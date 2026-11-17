@@ -2028,7 +2028,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d && (d->params.reflect_dealt_damage != CardParams::ReflectTo::None
                           || d->params.grants_reflect_to_subtype != CardParams::ReflectTo::None   // Spiteful Sliver
                           || d->params.aura_host_damage_back                       // + Guilty Conscience
-                          || d->params.redirect_shield)) { return true; }          // + en-Kor shields
+                          || d->params.redirect_shield                             // + en-Kor shields
+                          || d->params.redirect_pull_cost.has_value())) { return true; }   // + Shaman's pull
             }
             return false;
         };

@@ -651,6 +651,7 @@ int UnmetActivationColorMask(const GameState& state)
             &q.firebreathing_cost, &q.animate_cost, &q.tap_token_cost, &q.attach_all_equipment_cost,
             &q.tap_put_from_hand_cost, &q.gy_exile_grow_cost, &q.activated_reveal_top_cost,
             &q.untap_creature_cost, &q.sac_named_activation_cost,
+            &q.redirect_pull_cost,   // Shaman en-Kor's {1}{W} pull (paid at our sweep, dmgrx::AddShieldRider)
             // Arcanum Wings' swap is an activation only while the Aura is attached.
             p.aura_attached_to != 0 ? &q.aura_swap_cost : nullptr,
         };

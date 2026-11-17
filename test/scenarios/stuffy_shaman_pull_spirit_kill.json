@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Shaman en-Kor's {1}{W} source pull, design step 9 (docs/design/damage-reflection-pipeline.md 4.3 / 10 / 14).",
+    "Shaman en-Kor + Stuffy Doll (chosen the opponent) + four opponent Spirits = 6 creatures, so Blasphemous Act",
+    "costs {2}{R}; five lands leave exactly one {1}{W}. The Act deals 13 to each creature. The pull (searched on the",
+    "damage pipeline's pin stream, paid at the sweep) moves one Spirit's 13 onto the Shaman; the Shaman's free {0}",
+    "shields then move all 26 on to the Doll, which is dealt 13 + 26 = 39 as ONE event and reflects 39 -- exactly",
+    "the opponent's life. Step 8 alone (the shields, no pull) reflects only 26 and the Doll's once-a-turn ping",
+    "cannot close the gap by turn 6: see the _control scenario (a Nomads en-Kor, shields only, in the Shaman's seat)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 39,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Shaman en-Kor" },
+    { "name": "Stuffy Doll" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

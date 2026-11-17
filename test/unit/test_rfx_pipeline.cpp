@@ -1477,3 +1477,194 @@ TEST_CASE("rfx step 8: human play is ASKED a divide over the en-Kor and our othe
     CHECK(Find(s, 2010)->damage == 21);
     CHECK(s.players[1].life == 40 - 21);
 }
+
+// ---- step 9: Shaman en-Kor's {1}{W} source pull ---------------------------------------------------------------
+namespace
+{
+// Shaman en-Kor #2001 + Stuffy Doll #2010 (chosen the opponent) + four opponent Spirits #2020..; `plains` Plains
+// #2030.. and `mountains` Mountains #2040.., untapped; opponent at `opp`.
+GameState ShamanBoard(int opp, int plains, int mountains)
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[1].life = opp;
+    PutRfx(s, "Shaman en-Kor", 2001);
+    PutRfx(s, "Stuffy Doll", 2010).chosen_player = 1;
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 2020 + i, 1, 1, 1, "Spirit"); }
+    for (int i = 0; i < plains; ++i) { PutRfx(s, "Plains", 2030 + i); }
+    for (int i = 0; i < mountains; ++i) { PutRfx(s, "Mountain", 2040 + i); }
+    return s;
+}
+int UntappedLands(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9: Shaman en-Kor's card data (the {1}{W} pull param beside the {0} shield)")
+{
+    const CardDefinition& d = DefRfx("Shaman en-Kor");
+    REQUIRE(d.params.redirect_pull_cost.has_value());
+    CHECK(d.params.redirect_pull_cost->ToString() == "{1}{W}");
+    CHECK(d.params.redirect_shield);
+    CHECK(dmgrx::DefOffersShieldChoice(d));
+    CHECK_FALSE(DefRfx("Nomads en-Kor").params.redirect_pull_cost.has_value());
+}
+
+TEST_CASE("rfx step 9: Act + Shaman + Doll + Spirit -- the pull moves the Spirit's 13 onto the Shaman, its shields move "
+          "26 on: the Doll is dealt 39 in ONE event, and the {1}{W} is paid")
+{
+    GameState s = ShamanBoard(60, 1, 1);
+    const std::vector<int> pins{ dmgrx::PullCode(2020) };
+    {
+        dmgrx::PinScope ps(pins);
+        PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    }
+    REQUIRE(Find(s, 2010) != nullptr);
+    CHECK(Find(s, 2010)->damage == 39);              // its own 13 + the Shaman's 13 + the Spirit's 13
+    CHECK(s.players[1].life == 60 - 39);
+    CHECK(dmgrx::t_last_drain.resolutions == 1);     // ONE reflection for the total
+    REQUIRE(Find(s, 2001) != nullptr);               // the Shaman forwarded every point (F4): it survives
+    CHECK(Find(s, 2001)->damage == 0);
+    REQUIRE(Find(s, 2020) != nullptr);               // the pulled Spirit was dealt nothing
+    CHECK(Find(s, 2020)->damage == 0);
+    for (int i = 1; i < 4; ++i) { CHECK(Find(s, 2020 + i) == nullptr); }
+    CHECK(UntappedLands(s) == 0);                    // the pull's {1}{W} was paid at the sweep
+}
+
+TEST_CASE("rfx step 9: without {1}{W} spare the pull is not offered -- the same pin does nothing")
+{
+    for (int lands : { 0, 1 })   // nothing; a lone Mountain (no {W})
+    {
+        GameState s = ShamanBoard(60, 0, lands);
+        const std::vector<int> pins{ dmgrx::PullCode(2020) };
+        std::vector<std::vector<int>> lists;
+        dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { lists.push_back(legal); };
+        {
+            dmgrx::PinScope ps(pins);
+            dmgrx::TargetProbeScope tp(probe, pins, 0);
+            PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+        }
+        CHECK(lists.empty());                         // no choice at all: the pull cannot be paid
+        CHECK(Find(s, 2010)->damage == 26);           // step 8's line: the Shaman's own 13 shielded onto the Doll
+        CHECK(Find(s, 2020) == nullptr);
+        CHECK(UntappedLands(s) == lands);             // nothing tapped
+    }
+}
+
+TEST_CASE("rfx step 9: the pull's option set -- stop first; folds P1 (own en-Kor), P2 (the Doll), P3 (identical "
+          "Spirits); a multiset; the mana bounds the count")
+{
+    GameState s = ShamanBoard(60, 2, 2);             // {2}{W}{W}: two pulls, not three
+    PutRfx(s, "Nomads en-Kor", 2002);
+    PutRfx(s, "Mogg Maniac", 2011);
+    const std::vector<int> pins{ dmgrx::PullCode(2020) };
+    std::vector<std::vector<int>> lists;
+    dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { lists.push_back(legal); };
+    {
+        dmgrx::PinScope ps(pins);
+        dmgrx::TargetProbeScope tp(probe, pins, 0);
+        PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    }
+    REQUIRE(lists.size() >= 2);
+    // battlefield order: Shaman, Doll, Spirits, lands, Nomads, Maniac -- the Nomads (P1) and the Doll (P2) are
+    // folded out, the four Spirits are one class (P3), the Maniac (a doomed reflector) is kept
+    CHECK(lists[0] == std::vector<int>{ dmgrx::PullCode(0), dmgrx::PullCode(2020), dmgrx::PullCode(2011) });
+    // after a Spirit: the next Spirit or stop (the Maniac's class comes later in the order, so it is still open)
+    CHECK(lists[1] == std::vector<int>{ dmgrx::PullCode(0), dmgrx::PullCode(2021), dmgrx::PullCode(2011) });
+    // the second pick is unpinned -> the FRONT (stop): one pull, two lands tapped
+    CHECK(UntappedLands(s) == 2);
+    REQUIRE(Find(s, 2020) != nullptr);
+    CHECK(Find(s, 2021) == nullptr);
+}
+
+TEST_CASE("rfx step 9: the pull is SEARCHED -- pull vs no pull branch, and each replays identically in the executor")
+{
+    // Shaman + Doll + 4 Spirits = 6 creatures: the Act costs {2}{R}; five lands leave exactly one {1}{W}.
+    // Opponent at 80 (no kill: every line is played to its end state).
+    GameState s = ShamanBoard(80, 3, 2);
+    for (Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number == 2010) { p.tapped = true; }             // no ping line
+        if (p.card.m_number == 2001) { p.entered_this_turn = true; }  // no attack
+    }
+    Card act = DefRfx("Blasphemous Act").card; act.m_number = 2050;
+    s.players[0].hand.push_back(act);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Plains").card; m.m_number = 2060 + i; s.players[0].library.push_back(m); }
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    std::set<int> first_pins;
+    int n = 0;
+    for (const auto& p : plans)
+    {
+        const bool casts = std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+            { return a.card_name.str() == "Blasphemous Act"; });
+        if (!casts) { continue; }
+        ++n;
+        REQUIRE_FALSE(p.reflect_targets.empty());
+        const int pin = p.reflect_targets.front();   // the pull resolves BEFORE the shields and the reflections
+        first_pins.insert(pin);
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, true);
+        INFO("pull pin ", pin);
+        if (pin == dmgrx::PullCode(2020))
+        {
+            CHECK(Find(roll, 2010)->damage == 39);
+            CHECK(Find(roll, 2020) != nullptr);
+            CHECK(UntappedLands(roll) == 0);
+        }
+        else { CHECK(Find(roll, 2010)->damage == 26); CHECK(Find(roll, 2020) == nullptr); }
+        GameState exec = s;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        REQUIRE(Find(exec, 2010) != nullptr);
+        CHECK(Find(exec, 2010)->damage == Find(roll, 2010)->damage);
+        CHECK((Find(exec, 2020) != nullptr) == (Find(roll, 2020) != nullptr));
+        CHECK(UntappedLands(exec) == UntappedLands(roll));
+    }
+    CHECK(n >= 2);
+    CHECK(first_pins == std::set<int>{ dmgrx::PullCode(0), dmgrx::PullCode(2020) });
+}
+
+TEST_CASE("rfx step 9: human play is ASKED which creatures to pull from (either side, up to what the mana affords)")
+{
+    GameState s = ShamanBoard(80, 2, 2);
+    int asked_pull = 0, asked_shield = 0;
+    std::vector<int> seen_legal;
+    int seen_max = -1;
+    TargetChooser chooser = [&](const GameState& st, const CardDefinition& def, int, int max_targets, int,
+                                const std::vector<ChosenTarget>& dflt) -> std::vector<ChosenTarget>
+    {
+        if (dmgrx::t_viewer_shield != nullptr) { ++asked_shield; return dflt; }   // keep the engine's allocation
+        ++asked_pull;
+        CHECK(def.params.redirect_pull_cost.has_value());
+        REQUIRE(dmgrx::t_viewer_pull != nullptr);
+        seen_legal = dmgrx::t_viewer_pull->legal;
+        seen_max = max_targets;
+        CHECK(dflt.empty());                          // unpinned: the engine's pick is no pull
+        std::vector<ChosenTarget> out;
+        for (int bi : seen_legal)
+        {
+            const int num = st.battlefield[static_cast<std::size_t>(bi)].card.m_number;
+            if (num == 2020 || num == 2021) { out.push_back({ 1, bi, 0 }); }
+        }
+        return out;
+    };
+    TargetChooser* saved = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    g_play_target_chooser = saved;
+    CHECK(asked_pull == 1);
+    CHECK(seen_max == 2);
+    CHECK(seen_legal.size() == 5);                   // the Doll and the four Spirits (not the Shaman itself)
+    CHECK(Find(s, 2010)->damage == 13 + 13 + 26);    // the Shaman's 39 forwarded onto the Doll
+    CHECK(Find(s, 2020) != nullptr);
+    CHECK(Find(s, 2021) != nullptr);
+    CHECK(Find(s, 2022) == nullptr);
+    CHECK(UntappedLands(s) == 0);
+    CHECK(asked_shield == 1);
+}

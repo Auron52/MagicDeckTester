@@ -13,7 +13,8 @@
 //
 // ONE CALL = ONE DAMAGE EVENT (CR 120.3; the Reckoner / Nemesis / Sliver rulings: "if it is dealt damage
 // by multiple sources at once, its ability triggers once"). DealDamageBatch runs, in order:
-//   1. replacement (en-Kor redirection shields, Batch::shields -- CR 614.9; see AddShieldRider);
+//   1. replacement (Shaman en-Kor source pulls, Batch::pulls, then en-Kor redirection shields, Batch::shields --
+//      CR 614.9 / 616.1; see AddPullRider / AddShieldRider);
 //   2. aggregation per recipient (13 + 13 redirected onto one creature = ONE "dealt 26");
 //   3. the trigger SNAPSHOT, taken before anything changes (last-known information, CR 603.10a: a
 //      reflector killed by this very event still triggers);
@@ -99,6 +100,17 @@ struct Shield
     int to = 0;   // the target creature we control
 };
 
+// A Shaman en-Kor SOURCE PULL (CardParams::redirect_pull_cost, the {1}{W} ability): "the next time a source of
+// your choice [src] would deal damage to target creature [from] this turn, that damage is dealt to [on]
+// instead". ALL the damage that source deals that creature in the event moves, once (CR 614.9 / 614.5). `on` and
+// `from` are Card::m_number ids, `src` an index into Batch::src.
+struct Pull
+{
+    int on   = 0;   // the Shaman en-Kor
+    int from = 0;   // the target creature (any controller)
+    int src  = 0;   // the source of our choice (our sweeper)
+};
+
 // ONE simultaneous damage event: its sources and its assignments.
 struct Batch
 {
@@ -110,6 +122,9 @@ struct Batch
     // left over for later damage this turn and no per-turn GameState list is needed (design section 14,
     // step 8). Empty on every other event.
     std::vector<Shield> shields;
+    // Source pulls (Shaman en-Kor's {1}{W}), applied BEFORE the shields (see ApplyOne step 1). Same hosting and
+    // lifetime as `shields`: made for, paid at, and spent inside the sweep they ride (section 14, step 9).
+    std::vector<Pull> pulls;
 };
 
 // A trigger raised by an event and not yet resolved. Everything is held by value (LKI).
@@ -321,11 +336,37 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     //    this terminates). CR 614.9: if either creature is no longer on the battlefield, or no longer a
     //    creature, when the damage would be redirected, the effect does nothing -- and (Q-R1, USER question,
     //    default) the shield is NOT spent: it simply did not apply, and the damage stays on the en-Kor.
+    //
+    //    SOURCE PULLS FIRST (Shaman en-Kor's {1}{W}, Batch::pulls). Each moves ALL the damage its source would deal
+    //    its target creature onto the Shaman, once (the target may be any creature, either side). ORDER (CR 616.1:
+    //    the affected object's controller chooses which applicable replacement applies first; CR 616.1f / 616.2:
+    //    after one applies, the ones that NOW apply are considered -- so damage pulled onto the Shaman can then be
+    //    moved on by the Shaman's own {0} shields, which is the point of the card). The only overlap is a pull on a
+    //    creature that also carries {0} shields: that creature is ours, so the order is ours, and pull-first loses
+    //    nothing -- "shields move k, the pull takes the rest" is reached as "no shields, the Shaman's shields move
+    //    k" (the shields are free and may target any creature we control). A pull whose Shaman or target is no
+    //    longer a creature on the battlefield does nothing (CR 614.9) and is not spent (the Q-R1 default).
     std::vector<DmgAssign> redirected;
     const std::vector<DmgAssign>* hits = &b.hits;
-    if (!b.shields.empty())
+    if (!b.pulls.empty())
     {
         redirected = b.hits;
+        for (const Pull& pl : b.pulls)
+        {
+            const Permanent* e = FindPerm(s, pl.on);
+            const Permanent* t = FindPerm(s, pl.from);
+            if (e == nullptr || !e->card.IsCreature() || t == nullptr || !t->card.IsCreature() || pl.on == pl.from) { continue; }
+            for (DmgAssign& a : redirected)
+            {
+                if (a.to.player || a.to.id != pl.from || a.src != pl.src || a.amount <= 0) { continue; }
+                a.to = Recipient{ false, pl.on };   // keeps its source, amount and combat flag
+            }
+        }
+        hits = &redirected;
+    }
+    if (!b.shields.empty())
+    {
+        if (b.pulls.empty()) { redirected = b.hits; }
         std::vector<char> spent(b.shields.size(), 0);
         for (bool moved = true; moved; )
         {
@@ -747,7 +788,7 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
 }
 // Does `d` raise an en-Kor shield CHOICE (AddShieldRider) when our own sweeper hits it? The main-phase fan's
 // pre-check counts it as a chooser on the battlefield or in the plan, beside DefReflectsWithChoice.
-inline bool DefOffersShieldChoice(const CardDefinition& d) { return d.params.redirect_shield; }
+inline bool DefOffersShieldChoice(const CardDefinition& d) { return d.params.redirect_shield || d.params.redirect_pull_cost.has_value(); }
 
 // ONE searched choice on the pin stream (a list of more than one option): takes the next ordinal, reports the
 // list to the fan's probe, and returns the plan's pin for that ordinal when it is legal, else the FRONT (the
@@ -1099,13 +1140,21 @@ struct ShieldOpt { int dest = 0; int amount = 0; };
 
 // The option list for en-Kor E under a sweep of `dmg` to each creature (see the block note). `extra` holds
 // what earlier en-Kors of this rider already moved onto each destination (m_number, amount). `f4` reports
-// whether the F4 fold produced the list.
+// whether the F4 fold produced the list. `base` (step 9), when given, is the damage the sweep deals each
+// creature AFTER the rider's source pulls (m_number, amount; a creature not listed is dealt 0): E's own d is
+// then base(E) -- its sweep damage plus everything pulled onto it -- and a pulled-from creature is dealt 0.
 inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent& e, int dmg,
-                                            const std::vector<std::pair<int, int>>& extra, bool& f4)
+                                            const std::vector<std::pair<int, int>>& extra, bool& f4,
+                                            const std::vector<std::pair<int, int>>* base = nullptr)
 {
     f4 = false;
     std::vector<ShieldOpt> out;
-    const int d = dmg;
+    auto base_on = [&](int num) {
+        if (base == nullptr) { return dmg; }
+        for (const auto& x : *base) { if (x.first == num) { return x.second; } }
+        return 0;
+    };
+    const int d = base_on(e.card.m_number);
     if (d <= 0) { return out; }
     auto extra_on = [&](int num) { int n = 0; for (const auto& x : extra) { if (x.first == num) { n += x.second; } } return n; };
     auto is_enkor = [&](const Permanent& q) { const CardDefinition* qd = Def(q); return qd != nullptr && qd->params.redirect_shield; };
@@ -1116,7 +1165,7 @@ inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent&
         if (!q.card.IsCreature() || q.controller_index != e.controller_index || q.card.m_number == e.card.m_number) { continue; }
         const int lt = LethalToughness(q, s);
         const bool indes = q.HasKeyword(Keyword::Indestructible);
-        const int incoming = q.damage + d + extra_on(q.card.m_number);
+        const int incoming = q.damage + base_on(q.card.m_number) + extra_on(q.card.m_number);
         const bool sink = indes || lt <= 0 || incoming >= lt;
         const int mult = ReflectInstances(s, q);
         cands.push_back({ &q, mult, sink, mult > 0 && ReflectsFaceOnly(s, q), lt, indes ? 1 << 20 : lt - 1 - incoming });
@@ -1187,19 +1236,263 @@ inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent&
     return out;
 }
 
+// ---- SHAMAN EN-KOR'S SOURCE PULL: the {1}{W} half of the rider (design 4.3 / section 14 step 9) -------------
+// "{1}{W}: The next time a source of your choice would deal damage to target creature this turn, that damage is
+// dealt to this creature instead" (CardParams::redirect_pull_cost). Hosted on the same sweeper rider as the {0}
+// shields, by the same timing fold (nothing happens between our sorcery-speed cast and its resolution, so
+// activating in response is activating as it resolves), and the SOURCE OF OUR CHOICE is that sweeper (CR 609.7a:
+// a spell on the stack is a legal choice). PROVISIONAL deferral (USER Q-U1): no other source, no other window.
+//
+// THE CHOICE, per puller P of the caster's (battlefield order): which creatures P pulls from, each pull one
+// activation. Made as a SEQUENCE of choices on the shared pin stream (PinnedChoice), BEFORE the shield choices
+// (the shields then see what was pulled): {stop} + one representative per target CLASS, until stop. Pulls on the
+// same target are pointless (the first takes all of that source's damage to it; the next has nothing left to
+// replace, and with rider-only hosting no later damage this turn reaches it), so each creature is pulled at most
+// once, by one puller. The FRONT is {stop}: no pull, no mana -- the legacy outcome wherever nothing pins.
+// THE MANA IS PAID AT THE SWEEP, in BOTH worlds, through TapForCostDirect (the Mihail / Arcanum Wings shape:
+// lockstep by construction, the executor re-derives its pool per action): a pull is offered only while a COPY of
+// the state can pay the cumulative bill (every earlier pull of this sweep + this one, EffectiveActivationCost per
+// puller), and the whole bill is then paid at once before the damage. A plan therefore cannot overspend: what the
+// pulls tap is gone for every later action of the plan, in the search and in the executor alike.
+// SOUND FOLDS (stated in design section 14, step 9):
+//   P0  a creature the sweep deals no damage to is not offered (the pull would replace nothing; no later damage
+//       this turn under rider-only hosting) -- dominated by not paying.
+//   P1  our own {0}-shield en-Kor (the puller itself included) is not offered: its own free shields can move any
+//       of its points onto the puller (a creature we control) or straight on to wherever the puller would forward
+//       them -- the same end state without the mana. (Itself: "dealt to this creature instead" changes nothing.)
+//   P2  an INDESTRUCTIBLE reflector of ours whose every instance can only hit the opponent's face, with no less
+//       multiplicity than any creature we control, is not offered: its survival cannot change, the points it
+//       reflects mult(T) x d to the face cannot be beaten by any destination the puller's shields can reach, and
+//       the pull costs mana. (Every OTHER reflector stays: pulling off a doomed Mogg Maniac keeps it alive.)
+//   P3  identical targets (same name, definition, controller, token-ness, damage, lethal toughness, power, counters,
+//       tapped / summoning-sick state, nothing attached, same reflection multiplicity / chosen player, same damage
+//       incoming) are interchangeable: one representative per class, and a puller's successive picks take a
+//       non-decreasing class index (its pulls form a multiset).
+// Human play: one `target` prompt per puller (any number of creatures up to what the mana affords, either side,
+// every creature but the puller itself and those an earlier puller took; default = the engine's picks).
+// Option ids on the pin stream: kPullPinBase - from (from = the target's m_number; 0 = stop). Disjoint from the
+// shield codes (above kPullPinBase - 2^17 > kCombatPinMark, below every shield code) and from every player/card id.
+inline constexpr int kPullPinBase = -0x20000000;
+inline int PullCode(int from)
+{
+    if (from < 0 || from >= (1 << 17))
+    {
+        std::fprintf(stderr, "[rfx] FATAL: Shaman en-Kor pull target %d cannot be encoded\n", from);
+        std::abort();
+    }
+    return kPullPinBase - from;
+}
+inline int PullDecode(int code) { return kPullPinBase - code; }
+
+// The human-play `target` prompt for one puller (read by main.cpp's target chooser while it builds it).
+struct PullPrompt
+{
+    int puller = -1;                // battlefield index of P
+    int max = 0;                    // how many pulls the mana affords now
+    std::vector<int> legal;         // battlefield indices
+    std::vector<int> defaults;      // the engine's picks (battlefield indices)
+};
+inline thread_local const PullPrompt* t_viewer_pull = nullptr;
+
+// Can `s` pay `bill` now? (On a COPY: the probe never taps the real state.)
+inline bool PullAffordable(const GameState& s, const ManaCost& bill)
+{
+    GameState probe = s;
+    return TapForCostDirect(probe, bill, false);
+}
+
+// Choose (search / pin / ask) and PAY the pulls of every puller of `controller`'s on this sweep. `base` is the
+// damage the sweep deals each creature (m_number, amount) and is updated in place: a pulled creature's amount
+// moves onto its puller. Appends to b.pulls (source = b.src[0], the sweeper).
+inline void AddPullRider(GameState& s, int controller, Batch& b, std::vector<std::pair<int, int>>& base, bool ask)
+{
+    auto base_ref = [&](int num) -> int* { for (auto& x : base) { if (x.first == num) { return &x.second; } } return nullptr; };
+    auto pulled = [&](int num) { for (const Pull& p : b.pulls) { if (p.from == num) { return true; } } return false; };
+    std::vector<int> pullers;   // battlefield indices, battlefield order
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        const Permanent& q = s.battlefield[i];
+        if (!q.card.IsCreature() || q.controller_index != controller) { continue; }
+        const CardDefinition* d = Def(q);
+        if (d != nullptr && d->params.redirect_pull_cost.has_value()) { pullers.push_back(static_cast<int>(i)); }
+    }
+    if (pullers.empty()) { return; }
+    ManaCost bill;                 // every pull chosen so far on this sweep
+    std::vector<Pull> chosen;      // in order
+    for (int pi : pullers)
+    {
+        const Permanent& P = s.battlefield[static_cast<std::size_t>(pi)];
+        const CardDefinition* pd = Def(P);
+        const ManaCost cost = EffectiveActivationCost(s, controller, P.card, *pd->params.redirect_pull_cost);
+        auto taken = [&](int num) {
+            if (pulled(num)) { return true; }
+            for (const Pull& c : chosen) { if (c.from == num) { return true; } }
+            return false;
+        };
+        int max_mult_ours = 0;
+        for (const Permanent& q : s.battlefield)
+        { if (q.card.IsCreature() && q.controller_index == controller) { max_mult_ours = std::max(max_mult_ours, ReflectInstances(s, q)); } }
+        // Candidate classes (P0-P3), battlefield order of their first member.
+        struct Cls { std::vector<int> members; };
+        std::vector<Cls> classes;
+        auto same_class = [&](const Permanent& a, const Permanent& c) {
+            auto attached = [&](const Permanent& x) {
+                for (const Permanent& y : s.battlefield)
+                { if (y.aura_attached_to == x.card.m_number || y.equipped_to == x.card.m_number) { return true; } }
+                return false;
+            };
+            const int* ia = base_ref(a.card.m_number);
+            const int* ic = base_ref(c.card.m_number);
+            return a.card.m_name == c.card.m_name && Def(a) == Def(c) && a.controller_index == c.controller_index
+                && a.is_token == c.is_token && a.damage == c.damage && a.tapped == c.tapped
+                && a.entered_this_turn == c.entered_this_turn
+                && LethalToughness(a, s) == LethalToughness(c, s) && CombatPowerOf(a, s) == CombatPowerOf(c, s)
+                && a.HasKeyword(Keyword::Indestructible) == c.HasKeyword(Keyword::Indestructible)
+                && a.counters.KeyFragment() == c.counters.KeyFragment()
+                && ReflectInstances(s, a) == ReflectInstances(s, c) && a.chosen_player == c.chosen_player
+                && !attached(a) && !attached(c)
+                && ia != nullptr && ic != nullptr && *ia == *ic;
+        };
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature() || q.card.m_number == P.card.m_number || taken(q.card.m_number)) { continue; }
+            const int* inc = base_ref(q.card.m_number);
+            if (inc == nullptr || *inc <= 0) { continue; }                                            // P0
+            const CardDefinition* qd = Def(q);
+            if (q.controller_index == controller && qd != nullptr && qd->params.redirect_shield) { continue; }   // P1
+            const int mult = ReflectInstances(s, q);
+            if (q.controller_index == controller && q.HasKeyword(Keyword::Indestructible) && mult > 0
+                && mult >= max_mult_ours && ReflectsFaceOnly(s, q)) { continue; }                     // P2
+            bool placed = false;
+            for (Cls& c : classes)
+            {
+                const Permanent* rep = FindPerm(s, c.members.front());
+                if (rep != nullptr && same_class(*rep, q)) { c.members.push_back(q.card.m_number); placed = true; break; }
+            }
+            if (!placed) { classes.push_back(Cls{ { q.card.m_number } }); }
+        }
+        // The searched sequence (P3: non-decreasing class index).
+        std::vector<int> picks;   // m_numbers
+        std::vector<std::size_t> took(classes.size(), 0);
+        std::size_t cls_from = 0;
+        ManaCost run = bill;
+        for (;;)
+        {
+            std::vector<int> legal{ PullCode(0) };
+            const ManaCost next = run.PlusAdditionalCost(cost);
+            bool any_left = false;
+            for (std::size_t c = cls_from; c < classes.size(); ++c) { if (took[c] < classes[c].members.size()) { any_left = true; break; } }
+            if (any_left && PullAffordable(s, next))
+            {
+                for (std::size_t c = cls_from; c < classes.size(); ++c)
+                { if (took[c] < classes[c].members.size()) { legal.push_back(PullCode(classes[c].members[took[c]])); } }
+            }
+            if (legal.size() == 1) { break; }
+            const int pick = PinnedChoice(legal);
+            if (pick == PullCode(0)) { break; }
+            const int from = PullDecode(pick);
+            for (std::size_t c = cls_from; c < classes.size(); ++c)
+            {
+                if (took[c] < classes[c].members.size() && classes[c].members[took[c]] == from) { ++took[c]; cls_from = c; break; }
+            }
+            picks.push_back(from);
+            run = next;
+        }
+        if (ask)   // human play: any set of creatures (either side, not P, not taken) up to what the mana affords
+        {
+            PullPrompt pr;
+            pr.puller = pi;
+            for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+            {
+                const Permanent& q = s.battlefield[i];
+                if (static_cast<int>(i) != pi && q.card.IsCreature() && !taken(q.card.m_number)) { pr.legal.push_back(static_cast<int>(i)); }
+            }
+            ManaCost probe_bill = bill;
+            while (pr.max < static_cast<int>(pr.legal.size()))
+            {
+                probe_bill = probe_bill.PlusAdditionalCost(cost);
+                if (!PullAffordable(s, probe_bill)) { break; }
+                ++pr.max;
+            }
+            for (int num : picks)
+            {
+                for (int i : pr.legal) { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { pr.defaults.push_back(i); } }
+            }
+            std::sort(pr.defaults.begin(), pr.defaults.end());   // battlefield order (the prompt's option order)
+            if (pr.max > 0 && !pr.legal.empty())
+            {
+                std::vector<ChosenTarget> dflt;
+                for (int i : pr.defaults) { dflt.push_back({ 1, i, 0 }); }
+                const PullPrompt* saved = t_viewer_pull;
+                t_viewer_pull = &pr;
+                const auto got = (*g_play_target_chooser)(s, *pd, controller, pr.max, 0, dflt);
+                t_viewer_pull = saved;
+                std::vector<int> human;
+                bool ok = static_cast<int>(got.size()) <= pr.max;
+                for (const ChosenTarget& c : got)
+                {
+                    if (!ok) { break; }
+                    if (c.kind != 1 || std::find(pr.legal.begin(), pr.legal.end(), c.index) == pr.legal.end()) { ok = false; break; }
+                    const int num = s.battlefield[static_cast<std::size_t>(c.index)].card.m_number;
+                    if (std::find(human.begin(), human.end(), num) != human.end()) { ok = false; break; }
+                    human.push_back(num);
+                }
+                if (ok) { picks = human; }
+            }
+        }
+        for (int from : picks)
+        {
+            chosen.push_back({ P.card.m_number, from, 0 });
+            bill = bill.PlusAdditionalCost(cost);
+        }
+    }
+    if (chosen.empty()) { return; }
+    // PAY (both worlds, the same payer as the probes; the last probe paid exactly this bill on a copy).
+    if (!TapForCostDirect(s, bill, false)) { return; }   // unreachable: the probe of this very bill succeeded
+    for (const Pull& c : chosen)
+    {
+        b.pulls.push_back(c);
+        int* from_amt = base_ref(c.from);
+        int* on_amt   = base_ref(c.on);
+        const int amt = from_amt != nullptr ? *from_amt : 0;
+        if (from_amt != nullptr) { *from_amt = 0; }
+        if (on_amt != nullptr) { *on_amt += amt; } else { base.push_back({ c.on, amt }); }
+        if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+        {
+            const Permanent* e = FindPerm(s, c.on);
+            const Permanent* t = FindPerm(s, c.from);
+            const CardDefinition* ed = e != nullptr ? Def(*e) : nullptr;
+            EmitPlayEvent(s.turn_number, "redirect",
+                          "\xE2\x86\xAA " + (e != nullptr ? e->card.m_name.str() : std::string("en-Kor")) + " "
+                          + (ed != nullptr ? ed->params.redirect_pull_cost->ToString() : std::string("{1}{W}"))
+                          + ": the " + std::to_string(amt) + " damage " + b.src[0].card.m_name.str() + " would deal to "
+                          + (t != nullptr ? t->card.m_name.str() : std::string("a creature"))
+                          + (t != nullptr && t->controller_index != controller ? " (opponent's)" : "")
+                          + " is dealt to it instead");
+        }
+    }
+}
+
 inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
 {
     if (dmg <= 0) { return; }
     std::vector<int> enkors;   // battlefield indices, battlefield order
+    bool any_puller = false;
     for (std::size_t i = 0; i < s.battlefield.size(); ++i)
     {
         const Permanent& q = s.battlefield[i];
         if (!q.card.IsCreature() || q.controller_index != controller) { continue; }
         const CardDefinition* d = Def(q);
         if (d != nullptr && d->params.redirect_shield) { enkors.push_back(static_cast<int>(i)); }
+        if (d != nullptr && d->params.redirect_pull_cost.has_value()) { any_puller = true; }
     }
-    if (enkors.empty()) { return; }
+    if (enkors.empty() && !any_puller) { return; }
     const bool ask = g_play_target_chooser != nullptr && !TapSpeculatingNow();   // the viewer (EtbChoosePlayer's test)
+    // The damage this sweep deals each creature (m_number, amount), before any replacement; the pulls (step 9)
+    // move whole amounts onto their pullers, and the shields below then see the result.
+    std::vector<std::pair<int, int>> base;
+    for (const DmgAssign& a : b.hits) { if (!a.to.player && a.src == 0) { base.push_back({ a.to.id, a.amount }); } }
+    if (any_puller) { AddPullRider(s, controller, b, base, ask); }
     std::vector<std::pair<int, int>> moved;   // (dest m_number, amount) so far
     std::vector<ShieldOpt> prev_opts;
     const Permanent* prev = nullptr;
@@ -1209,8 +1502,10 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
     {
         const Permanent& e = s.battlefield[static_cast<std::size_t>(ei)];
         bool f4 = false;
-        const std::vector<ShieldOpt> opts = ShieldOptions(s, e, dmg, moved, f4);
+        const std::vector<ShieldOpt> opts = ShieldOptions(s, e, dmg, moved, f4, &base);
         if (opts.empty()) { continue; }
+        int de = 0;   // the damage about to be dealt to E (its sweep damage plus whatever was pulled onto it)
+        for (const auto& x : base) { if (x.first == e.card.m_number) { de = x.second; break; } }
         // SYMMETRY (F4 only): an interchangeable en-Kor right after one with the same list starts at its pick.
         std::size_t from = 0;
         if (f4 && prev_f4 && prev != nullptr && prev->card.m_name == e.card.m_name && prev->damage == e.damage
@@ -1234,7 +1529,7 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
         {
             ShieldPrompt pr;
             pr.enkor = ei;
-            pr.total = dmg;
+            pr.total = de;
             pr.legal.push_back(ei);
             for (std::size_t i = 0; i < s.battlefield.size(); ++i)
             {
@@ -1243,7 +1538,7 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
                 { pr.legal.push_back(static_cast<int>(i)); }
             }
             pr.defaults.assign(pr.legal.size(), 0);
-            pr.defaults[0] = dmg - pamt;
+            pr.defaults[0] = de - pamt;
             for (std::size_t k = 1; k < pr.legal.size(); ++k)
             { if (s.battlefield[static_cast<std::size_t>(pr.legal[k])].card.m_number == pdest) { pr.defaults[k] = pamt; } }
             const CardDefinition* ed = Def(e);
@@ -1254,7 +1549,7 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
                 { if (pr.defaults[k] > 0) { dflt.push_back({ 1, pr.legal[k], pr.defaults[k] }); } }
                 const ShieldPrompt* saved = t_viewer_shield;
                 t_viewer_shield = &pr;
-                const auto chosen = (*g_play_target_chooser)(s, *ed, controller, 0, dmg, dflt);
+                const auto chosen = (*g_play_target_chooser)(s, *ed, controller, 0, de, dflt);
                 t_viewer_shield = saved;
                 int sum = 0;
                 std::vector<std::pair<int, int>> got;
@@ -1267,7 +1562,7 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
                     if (c.index != ei && c.amount > 0)
                     { got.push_back({ s.battlefield[static_cast<std::size_t>(c.index)].card.m_number, c.amount }); }
                 }
-                if (ok && sum == dmg) { alloc = got; }
+                if (ok && sum == de) { alloc = got; }
             }
         }
         for (const auto& [dest, amt] : alloc)

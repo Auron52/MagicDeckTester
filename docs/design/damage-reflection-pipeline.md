@@ -1523,3 +1523,61 @@ Where the code departs from the sections above, and why. Each entry names the sy
   `WriteDivideDecisionJson` gained a `note_override`. DECISIONS.md row + note; the auditor maps
   `redirect_shield_cost -> divide` (and `target`, the oracle's "target creature you control").
 * **Provider.** Not consulted (no hook); ordering the landmarks is the step-10 provider's.
+
+### Step 9 (Shaman en-Kor's {1}{W} source pull)
+
+* **The oracle, verified against Scryfall** (`build/scratch/stuffy/scry/Shaman_en-Kor.json`): "{1}{W}: The next time a
+  source of your choice would deal damage to target creature this turn, that damage is dealt to this creature
+  instead." New param `redirect_pull_cost` (the activation's mana cost, `"{1}{W}"`), beside the step-8 shield; it arms
+  `reflect_armed` and counts as a chooser for the fan's pre-check (`dmgrx::DefOffersShieldChoice`).
+* **A Batch-level kind-1 form, as step 8 did for the shields:** `dmgrx::Pull { on, from, src }` in `Batch::pulls`
+  (no GameState list, no key fold: made for, paid at and spent inside the sweep it rides). `ApplyOne` step 1 applies
+  the pulls FIRST -- each moves ALL the damage its source deals its target, once -- and then the {0} shields.
+* **Order of replacement effects (CR 616.1, 616.1f, 616.2).** The affected object's controller chooses which
+  applicable replacement applies first; after one applies, the ones that now apply are considered. Damage to an
+  opponent's Spirit has one applicable effect (the pull; one pull per creature, below); once it is redirected, the
+  damage would be dealt to the Shaman, so the Shaman's {0} shields now apply and we (its controller) order them. The
+  only real overlap -- a pull on a creature that also carries {0} shields -- is a creature of ours, so the order is
+  ours; pull-first loses nothing ("shields move k, the pull takes the rest" = "no shields there, the Shaman's own
+  shields move k"). A pull whose Shaman or target has left the battlefield does nothing and is not spent (CR 614.9,
+  the Q-R1 default).
+* **Hosting and the source** (design 4.3): `dmgrx::AddPullRider`, run by `AddShieldRider` before the shields. The
+  source of our choice is the resolving sweeper (CR 609.7a: a spell on the stack is a legal choice) -- the PROVISIONAL
+  Q-U1 deferral, now disclosed on the card for the pull too.
+* **The choice is SEARCHED** on the step-3 pin stream: per puller, a sequence of `PinnedChoice`s over {stop} + one
+  representative per target class until stop (ordinals before the shields'). Option ids `kPullPinBase - from`
+  (`-0x20000000`; 0 = stop), disjoint from the shield codes, player ids and `kCombatPinMark`. The FRONT is stop (no
+  pull, no mana): the legacy outcome wherever nothing pins. Each creature is pulled at most once across all pullers:
+  a second pull on the same target has nothing left to replace (and with rider-only hosting no later damage reaches
+  it this turn).
+* **Sound folds** (stated in the `AddPullRider` block note): P0 a creature the sweep deals nothing is not offered; P1 our
+  own {0}-shield en-Kors (the puller included) are not offered -- their free shields reach the same end state without
+  the mana; P2 an indestructible face-only reflector of ours with the highest multiplicity among our creatures (the
+  chosen-opponent Doll) is not offered -- its survival cannot change and no destination beats its own reflection;
+  P3 identical targets (name, def, controller, token-ness, damage, lethal toughness, power, counters, tapped/sick,
+  nothing attached, multiplicity, chosen player, incoming damage) fold to one representative, and a puller's picks
+  take a non-decreasing class index (a multiset).
+* **Deviation from design 4.3's "T must not be a reflector".** That claim holds only for the max-multiplicity
+  reflector, and it ignores survival: pulling a doomed Mogg Maniac's 13 keeps the Maniac alive at the cost of {1}{W},
+  a real trade. So only the P2 case is folded; every other reflector (and every opponent creature) stays a target.
+  No provider ordering ("Spirits first") exists yet: that is the step-10 provider's.
+* **The bill: PAID AT THE SWEEP, both worlds, through `TapForCostDirect`** (the Mihail / Arcanum Wings resolution-time
+  shape, lockstep by construction; the executor re-derives its pool per action, so nothing it carries drifts). The
+  design planned the Spellskite shape (a cast-bill pip on the Action); that needs a count field on `Action` and every
+  dedup / signature / fingerprint site (about thirty for `trick_redirect`), for the same affordability. A pull is
+  offered only while a COPY of the state can pay the cumulative bill (every earlier pull of this sweep + this one,
+  `EffectiveActivationCost` per puller); the whole bill is then paid at once before the damage. So a plan cannot
+  overspend: what the pulls tap is gone for every later action of the plan, in the search and in the executor alike.
+  The pull's colours also enter `UnmetActivationColorMask` (LandPlay.cpp), beside every other battlefield activation.
+* **Viewer.** One `target` prompt per puller BEFORE the shield `divide`: any number of creatures (either side, every
+  creature but the puller, minus those an earlier puller took) up to how many `{1}{W}` the mana affords (`max`), min 0;
+  default = the engine's picks. main.cpp's `pull_viewer` branch (keyed on `dmgrx::t_viewer_pull` + the param); the
+  Shaman's `divide` then totals its own damage plus what it pulled. DECISIONS.md row + note; the auditor maps
+  `redirect_pull_cost -> target`.
+* **Disclosed limits.** As step 8: only against our own sweeper. The fold P1 is relative to the FULL shield allocation;
+  autonomous shields still offer the step-8 landmarks only.
+* **Verification.** Unit 3447/3447 (6 new step-9 cases: card data; Spirit pull -> Doll dealt 39 in one event with the
+  {1}{W} tapped; no spare {1}{W} -> no choice, same pin inert; the option set and folds; the pull branched by
+  `EnumerateMainPlans` with each plan replayed identically by the executor, lands included; the viewer prompt).
+  Scenarios 576/576, incl. `stuffy_shaman_pull_spirit_kill` (T4 kill from 39) + `_control` (a Nomads in the seat: no
+  win by T6). Smoke: 219/219 job digests identical to step 8.

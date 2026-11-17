@@ -236,6 +236,9 @@ MANIFEST = {
     # Nomads / Shaman en-Kor's {0} shields (dmgrx::AddShieldRider): the allocation of our sweeper's damage to
     # the en-Kor among it and our other creatures -- the `divide` prompt at the sweep (dmgrx::t_viewer_shield).
     "redirect_shield_cost": ("divide",     truthy),
+    # Shaman en-Kor's {1}{W} source pull (dmgrx::AddPullRider): which creatures (either side) our sweeper's damage is
+    # pulled from onto the Shaman, up to what the mana affords -- a `target` prompt at the sweep (dmgrx::t_viewer_pull).
+    "redirect_pull_cost":   ("target",     truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
     # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
@@ -2450,6 +2453,8 @@ def modeled_tokens(card):
     if p.get("etb_damage_divided_creatures", 0) > 0:                      t.add("divide")   # Fury's ETB
     if p.get("redirect_shield_cost"):   # en-Kor shields: the divide IS the choice of each shield's target
         t.add("divide"); t.add("target")
+    if p.get("redirect_pull_cost"):     # Shaman en-Kor's pull: "target creature" (any number, up to the mana)
+        t.add("target")
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
     if (p.get("tap_draw_then_discard") or p.get("post_draw_discard", 0) > 0

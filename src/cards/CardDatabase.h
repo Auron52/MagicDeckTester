@@ -900,6 +900,13 @@ struct CardParams
     // free rider on our own creature sweeper, which carries no bill -- design 4.2 / section 14 step 8).
     // Read by dmgrx::Sweep (the rider) and dmgrx::ApplyOne step 1 (the replacement); arms reflect_armed.
     bool redirect_shield = false;
+    // Shaman en-Kor: "{1}{W}: The next time a source of your choice would deal damage to target creature this
+    // turn, that damage is dealt to this creature instead." A REDIRECTION effect (CR 614.9) that moves ALL the
+    // damage one source deals one creature onto this en-Kor. JSON `redirect_pull_cost` (the activation's mana
+    // cost). Hosted, like the {0} shields, as a rider on our own creature sweeper (dmgrx::AddShieldRider; the
+    // source of our choice = the sweeper, design 4.3 / section 14 step 9): the pulls are SEARCHED on the pin
+    // stream and their mana is PAID at the sweep (TapForCostDirect, both worlds). Arms reflect_armed.
+    std::optional<ManaCost> redirect_pull_cost;
     // Screaming Nemesis's rider on its reflection: "If a player is dealt damage this way, they can't
     // gain life for the rest of the game." Sets GameState::cant_gain_life_rest_of_game_mask for each
     // player its reflection actually deals damage to (the bit outlives the creature, rulings).

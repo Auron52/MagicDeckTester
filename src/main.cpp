@@ -7741,7 +7741,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
             const bool trick = def.params.solo_target_trick;
             const bool activated_target = def.params.tap_target_pump_cost.has_value();
-            const std::string ability_desc = (trick && def.params.grants_temp_indestructible)
+            // Shaman en-Kor's {1}{W} source pull (dmgrx::AddPullRider, at our own sweeper): "any number" of target
+            // creatures, either side, up to what the mana affords (max_targets); min 0 = no pull.
+            const bool pull_viewer = dmgrx::t_viewer_pull != nullptr && def.params.redirect_pull_cost.has_value();
+            const std::string ability_desc = pull_viewer
+                ? "pulled: the damage the resolving sweeper would deal it is dealt to " + def.card.m_name.str()
+                  + " instead (one " + def.params.redirect_pull_cost->ToString() + " activation per creature chosen; "
+                  "its {0} shields can then move that damage on)"
+                : (trick && def.params.grants_temp_indestructible)
                 ? std::string("given indestructible (and hexproof) until end of turn")
                   + (def.params.cast_scry > 0 ? "; then you scry " + std::to_string(def.params.cast_scry) : std::string())
                 : !activated_target ? std::string()
@@ -7800,6 +7807,16 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                             + (p.controller_index == controller ? " (yours)" : " (opponent)"));
                         break;
                     }
+                }
+            }
+            else if (pull_viewer)
+            {
+                for (int bi : dmgrx::t_viewer_pull->legal)
+                {
+                    const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s)
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
                 }
             }
             else if (def.params.incinerator_damage_trigger)
@@ -8019,6 +8036,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                   crackle ? std::max(1, static_cast<int>(heuristic.size()))
                 : copy_entrant ? 0   // "you MAY have it enter as a copy": decline is a real option
                 : bounce_trigger ? 0 // Hullbreaker's "choose up to one" / Brinelin's "you may"
+                : pull_viewer  ? 0   // Shaman en-Kor's pull: activating none is a real option
                 : (trick && def.params.trick_up_to_one && max_targets == 1) ? 0
                 : trick   ? std::min(max_targets, std::max(1, static_cast<int>(heuristic.size())))
                 : 1;
