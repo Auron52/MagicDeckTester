@@ -72,6 +72,10 @@ public:
     // recursion consumes from ONE budget per node. See ai/GameWorkMeter.h.
     void      Consume(long long n = 1) { m_used += n; gamework::Add(n); decisionwork::Add(n); }
     long long Used() const { return m_used; }
+    // Give units back to THIS decision's allowance (never below zero). Only the decision meter moves: the per-game and
+    // per-decision work meters (gamework / decisionwork) keep every unit, so the real cost stays counted. Used by the
+    // sampled-gate lookahead (P18j, _plrf): a lookahead that commits nothing hands the ladder its whole budget back.
+    void      Refund(long long n) { if (n > 0) { m_used = n < m_used ? m_used - n : 0; } }
     long long Limit() const { return m_limit; }
 
     bool Exhausted() const
