@@ -66,8 +66,8 @@ implementer agent per step, serial.
 | 1 | pipeline core, no cards | DONE 773bfef4b (unit 3403/3403, scen 561/561) |
 | 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | DONE 2a3d5db13 (scen 563/563; smoke PLAY-NEUTRAL: 219/219 job digests identical to a base binary (src b6d0cd16e, 18ab35ca8) on the same manifest; the 44 smoke FAILs vs GT are stale origin GT from 7 src commits since the last accept (6112caed4..b25400e31), not ours; cost audit re-run + full field --update owed, Scryfall 429). Deviations: design §14. Handoff: logs/stuffy/impl-step1-2-handoff.md |
 | 3 | searched reflection-target axis (Incinerator precedent) | DONE ebfea35d5 (unit 3406/3406, scen 564/564, smoke 0/219 digests moved vs step 2; Plan +24 B for every deck, play-neutral; viewer `target` prompt wired; deviations §14) |
-| 4 | Stuffy Doll (choose player, {T} self-ping) | IN PROGRESS (fresh Opus implementer, ~15:40 UTC) |
-| 5 | Guilty Conscience (+ combat damage hook, loops) | pending |
+| 4 | Stuffy Doll (choose player, {T} self-ping) | DONE f8dabbaea (unit 3413, scen 566/566, smoke 0/219 moved vs step 3; chosen-player fold = deck-level `!dmg_events_armed`, else branched on the ETB choice axis; viewer `choose_player` prompt + `selfping=` verb wired, 5h forced run owed; OPEN: a dropped unit check found no 'don't ping' plan on a test board — root-cause in step 5) |
+| 5 | Guilty Conscience (+ combat damage hook, loops) | IN PROGRESS (fresh Opus implementer, ~16:20 UTC) |
 | 6 | Spiteful Sliver | pending |
 | 7 | Loran's Escape | pending |
 | 8 | Nomads en-Kor shields (sweeper rider) | pending |
