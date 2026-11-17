@@ -76,6 +76,7 @@ implementer agent per step, serial.
 | 9 | Shaman en-Kor {1}{W} pull | DONE 268e96f4a (unit 3447, scen 576/576, smoke 0/219 moved vs 8; pulls on the damage Batch applied before shields (CR 616.1); count/targets searched with folds P0-P3; {1}{W} paid at sweep resolution via TapForCostDirect, offered only while affordable; Shaman pull Spirit kill from 39 T4, Nomads control no win by T6) |
 | 10 | StuffyDollProvider + ExtraLethalDamage | IN PROGRESS (~20:15 UTC) |
 | 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35); provider GC-host restriction to loop-sustaining creatures (USER 20:40) | pending (after 10) |
+| 9c | searched attack-vs-hold for GC-enchanted non-indestructible creatures + GC host order Doll-first (USER 20:45) | pending (after 9b) |
 | 11 | second main (Q-U4) | pending |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
@@ -105,6 +106,18 @@ deferrals provisional.
   being dealt damage makes them deal damage (Doll, Reckoner, Nemesis, Mogg Maniac, Slivers under a Spiteful grant).
   Restrict-only heuristic (engine still models every host; lifted by MTG_UNPRUNE / human play). If no such host
   exists the provider must not empty the list (keep the engine's list). Built in step 9b with the pull/shield hooks.
+  USER clarification: "(heuristically)" — i.e. a provider restriction, not an engine rule.
+- USER RULING 2026-11-17 ~20:45 UTC (verbatim): "Stuffy Doll is even better if out, but given that it is slow often
+  the others would be the target. One slightly messy case is if we need to Guilty Conscience and Loren's Escape next
+  turn. We need to not always attack in the meantime."
+  => (a) provider ORDERS GC hosts Doll first (when on the battlefield), then the other loop-sustaining creatures.
+  (b) ATTACK HOLD: today attacks are the provider's per-creature `ShouldAttackWith` (the standing attack exemption),
+  so a GC'd non-indestructible reflector always attacks and kills itself via GC (e.g. Reckoner: 3 combat + GC 3 back
+  -> dies), destroying the "GC now, Loran's Escape + loop next turn" line. Fix (step 9c): make attack-vs-hold a
+  SEARCHED binary for each GC-enchanted creature that is not indestructible (bounded: <= 4 GCs), executor and
+  rollout in lockstep, other decks byte-identical; the provider may order (e.g. hold first when a Loran's Escape
+  is in hand) but not pick. Fallback only if the searched axis proves infeasible: a provider `ShouldAttackWith`
+  hold heuristic, surfaced to the USER.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
