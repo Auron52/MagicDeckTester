@@ -90662,7 +90662,7 @@ public:
     // one (base plan, bp_at) slot shares its pre-continuation prefix state.
     std::size_t LastBase() const { return m_slots[m_last].base; }
     int         LastAt()   const { return m_slots[m_last].at; }
-    std::size_t LastSlot() const { return m_last; }   // MTG_BP_WAVE_PROBE slot attribution
+    std::size_t LastSlot() const { return m_slot_offset + m_last; }   // stable across retired waves
 
     // Fills `out` with the next variant to score. False once every slot is retired.
     // Did the variant Next() last handed out come from a base opened only on the canon record?
@@ -90674,6 +90674,9 @@ public:
     std::size_t LastPreLen() const { return m_last < m_slots.size() ? m_slots[m_last].pre.size() : 0; }
     std::string SlotDesc(std::size_t i) const   // MTG_DEV_SEQ_STATS
     {
+        if (i < m_slot_offset)
+        { return i < m_retired_desc.size() ? m_retired_desc[i] : "?"; }
+        i -= m_slot_offset;
         if (i >= m_slots.size()) { return "?"; }
         const Slot& sl = m_slots[i];
         std::string d = "tmpl=" + std::to_string(sl.base) + " at=" + std::to_string(sl.at) + " pre=[";
@@ -90694,9 +90697,20 @@ public:
         {
             if (NextLive(plans, out)) { return true; }
             if (m_deferred.empty()) { return false; }
-            m_cursor = m_slots.size();   // the promoted wave starts at its first slot
+            // Every slot of the previous deviation wave has retired. Keeping those Slots
+            // made a long compound walk retain every old Plan prefix and scan them on each
+            // NextLive call. Keep only stable ids for the prefix cache and diagnostics.
+            if (devseqstats::On())
+            {
+                m_retired_desc.reserve(m_slot_offset + m_slots.size());
+                for (std::size_t i = 0; i < m_slots.size(); ++i)
+                { m_retired_desc.push_back(SlotDesc(m_slot_offset + i)); }
+            }
+            m_slot_offset += m_slots.size();
+            std::vector<Slot>().swap(m_slots);
+            m_cursor = 0;
             for (Slot& d : m_deferred) { m_slots.push_back(std::move(d)); }
-            m_deferred.clear();
+            std::vector<Slot>().swap(m_deferred);
         }
     }
 
@@ -90726,7 +90740,7 @@ public:
     {
         const Slot& sl = m_slots[m_last];
         if (sl.pre.empty()) { return (static_cast<uint64_t>(sl.base) << 8) | static_cast<uint64_t>(sl.at & 0xFF); }
-        return (1ull << 63) | static_cast<uint64_t>(m_last);
+        return (1ull << 63) | static_cast<uint64_t>(LastSlot());
     }
 
 private:
@@ -90834,6 +90848,7 @@ public:
             if (m_covered.count(SlotKey(bi, at)) != 0) { continue; }
             m_covered.insert(SlotKey(bi, at));
             m_slots.push_back(Slot{ idx, bi, at, 0, 0, -1, false, m_empty });
+            m_ordinary_slots.insert(SlotKey(bi, at));
             if (BpWaveProbeOn()) { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
         }
         // A FRESH base never opens the indices before the pend (no route ever selected it for them;
@@ -90861,13 +90876,14 @@ public:
         {
             // A base this walker already owns for another site may hold a slot at the pend index
             // already; that slot learns the same demoted length and hands the wave out itself.
-            for (const Slot& s : m_slots) { if (s.base_slot == bi && s.at == pend_at) { return; } }
+            if (m_ordinary_slots.count(SlotKey(bi, pend_at)) != 0) { return; }
             // ...and if it does not yet, the node owns the index's ranks: never open it here.
             m_covered.insert(SlotKey(bi, pend_at));
         }
         Slot ds{ idx, bi, pend_at, 0, 0, 0, false, false };
         ds.m = m;
         m_slots.push_back(ds);
+        m_ordinary_slots.insert(SlotKey(bi, pend_at));
     }
 
     // Report what the apply of the last handed-out variant observed: `n` = the continuation list's
@@ -91029,6 +91045,7 @@ private:
                             Slot ds{ idx, bi, at, k0, k0, it->second.n, false, false };
                             ds.m = it->second.m;
                             m_slots.push_back(ds);
+                            m_ordinary_slots.insert(SlotKey(bi, at));
                             continue;
                         }
                     }
@@ -91084,6 +91101,7 @@ private:
                 }
             }
             m_slots.push_back(Slot{ idx, bi, at, k0, k0, -1, false, m_empty && k0 == 0 });
+            m_ordinary_slots.insert(SlotKey(bi, at));
             if (at > 0 && BpWaveProbeOn())
             { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
         }
@@ -91093,6 +91111,9 @@ private:
     const KnownLens*         m_known_n = nullptr;   // MTG_BP_WAVE_NSKIP; nullptr = off
     const TranspositionTable::Key* m_node_key = nullptr;   // MTG_BP_NSKIP_GLOBAL; nullptr = off
     std::vector<Slot>        m_slots;
+    std::size_t              m_slot_offset = 0;  // number of retired slots; compound cache ids stay unique
+    std::vector<std::string> m_retired_desc;     // MTG_DEV_SEQ_STATS only
+    std::unordered_set<uint64_t> m_ordinary_slots; // duplicate guard across retired waves
     std::vector<std::size_t> m_bases;      // node-plan index of each base plan, in slot-creation order
     std::unordered_set<std::size_t> m_canon_only;   // base_slot indices opened only on the canon record
     std::vector<int>         m_at_count;   // how many bp_at slots each base already has
@@ -120735,6 +120756,50 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             // the refutation without paying for its own FSLineTail. Per-pass, because a deeper
             // pass genuinely re-asks the question.
             std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pass_refuted;
+            // The value-row caller reads only the earliest win. Before a compound deviation can
+            // monopolise the first candidate, look for an observed horizon-edge win anywhere in
+            // the ordinary tree. Every shallower horizon was fully refuted, so such a witness
+            // settles the label even if other candidates have compound continuations. A miss
+            // proves nothing and falls through to the full search below.
+            if (earliest_only && BpDevSeqOn() && g_devseq_suppress == 0)
+            {
+                FSLineCache probe_lc;
+                std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> probe_refuted;
+                const bool latent_prev = g_devseq_latent_hit;
+                const unsigned long long latent_n_prev = g_devseq_latent_n;
+                const int latent_min_prev = g_devseq_latent_min_turn;
+                {
+                    struct Suppress { Suppress() { ++g_devseq_suppress; }
+                                      ~Suppress() { --g_devseq_suppress; } } _sup;
+                    for (std::size_t i = 0; i < pre.size(); ++i)
+                    {
+                        if (gamework::Poll()) { break; }
+                        if (settled[i]) { continue; }
+                        if (ldedup && probe_refuted.count(ckey[i]) != 0) { continue; }
+                        LpSite _lps(1);
+                        LoadPlanState(pass_buf, state, s_state_reuse);
+                        GameState& s = pass_buf;
+                        std::vector<Action> bp;
+                        ApplyPlanDirect(s, pre[i], true, &bp);
+                        SimulateCombat(s);
+                        const TurnSolver::SearchLine tail =
+                            FSLineTail(s, dd, max_turns, cut, second_main, &tt, &probe_lc, &budget);
+                        if (tail.win_turn <= cut)
+                        {
+                            ladder_wt[i] = tail.win_turn;
+                            settled[i] = 1;
+                            --unsettled;
+                            any_new = true;
+                            break;
+                        }
+                        if (ldedup) { probe_refuted.insert(ckey[i]); }
+                    }
+                }
+                g_devseq_latent_hit = latent_prev;
+                g_devseq_latent_n = latent_n_prev;
+                g_devseq_latent_min_turn = latent_min_prev;
+            }
+            if (!any_new)
             for (std::size_t i = 0; i < pre.size(); ++i)
             {
                 if (gamework::Poll()) { break; }   // a VOID game (see the pass-0 loop)
@@ -120758,8 +120823,64 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 std::vector<Action> bp;
                 ApplyPlanDirect(s, pre[i], true, &bp);
                 SimulateCombat(s);
-                const TurnSolver::SearchLine tail =
-                    FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget);
+                // FullSearchLine searches compound breakpoint deviations in two passes, but
+                // labels enter FSLineTail directly. Run the ordinary tree first. A win at this
+                // horizon is already this candidate's earliest (all shallower horizons were
+                // refuted), so compound lines cannot improve it. Only a refutation that met a
+                // latent occurrence needs the compound tree. The first-pass cache is carried
+                // across exactly as in FullSearchLine, with dirty answers erased before pass 2.
+                auto label_tail = [&]() -> TurnSolver::SearchLine
+                {
+                    if (!BpDevSeqOn() || g_devseq_suppress != 0)
+                    { return FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget); }
+                    FSLineCache carry;
+                    std::vector<TranspositionTable::Key> dirty;
+                    std::vector<DvsNodeMeta> dirty_meta;
+                    DevSeqDirtyKeys dirty_keys;
+                    FSLineCache* const lc_prev = g_devseq_lc_handoff;
+                    auto* const dirty_prev = g_devseq_dirty;
+                    auto* const keys_prev = g_devseq_dirty_keys;
+                    auto* const meta_prev = g_devseq_dirty_meta;
+                    const bool latent_prev = g_devseq_latent_hit;
+                    const int min_prev = g_devseq_latent_min_turn;
+                    const int known_miss = g_lazy_known_miss_depth;
+                    g_devseq_latent_hit = false;
+                    g_devseq_latent_min_turn = INT_MAX;
+                    g_devseq_lc_handoff = &carry;
+                    g_devseq_dirty = &dirty;
+                    g_devseq_dirty_keys = &dirty_keys;
+                    const bool tail_skip = DvsTailSkipOn();
+                    g_devseq_dirty_meta = tail_skip ? &dirty_meta : nullptr;
+                    carry.dvs_mode = (tail_skip || DvsDirtyReadOn()) ? 1 : 0;
+                    TurnSolver::SearchLine first;
+                    {
+                        struct Suppress { Suppress() { ++g_devseq_suppress; }
+                                          ~Suppress() { --g_devseq_suppress; } } _sup;
+                        first = FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &carry, &budget);
+                    }
+                    carry.dvs_mode = 0;
+                    const bool met_latent = g_devseq_latent_hit;
+                    const int min_latent = g_devseq_latent_min_turn;
+                    g_devseq_latent_hit = latent_prev || met_latent;
+                    g_devseq_latent_min_turn = std::min(min_prev, min_latent);
+                    g_devseq_dirty_meta = meta_prev;
+                    g_devseq_dirty_keys = keys_prev;
+                    g_devseq_dirty = dirty_prev;
+                    g_devseq_lc_handoff = lc_prev;
+                    if (first.win_turn <= cut || !met_latent || min_latent > cut)
+                    { return first; }
+                    FslEraseDirty(&carry, dirty, dirty_meta, cut);
+                    g_lazy_known_miss_depth = known_miss;
+                    g_devseq_lc_handoff = &carry;
+                    carry.dvs_mode = tail_skip ? 2 : 0;
+                    carry.dvs_dirty.clear();
+                    const TurnSolver::SearchLine second =
+                        FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &carry, &budget);
+                    carry.dvs_mode = 0;
+                    g_devseq_lc_handoff = lc_prev;
+                    return second.win_turn < first.win_turn ? second : first;
+                };
+                const TurnSolver::SearchLine tail = label_tail();
                 if (ldedup)
                 {
                     winlesscert::g_ldd_searched.fetch_add(1, std::memory_order_relaxed);
@@ -127762,6 +127883,13 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     BpEnumMap& cache = bpcache::t_plans;   // cleared per game -- see bpcache / ClearPerGameCaches
     static const std::size_t s_bp_enum_cap =
         static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
+    // The offline earliest-win ladder can hold a large number of distinct mid-turn
+    // continuation lists while it refutes a single horizon. It needs no long-lived
+    // 8,192-entry working set: Boars' pathological label retained hundreds of MB here,
+    // while 128 entries reproduced the labels and ran faster in the matched sample.
+    // Keep the explicit env cap as an upper bound; ordinary play keeps its old cap.
+    const std::size_t bp_enum_cap = g_unbounded_label_search != 0
+                                  ? std::min<std::size_t>(s_bp_enum_cap, 128) : s_bp_enum_cap;
 
     TranspositionTable::Key key;
     const bool keyed = (pre_key != nullptr)
@@ -128280,7 +128408,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 plans.size(), plans.capacity(), acts, acts_cap, plancache::ApproxPlansBytes(plans),
                 sizeof(TurnSolver::Plan), sizeof(Action),
                 keyed ? 1 : 0, static_cast<unsigned long long>(key.h1), nf,
-                static_cast<unsigned long long>(raw.h1), nr, cache.size(), s_bp_enum_cap,
+                static_cast<unsigned long long>(raw.h1), nr, cache.size(), bp_enum_cap,
                 plancache::PoolUsed().load(), plancache::BudgetBytes(),
                 static_cast<unsigned long long>(g_decision_epoch));
             // MTG_BP_DERIVE_DUMP=1 (DIAGNOSTIC, print-only, with MTG_BP_DERIVE_SLOW_MS): the derivation's
@@ -128419,7 +128547,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             bpuse::g_raw_keys.insert(raw);
             bpuse::g_full_keys.insert(key);
         }
-        if (cache.size() >= s_bp_enum_cap || !plancache::Fits(psz))
+        if (cache.size() >= bp_enum_cap || !plancache::Fits(psz))
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
             // DIAGNOSTIC (MTG_BP_SCRATCH_KEEP=1): evicted entries are moved aside, not destroyed, so a caller
