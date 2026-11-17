@@ -2,18 +2,21 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:19 UTC
+## Current state, updated 03:30 UTC
 
-The next due **Mill** PGO mana-clean gate is running as the only active
-simulation batch, exec session 54757:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run mill --games 5000 --name codex-mill-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/mill_fresh_gate.out`.
-Read `logs/mana_clean/codex-mill-fresh-20261117/report.md` on completion,
-update this handoff, and commit the `test/mana_clean.json` record.
+**Mill fresh gate complete:** indices 10,000–14,999 at PGO source
+`fcb9352608ea` yielded 131 ENUM-GAP flags across 51 signatures, with
+zero other issue class or cap and byte-identical oracle-on/off play.
+Report: `logs/mana_clean/codex-mill-fresh-20261117/report.md`.
+The leading signatures are still Visions of Beyond → Surgical Extraction,
+usually with Surgical life-paid and a different land left untapped; exact
+seeds include 30010053 T2 (15 flags), 30010015 T2 (14), 30010356 T2
+(10), and 30010627 T2 (7). This is the residual investigated in
+`docs/design/mill-surgical-mana-clean-2026-11-16.md`: simply reopening
+Surgical's searched mana-vs-life choice did not clear the gate and added
+substantial work. The menu/resource comparison across Visions' draw
+breakpoint needs a narrower diagnosis. The new `test/mana_clean.json`
+record is committed with this handoff. No simulation batch is active.
 
 **Shadowborn Apostle fresh gate complete:** indices 100,000–104,999 at
 PGO source `fcb9352608ea` yielded three issues: two APPLY-DROP, one

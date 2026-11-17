@@ -6611,6 +6611,46 @@
      "seed": 30005000,
      "src": "757ec31287ceba27dfbe94ec3b5ec68453fd0775",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 65,
+      "DOMINATED-LAND": 56438,
+      "DROP-COVERED": 322289,
+      "ENUM-GAP": 131,
+      "PHANTOM": 141
+     },
+     "commit": "908833468295e9180fcab77a3bb71f67e5caa3b4",
+     "date": "2026-11-17T03:31:13Z",
+     "decisions": 46483,
+     "deck": "decks/Mill/Mill.cod",
+     "deck_sha": "470d27a576f82fa68f57fc4d0eba5f836bbe1676",
+     "game_index": 10000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 131,
+     "life_breakpoints": [],
+     "ms_off": 13163052,
+     "ms_on": 15240023,
+     "report": "logs/mana_clean/codex-mill-fresh-20261117/report.md",
+     "run": "codex-mill-fresh-20261117",
+     "seed": 30010000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "issues"
     }
    ]
   },
