@@ -2,7 +2,17 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 04:53 UTC
+## Current state, updated 05:04 UTC
+
+The eight-worker due-four gate was intentionally stopped at chunk
+boundary for the post-rebase smoke and upcoming push. It had completed
+18 new oracle chunks in attempt 2; all finished jobs persist. Current
+top-level simulation batch is **smoke**, exec session `98865`, console
+`build/scratch/dragonstorm_visible_lump_ab/rebase_smoke.out`, command
+`MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`. Once smoke passes,
+push no earlier than 05:09 UTC, start an async Windows CI watch, and
+resume the due-four gate with `--threads 8` (attempt 3). If smoke fails,
+investigate before the push; the mana gate stays paused meanwhile.
 
 **Active batch:** refreshing four older issue records at source
 `fcb9352608ea`, 5,000 games each: Anti-Lifegain, Bruna, Midrange Burn,
