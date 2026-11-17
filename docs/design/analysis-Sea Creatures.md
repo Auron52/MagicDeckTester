@@ -245,6 +245,29 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
 * **Gorger gi57 (s8840001):** arms split on turn 1 before any Gorger exists; at b20 the extra menu re-prices the
   lookahead; b40 / b80 / b160 play identically. Uninformative about the Gorger choice.
 
+## Stage 5c2 leaf tie-break / 5i discard bound (2026-11-17, re-run after the 9p loss)
+
+* **5c2 leaf tie-break** (`scripts/leaf_tiebreak_check.py --tag sea`, 12000 paired games at play settings, one pooled
+  batch): net -3 turns, 0 worse / 2 better, binding in 2 of 12000 (0.017%). The script's verdict is "no sign at this
+  sample"; at 12000 pairs it is effectively unbindable for this deck, so the default (ON) stands -- a lever that
+  almost never fires costs nothing. No provider opt-out proposed.
+* **5i discard best-vs-worst bound** (`build/scratch/sea/discbound/`, `MTG_SHED_WORST` + `MTG_NONCLEANUP_SHED_WORST`
+  vs the search's choice, 200 g per cell, seeds 8850001 / 8860001):
+
+  | cell | search shed | worst shed |
+  |---|---|---|
+  | d3 b10 s8850001 | 5.910 | 5.910 |
+  | d3 b10 s8860001 | 5.880 | 5.885 |
+  | d5 b20 s8850001 | 5.900 | 5.895 |
+  | d5 b20 s8860001 | 5.870 | 5.870 |
+
+  The bound is ~0 (+/-1 game-turn in 200): the discard choice does not move this deck. 20 real sheds in 1600 games.
+  The bucket ladder proposal (`docs/design/sea-creatures-discard-policy-proposal.md`) is therefore a correctness /
+  readability item for the USER, not a win-turn lever.
+* **5a verify_deck viewer gate:** the auditor read Koma / Brinelin `legend_keep` as a HARD MISS. Expectation bug in the
+  audit (a single cast forces nothing; the prompt needs a second, differing copy beside the first); fixed to
+  NOT_FORCED in `scripts/audit_viewer_decisions.py`.
+
 ## Approved deferrals
 
 (none yet)
