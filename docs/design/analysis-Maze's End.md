@@ -44,7 +44,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 |---|---|---|
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
 | I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | DONE `c71d96361` + `699e1137a` (wip/maze-end); unit suite 3411/3411; smoke byte-identical to I1 (all 219 cases' per-game digests) |
-| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | IN PROGRESS (see I3 cards) |
+| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | CODE DONE `4b416123c` + I3b (see I3 cards); unit suite 3418/3418 on `4b416123c`; in-window crossing census 0; smoke/units on the I3b tip: see I3b below |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
 
 ### I1 cards (2026-11-17)
@@ -224,6 +224,57 @@ narrowed playout / d0 runner / breakpoint enumeration, not a constant-leaf edge)
   resolution), then the batch's enter triggers resolve in put order (land extras, Gateway Plaza with its pin, landfall /
   Guild Summit -- those draws are kept).
 
+**I3b -- the in-window audit of the crossing choices (2026-11-17).** The coordinator required that no Burgeoning
+which-land / none, Manabond yes/no, or dumped-land entry choice is resolved by its unpinned front while search depth
+remains. Instrument: `MTG_CROSSING_LAND_STATS=1` (TurnSolver.cpp `crossinglandcensus`, hooked in
+`TakeCrossingLandRank`; `=2` prints each searched-frame / overflow hit with seed and turn), the face-up census's frame
+classification plus an `overflow` count for a fanned crossing's 13th+ ordinal.
+* **First census (I3 code, 60 d3 b10 + 30 d5 b10 games, seeds 91001 / 92001): 214 searched-frame hits** (seeds 91009,
+  91042, 91051, 91058, 92015 ...; turns 7-8; widths 2-4). Root cause, traced in gdb on seed 91051 gi50 d3 b10: NOT the
+  crossing axis. `MazesEndProvider::ProjectsAlternateWin` is a BOARD-level projection ("an untapped Maze's End plus {3}
+  and ten Gate names"), and the plan enumeration's subset loop (EnumeratePlansWithLand, `ProjectsAlternateWin(state,
+  {})`) labelled EVERY plan of such a turn `wins_this_turn`. SolveWithLookahead returns the first labelled candidate
+  unexecuted at an interior node ("Candidates are sorted highest-value first..."), so a rollout turn adopted a plan
+  that does NOT activate Maze's End (there: Cliffgate + a cast), without searching the turn, and the line's later
+  crossing fell to its fronts inside the window. That is an in-window greedy pick of the whole turn, not only of the
+  crossing. **Fix:** `DecisionProvider::AlternateWinNeedsAction()` (new virtual at the END; default false, so every
+  other deck is byte-identical), true for MazesEndProvider, keeps the board-level projection off the per-plan label.
+  The activation plan's win is found by execution. On the traced game the deck now wins T7 instead of T8.
+* **Second fix, a host with no fan:** SolveWithLookahead's group-wave tranche scorer (`score_gw`) crossed with a bare
+  `SimulateEndAndStartNextTurn` and adopted `pass_best = v` with no boundary pin. It now fans the crossing-land digit
+  (`BoundaryChooseCrossingLandsByRollout`, the cl_only BoundaryFan, deck-gated) and records it. The OTHER boundary
+  axes (echo, Defense of the Heart, face-up, upkeep tutor, ...) are still unfanned in that host: a pre-existing hole,
+  OWED; fixing it moves those decks' play and needs a held-out A/B (USER).
+* **Census after both fixes (same 90 games): searched-frame = 0, fanned overflow = 0** (playout 23.1M, outside-window
+  59.5K, edge 0, real-crossing 0). d3 b10 avg 7.0667 over 60, d5 b10 avg 6.9667 over 30 (no profile, I4 cards still
+  unimplemented). Cost note for the suite gate: ~43 s/game at d3 b10 and ~41 s/game at d5 b10 wall on 32 busy
+  workers -- check `suite_gate.py --cost` early. The unbudgeted d3 rows ran past 0.3 h per game (probe stopped).
+* **Greedy multi-land wrappers (Exploration).** `SimulateLandPlay` takes every open drop only where the single greedy
+  drop already ran: an undecided plan (`land_decided == false`, i.e. a depth-0 static Solve: HorizonLeaf / D0Runner)
+  and the extra-turn chain trial (depth 0). `AIEngine::TryPlayLand`'s callers are `m_lookahead_depth == 0` paths, plus
+  one pre-existing executor fallback (AIEngine.cpp, the flood-keep drop after an UNSEARCHED draw continuation,
+  `!bp_searched_here && hand > 7`), which now takes every open drop in this deck. Not a new site; recorded as owed
+  with the fallback itself.
+
+**I3b sound folds.** Added: decision 28 (Manabond "yes" with no land in hand, deck-scoped provider dominance). OWED,
+not built (collapse-only, no proof written yet): an order fold for Exploration drops whose entries commute
+(`LandEntriesCommute`; different-named Gates never fold, since the name set is the win condition); a multiset fold
+for several Burgeoning triggers whose puts commute; a widening of the crossing pin past 12 ordinals if `overflow`
+ever reads non-zero.
+
+**I3b rules review** (`.claude/skills/mtg-rules.md`). Exploration: CR 305.2 additional land plays; the skill models
+static grants as evaluated continuously, the engine folds them into the per-turn bonus at untap and on entry
+(decision 21: a copy leaving mid-turn keeps its drop -- disclosed, reachable only through our own human-only
+Charm mode 3). Burgeoning: triggers on the opponent PLAYING a land (the passive opponent's `play.played`), never on
+a fetch's search or a put; one trigger per copy, each resolving against the current hand; the put is ours and is
+not a land play (no `lands_played_this_turn`). Manabond: "If you do" -- revealing with no land still discards the
+hand (Gatherer ruling), which is why decision 28 is a dominance, not an identity; the batch enters simultaneously
+(CR 614.12: each enters-tapped-unless test and Gond Gate's replacement judged against the pre-event board, the
+Genesis Wave precedent); enter TRIGGERS (Gateway Plaza, Guild Summit's draw, landfall) go on the stack after the
+resolution, so the draws follow the discard -- correct. Controller-aware entry for the opponent-turn put (I2).
+Ordering note: Manabond is fixed before Abiding Grace at the end step; a real controller orders its own
+simultaneous end-step triggers (CR 603.3b), but no other end-step trigger exists in this list. No defect found.
+
 ## Decisions and provisional deferrals (USER sign-off pending)
 
 Defaults taken so the work can proceed (raised to the user; none blocks anything):
@@ -309,6 +360,33 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
    nonland cards in the controller's zones (G/U/R for this list); activated-ability pips are ignored because the
    only one in the list (The Black Gate's {1}{B}) needs a creature target and the list has none. Re-check if the
    list changes (the restriction is recomputed at runtime, the premise is not).
+21. **Exploration's extra drops are folded into `bonus_land_drops_this_turn`** (seeded at each untap from the copies
+   in play, +1 when a copy enters). A copy LEAVING mid-turn does not take its drop away; only our own Archdruid's
+   Charm mode 3 (human-only, decision 3) could exile one. Disclosed in the bracket note.
+22. **The multi-drop route is gated on `deck_has_static_land_drops`.** Scale the Heights (`grants_extra_land_drop`)
+   decks keep the old hole: a second drop in one main phase is unfindable for them. OPEN QUESTION (USER): extending
+   the route moves their play and needs a held-out A/B.
+23. **Burgeoning's menu** is the distinct land names in hand order, each crossed with its admitted as-enters values,
+   then "none" LAST. Rank 0 (the first land) is the beyond-horizon playout default.
+24. **Manabond's rank 0** is yes when the hand holds a land, else no (the playout default). See 28 for the no-land
+   restriction.
+25. **Manabond and Burgeoning share ONE crossing pin** (an odometer over event-ordered ordinals, 12 max) rather than
+   separate plan axes. A 13th+ real decision in one crossing takes its front unsearched; the census (29) counts it
+   as `overflow` (0 seen).
+26. **Human play** asks which land / yes-no on the `dig` chooser, and the land's colour or Plaza prompt follows at the
+   entry. Autonomous play fans (land x admitted entry pin) in one rank (decision 15's rule).
+27. **Manabond's dumped lands resolve their enter triggers in put (hand) order, after the discard.** A real
+   controller may order its simultaneous triggers; the only order-sensitive pair in the list is Gateway Plaza's
+   pay before / after Guild Summit's draw, the same disclosure as decision 17.
+28. **Manabond "yes" with NO land in hand is pruned** (I3b; `DecisionProvider::CrossingDumpWithoutLandDominated`,
+   true only in `MazesEndProvider`). "Yes" there is NOT the same as "no" -- it still reveals and discards the hand --
+   so this is a deck-scoped DOMINANCE restriction, not an engine identity fold: nothing in this list reads the
+   graveyard, rewards a discard or an empty / smaller hand, and the cleanup discard is ours to choose, so a superset
+   hand is never worse. The crossing-pending predicate mirrors it. Human play still asks. PREMISE: re-check if the
+   list gains a madness / threshold / delirium / hellbent / hand-size card.
+29. **The in-window audit for the crossing choices** (I3b, coordinator requirement): `MTG_CROSSING_LAND_STATS=1`
+   (TurnSolver.cpp `crossinglandcensus`, the face-up census's shape) classifies every UNPINNED crossing decision with
+   a real choice by frame, plus fanned-crossing overflow past the 12 ordinals. Result in "I3 cards" below.
 
 ## Approved deferrals
 

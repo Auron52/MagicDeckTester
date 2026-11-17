@@ -4869,6 +4869,13 @@ public:
     std::vector<int> LandEntryPinCandidates(const GameState& s, int controller,
                                             const CardDefinition& def) const override;
     bool LandEntersUntapped(const GameState& s, const CardDefinition& def, bool heuristic) const override;
+    // I3b: Manabond "yes" with no land in hand only discards the hand -- dominated by "no" in this list (sound
+    // deck-scoped dominance, ledger decision 28): no card here reads the graveyard, rewards a discard or an
+    // empty hand, and the cleanup discard is ours to choose, so a superset hand is never worse. PREMISE: re-check
+    // if the list gains a madness / threshold / delirium / hellbent / "cards in hand" card.
+    bool CrossingDumpWithoutLandDominated(const GameState&, int) const override { return true; }
+    // I3b: Maze's End's win needs the activation; the projection must not label a plan that does not activate.
+    bool AlternateWinNeedsAction() const override { return true; }
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
