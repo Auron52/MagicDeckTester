@@ -21,6 +21,21 @@ searched slower games before accepting GT or pushing; use
 regressions, then rerun smoke/accept only with evidence. The due-four
 mana gate remains paused at completed chunks and can resume after the
 smoke investigation. The 05:09 push window is open, but no push yet.
+The smoke audit's searched rows are 15 slower, 13 faster, 345 changed
+at the same score; over 14,515 searched games the net loss-penalized
+delta is **+4 turn-games** (+0.000276 per game). d0 is 248 slower and
+260 faster, net -31 turn-games over 55,100. The classifier output at
+`build/scratch/dragonstorm_visible_lump_ab/rebase_smoke_classify.out`
+marks 12 of the 15 searched slowdowns as higher-budget churn. Three
+persist at 4x/16x: Creature Giving d5 gi113, Cyclone d3 gi37, Five
+Colour d3 gi24. `test/explain_game.py` replays the saved baseline binary
+and current binary at the original budget for these three and reports
+the **same T5** on both, though committed `.wins` says old T4 in each;
+the baseline snapshot is `logs/snapshots/smoke-baseline` (built from
+f2156d4e6 with dirty state). Investigate this GT/snapshot mismatch
+before accepting, and review the same-score changes by affected deck.
+No GT acceptance or push has occurred. The mana gate can resume in
+parallel with read-only GT analysis, one simulation batch at a time.
 
 The eight-worker due-four gate was intentionally stopped at chunk
 boundary for the post-rebase smoke and upcoming push. It had completed
