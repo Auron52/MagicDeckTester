@@ -79,6 +79,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    wins are not regressions.) Sea Creatures has no landfall, so it never holds in search. OWED FOLLOW-UP (not in this run's scope;
    would move other decks): audit every existing SEARCHED hold site against this rule -- the root
    <=3-life autonomous hold (`FetchResolvesOnPlay`) is not landfall-scoped -- and bring the list to the USER.
+   USER on life: *"Holding is not the correct solution to that problem"* -- fetch a shock tapped or a basic
+   instead. Deferred doc: `docs/design/fetch-hold-searched-scope.md`.
 1. ~~Misty Rainforest: migrate to the battlefield fetchland model~~ — **ANSWERED (USER 2026-11-16):**
    *"Yes, misty rainforest should automatically get Breeding Pool, kind of like how Boars gets Stomping
    Ground."* So: migrate Misty to the battlefield model, and the Sea Creatures provider ranks Breeding
