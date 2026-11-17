@@ -1,5 +1,17 @@
 # Handoff: the mana-clean fix chain, Claude session -> Codex (2026-11-14 ~10:45 UTC)
 
+## Codex continuation (2026-11-17)
+
+Dragonstorm's 62,000–66,999 gate had 93 issues. Four Ruby Medallion
+cast-order drops, one two-Apex enumeration gap, and two storage-land oracle
+gaps now clear in focused repros. The provider order fix is play-identical
+over 5,000 paired games; the narrowed Apex gate gains two earlier wins and
+no later wins in another 5,000 paired games at 5% more CPU. All 3,383 unit
+cases, 561 scenarios, and 864 strict viewer references pass; the measured
+Dragonstorm smoke/regression changes are accepted. Windows CI for the prior
+push passed. The next fresh PGO block is 67,000–71,999. See
+`docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
+
 The Claude owner session (24b9e9dc) is out of usage and hands the USER's standing mana-clean program to Codex.
 Detailed per-item history is in `docs/design/mana-clean-pass-checkpoint.md` (newest bullets at the end of each
 round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-chain/<item>-handoff.md`.
