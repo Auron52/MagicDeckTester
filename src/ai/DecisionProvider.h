@@ -4531,6 +4531,15 @@ public:
     // Mimic is an artifact creature) -- not reachable today (no card in the pool rewards one of our
     // artifacts or enchantments being destroyed in a deck running a "may destroy" ETB), disclosed as a
     // PROVISIONAL known narrowing. The human always sees the full legal set and may decline.
+    // RestrictSagaStealCandidates -- Kiora Bests the Sea God III ("gain control of target permanent an
+    // opponent controls"): narrow the engine-ordered legal list `cands` (battlefield indices, SagaStealCandidates'
+    // order, front = the heuristic) that the searched chapter-target rank pin indexes. Never called in human
+    // play (the human chooses from the full list). The ROOT rule is SOUND FOLDS ONLY, default ON,
+    // MTG_UNPRUNE=sagasteal restores the full list (DecisionProviders.cpp has the proof): an identity fold (one
+    // representative per class of interchangeable vanilla bodies) and a dominance fold (a vanilla body another
+    // vanilla candidate beats on both power and toughness). Must keep cands.front().
+    virtual void RestrictSagaStealCandidates(const GameState& s, int controller, std::vector<int>& cands) const;
+
     virtual int EtbOptionalDestroyTargetPick(const GameState& s, int controller,
                                              const std::vector<int>& legal) const
     {

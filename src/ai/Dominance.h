@@ -1009,6 +1009,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // keeps a pinned rank 0 distinguishable from "no pin".
     if (s.scripted_saga_target >= 0)
     { fold(static_cast<std::uint64_t>(s.scripted_saga_target) + 1u); }
+    // Summon: Leviathan's live until-end-of-turn attack-draw instances (GameState::eot_attack_draw_n): set at the
+    // draw step, read at declare-attackers -- future-determining within the turn. Value-gated with its own tag so
+    // every deck without the card keeps its exact key.
+    if (s.eot_attack_draw_n != 0)
+    { fold(0xE07D4A00ull + static_cast<std::uint64_t>(s.eot_attack_draw_n)); }
     // Abiding Grace's packed end-step pin: FUTURE-DETERMINING (set during the turn's apply, consumed at
     // THIS turn's end step), value-gated with its own domain tag so every deck without the card keeps
     // its exact key.

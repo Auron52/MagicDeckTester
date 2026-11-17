@@ -2128,6 +2128,40 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         = params.value("saga_ch1_free_cast_creature_colors", std::string{});
     p.saga_ch2_counters_on_target  = params.value("saga_ch2_counters_on_target", 0);
     p.saga_ch3_double_pt_target    = params.value("saga_ch3_double_pt_target", false);
+    // Sea Creatures I3: Kiora Bests the Sea God / Summon: Leviathan chapter effects.
+    p.saga_ch1_token_power         = params.value("saga_ch1_token_power", 0);
+    p.saga_ch1_token_toughness     = params.value("saga_ch1_token_toughness", 0);
+    for (const std::string& s : params.value("saga_ch1_token_subtypes", json::array()))
+        p.saga_ch1_token_subtypes.push_back(s);
+    p.saga_ch1_token_color         = params.value("saga_ch1_token_color", std::string());
+    for (const std::string& s : params.value("saga_ch1_token_keywords", json::array()))
+        p.saga_ch1_token_keywords.push_back(s);
+    for (const std::string& s : params.value("saga_ch1_bounce_creatures_except_subtypes", json::array()))
+        p.saga_ch1_bounce_creatures_except_subtypes.push_back(s);
+    p.saga_ch2_tap_opp_nonland     = params.value("saga_ch2_tap_opp_nonland", false);
+    p.saga_ch3_gain_control_opp_permanent = params.value("saga_ch3_gain_control_opp_permanent", false);
+    for (const int ch : params.value("saga_eot_attack_draw_chapters", json::array()))
+    {
+        if (ch < 1 || ch > p.saga_chapters || ch > 7)
+            throw std::runtime_error("saga_eot_attack_draw_chapters: chapter outside 1..saga_chapters");
+        p.saga_eot_attack_draw_chapter_mask |= static_cast<std::uint8_t>(1u << ch);
+    }
+    for (const std::string& s : params.value("saga_eot_attack_draw_subtypes", json::array()))
+        p.saga_eot_attack_draw_subtypes.push_back(s);
+    {
+        const bool any_effect = p.saga_ch1_token_power > 0 || !p.saga_ch1_bounce_creatures_except_subtypes.empty()
+            || p.saga_ch2_tap_opp_nonland || p.saga_ch3_gain_control_opp_permanent
+            || p.saga_eot_attack_draw_chapter_mask != 0;
+        if (any_effect && p.saga_chapters <= 0)
+            throw std::runtime_error("a saga_* chapter effect needs saga_chapters > 0");
+        if ((p.saga_ch2_tap_opp_nonland && p.saga_chapters < 2)
+            || (p.saga_ch3_gain_control_opp_permanent && p.saga_chapters < 3))
+            throw std::runtime_error("a saga_chN_* effect names a chapter past saga_chapters");
+        if ((p.saga_eot_attack_draw_chapter_mask != 0) != !p.saga_eot_attack_draw_subtypes.empty())
+            throw std::runtime_error("saga_eot_attack_draw_chapters and saga_eot_attack_draw_subtypes go together");
+        if ((p.saga_ch1_token_power > 0) != (p.saga_ch1_token_toughness > 0))
+            throw std::runtime_error("saga_ch1_token_power and saga_ch1_token_toughness go together");
+    }
     p.creature_enters_min_power     = params.value("creature_enters_min_power", 0);
     p.own_creature_enters_draw      = params.value("own_creature_enters_draw", 0);
     p.creature_enters_includes_self = params.value("creature_enters_includes_self", false);

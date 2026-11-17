@@ -79209,6 +79209,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_prophets_sac.clear();
     state.scripted_prophets_sac_cursor = 0;
     state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
+    state.eot_attack_draw_n       = 0;             // Summon: Leviathan's until-EOT attack draws (lockstep w/ UntapStep)
     state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice   = -1;            // searched Abiding Grace pin is per-turn (same lockstep)
     state.scripted_athreos_coin   = -1;            // searched Shroud-Veiled end-step target is per-turn
@@ -95413,46 +95414,65 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         auto is_saga = [](const CardDefinition* d)
         { return d != nullptr && d->params.saga_chapters > 0; };
-        // Does this Saga definition have a TARGETING chapter still ahead of it?
-        auto targets_ahead = [](const CardDefinition& d, int lore)
+        // Which kind of TARGETING chapter fires at the NEXT draw step (lore + 1)? 0 = none, 1 = "target creature
+        // you control" (World War Hulk II / III), 2 = "target permanent an opponent controls" (Kiora Bests the Sea
+        // God III). Gated to the NEXT chapter, not "any targeting chapter still ahead" (Sea Creatures I3): the pin
+        // is consumed by the next advance's first targeting chapter, so a pin for a later chapter is inherited one
+        // more turn by duplicate worlds (Kiora at lore 1: chapter II does not target). Identical for WWH, whose
+        // every chapter after I targets. A lore-0 Saga (Sin) re-fires chapter I next: no consumer.
+        auto next_target_kind = [](const CardDefinition& d, int lore)
         {
-            for (int ch = lore + 1; ch <= d.params.saga_chapters; ++ch)
-            {
-                if ((ch == 2 && d.params.saga_ch2_counters_on_target > 0)
-                    || (ch == 3 && d.params.saga_ch3_double_pt_target)) { return true; }
-            }
-            return false;
+            const int ch = lore + 1;
+            if (ch > d.params.saga_chapters) { return 0; }
+            if ((ch == 2 && d.params.saga_ch2_counters_on_target > 0)
+                || (ch == 3 && d.params.saga_ch3_double_pt_target)) { return 1; }
+            if (ch == 3 && d.params.saga_ch3_gain_control_opp_permanent) { return 2; }
+            return 0;
         };
-        bool consumer = false;
+        bool own_consumer = false, steal_consumer = false;
+        auto note = [&](int k) { if (k == 1) { own_consumer = true; } else if (k == 2) { steal_consumer = true; } };
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (is_saga(d) && targets_ahead(*d, p.lore_counters)) { consumer = true; break; }
+            if (is_saga(d)) { note(next_target_kind(*d, p.lore_counters)); }
         }
-        if (!consumer)
+        if (!own_consumer || !steal_consumer)
         {
-            consumer = std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
+            for (const TurnSolver::Plan& p : all)
             {
-                return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
+                for (const Action& a : p.actions)
                 {
-                    if (a.kind != Action::Kind::CastFromHand) { return false; }
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
                     const CardDefinition* d = a.def ? a.def
                                                     : CardDatabase::Instance().Lookup(a.card_name.str());
                     // It enters and immediately takes chapter I, so it is on lore 1 next turn.
-                    return is_saga(d) && targets_ahead(*d, 1);
-                });
-            });
-        }
-        if (consumer)
-        {
-            int creatures = 0;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller_index == state.active_player_index && p.card.IsCreature())
-                { ++creatures; }
+                    if (is_saga(d)) { note(next_target_kind(*d, 1)); }
+                }
+                if (own_consumer && steal_consumer) { break; }
             }
-            const int W = std::min(4, creatures + 1);
+        }
+        if (own_consumer || steal_consumer)
+        {
+            // WIDTH: the consumer's list size now + 1 headroom, capped at 4 (the list is rebuilt at the next draw
+            // step, generally wider). Own creatures for WWH; for Kiora III the provider-restricted steal list (a
+            // spawn arriving at the next turn start is the headroom).
+            int W = 1;
+            if (own_consumer)
+            {
+                int creatures = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index && p.card.IsCreature())
+                    { ++creatures; }
+                }
+                W = std::max(W, std::min(4, creatures + 1));
+            }
+            if (steal_consumer)
+            {
+                const int steal = static_cast<int>(SagaStealSearchCandidates(state, state.active_player_index).size());
+                W = std::max(W, std::min(4, steal + 1));
+            }
             if (W > 1)
             {
                 // A rank-valued state pin read at the NEXT draw step: one left unconsumed by an
@@ -102056,6 +102076,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
             state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        if (state.eot_attack_draw_n != 0) { mix(0xE07D4A00ull + state.eot_attack_draw_n); }   // value-gated
         if (!state.scripted_prophets_sac.empty())
         {
             mix(0x50524F50ull);
@@ -103483,6 +103504,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.turn_number));
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     if (state.scripted_early_ondemand_crack) { Fold(k, 0xEA4CCA11ull); }
+    // Summon: Leviathan's live until-end-of-turn attack draws (value-gated: every other deck's key is unchanged).
+    if (state.eot_attack_draw_n != 0) { Fold(k, 0xE07D4A00ull + static_cast<uint64_t>(state.eot_attack_draw_n)); }
     if (state.scripted_prophets_sac_cursor < static_cast<int>(state.scripted_prophets_sac.size()))
     {
         Fold(k, 0x50524F50ull);

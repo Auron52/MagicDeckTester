@@ -217,6 +217,13 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     engine silently wastes the trigger every turn.
         if (def->params.attack_draw_cards > 0) { return true; }
 
+        //   * NOT SUMMON: LEVIATHAN (saga_eot_attack_draw_chapter_mask), deliberately -- the Jorn shape. Its
+        //     attack draws ARE a combat-generated resource, but only on its chapter-II / III turns (two per
+        //     copy). A deck-wide second main would solve a post-combat main on every turn for them. The deck's
+        //     provider opens one per TURN instead, exactly while GameState::eot_attack_draw_n is live
+        //     (SeaCreaturesProvider::RestrictedSecondMainLive; USER-owned shape, ledger Q12, agent default
+        //     PROVISIONAL). MTG_FORCE_USES_M2=1 above is the every-turn arm for that measurement.
+
         //   * NOT JORN, GOD OF WINTER (attack-trigger untap), deliberately. Its untapped mana IS a
         //     combat-generated resource, but only on a turn Jorn attacks -- the minority. A deck-wide
         //     second main cost Snow 1.96x search units for every turn (USER 2026-10-03: "We should

@@ -189,6 +189,7 @@ enum class UnprunedGate
     ChampionMain2,   // Red Elementals: a no-haste champion card's PRE-combat hardcast restored
                      // (RedElementalsProvider::CollectedActionAllowed, the USER's Nova Chaser main-2 rule)
     SeaWave,         // Sea Creatures: Whelming Wave's cast restored (SeaCreaturesProvider::NeverCast, USER 2026-11-16)
+    SagaSteal,       // Kiora Bests the Sea God III: the full steal-target list (DecisionProvider::RestrictSagaStealCandidates' sound folds lifted)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -637,18 +638,24 @@ public:
 //     so the bounce only removes opponent spawns (payoff <= 0) and its one upside, a cast for Hullbreaker
 //     Horror's trigger, is itself declined. MTG_SEA_WAVE_NEVER=0 searches the cast again; human play and
 //     MTG_UNPRUNE=seawave always offer it.
+//   * A PER-TURN POST-COMBAT MAIN ON SUMMON: LEVIATHAN'S DRAW TURNS (I3; ledger Q12, the USER owns the main-2 shape --
+//     agent default PROVISIONAL). Cards drawn at declare-attackers by Leviathan II / III (GameState::
+//     eot_attack_draw_n) are a combat-generated resource (2c-bis) castable only after combat. Instead of a deck-wide
+//     second main (DeckUsesSecondMain, which would solve a post-combat main on EVERY turn -- 1.6-4x in measured
+//     decks, against the 3x-Hinata gate), RestrictedSecondMainLive opens one exactly while an instance is live, with
+//     the FULL menu (RestrictedSecondMainAdmits is the base "admit everything": a land drawn in combat makes old
+//     hand cards castable too, so no admit-list restriction is sound without the Omnitool's land carve-out). Every
+//     other turn has no combat-generated resource in this list, so main 1 dominates there (the engine-wide no-M2
+//     argument). A pure function of the post-combat state (the field is folded into every key): lockstep by
+//     construction. The every-turn arm for the USER's measurement is MTG_FORCE_USES_M2=1.
 // ConsiderFetchHold is NOT overridden: the root default (false, USER 2026-11-14) cracks on play, which is the
 // reviewed answer for this list (analysis ledger, fetch_hold_review).
 //
-// SIGNATURE (DetectDecisionProvider's `sea`). INTERIM (I1): most of this list's cards are not implemented yet, so
-// the signature ORs the shapes of the cards I1 adds -- Worn Powerstone (an enters-tapped two-mana rock), Flooded
-// Grove (a G/U filter land), Hedge Maze (a Forest Island surveil land) -- plus Spawning Kraken's
-// combat_damage_watch_subtypes naming Kraken (name-free; no card carries it until the combat step lands). Those
-// three are colourless / land STAPLES another deck may add, which is the archetype-neutral misroute class. TODO
-// (later Sea integration steps): OR in the Sea-only creature params as they land (Whelming Wave / Summon:
-// Leviathan's bounce_all_creatures_except_subtypes, Summon's saga_eot_attack_draw_subtypes, Koma's
-// combat_damage_watch_self, Trench Gorger's etb_exile_library_lands_set_base_pt, ...) and then DELETE the three
-// interim staple terms.
+// SIGNATURE (DetectDecisionProvider's `sea`). Params no other card in cards.json carries, OR-ed across FIVE cards:
+// Spawning Kraken's combat_damage_watch_subtypes naming Kraken, Koma's self-scoped Serpent combat tokens, Whelming
+// Wave's mass bounce sparing Krakens, Summon: Leviathan's chapter-I bounce / until-EOT attack draw, Kiora Bests the
+// Sea God's chapter-III steal (I3). The three I1 interim STAPLE terms (an enters-tapped two-mana rock, a G/U filter
+// land, a Forest Island surveil land -- the archetype-neutral misroute class) were DELETED at I3, as planned.
 // =============================================================================================
 class SeaCreaturesProvider : public DeckProvider
 {
@@ -670,6 +677,9 @@ public:
                                          const CardDefinition& def) const override;
     int EtbChosenColor(const GameState& s, int controller, const CardDefinition& def) const override;
     bool NeverCast(const CardDefinition& def) const override;
+    // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "

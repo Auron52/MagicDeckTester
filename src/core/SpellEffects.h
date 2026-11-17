@@ -24311,6 +24311,36 @@ inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
 // Drawing from an empty library loses the game -- same player_lost_on_draw flag as the draw step.
 // Gated: an attacker whose def leaves attack_draw_cards at 0 is untouched -> other decks
 // byte-identical.
+// THE subtype filter of Summon: Leviathan's until-end-of-turn attack draw (CardParams::
+// saga_eot_attack_draw_subtypes), process-wide. GameState carries only the INSTANCE COUNT
+// (eot_attack_draw_n): the instance outlives the Saga (chapter III sacrifices it before combat), so the
+// filter cannot be read off a permanent, and a definition pointer in GameState would cost +8 bytes on
+// the hottest struct in the engine. The card pool holds ONE list today; a second definition carrying a
+// DIFFERENT list would need a per-instance filter in the state, so it aborts here rather than silently
+// drawing for the first card's subtypes. Scanned once (thread-safe static), after the database loads.
+inline const std::vector<std::string>& EotAttackDrawFilter()
+{
+    static const std::vector<std::string> s_filter = []
+    {
+        std::vector<std::string> f;
+        const CardDatabase& db = CardDatabase::Instance();
+        for (const std::string& nm : db.AllNames())
+        {
+            const CardDefinition* d = db.Lookup(nm);
+            if (d == nullptr || d->params.saga_eot_attack_draw_chapter_mask == 0) { continue; }
+            if (!f.empty() && f != d->params.saga_eot_attack_draw_subtypes)
+            {
+                std::fprintf(stderr, "FATAL: two saga_eot_attack_draw_subtypes lists in the card pool (%s); "
+                             "extend GameState::eot_attack_draw_n to a per-instance filter\n", nm.c_str());
+                std::abort();
+            }
+            f = d->params.saga_eot_attack_draw_subtypes;
+        }
+        return f;
+    }();
+    return s_filter;
+}
+
 inline void ApplyAttackDrawTriggers(GameState& state, int controller,
                                     const std::vector<int>& attacker_indices, int declared_n = -1)
 {
@@ -24334,6 +24364,36 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
             if (draw.drew) { ++pl.cards_drawn_this_turn; }
             if (draw.drew && g_play_draw_sink)
             { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+        }
+    }
+    // SUMMON: LEVIATHAN II / III (Sea Creatures I3): "Until end of turn, whenever a Kraken, Leviathan, Merfolk,
+    // Octopus, or Serpent attacks, draw a card." eot_attack_draw_n live instances (set at this turn's draw step by
+    // FireSagaChapter); each DECLARED attacker we control of a listed subtype draws once per instance (CR 508.4: a
+    // creature put onto the battlefield attacking did not "attack"). The instance outlives the Saga, so on its
+    // chapter-III turn (the Saga sacrificed before combat) every other sea attacker still draws. Tokens match on
+    // their own subtypes (Kiora's 8/8, Spawning Kraken's 9/9s, Koma's Coils); an all-types animated permanent
+    // matches. Both worlds call this one function (GameEngine::CombatPhase, the rollout's combat) -> lockstep. Every
+    // deck without the card has eot_attack_draw_n == 0 and is untouched.
+    if (state.eot_attack_draw_n > 0)
+    {
+        const std::vector<std::string>& subs = EotAttackDrawFilter();
+        for (int k = 0; k < nsrc; ++k)
+        {
+            const int idx = attacker_indices[static_cast<std::size_t>(k)];
+            if (idx < 0 || idx >= bf_size) { continue; }
+            const Permanent& att = state.battlefield[static_cast<std::size_t>(idx)];
+            if (att.controller_index != controller) { continue; }
+            bool sea = att.AnimatedAllTypes();
+            for (std::size_t si = 0; !sea && si < subs.size(); ++si) { sea = CardHasSubtype(att.card, subs[si]); }
+            if (!sea) { continue; }
+            for (int r = 0; r < state.eot_attack_draw_n; ++r)
+            {
+                const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
+                if (!draw.satisfied) { state.player_lost_on_draw = true; return; }
+                if (draw.drew) { ++pl.cards_drawn_this_turn; }
+                if (draw.drew && g_play_draw_sink)
+                { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+            }
         }
     }
 }
@@ -50891,6 +50951,26 @@ inline int DefaultSagaChapterTarget(const GameState& state, int controller)
 // the same rule the loyalty chooser follows. Returns a battlefield index; with no chooser installed
 // (autonomous play, search, every rollout -- the pointer is nulled by RevealLogPause) it returns
 // `heuristic_idx` untouched, so every non-human run is byte-identical.
+// The chooser body over an explicit RULES-legal candidate list (Kiora Bests the Sea God III passes every
+// opponent permanent it may target; World War Hulk II / III pass their own creatures, below).
+inline int ChooseSagaChapterTargetFrom(const GameState& state, int controller,
+                                       const std::string& source_name, int chapter,
+                                       const std::string& prompt, const std::vector<int>& cands,
+                                       int heuristic_idx)
+{
+    if (!g_play_loyalty_chooser) { return heuristic_idx; }
+    // A single legal target is FORCED (CR 601.2c) -- prompting for a non-choice is the noise the
+    // sac-outlet chooser avoids the same way.
+    if (cands.size() <= 1) { return heuristic_idx; }
+    int def_opt = 0;
+    for (int k = 0; k < static_cast<int>(cands.size()); ++k)
+    { if (cands[k] == heuristic_idx) { def_opt = k; break; } }
+    const std::string src = source_name + (chapter == 2 ? " (Chapter II)" : " (Chapter III)");
+    const int chosen = (*g_play_loyalty_chooser)(state, controller, src, prompt, cands, def_opt);
+    if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { return cands[chosen]; }
+    return heuristic_idx;
+}
+
 inline int ChooseSagaChapterTargetIndex(const GameState& state, int controller,
                                         const std::string& source_name, int chapter,
                                         const std::string& prompt, int heuristic_idx)
@@ -51085,14 +51165,195 @@ inline void PerformSagaFreeCast(GameState& state, int controller, const CardPara
     PutCardOntoBattlefield(state, controller, chosen, source_name);
 }
 
+// ---- Sea Creatures I3 (2026-11-17): Kiora Bests the Sea God + Summon: Leviathan chapter effects ----------
+inline int PerformBounceAllCreaturesExcept(GameState& state, const std::string& src_name,
+                                           const std::vector<std::string>& except);   // defined below (Whelming Wave)
+
+// Kiora II: "Tap all nonland permanents target opponent controls." The target is the PLAYER, so hexproof
+// permanents are tapped too (ruling); already-tapped ones are unaffected. Payoff 0 in goldfish: no engine path
+// reads an opponent permanent's tapped state (the Abominable Treefolk finding) -- except Kiora III's "untap it".
+// [PROVISIONAL deferral, ledger Q13] "They don't untap during their controller's next untap step" is NOT
+// modelled: the passive opponent has no untap step in this engine, and Permanent::skip_next_untap is
+// deliberately NOT set -- a permanent later stolen by chapter III would carry it into OUR untap step.
+inline int TapAllOppNonlandPermanents(GameState& state, int controller, const std::string& src_name)
+{
+    int n = 0;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.controller_index == controller || q.card.IsLand() || q.tapped) { continue; }
+        q.tapped = true;
+        ++n;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + " (Chapter II): taps the opponent's nonland permanents ("
+                      + std::to_string(n) + " tapped)");
+    }
+    return n;
+}
+
+// Kiora III's RULES-legal list, engine ORDER only: every permanent an opponent controls that an ability may
+// target (SpellCanTargetPermanent: hexproof / shroud / protection behave like every other targeted effect).
+// Order: creatures first, then EffectivePower desc, then EffectiveToughness desc, ties to the LOWEST battlefield
+// index (a stable sort over ascending indices) -- deterministic, so executor and rollout agree. Entry 0 is the
+// heuristic (the branch order's front and the only decision on every path with no pin).
+inline std::vector<int> SagaStealCandidates(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == controller) { continue; }
+        if (!SpellCanTargetPermanent(state, controller, q)) { continue; }
+        out.push_back(i);
+    }
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        const Permanent& pa = state.battlefield[static_cast<std::size_t>(a)];
+        const Permanent& pb = state.battlefield[static_cast<std::size_t>(b)];
+        const bool ca = pa.card.IsCreature() || pa.is_animated, cb = pb.card.IsCreature() || pb.is_animated;
+        if (ca != cb) { return ca; }
+        if (pa.EffectivePower() != pb.EffectivePower()) { return pa.EffectivePower() > pb.EffectivePower(); }
+        return pa.EffectiveToughness() > pb.EffectiveToughness();
+    });
+    return out;
+}
+
+// The list the SEARCH pins into: the engine order above, RESTRICTED by the deck's provider to sound folds only
+// (DecisionProvider::RestrictSagaStealCandidates; human play never narrows -- the chooser below offers the full
+// list). The front always survives a fold (nothing strictly dominates the highest-power, highest-toughness entry),
+// so the unpinned pick is the same with or without it.
+inline std::vector<int> SagaStealSearchCandidates(const GameState& state, int controller)
+{
+    std::vector<int> c = SagaStealCandidates(state, controller);
+    if (c.size() > 1 && !HumanPlayActive()) { ResolveProvider(state).RestrictSagaStealCandidates(state, controller, c); }
+    return c;
+}
+
+// "Gain control of target permanent ... Untap it." (Kiora III). The control change is PERMANENT (no duration,
+// ruling 2020-01-24); the OWNER is unchanged, so a bounce returns it to the opponent's hand (a spawn ceases) and a
+// death puts it in the opponent's graveyard. gained_control_this_turn: CR 302.6 sickness by control (the Bolas -2
+// precedent), cleared at our next untap in both worlds; Kiora III resolves at the start of our main 1, so the
+// stolen creature attacks from the NEXT turn. skip_next_untap is cleared (nothing sets it on an opponent
+// permanent today; it would otherwise freeze the creature in OUR untap step). Not an entering: no ETB, no watcher.
+inline void GainControlOfPermanent(GameState& state, int idx, int new_controller, bool untap,
+                                   const std::string& src_name)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& q = state.battlefield[static_cast<std::size_t>(idx)];
+    q.controller_index         = new_controller;
+    q.gained_control_this_turn = true;
+    q.skip_next_untap          = false;
+    if (untap) { q.tapped = false; }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + " (Chapter III): gains control of " + q.card.m_name.str()
+                      + (untap ? std::string(" and untaps it") : std::string()));
+    }
+}
+
+// Kiora III: which permanent. SEARCHED via the chapter-target rank pin (state.scripted_saga_target, set by the
+// previous turn's plan and read here at the draw step -- the World War Hulk II / III machinery), indexing the
+// provider-restricted list; out-of-range clamps to the last candidate (duplicate-not-whiff); consumed by the FIRST
+// targeting chapter of the advance. Beyond the horizon / with no pin: the list's front. Human play re-asks off the
+// real board over the FULL legal list. No legal target: the chapter does nothing (CR 603.3d); the Saga is still
+// sacrificed by AdvanceSagas.
+inline void PerformSagaSteal(GameState& state, int controller, const CardDefinition& def)
+{
+    const std::vector<int> cands = SagaStealSearchCandidates(state, controller);
+    static const bool s_trace = EnvOn("MTG_SAGA_TRACE");   // DIAGNOSTIC only
+    if (cands.empty())
+    {
+        if (s_trace) { std::fprintf(stderr, "[saga] T%d chapter III steal: no legal target\n", state.turn_number); }
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", def.card.m_name.str() + " (Chapter III): no permanent to take"); }
+        return;
+    }
+    int ti = cands.front();
+    if (state.scripted_saga_target >= 0)
+    {
+        const int k = state.scripted_saga_target;
+        state.scripted_saga_target = -1;
+        ti = cands[std::min<std::size_t>(static_cast<std::size_t>(k), cands.size() - 1)];
+    }
+    if (g_play_loyalty_chooser)
+    {
+        ti = ChooseSagaChapterTargetFrom(state, controller, def.card.m_name.str(), 3, "taken under your control",
+                                         SagaStealCandidates(state, controller), ti);
+    }
+    if (s_trace)
+    {
+        const Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+        std::fprintf(stderr, "[saga] T%d chapter III steal: %s (%d/%d) of %zu\n", state.turn_number,
+                     t.card.m_name.str().c_str(), t.EffectivePower(), t.EffectiveToughness(), cands.size());
+    }
+    GainControlOfPermanent(state, ti, controller, /*untap=*/true, def.card.m_name.str());
+}
+
 // Resolve chapter `chapter` of `def` for `controller`. Each effect is inert when its param is
 // unset, so a partially-modelled Saga still ticks and sacrifices on schedule.
+//
+// Several effects may share a chapter (Sea Creatures I3 split the old "chapter 1 = free cast, return" into
+// "run every effect keyed to this chapter"); World War Hulk sets only its own params, so its path is unchanged.
+// INDEX SAFETY: chapter I may now ERASE permanents (Summon: Leviathan's bounce) as well as append them (WWH's
+// free cast, Kiora's token). Every caller re-finds by per-copy number afterwards (DrainPendingSagaEnters,
+// AdvanceSagas, the rollout creature cast's cast_number re-find); no caller holds a battlefield index across it.
 inline void FireSagaChapter(GameState& state, int controller, const CardDefinition& def, int chapter)
 {
     const CardParams& pp = def.params;
 
     if (chapter == 1)
-    { PerformSagaFreeCast(state, controller, pp, def.card.m_name.str()); return; }
+    {
+        PerformSagaFreeCast(state, controller, pp, def.card.m_name.str());
+        static const bool s_trace1 = EnvOn("MTG_SAGA_TRACE");   // DIAGNOSTIC only
+        if (pp.saga_ch1_token_power > 0)
+        {
+            // Kiora I: one 8/8 blue Kraken token with hexproof (summoning-sick, is_token, fresh number, enter
+            // watchers) through THE token chokepoint. Subtype Kraken: Spawning Kraken and Summon: Leviathan see it.
+            CreateToken(state, controller, pp.saga_ch1_token_power, pp.saga_ch1_token_toughness,
+                        pp.saga_ch1_token_subtypes, pp.saga_ch1_token_color, pp.saga_ch1_token_keywords);
+            if (s_trace1) { std::fprintf(stderr, "[saga] T%d chapter I: token %d/%d\n", state.turn_number,
+                                         pp.saga_ch1_token_power, pp.saga_ch1_token_toughness); }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              def.card.m_name.str() + " (Chapter I): creates a "
+                              + std::to_string(pp.saga_ch1_token_power) + "/"
+                              + std::to_string(pp.saga_ch1_token_toughness) + " token");
+            }
+        }
+        if (!pp.saga_ch1_bounce_creatures_except_subtypes.empty())
+        {
+            // Summon: Leviathan I: the shared simultaneous mass bounce (Whelming Wave's body). It re-finds by
+            // number, returns each to its OWNER's hand (a stolen creature goes back to the opponent; a token or an
+            // opponent spawn ceases) and sweeps orphaned Auras once at its end -- safe here (see INDEX SAFETY).
+            const int n = PerformBounceAllCreaturesExcept(state, def.card.m_name.str() + " (Chapter I)",
+                                                          pp.saga_ch1_bounce_creatures_except_subtypes);
+            if (s_trace1) { std::fprintf(stderr, "[saga] T%d chapter I: bounced %d\n", state.turn_number, n); }
+        }
+    }
+    if (pp.saga_eot_attack_draw_chapter_mask & (1u << chapter))
+    {
+        // Summon: Leviathan II / III: one more until-end-of-turn attack-draw instance (ApplyAttackDrawTriggers).
+        if (state.eot_attack_draw_n < 0xFF) { ++state.eot_attack_draw_n; }
+        static const bool s_trace_eot = EnvOn("MTG_SAGA_TRACE");   // DIAGNOSTIC only
+        if (s_trace_eot) { std::fprintf(stderr, "[saga] T%d chapter %d: attack-draw instances=%d\n",
+                                        state.turn_number, chapter, state.eot_attack_draw_n); }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          def.card.m_name.str() + (chapter == 2 ? " (Chapter II)" : " (Chapter III)")
+                          + ": until end of turn, each attacking sea creature draws a card");
+        }
+    }
+    if (chapter == 2 && pp.saga_ch2_tap_opp_nonland)
+    { (void)TapAllOppNonlandPermanents(state, controller, def.card.m_name.str()); }
+    if (chapter == 3 && pp.saga_ch3_gain_control_opp_permanent)
+    { PerformSagaSteal(state, controller, def); }
+
+    if (chapter == 1) { return; }
 
     const bool wants_target = (chapter == 2 && pp.saga_ch2_counters_on_target > 0)
                            || (chapter == 3 && pp.saga_ch3_double_pt_target);
@@ -51156,6 +51417,22 @@ inline void FireSagaChapter(GameState& state, int controller, const CardDefiniti
     }
 }
 
+// CR 714.4: sacrifice the Saga at battlefield index `idx` once its final chapter has resolved.
+// A CREATURE Saga (Summon: Leviathan) goes through THE sacrifice chokepoint (SacrificePermanentAt: attachments fall
+// off, sacrifice and dies watchers fire, creature_died_this_turn, the OWNER's graveyard) -- it dies like any
+// sacrificed creature. A NONCREATURE Saga keeps the historical raw path (World War Hulk / Stompy byte-identical):
+// OnCreatureDies fires FireCreatureDiesWatchers without testing creature-ness, so routing an enchantment through it
+// would be a separate bug. DISCLOSED latent gap: a noncreature Saga's sacrifice reaches no "whenever you sacrifice a
+// permanent" / leaves-the-battlefield watcher (no list holds one alongside a Saga today).
+inline void SacrificeSagaAt(GameState& state, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+    if (p.card.IsCreature()) { SacrificePermanentAt(state, p.controller_index, idx); return; }
+    state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));
+    state.battlefield.erase(state.battlefield.begin() + idx);
+}
+
 // Drain the pending Saga-enter queue. CR 714.2a puts the first lore counter on AS the Saga enters
 // (an as-enters replacement, not a trigger), so chapter I resolves on the turn it lands. Deferred
 // out of the enter cascade via g_pending_saga_enters because chapter I appends a permanent -- see
@@ -51185,8 +51462,7 @@ inline void DrainPendingSagaEnters(GameState& state)
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             if (state.battlefield[i].card.m_number != e.perm_number) { continue; }
-            state.players[state.battlefield[i].owner_index].graveyard.push_back(RevealedCard(state.battlefield[i].card));
-            state.battlefield.erase(state.battlefield.begin() + i);
+            SacrificeSagaAt(state, i);
             break;
         }
     }
@@ -51219,17 +51495,19 @@ inline void AdvanceSagas(GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
         if (d == nullptr || d->params.saga_chapters <= 0) { continue; }
         const int chapters = d->params.saga_chapters;
+        // A lore count may be 0 here (Sin, Unending Cataclysm removes every counter): the +1 then re-fires
+        // chapter I (CR 714.2c: a chapter triggers when the count reaches its number, so removed-and-re-added
+        // counters re-trigger), and the Saga is not sacrificed (0 < chapters).
         const int ch       = ++state.battlefield[idx].lore_counters;
-        if (ch > chapters) { continue; }            // past the last chapter, awaiting cleanup
-        FireSagaChapter(state, active, *d, ch);
+        if (ch <= chapters) { FireSagaChapter(state, active, *d, ch); }
         if (ch < chapters) { continue; }
-        // CR 714.4 -- sacrifice once the FINAL chapter has resolved. Re-find by number: the
-        // chapter may have moved battlefield slots.
+        // CR 714.4 -- sacrifice once lore >= the final chapter number and no chapter ability is
+        // pending (">=", so a Saga pushed past its last chapter is sacrificed too, not left forever).
+        // Re-find by number: the chapter may have moved battlefield slots.
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             if (state.battlefield[i].card.m_number != num) { continue; }
-            state.players[state.battlefield[i].owner_index].graveyard.push_back(RevealedCard(state.battlefield[i].card));
-            state.battlefield.erase(state.battlefield.begin() + i);
+            SacrificeSagaAt(state, i);
             break;
         }
     }
