@@ -4,6 +4,18 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:14 UTC
 
+The next due **Shadowborn Apostle** PGO mana-clean gate is active as the
+only top-level simulation batch, exec session 84136:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run shadowborn_apostle --games 5000 --name codex-shadowborn-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/shadowborn_fresh_gate.out`.
+It covers indices 100,000–104,999; when done, inspect
+`logs/mana_clean/codex-shadowborn-fresh-20261117/report.md`, update this
+handoff, and commit the `test/mana_clean.json` record.
+
 **Pirates fresh gate complete:** indices 99,000–103,999 at PGO source
 `fcb9352608ea` yielded two APPLY-DROP flags in one seed, no enum/oracle
 or capped flag, with oracle-on/off play byte-identical. Report:
