@@ -99,7 +99,10 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    every target; =0 restores the full searched set. Island-vs-Forest stays switchable for a Stage 5 A/B
    (the USER said "might").
 2. Hedge Maze (Forest Island, enters tapped, surveil 1) as a fetch target: where in the pruned order?
-   Agent default (PROVISIONAL): after Island and Forest.
+   Agent default (PROVISIONAL): after Island and Forest. **USER 2026-11-17:** *"Hedge maze is a maybe if we
+   absolutely do not need it for mana."* / *"(if we do not need it for mana this turn it is possible, otherwise
+   not)"* -> built as `MTG_SEA_FETCH_MAZE` (default OFF; A/B 6 faster / 0 slower), see "Hedge Maze fetch" below.
+   OPEN: adopt as default ON?
 4. Hullbreaker Flash / Brinelin Partner deferrals (inert: main-phase cast dominates; Commander-only).
    PROVISIONAL.
 5. Serpent of Yawning Depths evasion + Lorthos {8} tap (always declined, dominance) deferrals. PROVISIONAL.
@@ -136,7 +139,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
     GT for decks with Figure. Agent default: fix for Gorger now; Figure as a separate USER-approved change.
 12. Main 2 shape (USER-owned): every turn (costly vs the 3x-Hinata gate) or the cheaper Omnitool-style
     main 2 opened only on turns with combat draws (Summon II/III). Agent default (PROVISIONAL): the
-    conditional main 2; measure both before Stage 5j.
+    conditional main 2; measure both before Stage 5j. **USER 2026-11-17:** *"I do lean toward conditional mains
+    when I can, though, so that is probably correct."* The re-measure with the land-Aura fix is 0 / 0 (below).
 13. Kiora II "don't untap during next untap step" deferral (the opponent never untaps; setting
     skip_next_untap would wrongly keep a later-stolen creature tapped). PROVISIONAL.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
