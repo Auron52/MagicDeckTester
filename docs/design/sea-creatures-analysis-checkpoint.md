@@ -68,3 +68,20 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
   (uncommitted). Build + units + A/B chain `build/scratch/sea/maze/{build.sh,ab.sh}` -> `maze/result.txt`.
   Design note `docs/design/fetch-tapped-typed-land.md` (there).
 * Next: per-row verdicts -> scoped accept -> check_gt_logs -> push -> CI watch -> Stage 6 report.
+
+## Landing result, 2026-11-17 ~15:50 UTC
+
+* `land2/attrib.txt`: 130 failing rows. 104 are UPSTREAM drift (the origin binary reproduces the tip's
+  digest; the 12:07 UTC engine commits have no GT accept since 19d7624a5). 9 Sea rows. 17 differ from origin:
+  Alchemist / EDF / Jumbo (land-Aura fix) and Creature Giving d0 x2.
+* Creature Giving d0 root-caused: `7c680f8dc` (Misty battlefield model) lets a Misty put onto the battlefield
+  by Crop Rotation crack (origin leaves it uncracked all game). 2 games faster (smoke gi832 6->5, regression
+  gi355 8->6). NOT accepted: its other 8 failing rows are upstream-only, so the deck is left to that owner.
+* Accepted (scoped) in `e294012fe`: 24 rows (Sea 9, Alchemist 4, EDF 6, Jumbo 6 -- jumbo d0 also carries
+  upstream drift). Only SLOWER game on an accepted deck: sea_regression_d5_s3003 gi69 (fetch-shuffle variance).
+  check_gt_logs 1278 consistent / 0 stale.
+* Hedge Maze: committed `4147878d2` on `sea-maze-fetch` (backup `backup/2026-11-17/sea-maze-fetch`). A/B std
+  1000 + 2HG 300: 6 faster, 0 slower (std -0.0050 se 0.0022). Repro std gi223: on-arm Windswept Heath fetches
+  Hedge Maze T3 (mechanism confirmed; arms already diverge at T1, so draw order is mixed in). Default OFF ->
+  USER. To cherry-pick onto this branch for the NEXT push window (needs build + units + smoke byte-identity).
+* Next: push phase-1-2-deck-analyzer, CI watch, remove `.claude/worktrees/sea-origin`, Stage 6 report.
