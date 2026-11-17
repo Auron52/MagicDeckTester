@@ -42,7 +42,15 @@ plans). Deferred doc: `docs/design/merfolk-turns-champion-fan-rss-2026-11-17.md`
 - So this is a float-vs-TAP decision: spend the banked counter when the named line is otherwise short a colour
   that no other source makes. That is a design question about banked lands; not started.
 
-**NEXT:** s30083522 T6 (Karrthus beyond two Apexes), then the PD CAPPED fold, then the deck queue (Pirates, Extra
+**s30083522 T6 (not fixed):** Karrthus beyond the SECOND Apex is not named in the plan, so the line owes no
+{B} and even `MTG_UNSEEN_KEEP_SCARCE` cannot keep Bloom's black through ten payments. This is the same open design
+question as s30086338: carry a visible-but-unnamed closer's colour (or spend a banked land) under an opener line.
+
+**IN FLIGHT (18:54 UTC): near-clean six-deck gate** `claude-nearclean-20261117` (pirates, shadowborn_apostle,
+fluctuator, minotaur, angels, vampires; 5,000 each). Console `build/scratch/claude_gate/nearclean.out`, pid in
+`nearclean.pid`. Next: read the report, commit the record, fix any small concrete flags.
+
+**THEN:** the PD CAPPED fold, then the deck queue (Pirates, Extra
 Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph, Landfall Elementals, Dragons, stale-clean decks). Then the Merfolk Turns RSS runaway, the PD CAPPED
 fold, and the deck queue. Next push not before 20:44 UTC.
 
