@@ -19536,10 +19536,15 @@ inline void PerformEndStepSelfSacrifices(GameState& state)
 // Sovereign was treated as 3/4 rather than its real 5/6. Two wrongs kept the worlds in lockstep.
 // The SBA has since been corrected to the lord/CDA/equipment-inclusive value, so mirroring the old
 // behaviour here would now be the thing that desyncs them.
+namespace dmgrx { inline void Sweep(GameState& s, int controller, const CardDefinition& def, int dmg); }
 inline void PerformDamageAllCreatures(GameState& state, int controller,
                                       const CardDefinition& def, int dmg)
 {
     if (dmg <= 0) { return; }
+    // DAMAGE REFLECTION (core/DamageReflection.h): on an armed deck the sweep is ONE damage event of
+    // the shared pipeline (aggregation, inline SBA, the "is dealt damage" triggers it raises). Every
+    // other deck keeps the legacy body below, byte-for-byte.
+    if (state.reflect_armed) { dmgrx::Sweep(state, controller, def, dmg); return; }
     (void)controller;
     struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
     std::vector<SweptDeath> died;
@@ -36392,6 +36397,11 @@ inline void DrainPendingZeroToughness(GameState& state)
         }
     }
 }
+
+// The creature-damage EVENT pipeline (damage reflection; Stuffy Doll). Included HERE because it needs
+// CounterPingSbaDead / OnCreatureDies / SweepOrphanedAuras / FireOppCreatureDies above. Inert unless
+// GameState::reflect_armed -- see the header.
+#include "DamageReflection.h"
 
 // ==== GRAVEYARD -> BATTLEFIELD SINGLE-TARGET RETURN: the shared helper set ===========================
 // Abiding Grace's end-step mode 2 ("return target creature card with mana value 1 from your graveyard
@@ -57565,7 +57575,7 @@ struct PainSweepDeferScope
 inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
 {
     if (!state.dmg_events_armed) { return; }
-    dmgev::BackstopFlush(state, "pain-sweep");   // nothing may still be pending from the main phase
+    dmgev::BackstopFlush(state, "pain-sweep"); dmgrx::VerifyQuiescent(state, "pain-sweep");   // nothing may still be pending from the main phase
     if (dmgev::WonLocked(state) || state.players[ctrl].life <= 0) { return; }
     const bool purity = dmgev::PurityProtects(state, ctrl);
     const int  tam    = dmgev::CountTamanoa(state, ctrl);

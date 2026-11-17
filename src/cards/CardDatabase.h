@@ -853,6 +853,16 @@ struct CardParams
     // with an empty list is "return all creatures" (Evacuation-class). false = inert.
     bool                     bounce_all_creatures = false;
     std::vector<std::string> bounce_all_creatures_except_subtypes;
+    // DAMAGE REFLECTION (Stuffy Doll deck, 2026-11-17; docs/design/damage-reflection-pipeline.md).
+    // "Whenever this creature is dealt damage, it deals that much damage to <recipient>." The
+    // recipient class is the whole card-specific part; the trigger itself is raised and resolved by
+    // the shared pipeline in core/DamageReflection.h (dmgrx::), which executor and rollout both call.
+    // Carrying it (main or sideboard) ARMS the pipeline for the deck (GameState::reflect_armed,
+    // GoldFishRunner::StampDeckTraits); every other deck keeps its legacy damage bodies byte-for-byte.
+    // JSON strings: "target_opponent" (Mogg Maniac), "any_target" (Boros Reckoner),
+    // "any_other_target" (Screaming Nemesis), "target_player". None = inert.
+    enum class ReflectTo : std::uint8_t { None = 0, TargetOpponent, AnyTarget, AnyOtherTarget, TargetPlayer };
+    ReflectTo reflect_dealt_damage = ReflectTo::None;
 
     // Breaching Dragonstorm clause 2: "When a Dragon you control enters, return this
     // enchantment to its owner's hand." Non-empty = the watched subtype ("Dragon"). Fires from

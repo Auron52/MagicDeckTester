@@ -1152,3 +1152,37 @@ card made literal for every Orchard deck.
 Design complete. No code written, nothing built, nothing committed. Scryfall rulings for all twelve
 cards are in `build/scratch/stuffy/rulings/` (build volume; regenerable from each card's
 `rulings_uri`). The next action is step 1 of §10.
+
+---
+
+## 14. Implementation notes (steps 1-2, 2026-11-17)
+
+Where the code departs from the sections above, and why. Each entry names the symbol.
+
+### Step 1 (pipeline core)
+
+* **Graveyard: the OWNER's, not the controller's** (`dmgrx::SbaPass`). Section 2.2 step 5 said
+  "controller's graveyard (matching `GameEngine.cpp:1710`)". CR 400.3 sends a card to its owner's
+  graveyard, and the legacy `PerformDamageAllCreatures` already did that. Lockstep does not need the
+  executor's rule here: the pipeline kills inline, so the executor's `CheckStateBasedActions` never
+  sees these deaths. Side finding: the executor SBA (and `CounterPingKillAt`) push to the
+  CONTROLLER's graveyard. Only a stolen creature can observe the difference. Not fixed here.
+* **The pending stack is a thread-local frame** (`dmgrx::t_frame`), not a local vector. A nested
+  `DealDamageBatch` on the same state (a trigger resolving) only pushes. The top-level call drains.
+  `MTG_RFX_VERIFY` asserts at the three dmgev decision-boundary backstops (`GameEngine::MainPhase`,
+  `ApplyPlanDirect`, the pain sweep) that no frame is open and nothing is pending.
+* **The arming param arrives in step 1**: `CardParams::reflect_dealt_damage` (enum `ReflectTo`) and
+  the `StampDeckTraits` scan, so "stamping" has something to stamp. No card carried it in step 1.
+* **Life SBA**: `dmgev::SbaCheckpoint` runs only on `own_death_live` decks (it parks our life at
+  `kLostLife`). "Game over" for the trigger stack is `OpponentLostRaw || (own_death_live && our life
+  <= 0)`. The Stuffy Doll deck is NOT `own_death_live` today. Step 4 (a Doll can choose us) should
+  arm it from a Doll-only param, not from `reflect_armed`: arming it from `reflect_armed` would move
+  Minotaur.
+* **Disclosed limits** (header note): damage-source keywords (lifelink, deathtouch, infect) are not
+  modelled, because no source in the pool has one. On a board that also arms dmgev, a noncreature
+  sweeper's CREATURE damage raises no Tamanoa trigger. Animated lands are not dealt sweep damage (the
+  legacy sweep's and the executor SBA's own `card.IsCreature()` predicate).
+* **Routing today is a MISROUTE**: the decklist alone sends Stuffy Doll to `ModernRwBurnProvider`
+  (Arid Mesa's `fetch_land_types` sets `anti`, the name "Inspiring Vantage" sets `modern_rw_burn`).
+  Section 8's "most likely routes to Generic" is wrong. The routing-table unit test
+  (`test_pirates_provider.cpp`) pins the measured value; step 10 must route above that chain.

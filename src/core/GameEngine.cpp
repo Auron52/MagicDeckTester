@@ -1065,7 +1065,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     m_ai.ActivateLandsEdge(state, is_pre_combat);
 
     // Prevent Damage backstop (armed only): no tap-trigger may outlive the main phase.
-    dmgev::BackstopFlush(state, "GameEngine::MainPhase");
+    dmgev::BackstopFlush(state, "GameEngine::MainPhase"); dmgrx::VerifyQuiescent(state, "GameEngine::MainPhase");
 
     if (m_logger)
     {

@@ -856,6 +856,16 @@ struct GameState
     // the size ledger above Dominance.h's static_assert) so the search's per-node copy does not grow
     // by 8 bytes for a deck constant.
     bool                     deck_reads_lifegain_in_play = false;
+    // DAMAGE REFLECTION (Stuffy Doll, 2026-11-17) -- DECK CONSTANT stamped by
+    // GoldFishRunner::StampDeckTraits: the deck (main + sideboard) carries a damage-reflection param
+    // (CardParams::reflect_dealt_damage). Arms the shared creature-damage pipeline in
+    // core/DamageReflection.h (dmgrx::): a symmetric sweep (PerformDamageAllCreatures) becomes ONE
+    // damage event with per-creature aggregation, an inline SBA pass, and a LIFO of the "is dealt
+    // damage" triggers it raised. False for every other deck, which keeps the legacy bodies
+    // byte-for-byte (every routed site tests this bool first). Never folded into any key: identical
+    // across every pair of states a key could compare. Placed in the padding after the bool above
+    // (sizeof(GameState) unchanged).
+    bool                     reflect_armed = false;
     // Deck-level stamp (GoldFishRunner::SetupGame), same shape and same rationale as
     // The LARGEST CardParams::endstep_lifegain_threshold over the cards in this deck that carry
     // endstep_lifegain_tokens, i.e. over everything that actually READS

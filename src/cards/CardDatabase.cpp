@@ -1340,6 +1340,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("bounce_all_creatures_except_subtypes", json::array()))
         p.bounce_all_creatures_except_subtypes.push_back(s);
     if (!p.bounce_all_creatures_except_subtypes.empty()) { p.bounce_all_creatures = true; }
+    {
+        // Damage reflection (core/DamageReflection.h). An unknown string is a cards.json typo, and
+        // silently reading it as None would make the card's trigger inert -- so it is fatal.
+        const std::string rf = params.value("reflect_dealt_damage", std::string());
+        using RT = CardParams::ReflectTo;
+        if      (rf.empty())               { p.reflect_dealt_damage = RT::None; }
+        else if (rf == "target_opponent")  { p.reflect_dealt_damage = RT::TargetOpponent; }
+        else if (rf == "any_target")       { p.reflect_dealt_damage = RT::AnyTarget; }
+        else if (rf == "any_other_target") { p.reflect_dealt_damage = RT::AnyOtherTarget; }
+        else if (rf == "target_player")    { p.reflect_dealt_damage = RT::TargetPlayer; }
+        else { throw std::runtime_error("cards.json reflect_dealt_damage \"" + rf + "\" is not a known recipient"); }
+    }
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);
 

@@ -574,6 +574,7 @@ add_executable(mtg-test
     test/unit/test_gods_targeted.cpp
     test/unit/test_niv_brainstorm_rule.cpp
     test/unit/test_depletion_sba.cpp
+    test/unit/test_rfx_pipeline.cpp
     test/unit/test_izzet_mana_fidelity.cpp
     test/unit/test_depletion_hold.cpp
     test/unit/test_lfe_fury.cpp

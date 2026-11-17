@@ -70369,7 +70369,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     } _pbtbl_out{ pbtbl_want, pbtbl, apd_pb_top, apd_pb_second };
     // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
     // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
-    dmgev::BackstopFlush(state, "ApplyPlanDirect");
+    dmgev::BackstopFlush(state, "ApplyPlanDirect"); dmgrx::VerifyQuiescent(state, "ApplyPlanDirect");
     // g_bp_base_lens is NOT reset here: the candidate loops clear it immediately before a base plan's
     // apply (see ArmNewDupAll). A reset at every apply's entry let a nested apply wipe the outer
     // base plan's measurement mid-flight.

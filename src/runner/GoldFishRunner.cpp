@@ -2016,6 +2016,20 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             return false;
         };
         state.dmg_events_armed = arms(deck.mainboard) || arms(deck.sideboard);
+        // DAMAGE REFLECTION (Stuffy Doll, 2026-11-17): arm the creature-damage pipeline
+        // (core/DamageReflection.h) iff the deck -- main OR sideboard, the same reach as above --
+        // carries a card whose trigger reads "is dealt damage". Boros Reckoner arms Minotaur too; that
+        // deck never damages a creature, so no pipeline code runs in its games.
+        auto rfx_arms = [](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.reflect_dealt_damage != CardParams::ReflectTo::None) { return true; }
+            }
+            return false;
+        };
+        state.reflect_armed = rfx_arms(deck.mainboard) || rfx_arms(deck.sideboard);
         // inf_life_possible (see GameState): the one card class that can stamp inf_life_turn.
         auto inf_arms = [](const std::vector<Card>& zone)
         {
