@@ -138,6 +138,10 @@ deferrals provisional.
   USER (verbatim, ~21:00): "But we only need to try a maximum of 2 targets." => provider RESTRICTS GC hosts to at
   most 2: the Doll (if on board) + the best other loop-sustaining reflector (one with a starter this turn
   preferred); with no Doll, the best 2 reflectors. Restrict-only heuristic; lifted by MTG_UNPRUNE / human play.
+  USER (~21:01): "(and often just 1)" => ONE candidate when a host clearly dominates: a Stuffy Doll with a starter
+  this turn (it can tap, or our sweeper reaches it) — indestructible and loops now, nothing beats it; also when only
+  one loop-sustaining creature exists. TWO only in the split case: the Doll must wait a turn but another reflector
+  can go off now.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
