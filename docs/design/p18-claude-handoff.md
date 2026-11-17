@@ -1,0 +1,46 @@
+# P18 sampled gate: Claude handoff (2026-11-17)
+
+## Objective and status
+
+The user wants an opt-in replacement that **consistently beats the bare heuristic rollout ladder** on the repository's decks. It does not need to become the default. Do not stop at a few favorable decks or a speed result that sacrifices win turns. Work through the remaining failures and measure a new candidate on fresh paired seeds across all decks.
+
+The current implementation is `value_play.sampled_gate=2` in `src/ai/TurnSolver.cpp` (around line 108217 for the sampler and 117521 for ladder integration). Mode 2 is shipped as an option at shared commit `6a21bedd2`; Boars opts in via `decks/Boars/Boars.value.json`. The shared Windows CI for that commit passed. The full design history and 56-deck measurements are in `docs/design/sampled-gate-ladder.md`. **No source changes were made during this handoff turn.**
+
+This file is in the persistent `.claude/worktrees/p18-ship` checkout, branch `p18-ship`. The primary checkout is a separate local history at `e4f2b7c71` (six commits ahead of its old base, 147 behind `origin/phase-1-2-deck-analyzer`, with an untracked `build.lock`). Do not reset or pull it casually. The `p18-ship` checkout was clean before this document was added. Its `build` symlink points to `/workspaces/MagicDeckTester/build/wt/p18-ship`; `build/Release/mtg` exists. Verify branch tips and process state on resume.
+
+## Measured result against the bare ladder
+
+F2: 56 decks x 400 paired games, depth 5, 20 ms, max turn 8, with identical deck/profile inputs and **no value leaf on either arm**. Mode 2 charged less thread CPU in 48/56 decks, but the savings are often 1–3%. Changed win turns:
+
+| Deck | Seed (`--game-index`) | Bare -> mode 2 |
+|---|---:|---:|
+| Dragonstorm | 5120149 (149) | T6 -> T7 |
+| Gods | 5210038 (38) | T6 -> T7 |
+| Gods | 5210051 (51) | T6 -> T8 |
+| Gods | 5210058 (58) | T8 -> unwon |
+| Gods | 5210124 (124) | T7 -> T8 |
+| Gods | 5210250 (250) | T6 -> T7 |
+| Gods | 5210312 (312) | T8 -> T5 |
+| Gods | 5210336 (336) | T5 -> T7 |
+| Kithkin | 5250100 (100) | T4 -> T5 |
+| Merfolk Turns | 5340317 (317) | T6 -> T7 |
+
+Thus Gods is 1 earlier / 6 later; the other three decks have one later each. F5: another 1,000 paired Mill games found seed **8010197** (`--game-index 197`) going T5 -> T6. Its first decision pre-refused pass 5 on a cold price, while the bare ladder reached pass 5 after a T5 pass-4 result and spent only 11 units there. Mill stays on the bare ladder. Boars had 1,800 paired games over F2/F4/F5 with identical win turns and 1.3–1.7% deterministic work savings, so it was adopted.
+
+F2 inputs and old wins are in `/workspaces/MagicDeckTester/build/scratch/p18f/F2/{manifest.json,v/,wins/}`. F5 inputs are in the adjacent `F5/` directory. Those ignored scratch outputs may be absent on another machine; reconstruct diagnostic directories from committed `decks/<Deck>/` by symlinking the `.cod`, `.profile.json`, `.buckets.json`, and keepmodel sidecars into two arm directories. The sampled arm alone gets `<Deck>.value.json` with `{"value_play":{"sampled_gate":2}}`. Use the same seed **and game_index** in paired jobs. Batch syntax is `build/Release/mtg --batch <manifest.json> --threads "$(nproc)"`; use `./build.sh` for all rebuilds, never raw CMake. Run both arms in one pooled batch for comparable CPU, and use deterministic charged units to confirm the result.
+
+## Likely next experiment
+
+The current mode 2 sets `b1`, `b2`, `b3`, `b3r=3`, `lcap`, `rr`, `rx2`, `fr=2`, `a1=.95`, `fd`, `zn`, `hx`, `hw=3`, `wn=3`, and `z=0` in `p18::Knobs()`. At the decision loop around line 117730, `kn.hx` can pre-refuse a pass **before** the `kn.fd && k == depth` branch. Thus the documented “terminal pass is run once, with no priced verdict” still allows an extrapolated *pre-refusal* at depth 5. This is a concrete candidate for the Mill loss. First trace the 11 later games with `MTG_P16_TRACE=1`; compare the ordinary ladder's pass costs and the sampled gate's `phx`/priced decisions. Then test moving the terminal `fd` branch before `hx`, or a narrower rule motivated by those traces. That change can increase runtime when the ordinary ladder correctly refuses the last pass, so measure it rather than assuming a win.
+
+Gods and the other losses may have different causes (including earlier pass refusal and cache warming). The P18 report records many failed variations, including conservative R36, which matched win turns on one 17-deck held-out set but saved essentially no CPU and did not establish the fleet bar. Read that history before rerunning an old arm. The user ruled on 2026-11-13 that uncertainty should drive *more or fewer sampled rollouts*, with a hard fractional ceiling; an uncertain decision should not fall back to running the entire heuristic ladder. Preserve that design intent.
+
+## Acceptance route
+
+1. Reproduce and classify all F2 and F5 later games. A fixed-seed repair screen is for diagnosis only.
+2. Measure candidate speed and win turns in one paired batch across all 56 decks, at the bare ladder's depth 5 / 20 ms / turn 8. Require no deck's mean win turn to worsen; inspect every later game, including any earlier/later trade. A material CPU saving should hold across independent fresh sets, not only the training seeds. The full table is in `docs/design/sampled-gate-ladder.md` lines 724–798.
+3. Confirm with a separate held-out seed range, including larger samples for near-neutral or high-variance decks. Compare to configured play shapes separately before adopting a deck; a win over the bare ladder does not imply a win over a value leaf or single-pass setting. Keep Boars' existing adoption unless a new candidate is demonstrably better there.
+4. Run unit tests and smoke; audit any ground-truth mismatches against the exact parent binary, as P18 did. The prior smoke run had 39 mismatches, all 39 reproduced on parent `8cd0bbf23`, and no P18-induced drift. Do not rebaseline unrelated ground truth.
+5. Update `docs/design/sampled-gate-ladder.md` with the new candidate and all-deck results. Commit locally. Follow the repository's four-hour shared-push rhythm; personal `wip/*` branches may be pushed sooner. Run `python3 scripts/check_references_safe.py` before pushing or ending. Watch Windows CI after a platform-sensitive push.
+
+Relevant instructions: repository `CLAUDE.md`; `.claude/skills/mtg-ai.md`, `.claude/skills/regression-testing.md`, and `.claude/skills/coding-conventions.md` if adding a diagnostic lever. The user's stated bar is stronger than the current mode 2 result: **do not report the project complete while quality losses or merely neutral runtime remain.**
