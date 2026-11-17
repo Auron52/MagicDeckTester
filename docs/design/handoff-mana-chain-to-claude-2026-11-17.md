@@ -16,6 +16,11 @@ Original command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run anti_lifegain bruna midrange_burn selesnya_lifegain --games 5000 --name codex-due-four-20261117`.
 Resume command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run --resume codex-due-four-20261117 --threads 16`.
+Resume exec session `23177` is active; the first 16-worker attempt was
+still running at 04:51 UTC. `python3 scripts/check_references_safe.py`
+passed at 04:51 UTC after scanning 210 checkouts/worktrees. The next
+shared-branch push window opens at 05:09 UTC; rerun the safety check if
+new reference work appears before that push.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
 Commit the updated `test/mana_clean.json` and this handoff after it finishes.
