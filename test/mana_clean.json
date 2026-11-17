@@ -2419,6 +2419,47 @@
      "seed": 30067000,
      "src": "7940651a93b1749003e268106ee064aa5264b50b",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 28,
+      "CONTINUATION-DIFFERS": 42,
+      "DOMINATED-LAND": 15592,
+      "DROP-COVERED": 3087,
+      "HIDDEN-INFO": 105,
+      "PHANTOM": 9659
+     },
+     "commit": "821f065b257d12e9ff3ad6ba20e21fe7f0aef557",
+     "date": "2026-11-17T02:59:44Z",
+     "decisions": 38424,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 72000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 28,
+     "life_breakpoints": [],
+     "ms_off": 358844,
+     "ms_on": 2788619,
+     "report": "logs/mana_clean/codex-dragonstorm-ruby-song-20261117/report.md",
+     "run": "codex-dragonstorm-ruby-song-20261117",
+     "seed": 30072000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "issues"
     }
    ]
   },

@@ -107,4 +107,19 @@ board divergence, or enum gap. In 5,000 paired held-out games at seed
 9,820,001, both arms won 4,957 games with identical per-game win turns.
 The flag-off arm disables the earlier Ruby fallback as well, so its
 493.34 CPU seconds versus 503.26 seconds with the combined rule on
-(+2.0%) does not isolate the new move's cost. A new PGO gate remains.
+(+2.0%) does not isolate the new move's cost.
+
+The PGO+LTO build at source `fcb9352608ea` passed. Its fresh 5,000-game
+gate on indices 72,000–76,999 found 28 `APPLY-DROP` flags across 16
+signatures, and no ENUM-GAP, APPLY-DROP-ORDER, ORACLE-GAP, or capped flag.
+Oracle-on/off play was byte-identical. This is a new seed block, so its
+count should not be read as a direct reduction from the previous block.
+The leading residuals are seed 30,075,408 turn four (Apex continuation
+loses Kolaghan, six flags) and seed 30,073,082 turn five (Apex/Scourge
+continuation loses Karrthus, ten flags across variants). Other useful
+exact repros are 30,072,155 turn five (Ruby → Song → Karrthus),
+30,074,224 turn five (Song → Karrthus), 30,074,081 turn four (Karrthus
+→ Scourge), and 30,076,435 turn four (Desperate → Feat → Karrthus).
+The gate record is
+`logs/mana_clean/codex-dragonstorm-ruby-song-20261117/report.md` and
+`test/mana_clean.json`. The payment queue remains open.

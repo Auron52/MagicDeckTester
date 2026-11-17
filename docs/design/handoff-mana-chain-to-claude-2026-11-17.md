@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state at 02:28 UTC
+## Current state, updated 03:01 UTC
 
 **02:47 UTC update:** The scoped Ruby/Seething ordering repair in
 `src/ai/DecisionProviders.cpp` is complete and committed with this
@@ -20,18 +20,22 @@ Ruby flag (old and new rule) adds 2.0% CPU in this sample, so that is not
 an isolated cost for the new rule. PGO+LTO has since rebuilt successfully.
 Full evidence is appended to `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
 The source/doc commit is `cf5f44488`, and the PGO source tree stamp is
-`fcb9352608ea7e19580916d696643bc094d6ef3a`. A fresh Dragonstorm
-mana-clean gate on indices 72,000–76,999 is running in exec session 75986:
+`fcb9352608ea7e19580916d696643bc094d6ef3a`.
 
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name codex-dragonstorm-ruby-song-20261117
-```
-
-Console output: `build/scratch/dragonstorm_visible_lump_ab/ruby_song_fresh_gate.out`.
-Raw batch logs: `build/scratch/mana_clean/codex-dragonstorm-ruby-song-20261117/`.
-When done, read `logs/mana_clean/codex-dragonstorm-ruby-song-20261117/report.md`,
-update this handoff and design note, and commit the new `test/mana_clean.json`
-record. The gate may exit nonzero because issues remain; that is not a crash.
+**Fresh PGO Dragonstorm gate complete** on indices 72,000–76,999:
+`logs/mana_clean/codex-dragonstorm-ruby-song-20261117/report.md`.
+It found 28 APPLY-DROP flags across 16 signatures, with zero ENUM-GAP,
+APPLY-DROP-ORDER, ORACLE-GAP, or capped flags. Oracle-on/off play is
+byte-identical. The new block is not directly comparable to the earlier
+157-issue block. Leading residuals: seed 30075408 T4 Apex continuation
+loses Dragonlord Kolaghan (six flags); seed 30073082 T5 Apex/Scourge
+continuation loses Karrthus (ten flags across variants). Additional
+exact repros: 30072155 T5 Ruby → Song → Karrthus, 30074224 T5 Song →
+Karrthus, 30074081 T4 Karrthus → Scourge, 30076435 T4 Desperate → Feat
+→ Karrthus. The report has commands for each. The `test/mana_clean.json`
+record and design note are being committed with this update. No simulation
+batch is active after this gate. Next: investigate the APPLY-DROP clusters
+and run another fresh gate after any accepted fix.
 
 The earlier three source commits following pushed `f2156d4e6` are:
 
