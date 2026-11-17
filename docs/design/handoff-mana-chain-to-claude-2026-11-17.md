@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:45 UTC
 
+The next due **Treasure Hunt** PGO mana-clean gate is the only active
+simulation batch, exec session 39546:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run treasure_hunt --games 5000 --name codex-treasure-hunt-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/treasure_hunt_fresh_gate.out`.
+Read `logs/mana_clean/codex-treasure-hunt-fresh-20261117/report.md` on
+completion, update this handoff, and commit `test/mana_clean.json`.
+
 **Fungus fresh gate complete:** indices 80,000–84,999 at PGO
 source `fcb9352608ea` yielded 486 issues: 137 ENUM-GAP, 116
 DOMINATED-CREATURE, 204 ORACLE-GAP, and 29 CAPPED. There are also 102
