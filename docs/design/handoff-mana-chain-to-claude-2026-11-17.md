@@ -2,41 +2,39 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status (Claude), updated 10:31 UTC
+## Live status (Claude), updated 12:00 UTC
 
-**Prevent Damage, all 30 refresh flags explained; oracle repairs committed `7a289ca75`** (audit-only;
-`HEAD:src=b6bfdd2d261e`). Details: `docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`.
-(1) CAPPED x22: the retry default is now 400,000 (s30111776 140/140 and s30108897 15/15 finish clean).
-(2) Pyrohemia ORACLE-GAP x2 (s30111507): the frontier prune merged histories with different pending breakpoint
-continuations; frontiers now key `Hook::cont_sig` (`NoteContinuation`). (3) GSZ ORACLE-GAP x6 (s30109140): the
-end-of-main-1 pain sweep is life-dependent, so a healthier oracle payment swept Tarnished Citadel and the boards
-became incomparable; a fail-closed sweep-undone cover fallback (`UnSwept`) now classes it DOMINATED-LIFE. Unit suite
-3,385/3,385. A fresh PGO Prevent Damage gate is still owed.
+**Committed locally (NOT pushed; last push 05:35 UTC, window open):** `7a289ca75` oracle repairs (Prevent Damage
+30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float (`MTG_KAROO_FLOAT_RESTRICTED_C`), `1a3f5e1dc` gate record,
+`d85bc8c5a` Karoo line-colour float (`MTG_KAROO_FLOAT_LINE_COLOUR`), plus checkpoint docs. Notes:
+`docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`, `karoo-float-restricted-c-2026-11-17.md`,
+`karoo-float-line-colour-2026-11-17.md`.
 
-**Minotaur APPLY-DROP x2 (s30284922) fixed, committed `e6ffcefd7`** (`HEAD:src=34fb8c52119d`):
-`MTG_KAROO_FLOAT_RESTRICTED_C` (heurarm slot, default ON) lets the bounce's own float tap a creature-only land for
-its plain `{C}`; the ranking, user-rule filters and Satyr float are unchanged. Paired A/B (5,000 x 4 decks): 0 slower,
-Landfall Elementals 1 faster, Minotaur +4.02% units on 4,999 identical games. Note:
-`docs/design/karoo-float-restricted-c-2026-11-17.md`. Unit suite 3,387/3,387.
+**Gate `claude-pd-karoo-20261117`** (PGO `34fb8c52119d`, before `d85bc8c5a`): Spirits CLEAN; Minotaur 2 (new
+signature s30289322, fixed by `d85bc8c5a`: replay 0 issues, lever off APPLY-DROP=2); Prevent Damage 9 = one
+CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were left out: their own queue items.
 
-**State at 10:31 UTC (both commits LOCAL, NOT pushed; push window is open, last push 05:35 UTC):**
-1. PGO+LTO built and stamped `34fb8c52119d` (`build/scratch/claude_pd/pgo.out`).
-2. Smoke DONE (`build/scratch/claude_pd/smoke.out`): 43 failed = the known 39 + the d0 rows of Dragons,
-   Landfall Elementals, Minotaur and Spirits. Against the archived pre-change `.wins`
-   (`build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins/`) only those four d0 rows move,
-   and every moved game is FASTER (Elementals 1, Minotaur 2, Spirits 2, Dragons digest-only); 0 slower. Viewer:
-   0 play-drift / 0 board-diverged / 0 enum-gap (864 refs). Smoke GT not accepted (it is not this work's to
-   accept alone; the 39 known failures belong to the pending pooled accept).
-3. RUNNING: pooled gate `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run prevent_damage minotaur spirits
-   --games 5000 --name claude-pd-karoo-20261117`, console `build/scratch/claude_pd/gate.out`. Landfall
-   Elementals (94,137 issues) and Dragons (948) were left out: they cannot come out clean and are their own
-   queue items. On finish commit `test/mana_clean.json` and the verdicts in both design notes.
-4. Then push (check_references_safe, rebase, smoke if src replays, background CI watch with `--interval 60`).
-5. Then the wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras /
-   Fungus / Shadowborn / Morph, and every stale-clean deck (all 15 clean records are stale after these commits).
+**`d85bc8c5a` A/B** (16 Karoo / Lake decks x 2,000 held-out pairs, `build/scratch/claude_karoo_line_ab/`): 0 earlier,
+0 later, 12 digest-only, work within +/-0.17%. Unit 3,388/3,388.
 
-**Open for the USER:** painlands (`tap_self_damage > 0`) are also refused by `KarooBounceFloatable`, though their
-`{C}` mode is painless: the same shape, a wider play change, not made.
+**RUNNING:** smoke on `d85bc8c5a` (Release), console `build/scratch/claude_mino2/smoke.out`. Diff
+`test/logs/smoke/wins/` against `build/scratch/claude_mino2/prev_smoke_wins/` (the 10:28 run, post-`e6ffcefd7`):
+only Karoo / Lake deck rows may move, none slower; viewer zero drift.
+
+**NEXT, in order:**
+1. Push: check_references_safe, rebase onto origin, rebuild + smoke if src replays, background CI watch.
+2. Prevent Damage CAPPED s30115319 T8 (`{land=Reflecting Pool + GSZ + act:Pyrohemia(xN)}`, even x3 caps at 400K;
+   replay `build/scratch/claude_pd/s30115319_t8.out`, 870 MB). Cause: GSZ's pay1 fans to 2,724 surviving pay2
+   frontiers that differ only in the COLOUR of the units kept floating from any-colour sources (City of Brass,
+   Grand Coliseum, Reflecting Pool, Tarnished Citadel), so the Pareto prune cannot merge them. The engine floats a
+   full-rainbow source as `wild` (AddRefloatContribution); the oracle's per-face picks commit a colour. Fix shape:
+   an oracle fold that floats a full-rainbow face's leftover as wild exactly where the engine would (not a cap
+   raise). Then re-gate Prevent Damage and Minotaur.
+3. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
+   Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
+
+**Open for the USER:** painlands (`tap_self_damage > 0`) are still refused by `KarooBounceFloatable`, though their
+`{C}` mode is painless: the same shape as `e6ffcefd7`, a wider play change, not made.
 
 ## Codex status, updated 07:42 UTC
 
