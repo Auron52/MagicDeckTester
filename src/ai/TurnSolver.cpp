@@ -120776,6 +120776,11 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                         if (gamework::Poll()) { break; }
                         if (settled[i]) { continue; }
                         if (ldedup && probe_refuted.count(ckey[i]) != 0) { continue; }
+                        // MTG_LABEL_COLD_CACHE (diagnostic): fresh caches per candidate, as below.
+                        TranspositionTable  probe_tt_cold;
+                        FSLineCache         probe_lc_cold;
+                        TranspositionTable& probe_tt = s_cold_cache ? probe_tt_cold : tt;
+                        FSLineCache&        probe_lcu = s_cold_cache ? probe_lc_cold : probe_lc;
                         LpSite _lps(1);
                         LoadPlanState(pass_buf, state, s_state_reuse);
                         GameState& s = pass_buf;
@@ -120783,7 +120788,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                         ApplyPlanDirect(s, pre[i], true, &bp);
                         SimulateCombat(s);
                         const TurnSolver::SearchLine tail =
-                            FSLineTail(s, dd, max_turns, cut, second_main, &tt, &probe_lc, &budget);
+                            FSLineTail(s, dd, max_turns, cut, second_main, &probe_tt, &probe_lcu, &budget);
                         if (tail.win_turn <= cut)
                         {
                             ladder_wt[i] = tail.win_turn;
@@ -120823,64 +120828,8 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 std::vector<Action> bp;
                 ApplyPlanDirect(s, pre[i], true, &bp);
                 SimulateCombat(s);
-                // FullSearchLine searches compound breakpoint deviations in two passes, but
-                // labels enter FSLineTail directly. Run the ordinary tree first. A win at this
-                // horizon is already this candidate's earliest (all shallower horizons were
-                // refuted), so compound lines cannot improve it. Only a refutation that met a
-                // latent occurrence needs the compound tree. The first-pass cache is carried
-                // across exactly as in FullSearchLine, with dirty answers erased before pass 2.
-                auto label_tail = [&]() -> TurnSolver::SearchLine
-                {
-                    if (!BpDevSeqOn() || g_devseq_suppress != 0)
-                    { return FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget); }
-                    FSLineCache carry;
-                    std::vector<TranspositionTable::Key> dirty;
-                    std::vector<DvsNodeMeta> dirty_meta;
-                    DevSeqDirtyKeys dirty_keys;
-                    FSLineCache* const lc_prev = g_devseq_lc_handoff;
-                    auto* const dirty_prev = g_devseq_dirty;
-                    auto* const keys_prev = g_devseq_dirty_keys;
-                    auto* const meta_prev = g_devseq_dirty_meta;
-                    const bool latent_prev = g_devseq_latent_hit;
-                    const int min_prev = g_devseq_latent_min_turn;
-                    const int known_miss = g_lazy_known_miss_depth;
-                    g_devseq_latent_hit = false;
-                    g_devseq_latent_min_turn = INT_MAX;
-                    g_devseq_lc_handoff = &carry;
-                    g_devseq_dirty = &dirty;
-                    g_devseq_dirty_keys = &dirty_keys;
-                    const bool tail_skip = DvsTailSkipOn();
-                    g_devseq_dirty_meta = tail_skip ? &dirty_meta : nullptr;
-                    carry.dvs_mode = (tail_skip || DvsDirtyReadOn()) ? 1 : 0;
-                    TurnSolver::SearchLine first;
-                    {
-                        struct Suppress { Suppress() { ++g_devseq_suppress; }
-                                          ~Suppress() { --g_devseq_suppress; } } _sup;
-                        first = FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &carry, &budget);
-                    }
-                    carry.dvs_mode = 0;
-                    const bool met_latent = g_devseq_latent_hit;
-                    const int min_latent = g_devseq_latent_min_turn;
-                    g_devseq_latent_hit = latent_prev || met_latent;
-                    g_devseq_latent_min_turn = std::min(min_prev, min_latent);
-                    g_devseq_dirty_meta = meta_prev;
-                    g_devseq_dirty_keys = keys_prev;
-                    g_devseq_dirty = dirty_prev;
-                    g_devseq_lc_handoff = lc_prev;
-                    if (first.win_turn <= cut || !met_latent || min_latent > cut)
-                    { return first; }
-                    FslEraseDirty(&carry, dirty, dirty_meta, cut);
-                    g_lazy_known_miss_depth = known_miss;
-                    g_devseq_lc_handoff = &carry;
-                    carry.dvs_mode = tail_skip ? 2 : 0;
-                    carry.dvs_dirty.clear();
-                    const TurnSolver::SearchLine second =
-                        FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &carry, &budget);
-                    carry.dvs_mode = 0;
-                    g_devseq_lc_handoff = lc_prev;
-                    return second.win_turn < first.win_turn ? second : first;
-                };
-                const TurnSolver::SearchLine tail = label_tail();
+                const TurnSolver::SearchLine tail =
+                    FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget);
                 if (ldedup)
                 {
                     winlesscert::g_ldd_searched.fetch_add(1, std::memory_order_relaxed);
