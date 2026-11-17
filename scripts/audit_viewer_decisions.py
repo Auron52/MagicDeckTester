@@ -743,6 +743,11 @@ MANIFEST = {
     # side's nonland permanents (plus Hullbreaker's always-empty opponent-spell mode).
     "cast_trigger_bounce_nonland": ("target", truthy),
     "etb_bounce_nonland":          ("target", truthy),
+    # Sin, Unending Cataclysm (Sea Creatures I5): "remove all counters from any number of artifacts, creatures, and
+    # enchantments" -- the generic `dragon` multi-pick at ApplyCounterHarvestAsEnters (the enter cascade, shared
+    # executor+rollout), one Card per counter-bearing candidate (either side), the pin / provider default
+    # preselected, an EMPTY reply stands. Asked only when a candidate exists.
+    "as_enters_harvest_counters":  ("dragon", positive),
     # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
     # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
     # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
@@ -2133,6 +2138,11 @@ STATE_GATED_TYPES = {
         "battlefield (Brinelin: MV >= 6); a short forward sweep can cast the 7-8 drop without reaching that later "
         "state. Pinned by test/unit/test_sea_bounce.cpp 'human play -- the full legal set (both sides) and (no "
         "target) declines'.",
+    ("as_enters_harvest_counters", "dragon"):
+        "Sin, Unending Cataclysm asks only when a counter-bearing artifact / creature / enchantment is on the "
+        "battlefield as it enters (in Sea Creatures: a Saga mid-chapter); a short forward sweep can cast the 7-drop "
+        "onto a counterless board. Pinned by test/unit/test_sea_sin.cpp 'human play -- the dragon multi-pick, "
+        "default preselected; an empty reply stands'.",
     ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
     ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
 

@@ -191,6 +191,7 @@ enum class UnprunedGate
     SeaWave,         // Sea Creatures: Whelming Wave's cast restored (SeaCreaturesProvider::NeverCast, USER 2026-11-16)
     SeaBounce,       // Sea Creatures: Hullbreaker Horror's / Brinelin's bounce-trigger targets restored (SeaCreaturesProvider::BounceTriggerDeclineOnly, USER 2026-11-16)
     SagaSteal,       // Kiora Bests the Sea God III: the full steal-target list (DecisionProvider::RestrictSagaStealCandidates' sound folds lifted)
+    SeaSin,          // Sea Creatures: Sin's searched counter-harvest subsets restored (SeaCreaturesProvider::CounterHarvestSearchSubsets, USER 2026-11-17)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -657,6 +658,13 @@ public:
 //     other turn has no combat-generated resource in this list, so main 1 dominates there (the engine-wide no-M2
 //     argument). A pure function of the post-combat state (the field is folded into every key): lockstep by
 //     construction. The every-turn arm for the USER's measurement is MTG_FORCE_USES_M2=1.
+//   * SIN, UNENDING CATACLYSM STRIPS THE SAGAS (I5; USER 2026-11-17: "We should search in the engine for sin, but
+//     heuristically prune so that it strips sagas. I don't think there are any other counters in the deck, but if
+//     anything else shows up I guess we can leave it?"). The engine searches every harvest subset (the live-probe
+//     fan, identity-folded); CounterHarvestSearchSubsets is a ONE-OPTION PRUNE to the subset "every Saga with lore,
+//     no non-Saga permanent" (any other counter is left where it is), under MTG_SEA_SIN_STRIP_SAGAS, default ON;
+//     =0 restores the engine's full searched list. CounterHarvestDefault (the playout beyond the horizon, puts, the
+//     human preselection) is the same rule. Human play and MTG_UNPRUNE=seasin always offer every candidate.
 // ConsiderFetchHold is NOT overridden: the root default (false, USER 2026-11-14) cracks on play, which is the
 // reviewed answer for this list (analysis ledger, fetch_hold_review).
 //
@@ -688,6 +696,12 @@ public:
     bool NeverCast(const CardDefinition& def) const override;
     // Hullbreaker Horror / Brinelin: every bounce trigger declined autonomously (I4; see the class note).
     bool BounceTriggerDeclineOnly(const GameState& s, int controller, const CardDefinition& src) const override;
+    // Sin, Unending Cataclysm: strip the Sagas, leave everything else (I5; USER 2026-11-17, see the class note).
+    std::vector<int> CounterHarvestDefault(const GameState& s, int controller,
+                                           const std::vector<int>& cands) const override;
+    std::vector<std::string> CounterHarvestSearchSubsets(const GameState& s, int controller,
+                                                         const std::vector<int>& cands,
+                                                         const std::vector<std::string>& all) const override;
     // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }

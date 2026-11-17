@@ -598,6 +598,19 @@ struct CardParams
     // EntersWithPreappliedScope, SpellEffects.h), so a co-entrant's enter trigger resolving first
     // already sees the counters. 0 = none -> byte-identical for every other card.
     int enters_with_plus_counters = 0;
+    // ---- "AS THIS ENTERS, REMOVE ALL COUNTERS FROM ANY NUMBER OF ARTIFACTS, CREATURES AND ENCHANTMENTS;
+    // IT ENTERS WITH X +1/+1 COUNTERS, X = N x THE COUNTERS REMOVED" (Sin, Unending Cataclysm: N = 2;
+    // Sea Creatures I5, 2026-11-17) ----------------------------------------------------------------
+    // An AS-ENTERS REPLACEMENT (CR 614.1c / 614.12) that carries a real CHOICE (which permanents, any
+    // controller, the empty set included; NOT targeted, so ward / hexproof never apply). Resolved in the
+    // universal enter cascade (FireEtbWatchers -> ApplyCounterHarvestAsEnters, SpellEffects.h) before
+    // anything observes the entrant, so every entry route gets it. The choice is SEARCHED: a cast carries
+    // the sentinel Action::tutor_target "@H?", AppendSubdecisionAxes probes the live board at the entry
+    // and fans one plan per candidate subset ("@H<n>,<n>", identical permanents folded to k-of-m), and the
+    // pin reaches the entry through CounterHarvestPinScope (both worlds). Unpinned entries (the playout
+    // beyond the horizon, a put / reanimation) take DecisionProvider::CounterHarvestDefault. 0 = not a
+    // harvester -> byte-identical for every other card. The loader rejects a negative value.
+    int as_enters_harvest_counters = 0;
     // Kinsbaile Borderguard: as this enters, count OTHER creatures of the named
     // subtype already controlled and put that many +1/+1 counters on it.
     std::string enters_with_plus_counters_per_other_subtype;

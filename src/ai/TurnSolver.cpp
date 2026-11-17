@@ -15520,6 +15520,21 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             dyn += def.params.enters_with_plus_counters
                    << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
         }
+        // Sin, Unending Cataclysm: enters with N x the counters its UNPINNED harvest would remove (the provider
+        // default on the board as it stands) -- the body it is likely to be, doubler-aware. An ordering / greedy-
+        // leaf score only; the searched subset and a Saga's replayed chapters are the search's to value.
+        if (def.params.as_enters_harvest_counters > 0)
+        {
+            const std::vector<int> hc = CounterHarvestCandidates(state, std::numeric_limits<int>::min());
+            int removed = 0;
+            if (!hc.empty())
+            {
+                for (int bi : ResolveProvider(state).CounterHarvestDefault(state, state.active_player_index, hc))
+                { removed += TotalCountersOn(state.battlefield[static_cast<std::size_t>(bi)]); }
+            }
+            dyn += (def.params.as_enters_harvest_counters * removed)
+                   << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
+        }
         // Walking Ballista: enters with X counters (the cast's X) -- the body it IS, doubler-aware like
         // the line above. Its ping reach is the projection's (CounterPingReach), not this score's.
         // Neverwinter Hydra scores the EXPECTED dice total (X d6 -> X*(sides+1)/2; an ordering score only,
@@ -28060,6 +28075,10 @@ static thread_local int g_apd_last_putback_w = -1;
 static thread_local int g_apd_last_putback_i = -1;
 static thread_local std::vector<std::string>* g_loam_probe_offer = nullptr;
 static thread_local int g_loam_probe_depth = -1;
+// Sin's counter-harvest live probe (AppendSubdecisionAxes' harvest fan; the Loam probe's twin): set while a
+// plan prefix is replayed to Sin's entry, filled there with the live subset list (CounterHarvestSubsets).
+static thread_local std::vector<std::string>* g_harvest_probe_offer = nullptr;
+static thread_local int g_harvest_probe_depth = -1;
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
@@ -53101,6 +53120,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // SIN'S COUNTER HARVEST post-pass (CardParams::as_enters_harvest_counters; Sea Creatures I5). Which
+    // permanents Sin strips is chosen AS IT ENTERS, against the board it meets -- which an earlier cast of the
+    // same plan (a Saga cast first) or a cast trigger (Hullbreaker / Brinelin bouncing a Saga) can change, so
+    // no plan-start list can name it. The cast is stamped with the unresolved sentinel "@H?" and
+    // AppendSubdecisionAxes' harvest fan replays each plan to the entry and branches every live subset (the
+    // Life from the Loam "L?" shape). Same decision-space gate and human-play rule as the ETB CHOICE AXIS
+    // above: rollout leaves keep the unpinned cast (the provider's CounterHarvestDefault at the entry), and
+    // human play gets no sentinel -- the viewer asks at the entry. Param-gated: no other deck's actions move.
+    {
+        const bool hv_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        for (std::size_t i = 0; hv_decision_space && i < actions.size(); ++i)
+        {
+            Action& a = actions[i];
+            if (a.kind != Action::Kind::CastFromHand || a.def == nullptr
+                || a.def->params.as_enters_harvest_counters <= 0 || !a.tutor_target.empty()) { continue; }
+            if (!a.remand_by.empty() && a.remand_chain_by.empty() && !a.def->params.cant_be_countered)
+            { continue; }   // a Remanded cast never enters
+            static const InternedName kUnresolved(kCounterHarvestUnresolved);
+            a.tutor_target = kUnresolved;
+        }
+    }
+
     // THE UNTAP LOOP'S KILL FOLD (chunk C2b): only inside BpDeriveContinuationList's kill derivation --
     // admit the payoff's kill action alone (see that function for the dominance argument).
     if (g_untap_loop_kill_only != 0)
@@ -73330,10 +73372,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (Scourge ETB ping -> opponent life loss + Lathliss 5/5 token). Mirrors the executor's
             // EffectHandler::EnterBattlefield (lockstep) so the search's win projection counts the
             // ping toward lethal. No-op for every non-Dragon creature -> other decks byte-identical.
+            // SIN'S COUNTER HARVEST LIVE PROBE (AppendSubdecisionAxes' harvest fan): the first unresolved
+            // "@H?" entry reached at the probed depth publishes the subsets of the board it MEETS -- after
+            // every earlier cast of the plan and every cast trigger (a Hullbreaker / Brinelin bounce resolved
+            // before this creature entered). Param-gated; the probe pointer is null outside the fan.
+            if (def.params.as_enters_harvest_counters > 0 && tutor_target == kCounterHarvestUnresolved
+                && g_harvest_probe_offer != nullptr && g_apd_depth == g_harvest_probe_depth
+                && g_harvest_probe_offer->empty())
+            {
+                *g_harvest_probe_offer = CounterHarvestSubsets(state, state.active_player_index,
+                                                               CounterHarvestCandidates(state, cast_number));
+            }
             {
                 // Galvanic Alchemist's SEARCHED partner rides chosen_x into Trigger A (lockstep with
                 // EffectHandler::EnterBattlefield); 0 = no pin for every other card.
                 SoulbondPartnerPinScope _spp(SoulbondPinForCast(def.params, chosen_x));
+                // Sin's searched harvest subset (tutor_target "@H..."), read ONLY by the entry whose per-copy
+                // number is this cast's (lockstep with EffectHandler::EnterBattlefield).
+                CounterHarvestPinScope _chp(cast_number,
+                                            def.params.as_enters_harvest_counters > 0 ? &tutor_target : nullptr);
                 FireEtbWatchers(state, state.active_player_index,
                                static_cast<int>(state.battlefield.size()) - 1);
             }
@@ -81040,6 +81097,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 { w.Put("#FD"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.return_up_to_gy_lands > 0)
                 { w.Put("#LO"); w.Put(act.tutor_target); }
+                if (d && d->params.as_enters_harvest_counters > 0)   // Sin's harvest subset (a distinct play)
+                { w.Put("#HV"); w.Put(act.tutor_target); }
                 // Surgical's target, optional exile subset, and hand slot are real
                 // choices. The slot fixes which copy resolves first in a same-name chain.
                 if (d && d->params.surgical_extraction)
@@ -86413,6 +86472,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         { k += "#FD"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         if (cd && cd->params.return_up_to_gy_lands > 0)
                         { k += "#LO"; k += act.tutor_target.str(); }
+                        // Sin's counter-harvest subset: distinct pins are distinct plays (gated).
+                        if (cd && cd->params.as_enters_harvest_counters > 0)
+                        { k += "#HV"; k += act.tutor_target.str(); }
                         if (cd && cd->params.surgical_extraction)
                         { k += "#SX"; k += std::to_string(act.hand_index); k += ':'; k += act.tutor_target.str(); }
                         // Natural Order: distinct sacrifice victims are DISTINCT plans (core
@@ -88218,7 +88280,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // no white left, is dropped, and the combo turn dies. The dropping ordering sorts FIRST,
             // so it is the one a player naturally picks -- which is why it has to SAY so.
             const bool unresolved_loam = std::any_of(cand.actions.begin(), cand.actions.end(),
-                [](const Action& a) { return a.tutor_target == "L?"; });
+                [](const Action& a) { return a.tutor_target == "L?" || a.tutor_target == kCounterHarvestUnresolved; });
             // Before the live target axis, two orders can reach the same board
             // yet expose different land subsets at Loam's declaration.
             if (unresolved_loam || seen_states.insert(BuildDedupKey(copy)).second)
@@ -98687,6 +98749,65 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     TurnSolver::Plan v = p;
                     v.actions[index].tutor_target = *it;
+                    v.bp_wave0 = false;
+                    work.push_back(std::move(v));
+                }
+            }
+            all = std::move(expanded);
+        }
+    }
+
+    // SIN'S COUNTER HARVEST (CardParams::as_enters_harvest_counters): the Loam fan's twin. Which permanents Sin
+    // strips is chosen as it ENTERS, so each plan carrying an unresolved "@H?" cast is replayed on a copy under
+    // the probe (apply_one's creature-enter branch publishes the live CounterHarvestSubsets at the entry) and
+    // cloned once per offered subset. A plan whose Sin cast was never reached gets the legal empty pin "@H"
+    // (no sentinel escapes enumeration). Searched, never picked: every subset is a plan (identity fold only).
+    if (!HumanPlayActive() && g_harvest_probe_offer == nullptr)
+    {
+        bool has_harvest = false;
+        for (const auto& p : all)
+        {
+            for (const Action& a : p.actions)
+            { if (a.kind == Action::Kind::CastFromHand && a.tutor_target == kCounterHarvestUnresolved)
+              { has_harvest = true; break; } }
+            if (has_harvest) { break; }
+        }
+        if (has_harvest)
+        {
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            static const InternedName kNone("@H");
+            std::vector<TurnSolver::Plan> expanded;
+            std::reverse(all.begin(), all.end());
+            std::vector<TurnSolver::Plan> work = std::move(all);
+            while (!work.empty())
+            {
+                TurnSolver::Plan p = std::move(work.back()); work.pop_back();
+                const auto unresolved = std::find_if(p.actions.begin(), p.actions.end(), [](const Action& a)
+                { return a.kind == Action::Kind::CastFromHand && a.tutor_target == kCounterHarvestUnresolved; });
+                if (unresolved == p.actions.end()) { expanded.push_back(std::move(p)); continue; }
+                std::vector<std::string> offer;
+                GameState copy = state;
+                {
+                    RevealLogPause quiet;
+                    struct ProbeScope
+                    {
+                        std::vector<std::string>* saved_offer;
+                        int saved_depth;
+                        explicit ProbeScope(std::vector<std::string>& out)
+                            : saved_offer(g_harvest_probe_offer), saved_depth(g_harvest_probe_depth)
+                        { g_harvest_probe_offer = &out; g_harvest_probe_depth = g_apd_depth + 1; }
+                        ~ProbeScope()
+                        { g_harvest_probe_offer = saved_offer; g_harvest_probe_depth = saved_depth; }
+                    } probe(offer);
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                }
+                if (offer.empty())
+                { unresolved->tutor_target = kNone; expanded.push_back(std::move(p)); continue; }
+                const std::size_t index = static_cast<std::size_t>(unresolved - p.actions.begin());
+                for (auto it = offer.rbegin(); it != offer.rend(); ++it)
+                {
+                    TurnSolver::Plan v = p;
+                    v.actions[index].tutor_target = InternedName(*it);
                     v.bp_wave0 = false;
                     work.push_back(std::move(v));
                 }
@@ -125351,6 +125472,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // different list inside and outside one. Nonzero-gated: every key outside a probe is unchanged. (Found while
     // chasing Gods gi39, 2026-11-11, whose actual hole was the provider context folded just below.)
     if (g_loam_probe_offer != nullptr) { Fold(k, 0x10A3B0BEull); }
+    // Same for Sin's counter-harvest probe (the harvest fan runs only with no harvest probe open).
+    if (g_harvest_probe_offer != nullptr) { Fold(k, 0x4A2B5E57ull); }
     // The provider's own enumeration context (DecisionProvider::EnumerationContextKey; nonzero only where a
     // narrowing reads something besides the state -- the Gods Loam fan reads the search root).
     if (const std::uint64_t pc = ResolveProvider(state).EnumerationContextKey(state); pc != 0) { Fold(k, 0xEC0C7Eull); Fold(k, pc); }

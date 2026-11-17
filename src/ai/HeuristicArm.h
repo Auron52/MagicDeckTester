@@ -966,6 +966,7 @@ enum Slot : int
     SEA_WAVE_NEVER,           // MTG_SEA_WAVE_NEVER  Sea Creatures (USER 2026-11-16 "I would heuristically skip Whelming Wave"): SeaCreaturesProvider::NeverCast never offers a bounce_all_creatures spell autonomously. Default ON; =0 -> the cast is searched again (human play / MTG_UNPRUNE=seawave always offer it)
     SEA_HULLBREAKER_DECLINE,  // MTG_SEA_HULLBREAKER_DECLINE  Sea Creatures I4 (USER 2026-11-16 "Neither of Hullbreaker's abilities are useful in Goldfish, so we can opt out heuristically as well."): SeaCreaturesProvider::BounceTriggerDeclineOnly declines every Hullbreaker Horror cast trigger autonomously. Default ON; =0 -> the searched per-instance target digit (decline + every legal class)
     SEA_BRINELIN_DECLINE,     // MTG_SEA_BRINELIN_DECLINE  Sea Creatures I4 (USER 2026-11-16 "Brinelin is the same deal. Unless you can come up with a counterexample I would prune it."): SeaCreaturesProvider::BounceTriggerDeclineOnly declines Brinelin's ETB and MV>=6 cast triggers autonomously. Default ON; =0 -> the searched per-instance target digit
+    SEA_SIN_STRIP_SAGAS,      // MTG_SEA_SIN_STRIP_SAGAS  Sea Creatures I5 (USER 2026-11-17 "We should search in the engine for sin, but heuristically prune so that it strips sagas. I don't think there are any other counters in the deck, but if anything else shows up I guess we can leave it?"): SeaCreaturesProvider::CounterHarvestSearchSubsets offers ONE subset -- every Saga with lore, no non-Saga permanent. Default ON; =0 -> every searched subset (human play / MTG_UNPRUNE=seasin always see every candidate)
     COUNT
 };
 
@@ -1876,6 +1877,7 @@ inline const char* Name(int slot)
         "MTG_SEA_WAVE_NEVER",
         "MTG_SEA_HULLBREAKER_DECLINE",
         "MTG_SEA_BRINELIN_DECLINE",
+        "MTG_SEA_SIN_STRIP_SAGAS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
