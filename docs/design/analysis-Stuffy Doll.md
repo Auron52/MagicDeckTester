@@ -76,7 +76,7 @@ implementer agent per step, serial.
 | 9 | Shaman en-Kor {1}{W} pull | DONE 268e96f4a (unit 3447, scen 576/576, smoke 0/219 moved vs 8; pulls on the damage Batch applied before shields (CR 616.1); count/targets searched with folds P0-P3; {1}{W} paid at sweep resolution via TapForCostDirect, offered only while affordable; Shaman pull Spirit kill from 39 T4, Nomads control no win by T6) |
 | 10 | StuffyDollProvider + ExtraLethalDamage | IN PROGRESS (~20:15 UTC) |
 | 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35); provider GC-host restriction to loop-sustaining creatures (USER 20:40) | pending (after 10) |
-| 9c | searched attack-vs-hold for GC-enchanted non-indestructible creatures + GC host order Doll-first (USER 20:45) | pending (after 9b) |
+| 9c | searched attack-vs-hold for GC-enchanted non-indestructible creatures; GC host order (tappable Doll first, else Doll + one other reflector); Loran's target GC'd creature first; cast order GC before Loran's (USER 20:45/20:50) | pending (after 9b) |
 | 11 | second main (Q-U4) | pending |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
@@ -118,6 +118,17 @@ deferrals provisional.
   rollout in lockstep, other decks byte-identical; the provider may order (e.g. hold first when a Loran's Escape
   is in hand) but not pick. Fallback only if the searched axis proves infeasible: a provider `ShouldAttackWith`
   hold heuristic, surfaced to the USER.
+- USER RULING 2026-11-17 ~20:50 UTC (verbatim, refines (a)): "Actually, Doll first only works consistently if it can
+  tap this turn. If not, we might need to consider one other critter that reflects damage. Similarily Loren's Escape
+  should target a critter with Guilty Conscience on it if such exists. The order should make this easy. (Guilty
+  Conscience first?)"
+  => GC host (provider, heuristic): if a Stuffy Doll can tap THIS turn (untapped, not summoning sick) -> Doll first;
+  otherwise keep the Doll AND one other loop-sustaining reflector as candidates (Doll + the best other reflector),
+  ordered so the reflector that can loop this turn comes first.
+  => Loran's Escape target (provider, heuristic): a creature carrying Guilty Conscience first when one exists.
+  => CAST ORDER (USER-proposed, marked "?"): Guilty Conscience before Loran's Escape, so the Escape can see the GC'd
+  creature. Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
+  (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
