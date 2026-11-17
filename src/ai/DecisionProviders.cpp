@@ -25510,6 +25510,7 @@ namespace
     const SpiritsProvider        g_spirits;
     const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
+    const MazesEndProvider       g_mazes_end;
 }
 
 // Our own damage is useful whenever a gain engine is on the board (see the class comment). Rules
@@ -28331,6 +28332,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // black staples), Lotus Bloom (Dragonstorm). Must beat `anti` (the tutors' tutor_to_hand), so it
     // routes FIRST; the signature is carried by no other deck, so the position is free.
     bool shadowborn = false;
+    // MAZE'S END (onboarding 2026-11-17): OR of three params no other card carries -- Maze's End's
+    // distinct-names alternate win, Guild Summit's tap-Gates draw, Gates Ablaze's per-Gate X -- so a list
+    // that cuts one card still routes. Returns FIRST (a land-tutor list would otherwise risk `anti`).
+    bool mazes_end = false;
     // SPIRITS (W/U(/b) Spirit tribal on Aether Vial; onboarding 2026-11-13). MUST return ABOVE `anti`
     // (Flooded Strand's fetch_land_types), `goblin` (a Spirit dies-watcher such as Millicent's) and
     // `vial && slivers` (Millicent's affinity_for_subtype) -- the archetype-neutral misroute class
@@ -28368,6 +28373,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        if (p.alt_win_distinct_named_count > 0 || !p.etb_tap_subtype_draw.empty()
+            || !p.damage_all_creatures_x_per_subtype.empty()) { mazes_end = true; }
         if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
             || p.landfall_mill_target_player || p.cycling_mill_opponent > 0
             || p.spell_mill_opponent > 0)
@@ -28962,6 +28969,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Morph: FIRST (after Red Elementals) -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
     // Red Elementals: above `morph`, whose signature its end-step-sacrifice bodies / Firecat / Legion Leadership
     // set alone (see the flag). Its signature is carried by no other deck, so the position is free.
+    // Maze's End: FIRST -- its signature is carried by no other deck, so the position is free.
+    if (mazes_end)   { return g_mazes_end; }
     if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
@@ -39145,7 +39154,8 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
         if (d == nullptr) { c = C_REST; continue; }
         const CardParams& p = d->params;
         // Order matters: the reducer test precedes the creature test (a Daredevil is a creature).
-        if (p.damage_all_creatures > 0)        { c = C_BLANK; }
+        if (p.damage_all_creatures > 0
+            || !p.damage_all_creatures_x_per_subtype.empty())   { c = C_BLANK; }   // + Gates Ablaze
         else if (IsSubtypeCostReducer(*d))     { c = C_RED; }
         else if (p.mana_rock)                  { c = C_ROCK; }
         else if (p.equip_grants_haste)         { c = C_HASTE; }
@@ -66327,3 +66337,136 @@ std::vector<int> ShadowbornProvider::CleanupDiscardCandidates(
 
 // The conditions (fodder, the Lake's fuel, the quota) move as the hand shrinks, so re-ask per shed.
 bool ShadowbornProvider::CleanupDiscardShedStable() const { return !ShadowbornBucketDiscardOn(); }
+
+// ==== MazesEndProvider (Maze's End, onboarding 2026-11-17) ===========================================
+namespace
+{
+// Distinct Gate names `ctrl` controls now, and whether `name` is one of them.
+bool MazeControlsGateNamed(const GameState& s, int ctrl, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || !p.card.IsLand() || p.card.m_name.str() != name) { continue; }
+        if (LandHasSubtypeNow(s, p, "Gate")) { return true; }
+    }
+    return false;
+}
+bool MazeNameIsGate(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    return d != nullptr && CardHasSubtype(d->card, "Gate");
+}
+}
+
+std::vector<std::string>
+MazesEndProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    const bool land_tutor = std::find(pp.tutor_types.begin(), pp.tutor_types.end(), std::string("Land"))
+                            != pp.tutor_types.end();
+    if (!land_tutor || all.size() <= 1) { return all; }
+    // Do we already hold a Maze's End (hand or battlefield)?
+    bool have_maze = false;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    auto is_maze = [](const CardDefinition* d) { return d != nullptr && d->params.alt_win_distinct_named_count > 0; };
+    for (const Card& c : pl.hand) { if (is_maze(CardDatabase::Instance().LookupCached(c))) { have_maze = true; break; } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (have_maze) { break; }
+        if (p.controller_index == controller && is_maze(CardDatabase::Instance().LookupCached(p.card))) { have_maze = true; }
+    }
+    // ORDER ONLY (stable, nothing dropped): 0 = Maze's End while we hold none; 1 = a Gate name we do not
+    // control; 2 = anything else; 3 = a Gate name we already control (adds nothing to the count).
+    auto tier = [&](const std::string& nm) -> int {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (!have_maze && is_maze(d)) { return 0; }
+        if (MazeNameIsGate(nm)) { return MazeControlsGateNamed(s, controller, nm) ? 3 : 1; }
+        return 2;
+    };
+    std::stable_sort(all.begin(), all.end(),
+                     [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
+    return all;
+}
+
+bool MazesEndProvider::TapTutorPutCandidates(const GameState& s, const CardDefinition& source,
+                                             std::vector<std::string>& names) const
+{
+    const CardParams& pp = source.params;
+    if (pp.alt_win_distinct_named_count <= 0 || pp.alt_win_distinct_named_subtype.empty())
+    { return DeckProvider::TapTutorPutCandidates(s, source, names); }
+    const int me = s.active_player_index;
+    const int need = pp.alt_win_distinct_named_count;
+    const int have = CountDistinctNamedLandsWithSubtype(s, me, pp.alt_win_distinct_named_subtype, need);
+    // A find adds a name iff it is a Gate name not controlled now. (The source returns to hand as a COST;
+    // Maze's End is not a Gate, so the count is unchanged by it.)
+    auto adds = [&](const std::string& nm) { return !MazeControlsGateNamed(s, me, nm); };
+    // THE SOUND WIN FOLD: the activation wins whatever it finds -> one winning target, no fail-to-find.
+    if (have >= need)
+    {
+        if (names.empty()) { return false; }   // the fail-to-find twin is the (winning) activation
+        names.resize(1);
+        return true;
+    }
+    if (have == need - 1)
+    {
+        for (const std::string& nm : names)
+        { if (adds(nm)) { names = { nm }; return true; } }
+    }
+    // ORDER ONLY: new names first, duplicates last. Every name kept; the fail-to-find stays.
+    std::stable_sort(names.begin(), names.end(),
+                     [&](const std::string& a, const std::string& b) { return adds(a) && !adds(b); });
+    return false;
+}
+
+bool MazesEndProvider::ProjectsAlternateWin(const GameState& s,
+                                            const std::vector<const CardDefinition*>& casting) const
+{
+    (void)casting;
+    // An untapped Maze's End with {3} more from other untapped lands, and the activation wins: ten names
+    // already, or nine and a Gate name we do not control is in the library. An input to the projection,
+    // never a win (execution is the arbiter); the mana test counts one mana per other untapped land.
+    const int me = s.active_player_index;
+    for (const Permanent& src : s.battlefield)
+    {
+        if (src.controller_index != me || src.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+        if (d == nullptr || d->params.alt_win_distinct_named_count <= 0 || !d->params.tap_tutor_put_cost) { continue; }
+        int other_lands = 0;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index == me && !q.tapped && q.card.IsLand() && q.card.m_number != src.card.m_number)
+            { ++other_lands; }
+        }
+        if (other_lands < d->params.tap_tutor_put_cost->ManaValue()) { continue; }
+        const int need = d->params.alt_win_distinct_named_count;
+        const int have = CountDistinctNamedLandsWithSubtype(s, me, d->params.alt_win_distinct_named_subtype, need);
+        if (have >= need) { return true; }
+        if (have == need - 1)
+        {
+            for (const Card& lc : s.players[static_cast<std::size_t>(me)].library)
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                if (ld != nullptr && TapTutorPutLibraryCandidate(d->params, ld->card)
+                    && !MazeControlsGateNamed(s, me, lc.m_name.str())) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+bool MazesEndProvider::NeverCast(const CardDefinition& def) const
+{
+    // Gates Ablaze: outcome-inert in a goldfish (see the class comment). Human play keeps it.
+    if (!def.params.damage_all_creatures_x_per_subtype.empty())
+    { return !HumanPlayActive() && !DecisionUnpruned(); }
+    return false;
+}
+
+bool MazesEndProvider::OffersModalExileArtEnch(const GameState& s, const CardDefinition& def) const
+{
+    (void)s; (void)def;
+    // Archdruid's Charm mode 3: the passive opponent controls no artifact or enchantment, so every legal
+    // target is one of OUR permanents (Amulet, Exploration, Burgeoning, Manabond, Guild Summit) -- exiling
+    // one is dominated by not casting (deck-scoped dominance). Human play keeps the mode.
+    return HumanPlayActive() || DecisionUnpruned();
+}

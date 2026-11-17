@@ -17498,6 +17498,307 @@
     "attack_trigger_reanimate_toughness_lt_self": true,
     "attack_trigger_reanimate_sac_end_step": true
    }
+  },
+  {
+   "name": "Maze's End",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{3}, {T}, Return this land to its owner's hand: Search your library for a Gate card, put it onto the battlefield, then shuffle. If you control ten or more Gates with different names, you win the game. [NOT a Gate itself. The activation is the TapTutorPut route (Seahunter's), its library filter read off THIS card's params (tutor_required_subtype Gate + tutor_types Land, Planar Nexus included through its every-nonbasic-type bit). {T} is paid before the {3} (it cannot pay for itself); the RETURN-TO-HAND is part of the cost (tap_tutor_put_return_self, paid first at resolution -- nothing can respond in a goldfish). The Gate enters through EnterLand: its own enters-tapped, landfall and Guild Summit's draw. The WIN CHECK runs after the put AND on a fail-to-find (GameState::won_by_effect, CR 104.2b), counting distinct NAMES among Gates we control. The target is SEARCHED: one action per distinct Gate name plus fail-to-find; the deck provider collapses the menu to one target when the activation wins regardless of target (a sound fold: every such target reaches the same terminal state). The bounce is new hand material, so the hand-entry breakpoint re-solves and a replay (land drop) plus a second activation is reachable the same turn.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "enters_tapped": true,
+    "tap_tutor_put_cost": "{3}",
+    "tap_tutor_put_return_self": true,
+    "tutor_types": [
+     "Land"
+    ],
+    "tutor_required_subtype": "Gate",
+    "tutor_shuffle_after": true,
+    "alt_win_distinct_named_subtype": "Gate",
+    "alt_win_distinct_named_count": 10
+   }
+  },
+  {
+   "name": "Azorius Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {W} or {U}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Boros Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {R} or {W}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Dimir Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {U} or {B}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Golgari Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {B} or {G}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Gruul Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {R} or {G}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Izzet Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {U} or {R}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "R"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Orzhov Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {W} or {B}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "B"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Rakdos Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {B} or {R}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Selesnya Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {G} or {W}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Simic Guildgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {G} or {U}. [Gate (CR 205.3i): counted BY NAME for Maze's End's \"ten or more Gates with different names\" -- the land-drop signature, LandSearchClasses and behaviour_identity keep its name, so it is never folded with another Gate. Colour choice on tap = the mana-payment exemption.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Planar Nexus",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land is every nonbasic land type. (Nonbasic land types include Cave, Desert, Gate, Lair, Locus, Mine, Power-Plant, Sphere, Tower, and Urza's.)\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color. [Every nonbasic land type in EVERY zone (a characteristic-defining ability, CR 604.3): all_nonbasic_land_types sets a bit on the card's subtype set, read as a fallback by every subtype reader (CardHasSubtype, LandHasSubtypeNow, SubtypeSet::HasId) against CR 205.3i's nonbasic list. So it IS a Gate for Maze's End's search and distinct-name count, Guild Summit's draw and tap, and Gates Ablaze. NO basic land type and no Basic supertype. Mana: Capital City's any_color_filter ({T}: {C} implicit; {1},{T}: one mana of any colour). The other nonbasic types have no reader in this list (inert).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "all_nonbasic_land_types": true
+   }
+  },
+  {
+   "name": "Guild Summit",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, you may tap any number of untapped Gates you control. Draw a card for each Gate tapped this way.\nWhenever a Gate you control enters, draw a card. [ETB (etb_tap_subtype_draw Gate): the COUNT N is SEARCHED on the ETB choice axis (0 = decline .. every untapped Gate); WHICH N Gates follows the deck provider's mana-source rank, least valuable first (USER decision pending -- ledger decision 2; rests on the mana-payment exemption), clamped at resolution to the untapped Gates then present. WATCHER (draw_on_other_subtype_enter Gate): fires at OnLandEntered, the once-per-land chokepoint, so a Gate entering by land drop, by Maze's End's fetch, by a tutor put or any other route draws once. An empty-library draw is skipped (the existing 6a disclosure).]",
+   "template": "custom",
+   "parameters": {
+    "etb_tap_subtype_draw": "Gate",
+    "draw_on_other_subtype_enter": [
+     "Gate"
+    ]
+   }
+  },
+  {
+   "name": "Gates Ablaze",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Gates Ablaze deals X damage to each creature, where X is the number of Gates you control. [X counted at resolution over EVERY Gate we control (duplicates included; Planar Nexus counts). SYMMETRIC (our creatures too). OUTCOME-INERT in a goldfish: this list has no creatures and the passive opponent's creatures never attack or block, and nothing watches their deaths (the Pyroclasm disclosure). The deck provider never offers the cast autonomously (deck-scoped dominance); a human may cast it.]",
+   "template": "custom",
+   "parameters": {
+    "damage_all_creatures_x_per_subtype": "Gate"
+   }
+  },
+  {
+   "name": "Archdruid's Charm",
+   "mana_cost": "{G}{G}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Choose one —\n• Search your library for a creature or land card and reveal it. Put it onto the battlefield tapped if it's a land card. Otherwise, put it into your hand. Then shuffle.\n• Put a +1/+1 counter on target creature you control. It deals damage equal to its power to target creature you don't control.\n• Exile target artifact or enchantment. [MODE 1 = the Crop Rotation route (tutor_land_to_battlefield, no additional cost): the find is the SEARCHED tutor axis; a land enters TAPPED by the effect (LandEntryTap::ForcedTapped -- its own enters-tapped rule is not consulted, Amulet sees a tapped entry), a creature goes to HAND (tutor_nonland_to_hand); then shuffle. Reveal is unobservable. MODE 2 needs a creature we control as a target and this list has none and makes none, so it can never be chosen (CR 601.2c) -- not modelled (PROVISIONAL, ledger). MODE 3 (modal_exile_target_artifact_enchantment): the passive opponent controls no artifact or enchantment, so its only legal targets are our own; dominated by not casting, so the deck provider never offers it autonomously; human play offers one cast variant per legal target (the AX<n> pin, exiled at resolution if still legal).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_land_to_battlefield": true,
+    "tutor_types": [
+     "Creature",
+     "Land"
+    ],
+    "tutor_land_enters_tapped": true,
+    "tutor_nonland_to_hand": true,
+    "tutor_shuffle_after": true,
+    "modal_exile_target_artifact_enchantment": true
+   }
   }
  ]
 }

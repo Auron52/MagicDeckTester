@@ -525,6 +525,19 @@ MANIFEST = {
     # activation occurs, so a land played earlier in the line is included.
     "tap_target_pump_cost":          ("target",      present),
     "tap_tutor_put_cost":             ("main_phase",  present),
+    # ---- Maze's End (I1, 2026-11-17) ----
+    # Maze's End's "{3}, {T}, Return this land to its owner's hand: Search ... for a Gate card": the same
+    # TapTutorPut plan variants as Seahunter -- one per distinct Gate name + fail-to-find (human play gets
+    # every name, never the provider's win fold); the return-to-hand is a fixed cost, not a choice.
+    "tap_tutor_put_return_self":      ("main_phase",  truthy),
+    # Guild Summit's ETB "you may tap any number of untapped Gates ... draw a card for each": HOW MANY is
+    # the `x_value` prompt (x_kind etb_tap_draw), WHICH Gates the `target` board picks that follow
+    # (g_play_loyalty_chooser), both at FireOwnEtbTriggersBody (shared executor + rollout/viewer apply).
+    "etb_tap_subtype_draw":           ("x_value",     truthy),
+    # Archdruid's Charm mode 3 "Exile target artifact or enchantment": the MODE and its TARGET are cast
+    # variants (one per legal artifact/enchantment, Action::tutor_target "AX<n>") in HUMAN play; the deck
+    # provider withholds the mode autonomously (OffersModalExileArtEnch -- every legal target is our own).
+    "modal_exile_target_artifact_enchantment": ("main_phase", truthy),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
     # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
@@ -966,6 +979,14 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Maze's End (I1, 2026-11-17).
+    "damage_all_creatures_x_per_subtype": "Gates Ablaze -- an untargeted symmetric sweep ('each creature'), X fixed by the Gates you control at resolution: no target, no mode, no division, no 'may'. The only decision is whether to cast it (main_phase)",
+    "alt_win_distinct_named_subtype": "Maze's End's win condition subtype -- a mandatory rules check at resolution, no choice",
+    "alt_win_distinct_named_count": "Maze's End's win threshold (ten) -- a mandatory rules check at resolution, no choice",
+    "all_nonbasic_land_types": "Planar Nexus -- a characteristic-defining static ability (every nonbasic land type), no choice",
+    "tutor_land_enters_tapped": "Archdruid's Charm -- the found land enters tapped (fixed by the effect), no choice; the find itself rides tutor_land_to_battlefield's main_phase variants",
+    "tutor_nonland_to_hand": "Archdruid's Charm -- a found nonland goes to hand (fixed by the effect), no choice",
+    "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
     # Mill: printed magnitudes and legality thresholds. Their action/target choices
     # are classified above; resolving these riders is mandatory.
     "cycling_mill_opponent": "mandatory mill count on cycling Fractured Sanity; cycling timing is the existing main_phase action",

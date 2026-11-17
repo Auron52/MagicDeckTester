@@ -2510,7 +2510,8 @@ inline bool LandHasSubtypeNow(const GameState& state, const Permanent& land,
     const CardDefinition* def = CardDatabase::Instance().LookupCached(land.card);
     const SubtypeSet& subs = def ? def->card.m_subtypes : land.card.m_subtypes;
     for (const std::string& s : subs) { if (s == subtype) { return true; } }
-    return false;
+    // Planar Nexus (SubtypeSet::AllNonbasicLandTypes): fallback after the miss.
+    return subs.AllNonbasicLandTypes() && SubtypeSet::IsNonbasicLandTypeName(subtype);
 }
 
 inline bool CanRevealAdditionalCost(const GameState& state, int controller,
@@ -4637,6 +4638,13 @@ inline ConvokeRules ConvokeRulesFor(const CardDefinition& d, bool post_combat_or
     return r;
 }
 
+// EnterLand -- THE effect-put land entry (defined with the land-entry block far below). Declared
+// here, with its defaults, because PerformTutorToBattlefield routes a LAND put through it.
+enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped, PreDecidedUntapped, PreDecidedTapped };
+inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
+                      bool resolve_full_etb = false, bool fire_landfall = true,
+                      LandEntryTap entry_tap = LandEntryTap::Natural);
+
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
@@ -4947,6 +4955,22 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         Card lc = ap.library[idx];
         ap.library.erase(ap.library.begin() + idx);
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        // A LAND put (Maze's End's Gate) enters through EnterLand -- the land route every other put
+        // uses: its own enters-tapped (a Guildgate), its land ETBs, and landfall / the land-entry
+        // watchers through OnLandEntered, exactly once. Reached by no pre-existing deck: Seahunter is
+        // the only other tutor-to-battlefield whose types name Land, and no Merfolk card is a land.
+        if (d != nullptr && d->card.IsLand() && !d->card.IsCreature()
+            && controller == state.active_player_index)
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "tutor",
+                              lc.m_name.str() + " -- put onto the battlefield ("
+                              + (source_name.empty() ? std::string("tutor") : source_name) + ")");
+            }
+            EnterLand(state, *d, lc.m_number, /*resolve_full_etb=*/true, /*fire_landfall=*/true);
+            continue;
+        }
         Permanent perm;
         perm.card              = d ? d->card : lc;
         perm.card.m_number     = lc.m_number;   // preserve per-copy id (logging / state key)
@@ -10583,7 +10607,9 @@ inline void PerformEndStepNoCreatureSacrifice(GameState& state)
 inline bool CardHasSubtype(const Card& c, std::string_view sub)
 {
     for (const std::string& s : c.m_subtypes) { if (s == sub) { return true; } }
-    return false;
+    // Planar Nexus: every nonbasic land type (SubtypeSet::AllNonbasicLandTypes). A fallback after
+    // the miss -- false for every card without the bit.
+    return c.m_subtypes.AllNonbasicLandTypes() && SubtypeSet::IsNonbasicLandTypeName(sub);
 }
 
 // Interned-id form, for a site hot enough that even four short string compares matter. The id is
@@ -11516,6 +11542,59 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 
 // THE LANDFALL CHOKEPOINT -- see the contract at the top of this block. `target_snapshot` is non-null
 // only for the deferred landfall of a SIMULTANEOUS multi-put (PerformGenesisWave).
+// "Whenever another <subtype> you control enters, draw a card" (CardParams::draw_on_other_subtype_enter:
+// Kili, Guild Summit). ONE resolver for every entrant: FireEtbWatchers calls it for a NONLAND entrant,
+// OnLandEntered (the once-per-land chokepoint) for a LAND -- so a Gate entering by drop, by an effect's
+// put (EnterLand, Maze's End's fetch, the Wave) or through the universal cascade triggers exactly once.
+// The caller holds the deck-presence gate (GameState::deck_has_other_subtype_enter_draw).
+inline void FireOtherSubtypeEnterDraws(GameState& state, int entered_index)
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent& entrant = state.battlefield[entered_index];
+    const int nctrl2 = entrant.controller_index;
+    const int ent_num = entrant.card.m_number;
+    // SNAPSHOT which watchers fire before resolving any of them: a draw entering hand can run
+    // hand-entry watchers, and the set that triggered must not be re-derived mid-resolution.
+    std::vector<int> fire_idx;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& w = state.battlefield[i];
+        if (w.controller_index != nctrl2 || w.def_absent) { continue; }
+        if (w.card.m_number == ent_num) { continue; }          // "ANOTHER" -- never itself
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd || wd->params.draw_on_other_subtype_enter.empty()) { continue; }
+        if (wd->params.draw_on_other_subtype_enter_once_each_turn
+            && w.storied_draw_used_this_turn) { continue; }    // already triggered this turn
+        bool match = false;
+        for (const std::string& want : wd->params.draw_on_other_subtype_enter)
+        {
+            if (CardHasSubtype(entrant.card, want)) { match = true; break; }
+        }
+        if (match) { fire_idx.push_back(i); }
+    }
+    for (int i : fire_idx)
+    {
+        if (i >= static_cast<int>(state.battlefield.size())) { continue; }
+        Permanent& w = state.battlefield[i];
+        const CardDefinition* wd = w.def_absent
+            ? nullptr : CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        if (wd->params.draw_on_other_subtype_enter_once_each_turn)
+        { w.storied_draw_used_this_turn = true; }
+        Player& kp = state.players[nctrl2];
+        if (kp.library.empty()) { continue; }
+        [[maybe_unused]] const std::size_t before = kp.hand.size();
+        // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+        // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+        kp.cards_drawn_this_turn += DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
+        if (g_play_draw_sink)
+        {
+            for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
+            { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
+        }
+    }
+}
+
 inline void OnLandEntered(GameState& state, int controller, int land_number,
                           const std::vector<int>* target_snapshot)
 {
@@ -11524,6 +11603,19 @@ inline void OnLandEntered(GameState& state, int controller, int land_number,
     // CONDITION, and the condition reads the event, not a watcher. Read only through
     // LandEnteredUnderControlThisTurn, so setting it changes nothing for any deck without one.
     state.players[static_cast<std::size_t>(controller)].land_entered_this_turn = true;
+    // Guild Summit: "Whenever a Gate you control enters, draw a card." A land entrant's subtype-enter
+    // draw (FireOtherSubtypeEnterDraws), here because this runs exactly once per land on every route.
+    // Deck-presence gated: a clear bit proves no watcher exists. A land already gone again (a Karoo
+    // that bounced itself) is not found and draws nothing -- no Gate does that.
+    if (state.deck_has_other_subtype_enter_draw)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& lp = state.battlefield[static_cast<std::size_t>(i)];
+            if (lp.card.m_number == land_number && lp.controller_index == controller)
+            { FireOtherSubtypeEnterDraws(state, i); break; }
+        }
+    }
     if (controller == 0 && !state.deck_has_landfall) { return; }   // per-game gate (see above)
     FireLandfallTriggers(state, controller, land_number, target_snapshot);
 }
@@ -12047,49 +12139,8 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // watcher can be found, so our own entrants skip the walk; an opponent entrant keeps it.
     if (state.battlefield[entered_index].controller_index != 0 || state.deck_has_other_subtype_enter_draw)
     {
-        const Permanent& entrant = state.battlefield[entered_index];
-        const int nctrl2 = entrant.controller_index;
-        const int ent_num = entrant.card.m_number;
-        // SNAPSHOT which watchers fire before resolving any of them: a draw entering hand can run
-        // hand-entry watchers, and the set that triggered must not be re-derived mid-resolution.
-        std::vector<int> fire_idx;
-        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-        {
-            const Permanent& w = state.battlefield[i];
-            if (w.controller_index != nctrl2 || w.def_absent) { continue; }
-            if (w.card.m_number == ent_num) { continue; }          // "ANOTHER" -- never itself
-            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
-            if (!wd || wd->params.draw_on_other_subtype_enter.empty()) { continue; }
-            if (wd->params.draw_on_other_subtype_enter_once_each_turn
-                && w.storied_draw_used_this_turn) { continue; }    // already triggered this turn
-            bool match = false;
-            for (const std::string& want : wd->params.draw_on_other_subtype_enter)
-            {
-                if (CardHasSubtype(entrant.card, want)) { match = true; break; }
-            }
-            if (match) { fire_idx.push_back(i); }
-        }
-        for (int i : fire_idx)
-        {
-            if (i >= static_cast<int>(state.battlefield.size())) { continue; }
-            Permanent& w = state.battlefield[i];
-            const CardDefinition* wd = w.def_absent
-                ? nullptr : CardDatabase::Instance().LookupCached(w.card);
-            if (wd == nullptr) { continue; }
-            if (wd->params.draw_on_other_subtype_enter_once_each_turn)
-            { w.storied_draw_used_this_turn = true; }
-            Player& kp = state.players[nctrl2];
-            if (kp.library.empty()) { continue; }
-            [[maybe_unused]] const std::size_t before = kp.hand.size();
-            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
-            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
-            kp.cards_drawn_this_turn += DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
-            if (g_play_draw_sink)
-            {
-                for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
-                { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
-            }
-        }
+        // A LAND entrant's watcher draw runs at OnLandEntered (the land chokepoint), not here.
+        if (!state.battlefield[entered_index].card.IsLand()) { FireOtherSubtypeEnterDraws(state, entered_index); }
     }
     // Puresteel Paladin: "Whenever an Equipment you control enters, you may draw a card." Lives
     // at this universal cascade (NOT the on-cast hook) so it fires for a cast equipment AND one
@@ -13247,6 +13298,90 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                               ? " -- chose: +" + std::to_string(p.etb_modal_self_counters) + "/+"
                                 + std::to_string(p.etb_modal_self_counters) + " counter"
                               : " -- chose: gain " + std::to_string(p.etb_modal_lifegain) + " life"));
+        }
+    }
+
+    // GUILD SUMMIT: "When Guild Summit enters, you may tap any number of untapped Gates you control. Draw a
+    // card for each Gate tapped this way." (etb_tap_subtype_draw = the subtype.) The COUNT is the SEARCHED
+    // ETB choice axis: etb_kx = N + 1 (CollectActions' ETB CHOICE AXIS, EtbChoiceCandidates), clamped to
+    // the untapped Gates present NOW (the cast's own payment may have tapped some). Unpinned (a rollout
+    // leaf beyond the horizon, a put) = the provider's EtbTapSubtypeDrawDefault. WHICH Gates: the
+    // provider's EtbTapSubtypeOrder (mana-source rank, least valuable first -- USER decision pending, see
+    // the analysis ledger). Human play asks the count (x_value, x_kind etb_tap_draw) and then each Gate on
+    // the board (the loyalty-target chooser), defaulting to the same order. Tapping is a cost-free choice
+    // the tapped Gates then cannot produce mana this turn -- which is exactly what the count trades off.
+    // Param-gated -> byte-identical for every other card.
+    if (!p.etb_tap_subtype_draw.empty())
+    {
+        const int self_number = state.battlefield[static_cast<std::size_t>(entered_index)].card.m_number;
+        auto eligible = [&]() {
+            std::vector<int> v;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.controller_index != controller || q.tapped || !q.card.IsLand()) { continue; }
+                if (!LandHasSubtypeNow(state, q, p.etb_tap_subtype_draw)) { continue; }
+                v.push_back(i);
+            }
+            ResolveProvider(state).EtbTapSubtypeOrder(state, controller, v);
+            return v;
+        };
+        std::vector<int> elig = eligible();
+        const int avail = static_cast<int>(elig.size());
+        int n = etb_kx >= 1 ? etb_kx - 1
+              : ResolveProvider(state).EtbTapSubtypeDrawDefault(state, controller, *def, avail);
+        n = std::clamp(n, 0, avail);
+        const bool human = g_play_x_value_chooser != nullptr && !g_tap_speculating && avail > 0;
+        if (human)
+        {
+            const int h = (*g_play_x_value_chooser)(state, controller, def->card.m_name.str(),
+                                                    /*kind=*/5, avail, n, 0);
+            if (h >= 0 && h <= avail) { n = h; }
+        }
+        std::vector<int> tap_numbers;   // card numbers, in tap order
+        for (int k = 0; k < n; ++k)
+        {
+            if (human && g_play_loyalty_chooser != nullptr)
+            {
+                std::vector<int> legal;
+                for (int i : elig)
+                {
+                    const int num = state.battlefield[static_cast<std::size_t>(i)].card.m_number;
+                    if (std::find(tap_numbers.begin(), tap_numbers.end(), num) == tap_numbers.end())
+                    { legal.push_back(i); }
+                }
+                if (legal.empty()) { break; }
+                int pick = (*g_play_loyalty_chooser)(state, controller, def->card.m_name.str(),
+                                                     "tap (draw a card)", legal, 0);
+                if (pick < 0 || pick >= static_cast<int>(legal.size())) { pick = 0; }
+                tap_numbers.push_back(state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])].card.m_number);
+            }
+            else { tap_numbers.push_back(state.battlefield[static_cast<std::size_t>(elig[static_cast<std::size_t>(k)])].card.m_number); }
+        }
+        for (int num : tap_numbers)
+        {
+            for (Permanent& q : state.battlefield)
+            { if (q.card.m_number == num && q.controller_index == controller) { q.tapped = true; break; } }
+        }
+        (void)self_number;
+        const int drawn_n = static_cast<int>(tap_numbers.size());
+        if (drawn_n > 0)
+        {
+            Player& kp = state.players[static_cast<std::size_t>(controller)];
+            const std::size_t before = kp.hand.size();
+            kp.cards_drawn_this_turn += DrawIntoHand(state, controller, drawn_n, HandEntryReason::Draw);
+            if (g_play_draw_sink)
+            {
+                for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
+            }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb_mode",
+                          def->card.m_name.str() + " -- tapped " + std::to_string(drawn_n) + " "
+                          + p.etb_tap_subtype_draw + (drawn_n == 1 ? "" : "s") + ", drew "
+                          + std::to_string(drawn_n));
         }
     }
 
@@ -14671,6 +14806,48 @@ inline int CountControlledLandsWithSubtype(const GameState& state, int controlle
             && LandHasSubtypeNow(state, p, sub)) { ++n; }
     }
     return n;
+}
+
+// IS THIS CARD A GATE (CR 205.3i nonbasic land type)? Reads the DEFINITION (a library / hand Card
+// can be a name-only placeholder), with Planar Nexus's every-nonbasic-type bit honoured through
+// CardHasSubtype. The ONE predicate for "Gate card" outside the battlefield (Maze's End's search
+// filter rides tutor_required_subtype through the same CardHasSubtype).
+inline bool IsGate(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return CardHasSubtype(d ? d->card : c, "Gate");
+}
+
+// "Gates with different names" (Maze's End, CardParams::alt_win_distinct_named_subtype): the number
+// of DISTINCT NAMES among the lands `controller` controls that have land subtype `sub` NOW
+// (LandHasSubtypeNow: an Islandized Gate is not a Gate; Planar Nexus is one). Duplicates count once.
+// Names are interned (Card::m_name), so the dedupe compares the interned string's address. Stops
+// early at `stop_at` (> 0) -- a win check needs only "at least N".
+inline int CountDistinctNamedLandsWithSubtype(const GameState& state, int controller, const std::string& sub,
+                                              int stop_at = 0)
+{
+    if (sub.empty()) { return 0; }
+    const std::string* seen[64];
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        if (!LandHasSubtypeNow(state, p, sub)) { continue; }
+        const std::string* nm = &p.card.m_name.str();
+        bool dup = false;
+        for (int i = 0; i < n && i < 64; ++i) { if (seen[i] == nm || *seen[i] == *nm) { dup = true; break; } }
+        if (dup) { continue; }
+        if (n < 64) { seen[n] = nm; }
+        ++n;
+        if (stop_at > 0 && n >= stop_at) { return n; }
+    }
+    return n;
+}
+
+inline int CountDistinctNamedGates(const GameState& state, int controller, int stop_at = 0)
+{
+    static const std::string kGate = "Gate";
+    return CountDistinctNamedLandsWithSubtype(state, controller, kGate, stop_at);
 }
 
 inline bool GyCastSpellLegal(int max_mv, const CardDefinition& spell);   // Lurrus -- defined below (Kaldring block)
@@ -35523,6 +35700,24 @@ inline bool SeahunterLibraryCandidate(const Card& card)
         || card.HasType(CardType::Battle);
 }
 
+// A TapTutorPut activation's legal library find, read off the SOURCE'S definition: the card has
+// `tutor_required_subtype` (empty = any) and one of `tutor_types` (CardMatchesTypeName, with the two
+// permanent types it does not name -- Planeswalker, Battle -- read off the type mask). Seahunter's
+// params (Merfolk + the six permanent types) make this exactly SeahunterLibraryCandidate; Maze's End's
+// (Gate + Land) make it "a Gate card", Planar Nexus included. `card` must be the DEFINITION's card.
+inline bool TapTutorPutLibraryCandidate(const CardParams& pp, const Card& card)
+{
+    if (!pp.tutor_required_subtype.empty() && !CardHasSubtype(card, pp.tutor_required_subtype))
+    { return false; }
+    for (const std::string& t : pp.tutor_types)
+    {
+        if (t == "Planeswalker") { if (card.HasType(CardType::Planeswalker)) { return true; } continue; }
+        if (t == "Battle")       { if (card.HasType(CardType::Battle)) { return true; } continue; }
+        if (CardMatchesTypeName(card, t)) { return true; }
+    }
+    return false;
+}
+
 inline bool UntapLandTargetLegal(const GameState& s, const Permanent& q, int controller)
 {
     return q.card.IsLand() && !LandHasShroud(q, s)
@@ -37198,7 +37393,7 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
                 for (const Card& c : state.players[controller].library)
                 {
                     const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
-                    if (c.m_name.str() == *target && SeahunterLibraryCandidate(cd ? cd->card : c))
+                    if (c.m_name.str() == *target && TapTutorPutLibraryCandidate(ad->params, cd ? cd->card : c))
                     { found = true; break; }
                 }
                 if (!found) { return false; }
@@ -37521,6 +37716,13 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
     // Slimefoot's / King Darien's label -- and every reference keyed on it -- is unchanged).
     if (mode == PermAbilityMode::PayToken && d != nullptr && d->params.activate_only_if_attacked_this_turn)
     { return "boast: create a creature token"; }
+    // Maze's End (only a return-self TapTutorPut carries the param, so Seahunter's label is unchanged).
+    if (mode == PermAbilityMode::TapTutorPut && d != nullptr && d->params.tap_tutor_put_return_self)
+    {
+        return "return this land to hand: search for a "
+             + (d->params.tutor_required_subtype.empty() ? std::string("") : d->params.tutor_required_subtype + " ")
+             + "card and put it onto the battlefield";
+    }
     return PermAbilityLabel(mode);
 }
 
@@ -37546,6 +37748,58 @@ struct ThresholdLootTargetScope
     { g_threshold_loot_target = target; }
     ~ThresholdLootTargetScope() { g_threshold_loot_target = old; }
 };
+// Return battlefield permanent `idx` to its OWNER's hand (Oboro's SelfBounce; Maze's End's return-self
+// cost). Shared so both read one LTB bookkeeping: revolt's "a permanent left", the hand-entry reason
+// (Bounce = new material, which arms the hand-entry breakpoint so the replay is searchable), the
+// devotion / reconfigure refresh, and every Equipment / Aura attached to it falling off.
+inline void ReturnPermanentToOwnersHand(GameState& state, int idx, const std::string& src_name)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent self = state.battlefield[static_cast<std::size_t>(idx)];
+    const int source_id = self.card.m_number;
+    if (self.controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
+    EnterHand(state, self.owner_index, RevealedCard(self.card), HandEntryReason::Bounce);
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    RefreshDevotionCreatures(state);
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to == source_id) { q.equipped_to = 0; }
+        if (q.aura_attached_to == source_id) { q.aura_attached_to = 0; }
+    }
+    RefreshReconfigureCreatures(state);
+    if (g_play_event_sink)
+    {
+        EmitPlayEvent(state.turn_number, "zone",
+                      "\xF0\x9F\x94\x99 " + src_name + ": returned to owner's hand");
+    }
+}
+
+// "If you control <N> or more <subtype>s with different names, you win the game" (Maze's End;
+// CR 104.2b). Sets GameState::won_by_effect, which every win reader sees through OpponentHasLost.
+// No-op for a definition without the clause.
+inline bool AltWinDistinctNamedMet(const GameState& state, int controller, const CardParams& pp)
+{
+    if (pp.alt_win_distinct_named_count <= 0 || pp.alt_win_distinct_named_subtype.empty()) { return false; }
+    return CountDistinctNamedLandsWithSubtype(state, controller, pp.alt_win_distinct_named_subtype,
+                                              pp.alt_win_distinct_named_count)
+        >= pp.alt_win_distinct_named_count;
+}
+inline void ResolveAltWinDistinctNamed(GameState& state, int controller, const CardParams& pp,
+                                       const std::string& src_name)
+{
+    if (state.won_by_effect || !AltWinDistinctNamedMet(state, controller, pp)) { return; }
+    // Only the active player wins in this engine (a goldfish: we are always the activator).
+    if (controller != state.active_player_index) { return; }
+    state.won_by_effect = true;
+    if (g_play_event_sink)
+    {
+        EmitPlayEvent(state.turn_number, "win",
+                      "\xF0\x9F\x8F\x86 " + src_name + ": " + std::to_string(pp.alt_win_distinct_named_count)
+                      + " or more " + pp.alt_win_distinct_named_subtype + "s with different names -- you win the game");
+    }
+}
+
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
@@ -37954,23 +38208,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
         {
             // Oboro: paying {1} does not tap or sacrifice the land. It leaves the battlefield
             // on resolution and can be replayed if a land drop remains this turn.
-            const Permanent self = state.battlefield[static_cast<std::size_t>(idx)];
-            if (self.controller_index == state.active_player_index)
-            { state.permanent_left_under_control_this_turn = true; }
-            EnterHand(state, self.owner_index, RevealedCard(self.card), HandEntryReason::Bounce);
-            state.battlefield.erase(state.battlefield.begin() + idx);
-            RefreshDevotionCreatures(state);
-            for (Permanent& q : state.battlefield)
-            {
-                if (q.equipped_to == source_id) { q.equipped_to = 0; }
-                if (q.aura_attached_to == source_id) { q.aura_attached_to = 0; }
-            }
-            RefreshReconfigureCreatures(state);
-            if (g_play_event_sink)
-            {
-                EmitPlayEvent(state.turn_number, "zone",
-                              "\xF0\x9F\x94\x99 " + src_name + ": returned to owner's hand");
-            }
+            ReturnPermanentToOwnersHand(state, idx, src_name);
             break;
         }
         case PermAbilityMode::ThresholdLoot:
@@ -38493,7 +38731,17 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             std::vector<std::string> preferred;
             if (g_sac_named_pin.target != nullptr && !g_sac_named_pin.target->empty())
             { preferred.push_back(*g_sac_named_pin.target); }
+            // Maze's End: "Return this land to its owner's hand" is part of the COST (CR 602.2b). It is
+            // paid here, before the search, which is the cost's order relative to the effect; nothing
+            // can respond in a goldfish, so paying it at resolution observes the same board. The {T}
+            // was paid by the caller (PermAbilityTaps), before the {3}.
+            if (d->params.tap_tutor_put_return_self)
+            { ReturnPermanentToOwnersHand(state, idx, src_name); }
             PerformTutorToBattlefield(state, controller, d->params, 1, preferred, src_name);
+            // "If you control ten or more Gates with different names, you win the game." Part of the
+            // same resolution, checked AFTER the put -- and on a fail-to-find too (the ability still
+            // resolves: a 10th name already on the battlefield wins).
+            ResolveAltWinDistinctNamed(state, controller, d->params, src_name);
             break;
         }
         case PermAbilityMode::TransformSelf:
@@ -51374,10 +51622,9 @@ inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& de
 // Razorverge Thicket onto two lands put the Thicket TAPPED (Scryfall ruling 2023-02-04 on the
 // fastlands: lands entering at the same time are not taken into consideration). Found by the
 // SelesnyaLifegain v2 claude-play sweep, seed 79722.
-enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped, PreDecidedUntapped, PreDecidedTapped };
-inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
-                      bool resolve_full_etb = false, bool fire_landfall = true,
-                      LandEntryTap entry_tap = LandEntryTap::Natural)
+// (LandEntryTap and EnterLand's default arguments are declared above PerformTutorToBattlefield.)
+inline void EnterLand(GameState& state, const CardDefinition& def, int card_number,
+                      bool resolve_full_etb, bool fire_landfall, LandEntryTap entry_tap)
 {
     bool tapped;
     if (entry_tap != LandEntryTap::Natural)
@@ -52818,10 +53065,57 @@ inline void PerformUpkeepSacrificeCreature(GameState& state)
 // HERE, not in EnterLand, so existing fetchland behaviour stays byte-identical -- basic-typed
 // fetches can never pull an Orchard). Shared by the executor (EffectHandler) and the rollout
 // (TurnSolver::ApplyPlanDirect), lockstep.
+// ARCHDRUID'S CHARM mode 3 pin ("Exile target artifact or enchantment"): Action::tutor_target "AX<n>" =
+// the permanent numbered n. ONE encoder / parser for the enumerator, the resolver and the signatures.
+inline std::string ModalExileArtEnchPin(int number) { return "AX" + std::to_string(number); }
+inline int ModalExileArtEnchPinTarget(const std::string& pin)
+{
+    if (pin.size() < 3 || pin[0] != 'A' || pin[1] != 'X') { return 0; }
+    int n = 0;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        if (pin[i] < '0' || pin[i] > '9') { return 0; }
+        n = n * 10 + (pin[i] - '0');
+    }
+    return n;
+}
+inline bool ModalExileArtEnchLegal(const Permanent& q)
+{
+    return q.card.HasType(CardType::Artifact) || q.card.HasType(CardType::Enchantment);
+}
+
 inline void PerformLandTutorToBattlefield(GameState& state, int controller_index,
                                           const CardParams& pp, const std::string& target_name = "")
 {
     Player& ap = state.players[controller_index];
+    // Archdruid's Charm mode 3: "Exile target artifact or enchantment." The mode and its target were
+    // chosen at the cast (the AX<n> variant). Target gone or no longer legal on resolution -> the spell
+    // does nothing (CR 608.2b). No search, so no shuffle.
+    if (pp.modal_exile_target_artifact_enchantment)
+    {
+        if (const int tn = ModalExileArtEnchPinTarget(target_name); tn > 0)
+        {
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent gone = state.battlefield[static_cast<std::size_t>(bi)];
+                if (gone.card.m_number != tn || !ModalExileArtEnchLegal(gone)) { continue; }
+                for (Permanent& e : state.battlefield)
+                {
+                    if (e.aura_attached_to == tn) { e.aura_attached_to = 0; }
+                    if (e.equipped_to      == tn) { e.equipped_to      = 0; }
+                }
+                state.battlefield.erase(state.battlefield.begin() + bi);
+                if (gone.controller_index == state.active_player_index)
+                { state.permanent_left_under_control_this_turn = true; }
+                if (!gone.is_token) { state.exile.push_back(RevealedCard(gone.card)); }
+                if (g_play_event_sink && !g_tap_speculating)
+                { EmitPlayEvent(state.turn_number, "removal", "exiles " + gone.card.m_name.str()); }
+                FireLeavesBattlefieldTriggers(state, gone.controller_index, gone.card);
+                break;
+            }
+            return;
+        }
+    }
 
     std::string want = target_name;
     if (want.empty())
@@ -52861,6 +53155,17 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     if (!lc.IsLand())
     {
         const CardDefinition* pd = CardDatabase::Instance().LookupCached(lc);
+        // Archdruid's Charm (tutor_nonland_to_hand): "Put it onto the battlefield tapped if it's a land
+        // card. Otherwise, put it into your hand." A creature find goes to HAND (searched out: Tutor).
+        if (pp.tutor_nonland_to_hand && pd != nullptr && !pd->card.IsLand())
+        {
+            ap.library.erase(ap.library.begin() + idx);
+            if (g_play_event_sink)
+            { EmitPlayEvent(state.turn_number, "tutor", lc.m_name.str() + " -- put into hand"); }
+            EnterHand(state, controller_index, RevealedCard(lc), HandEntryReason::Tutor);
+            ShuffleAfterSearch(state, controller_index);
+            return;
+        }
         // Guard: only a land card may be put -- a fail-to-find, which still shuffles.
         if (!pd || !pd->card.IsLand()) { WhiffShuffle(state, controller_index, "land tutor"); return; }
     }
@@ -52868,7 +53173,10 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
     if (def)
     {
-        EnterLand(state, *def, lc.m_number);
+        // Archdruid's Charm: "onto the battlefield tapped" is the EFFECT's, so the land's own
+        // enters-tapped rule is not consulted (LandEntryTap::ForcedTapped). Crop Rotation: Natural.
+        EnterLand(state, *def, lc.m_number, false, true,
+                  pp.tutor_land_enters_tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural);
         if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
     }
     else

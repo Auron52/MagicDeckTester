@@ -6423,6 +6423,16 @@ function xValuePanelHtml(d){
       h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">${k} target${k===1?'':'s'}${k===def?'  ·  AI':''}</button>`;
     return h+`</div>`;
   }
+  if (d.x_kind==='etb_tap_draw'){
+    // Guild Summit's ETB (Maze's End, 2026-11-17): how many untapped Gates to tap, a card each.
+    let h=`<h3>${esc(d.source||'Guild Summit')} — tap how many Gates?</h3>`;
+    h+=`<div class="sub">Tap up to <b>${max}</b> untapped Gates and draw a card for each. You will choose each Gate on the board next. A tapped Gate makes no mana this turn.</div>`;
+    h+=`<div class="tutgrid">`+cardMini(d.source||'')+`</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+    for (let k=0;k<=max;k++)
+      h+=`<button class="${k===def?'primary':'ghost'}" data-xv="${k}">tap ${k} → draw ${k}${k===def?'  ·  AI':''}</button>`;
+    return h+`</div>`;
+  }
   if (d.x_kind==='finale'){
     let h=`<h3>Finale of Devastation — choose X</h3>`;
     h+=`<div class="sub">Pay X, then choose a creature card with mana value X or less from your library or graveyard. At X ≥ 10, your creatures gain +X/+X and haste until end of turn.</div>`;
@@ -6458,6 +6468,7 @@ function commitXValue(d, n){
   if (d.x_kind==='reveal_gain'){ pushChoice(d, n, `${d.source}: reveal ${n} → gain ${(d.life_per_x|0)*n}`); return; }
   if (d.x_kind==='etb_destroy_k'){ pushChoice(d, n, `${d.source}: target ${n} noncreature permanent${n===1?'':'s'}`); return; }
   if (d.x_kind==='finale'){ pushChoice(d, n, `${d.source}: X=${n}`); return; }
+  if (d.x_kind==='etb_tap_draw'){ pushChoice(d, n, `${d.source}: tap ${n} Gate${n===1?'':'s'}, draw ${n}`); return; }
   pushChoice(d, n, `${d.source}: X=${n} → ${d.draw_target==='opponent'?'opponent':'you'} draw${d.draw_target==='opponent'?'s':''}`);
 }
 // Firebreathe amount modal (#4): a combat-phase decision (the viewer's first NON-main-phase breakpoint

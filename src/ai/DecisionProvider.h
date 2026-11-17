@@ -3471,6 +3471,25 @@ public:
             }
         }
         else if (p.etb_modal_self_counters > 0 && p.etb_modal_lifegain > 0) { out = { 1, 2 }; }
+        else if (!p.etb_tap_subtype_draw.empty())
+        {
+            // Guild Summit: tap N of the U untapped Gates now, N = 0..U, pinned as N + 1. U is an upper
+            // bound at the enumeration (the cast's own payment may tap some); the resolver clamps.
+            // Every count, no ranking: the search picks (the no-greedy rule).
+            int u = 0;
+            for (const Permanent& q : s.battlefield)
+            {
+                if (q.controller_index != controller || q.tapped || !q.card.IsLand()) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                const Card& qc = qd ? qd->card : q.card;
+                bool has = false;
+                for (const std::string& st : qc.m_subtypes) { if (st == p.etb_tap_subtype_draw) { has = true; break; } }
+                if (!has && qc.m_subtypes.AllNonbasicLandTypes()
+                    && SubtypeSet::IsNonbasicLandTypeName(p.etb_tap_subtype_draw)) { has = true; }
+                if (has) { ++u; }
+            }
+            for (int n = 0; n <= u; ++n) { out.push_back(n + 1); }
+        }
         return out;
     }
 
@@ -4773,6 +4792,43 @@ public:
     // provider call sites retain their offsets across incremental builds.
     virtual bool SeahunterCandidates(const GameState&, std::vector<std::string>&) const { return false; }
     virtual bool ProphetsSacrificeHeuristicEnabled() const { return false; }
+
+    // TapTutorPutCandidates -- the searched library targets of a TapTutorPut activation (Seahunter,
+    // Maze's End), `names` = every legal distinct name in library order. May RESTRICT / ORDER only.
+    // Return true when the provider NARROWED the menu, which also withholds the fail-to-find twin.
+    // Default = the Seahunter hook (Merfolk Turns' policy), so every existing deck is unchanged.
+    virtual bool TapTutorPutCandidates(const GameState& s, const CardDefinition& source,
+                                       std::vector<std::string>& names) const
+    { (void)source; return SeahunterCandidates(s, names); }
+
+    // (Appended at the END of the class, like every new hook: existing vtable slots keep their offsets.)
+    // Guild Summit's ETB ("tap any number of untapped Gates ... draw a card for each"): the count when NO
+    // searched pin rode the entry (a rollout leaf beyond the horizon, a put). `avail` = untapped Gates
+    // now. Base: all of them (a card per Gate; the turn's remaining mana is the trade-off the searched
+    // axis prices inside the window).
+    virtual int EtbTapSubtypeDrawDefault(const GameState& s, int controller, const CardDefinition& def,
+                                         int avail) const
+    { (void)s; (void)controller; (void)def; return avail; }
+
+    // ...and WHICH Gates, for any count: `idx` = battlefield indices of the eligible untapped Gates, to be
+    // ORDERED (first = tapped first). Base: mana-source rank ascending (ManaSourceRank's LOWER = tap
+    // earlier = least valuable), ties by battlefield order -- the mana-payment exemption's ordering.
+    virtual void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const
+    {
+        (void)controller;
+        std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
+            const CardDefinition* da = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(a)].card);
+            const CardDefinition* db = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(b)].card);
+            const int ra = da ? ManaSourceRank(s, *da) : 0;
+            const int rb = db ? ManaSourceRank(s, *db) : 0;
+            return ra < rb;
+        });
+    }
+
+    // OffersModalExileArtEnch -- does the menu carry Archdruid's Charm's mode 3 ("Exile target artifact or
+    // enchantment") cast variants, one per legal target? A RESTRICTION hook (the deck provider withholds a
+    // mode it proves dominated). Default true: every legal target is offered.
+    virtual bool OffersModalExileArtEnch(const GameState&, const CardDefinition&) const { return true; }
 };
 
 // ---------------------------------------------------------------------------------------------------

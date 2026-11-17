@@ -186,10 +186,33 @@ public:
     {
         if (id == SubtypeRegistry::kNone) { return false; }
         for (uint8_t i = 0; i < m_count; ++i) { if (m_ids[i] == id) { return true; } }
+        // Planar Nexus (see m_all_nonbasic_land): a FALLBACK after a miss, so every other card's
+        // answer is the unchanged scan above.
+        return m_all_nonbasic_land && IsNonbasicLandTypeName(SubtypeRegistry::Instance().Name(id));
+    }
+
+    // "This land is every nonbasic land type" (Planar Nexus; CardParams::all_nonbasic_land_types).
+    // A characteristic-defining ability that works in every zone (CR 604.3), so a library copy IS a
+    // "Gate card" for Maze's End's search. Carried as a bit rather than as thirteen ids: kCap is 4,
+    // and the list grows with new sets. NEVER a basic land type (Plains/Island/...): CR 205.3i lists
+    // the basic types separately and the card grants only the nonbasic ones. Read as a fallback by
+    // HasId, CardHasSubtype and LandHasSubtypeNow; iterating the set still yields only the printed
+    // subtypes (none, for Planar Nexus).
+    bool AllNonbasicLandTypes() const { return m_all_nonbasic_land; }
+    void SetAllNonbasicLandTypes(bool v) { m_all_nonbasic_land = v; }
+
+    // CR 205.3i's NONBASIC land types (Comprehensive Rules, 2025). Name compare, so it needs no
+    // interning and stays correct on a worker thread.
+    static bool IsNonbasicLandTypeName(std::string_view n)
+    {
+        static constexpr std::string_view kTypes[] = {
+            "Cave", "Cloud", "Desert", "Gate", "Lair", "Locus", "Mine", "Planet", "Power-Plant",
+            "Sphere", "Tower", "Town", "Urza's" };
+        for (std::string_view t : kTypes) { if (n == t) { return true; } }
         return false;
     }
 
-    void clear() { m_count = 0; }
+    void clear() { m_count = 0; m_all_nonbasic_land = false; }
 
     // Append a subtype by name. Interns it (read-only for an already-interned name, so
     // safe on the worker threads once everything is pre-interned at load). Silently caps
@@ -217,6 +240,7 @@ public:
     SubtypeSet& operator=(const std::vector<std::string>& names)
     {
         m_count = 0;
+        m_all_nonbasic_land = false;
         for (const std::string& s : names) { push_back(s); }
         return *this;
     }
@@ -224,4 +248,7 @@ public:
 private:
     uint16_t m_ids[kCap] = {0, 0, 0, 0};
     uint8_t  m_count     = 0;
+    // In the padding byte after m_count: sizeof(SubtypeSet) stays 10.
+    bool     m_all_nonbasic_land = false;
 };
+static_assert(sizeof(SubtypeSet) == 10, "SubtypeSet grew -- Card is deep-copied per search node");
