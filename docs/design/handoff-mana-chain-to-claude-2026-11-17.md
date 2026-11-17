@@ -2,7 +2,18 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:39 UTC
+## Current state, updated 05:44 UTC
+
+**Second new-source clean refresh complete:** all nine decks in
+`codex-clean-refresh-newsrc-b-20261117` are clean at source
+`f7cce0693b6a`, 5,000 games each, zero issue flags, oracle-on/off play
+byte-identical: Colossus Hammer, Critter Lifegain, Kithkin, Knights,
+Lifegain Heliod Combo, Merfolk, Modern RW Burn, Soldiers, White
+Knights. Report:
+`logs/mana_clean/codex-clean-refresh-newsrc-b-20261117/report.md`.
+`test/mana_clean.json` carries the nine records. Only Martyr Lifegain,
+Prevent Damage, and Spirits remain stale-clean at this source; refresh
+those next. The CI watcher is still active.
 
 **First new-source clean refresh complete:** 5,000 games each at source
 `f7cce0693b6a`, oracle-on/off play byte-identical. Burn, Red
