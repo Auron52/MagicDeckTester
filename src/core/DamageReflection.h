@@ -49,6 +49,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -533,6 +534,28 @@ inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTri
 //     legal set (F1 and the provider prune are lifted there); the fan does not run under human play.
 inline thread_local const std::vector<int>* t_pins = nullptr;
 inline thread_local std::size_t t_pin_cursor = 0;
+// THE COMBAT SUFFIX (step 5b). Plan::reflect_targets is [main-phase pins] [kCombatPinMark combat pins]:
+// the choices a Guilty Conscience trigger raises INSIDE COMBAT (a GC'd Boros Reckoner / Screaming Nemesis
+// attacks, GC hits it, its reflection picks a target) are pinned after the mark. The main-phase apply reads
+// only the prefix (t_pins_n); WritePostApplyStatePins copies the suffix onto the STATE
+// (GameState::scripted_combat_reflect, the Wanderwine Prophets state-pin route), and CombatDamageDealt --
+// shared by the rollout's SimulateCombat and the executor's combat -- installs it for the combat drain.
+// Packing both into one vector keeps sizeof(Plan) and every plan fold site unchanged (each already folds
+// the whole vector).
+inline constexpr int kCombatPinMark = -0x40000000;   // never a stable id (players are -1/-2, cards > 0)
+inline thread_local std::size_t t_pins_n = 0;         // the installed vector's main-phase prefix length
+inline std::size_t MainPinCount(const std::vector<int>& v)
+{
+    const auto it = std::find(v.begin(), v.end(), kCombatPinMark);
+    return static_cast<std::size_t>(it - v.begin());
+}
+inline bool HasCombatPins(const std::vector<int>& v) { return MainPinCount(v) < v.size(); }
+inline std::vector<int> CombatPinsOf(const std::vector<int>& v)
+{
+    const std::size_t at = MainPinCount(v);
+    return at < v.size() ? std::vector<int>(v.begin() + static_cast<std::ptrdiff_t>(at) + 1, v.end())
+                         : std::vector<int>{};
+}
 using TargetProbe = std::function<void(const std::vector<int>&)>;
 inline thread_local TargetProbe* t_probe = nullptr;
 inline thread_local const std::vector<int>* t_probe_owner = nullptr;
@@ -558,19 +581,20 @@ struct PinScope
 {
     const std::vector<int>* old;
     std::size_t cursor;
+    std::size_t old_n;
     TargetProbe* old_probe;
     const std::vector<int>* old_probe_owner;
     int old_probe_depth;
     explicit PinScope(const std::vector<int>& pins)
-        : old(t_pins), cursor(t_pin_cursor), old_probe(t_probe), old_probe_owner(t_probe_owner),
+        : old(t_pins), cursor(t_pin_cursor), old_n(t_pins_n), old_probe(t_probe), old_probe_owner(t_probe_owner),
           old_probe_depth(t_probe_fan_depth)
     {
-        t_pins = &pins; t_pin_cursor = 0;
+        t_pins = &pins; t_pin_cursor = 0; t_pins_n = MainPinCount(pins);
         if (t_probe && t_probe_owner != &pins) { t_probe = nullptr; t_probe_owner = nullptr; t_probe_fan_depth = -1; }
     }
     ~PinScope()
     {
-        t_pins = old; t_pin_cursor = cursor;
+        t_pins = old; t_pin_cursor = cursor; t_pins_n = old_n;
         t_probe = old_probe; t_probe_owner = old_probe_owner; t_probe_fan_depth = old_probe_depth;
     }
     PinScope(const PinScope&) = delete;
@@ -585,8 +609,10 @@ struct PinScope
 // Earthquake (x_damage_each_creature_and_player) and Pyrohemia's activation (ping_all_amount).
 // Step 4 adds Stuffy Doll's {T} self-ping (self_ping_damage, PermAbilityMode::SelfPing -> SelfPingAt).
 // Step 5 adds Guilty Conscience (aura_host_damage_back): a plan that casts one onto a creature makes that
-// creature's damage come back to it. Combat damage is the remaining route (CombatDamageDealt) and is NOT
-// probed by the main-phase fan at all -- see the step-5 note in design section 14.
+// creature's damage come back to it. Combat damage is the remaining route (CombatDamageDealt): it is NOT
+// probed by the main-phase fan, and needs no entry here -- step 5b's COMBAT FAN (AppendSubdecisionAxes) has
+// its own pre-check (a GC on the battlefield or in the plan, and a chooser), since in the goldfish combat
+// damage reaches a creature only through a GC trigger.
 inline bool DefCanDamageCreatures(const CardDefinition& d)
 {
     return d.params.damage_all_creatures > 0 || d.params.damage_all_creatures_count_creatures
@@ -650,7 +676,7 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
     {
         const std::size_t ordinal = t_pin_cursor++;
         if (t_probe) { (*t_probe)(legal); }
-        if (t_pins && ordinal < t_pins->size())
+        if (t_pins && ordinal < t_pins_n)   // the main-phase prefix only (never the combat suffix)
         {
             const int pin = (*t_pins)[ordinal];
             if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { pick = pin; }
@@ -714,6 +740,32 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
 // opponent (nothing blocks), so no creature is dealt combat damage and no reflection trigger arises from
 // the step itself; what remains is each host's GC trigger, raised at this snapshot in battlefield order and
 // drained as one top-level event (cap and no-progress rule included). A lethal step raises nothing.
+//
+// THE COMBAT-TIME REFLECTION CHOICE (step 5b). A GC trigger in combat can hit a reflector with a target
+// CHOICE (Boros Reckoner: any target; Screaming Nemesis: any other target). That choice is SEARCHED: the
+// plan's combat suffix (kCombatPinMark above) rides GameState::scripted_combat_reflect, installed here for
+// the drain; consumed pins are erased from the front, so a first-strike step and the regular step (and an
+// additional combat) continue one ordinal stream. AppendSubdecisionAxes' COMBAT FAN probes the plan's
+// apply + SimulateCombat under t_combat_probe (reported only for the probing state, so a nested copy's
+// combat cannot add speculative choices) and clones the plan once per admitted option at the first
+// unpinned combat ordinal. An unpinned choice takes the list's front -- only beyond the horizon, in a
+// speculative apply, or where the executor's state drifted from the plan's (the main-phase rule).
+struct CombatProbe
+{
+    TargetProbe* probe = nullptr;
+    const GameState* state = nullptr;
+    int depth = -1;
+};
+inline thread_local CombatProbe t_combat_probe;
+struct CombatProbeScope
+{
+    CombatProbe saved = t_combat_probe;
+    CombatProbeScope(TargetProbe& probe, const GameState& s, int depth) { t_combat_probe = { &probe, &s, depth }; }
+    ~CombatProbeScope() { t_combat_probe = saved; }
+    CombatProbeScope(const CombatProbeScope&) = delete;
+    CombatProbeScope& operator=(const CombatProbeScope&) = delete;
+};
+
 inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const std::vector<int>& amounts)
 {
     if (!s.reflect_armed || nums.empty() || GameOver(s) || !AnyAuraHostDamageBack(s)) { return; }
@@ -729,7 +781,23 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
     t_frame.state = &s;
     t_frame.depth = 1;
     for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
-    Drain(s, 0);
+    std::size_t used = 0;
+    {
+        // The combat suffix of the plan that led here (empty: every choice takes the front). The PinScope
+        // also detaches any main-phase probe, so a main fan's probe never counts a combat choice.
+        const std::vector<int> pins = s.scripted_combat_reflect;
+        PinScope pin_scope(pins);
+        std::optional<TargetProbeScope> probing;
+        if (t_combat_probe.probe != nullptr && t_combat_probe.state == &s)
+        { probing.emplace(*t_combat_probe.probe, pins, t_combat_probe.depth); }
+        Drain(s, 0);
+        used = t_pin_cursor;
+    }
+    if (used > 0 && !s.scripted_combat_reflect.empty())
+    {
+        s.scripted_combat_reflect.erase(s.scripted_combat_reflect.begin(),
+            s.scripted_combat_reflect.begin() + static_cast<std::ptrdiff_t>(std::min(used, s.scripted_combat_reflect.size())));
+    }
     std::swap(saved, t_frame);
 }
 

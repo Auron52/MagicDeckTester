@@ -2034,6 +2034,10 @@ INERT_PARAMS = {
     "saga_ch1_bounce_creatures_except_subtypes": "Summon: Leviathan I returns EACH non-Kraken/Leviathan/Merfolk/Octopus/Serpent creature to its owner's hand -- mandatory sweep, no choice",
     "saga_eot_attack_draw_chapters": "Summon: Leviathan II/III 'until end of turn, whenever a sea creature you control attacks, draw a card' -- mandatory draws, no choice",
     "saga_eot_attack_draw_subtypes": "Summon: Leviathan II/III's qualifying attacker types -- fixed, no choice",
+    # ---- Stuffy Doll (2026-11-17, damage-reflection step 5b; classification surfaced to the USER) ----
+    "cost_less_per_creature_on_battlefield": "Blasphemous Act's STATIC cost reduction ({1} less per creature on the battlefield, counted at cast) -- a cost detail, not a choice; the cast is the existing main_phase plan",
+    "damage_all_creatures_count_creatures": "Chain Reaction's X = the number of creatures on the battlefield at resolution -- computed, never chosen; an untargeted symmetric sweep, so the only decision is the main_phase cast",
+    "reflect_player_cant_gain_life": "Screaming Nemesis's mandatory rider ('if a player is dealt damage this way, they can't gain life for the rest of the game') -- no choice; WHO is hit rides reflect_dealt_damage -> target",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

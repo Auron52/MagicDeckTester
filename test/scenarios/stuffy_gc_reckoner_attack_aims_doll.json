@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Step 5b: the combat-time reflection target is SEARCHED. A settled Boros Reckoner carrying Guilty",
+    "Conscience attacks for 3 (20 -> 17); GC deals 3 back, the Reckoner dies and its last-known reflection",
+    "of 3 is a CHOICE made inside combat. Aimed at the face it leaves the opponent at 14 (the old unpinned",
+    "default). Aimed at the summoning-sick Stuffy Doll (chosen: the opponent), which carries its own GC, it",
+    "starts the Doll+GC loop and kills this turn. The sick Doll cannot ping, so only the combat choice wins",
+    "turn 4; without the combat fan the first win is turn 5 (the Doll's ping)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Boros Reckoner" },
+    { "name": "Guilty Conscience", "equips": "Boros Reckoner" },
+    { "name": "Stuffy Doll", "sick": true, "chosen_player": "opponent" },
+    { "name": "Guilty Conscience", "equips": "Stuffy Doll" }
+  ],
+  "hand": [],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

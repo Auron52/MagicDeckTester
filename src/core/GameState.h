@@ -1635,6 +1635,12 @@ struct GameState
     // ranks select a legal permanent after earlier triggers have resolved.
     std::vector<int>          scripted_prophets_sac;
     int                       scripted_prophets_sac_cursor = 0;
+    // Damage reflection (Stuffy Doll step 5b): the plan's COMBAT-TIME reflection-target pins (the suffix of
+    // Plan::reflect_targets after dmgrx::kCombatPinMark), one stable target id per choice a Guilty
+    // Conscience trigger raises in this turn's combat, in resolution order. Written by
+    // WritePostApplyStatePins, consumed (erased from the front) by dmgrx::CombatDamageDealt in both worlds.
+    // Empty on every deck without reflect_armed. Per-turn; FOLDED wherever scripted_prophets_sac is.
+    std::vector<int>          scripted_combat_reflect;
     bool                      deck_has_prophets = false;
     // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
     // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the

@@ -80103,6 +80103,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     state.scripted_prophets_sac.clear();
     state.scripted_prophets_sac_cursor = 0;
+    state.scripted_combat_reflect.clear();         // searched combat-time reflection pins (same lockstep)
     state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
     state.eot_attack_draw_n       = 0;             // Summon: Leviathan's until-EOT attack draws (lockstep w/ UntapStep)
     state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
@@ -99462,8 +99463,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (!plan_may_choose(p)) { expanded.push_back(std::move(p)); continue; }
                 std::vector<int> next;
                 std::size_t ordinal = 0;
+                const std::size_t n_main = dmgrx::MainPinCount(p.reflect_targets);
                 dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
-                    if (ordinal++ == p.reflect_targets.size()) { next = legal; }
+                    if (ordinal++ == n_main) { next = legal; }
                 };
                 GameState copy = state;
                 {
@@ -99477,6 +99479,94 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     for (auto it = next.rbegin(); it != next.rend(); ++it)
                     {
                         TurnSolver::Plan v = p;
+                        // the main-phase prefix grows; a combat suffix (none yet: the combat fan runs below) stays last
+                        v.reflect_targets.insert(v.reflect_targets.begin() + static_cast<std::ptrdiff_t>(n_main), *it);
+                        work.push_back(std::move(v));
+                    }
+                }
+            }
+            all = std::move(expanded);
+        }
+    }
+
+    // ---- DAMAGE-REFLECTION TARGETS IN COMBAT (step 5b; design section 14) ---------------------------------
+    // A Guilty Conscience on an attacking reflector (Boros Reckoner, Screaming Nemesis) raises its trigger in
+    // this turn's combat (dmgrx::CombatDamageDealt), and the reflection it causes can be a target CHOICE (the
+    // face, a GC'd Stuffy Doll -- a loop -- or any other creature). The same probe-and-fan as above, over the
+    // plan's apply AND the combat that follows it (SimulateCombat, exactly what the scorer runs), recorded in
+    // the plan's combat suffix (dmgrx::kCombatPinMark) and carried to combat on the state
+    // (GameState::scripted_combat_reflect, the Wanderwine Prophets route), so every admitted option is
+    // BRANCHED -- none picked -- and the executor's combat reads the same pins. Pre-combat top-level lists only
+    // (a breakpoint continuation's combat is its outer plan's: the outer probe applies the plan with its own
+    // breakpoint pins). Sound pre-check, not a fold: with no GC on the battlefield or in the plan, combat
+    // damage (which in the goldfish only ever reaches the opponent) raises no trigger at all; with no
+    // reflector whose target can be a choice, none of the cascade's triggers offers one.
+    if (state.reflect_armed && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive()
+        && dmgrx::t_combat_probe.probe == nullptr)
+    {
+        bool gc_on_board = false, chooser_on_board = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            if (!d) { continue; }
+            if (d->params.aura_host_damage_back) { gc_on_board = true; }
+            if (dmgrx::DefReflectsWithChoice(*d)) { chooser_on_board = true; }
+        }
+        auto plan_may_choose_in_combat = [&](const TurnSolver::Plan& p) {
+            bool gc = gc_on_board, chooser = chooser_on_board;
+            auto scan = [&](const Action& a) {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (!d) { return; }
+                if (d->params.aura_host_damage_back) { gc = true; }
+                if (dmgrx::DefReflectsWithChoice(*d)) { chooser = true; }
+            };
+            for (const Action& a : p.actions)
+            {
+                scan(a);
+                for (const Action& c : a.breakpoint_casts) { scan(c); }
+            }
+            for (const Action& a : p.breakpoint_actions) { scan(a); }
+            return gc && chooser;
+        };
+        bool any = false;
+        for (const TurnSolver::Plan& p : all) { if (plan_may_choose_in_combat(p)) { any = true; break; } }
+        if (!any && pb_lazy && pb_lazy->active)
+        { for (const TurnSolver::Plan& p : pb_lazy->protos) { if (plan_may_choose_in_combat(p)) { any = true; break; } } }
+        if (any)
+        {
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> expanded;
+            expanded.reserve(all.size());
+            std::reverse(all.begin(), all.end());
+            std::vector<TurnSolver::Plan> work = std::move(all);
+            while (!work.empty())
+            {
+                TurnSolver::Plan p = std::move(work.back()); work.pop_back();
+                if (!plan_may_choose_in_combat(p)) { expanded.push_back(std::move(p)); continue; }
+                const std::size_t n_combat = dmgrx::CombatPinsOf(p.reflect_targets).size();
+                std::vector<int> next;
+                std::size_t ordinal = 0;
+                dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
+                    if (ordinal++ == n_combat) { next = legal; }
+                };
+                GameState copy = state;
+                {
+                    RevealLogPause quiet;
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                    if (!OpponentHasLost(copy))
+                    {
+                        dmgrx::CombatProbeScope probing(probe, copy, g_apd_depth);
+                        const EotHoldCombatScope _eh(p);
+                        SimulateCombat(copy);
+                    }
+                }
+                if (next.empty()) { expanded.push_back(std::move(p)); }
+                else
+                {
+                    for (auto it = next.rbegin(); it != next.rend(); ++it)
+                    {
+                        TurnSolver::Plan v = p;
+                        if (!dmgrx::HasCombatPins(v.reflect_targets)) { v.reflect_targets.push_back(dmgrx::kCombatPinMark); }
                         v.reflect_targets.push_back(*it);
                         work.push_back(std::move(v));
                     }
@@ -103143,6 +103233,11 @@ std::string enummemo::Fingerprint(const GameState& state)
         s += "prophets=" + std::to_string(state.scripted_prophets_sac_cursor) + ':';
         for (int x : state.scripted_prophets_sac) { s += std::to_string(x) + ','; }
     }
+    if (!state.scripted_combat_reflect.empty())
+    {
+        s += "rfxc=";
+        for (int x : state.scripted_combat_reflect) { s += std::to_string(x) + ','; }
+    }
     // Mode-B keep pin, appended VALUE-GATED for the same reason the dominance fold is gated: an
     // unconditional `;tkeep=-1` would lengthen the key of every state in every deck. Appending
     // only when the pin is set leaves all existing keys byte-identical while still separating the
@@ -103336,6 +103431,11 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             mix(0x50524F50ull);
             mix(static_cast<std::uint64_t>(state.scripted_prophets_sac_cursor));
             for (int v : state.scripted_prophets_sac) { mix(static_cast<std::uint64_t>(v + 3)); }
+        }
+        if (!state.scripted_combat_reflect.empty())   // damage reflection's combat pins (step 5b), value-gated
+        {
+            mix(0x8EF1EC71ull);
+            for (int v : state.scripted_combat_reflect) { mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(v) + 0x40000000LL)); }
         }
         if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_trigger_ordinal > 0)
         {
@@ -104767,6 +104867,11 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         for (std::size_t i = static_cast<std::size_t>(state.scripted_prophets_sac_cursor);
              i < state.scripted_prophets_sac.size(); ++i)
         { Fold(k, static_cast<uint64_t>(state.scripted_prophets_sac[i] + 3)); }
+    }
+    if (!state.scripted_combat_reflect.empty())   // damage reflection's unconsumed combat pins (step 5b)
+    {
+        Fold(k, 0x8EF1EC71ull);
+        for (int v : state.scripted_combat_reflect) { Fold(k, static_cast<uint64_t>(static_cast<std::int64_t>(v) + 0x40000000LL)); }
     }
     Fold(k, state.on_the_play ? 1u : 0u);
     if (state.opponent_plays_lands) { Fold(k, 0x0A11D5u); }
@@ -135731,6 +135836,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.lackey_choice >= 0) { s.scripted_cheat_choice = p.lackey_choice; }
     if (!p.prophets_sac_choice.empty())
     { s.scripted_prophets_sac = p.prophets_sac_choice; s.scripted_prophets_sac_cursor = 0; }
+    // Damage reflection (step 5b): the combat suffix of reflect_targets, read by this turn's combat drain.
+    if (dmgrx::HasCombatPins(p.reflect_targets)) { s.scripted_combat_reflect = dmgrx::CombatPinsOf(p.reflect_targets); }
     // Surtland Flinger's victim, at declare-attackers. -2 (decline) is a real pinned choice: != -1.
     if (p.fling_victim_choice != -1) { s.scripted_fling_victim = p.fling_victim_choice; }
     // Tectonic Giant's mode and mode-B keep, at declare-attackers.

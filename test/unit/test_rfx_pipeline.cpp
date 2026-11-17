@@ -764,3 +764,102 @@ TEST_CASE("rfx step 5: the GC host is SEARCHED -- the plan 'GC on the Doll, then
     CHECK(hosts.size() >= 2);    // one cast variant per legal host: the Doll AND the Maniac
     CHECK(killing >= 1);         // the Doll host + ping ordering is enumerated
 }
+
+// ---- STEP 5b: the combat-time reflection-target choice is SEARCHED (design section 14) -----------------
+
+namespace
+{
+// A settled Boros Reckoner with GC attacks; a summoning-sick Stuffy Doll (chosen: the opponent, so its {T}
+// line is closed) also carries a GC. Combat: 3 to the face, GC deals 3 back, the Reckoner dies and its LKI
+// reflection of 3 is a CHOICE -- the face (opponent at 14) or the GC'd Doll (a loop that kills).
+GameState CombatChoiceBoard()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    PutRfx(s, "Boros Reckoner", 1601);
+    AttachGc(s, 1602, 1601);
+    Permanent& d = PutRfx(s, "Stuffy Doll", 1603);
+    d.chosen_player     = 1;
+    d.entered_this_turn = true;
+    AttachGc(s, 1604, 1603);
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1630 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 5b: the combat suffix rides the state; the main-phase apply never reads it")
+{
+    const std::vector<int> v{ 7, dmgrx::kCombatPinMark, dmgrx::PlayerId(1), 1603 };
+    CHECK(dmgrx::MainPinCount(v) == 1);
+    CHECK(dmgrx::HasCombatPins(v));
+    CHECK(dmgrx::CombatPinsOf(v) == std::vector<int>{ dmgrx::PlayerId(1), 1603 });
+    CHECK_FALSE(dmgrx::HasCombatPins({ 7 }));
+    TurnSolver::Plan p;
+    p.reflect_targets = v;
+    GameState s = ArmedState();
+    TurnSolver::WritePostApplyStatePins(s, p);
+    CHECK(s.scripted_combat_reflect == std::vector<int>{ dmgrx::PlayerId(1), 1603 });
+    {   // a pin scope over the packed vector exposes only the prefix
+        dmgrx::PinScope scope(v);
+        CHECK(dmgrx::t_pins_n == 1);
+    }
+}
+
+TEST_CASE("rfx step 5b: the search BRANCHES the combat-time reflection target, and the Doll line kills")
+{
+    const GameState s = CombatChoiceBoard();
+    // Nothing to cast: the main-phase list is just the pass (the hosts append it), so feed the axes that.
+    TurnSolver::Plan pass;
+    pass.land_decided = true;
+    const auto plans = TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { pass });
+    REQUIRE_FALSE(plans.empty());
+    std::set<std::vector<int>> combat_pins;
+    for (const auto& p : plans)
+    {
+        CHECK(dmgrx::HasCombatPins(p.reflect_targets));   // no plan's combat choice is left to the front
+        combat_pins.insert(dmgrx::CombatPinsOf(p.reflect_targets));
+    }
+    // Both admitted targets are branched: the opponent's face and the GC'd Doll. (Our own face is F1-folded.)
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1603 } });
+    int doll_lines = 0, face_lines = 0;
+    for (const auto& p : plans)
+    {
+        const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
+        INFO("combat pin ", pins.front());
+        // The rollout: the plan's apply, then the combat the scorer runs.
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, true);
+        CHECK(roll.scripted_combat_reflect == pins);
+        RolloutSimulateCombat(roll);
+        CHECK(roll.scripted_combat_reflect.empty());   // consumed
+        if (pins.front() == 1603) { ++doll_lines; CHECK(roll.players[1].life <= 0); }
+        else                      { ++face_lines; CHECK(roll.players[1].life == 14); }
+        // The executor: the committed plan, then GameEngine's real combat -- the same pin, the same result.
+        GameState exec = s;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.scripted_combat_reflect == pins);
+        exec.phase = Phase::Combat;
+        GameEngine ge(eng);
+        ge.PlayOutFrom(exec, exec.turn_number, GameEngine::ResumeAt::Combat);
+        CHECK((exec.players[1].life <= 0) == (roll.players[1].life <= 0));
+        if (roll.players[1].life > 0) { CHECK(exec.players[1].life == roll.players[1].life); }
+    }
+    CHECK(doll_lines >= 1);
+    CHECK(face_lines >= 1);
+}
+
+TEST_CASE("rfx step 5b: no GC anywhere -> no combat probe, no combat pin (the pre-check)")
+{
+    GameState s = CombatChoiceBoard();
+    s.battlefield.erase(std::remove_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& q)
+                        { return q.card.m_name.str() == "Guilty Conscience"; }), s.battlefield.end());
+    TurnSolver::Plan pass;
+    pass.land_decided = true;
+    const auto plans = TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { pass });
+    CHECK(plans.size() == 1);
+    for (const auto& p : plans) { CHECK(p.reflect_targets.empty()); }
+}

@@ -1352,3 +1352,36 @@ Where the code departs from the sections above, and why. Each entry names the sy
   not always best (Reckoner+GC attacks, its reflection aimed at a GC'd Doll loops). Fix shape: carry the
   plan's reflect pins (cursor included) through `SimulateCombat` / the executor's combat and extend the
   probe to run combat, or a combat-crossing pin like the other combat axes. Disclosed in GC's oracle note.
+  **CLOSED by step 5b** (below).
+
+### Step 5b (combat-time reflection pins)
+
+* **Shape: a combat suffix on the existing pin vector, carried to combat on the STATE** (the Wanderwine Prophets
+  `scripted_prophets_sac` route, the precedent for a choice consumed by a combat-damage trigger). `Plan::
+  reflect_targets` is `[main-phase pins] [dmgrx::kCombatPinMark combat pins]`. Packing into the one vector keeps
+  `sizeof(Plan)` and every plan fold site of step 3 (hash, SamePlan, census, dump, ContPins, bp key...) unchanged,
+  since each already folds the whole vector. `dmgrx::PinScope` exposes only the prefix (`t_pins_n`), so the
+  main-phase apply never reads a combat pin. `WritePostApplyStatePins` copies the suffix onto
+  `GameState::scripted_combat_reflect`; `dmgrx::CombatDamageDealt` (both combat paths, so the rollout's
+  `SimulateCombat` and GameEngine's real combat alike) installs it for the drain and ERASES the consumed pins, so a
+  first-strike step, the regular step and an additional combat continue one ordinal stream.
+* **The combat fan** (AppendSubdecisionAxes, right after the main-phase fan): for each pre-combat top-level plan
+  (`g_bp_enum_depth == 0`, not human play) it applies the plan and runs `SimulateCombat` (under the plan's
+  `EotHoldCombatScope`, exactly as the scorer does) with a probe registered for THAT state only
+  (`dmgrx::CombatProbeScope`; a nested copy's combat cannot add choices), and clones the plan once per admitted
+  option at the first unpinned combat ordinal, until every combat choice is pinned. Pre-check (sound, not a
+  fold): a GC on the battlefield or in the plan AND a reflector-with-choice on the battlefield or in the plan
+  (`DefReflectsWithChoice`) -- in the goldfish combat damage reaches a creature only through a GC trigger.
+  `DefCanDamageCreatures` (the main-phase gate) is unchanged: combat has its own gate.
+* **`sizeof(GameState)` 1608 -> 1632** (the vector; no hole fits one). Folded value-gated wherever
+  `scripted_prophets_sac` is (dominance `Build`, `BuildSimKeyBase`, the plan-cache key, the debug fingerprint),
+  cleared at both turn starts, and checked by the executor's re-solve realisation diagnostic
+  (`CarriesPostApplyPin` / `RecordReSolveRealized`).
+* **Residuals (disclosed).** (1) A breakpoint continuation's combat is its outer plan's: the outer probe applies
+  the plan with its own breakpoint pins, but a wave-walker compound clone (`bp_pre`) inherits its source's combat
+  suffix; if its combat differs, an illegal pin takes the front (the Prophets residual). (2) Main 2's additional
+  combats (Moraug) are not probed (no such card in this deck). (3) Viewer: a combat choice is the existing
+  reflection `target` prompt (same resolver), noted in DECISIONS.md.
+* **Audit.** `audit_viewer_decisions.py --no-sweep` now passes: `cost_less_per_creature_on_battlefield`,
+  `damage_all_creatures_count_creatures`, `reflect_player_cant_gain_life` classified INERT (no choice), surfaced
+  to the USER for sign-off.

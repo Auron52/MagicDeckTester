@@ -652,7 +652,11 @@ static_assert(sizeof(Player) == 216,
 // is a DECK CONSTANT (stamped once in StampDeckTraits) -- nothing to fold. The second is GAME STATE, monotone
 // and future-determining (Screaming Nemesis: that player can never gain life again) -- folded in Build()
 // beside players_cant_gain_life_this_turn, only when nonzero.
-static_assert(sizeof(GameState) == 1616,   // Boars fields fit in upstream storage; +8 Maze's End I3
+// +24 bytes (2026-11-17, Stuffy Doll step 5b; 1616 -> 1640 after Maze's End I3): `scripted_combat_reflect` (std::vector<int>, no hole fits a
+// vector) -- the plan's combat-time reflection-target pins. FUTURE-DETERMINING within the turn (which target each
+// combat GC cascade's reflection takes), FOLDED in Build() beside scripted_prophets_sac (value-gated: empty on
+// every deck without reflect_armed). Measured by the tripwire (1632 before Maze's End I3).
+static_assert(sizeof(GameState) == 1640,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1098,6 +1102,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         for (std::size_t i = static_cast<std::size_t>(s.scripted_prophets_sac_cursor);
              i < s.scripted_prophets_sac.size(); ++i)
         { fold(static_cast<std::uint64_t>(s.scripted_prophets_sac[i] + 3)); }
+    }
+    // Damage reflection's combat-time target pins (Stuffy Doll step 5b): consumed pins are erased, so the whole
+    // vector is the live suffix. Value-gated (empty on every deck without reflect_armed).
+    if (!s.scripted_combat_reflect.empty())
+    {
+        fold(0x1A6E000000ull);
+        for (int v : s.scripted_combat_reflect) { fold(static_cast<std::uint64_t>(static_cast<std::int64_t>(v) + 0x40000000LL)); }
     }
     if (s.scripted_attack_put != -1)   // Ilharg's attack put (I5a), its own domain tag
     { fold(0x1A66000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_put + 3))); }

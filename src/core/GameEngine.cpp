@@ -418,6 +418,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.scripted_prophets_sac.clear();
     state.scripted_prophets_sac_cursor = 0;
+    state.scripted_combat_reflect.clear();   // searched combat-time reflection pins are per-turn (same lockstep)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.eot_attack_draw_n = 0;        // Summon: Leviathan's until-EOT attack draws end with the turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)

@@ -762,6 +762,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.combat_transform_choice >= 0
         || p.militia_pride_pay_choice >= 0
         || p.mihail_pay_choice.IsPinned() || !p.prophets_sac_choice.empty()
+        || dmgrx::HasCombatPins(p.reflect_targets)
         || p.militia_pride_pay_choice >= 0 || p.attack_put_choice != -1 || p.legend_keep_turn != 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
@@ -806,6 +807,8 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_mihail_pay_choice != p.mihail_pay_choice)                                         { ok = false; }
     if (!p.prophets_sac_choice.empty()
         && s.scripted_prophets_sac != p.prophets_sac_choice)                                       { ok = false; }
+    if (dmgrx::HasCombatPins(p.reflect_targets)
+        && s.scripted_combat_reflect != dmgrx::CombatPinsOf(p.reflect_targets))                    { ok = false; }
     if (p.attack_put_choice != -1 && s.scripted_attack_put != p.attack_put_choice)                 { ok = false; }
     if (p.legend_keep_turn != 0 && LegendKeepNow(s) != p.legend_keep_turn)                          { ok = false; }
     if (p.upkeep_legend_keep_choice >= 0 && LegendKeepUpkeepPin(s) != p.upkeep_legend_keep_choice)   { ok = false; }
