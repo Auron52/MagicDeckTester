@@ -849,11 +849,13 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
 //     pick per any-colour Aura, as in TapSourceIntoFloat; nullptr = the historical `wild` credit).
 //
 // The YIELD (what the activation adds) stays with each caller: the payer picks it per pip, the human
-// names it in the token. (Only the ramp-filter branch of the greedy credits the Aura today; its free
-// {C}, is_filter and any-colour branches do not, while the backtracker's activate() credits it on
-// every branch -- an inconsistency between the two payers, left byte-identical here because moving it
-// is a play change of its own. The human's tap credits the Aura on every branch, as the rules and
-// the backtracker do.)
+// names it in the token. Every greedy branch credits the Aura (Sea Creatures I1 fix F2, 2026-11-16: the
+// ranked payer's kind-3 free {C} / kind-2 fed-filter taps and the fallback's free {C}, is_filter and any-colour
+// branches used to skip it while the ramp-filter branches, the
+// backtracker's activate() and the human's tap all credited it -- the projection and the real tap
+// disagreed for the first list that could put Wild Growth / Overgrowth on a filter land, Flooded Grove).
+// Inert for every list without a land Aura on a free-mode / fed / any-colour conversion land (Bruna's
+// Skycloud Expanse is a ramp filter, branch 4, credited all along).
 static bool ConsumeHybridFilterFeed(ManaPool& pool, const CardDefinition& def)
 {
     for (Color c : def.params.produces) { if (ConsumeFloating(pool, c)) { return true; } }
@@ -3637,6 +3639,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (available->colorless > 0)  { --available->colorless; }
                     else if (available->wild > 0)  { --available->wild; }
                 }
+                // A filter's free {C} mode is a mana tap (CR 106.12): its land Aura's bonus arrives (F2).
+                CreditConversionLandAura(state, bp, floating, available);
                 return true;
             }
             if (best_kind == 4)
@@ -3700,6 +3704,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             dmgev::MarkLandTap(state, bp);   // Manabarbs: a land tapped for mana (armed only)
             floating.Add(out, 2);
             if (available && available->wild > 0) { --available->wild; }
+            CreditConversionLandAura(state, bp, floating, available);   // the fed mode is a mana tap too (F2)
             return true;
         }
 
@@ -3755,6 +3760,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (available->colorless > 0)  { --available->colorless; }
                     else if (available->wild > 0)  { --available->wild; }
                 }
+                // The free {C} mode IS tapping the land for mana (CR 106.12): its land Aura's bonus arrives
+                // too (Sea Creatures I1 fix F2: Wild Growth / Overgrowth on Flooded Grove).
+                CreditConversionLandAura(state, p, floating, available);
                 return true;
             }
         }
@@ -3812,6 +3820,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             TapConversionSource(state, p);
             floating.Add(out, 2);
             if (available && available->wild > 0) { --available->wild; }  // filter counted as 1 wild in the pool
+            CreditConversionLandAura(state, p, floating, available);   // the fed mode is a mana tap too (F2)
             return true;
         }
 
@@ -3886,6 +3895,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 TapConversionSource(state, p);   // shared with the human pre-tap (see its header)
                 floating.Add(needed, 1);
                 if (available && available->wild > 0) { --available->wild; }   // counted as 1 wild
+                CreditConversionLandAura(state, p, floating, available);   // a land Aura's bonus (F2)
                 return true;
             }
         }

@@ -596,6 +596,80 @@ public:
     const char* Name() const override { return "Boars"; }
 };
 
+// =============================================================================================
+// SeaCreaturesProvider -- the Sea Creatures deck (G/U land-Aura ramp into Krakens / Leviathans / Serpents; ledger
+// docs/design/analysis-Sea Creatures.md). Created by Sea Creatures I1 (2026-11-16) for the USER's fetch and
+// Utopia Sprawl rulings.
+//
+// DERIVES FROM DeckProvider (the Generic surface), NOT from the provider the list rode before this branch:
+// AntiLifegainProvider, reached only because the fetchlands' fetch_land_types set the `anti` signature (the
+// Morph / Boars precedent). None of that provider's hooks is about this deck.
+//
+// What it adds (each a provider prune, default ON with its own =0 lever; human play and MTG_UNPRUNED /
+// MTG_UNPRUNE=fetch,landpick,etbcolor keep every legal option):
+//   * THE ONE-OPTION FETCH PRUNE (USER 2026-11-16: "misty rainforest should automatically get Breeding Pool, kind
+//     of like how Boars gets Stomping Ground", then "These should be heuristically pruned. Though we might want to
+//     prioritize Island over forest once the breeding pools are gone"). Every fetch in the list (Misty Rainforest,
+//     Windswept Heath, Flooded Strand) searches ONE target: Breeding Pool while one remains, else Island, else
+//     Forest, else Hedge Maze (Q2, agent default PROVISIONAL), else the rest by name. MTG_SEA_FETCH_PRUNE=0 restores
+//     the full searched set (and the land drop's full fan, OnPlayFetchWidth 0); MTG_SEA_FETCH_ISLAND_FIRST=0 puts
+//     Forest before Island (the USER's "might", a Stage 5 A/B). Hooks: FetchLineRankEnabled (off: the reviewed rule
+//     owns both routes), LandSearchFetchPickOrder (the order -- one list for the battlefield activation, the on-play
+//     land drop AND, through GenericProvider::FetchCandidates, the legacy immediate route), LandSearchFetchPickWidth
+//     (the battlefield prune), FetchSearchCandidates (the legacy route's prune), OnPlayFetchWidth,
+//     LandSearchPickOrderKey (bits 5-7). The Boars low-life rule is copied: at <= 3 life the width is the full
+//     list (a held crack still searches every target -- a Pool would then enter tapped).
+//     LOSSY by construction and USER-ruled, the status of the Boars / Morph / FiveColour fetch prunes.
+//   * UTOPIA SPRAWL ALWAYS BLUE (USER 2026-11-16: "Utopia sprawl should prioritize blue as well. Green is a minor
+//     colour in the deck." and "In fact, we should try a prune to always use blue."). EtbChoiceCandidates returns
+//     {U}; MTG_SEA_SPRAWL_BLUE=0 searches the SOUND {U, G} fold (every coloured pip in the list is U or G, so a
+//     W/B/R Sprawl is dominated -- re-checked at runtime, SeaListSpendsNonGU). EtbChosenColor (the unpinned
+//     entries: rollout leaves, puts, d0) agrees. Exception E1 (USER: "if we need to build an exception for a
+//     specific case we probably can just do that rather than dropping the prune"), MTG_SEA_SPRAWL_GREEN_NEED,
+//     DEFAULT OFF pending the USER (Q3): green is admitted as a SECOND searched branch when the controller has at
+//     most one green-producing permanent and the hand holds two or more other {G} pips.
+//
+// ConsiderFetchHold is NOT overridden: the root default (false, USER 2026-11-14) cracks on play, which is the
+// reviewed answer for this list (analysis ledger, fetch_hold_review).
+//
+// SIGNATURE (DetectDecisionProvider's `sea`). INTERIM (I1): most of this list's cards are not implemented yet, so
+// the signature ORs the shapes of the cards I1 adds -- Worn Powerstone (an enters-tapped two-mana rock), Flooded
+// Grove (a G/U filter land), Hedge Maze (a Forest Island surveil land) -- plus Spawning Kraken's
+// combat_damage_watch_subtypes naming Kraken (name-free; no card carries it until the combat step lands). Those
+// three are colourless / land STAPLES another deck may add, which is the archetype-neutral misroute class. TODO
+// (later Sea integration steps): OR in the Sea-only creature params as they land (Whelming Wave / Summon:
+// Leviathan's bounce_all_creatures_except_subtypes, Summon's saga_eot_attack_draw_subtypes, Koma's
+// combat_damage_watch_self, Trench Gorger's etb_exile_library_lands_set_base_pt, ...) and then DELETE the three
+// interim staple terms.
+// =============================================================================================
+class SeaCreaturesProvider : public DeckProvider
+{
+public:
+    bool FetchLineRankEnabled(const GameState& s) const override;
+    std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller,
+        const CardParams& fetch_pp, const std::vector<std::string>& ranked) const override;
+    int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const override;
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                  bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                  std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                 bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                 std::uint16_t subtype_alt,
+                                 const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
+                                         const CardDefinition& def) const override;
+    int EtbChosenColor(const GameState& s, int controller, const CardDefinition& def) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "
+               "turn and the mana a turn can make (Utopia Sprawl / Wild Growth / Overgrowth on any host, Sol Ring, "
+               "Worn Powerstone, a fed Flooded Grove), plus Spawning Kraken's and Koma's combat-damage tokens and "
+               "the Sagas' attack draws, before claiming no line wins." }; }
+    const char* Name() const override { return "SeaCreatures"; }
+};
+
 // Extra Turns starts with the generic decision surface. Its own provider gives the
 // deck an explicit routing and certificate stance before any pruning is measured.
 class ExtraTurnsProvider : public DeckProvider

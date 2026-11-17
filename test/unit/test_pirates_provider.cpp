@@ -247,6 +247,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Mill now routes by its dedicated mill signature, above fetch-land AntiLifegain.
         {"Mill", "Mill"},                     {"Unpredictable Cyclone", "Cyclone"},
         {"Boars", "Boars"},   // Boars I1: own provider (Flinthoof's self_haste_cost), above the fetchlands' anti
+        {"Sea Creatures", "SeaCreatures"},   // Sea I1: own provider (interim staple signature), above the fetchlands' anti
         // Morph (onboarded 2026-11-11, INT-1): MorphProvider, routed at the TOP by its own signature -- it
         // would otherwise ride AntiLifegain via Wooded Foothills' fetch.
         {"Morph", "Morph"},
