@@ -17,14 +17,21 @@ passes all cells, 561 scenarios and strict viewer replay of 864 references
 with zero drift/divergence/enum gap. Five thousand paired held-out games
 at seed 9,820,001 had identical win turns (4,957 wins each). The combined
 Ruby flag (old and new rule) adds 2.0% CPU in this sample, so that is not
-an isolated cost for the new rule. Source PGO stamp is stale; after the
-commit, run `./build.sh pgo` and a fresh Dragonstorm mana-clean gate.
+an isolated cost for the new rule. PGO+LTO has since rebuilt successfully.
 Full evidence is appended to `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
-The source/doc commit is `cf5f44488`. A PGO+LTO rebuild is running in
-exec session 90786; its output is
-`build/scratch/dragonstorm_visible_lump_ab/ruby_song_pgo_build.out`.
-When it finishes, run a fresh 5,000-game Dragonstorm mana-clean gate on
-indices 72,000–76,999 and update this document with its report.
+The source/doc commit is `cf5f44488`, and the PGO source tree stamp is
+`fcb9352608ea7e19580916d696643bc094d6ef3a`. A fresh Dragonstorm
+mana-clean gate on indices 72,000–76,999 is running in exec session 75986:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name codex-dragonstorm-ruby-song-20261117
+```
+
+Console output: `build/scratch/dragonstorm_visible_lump_ab/ruby_song_fresh_gate.out`.
+Raw batch logs: `build/scratch/mana_clean/codex-dragonstorm-ruby-song-20261117/`.
+When done, read `logs/mana_clean/codex-dragonstorm-ruby-song-20261117/report.md`,
+update this handoff and design note, and commit the new `test/mana_clean.json`
+record. The gate may exit nonzero because issues remain; that is not a crash.
 
 The earlier three source commits following pushed `f2156d4e6` are:
 
@@ -52,11 +59,8 @@ visible Scourge of Valkas**; their oracle order casts Apex before Scourge.
 This points to the pair-only guard as the gate, but broad one-copy credit
 previously cost +22% CPU. Seek a narrower visible-payoff condition and A/B
 it; the sequential payment walk already applies the Apex mana after cast.
-The new seed 30068752 T3 order gap is Seething Song → Ruby Medallion →
-Irencrag Feat → Dragonlord Kolaghan. The current Ruby fallback requires at
-least two *cheap* rituals before Ruby; Seething is cost three, so that rule
-does not see this line. Seed 30071498 similarly needs Rite → Seething →
-Ruby → Feat → Kolaghan. These are diagnosis leads, not fixes yet.
+The new Ruby/Seething order gaps are fixed in `cf5f44488`; see the update
+above and the design note. The Apex one-copy gaps remain open.
 
 1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `e09d0ca2b`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
 2. Work the new Dragonstorm issue clusters with exact on/off repros, narrow deterministic payment/order fixes, 5,000 paired A/B where material, Release unit/regression/viewer validation, and a fresh PGO 5,000-game gate. Avoid adding searched options or costly broad branches. One top-level simulation batch at a time, `MTG_RSS_CAP_GB=40`, use `nproc` for worker count. Build only via `./build.sh`; PGO+LTO for long runs.
