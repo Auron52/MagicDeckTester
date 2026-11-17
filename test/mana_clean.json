@@ -2331,6 +2331,49 @@
      "seed": 30057000,
      "src": "8f3e6e2bc6379e01e35107781f4cd0d5de83f49f",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 86,
+      "APPLY-DROP-ORDER": 4,
+      "DOMINATED-LAND": 14749,
+      "DROP-COVERED": 1014,
+      "ENUM-GAP": 1,
+      "HIDDEN-INFO": 244,
+      "ORACLE-GAP": 2,
+      "PHANTOM": 10400
+     },
+     "commit": "ab49780903e5baf520717dc6d6cf426a0e1d746d",
+     "date": "2026-11-17T00:48:56Z",
+     "decisions": 38609,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 62000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 93,
+     "life_breakpoints": [],
+     "ms_off": 354115,
+     "ms_on": 2911976,
+     "report": "logs/mana_clean/codex-dragonstorm-visible-lump-20261117/report.md",
+     "run": "codex-dragonstorm-visible-lump-20261117",
+     "seed": 30062000,
+     "src": "4f1fba3d1d77815de1b32e4d3dff8fdb54292b85",
+     "verdict": "issues"
     }
    ]
   },

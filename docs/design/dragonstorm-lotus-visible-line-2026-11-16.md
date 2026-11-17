@@ -46,4 +46,9 @@ slower (seed 2,173), which recovers at depth eight with no time budget; one
 other searched play digest changes at the same win turn. Its smoke depth-zero
 cell improves one turn-game and its regression depth-zero cell slows one.
 The strict viewer check passes 864 references with no drift or divergence;
-both suboptimal references remain beaten. A fresh mana-clean gate remains.
+both suboptimal references remain beaten. The fresh PGO mana-clean gate on
+indices 62,000–66,999 reports 93 issues: 86 APPLY-DROP, four
+APPLY-DROP-ORDER, one ENUM-GAP, and two ORACLE-GAP. These are new seeds, so
+their count is not an A/B delta against the earlier 63-issue block. The
+remaining signatures and repro commands are in
+`logs/mana_clean/codex-dragonstorm-visible-lump-20261117/report.md`.

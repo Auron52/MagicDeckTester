@@ -1,0 +1,23 @@
+{
+ "name": "codex-dragonstorm-visible-lump-20261117",
+ "src": "4f1fba3d1d77815de1b32e4d3dff8fdb54292b85",
+ "commit": "ab49780903e5baf520717dc6d6cf426a0e1d746d",
+ "minutes": 30,
+ "started": "2026-11-17T00:45:49Z",
+ "decks": [
+  {
+   "key": "dragonstorm",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "game_index": 62000,
+   "seed": 30062000,
+   "games": 5000,
+   "chunk": 195,
+   "est_ms_per_game": [
+    613.7,
+    75.3
+   ]
+  }
+ ]
+}
