@@ -10337,11 +10337,40 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // supply compared with the ordinary payment. Both candidate payments are tried
     // through the same payer before either is committed.
     static const bool s_visible_lump = EnvOn("MTG_ONDEMAND_VISIBLE_LUMP", true);
-    if (s_visible_lump && cost_in.generic > 0 && lands.empty() && !lumps.empty())
+    if (s_visible_lump && cost_in.generic > 0 && lands.empty() && !lumps.empty()
+        && std::strcmp(ResolveProvider(state).Name(), "Dragonstorm") == 0)
     {
         int later_pips[5];
         if (LineRestAfter(cost_in, later_pips) > 0)
         {
+            const int own[5] = { cost_in.white, cost_in.blue, cost_in.black,
+                                 cost_in.red, cost_in.green };
+            // Apex opens a breakpoint: Karrthus is already visible in hand, but
+            // the currently named prefix stops at Apex and its line hold has no
+            // black pip yet. Count a visible Dragonstorm creature's off-colour
+            // pips when that breakpoint is part of the line.
+            const bool visible_hand = g_line_opens_unseen;
+            if (visible_hand)
+            {
+                const CardDefinition* sole_creature = nullptr;
+                for (const Card& card : state.players[state.active_player_index].hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+                    if (d == nullptr || !d->card.IsCreature()) { continue; }
+                    if (sole_creature != nullptr) { sole_creature = nullptr; break; }
+                    sole_creature = d;
+                }
+                // Across an unseen Apex breakpoint, two visible closers are
+                // competing continuations. Do not pick one creature's colour
+                // for the lump before the search has chosen that continuation.
+                if (sole_creature != nullptr)
+                {
+                    const ManaCost& m = sole_creature->card.m_mana_cost;
+                    const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+                    for (int c = 0; c < 5; ++c)
+                    { if (own[c] == 0) { later_pips[c] = std::max(later_pips[c], pip[c]); } }
+                }
+            }
             const ManaPool before = AvailableManaPool(state);
             const int have[5] = { before.white, before.blue, before.black, before.red, before.green };
             const int non_lump_wild = std::max(0, before.wild - OnDemandSacSupplyNow(state).any);
@@ -10350,7 +10379,15 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             ManaPool trial_avail;
             for (int c = 0; c < 5; ++c)
             {
-                if (later_pips[c] <= 0 || have[c] + non_lump_wild >= later_pips[c]) { continue; }
+                int competing_need = 0;
+                for (int d = 0; d < 5; ++d)
+                { if (d != c) { competing_need += std::max(0, later_pips[d] - have[d]); } }
+                // One wild source cannot cover two later coloured pips at once.
+                // Karrthus owes {B}{G}, while Territory is the sole flexible
+                // source: Bloom must provide one of those colours.
+                const bool short_with_shared = have[c]
+                    + std::max(0, non_lump_wild - competing_need) < later_pips[c];
+                if (later_pips[c] <= 0 || !short_with_shared) { continue; }
                 bool other_colour_owed = false;
                 for (int d = 0; d < 5; ++d)
                 { if (d != c && later_pips[d] > 0) { other_colour_owed = true; } }

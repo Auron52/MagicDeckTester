@@ -230,6 +230,8 @@ TEST_CASE("On-demand Lotus Bloom: kept when the lands pay; pays a colour no land
 TEST_CASE("On-demand Lotus Bloom: named later black cast cracks during an earlier generic Song")
 {
     GameState s = BaseLp();
+    static const DragonstormProvider dragonstorm;
+    s.m_provider = &dragonstorm;
     s.battlefield.push_back(PermLp("Lotus Bloom", 70));
     for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Mountain", 71 + i)); }
 

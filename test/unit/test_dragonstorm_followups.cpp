@@ -691,6 +691,49 @@ struct LineCostFu
 };
 }   // namespace
 
+TEST_CASE("Dragonstorm: visible Karrthus needs Bloom black with one wild Territory before an Apex breakpoint")
+{
+    GameState s = BoardFu({ "Mountain", "Mountain", "Mountain", "Unclaimed Territory", "Lotus Bloom" },
+                          { "Karrthus, Tyrant of Jund" }, 6);
+    ManaCost song;
+    song.generic = 2;
+    song.red = 1;
+    ManaCost prefix = song;   // another Song and Apex are named; Karrthus is visible but beyond Apex
+    prefix.generic += 2;
+    prefix.red += 1;
+    {
+        LineCostFu line(prefix);
+        LineOpensUnseenScope unseen(true);
+        REQUIRE(TapForCostDirect(s, song, false));
+    }
+    CHECK(std::none_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Lotus Bloom"; }));
+    CHECK(s.floating_mana.black >= 1);
+    CHECK(std::any_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Unclaimed Territory" && !p.tapped; }));
+    CHECK(std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Mountain" && !p.tapped; }) >= 2);
+}
+
+TEST_CASE("Dragonstorm: two visible closers do not select an unseen Apex continuation's Bloom colour")
+{
+    GameState s = BoardFu({ "Mountain", "Mountain", "Mountain", "Lotus Bloom" },
+                          { "Karrthus, Tyrant of Jund", "Dragonlord Kolaghan" }, 6);
+    ManaCost song;
+    song.generic = 2;
+    song.red = 1;
+    ManaCost prefix = song;
+    prefix.generic += 2;
+    prefix.red += 1;
+    {
+        LineCostFu line(prefix);
+        LineOpensUnseenScope unseen(true);
+        REQUIRE(TapForCostDirect(s, song, false));
+    }
+    CHECK(std::any_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Lotus Bloom"; }));
+}
+
 TEST_CASE("Line float: a spare source pays the generic before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)")
 {
     // s7100081 T2's shape: an Unclaimed Territory up, {R}{R} floating off Rite of Flame, and Ruby Medallion's {2}
