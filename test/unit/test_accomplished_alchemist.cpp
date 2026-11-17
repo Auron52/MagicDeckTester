@@ -3514,13 +3514,26 @@ TEST_CASE("Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- re
         { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST] = static_cast<std::int8_t>(x); }
         ~AfArm() { heurarm::t_arm[heurarm::AA_CAST_ORDER_AURAS_FIRST] = v; }
     };
-    int off = 0, on = 0, af = 0;
+    struct DomainArm
+    {
+        std::int8_t v;
+        explicit DomainArm(int x) : v(heurarm::t_arm[heurarm::PO_LAND_AURA_DOMAIN])
+        { heurarm::t_arm[heurarm::PO_LAND_AURA_DOMAIN] = static_cast<std::int8_t>(x); }
+        ~DomainArm() { heurarm::t_arm[heurarm::PO_LAND_AURA_DOMAIN] = v; }
+    };
+    int off = 0, on = 0, on_nodomain = 0, af = 0;
     { CastOrderArmAa o(0); off = realised(); }
     { CastOrderArmAa o(1); AfArm a(0); on = realised(); }
+    { CastOrderArmAa o(1); AfArm a(0); DomainArm d(0); on_nodomain = realised(); }
     { CastOrderArmAa o(1); AfArm a(1); af = realised(); }
-    MESSAGE("realised in worlds: off=" << off << " on=" << on << " af=" << af);
+    MESSAGE("realised in worlds: off=" << off << " on=" << on << " on(domain off)=" << on_nodomain << " af=" << af);
     CHECK(off == 2);   // generic: land Aura (5) before the Wish (20)
-    CHECK(on == 0);    // PROPOSED: the Wish pays off both Forests first and strands Wild Growth, in BOTH worlds
+    // PROPOSED, without the land-Aura payable-order domain (MTG_PO_LAND_AURA_DOMAIN=0): the Wish pays off both
+    // Forests first and strands Wild Growth, in BOTH worlds -- the mechanism this probe was written to show.
+    CHECK(on_nodomain == 0);
+    // ...and with it (the default since docs/design/land-aura-main1-line.md): the rank order does not pay, so the
+    // payable-order decider realises the plan Aura first in both worlds. The plan's casts are unchanged.
+    CHECK(on == 2);
     CHECK(af == 2);    // AURAS_FIRST: the Aura first again
 }
 

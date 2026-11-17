@@ -5430,9 +5430,17 @@ static void CreditCastOutput(const GameState& state, const std::vector<Action>& 
 // the bonus of every Aura of the order that has resolved on it by then.
 struct PoLandAuraHold
 {
-    ManaPool         yield;    // the host's own tap (AvailableManaPool with it minus without it)
-    std::vector<int> auras;    // indices into acts: the order's land-Aura casts naming the host
+    ManaPool         yield;    // the (first) host's own tap (AvailableManaPool with it minus without it)
+    std::vector<int> auras;    // indices into acts: the order's land-Aura casts naming a held host
     std::vector<ManaPool> bonus;   // per aura, its extra mana in its colour (wild for any / several)
+    // SEVERAL HOSTS (MTG_PO_LAND_AURA_DOMAIN; one entry each otherwise). hosts[0] is the one returned,
+    // host_yield[0] == yield. Each held host is released on its own, when a cast cannot be paid without
+    // it, in the order `prio` names (a permutation of 0..hosts-1, identity by default; a caller that
+    // asks "does SOME release order pay" walks every permutation, see PoLandAuraWalkAnyRelease).
+    std::vector<const Permanent*> hosts;
+    std::vector<ManaPool> host_yield;
+    std::vector<int>      aura_host;   // per aura: its index into hosts
+    std::vector<int>      prio;
 };
 
 // MTG_PO_LAND_AURA_HOLD (DEFAULT ON; =0 -> the walk ignores a land Aura's bonus, as before). The walk
@@ -5444,21 +5452,49 @@ struct PoLandAuraHold
 // Forest + its bonus pay the Myconid; the walk saw 3 mana for 4 and moved the Myconid first, so it
 // tapped itself for Wild Growth and missed the attack the T4 kill needed. The host is held back
 // exactly as PoWidenFirstUnpayable holds the domain sources: tapped only when a cast needs it, with the
-// bonus of every Aura resolved on it by then. One host only (several distinct hosts -> no hold).
+// bonus of every Aura resolved on it by then. One host only with MTG_PO_LAND_AURA_DOMAIN off (several
+// distinct hosts -> no hold); with it on, every host is held and released on its own.
 static bool PoLandAuraHoldOn()
 {
     static const bool env_on = EnvOn("MTG_PO_LAND_AURA_HOLD", true);
     return heurarm::Flag(heurarm::PO_LAND_AURA_HOLD, env_on);
 }
 
-// The order's single land-Aura host (an own untapped land the casts' enchant_target names), or null.
+static bool PoLandAuraDomainOn();   // MTG_PO_LAND_AURA_DOMAIN, defined with the decider below
+
+static ManaPool PoHostYield(const GameState& state, const ManaPool& full, const Permanent* host)
+{
+    const ManaPool without = AvailableManaPool(state, host);
+    ManaPool y;
+    y.white     = std::max(0, full.white     - without.white);
+    y.blue      = std::max(0, full.blue      - without.blue);
+    y.black     = std::max(0, full.black     - without.black);
+    y.red       = std::max(0, full.red       - without.red);
+    y.green     = std::max(0, full.green     - without.green);
+    y.colorless = std::max(0, full.colorless - without.colorless);
+    y.wild      = std::max(0, full.wild      - without.wild);
+    y.wild_c    = std::max(0, full.wild_c    - without.wild_c);
+    return y;
+}
+
+// The order's land-Aura hosts (own untapped lands the casts' enchant_target names), or null. Returns the
+// first host. With MTG_PO_LAND_AURA_DOMAIN off, Auras naming two DIFFERENT hosts -> null (no hold), as
+// before; with it on, every distinct host is held (la.hosts), each released on its own.
+//
+// SPLIT HOSTS. Sea Creatures s8820001 gi39 T2: Breeding Pool (carrying a Sprawl) + a new Forest, hand
+// {Utopia Sprawl, Overgrowth}. {Sprawl -> Pool, Overgrowth -> Forest} pays (the Forest pays the Sprawl, the
+// Pool then taps for three), exactly like the same-host variant -- but two distinct hosts refused the hold,
+// so this decider's domain never admitted the order and its walk could not see the Pool's new bonus: the
+// subset was walked in rank order (Overgrowth first) only and refused. Same defect, same lever.
 static const Permanent* PoLandAuraHoldFor(const GameState& state, const std::vector<Action>& acts,
                                           const std::vector<int>& order, PoLandAuraHold& la)
 {
     if (!state.deck_has_land_aura || !PoLandAuraHoldOn()) { return nullptr; }
-    const Permanent* host = nullptr;
+    const bool multi = PoLandAuraDomainOn();
     la.auras.clear();
     la.bonus.clear();
+    la.hosts.clear();
+    la.aura_host.clear();
     for (int i : order)
     {
         const Action& a = acts[i];
@@ -5472,28 +5508,59 @@ static const Permanent* PoLandAuraHoldFor(const GameState& state, const std::vec
                 && p.card.m_number == a.enchant_target) { h = &p; break; }
         }
         if (h == nullptr) { continue; }
-        if (host != nullptr && h != host) { return nullptr; }
-        host = h;
+        int hk = -1;
+        for (int k = 0; k < static_cast<int>(la.hosts.size()); ++k) { if (la.hosts[static_cast<std::size_t>(k)] == h) { hk = k; break; } }
+        if (hk < 0)
+        {
+            if (!la.hosts.empty() && !multi) { return nullptr; }
+            hk = static_cast<int>(la.hosts.size());
+            la.hosts.push_back(h);
+        }
         ManaPool b;
         const std::vector<Color>& cols = d->params.land_aura_produces;
         if (cols.size() == 1) { b.Add(cols[0], d->params.land_aura_extra_mana); }
         else { b.wild += d->params.land_aura_extra_mana; }
         la.auras.push_back(i);
         la.bonus.push_back(b);
+        la.aura_host.push_back(hk);
     }
-    if (host == nullptr) { return nullptr; }
+    if (la.hosts.empty()) { return nullptr; }
     const ManaPool full = AvailableManaPool(state);
-    const ManaPool without = AvailableManaPool(state, host);
-    la.yield = ManaPool{};
-    la.yield.white     = std::max(0, full.white     - without.white);
-    la.yield.blue      = std::max(0, full.blue      - without.blue);
-    la.yield.black     = std::max(0, full.black     - without.black);
-    la.yield.red       = std::max(0, full.red       - without.red);
-    la.yield.green     = std::max(0, full.green     - without.green);
-    la.yield.colorless = std::max(0, full.colorless - without.colorless);
-    la.yield.wild      = std::max(0, full.wild      - without.wild);
-    la.yield.wild_c    = std::max(0, full.wild_c    - without.wild_c);
-    return host;
+    la.host_yield.clear();
+    for (const Permanent* h : la.hosts) { la.host_yield.push_back(PoHostYield(state, full, h)); }
+    la.yield = la.host_yield[0];
+    la.prio.resize(la.hosts.size());
+    for (std::size_t k = 0; k < la.prio.size(); ++k) { la.prio[k] = static_cast<int>(k); }
+    return la.hosts[0];
+}
+
+// The walks' per-host state: held flags and the bonus resolved on each host while it is held.
+struct PoLandAuraLive
+{
+    std::vector<char>     held;
+    std::vector<ManaPool> resolved;
+    void Start(const PoLandAuraHold& la)
+    {
+        held.assign(la.hosts.size(), 1);
+        resolved.assign(la.hosts.size(), ManaPool{});
+    }
+    bool Any() const { for (char h : held) { if (h) { return true; } } return false; }
+};
+
+// The starting pool minus every held host's yield (the walks start without them).
+static void PoLandAuraSubtractHeld(ManaPool& pool, const PoLandAuraHold& la)
+{
+    for (const ManaPool& y : la.host_yield)
+    {
+        pool.white     = std::max(0, pool.white     - y.white);
+        pool.blue      = std::max(0, pool.blue      - y.blue);
+        pool.black     = std::max(0, pool.black     - y.black);
+        pool.red       = std::max(0, pool.red       - y.red);
+        pool.green     = std::max(0, pool.green     - y.green);
+        pool.colorless = std::max(0, pool.colorless - y.colorless);
+        pool.wild      = std::max(0, pool.wild      - y.wild);
+        pool.wild_c    = std::max(0, pool.wild_c    - y.wild_c);
+    }
 }
 
 // The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
@@ -5503,8 +5570,8 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
                                  const std::vector<int>& order, ManaPool pool,
                                  std::vector<PoHandCard>* hand, const PoLandAuraHold* la = nullptr)
 {
-    bool held = la != nullptr;
-    ManaPool resolved_bonus;
+    PoLandAuraLive live;   // allocates only with a hold
+    if (la != nullptr) { live.Start(*la); }
     bool ripple_live = RippleGranterOnBattlefield(state);
     FilterFeedHold feed;   // MTG_RAMP_FILTER_FEED_ORDER
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
@@ -5520,25 +5587,46 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
             PoRemoveFromHand(*hand, a.card_name);
         }
         if (a.alt_cost) { continue; }   // as before: an alt-cost cast is neither paid nor credited
-        if (held && !pool.CanPay(cost))
+        // Each held host taps now, in `prio` order, only while this cast cannot be paid without it.
+        if (la != nullptr)
         {
-            pool.AddPool(la->yield);
-            pool.AddPool(resolved_bonus);
-            feed.Release(pool);   // the host's yield can feed a held ramp filter
-            held = false;
+            for (int k : la->prio)
+            {
+                if (!live.held[static_cast<std::size_t>(k)] || pool.CanPay(cost)) { continue; }
+                pool.AddPool(la->host_yield[static_cast<std::size_t>(k)]);
+                pool.AddPool(live.resolved[static_cast<std::size_t>(k)]);
+                feed.Release(pool);   // the host's yield can feed a held ramp filter
+                live.held[static_cast<std::size_t>(k)] = 0;
+            }
         }
         if (!pool.CanPay(cost)) { return pos; }
         PayFromPool(pool, cost);
         CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
         if (IsRippleGranterCast(a)) { ripple_live = true; }
         feed.Release(pool);
-        if (held)
+        if (la != nullptr)
         {
             for (std::size_t k = 0; k < la->auras.size(); ++k)
-            { if (la->auras[k] == order[pos]) { resolved_bonus.AddPool(la->bonus[k]); } }
+            {
+                const std::size_t h = static_cast<std::size_t>(la->aura_host[k]);
+                if (la->auras[k] == order[pos] && live.held[h]) { live.resolved[h].AddPool(la->bonus[k]); }
+            }
         }
     }
     return -1;
+}
+
+// SEVERAL held hosts: which one taps first is a choice of the payment, not of the plan. "Does this order
+// pay" is "does it pay under SOME release order", so walk every permutation of `prio` (identity first).
+// Hosts are distinct land-Aura targets of ONE order, so h! stays tiny (two hosts: two walks). One host
+// (or none): the single walk, exactly as before.
+template <class Walk>
+static bool PoLandAuraWalkAnyRelease(PoLandAuraHold* la, Walk&& walk)
+{
+    if (la == nullptr || la->prio.size() < 2) { return walk(); }
+    std::sort(la->prio.begin(), la->prio.end());
+    do { if (walk()) { return true; } } while (std::next_permutation(la->prio.begin(), la->prio.end()));
+    return false;   // next_permutation left `prio` sorted again (identity)
 }
 
 static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
@@ -5665,9 +5753,11 @@ static Color WalkBurstColour(const ManaPool& pool, const ManaCost& cost, const M
     return kCols[most];
 }
 
-static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>& acts,
+// One exact walk under a given land-Aura hold (`la` null: no host held). ExactOrderWalkImpl below builds
+// the hold and, with several hosts, tries every release order.
+static int ExactOrderWalkOnce(const GameState& state, const std::vector<Action>& acts,
                               const std::vector<int>& order, std::vector<char>* paid,
-                              bool life_scaled = false, bool* scaled_early = nullptr)
+                              bool life_scaled, bool* scaled_early, const PoLandAuraHold* la_in)
 {
     if (paid != nullptr) { paid->assign(order.size(), 0); }
     if (scaled_early != nullptr) { *scaled_early = false; }
@@ -5716,19 +5806,12 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
     }
     // A LAND AURA's host (MTG_PO_LAND_AURA_HOLD; PoLandAuraHoldFor): out of the pool until a cast needs
     // it, then its tap plus the bonus of every Aura of the order resolved on it by then.
-    PoLandAuraHold la;
-    bool la_held = PoLandAuraHoldFor(state, acts, order, la) != nullptr;
-    ManaPool la_resolved;
-    if (la_held)
+    // Several hosts (MTG_PO_LAND_AURA_DOMAIN): each held and released on its own, in la_in->prio order.
+    PoLandAuraLive la_live;   // allocates only with a hold
+    if (la_in != nullptr)
     {
-        pool.white     = std::max(0, pool.white     - la.yield.white);
-        pool.blue      = std::max(0, pool.blue      - la.yield.blue);
-        pool.black     = std::max(0, pool.black     - la.yield.black);
-        pool.red       = std::max(0, pool.red       - la.yield.red);
-        pool.green     = std::max(0, pool.green     - la.yield.green);
-        pool.colorless = std::max(0, pool.colorless - la.yield.colorless);
-        pool.wild      = std::max(0, pool.wild      - la.yield.wild);
-        pool.wild_c    = std::max(0, pool.wild_c    - la.yield.wild_c);
+        la_live.Start(*la_in);
+        PoLandAuraSubtractHeld(pool, *la_in);
     }
     // Units of untapped colored_creature_only sources (booked as wild above): {C} for a noncreature cast.
     int cco = 0;
@@ -5793,12 +5876,16 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
             const int  restrict = (!creature && cco > 0) ? std::min(cco, pool.wild) : 0;
             if (restrict > 0) { pool.wild -= restrict; pool.colorless += restrict; }
             // The held land-Aura host taps now, only because this cast cannot be paid without it.
-            if (la_held && !pool.CanPay(cost))
+            if (la_in != nullptr)
             {
-                pool.AddPool(la.yield);
-                pool.AddPool(la_resolved);
-                feed.Release(pool);   // the host's yield can feed a held ramp filter
-                la_held = false;
+                for (int k : la_in->prio)
+                {
+                    if (!la_live.held[static_cast<std::size_t>(k)] || pool.CanPay(cost)) { continue; }
+                    pool.AddPool(la_in->host_yield[static_cast<std::size_t>(k)]);
+                    pool.AddPool(la_live.resolved[static_cast<std::size_t>(k)]);
+                    feed.Release(pool);   // the host's yield can feed a held ramp filter
+                    la_live.held[static_cast<std::size_t>(k)] = 0;
+                }
             }
             // A held life-scaled source taps now, only because this cast cannot be paid without it.
             while (scaled_left > 0 && !pool.CanPay(cost))
@@ -5830,10 +5917,13 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
         CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
         if (IsRippleGranterCast(a)) { ripple_live = true; }
         feed.Release(pool);
-        if (la_held)
+        if (la_in != nullptr)
         {
-            for (std::size_t k = 0; k < la.auras.size(); ++k)
-            { if (la.auras[k] == order[pos]) { la_resolved.AddPool(la.bonus[k]); } }
+            for (std::size_t k = 0; k < la_in->auras.size(); ++k)
+            {
+                const std::size_t h = static_cast<std::size_t>(la_in->aura_host[k]);
+                if (la_in->auras[k] == order[pos] && la_live.held[h]) { la_live.resolved[h].AddPool(la_in->bonus[k]); }
+            }
         }
         if (life_scaled) { ++storm_seen; life_gained += WalkCastLifegain(state, a, d, storm_seen); }
         if (d != nullptr)
@@ -5866,6 +5956,23 @@ static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>&
         if (paid != nullptr) { (*paid)[static_cast<std::size_t>(pos)] = 1; }
     }
     return first_fail;
+}
+
+static int ExactOrderWalkImpl(const GameState& state, const std::vector<Action>& acts,
+                              const std::vector<int>& order, std::vector<char>* paid,
+                              bool life_scaled = false, bool* scaled_early = nullptr)
+{
+    // A LAND AURA's host (MTG_PO_LAND_AURA_HOLD; PoLandAuraHoldFor): out of the pool until a cast needs
+    // it, then its tap plus the bonus of every Aura of the order resolved on it by then.
+    PoLandAuraHold la;
+    const bool held = PoLandAuraHoldFor(state, acts, order, la) != nullptr;
+    if (!held || la.prio.size() < 2)
+    { return ExactOrderWalkOnce(state, acts, order, paid, life_scaled, scaled_early, held ? &la : nullptr); }
+    // Several hosts: the order pays if SOME release order pays it; otherwise report the identity order's walk.
+    const bool any = PoLandAuraWalkAnyRelease(&la, [&]
+    { return ExactOrderWalkOnce(state, acts, order, paid, life_scaled, scaled_early, &la) < 0; });
+    if (any) { return -1; }
+    return ExactOrderWalkOnce(state, acts, order, paid, life_scaled, scaled_early, &la);
 }
 
 int ExactOrderFirstUnpayable(const GameState& state, const std::vector<Action>& acts,
@@ -6559,6 +6666,33 @@ static int PoWidenFirstUnpayable(const std::vector<Action>& acts, const std::vec
     return -1;
 }
 
+// MTG_PO_LAND_AURA_DOMAIN (DEFAULT ON; =0 -> a land Aura does not admit an order, as before). The
+// decider below re-orders only an order its DOMAIN admits: one holding a funding producer, a reveal
+// cast, a credited producer (ritual / rock / Treasure) or a domain widener. A land Aura is none of
+// them, so an order {land Aura, X} whose given order does not pay was kept as given, and the apply
+// realised it as given: Sea Creatures s8810001 gi64 T2, board Breeding Pool (carrying a Sprawl) + a new
+// Forest, plan {Utopia Sprawl -> Breeding Pool, Worn Powerstone} -- admitted by the enumeration, which
+// walks it Sprawl first (Forest pays {G}, the Pool then taps for three). CastOrderLess put Powerstone
+// first; it took Pool + Sprawl + Forest and nothing was left for {G}, so the Sprawl was dropped in BOTH
+// worlds (executor and rollout share this decider), and main 1 never cast the pair. Admitting the
+// order lets the walk with the host held back (MTG_PO_LAND_AURA_HOLD) find the order that pays. The
+// apply realising the plan the search chose, not a pick: the casts are the plan's, only their
+// realisation order changes, and only when the given order does not pay.
+// The ENUMERATION half is the same gate at the other site: an aura-only subset {Utopia Sprawl,
+// Overgrowth} reaches SubsetPayableSequential (MTG_AURA_FUNDS_AURA), whose real walk tries the rank
+// order (Overgrowth first: it takes every land and leaves no {G}) and then this decider's order --
+// which, outside the domain, was the rank order again, so the subset was refused and main 1 never
+// offered the pair (Sea Creatures s8820001 gi39 T2; s8830001 gi75 T4 {Wild Growth, Overgrowth}).
+// Admitted, the decider proposes the Aura first and the real walk confirms it pays.
+// SPLIT HOSTS ride the same lever: the hold used to give up on two Auras naming different lands, so
+// {Sprawl -> Pool, Overgrowth -> Forest} on that gi39 board was neither admitted nor walked with the Pool
+// held. With the lever on PoLandAuraHoldFor holds every host and the walks try each release order.
+static bool PoLandAuraDomainOn()
+{
+    static const bool env_on = EnvOn("MTG_PO_LAND_AURA_DOMAIN", true);
+    return heurarm::Flag(heurarm::PO_LAND_AURA_DOMAIN, env_on);
+}
+
 static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<Action>& acts,
                                  std::vector<int>& order, const std::vector<InternedName>* hand_exits,
                                  int extra_wild, int site)
@@ -6588,6 +6722,21 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
         {
             for (int i : order) { w_union |= PoWidenMask(acts[i], w_dom); }
             widen_only = any = (w_union != 0);
+        }
+    }
+    // MTG_PO_LAND_AURA_DOMAIN: an order no other producer admits, holding a land-Aura cast on an
+    // untapped own land, with the host held back by the walks (PoLandAuraHoldFor; the exact walk
+    // holds it itself). BOTH sites: at the apply site it is walked as a producer order (no reveal
+    // cast is in it, else `any` was set above); at the enumeration site (SubsetPayableSequential's
+    // payable-order retry) the reordered candidate is then priced by the real sequential walk, so
+    // admitting it can only ADD a subset that genuinely pays in the order the apply will realise.
+    if (!any && PoLandAuraDomainOn())
+    {
+        thread_local PoLandAuraHold la_probe;
+        if (PoLandAuraHoldFor(state, acts, order, la_probe) != nullptr)
+        {
+            any = true;
+            producer_only = (site == 0);
         }
     }
     if (!any) { return false; }
@@ -6622,10 +6771,11 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
     ManaPool la_pool0 = pool0;
     if (la_host != nullptr && !exact)
     {
-        la_pool0 = AvailableManaPool(state, la_host);
+        if (la.hosts.size() < 2) { la_pool0 = AvailableManaPool(state, la_host); }
+        else { la_pool0 = AvailableManaPool(state); PoLandAuraSubtractHeld(la_pool0, la); }   // every host held
         if (extra_wild > 0) { la_pool0.wild += extra_wild; }
     }
-    const PoLandAuraHold* la_p = (la_host != nullptr && !exact) ? &la : nullptr;
+    PoLandAuraHold* la_p = (la_host != nullptr && !exact) ? &la : nullptr;
     bool vial_treasure_maker = false;
     if (extra_wild == 0 && la_host == nullptr && !widen_only
         && (hand_exits == nullptr || hand_exits->empty()))
@@ -6656,9 +6806,14 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
         }
         if (widen_only) { return PoWidenFirstUnpayable(acts, ord, pool0, w_dom, w_live) < 0; }
         if (exact) { return ExactOrderFirstUnpayable(state, acts, ord) < 0; }
-        if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p) < 0; }
-        hand = hand0;
-        return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0;
+        // Several held hosts: the order pays under SOME release order (PoLandAuraWalkAnyRelease).
+        if (producer_only)
+        {
+            return PoLandAuraWalkAnyRelease(la_p, [&]
+            { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p) < 0; });
+        }
+        return PoLandAuraWalkAnyRelease(la_p, [&]
+        { hand = hand0; return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0; });
     };
     if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return true; }
 
