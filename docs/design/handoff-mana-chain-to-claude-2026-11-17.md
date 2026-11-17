@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 04:27 UTC
 
+A six-deck due-issue PGO gate is active as the only simulation batch,
+exec session 60169:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run boars dragons goblins hydras jumbo_cactuar morph --games 5000 --name codex-due-six-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/due_six_gate.out`.
+Read `logs/mana_clean/codex-due-six-20261117/report.md` on completion,
+update this handoff, and commit `test/mana_clean.json`.
+
 **Final stale-clean refresh complete:** Martyr Lifegain, Prevent
 Damage, and Spirits each ran a fresh 5,000-game PGO mana-clean block at
 source `fcb9352608ea`; all three are **clean**, with zero issue flags
