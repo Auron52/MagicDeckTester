@@ -106122,6 +106122,18 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // own turn. The ordinary rollout never uses this gate.
         if (chain_only && state.pending_extra_turns <= 0)
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
+        // THE LAST TURN UNDER A TRIPPED OVERRUN CEILING (Maze's End I4b). The poll above stops a rollout at the
+        // START of a turn once the ceiling has tripped; a ceiling that trips INSIDE the turn (a nested solve bails
+        // and returns its unsearched front plan) let the last turn cross anyway: no later turn-start poll exists,
+        // so the crossing's choices (Manabond / Burgeoning) fell to their defaults inside the search window and
+        // the natural horizon exit below graded the leaf. Every such result is already discarded: the bail
+        // bumped g_fs_trunc_events and the budget binds (no cache stores it), the tripped pass is dropped by the
+        // ceiling's owner, and the anytime rescue needs a STRICTLY earlier proven win, which a crossing out of
+        // the horizon cannot produce. So stopping here is result-identical; it removes wasted work and the
+        // unsearched crossing. MTG_CROSSING_LAND_STATS, seed 91052 gi51 d3 b10: 15 searched-frame hits, all here.
+        if (budget != nullptr && budget->OverrunQuiet() && state.turn_number >= max_turns
+            && state.pending_extra_turns <= 0)
+        { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         if (!SimulateEndAndStartNextTurn(state))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
     }
