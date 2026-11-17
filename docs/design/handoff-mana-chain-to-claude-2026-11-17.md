@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:30 UTC
+## Live status, updated 06:32 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -39,8 +39,19 @@ build completed in exec session `36997`, console
 Its 275-job/7,447-game training batch and final link passed; the
 `build/PGO/SRC_TREE` stamp exactly matches
 `7ecf53121b172fb2cbf078f7e5f554086b7b28fe`. A same-binary paired
-Dragonstorm A/B is now active in exec session `63896`; it runs 5,000
-games per arm on indices 77,000–81,999. Then
+Dragonstorm A/B finished on 5,000 paired games per arm, indices
+77,000–81,999: **zero earlier and zero later wins**, four changed play
+digests at the same win turn, 4,996 byte-identical game records. New
+search work was 9,985,030 units versus 9,976,007 old (+0.09%); recorded
+job ms 464,651 versus 465,987. Outputs and per-game `.wins` are under
+`build/scratch/dragonstorm_visible_lump_ab/afterpay_wild_5k/`.
+
+A fresh PGO mana-clean gate is **active** in exec session `36993`:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name codex-dragonstorm-afterpay-wild-20261117`.
+Console `build/scratch/dragonstorm_visible_lump_ab/clean_afterpay_wild.out`;
+report `logs/mana_clean/codex-dragonstorm-afterpay-wild-20261117/report.md`
+after it finishes. Check its issue signatures, commit `test/mana_clean.json`
+with this handoff, then
 check Breaching Dragonstorm's two ENUM-GAP seeds. The queue remains open.
 
 The paired A/B manifest and runner are prepared under
