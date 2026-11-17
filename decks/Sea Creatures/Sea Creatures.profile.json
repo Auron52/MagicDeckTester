@@ -1,0 +1,94 @@
+{
+  "card_scores": {
+    "Breeding Pool": [
+      0.33629468496737047,
+      -0.2731123388581951
+    ],
+    "Brinelin, the Moon Kraken": [
+      -0.23395918025229445
+    ],
+    "Flooded Grove": [
+      0.10744288872512886
+    ],
+    "Flooded Strand": [
+      0.13913509429984394
+    ],
+    "Forest": [
+      0.041768992712388986,
+      -0.20767195767195723
+    ],
+    "Hedge Maze": [
+      0.010803035004090411
+    ],
+    "Hullbreaker Horror": [
+      -0.20232558139534884
+    ],
+    "Island": [
+      -0.023507882882882747
+    ],
+    "Kiora Bests the Sea God": [
+      -0.10080034132203508
+    ],
+    "Koma, World-Eater": [
+      -0.10994928006538363
+    ],
+    "Lorthos, the Tidemaker": [
+      -0.141774891774892
+    ],
+    "Misty Rainforest": [
+      0.1815622476058607,
+      -0.22226479352916062
+    ],
+    "Overgrowth": [
+      0.3423282599753188,
+      -0.3463723776223775
+    ],
+    "Serpent of Yawning Depths": [
+      -0.2305248178227055
+    ],
+    "Sin, Unending Cataclysm": [
+      -0.1419284940411698
+    ],
+    "Sol Ring": [
+      0.6398420479302827
+    ],
+    "Spawning Kraken": [
+      0.20471551186247527
+    ],
+    "Summon: Leviathan": [
+      -0.22727135708687474
+    ],
+    "Trench Gorger": [
+      -0.09159042242553994
+    ],
+    "Utopia Sprawl": [
+      0.04336784617134981,
+      0.13983193277310946
+    ],
+    "Whelming Wave": [
+      -0.27481685251110655
+    ],
+    "Wild Growth": [
+      0.07490712793127496,
+      0.10437051532941943
+    ],
+    "Windswept Heath": [
+      -0.004218053267987187
+    ],
+    "Worn Powerstone": [
+      0.28558510118291114
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
