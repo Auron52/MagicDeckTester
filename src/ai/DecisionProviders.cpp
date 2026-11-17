@@ -8060,9 +8060,10 @@ int GenericProvider::EtbChosenColor(const GameState& s, int controller,
         }
         return best;
     }
-    // A colour-choosing LAND Aura (Utopia Sprawl) carries its menu in land_aura_produces.
+    // A colour-choosing LAND Aura (Utopia Sprawl) carries its menu in land_aura_produces; a CLB Gate's menu
+    // excludes its printed colour (EtbColorMenu; == produces for Coldsteel Heart, so it is unchanged).
     return EtbChosenColorFrom(s, controller, def,
-                              def.params.is_land_aura ? def.params.land_aura_produces : def.params.produces);
+                              def.params.is_land_aura ? def.params.land_aura_produces : EtbColorMenu(def.params));
 }
 
 // Rick's as-enters keyword pair (see the declaration). Live-reader keywords first, then menu order;
@@ -66469,4 +66470,57 @@ bool MazesEndProvider::OffersModalExileArtEnch(const GameState& s, const CardDef
     // target is one of OUR permanents (Amulet, Exploration, Burgeoning, Manabond, Guild Summit) -- exiling
     // one is dominated by not casting (deck-scoped dominance). Human play keeps the mode.
     return HumanPlayActive() || DecisionUnpruned();
+}
+
+// I2 -- the land-entry colour menu (the CLB Gates, Thran Portal). RESTRICT to the colours some card in
+// the controller's LIST (library + hand + graveyard + battlefield + exile: the whole 60, read off each
+// definition) can SPEND -- the coloured pips of its mana costs. SOUND: a colour no card's cost uses is a
+// source of mana nothing consumes, and nothing in this list reads a land's colour or basic land type
+// any other way (Gond Gate reflects only colours its Gates could produce, which then go unspent too;
+// Sylvan Scrying / Archdruid's Charm / Maze's End search by name or Gate subtype, never a basic type).
+// PREMISE (re-check when the list changes): no activated ability in the list with a coloured pip is ever
+// activatable -- The Black Gate's {1}{B} needs a creature target and the list has none. Computed at
+// runtime from the actual zones, so a screened list re-derives it. The base order (WUBRG) is kept;
+// an empty intersection (impossible here) keeps the full menu. Pay-or-sacrifice (Gateway Plaza) is
+// NOT restricted: declining can be right (the {1} buys a cast now; Guild Summit draws either way).
+std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, int controller,
+                                                          const CardDefinition& def) const
+{
+    std::vector<int> base = DeckProvider::LandEntryPinCandidates(s, controller, def);
+    if (base.empty() || !def.params.etb_choose_color || HumanPlayActive() || DecisionUnpruned())
+    { return base; }
+    bool spend[5] = { false, false, false, false, false };
+    auto scan = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { return; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.white > 0) { spend[0] = true; }
+        if (mc.blue  > 0) { spend[1] = true; }
+        if (mc.black > 0) { spend[2] = true; }
+        if (mc.red   > 0) { spend[3] = true; }
+        if (mc.green > 0) { spend[4] = true; }
+    };
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : me.library)   { scan(c); }
+    for (const Card& c : me.hand)      { scan(c); }
+    for (const Card& c : me.graveyard) { scan(c); }
+    for (const Card& c : s.exile)      { scan(c); }
+    for (const Permanent& p : s.battlefield) { if (p.owner_index == controller) { scan(p.card); } }
+    std::vector<int> out;
+    for (int c : base) { if (c >= 0 && c < 5 && spend[c]) { out.push_back(c); } }
+    return out.empty() ? base : out;
+}
+
+// The Black Gate ("As The Black Gate enters, you may pay 3 life. If you don't, it enters tapped."): with an
+// Amulet of Vigor controlled, DECLINING is a sound dominance -- the land enters tapped and the Amulet
+// untaps it (the same untapped land, 3 life kept; with two or more Amulets it also floats mana). The
+// controller of a land drop is the active player (I3's opponent-turn puts keep active_player_index on
+// us). Otherwise the base answer.
+bool MazesEndProvider::LandEntersUntapped(const GameState& s, const CardDefinition& def, bool heuristic) const
+{
+    if (def.params.etb_pay_life_to_untap > 0 && EnteringTappedUntapperCount(s, s.active_player_index) > 0
+        && !HumanPlayActive())
+    { return false; }
+    return DeckProvider::LandEntersUntapped(s, def, heuristic);
 }

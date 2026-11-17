@@ -17799,6 +17799,240 @@
     "tutor_shuffle_after": true,
     "modal_exile_target_artifact_enchantment": true
    }
+  },
+  {
+   "name": "Gond Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "Gates you control enter untapped.\n{T}: Add {C}.\n{T}: Add one mana of any color that a Gate you control could produce. [Static (gates_enter_untapped): a replacement judged for the ENTERING Gate's controller inside LandWouldEnterTapped, first, so it reaches every route (land drop, Maze's End's fetch, tutor puts) and no shock life is paid for a Gate under it (The Black Gate). It also untaps a Gate an effect puts onto the battlefield TAPPED (Archdruid's Charm): the controller orders the two replacements (CR 616.1) -- PROVISIONAL, ledger decision 5. A Gate entering SIMULTANEOUSLY with a Gond Gate is not untapped by it (CR 614.12: simultaneous puts judge the pre-event board). Gond Gate has no enters-tapped clause itself. Mana (mana_colors_of_controlled_subtype Gate): {C}, plus any COLOUR a Gate we control could produce (CR 106.7: costs ignored, so Planar Nexus / Gateway Plaza / Heap Gate give all five; a CLB Gate its printed + chosen colour, Thran Portal its chosen one; tapped Gates count; another Gond's reflected mode is circular and ignored). In hand: {C} only. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "gates_enter_untapped": true,
+    "mana_colors_of_controlled_subtype": "Gate"
+   }
+  },
+  {
+   "name": "Amulet of Vigor",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a permanent you control enters tapped, untap it. [One trigger per Amulet per permanent that enters TAPPED under our control, at every entry route: the land drop, every effect put (EnterLand: Maze's End's fetch, Archdruid's Charm's tapped put), and a nonland entrant (FireEtbWatchers). Resolved right after the permanent enters, BEFORE its other enter triggers (untap-first is weakly dominant: Gateway Plaza can then pay its own {1}). With N >= 2 Amulets each trigger but the last lets the land tap for mana in response (a mana ability), so a tapped-entering land yields N-1 floating mana in our main phase and still ends untapped -- taken automatically (no mana burn; weakly dominant), its colour by the shared tap-first commit (mana-payment exemption). No float for a nonland, for a land whose tap has a side effect (Thran Portal's life), or outside our main phase (I3's opponent-turn / end-step puts). A replacement that makes the permanent enter untapped (Gond Gate) means no trigger. With an Amulet out the deck provider declines The Black Gate's 3 life (enters tapped, Amulet untaps it: a sound dominance).]",
+   "template": "custom",
+   "parameters": {
+    "untap_own_permanent_entering_tapped": true
+   }
+  },
+  {
+   "name": "Thran Portal",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\nAs this land enters, choose a basic land type.\nThis land is the chosen type in addition to its other types.\nMana abilities of this land cost an additional 1 life to activate. [Fastland condition (fastland_max_other_lands 2), judged for its controller. The basic land type is an as-enters choice locked per object (etb_choose_color over WUBRG = Plains/Island/Swamp/Mountain/Forest), SEARCHED as the land-entry pin (one land option per admitted type; the deck provider restricts to colours the list can spend: Island/Mountain/Forest -- a sound prune, ledger decision 1). The chosen type is read by LandHasSubtypeNow (chosen_color_adds_basic_land_type). Its only mana ability is the basic type's intrinsic one (CR 305.6), so it makes the chosen colour only; each activation costs 1 LIFE as a cost (tap_self_damage + tap_is_life_payment, the horizon-land shape -- never damage). NOT a basic land (no Basic supertype). In hand: the full menu. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "fastland_max_other_lands": 2,
+    "etb_choose_color": true,
+    "chosen_color_adds_basic_land_type": true,
+    "tap_self_damage": 1,
+    "tap_is_life_payment": true
+   }
+  },
+  {
+   "name": "Gateway Plaza",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, sacrifice it unless you pay {1}.\n{T}: Add one mana of any color. [Enters tapped. The ETB pay-or-sacrifice (etb_sacrifice_unless_pay {1}) resolves at every land-entry route, AFTER Amulet of Vigor's untap (sound dominance order), so with an Amulet or Gond Gate it can pay with itself. Pay vs sacrifice is SEARCHED (the land-entry pin: one land option / one Maze's End fetch variant each) when the {1} is affordable; unaffordable = forced sacrifice. Human play: the `dig` chooser (pay = keep the card; the Mihail pay-{1} shape -- ledger decision 4). Any colour on tap (City of Brass shape, painless). Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_sacrifice_unless_pay": "{1}"
+   }
+  },
+  {
+   "name": "Sea Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than blue.\n{T}: Add {U} or one mana of the chosen color. [The chosen colour is an as-enters replacement (CR 614.12) locked per object (etb_choose_color + etb_choose_color_fixed U: the menu excludes the printed colour); a re-entering Gate chooses afresh. The locked land makes {U} or the chosen colour (the colour per tap = mana-payment exemption). SEARCHED: one land option per admitted colour at the land drop, one Maze's End fetch variant per colour; the deck provider restricts the menu to colours the list can spend (G/U/R -- a sound prune, ledger decision 1). An effect put that carries no pin (Archdruid's Charm, I3's puts) takes the provider's colour (ledger I2 decision). Human play: the viewer's choose_color. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "W",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_choose_color": true,
+    "etb_choose_color_fixed": "U"
+   }
+  },
+  {
+   "name": "Manor Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than green.\n{T}: Add {G} or one mana of the chosen color. [The chosen colour is an as-enters replacement (CR 614.12) locked per object (etb_choose_color + etb_choose_color_fixed G: the menu excludes the printed colour); a re-entering Gate chooses afresh. The locked land makes {G} or the chosen colour (the colour per tap = mana-payment exemption). SEARCHED: one land option per admitted colour at the land drop, one Maze's End fetch variant per colour; the deck provider restricts the menu to colours the list can spend (G/U/R -- a sound prune, ledger decision 1). An effect put that carries no pin (Archdruid's Charm, I3's puts) takes the provider's colour (ledger I2 decision). Human play: the viewer's choose_color. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W",
+     "U",
+     "B",
+     "R"
+    ],
+    "enters_tapped": true,
+    "etb_choose_color": true,
+    "etb_choose_color_fixed": "G"
+   }
+  },
+  {
+   "name": "Cliffgate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than red.\n{T}: Add {R} or one mana of the chosen color. [The chosen colour is an as-enters replacement (CR 614.12) locked per object (etb_choose_color + etb_choose_color_fixed R: the menu excludes the printed colour); a re-entering Gate chooses afresh. The locked land makes {R} or the chosen colour (the colour per tap = mana-payment exemption). SEARCHED: one land option per admitted colour at the land drop, one Maze's End fetch variant per colour; the deck provider restricts the menu to colours the list can spend (G/U/R -- a sound prune, ledger decision 1). An effect put that carries no pin (Archdruid's Charm, I3's puts) takes the provider's colour (ledger I2 decision). Human play: the viewer's choose_color. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W",
+     "U",
+     "B",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_choose_color": true,
+    "etb_choose_color_fixed": "R"
+   }
+  },
+  {
+   "name": "Citadel Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than white.\n{T}: Add {W} or one mana of the chosen color. [The chosen colour is an as-enters replacement (CR 614.12) locked per object (etb_choose_color + etb_choose_color_fixed W: the menu excludes the printed colour); a re-entering Gate chooses afresh. The locked land makes {W} or the chosen colour (the colour per tap = mana-payment exemption). SEARCHED: one land option per admitted colour at the land drop, one Maze's End fetch variant per colour; the deck provider restricts the menu to colours the list can spend (G/U/R -- a sound prune, ledger decision 1). An effect put that carries no pin (Archdruid's Charm, I3's puts) takes the provider's colour (ledger I2 decision). Human play: the viewer's choose_color. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_choose_color": true,
+    "etb_choose_color_fixed": "W"
+   }
+  },
+  {
+   "name": "Black Dragon Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than black.\n{T}: Add {B} or one mana of the chosen color. [The chosen colour is an as-enters replacement (CR 614.12) locked per object (etb_choose_color + etb_choose_color_fixed B: the menu excludes the printed colour); a re-entering Gate chooses afresh. The locked land makes {B} or the chosen colour (the colour per tap = mana-payment exemption). SEARCHED: one land option per admitted colour at the land drop, one Maze's End fetch variant per colour; the deck provider restricts the menu to colours the list can spend (G/U/R -- a sound prune, ledger decision 1). An effect put that carries no pin (Archdruid's Charm, I3's puts) takes the provider's colour (ledger I2 decision). Human play: the viewer's choose_color. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "W",
+     "U",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "etb_choose_color": true,
+    "etb_choose_color_fixed": "B"
+   }
+  },
+  {
+   "name": "The Black Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "As The Black Gate enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}.\n{1}{B}, {T}: Choose a player with the most life or tied for most life. Target creature can't be blocked by creatures that player controls this turn. [Shock-style entry (etb_pay_life_to_untap 3), judged for its controller: autonomous play pays when life > 3 and the mana is wanted (the shock rule; goldfish life is nearly free -- the life-payment disclosure), declines under an Amulet of Vigor (sound dominance), and never pays under a Gond Gate (it enters untapped anyway). Human play: the land_entry chooser. The {1}{B},{T} evasion ability (TapTargetPump, grants_unblockable) needs a target creature and this list has none and makes none, so it is never offered (inert); the 'player with the most life' choice is collapsed to the opponent (when we have more life the real ability does nothing). LEGENDARY: one copy; the legend rule applies. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ],
+    "etb_pay_life_to_untap": 3,
+    "tap_target_pump_cost": "{1}{B}",
+    "tap_target_pump_grants_unblockable": true
+   }
   }
  ]
 }

@@ -4711,6 +4711,11 @@ public:
     bool ProjectsAlternateWin(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
     bool NeverCast(const CardDefinition& def) const override;
     bool OffersModalExileArtEnch(const GameState& s, const CardDefinition& def) const override;
+    // I2: the land-entry colour menu restricted to colours the list can spend (sound), and the shock
+    // land's (The Black Gate's) life declined under an Amulet of Vigor (sound dominance).
+    std::vector<int> LandEntryPinCandidates(const GameState& s, int controller,
+                                            const CardDefinition& def) const override;
+    bool LandEntersUntapped(const GameState& s, const CardDefinition& def, bool heuristic) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,

@@ -7532,6 +7532,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
                                                   (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
+            // Maze's End I2: the fetched land's searched as-enters choice (chosen_x = pin + 1). Twin in the other world.
+            const LandEntryPinScope _le_pin(tap_tutor && a.chosen_x > 0 ? a.chosen_x - 1 : -1);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
             // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
             const FaceUpRegrowPinScope _fu_pin(

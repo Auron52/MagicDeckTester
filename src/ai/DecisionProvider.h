@@ -4829,6 +4829,35 @@ public:
     // enchantment") cast variants, one per legal target? A RESTRICTION hook (the deck provider withholds a
     // mode it proves dominated). Default true: every legal target is offered.
     virtual bool OffersModalExileArtEnch(const GameState&, const CardDefinition&) const { return true; }
+
+    // (Appended at the END of the class, like every new hook: existing vtable slots keep their offsets.)
+    // LandEntryPinCandidates -- the SEARCHED as-enters choice of a land (Maze's End I2; the land-entry pin,
+    // core/SpellEffects.h): the values a land drop / a pinned put is fanned over, in order (first = the
+    // unpinned default). Two shapes:
+    //   * a colour-choosing LAND (etb_choose_color: the CLB Gates, Thran Portal) -> each Color ordinal on
+    //     its menu (EtbColorMenu: produces minus the printed colour);
+    //   * a pay-or-sacrifice land (etb_sacrifice_unless_pay: Gateway Plaza) -> 1 (pay), 0 (sacrifice).
+    // Empty = no choice (no fan). A provider may RESTRICT (drop a colour the deck can never spend -- the
+    // permitted sound prune) and ORDER; never collapse to one option it did not search. Never consulted
+    // in human play (the viewer asks at the entry).
+    virtual std::vector<int> LandEntryPinCandidates(const GameState& s, int controller,
+                                                    const CardDefinition& def) const
+    {
+        (void)s; (void)controller;
+        std::vector<int> out;
+        if (!def.card.IsLand()) { return out; }
+        const CardParams& p = def.params;
+        if (p.etb_choose_color && !EtbColorChoiceIsNonSource(p))
+        {
+            for (Color c : EtbColorMenu(p))
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5 && std::find(out.begin(), out.end(), ci) == out.end()) { out.push_back(ci); }
+            }
+        }
+        else if (p.etb_sacrifice_unless_pay.has_value()) { out = { 1, 0 }; }
+        return out;
+    }
 };
 
 // ---------------------------------------------------------------------------------------------------
