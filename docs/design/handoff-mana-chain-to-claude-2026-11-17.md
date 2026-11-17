@@ -41,7 +41,12 @@ wins, zero changed play digests at the same score; loss-penalized score
 sum is 23,111 in both arms. New work 204,827,597 versus old 204,827,599
 units (two fewer); recorded job ms 4,924,122 versus 4,955,036. Outputs
 and the parser are under `build/scratch/spirits_shock_pair_5k/`.
-The next step is a fresh PGO Spirits mana-clean gate, then
+The fresh PGO Spirits mana-clean gate is now active in exec session
+`78520`: `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run spirits
+--games 5000 --name codex-spirits-shock-pair-20261117`, console
+`build/scratch/spirits_shock_pair_5k/mana_clean.out`. It covers indices
+50,000–54,999. After it completes, inspect its report and commit
+`test/mana_clean.json`; then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 
