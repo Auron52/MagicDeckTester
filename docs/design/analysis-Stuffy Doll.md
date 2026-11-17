@@ -172,6 +172,9 @@ deferrals provisional.
   but that is a use. In that case highest power (and not stuffy) I suppose." => the ONE no-GC target is our
   highest-power creature other than Stuffy Doll (already indestructible); only if there is none, the scry-only
   no-effect target.
+  USER (~21:40, verbatim): "It should be a creature that reflects damage also." => the no-GC target is our
+  highest-power damage-REFLECTING creature other than Stuffy Doll (Reckoner, Nemesis, Mogg Maniac, Slivers under a
+  Spiteful grant); if none, the scry-only no-effect target.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
