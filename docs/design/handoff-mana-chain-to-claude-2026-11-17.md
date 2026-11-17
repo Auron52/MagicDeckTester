@@ -458,6 +458,9 @@ floating colorless before W/U/B/R/G for generic costs in the normal
 route, while `MTG_HOLD_C_FOR_SINK` and `MTG_HOLD_C_IN_PAYMENT` protect
 human-play `{C}` sinks when `BoardHasColorlessPipSink` sees one. The
 current guard is board-based and human-only; verify the user's final
-kill case separately, including any visible hand/graveyard sink that
-is not yet on the board, before broadening the rule. This is an
+kill case separately: the sideboard has Essence Depleter and Dimensional
+Infiltrator, reached through Living Wish, and the main deck has Shivan
+Gorge. A `{C}` sink may therefore be visible as a Wish continuation
+before `BoardHasColorlessPipSink` sees it on the board. See the EDF
+analysis around its combo-finish route. This is an
 unverified lead, not a newly adopted EDF change.
