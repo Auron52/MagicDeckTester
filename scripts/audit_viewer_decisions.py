@@ -2827,6 +2827,14 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             return ("NOT_FORCED", {"note": "card was cast, but no combat with an attacker "
                                     "and payable pump mana was reached",
                                     "missing": missing, "covered": sorted(covered)})
+        if set(missing) <= {"legend_keep"}:
+            # The legend rule's board-click needs a SECOND copy on the battlefield beside the first, and identical
+            # copies fold (no prompt). Casting one copy forces nothing; the search seldom casts a redundant legend
+            # (Sea Creatures 2026-11-17: Koma / Brinelin cast, a twin never landed). The prompt itself is generic
+            # (LegendKeepPick, every legend since Boars I5b) and covered by the legend_keep unit tests.
+            return ("NOT_FORCED", {"note": "card was cast, but a second differing copy never reached the "
+                                    "battlefield beside it, so the legend rule offered no choice",
+                                    "missing": missing, "covered": sorted(covered)})
         return ("HARD_MISS", {"note": "card was cast but these expected decisions never surfaced: "
                                       + ", ".join(missing),
                               "missing": missing, "covered": sorted(covered)})
