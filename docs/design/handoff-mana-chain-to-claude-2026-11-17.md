@@ -4,7 +4,7 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Live status, updated 07:08 UTC
 
-**Spirits 30040647 T4 correction in progress, source and test still uncommitted:**
+**Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
 Flooded Strand, Lingering Souls flashback `{1}{B}`, then Millicent `{W}{U}`.
 At Souls payment, Hallowed Fountain, Watery Grave, and two Godless Shrines
@@ -20,8 +20,8 @@ issues**; lever-off still has APPLY-DROP=1. Outputs are
 and `_legacy.out`. Release `./build.sh` passed; the full Release unit
 suite passed **3,385/3,385**, zero failures, console
 `build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
-Next commit the source/test fix, rebuild PGO (current PGO is on the prior
-source tree), run same-PGO 5,000 paired Spirits games with the lever and
+Next rebuild PGO (current PGO is on the prior source tree), run same-PGO
+5,000 paired Spirits games with the lever and
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 
