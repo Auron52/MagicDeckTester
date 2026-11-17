@@ -870,3 +870,44 @@ passed 864 references, with zero play drift or enum gaps. The shared branch was 
 `a27d7bf8a`. The primary checkout is on the shared branch, and its viewer serves Red
 Elementals on port 8080 using the verified Release binary and persistent reference backup.
 The superseded local `viewer/redelem` branch was removed after the reference safety scan.
+
+## Value leaf and play setting (2026-11-17)
+
+`scripts/valueleaf.sh run` on frozen `24949783a` (src tree `aee55374648c`, PGO+LTO), started by Codex
+and finished by Claude. Phase A dumped 10,774 rows from 2,500 games; the 120-tree model has a held-out
+RMSE of 0.3358 turns. The C matrix (52 cells) was clean and phase D nominated trust depth 5 for the
+staged model.
+
+Phase E, 8 held-out seeds x 1,000 paired games against live (no sidecar, d5/b20, 4.29288):
+
+| arm | avg turn | delta | paired t | work units |
+|---|---:|---:|---:|---:|
+| staged learned leaf | 4.29250 | -0.00038 | -0.50 | 0.773x |
+| no-leaf escalation (`nlesc`) | 4.29175 | -0.00113 | -1.62 | 0.749x |
+| **no-leaf final-depth single pass (`nlfit`)** | **4.29188** | **-0.00100** | **-1.37** | **0.699x** |
+| emulation | 4.29350 | +0.00062 | +2.38 | 0.895x |
+
+E.5 adopted `nlfit`, the cheapest passing arm. The learned model stays staged at
+`logs/eval/Red Elementals.value.STAGED.json` and is not shipped. E.7 gridded d5/d6 x b20/b30/b40
+for all four shapes on fresh seeds (7505000..) and adopted **d6/b20**, the cheapest passing arm (0.993x,
+delta 0.00000). d6/b30 also passed at 1.000x with delta -0.00062 (t -3.42); d5/b30 and d5/b40 are
+better trades at 1.01-1.02x. E.7b had nothing to recheck (no trust candidate on the shipped shape), and
+E.6 found no ladder escalations in 1,200 games, so the skip allowance is the fleet default R=0.
+`value_trust_depth` is unset, so no overnight tier was owed.
+
+Shipped `decks/Red Elementals/Red Elementals.value.json`:
+`value_play {ladder: single, leaf: none, alpha: relaxed, target_depth 6, budget_ms 20,
+mull_gen_depth 1, mull_gen_budget_ms 3, expected_buckets 13}`.
+
+**Shipping gate.** A scoped smoke and regular run (`--deck=redelem,redelem2hg`) found 0 slower games,
+1 faster (regression d5 s3003, 4.3267 -> 4.3200), and 21 searched games whose play changed at the same
+score. The strict viewer protocol passed 864 references with 0 drift. Attribution: on the same binary
+with only the sidecar removed (`build/scratch/red_ship/`), all four changed cells reproduce the old GT
+exactly, score and digest; with it, they reproduce the new run. Work units fell to 0.70x (smoke d5) and
+0.66x (regression d5); d3 was 1.03x. Red's smoke and regular GT were accepted, and `check_gt_logs.py`
+reports 1,252 consistent logs. Red's overnight rows move with the sidecar and are left to the periodic
+overnight run.
+
+The full pooled smoke run at freeze time showed 48 moved rows in other decks. They come from the
+upstream mana-oracle commits after `c6027ae90`, which their owner has not accepted; they are not part
+of this adoption.

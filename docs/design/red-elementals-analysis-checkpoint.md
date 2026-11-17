@@ -3,7 +3,17 @@
 Shared state for whichever agent (Claude or Codex) continues the Red Elementals analysis. Read this first,
 then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify files/processes before acting.
 
-Last updated: 2026-11-15 (Codex continuation; this section supersedes the older running-job notes).
+Last updated: 2026-11-17 (Claude; value-leaf stage complete).
+
+## Value-leaf stage COMPLETE (2026-11-17, current)
+
+- The `valueleaf.sh` run on frozen `24949783a` finished. It shipped the leafless final-depth single
+  pass (`nlfit`) at **d6/b20**; the learned model stays staged and unshipped. Red's smoke and regular GT
+  were accepted after sidecar-off attribution (0 slower, 1 faster, 21 same-score line changes).
+  Overnight rows are left to the periodic run. Details: the ledger section "Value leaf and play setting
+  (2026-11-17)". The handoff `red-elementals-value-leaf-handoff.md` is closed.
+- Open for the USER: d6/b30 (1.000x, -0.00062 t -3.42) is a near-free quality trade the driver did not
+  take; the staged learned model is available if wanted.
 
 ## Final mulligan adoption progress (2026-11-15)
 
