@@ -1217,6 +1217,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_lifelink        = params.value("grants_lifelink", false);
     p.grants_first_strike    = params.value("grants_first_strike", false);   // Vampires 2026-10-18
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
+    p.cost_less_per_creature_on_battlefield = params.value("cost_less_per_creature_on_battlefield", false);
     p.upkeep_adds_charge     = params.value("upkeep_adds_charge", false);
     p.can_animate            = params.value("can_animate", false);
     p.animate_power          = params.value("animate_power", 0);
@@ -1352,6 +1353,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         else if (rf == "target_player")    { p.reflect_dealt_damage = RT::TargetPlayer; }
         else { throw std::runtime_error("cards.json reflect_dealt_damage \"" + rf + "\" is not a known recipient"); }
     }
+    p.reflect_player_cant_gain_life        = params.value("reflect_player_cant_gain_life", false);
+    p.damage_all_creatures_count_creatures = params.value("damage_all_creatures_count_creatures", false);
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);
 

@@ -2197,6 +2197,10 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     if (amount <= 0) { return; }
     if (PlayersCantGainLifeNow(state)) { return; }
     int opp = 1 - controller_index;
+    // Screaming Nemesis's rest-of-game lock on the GAINING player (the opponent here). The gain simply
+    // does not happen, exactly like the turn-scoped lock above (rulings: the rest of the effect still
+    // resolves -- every caller's other effects are separate statements).
+    if ((state.cant_gain_life_rest_of_game_mask >> opp) & 1u) { return; }
     const bool remedied = RemedyActive(state, controller_index);
     // MTG_LIFE_TRACE=1 (diagnosis only): per-event ledger of every opponent gain/flip with source
     // + speculation state. Earned permanence by finding the payment-fallback double-drip (the
@@ -9430,6 +9434,7 @@ inline void GainLife(GameState& state, int player, int amount)
 {
     if (amount <= 0) { return; }
     if (PlayersCantGainLifeNow(state)) { return; }
+    if ((state.cant_gain_life_rest_of_game_mask >> player) & 1u) { return; }   // Screaming Nemesis
     // Lifegain REPLACEMENT (Rhox Faithmender x2, Bilbo +1) -- armed decks only; identity otherwise.
     // Applied to the EVENT before anything reads it, so life_gained_this_turn and the watchers (Vito's
     // "that much") all see the replaced amount, as the rules say they must (CR 614.1).
@@ -19537,6 +19542,18 @@ inline void PerformEndStepSelfSacrifices(GameState& state)
 // The SBA has since been corrected to the lord/CDA/equipment-inclusive value, so mirroring the old
 // behaviour here would now be the thing that desyncs them.
 namespace dmgrx { inline void Sweep(GameState& s, int controller, const CardDefinition& def, int dmg); }
+inline int CreatureCount(const GameState& state, int controller_index);   // defined below
+// THE damage of a symmetric "N damage to each creature" sweep, read at RESOLUTION by both dispatch
+// sites (EffectHandler's Custom-spell resolution and the rollout's apply_one): the printed N
+// (damage_all_creatures -- Pyroclasm 2, Blasphemous Act 13), or Chain Reaction's X = the number of
+// creatures on the battlefield as it resolves, both sides (ruling). 0 = not such a sweep, so a card
+// with neither param falls through both dispatch chains exactly as before.
+inline int SweepDamageAmount(const GameState& state, const CardDefinition& def)
+{
+    if (def.params.damage_all_creatures > 0) { return def.params.damage_all_creatures; }
+    if (def.params.damage_all_creatures_count_creatures) { return CreatureCount(state, 0) + CreatureCount(state, 1); }
+    return 0;
+}
 inline void PerformDamageAllCreatures(GameState& state, int controller,
                                       const CardDefinition& def, int dmg)
 {

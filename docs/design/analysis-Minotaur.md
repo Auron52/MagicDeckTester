@@ -80,7 +80,7 @@ targets our permanents (`src/ai/Combat.cpp` has no blocker code path at all).
 
 | # | Card | Clause | Why inert |
 |---|---|---|---|
-| D1 | Boros Reckoner | "whenever this is dealt damage, it deals that much to any target" | nothing in the sim ever damages our creatures — the trigger has no event that can fire it |
+| D1 | Boros Reckoner | "whenever this is dealt damage, it deals that much to any target" | **IMPLEMENTED 2026-11-17** (Stuffy Doll, `core/DamageReflection.h`; the card now carries `reflect_dealt_damage` and arms this deck's `reflect_armed`). Still outcome-inert HERE: nothing in this deck damages a creature, so no pipeline code runs in its games |
 | D2 | Boros Reckoner | "{R/W}: gains first strike" | first strike is only observable against blockers |
 | D3 | Rageblood Shaman | trample (own + granted) | trample only matters when a blocker absorbs damage |
 | D4 | Neheb | first strike (own + granted) | as D2 |

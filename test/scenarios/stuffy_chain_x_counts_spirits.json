@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Damage reflection, design step 2. Chain Reaction deals X to each creature, X = the number of",
+    "creatures on the battlefield AS IT RESOLVES, both sides: Mogg Maniac + Screaming Nemesis + five",
+    "opponent Spirits = 7. Both reflectors are dealt 7 and die, and both reflections resolve (LKI):",
+    "7 + 7 = 14 = the opponent's life. Counting only our own creatures (X = 2) would deal 4, and",
+    "attacking instead deals 4, so the T4 win needs the opponent's Spirits counted in X."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 14,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mogg Maniac" },
+    { "name": "Screaming Nemesis" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Chain Reaction" ],
+  "library_filler": "Mountain", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

@@ -9,6 +9,7 @@
 // PerformDamageAllCreatures body, pinned at the end.
 #include <doctest/doctest.h>
 
+#include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -178,4 +179,110 @@ TEST_CASE("rfx pipeline: an UNARMED board keeps the legacy sweep body byte-for-b
     // disclosed approximation) -- unchanged, which is the point of the gate.
     REQUIRE(Find(s, 942) != nullptr);
     CHECK(Find(s, 942)->aura_attached_to == 0);
+}
+
+// ---- design step 2: reflectors, the sweepers, Blasphemous Act's cost ------------------------------------
+
+TEST_CASE("rfx step 2: a reflector killed by the same Act still deals 13 (LKI); the opponent dies")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Mogg Maniac", 951);
+    PutRfx(s, "Boros Reckoner", 952);
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 953 + i, 1, 1, 1, "Spirit"); }
+    const int me0 = s.players[0].life;
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    CHECK(s.battlefield.empty());                      // every creature died to the 13 ...
+    CHECK(s.players[1].life == 20 - 13 - 13);          // ... and BOTH reflections still resolved
+    CHECK(s.players[0].life == me0);                   // F1: Reckoner's "any target" never picks our face
+    CHECK(dmgrx::t_frame.stack.empty());
+}
+
+TEST_CASE("rfx step 2: one trigger per creature per EVENT, for the total (rulings)")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Mogg Maniac", 961);
+    dmgrx::Batch b;
+    b.src.push_back({ DefRfx("Pyroclasm").card, 0, false });
+    b.src.push_back({ DefRfx("Blasphemous Act").card, 0, false });
+    b.hits.push_back({ 0, { false, 961 }, 2, false, false });
+    b.hits.push_back({ 1, { false, 961 }, 3, false, false });   // two sources, ONE event
+    dmgrx::DealDamageBatch(s, b);
+    CHECK(Find(s, 961) == nullptr);
+    CHECK(s.players[1].life == 20 - 5);                // one trigger, "that much" = 2 + 3
+}
+
+TEST_CASE("rfx step 2: Screaming Nemesis's reflection locks the damaged player's lifegain for the game")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Screaming Nemesis", 971);
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    CHECK(Find(s, 971) == nullptr);                    // it died, and its trigger still resolved
+    CHECK(s.players[1].life == 20 - 13);
+    CHECK(s.cant_gain_life_rest_of_game_mask == 0b10); // the opponent's bit only
+    OpponentGainsLife(s, 0, 4);                         // e.g. Swords to Plowshares' gain
+    CHECK(s.players[1].life == 20 - 13);               // ... does not happen, after Nemesis is gone
+    GainLife(s, 0, 3);
+    CHECK(s.players[0].life == 23);                    // we were never dealt damage: we still gain
+}
+
+TEST_CASE("rfx step 2: Chain Reaction's X is the creature count AT RESOLUTION, both sides")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Mogg Maniac", 981);
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 982 + i, 1, 1, 1, "Spirit"); }
+    const CardDefinition& chain = DefRfx("Chain Reaction");
+    CHECK(SweepDamageAmount(s, chain) == 5);
+    PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));
+    CHECK(s.battlefield.empty());
+    CHECK(s.players[1].life == 20 - 5);                // the Maniac was dealt 5 and dealt 5
+    CHECK(SweepDamageAmount(s, DefRfx("Pyroclasm")) == 2);   // a printed N is unchanged
+}
+
+TEST_CASE("rfx step 2: Blasphemous Act costs {1} less per creature on the battlefield, floor {R}")
+{
+    GameState s = ArmedState();
+    const CardDefinition& act = DefRfx("Blasphemous Act");
+    ManaCost c = EffectiveSpellCost(act, s);
+    CHECK(c.generic == 8);
+    CHECK(c.red == 1);
+    PutRfx(s, "Mogg Maniac", 991);
+    PutRfx(s, "Boros Reckoner", 992);
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 993 + i, 1, 1, 1, "Spirit"); }   // the opponent's count too
+    c = EffectiveSpellCost(act, s);
+    CHECK(c.generic == 2);                             // 6 creatures -> {2}{R} (design scenario)
+    CHECK(c.red == 1);
+    for (int i = 0; i < 6; ++i) { TokenRfx(s, 1000 + i, 1, 1, 1, "Spirit"); }  // 12 creatures
+    c = EffectiveSpellCost(act, s);
+    CHECK(c.generic == 0);                             // "can't reduce the total cost below {R}"
+    CHECK(c.red == 1);
+    CHECK(c.ManaValue() == 1);
+    CHECK(act.card.m_mana_cost.ManaValue() == 9);     // the mana VALUE is the printed cost (ruling)
+}
+
+TEST_CASE("rfx step 2: the Act's price is locked when it is priced -- a later board change does not move it")
+{
+    // "The total cost to cast Blasphemous Act is locked in before you pay that cost": the engine prices
+    // a cast with EffectiveSpellCost on the board as it stands, BEFORE any mana ability is activated, and
+    // pays that bill. A creature that leaves (sacrificed for mana) or a Spirit created while paying
+    // (a Forbidden Orchard tap) changes a LATER pricing, never the bill already computed.
+    GameState s = ArmedState();
+    const CardDefinition& act = DefRfx("Blasphemous Act");
+    for (int i = 0; i < 3; ++i) { TokenRfx(s, 1010 + i, 0, 1, 1, "Goblin"); }
+    const ManaCost bill = EffectiveSpellCost(act, s);
+    CHECK(bill.generic == 5);                          // the ruling's own example: three creatures -> {5}{R}
+    s.battlefield.pop_back();                          // ... one is sacrificed while paying
+    TokenRfx(s, 1020, 1, 1, 1, "Spirit");              // ... and an Orchard tap makes a Spirit
+    TokenRfx(s, 1021, 1, 1, 1, "Spirit");
+    CHECK(bill.generic == 5);                          // the bill already computed is what is paid
+    CHECK(EffectiveSpellCost(act, s).generic == 4);    // only a NEW pricing would see the new board
+}
+
+TEST_CASE("rfx step 2: an UNARMED deck's reflector is a vanilla creature (Minotaur's Boros Reckoner)")
+{
+    GameState s = ArmedState();
+    s.reflect_armed = false;
+    PutRfx(s, "Boros Reckoner", 1031);
+    PerformDamageAllCreatures(s, 0, DefRfx("Pyroclasm"), 13);
+    CHECK(Find(s, 1031) == nullptr);
+    CHECK(s.players[1].life == 20);                    // the legacy body raises no trigger
 }

@@ -8586,6 +8586,19 @@ static int AffinityFeedCount(const GameState& state, const Action& a, const Card
     if (dk == nullptr && (a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::CastFromGraveyard))
     { dk = CardDatabase::Instance().LookupInterned(a.card_name); }
     if (dk == nullptr) { return 0; }
+    // Blasphemous Act ("{1} less for each creature on the battlefield"): EVERY creature this cast puts
+    // onto the battlefield feeds it -- the creature itself (with its pinned replicate copies, as below)
+    // and a token-making hand cast's tokens (cast_creates_tokens makes creature tokens). No subtype test.
+    if (aff.params.cost_less_per_creature_on_battlefield)
+    {
+        int c = 0;
+        if (dk->card.IsCreature())
+        { c += 1 + (a.kind == Action::Kind::ActivateVial ? 0 : std::max(0, a.replicate_count)); }
+        if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
+            && dk->params.cast_creates_tokens > 0)
+        { c += dk->params.cast_creates_tokens; }
+        return c;
+    }
     const std::vector<std::string>& subs = aff.params.subtypes_affected;
     int n = 0;
     if (dk->card.IsCreature())
@@ -8629,7 +8642,9 @@ static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector
                                        const std::vector<int>& sel, int j)
 {
     const CardDefinition* dj = cands[j].def;
-    if (!dj || !dj->params.affinity_for_subtype || dj->params.subtypes_affected.empty()) { return 0; }
+    if (!dj) { return 0; }
+    if (!dj->params.cost_less_per_creature_on_battlefield
+        && (!dj->params.affinity_for_subtype || dj->params.subtypes_affected.empty())) { return 0; }
     const int j_rank = ResolveProvider(state).CastOrderRank(state, *dj);
     int same_turn = 0;
     for (int k : sel)
@@ -15256,6 +15271,7 @@ static int BorosMode3ExtraStrike(const GameState& state, bool is_pre_combat,
                 || b.sac_source_id == target || b.sac_victim_id == target
                 || (b.def && (b.def->params.damage_all_creatures > 0
                               || !b.def->params.damage_all_creatures_x_per_subtype.empty()
+                              || b.def->params.damage_all_creatures_count_creatures
                               || b.def->params.x_damage_each_creature_and_player)))
             { may_leave_or_tap = true; break; }
         }
@@ -36843,7 +36859,7 @@ static int OptimisticTurnMana(const GameState& state)
             && !(outlet_not_growth && IsDiscardSacOutlet(d.params) && !IsSacManaOutlet(d.params));
         return d.params.ritual_floating_mana > 0
             || growth_outlet                  || d.params.hinata_cost_reducer
-            || d.params.affinity_for_subtype  || !d.params.reduces_spell_color.empty()
+            || CostFallsAsCreaturesEnter(d.params) || !d.params.reduces_spell_color.empty()
             || !d.params.reduces_spell_subtype.empty()
             || d.params.alt_lifegain_cost > 0 || !d.params.alt_cost_requires_subtype.empty()
             || d.params.suspend_time_counters > 0;
@@ -55605,7 +55621,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // Affinity applies a per-subset generic discount consider() sees but this scalar bound cannot ->
     // sum(cost.ManaValue()) overstates the true cost -> disable the prune to stay byte-identical.
     for (const Action& a : cands)
-    { if (a.def && a.def->params.affinity_for_subtype) { return std::numeric_limits<int>::max(); } }
+    { if (a.def && CostFallsAsCreaturesEnter(a.def->params)) { return std::numeric_limits<int>::max(); } }
     // A Medallion cast THIS turn discounts later same-colour spells in the subset -- a reduction the
     // scalar bound cannot see (like a same-turn affinity enabler), so bail when one is among the cands.
     for (const Action& a : cands)
@@ -55814,7 +55830,7 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
     {
         if (a.ritual_float > 0 || a.rock_mana.Total() > 0
             || a.mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
-            || (a.def && (a.def->params.affinity_for_subtype
+            || (a.def && (CostFallsAsCreaturesEnter(a.def->params)
                           || !a.def->params.reduces_spell_color.empty()
                           // Subtype reducers (Dragonspeaker / Incubator) -- the missing-bail fix,
                           // see ManaPruneBound (MTG_SUBRED_BAIL).
@@ -55887,7 +55903,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // before the sequential walk can check the actual order.
         t.gain += ApexPairGateCredit(etb_state, a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
-        t.block = ((a.def && (a.def->params.affinity_for_subtype
+        t.block = ((a.def && (CostFallsAsCreaturesEnter(a.def->params)
                               || !a.def->params.reduces_spell_color.empty()
                               // Subtype reducers -- the missing-bail fix (MTG_SUBRED_BAIL note
                               // at ManaPruneBound); selecting one disables the gate exactly like
@@ -55911,7 +55927,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         }
         // (A Vial-put Geist carries no def: its term blocks HARD, which only passes more selections.)
         if (t.block && a.def != nullptr && ActionColoredReducerDef(a) == nullptr
-            && !a.def->params.affinity_for_subtype && a.def->params.cost_less_per_cycle_or_discard <= 0
+            && !CostFallsAsCreaturesEnter(a.def->params) && a.def->params.cost_less_per_cycle_or_discard <= 0
             && !a.def->params.cost_less_per_opponent_noncombat_damage)
         {
             // Only the generic reducers are left to have set `block`. Patrician Geist's graveyard
@@ -58420,7 +58436,7 @@ static void DropRitualGroupsIfNoPayoff(const GameState& state, const ManaPool& p
         if (gross > cost)       { feasible_net += gross - cost; }   // net-positive ramp credit (non-seq)
         const CardDefinition* d = a.def;
         if (!d) { continue; }
-        if (d->params.affinity_for_subtype)          { return; }
+        if (CostFallsAsCreaturesEnter(d->params))    { return; }
         if (!d->params.reduces_spell_color.empty())  { return; }
         if (d->params.ritual_float_gy_self_bonus)    { ++gy_self; }   // Rite of Flame graveyard escalation
         if (d->params.tutor_to_battlefield || d->params.impulse_exile > 0 || d->card.IsCreature())
@@ -60831,7 +60847,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     }
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
-    for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    for (const Action& ra : cands) { if (ra.def && CostFallsAsCreaturesEnter(ra.def->params)) { any_affinity = true; break; } }
     // Same-turn cost reducer (Ruby Medallion) among the candidates -- gates the OPT-IN leaf credit
     // below (MTG_LEAF_REDUCER_CREDIT). Inert for every deck without one.
     bool any_reducer = false;
@@ -63176,7 +63192,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         if (!gate_relevant
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
                 || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
-                || (cands[j].def && (cands[j].def->params.affinity_for_subtype
+                || (cands[j].def && (CostFallsAsCreaturesEnter(cands[j].def->params)
                                      || !cands[j].def->params.reduces_spell_color.empty()))
                 || (GateSubredOn() && SubtypeReducerAction(cands[j]))))   // see EnumeratePlans' twin
         { gate_relevant = true; }
@@ -66373,7 +66389,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // {C} -> Muscle's {1} pays all three, Hivepool at {0}). Only entries still in hand count (a
         // resolved one is on the board, and EffectiveCost has it). Payment only: every cast reprices live.
         static const bool s_line_affinity = EnvOn("MTG_PREPAY_LINE_AFFINITY", true);
-        if (!a.evoke && d->params.affinity_for_subtype && !d->params.subtypes_affected.empty()
+        if (!a.evoke && ((d->params.affinity_for_subtype && !d->params.subtypes_affected.empty())
+                         || d->params.cost_less_per_creature_on_battlefield)
             && ec.generic > 0 && heurarm::Flag(heurarm::PREPAY_LINE_AFFINITY, s_line_affinity))
         {
             const int a_rank = ResolveProvider(state).CastOrderRank(state, *d);
@@ -74467,14 +74484,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // triggers, so their free-cast MVs are in the accumulator, per the oracle timing.
             PerformMvCastDamageOppCreatures(state, state.active_player_index, def);
         }
-        else if (def.params.damage_all_creatures > 0)
+        else if (const int sweep = SweepDamageAmount(state, def); sweep > 0)
         {
-            // Pyroclasm (shared helper -- executor twin in EffectHandler's Custom-spell
-            // resolution, lockstep). OMITTING this branch would make the rollout score a
-            // 2-mana spell that does NOTHING, which for a symmetric sweeper whose only live
-            // effect in this deck is a DRAWBACK would bias the search toward casting it.
-            PerformDamageAllCreatures(state, state.active_player_index, def,
-                                      def.params.damage_all_creatures);
+            // Pyroclasm / Blasphemous Act / Chain Reaction (shared helper -- executor twin in
+            // EffectHandler's Custom-spell resolution, lockstep; Chain Reaction's X counted here,
+            // at resolution). OMITTING this branch would make the rollout score a 2-mana spell
+            // that does NOTHING, which for a symmetric sweeper whose only live effect in this deck
+            // is a DRAWBACK would bias the search toward casting it.
+            PerformDamageAllCreatures(state, state.active_player_index, def, sweep);
         }
         else if (def.params.bounce_all_creatures)
         {
@@ -83115,7 +83132,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     const std::vector<DorkGrowthGroup> dork_growth = ScanDorkGrowthGroups(state);
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
-    for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    for (const Action& ra : cands) { if (ra.def && CostFallsAsCreaturesEnter(ra.def->params)) { any_affinity = true; break; } }
     // A castable generic reducer (Medallion, Daredevil, Incubator) gates the same-subset credit.
     bool any_reducer = false;
     for (const Action& ra : cands)
@@ -83333,7 +83350,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         if (!gate_relevant
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
                 || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
-                || (cands[j].def && (cands[j].def->params.affinity_for_subtype
+                || (cands[j].def && (CostFallsAsCreaturesEnter(cands[j].def->params)
                                      || !cands[j].def->params.reduces_spell_color.empty()))
                 // ...and a SUBTYPE reducer (Gargos, Dragonspeaker, Warchief; Incubator's chosen type). The
                 // legacy scalar bound BAILS on one (MTG_SUBRED_BAIL: ManaPruneBound returns unbounded), so a
@@ -85327,7 +85344,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             {
                 const Action& c = cands[j];
                 if (c.ritual_float > 0 || c.rock_mana.Total() > 0
-                    || (c.def && c.def->params.affinity_for_subtype)
+                    || (c.def && CostFallsAsCreaturesEnter(c.def->params))
                     || (c.def && (!c.def->params.reduces_spell_color.empty()
                                   || !c.def->params.reduces_spell_subtype.empty()
                                   || c.def->params.chooses_creature_type))
@@ -104642,6 +104659,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         Fold(k, 0x474F44534000ull + (state.ephara_creature_entered_last_turn ? 1ull : 0ull));
     }
     if (state.players_cant_gain_life_this_turn) { Fold(k, 0x5C011); }
+    // Screaming Nemesis's rest-of-game lock (GameState::cant_gain_life_rest_of_game_mask): folded only
+    // when set, like the turn-scoped lock above -> every other deck keeps its exact prior key.
+    if (state.cant_gain_life_rest_of_game_mask != 0)
+    { Fold(k, 0x5C0130 + static_cast<uint64_t>(state.cant_gain_life_rest_of_game_mask)); }
     if (state.damage_cant_be_prevented_this_turn) { Fold(k, 0x5C012); }
     // Alternate win by effect (Maze's End): terminal, never merged with an unwon state. Value-gated.
     if (state.won_by_effect) { Fold(k, 0xA17E1Du); }

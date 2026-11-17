@@ -418,6 +418,14 @@ struct CardParams
     // Affinity for subtype: reduce this card's generic mana cost by 1 per matching
     // permanent you control (e.g. Thrumming Hivepool — Affinity for Slivers).
     bool affinity_for_subtype = false;
+    // Blasphemous Act: "This spell costs {1} less to cast for each creature on the battlefield." Every
+    // creature, BOTH sides (the opponent's Forbidden Orchard Spirits included), counted where every
+    // cost is priced (EffectiveSpellCostImpl, before payment -- so the total is locked in before any
+    // mana ability is activated, ruling). Generic only, so the total never drops below the coloured
+    // pips ({R}, ruling). A board-counted reducer exactly like affinity_for_subtype above: its price
+    // falls as creatures enter THIS turn, so every site that treats affinity's per-subset discount as
+    // invisible to a scalar bound reads it through CostFallsAsCreaturesEnter below.
+    bool cost_less_per_creature_on_battlefield = false;
     // Medallion static cost reducer: a permanent (e.g. Ruby Medallion = "R") that reduces the
     // GENERIC cost of every spell of this colour YOU cast by 1 (floored at 0, stacks per copy).
     // Empty = not a reducer. Applied in EffectiveCost off permanents already in play; a Medallion
@@ -863,6 +871,14 @@ struct CardParams
     // "any_other_target" (Screaming Nemesis), "target_player". None = inert.
     enum class ReflectTo : std::uint8_t { None = 0, TargetOpponent, AnyTarget, AnyOtherTarget, TargetPlayer };
     ReflectTo reflect_dealt_damage = ReflectTo::None;
+    // Screaming Nemesis's rider on its reflection: "If a player is dealt damage this way, they can't
+    // gain life for the rest of the game." Sets GameState::cant_gain_life_rest_of_game_mask for each
+    // player its reflection actually deals damage to (the bit outlives the creature, rulings).
+    bool reflect_player_cant_gain_life = false;
+    // Chain Reaction: "deals X damage to each creature, where X is the number of creatures on the
+    // battlefield" -- the damage_all_creatures sweep with X counted AS IT RESOLVES (ruling), every
+    // creature on both sides. See SweepDamageAmount (SpellEffects.h), read by both dispatch sites.
+    bool damage_all_creatures_count_creatures = false;
 
     // Breaching Dragonstorm clause 2: "When a Dragon you control enters, return this
     // enchantment to its owner's hand." Non-empty = the watched subtype ("Dragon"). Fires from
@@ -5322,6 +5338,15 @@ struct CardParams
     std::string              transform_min_controlled_subtype;
     int                      transform_min_controlled_count = 0;
 };
+
+// A BOARD-COUNTED cost reducer: the spell's price falls as permanents enter the battlefield THIS turn
+// (affinity for a subtype -- Thrumming Hivepool; "{1} less for each creature on the battlefield" --
+// Blasphemous Act). Every search site that bails out of a scalar mana bound, or credits a same-turn
+// discount, because such a price is invisible at enumeration time reads this ONE predicate, so the
+// two reducers can never be treated differently by accident. Identical to the bare affinity test for
+// every card without the Act's param.
+inline bool CostFallsAsCreaturesEnter(const CardParams& p)
+{ return p.affinity_for_subtype || p.cost_less_per_creature_on_battlefield; }
 
 // Rick's chosen-keyword bits (Permanent::chosen_keyword_mask).
 constexpr std::uint8_t kChosenKwFirstStrike = 1u << 0;

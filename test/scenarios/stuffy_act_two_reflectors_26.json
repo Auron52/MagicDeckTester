@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Damage reflection, design step 2 (docs/design/damage-reflection-pipeline.md 10). Mogg Maniac +",
+    "Boros Reckoner + four opponent Spirits = 6 creatures, so Blasphemous Act ({8}{R}, {1} less per",
+    "creature on the battlefield, BOTH sides) costs {2}{R} off three lands. It deals 13 to each",
+    "creature as ONE damage event: everything dies, and both reflections still resolve through",
+    "last-known information -- the Maniac's to the opponent, the Reckoner's 'any target' to the",
+    "opponent (our own face folded away, F1; no creature is left) -- 13 + 13 = 26 >= 20. Without the",
+    "Act the two attack for 4 a turn, so a T4 win needs both the discount and both triggers."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Mogg Maniac" },
+    { "name": "Boros Reckoner" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Mountain", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

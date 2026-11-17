@@ -254,8 +254,24 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
         if (!merged) { ct.push_back({ a.to.id, a.amount }); }
     }
 
-    // 3. Snapshot the triggers (LKI), before anything changes. Trigger kinds: design step 2.
+    // 3. Snapshot the triggers (LKI), before anything changes, in BATTLEFIELD order (the canonical
+    //    order, design 4.7): one reflection trigger per damaged reflector for the event's total
+    //    (rulings: "triggers once ... that much damage"), raised even when the damage is lethal.
     std::vector<PendingTrig> raised;
+    if (!ct.empty())
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature()) { continue; }
+            int amt = 0;
+            for (const CreatureTotal& c : ct) { if (c.number == q.card.m_number) { amt = c.amount; break; } }
+            if (amt <= 0) { continue; }
+            const CardDefinition* d = Def(q);
+            if (d == nullptr || d->params.reflect_dealt_damage == CardParams::ReflectTo::None) { continue; }
+            raised.push_back({ d->params.reflect_dealt_damage, SourceRef{ q.card, q.controller_index, true },
+                               q.card.m_number, amt, d->params.reflect_player_cant_gain_life });
+        }
+    }
 
     // 4. Apply.
     for (const CreatureTotal& c : ct)
@@ -269,7 +285,10 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     {
         const int dealt = ApplyDamageToPlayer(s, b.src[static_cast<std::size_t>(p.src)], p.player, p.amount,
                                               p.combat);
-        (void)dealt;   // the Nemesis life lock reads it (design step 2)
+        // Screaming Nemesis: "If a player is dealt damage this way, they can't gain life for the rest
+        // of the game" -- only damage actually DEALT (a prevented hit sets nothing).
+        if (p.lock_life && dealt > 0)
+        { s.cant_gain_life_rest_of_game_mask = static_cast<std::uint8_t>(s.cant_gain_life_rest_of_game_mask | (1u << p.player)); }
     }
 
     // 5. State-based actions.
@@ -374,14 +393,99 @@ inline void VerifyQuiescent(const GameState& s, const char* site)
     }
 }
 
+// Stable target ids: a player p is -1 - p; a permanent is its Card::m_number (always > 0 on a board).
+inline int PlayerId(int p) { return -1 - p; }
+
+// F1 (SOUND engine fold, design 4.1): our own face is dominated by the opponent's while nothing rewards
+// damage to us. Proof: our life is read DOWNWARD by nothing in the engine (every own-life reader is a
+// floor -- etb_life_floor, activate_min_life, the land-search life cost, pay-life untaps, the
+// start-life tap restriction -- so less life is never better), it matters only through dying, and the
+// same N to the opponent is monotone good in the goldfish. The two cards that DO reward damage to us
+// break the proof and keep the option: Purity (our noncombat damage becomes lifegain) and Tamanoa for
+// a NONCREATURE source (every reflector is a creature, so that clause is future-proofing). Off under
+// human play and MTG_UNPRUNE=reflecttarget, which see every legal target.
+inline bool OwnFaceDominated(const GameState& s, const PendingTrig& t)
+{
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::ReflectTarget)) { return false; }
+    const int ctrl = t.src.controller;
+    if (dmgev::PurityProtects(s, ctrl)) { return false; }
+    if (!t.src.is_creature && dmgev::CountTamanoa(s, ctrl) > 0) { return false; }
+    return true;
+}
+
+// The trigger's legal targets at resolution, opponent's face FIRST (the rollout's permitted greedy
+// takes the front). Planeswalkers are not offered (disclosed PARTIAL on the cards: the goldfish
+// opponent never controls one, and damage to our own only removes loyalty).
+inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTrig& t)
+{
+    using RT = CardParams::ReflectTo;
+    const int ctrl = t.src.controller, opp = 1 - ctrl;
+    std::vector<int> legal{ PlayerId(opp) };
+    if (t.kind == RT::TargetOpponent) { return legal; }
+    if (!OwnFaceDominated(s, t)) { legal.push_back(PlayerId(ctrl)); }
+    if (t.kind == RT::AnyTarget || t.kind == RT::AnyOtherTarget)
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature()) { continue; }
+            if (t.kind == RT::AnyOtherTarget && q.card.m_number == t.self_number) { continue; }
+            legal.push_back(q.card.m_number);
+        }
+    }
+    return legal;
+}
+
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
 {
-    (void)s;
-    // No trigger kind is raised before design step 2 (the snapshot above pushes nothing), so reaching
-    // here is a pipeline defect, not a play decision.
-    std::fprintf(stderr, "[rfx] FATAL: unresolvable trigger kind %d from %s\n",
-                 static_cast<int>(t.kind), t.src.card.m_name.str().c_str());
-    std::abort();
+    using RT = CardParams::ReflectTo;
+    if (t.kind != RT::TargetOpponent && t.kind != RT::AnyTarget && t.kind != RT::AnyOtherTarget
+        && t.kind != RT::TargetPlayer)
+    {
+        std::fprintf(stderr, "[rfx] FATAL: unresolvable trigger kind %d from %s\n",
+                     static_cast<int>(t.kind), t.src.card.m_name.str().c_str());
+        std::abort();
+    }
+    std::vector<int> legal = LegalReflectTargets(s, t);
+    ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
+                                               static_cast<int>(t.kind), legal);
+    if (legal.empty()) { return; }   // no legal target: the trigger is removed (CR 603.3d)
+    // THE STEP-2 TRIPWIRE (design 10, step 2). Until the searched reflection-target axis exists (design
+    // step 3: Plan::reflect_targets, the Incinerator probe-and-fan), a choice of more than one target
+    // inside the search window has NO searched host, and taking the front there would be a greedy pick
+    // (CLAUDE.md, NO GREEDY PICK INSIDE THE SEARCH WINDOW). So it is fatal, never silently picked. The
+    // front is taken only where it is not a choice (a singleton), or where a one-shot policy is
+    // permitted: beyond the horizon (greedywindow depth 0), the depth-0 runner and the executor
+    // replaying a plan (no frame). Human play reaches the front too until design step 3 wires the
+    // viewer's `target` prompt here.
+    if (legal.size() > 1 && !HumanPlayActive() && greedywindow::InWindow(0))
+    {
+        greedywindow::Trip("damage-reflection trigger target (dmgrx::ResolveTrig; searched from design step 3)",
+                           greedywindow::t_depth);
+    }
+    const int pick = legal.front();
+    Batch b;
+    b.src.push_back(t.src);
+    DmgAssign a;
+    a.src       = 0;
+    a.to        = pick < 0 ? Recipient{ true, -1 - pick } : Recipient{ false, pick };
+    a.amount    = t.amount;
+    a.combat    = false;   // reflection damage is never combat damage (ruling)
+    a.lock_life = t.lock_life;
+    b.hits.push_back(a);
+    if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+    {
+        std::string to;
+        if (pick < 0) { to = (-1 - pick) == t.src.controller ? "you" : "the opponent"; }
+        else
+        {
+            const Permanent* q = FindPerm(s, pick);
+            to = q != nullptr ? q->card.m_name.str() : std::string("a creature");
+        }
+        EmitPlayEvent(s.turn_number, "trigger",
+                      "\xE2\x9A\xA1 " + t.src.card.m_name.str() + " was dealt " + std::to_string(t.amount)
+                      + " damage -- it deals " + std::to_string(t.amount) + " to " + to);
+    }
+    DealDamageBatch(s, b);
 }
 
 }   // namespace dmgrx

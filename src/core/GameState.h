@@ -451,6 +451,15 @@ struct GameState
     bool                     won_by_effect                = false;
     bool                     players_cant_gain_life_this_turn = false;
     bool                     damage_cant_be_prevented_this_turn = false;
+    // SCREAMING NEMESIS (2026-11-17): "If a player is dealt damage this way, they can't gain life for
+    // the rest of the game." A per-PLAYER, rest-of-game designation: bit p = players[p] can't gain
+    // life. Set only by the damage-reflection pipeline (core/DamageReflection.h) when a
+    // reflect_player_cant_gain_life trigger deals damage to that player; never reset (it outlives the
+    // creature, rulings). Read by GainLife and OpponentGainsLife. Kept HERE rather than on Player (the
+    // design's first sketch) because this 1-byte hole after the bool above holds it with no size
+    // change for either struct (gdb ptype /o, 2026-11-17). GAME STATE, future-determining: folded into
+    // the state keys only when nonzero, so it is 0 -- and byte-identical -- for every other deck.
+    std::uint8_t             cant_gain_life_rest_of_game_mask = 0;
     // SEARCHED DEMON-TRIGGER PIN (Plan::demon_trigger_choice; Shadowborn INT-2), in the 2-byte hole
     // after this bool (gdb ptype /o, 2026-11-03). PACKED: bits 0-7 = Reaper from the Abyss's end-step
     // destroy TARGET (kDemonPinBits per trigger ordinal), bits 8-15 = Abhorrent Overlord's upkeep

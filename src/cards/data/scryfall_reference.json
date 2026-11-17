@@ -699,6 +699,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Blasphemous Act": {
+    "cmc": 9.0,
+    "keywords": [],
+    "mana_cost": "{8}{R}",
+    "oracle_text": "This spell costs {1} less to cast for each creature on the battlefield.\nBlasphemous Act deals 13 damage to each creature.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Blasted Landscape": {
     "cmc": 0.0,
     "keywords": [
@@ -1231,6 +1240,15 @@
     "keywords": [],
     "mana_cost": "{R}",
     "oracle_text": "Chain Lightning deals 3 damage to any target. Then that player or that permanent's controller may pay {R}{R}. If the player does, they may copy this spell and may choose a new target for that copy.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Chain Reaction": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Chain Reaction deals X damage to each creature, where X is the number of creatures on the battlefield.",
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
@@ -4732,6 +4750,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Mogg Maniac": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to target opponent or planeswalker.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Goblin"
+  },
   "Mogg War Marshal": {
     "cmc": 2.0,
     "keywords": [
@@ -6146,6 +6173,17 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Creature — Dragon"
+  },
+  "Screaming Nemesis": {
+    "cmc": 3.0,
+    "keywords": [
+      "Haste"
+    ],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Haste\nWhenever this creature is dealt damage, it deals that much damage to any other target. If a player is dealt damage this way, they can't gain life for the rest of the game.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Spirit"
   },
   "Scrying Sheets": {
     "cmc": 0.0,

@@ -642,6 +642,12 @@ static_assert(sizeof(Player) == 216,
 // searched crossing pin). Classification: FUTURE-DETERMINING (set by the turn's plan apply or the crossing fan,
 // consumed by our end step and the opponent's land play), FOLDED in Build() value-gated (and in the TurnSolver keys).
 // `deck_has_static_land_drops` / `deck_has_crossing_land_put` (bools in padding): DECK CONSTANTS, never folded.
+// +0 bytes (2026-11-17, Stuffy Doll damage reflection): GameState gained `reflect_armed` (a bool in
+// the 3-byte hole after deck_reads_lifegain_in_play) and `cant_gain_life_rest_of_game_mask` (a uint8 in the
+// 1-byte hole after damage_cant_be_prevented_this_turn); gdb ptype /o, the tripwire did not fire. The first
+// is a DECK CONSTANT (stamped once in StampDeckTraits) -- nothing to fold. The second is GAME STATE, monotone
+// and future-determining (Screaming Nemesis: that player can never gain life again) -- folded in Build()
+// beside players_cant_gain_life_this_turn, only when nonzero.
 static_assert(sizeof(GameState) == 1616,   // Boars fields fit in upstream storage; +8 Maze's End I3
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
@@ -948,6 +954,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
     if (s.players_cant_gain_life_this_turn) { fold(0x5C011u); }
+    // Screaming Nemesis's rest-of-game lock: monotone and future-determining (one state can gain life
+    // for the rest of the game, the other cannot). Folded only when set -> byte-identical elsewhere.
+    if (s.cant_gain_life_rest_of_game_mask != 0)
+    { fold(0x5C0130u + static_cast<std::uint64_t>(s.cant_gain_life_rest_of_game_mask)); }
     if (s.damage_cant_be_prevented_this_turn) { fold(0x5C012u); }
     if (s.deck_tracks_noncombat_damage)
     {

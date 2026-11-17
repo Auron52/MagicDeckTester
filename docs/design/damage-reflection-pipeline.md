@@ -1186,3 +1186,32 @@ Where the code departs from the sections above, and why. Each entry names the sy
   (Arid Mesa's `fetch_land_types` sets `anti`, the name "Inspiring Vantage" sets `modern_rw_burn`).
   Section 8's "most likely routes to Generic" is wrong. The routing-table unit test
   (`test_pirates_provider.cpp`) pins the measured value; step 10 must route above that chain.
+
+### Step 2 (reflectors, sweepers)
+
+* **Nemesis's lock lives on GameState, not Player**: `GameState::cant_gain_life_rest_of_game_mask`
+  (bit p = players[p]). It sits in the 1-byte hole after `damage_cant_be_prevented_this_turn`.
+  `Player` has no padding, and a Player bool would have grown both structs by 8/16 bytes for every
+  deck. It is folded into `dominance::Build` and `BuildSimKey` only when nonzero. `GainLife` and
+  `OpponentGainsLife` honour it.
+* **F1 is an ENGINE fold, not only a provider one** (`dmgrx::OwnFaceDominated`). Without it the
+  step-2 tripwire fires on every reflection after a sweeper, since {opponent, us} is never a
+  singleton, and the step-2 scenarios could not run. The proof is in the code comment: no own-life
+  reader in the engine rewards lower life, and Purity / a noncreature-source Tamanoa keep the option.
+  It is lifted under human play and `MTG_UNPRUNE=reflecttarget` (new `UnprunedGate::ReflectTarget`).
+  F2/F3 and the Spirit restriction are NOT in the engine. A death or damage payoff (Blood Artist,
+  Massacre Wurm) breaks F2's proof in general, so they belong to the deck provider (step 10).
+* **Planeswalkers are not offered as reflection targets.** This is a disclosed PARTIAL on the three
+  cards. The goldfish opponent never controls one, and damage to our own only removes loyalty.
+* **The tripwire** (`dmgrx::ResolveTrig`): a target list of size > 1 while
+  `!HumanPlayActive() && greedywindow::InWindow(0)` calls `greedywindow::Trip`. The front is taken
+  for a singleton, beyond the horizon, in the d0 runner, by the executor, and in human play. The
+  viewer prompt is step 3.
+* **The Act's same-turn discount** reuses the affinity machinery. `CostFallsAsCreaturesEnter(params)`
+  (`CardDatabase.h`) replaces the bare `affinity_for_subtype` test at every scalar-bound bail and gate
+  site. `AffinityFeedCount` counts every creature a cast puts onto the battlefield for the Act.
+  `SameTurnAffinityDiscountFor` and the prepay line credit admit it. The credit stays rank-filtered,
+  as for affinity: on the generic order creatures (10) precede the Act (20).
+* **Chain Reaction's X** is `SweepDamageAmount` (`SpellEffects.h`). Both dispatch sites read it at
+  resolution: `CreatureCount(0) + CreatureCount(1)`, animated lands included as the count's
+  convention.

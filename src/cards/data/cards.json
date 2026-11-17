@@ -6269,9 +6269,11 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn. [Vanilla 3/3 Minotaur Wizard for goldfishing. The three {R/W} HYBRID pips are modelled as real either-colour pips (ManaCost::hybrid_pair), so the deck's black sources cannot pay them but any red source can; they also make the card RED AND WHITE (CR 202.2b) and give it DEVOTION TO RED 3, which is what Fanatic of Mogis reads. [PARTIAL: the damage-reflection trigger is inert -- nothing in this sim ever deals damage to our creatures (the opponent never blocks, casts, or removes; Combat.cpp has no blocker path), so the trigger has no event that could fire it. Disclosed deferral D1.] [PARTIAL: '{R/W}: gains first strike until end of turn' is not modelled as an activation. First strike is otherwise modelled (the CR 510.4 two-step combat damage split (Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout; 2026-10-18)), and against a never-blocking opponent it is observable only through a between-step effect; the Minotaur deck's only one is Neheb, the Worthy's discard, and under Neheb this Minotaur already strikes first, so the activation can change no outcome. Disclosed deferral D2.]]",
+   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn. [reflect_dealt_damage any_target: the damage-reflection trigger is raised by the shared creature-damage pipeline (core/DamageReflection.h, executor and rollout alike) ONCE per damage event for the total this creature was dealt (rulings), also when that damage is lethal (last-known information), and the damage it deals is noncombat (ruling). The target is chosen as the trigger resolves (the lazy-target equivalence, docs/design/damage-reflection-pipeline.md 4.1) among the opponent, us, and every creature on the battlefield; our own face is folded away while nothing rewards damage to us (sound fold F1). [PARTIAL: planeswalkers are not offered as targets -- the goldfish opponent never controls one, and damage to our own only removes loyalty. PROVISIONAL.] The three {R/W} HYBRID pips are modelled as real either-colour pips (ManaCost::hybrid_pair), so black sources cannot pay them but any red or white source can; they also make the card RED AND WHITE (CR 202.2b) and give it DEVOTION TO RED 3, which is what Fanatic of Mogis reads. [PARTIAL, PROVISIONAL deferral D2 -- needs USER sign-off: '{R/W}: gains first strike until end of turn' is not offered as an activation. First strike is otherwise modelled (the CR 510.4 two-step combat damage split, Combat.cpp ResolveCombatDamageTwoStep, shared by executor and rollout), and against an opponent that never blocks it only moves WHICH combat-damage step this creature's damage lands in: the amount to the player is identical, and any trigger that damage raises resolves inside the same combat, before the second main, so no line's outcome or win turn can change (the Minotaur deck's only between-step effect is Neheb, the Worthy's discard, under which this Minotaur already strikes first). It would only cost mana for nothing.]]",
    "template": "vanilla_creature",
-   "parameters": {}
+   "parameters": {
+    "reflect_dealt_damage": "any_target"
+   }
   },
   {
    "name": "Burning-Fist Minotaur",
@@ -17503,6 +17505,74 @@
     "attack_trigger_reanimate_subtype": "Elemental",
     "attack_trigger_reanimate_toughness_lt_self": true,
     "attack_trigger_reanimate_sac_end_step": true
+   }
+  },
+  {
+   "name": "Mogg Maniac",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to target opponent or planeswalker. [reflect_dealt_damage target_opponent: raised by the shared creature-damage pipeline (core/DamageReflection.h) once per damage event for the total dealt, also when lethal (last-known information); its damage is noncombat. In Two-Headed Giant the target opponent is one head of the shared team life pool, so a single target is x1. Planeswalkers are not offered: the goldfish opponent never controls one.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reflect_dealt_damage": "target_opponent"
+   }
+  },
+  {
+   "name": "Screaming Nemesis",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Haste\nWhenever this creature is dealt damage, it deals that much damage to any other target. If a player is dealt damage this way, they can't gain life for the rest of the game. [reflect_dealt_damage any_other_target: raised by the shared creature-damage pipeline (core/DamageReflection.h) once per damage event for the total dealt, also when lethal (last-known information, ruling); its damage is noncombat. The target is chosen as the trigger resolves among the opponent, us, and every creature on the battlefield except this one; our own face is folded away while nothing rewards damage to us (sound fold F1). reflect_player_cant_gain_life: a player this trigger deals damage to gets the rest-of-game bit Player::cant_gain_life_rest_of_game, which GainLife and OpponentGainsLife honour even after this creature has left the battlefield (rulings); goldfish-inert (the opponent never gains life of its own accord) but modelled. [PARTIAL: planeswalkers are not offered as targets -- the goldfish opponent never controls one, and damage to our own only removes loyalty. PROVISIONAL.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reflect_dealt_damage": "any_other_target",
+    "reflect_player_cant_gain_life": true
+   }
+  },
+  {
+   "name": "Blasphemous Act",
+   "mana_cost": "{8}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This spell costs {1} less to cast for each creature on the battlefield.\nBlasphemous Act deals 13 damage to each creature. [cost_less_per_creature_on_battlefield: the reduction counts every creature on the battlefield, both sides (the opponent's Forbidden Orchard Spirits included), in EffectiveSpellCost, which prices the cast BEFORE payment -- so a creature sacrificed or a Spirit created while paying does not change it (the cost is locked in, ruling). It reduces only the generic part, so the total never goes below {R} (ruling). The search credits creatures cast earlier in the same plan exactly as it credits affinity. damage_all_creatures 13: ONE damage event of the shared creature-damage pipeline on a reflection deck (the legacy two-pass sweep elsewhere): every creature is dealt 13 at once, lethal damage kills unless indestructible, and every 'is dealt damage' trigger it raises resolves afterwards.]",
+   "template": "custom",
+   "parameters": {
+    "damage_all_creatures": 13,
+    "cost_less_per_creature_on_battlefield": true
+   }
+  },
+  {
+   "name": "Chain Reaction",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Chain Reaction deals X damage to each creature, where X is the number of creatures on the battlefield. [damage_all_creatures_count_creatures: X is counted as the spell resolves (ruling), every creature on both sides (the opponent's Spirits included), and the sweep is the same symmetric damage event as damage_all_creatures (shared helper, executor and rollout).]",
+   "template": "custom",
+   "parameters": {
+    "damage_all_creatures_count_creatures": true
    }
   },
   {

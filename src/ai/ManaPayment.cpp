@@ -4695,6 +4695,14 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
         }
         reduce_generic(cost, reduction);
     }
+    // Blasphemous Act: "{1} less for each creature on the battlefield" -- both sides, counted on the
+    // board this cost is priced against (before payment: the total is locked in first, ruling).
+    // Generic only, so the coloured {R} is the floor (ruling). Gated on the casting card's own param,
+    // like the affinity walk above.
+    if (def.params.cost_less_per_creature_on_battlefield)
+    {
+        reduce_generic(cost, CreatureCount(state, 0) + CreatureCount(state, 1));
+    }
     // THE THREE REDUCER WALKS BELOW RUN ONLY IF THE DECK CAN CONTAIN A REDUCER AT ALL.
     //
     // Each of them walks the whole battlefield with a LookupCached per permanent, and two are gated
@@ -4887,7 +4895,7 @@ int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)
     if (!def.card.m_mana_cost.has_x) { return 0; }
     // Fast exit: the only generic reductions EffectiveSpellCostImpl applies are the deck-stamped reducer
     // walk and the casting card's own affinity / Hollow One / opponent-damage clauses.
-    if (!state.deck_has_cost_reducer && !def.params.affinity_for_subtype
+    if (!state.deck_has_cost_reducer && !CostFallsAsCreaturesEnter(def.params)
         && def.params.cost_less_per_cycle_or_discard <= 0
         && !def.params.cost_less_per_opponent_noncombat_damage) { return 0; }
     int excess = 0;

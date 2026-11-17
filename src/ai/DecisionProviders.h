@@ -194,6 +194,9 @@ enum class UnprunedGate
     SeaSin,          // Sea Creatures: Sin's searched counter-harvest subsets restored (SeaCreaturesProvider::CounterHarvestSearchSubsets, USER 2026-11-17)
     SeaGorger,       // Sea Creatures: Trench Gorger's full exile menu restored (SeaCreaturesProvider::RestrictExileLibraryLandsMenu, USER 2026-11-16)
     GorgerZero,      // Trench Gorger: the "search and exile 0" entry restored (DecisionProvider::RestrictExileLibraryLandsMenu's 0/0 prune)
+    ReflectTarget,   // damage reflection (core/DamageReflection.h): a reflection trigger's target set
+                     // restored to every legal target -- the engine's sound own-face fold (F1) and the
+                     // provider's ReflectTargetCandidates restriction both lifted
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");

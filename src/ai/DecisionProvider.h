@@ -1398,6 +1398,17 @@ public:
     virtual void IncineratorTargetCandidates(const GameState&, int damaged_player, int amount,
                                               std::vector<int>& out) const;
 
+    // ReflectTargetCandidates -- a damage-reflection trigger's target set (core/DamageReflection.h:
+    // Boros Reckoner "any target", Screaming Nemesis "any other target", "target player"), asked as the
+    // trigger RESOLVES (the lazy-target equivalence, docs/design/damage-reflection-pipeline.md 4.1).
+    // `io` arrives as the engine's legal set AFTER its sound folds, as stable ids: a player p is
+    // -1 - p, a permanent is its Card::m_number; the opponent's face first. A provider may only
+    // RESTRICT or ORDER it (the house rule); the engine branches over what is left. `kind` is the
+    // CardParams::ReflectTo value, `src_number` the reflector's m_number (it may already be gone).
+    // DEFAULT: unchanged.
+    virtual void ReflectTargetCandidates(const GameState& /*s*/, int /*src_number*/, int /*controller*/,
+                                         int /*amount*/, int /*kind*/, std::vector<int>& /*io*/) const {}
+
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
 

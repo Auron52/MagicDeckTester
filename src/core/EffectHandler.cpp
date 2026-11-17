@@ -759,11 +759,11 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformMvCastDamageOppCreatures(state, entry.controller_index, def);
                 }
                 // Pyroclasm: "deals N damage to each creature" -- SYMMETRIC (shared helper;
-                // rollout twin in apply_one's sorcery dispatch, lockstep).
-                if (def.params.damage_all_creatures > 0)
+                // rollout twin in apply_one's sorcery dispatch, lockstep). Chain Reaction's X is
+                // counted here, at resolution (SweepDamageAmount).
+                if (const int sweep = SweepDamageAmount(state, def); sweep > 0)
                 {
-                    PerformDamageAllCreatures(state, entry.controller_index, def,
-                                              def.params.damage_all_creatures);
+                    PerformDamageAllCreatures(state, entry.controller_index, def, sweep);
                 }
                 // Whelming Wave: return every non-excepted creature to its owner's hand -- SYMMETRIC,
                 // untargeted (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).

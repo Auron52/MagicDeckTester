@@ -1281,6 +1281,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"seasin",     UnprunedGate::SeaSin},
     {"seagorger",  UnprunedGate::SeaGorger},
     {"gorgerzero", UnprunedGate::GorgerZero},
+    {"reflecttarget", UnprunedGate::ReflectTarget},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
