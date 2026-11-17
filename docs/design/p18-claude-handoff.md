@@ -195,3 +195,7 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   (the leaf is not adopted and the deck ships the heur ladder). Ship-step consequence: the per-deck adoption is a
   post-value-leaf step (heur vs m4 held-out A/B on that deck; adopt on a clear win). Whether valueleaf.sh runs that
   A/B itself or it stays a separate step is to be proposed to the USER with the final state.
+- USER ruling 2026-11-17 (3): valueleaf.sh GAINS A STAGE that measures mode 4 against the heur ladder (when the ladder
+  is the shape that would ship) and turns it on for the deck when it wins. The design goal is unchanged: mode 4 should
+  beat the ladder on every deck, so that stage normally just confirms it. A deck where it does not is a residual
+  loser to investigate, not an accepted outcome.
