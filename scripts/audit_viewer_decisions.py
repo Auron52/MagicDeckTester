@@ -89,6 +89,9 @@ MANIFEST = {
     "klothys_first_main":   ("tutor_etb",          truthy),
     "targeting":             ("target",               real_target),
     "spectacle_cost":        ("target",               truthy),   # cast post-combat, still targets
+    # Needle Drop (2026-11-17): "any target that was dealt damage this turn" -- the `target` decision over
+    # the FILTERED cast-time list (FixedBurnCandidates); cast post-combat like spectacle.
+    "target_dealt_damage_this_turn": ("target",       truthy),
     "damage_divided":        ("divide",               truthy),
     # Fury (LandfallElementals, 2026-10-18): "4 damage divided as you choose among any number of target
     # creatures and/or planeswalkers" -- the `divide` decision with a creatures-only legal set and

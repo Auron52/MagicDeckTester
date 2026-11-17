@@ -8807,6 +8807,12 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
         && def.params.reduces_subtype_colored_cost.has_value()) { return 8; }
     if (IsManaRitual(def))                       { return 15; }
     if (def.params.verse_damage)                 { return 19; }
+    // 29 a DAMAGED-TARGET spell (Needle Drop: "any target that was dealt damage this turn"): after every
+    //    other noncreature spell (20) and the creatures (10), so a same-main burn or a Vexing Devil's ETB
+    //    has made the opponent a legal target before it is cast -- ranked with them, plan order could put
+    //    it first and its cast gate would refuse it. Before the on-cast self-damage tier (30). A pure
+    //    card-parameter test, so no deck without the card moves.
+    if (def.params.target_dealt_damage_this_turn) { return 29; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
     // Destroy-all-enchantments (Reverent Silence) wipes our OWN Aria/Remedy, so cast it LAST --
     // after this turn's wincon casts (Aria's lethal ETB reversal) have already resolved. Casting
@@ -48963,7 +48969,8 @@ static bool PregateRefuses(const GameState& s, int me, PregateDiag* dg = nullptr
         }
         if (IsDrainer(d) && where <= 1) { drainer_held = true; }
         // A creature whose ETB damages the opponent could kill outside the finisher count below.
-        if (d->card.IsCreature() && (d->params.etb_damage_each_opponent > 0 || d->params.etb_damage_any > 0))
+        if (d->card.IsCreature() && (d->params.etb_damage_each_opponent > 0 || d->params.etb_damage_any > 0
+                                     || d->params.etb_opp_may_take_damage_to_sac > 0))   // Vexing Devil
         { unsure = true; }
     };
     auto gorge = [&](const CardDefinition& d, int where)

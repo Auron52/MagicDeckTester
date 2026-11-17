@@ -67507,8 +67507,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // and face damage unlocks spectacle. Paying the printed total up front
         // tapped extra lands (including life-cost Islets) and stranded activations.
         // Both apply worlds call this function, so the per-cast fallback stays exact.
+        // Needle Drop likewise: whether it is cast at all depends on what this line damages first, and
+        // a pre-paid cast its gate then refuses would leave its mana tapped for nothing -- so the line
+        // pays per cast, where DamagedTargetCastLegal refuses before anything is paid.
         if (d->params.cost_less_per_opponent_noncombat_damage > 0
-            || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn))
+            || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn)
+            || d->params.target_dealt_damage_this_turn)
         { return Pp(PP_DYNAMIC_COST); }
         // EMERGE (Decimator, Boars I4): the alternative base is priced HERE, before every same-line credit
         // below, so nothing after it is overwritten (the evoke override further down runs after them).
@@ -73760,6 +73764,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...nor an Aura spell whose searched host is not a legal target now (the SHARED
         // AuraSpellCastLegal; AIEngine::CastSpellFromHand returns before paying on the same predicate).
         if (!AuraSpellCastLegal(state, state.active_player_index, def, enchant_target)) { return; }
+        // ...nor Needle Drop with no target dealt damage this turn (the SHARED DamagedTargetCastLegal;
+        // AIEngine::CastSpellFromHand returns before paying on the same predicate).
+        if (!DamagedTargetCastLegal(state, state.active_player_index, def)) { return; }
         if (riders.awaken && AwakenLandTargetIndex(state, state.active_player_index, enchant_target) < 0)
         { return; }
         // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"): the evoke's cost is a hand card.
@@ -74933,6 +74940,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets, &def, "apply");
                 dmg = sr.face_damage;
                 state.players[state.active_player_index].life -= sr.self_damage;
+                state.MarkPlayerDealtDamage(state.active_player_index, sr.self_damage);
                 // Soulfire's dig STAGES castable cards into hand, but damage_equals_top_mv never
                 // registered with ANY breakpoint class (not stages_cards, not impulse_exile) --
                 // its continuation was reachable only through the next phase's fresh enumeration,
@@ -75015,7 +75023,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                 }
                                 else             { tlist.push_back(c.index); }
                             }
-                            if (CrackleApplyTargets(state, ci, dmg, tlist)) { state.opponent_lost_life_this_turn = true; }
+                            if (CrackleApplyTargets(state, ci, dmg, tlist)) { state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, 1); }
                         }
                         else
                         {
@@ -75023,7 +75031,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             // face plus the first `crackle_targets` extras -- byte-identical to the old
                             // "face -= dmg; CrackleHitExtraTargets(count)" path (same order, same SBA).
                             state.players[opp_idx].life -= dmg;              // face = 5X (the win)
-                            state.opponent_lost_life_this_turn = true;
+                            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, dmg);
                             CrackleHitExtraTargets(state, ci, dmg, crackle_targets);
                         }
                     }
@@ -75076,6 +75084,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // OnCreatureDies (morbid, death watchers, persist, LTB). It used to be an inline
                     // loop with no indestructible test and no OnCreatureDies (design R7).
                     SbaKillDeadCreatures(state, "lethal damage");
+                }
+                else if (def.params.target_dealt_damage_this_turn
+                         && !DamagedThisTurnPinLegal(state, state.active_player_index, 0))
+                {
+                    // Needle Drop with its face target no longer qualifying (CR 608.2b): nothing resolves,
+                    // the draw included. Lockstep twin: EffectHandler::ResolveDirectDamage.
+                    direct_damage_resolved = false;
                 }
                 else
                 {
@@ -75991,7 +76006,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (dmg > 0)
             {
                 state.players[opp_idx].life -= dmg;
-                state.opponent_lost_life_this_turn = true;
+                state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, dmg);
             }
             // The opponent's share of the draw picks (Action::draw_target via the cast rider; 0 = all
             // ours), clamped to the split's picks. Lockstep twin: EffectHandler's modal_opp_draw_picks.
@@ -77386,7 +77401,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 DiscardCardFromHand(state, state.active_player_index, bi - fired, &le_mq, "Land's Edge");
                 state.players[opp_idx].life -= le_rate;
-                state.opponent_lost_life_this_turn = true;
+                state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, le_rate);
                 ++fired;
             }
             ResolvePendingMadness(state, le_mq, MadnessWindowNow(state), MadnessPin{}, "Land's Edge");
@@ -80521,7 +80536,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.graveyard.push_back(c);
                     state.players[opp_idx].life -= rate;
-                    state.opponent_lost_life_this_turn = true;
+                    state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, rate);
                     ++fired;
                 }
                 else { keep.push_back(std::move(c)); }
@@ -81288,6 +81303,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ GameEngine::UntapStep)
     state.permanent_left_under_control_this_turn = false;
+    state.player_dealt_damage_this_turn = {};   // Needle Drop's damaged-this-turn (lockstep w/ GameEngine::UntapStep)
     state.combat_damage_prevented_this_turn = false;   // Kami of False Hope (lockstep w/ GameEngine::UntapStep)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep w/ GameEngine::UntapStep)
     state.noncombat_damage_received_this_turn = {};
@@ -106512,6 +106528,13 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     { Fold(k, 0x4844524Eu + state.hedron_mill_trigger_ordinal); }
     if (state.deck_has_revolt && state.permanent_left_under_control_this_turn)
     { Fold(k, 0xFA7A1u); }
+    // Needle Drop's legal-target state (GameState::player_dealt_damage_this_turn): deck-gated and
+    // folded only when TRUE, so every deck without a reader keeps its exact key.
+    if (state.deck_reads_damage_dealt)
+    {
+        if (state.player_dealt_damage_this_turn[0]) { Fold(k, 0xDA3D0u); }
+        if (state.player_dealt_damage_this_turn[1]) { Fold(k, 0xDA3D1u); }
+    }
     if (state.deck_has_turn_gods)
     {
         Fold(k, 0x474F44530000ull + (state.keranos_first_own_draw_seen ? 1ull : 0ull));
@@ -131241,6 +131264,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.next_token_number != now.next_token_number) { d += " next_token_number=" + std::to_string(static_cast<long long>(stored.next_token_number)) + "/" + std::to_string(static_cast<long long>(now.next_token_number)); }
     if (stored.noncombat_trigger_depth != now.noncombat_trigger_depth) { d += " noncombat_trigger_depth=" + std::to_string(static_cast<long long>(stored.noncombat_trigger_depth)) + "/" + std::to_string(static_cast<long long>(now.noncombat_trigger_depth)); }
     if (stored.on_the_play != now.on_the_play) { d += " on_the_play=" + std::to_string(static_cast<long long>(stored.on_the_play)) + "/" + std::to_string(static_cast<long long>(now.on_the_play)); }
+    if (stored.player_dealt_damage_this_turn != now.player_dealt_damage_this_turn) { d += " player_dealt_damage_this_turn"; }
     if (stored.opponent_decked != now.opponent_decked) { d += " opponent_decked=" + std::to_string(static_cast<long long>(stored.opponent_decked)) + "/" + std::to_string(static_cast<long long>(now.opponent_decked)); }
     if (stored.opponent_library_dealt != now.opponent_library_dealt) { d += " opponent_library_dealt=" + std::to_string(static_cast<long long>(stored.opponent_library_dealt)) + "/" + std::to_string(static_cast<long long>(now.opponent_library_dealt)); }
     if (stored.opponent_plays_lands != now.opponent_plays_lands) { d += " opponent_plays_lands=" + std::to_string(static_cast<long long>(stored.opponent_plays_lands)) + "/" + std::to_string(static_cast<long long>(now.opponent_plays_lands)); }

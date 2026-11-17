@@ -1074,6 +1074,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xDE404E0000ull + static_cast<std::uint64_t>(s.scripted_demon_trigger)); }
     if (s.deck_has_morbid && s.creature_died_this_turn) { fold(0x40B1D0000ull); }
     if (s.deck_has_revolt && s.permanent_left_under_control_this_turn) { fold(0xFA7A10000ull); }
+    // Needle Drop's legal-target state: FUTURE-DETERMINING within the turn, deck-gated, folded when TRUE.
+    if (s.deck_reads_damage_dealt)
+    {
+        if (s.player_dealt_damage_this_turn[0]) { fold(0xDA3D00000ull); }
+        if (s.player_dealt_damage_this_turn[1]) { fold(0xDA3D10000ull); }
+    }
     // Kami of False Hope's prevention: FUTURE-DETERMINING within the turn (a prevented combat deals
     // nothing), so a "sacked Kami" board must not merge with an otherwise identical one (a Lurrus
     // recast or a Grace return can rebuild the same permanents). Folded only when TRUE.

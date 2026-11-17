@@ -1195,9 +1195,14 @@ struct NoncombatStateSnapshot
     std::array<int, 2> received{};
     std::vector<IncineratorDamageTrigger> pending;
     int depth = 0;
+    // Needle Drop's damaged-this-turn bits: a mana-payment probe can deal damage (a tap-for-mana ping),
+    // so every probe that rolls back the lost-life flag rolls these back with it. Unconditional (two
+    // bools); unread and unfolded for every deck without a reader.
+    std::array<bool, 2> dealt_damage{};
     explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage),
         cant_gain_life(s.players_cant_gain_life_this_turn),
-        cant_prevent_damage(s.damage_cant_be_prevented_this_turn)
+        cant_prevent_damage(s.damage_cant_be_prevented_this_turn),
+        dealt_damage(s.player_dealt_damage_this_turn)
     {
         if (enabled) { received = s.noncombat_damage_received_this_turn;
             pending = s.pending_incinerator_damage; depth = s.noncombat_trigger_depth; }
@@ -1206,6 +1211,7 @@ struct NoncombatStateSnapshot
     {
         s.players_cant_gain_life_this_turn = cant_gain_life;
         s.damage_cant_be_prevented_this_turn = cant_prevent_damage;
+        s.player_dealt_damage_this_turn = dealt_damage;
         if (enabled) { s.noncombat_damage_received_this_turn = received;
             s.pending_incinerator_damage = pending; s.noncombat_trigger_depth = depth; }
     }
@@ -2260,7 +2266,7 @@ inline int ApplyTapManaPing(GameState& state, int active, const CardDefinition& 
     const int opp = 1 - active;
     const int before = state.players[opp].life;
     state.players[opp].life -= dmg;
-    state.opponent_lost_life_this_turn = true;
+    state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, dmg);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "damage", def.card.m_name.str() + ": tapped for mana, "
@@ -5542,6 +5548,7 @@ inline void ApplyBurnToCreature(GameState& state, Permanent& target, int damage_
         const int ctrl = target.controller_index;
         state.players[ctrl].life -= target.pending_death_trigger;
         if (ctrl != caster_index) { state.opponent_lost_life_this_turn = true; }
+        state.MarkPlayerDealtDamage(ctrl, target.pending_death_trigger);   // Needle Drop's damaged-this-turn: ANY damaged player
         target.pending_death_trigger = 0;   // fired -- the transition gate also prevents a re-fire
     }
 }
@@ -6842,6 +6849,9 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
 inline void RecordNoncombatDamageToPlayer(GameState& state, int source_controller,
                                           int damaged_player, int amount)
 {
+    // Needle Drop's damaged-this-turn bit rides here unconditionally (a bool store): every damage-to-a-
+    // player site that records noncombat damage is thereby covered, whatever the deck tracks.
+    state.MarkPlayerDealtDamage(damaged_player, amount);
     if (!state.deck_tracks_noncombat_damage || amount <= 0 || damaged_player < 0 || damaged_player >= 2)
     { return; }
     // The cost reduction counts damage from ANY source; the trigger requires our source.
@@ -12803,7 +12813,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
         if (!sdef || !sdef->params.dragon_ping_on_enter) { continue; }
         const int before = state.players[opp].life;
         state.players[opp].life -= dragon_count;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, dragon_count);
         if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
         {
             EmitPlayEvent(state.turn_number, "damage",
@@ -14470,7 +14480,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     {
         const int before = state.players[opp].life;
         state.players[opp].life -= face_dmg;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, face_dmg);
         // Play-viewer history: an ETB burn moves the opponent's life with NOTHING on screen to
         // explain it -- the creature just enters and the total drops. Every other life-changing
         // site emits an event; this one did not, so Fanatic of Mogis's damage was invisible in the
@@ -14924,6 +14934,63 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     }
 }
 
+// ---- VEXING DEVIL (CardParams::etb_opp_may_take_damage_to_sac) ---------------------------------------
+// "When this creature enters, any opponent may have it deal N damage to them. If a player does, sacrifice
+// this creature."
+//
+// THE OPPONENT POLICY -- the ONE place it lives. PROVISIONAL (USER, docs/design/analysis-1 Drop Burn.md:
+// the user may change it): the opponent takes the N damage UNLESS that would be lethal (life <= N; the
+// opposing TEAM's shared life in 2HG, players[opponent]); otherwise the Devil stays. This is an
+// ENVIRONMENT model of the passive goldfish opponent -- the choice is THEIRS, not ours -- so it is
+// neither a search branch nor a viewer decision, and it is not a greedy pick inside the search window
+// (CLAUDE.md "NO GREEDY PICK"): no option of OURS is collapsed. Executor and rollout reach it through the
+// same cascade (FireOwnEtbTriggers), so they cannot disagree.
+inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
+inline bool VexingDevilOpponentTakesDamage(const GameState& s, int opponent, int amount)
+{
+    return s.players[static_cast<std::size_t>(opponent)].life > amount;
+}
+// Resolve the trigger for the entrant `devil_number` (re-found by number: the ETB body may have moved
+// the vector). Taken: N damage from the Devil (a red CREATURE source -- noncombat damage, so it marks the
+// opponent dealt damage and lost life, feeds spectacle / Needle Drop / Incinerator-style watchers through
+// DealPermanentAbilityDamage) and then the Devil is SACRIFICED through the shared sacrifice path (graveyard,
+// death and sacrifice watchers, morbid). Declined: nothing happens; the Devil stays a 4/3.
+inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_number, const CardDefinition& def)
+{
+    const int amount = def.params.etb_opp_may_take_damage_to_sac;
+    const int opp    = 1 - controller;
+    const int before = state.players[static_cast<std::size_t>(opp)].life;
+    if (!VexingDevilOpponentTakesDamage(state, opp, amount))
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xF0\x9F\x98\x88 " + def.card.m_name.str() + ": the opponent DECLINES the "
+                          + std::to_string(amount) + " damage (life " + std::to_string(before)
+                          + " -- it would be lethal) -- " + def.card.m_name.str() + " stays");
+        }
+        return;
+    }
+    {
+        NoncombatTriggerScope noncombat_scope(state);
+        DealPermanentAbilityDamage(state, controller, def, amount, 0, /*ask_human=*/false);
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x98\x88 " + def.card.m_name.str() + ": the opponent TAKES "
+                      + std::to_string(amount) + " (" + std::to_string(before) + "\xE2\x86\x92"
+                      + std::to_string(state.players[static_cast<std::size_t>(opp)].life) + ") -- "
+                      + def.card.m_name.str() + " is sacrificed");
+    }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == devil_number && q.controller_index == controller)
+        { SacrificePermanentAt(state, controller, i); break; }
+    }
+}
+
 // THE ENTRANT'S OWN ETB TRIGGERS, then -- at the OUTERMOST exit only -- the LOOK-TOP queue (Risen
 // Reef; see LOOK-TOP WATCHERS). Every full enter site calls FireEtbWatchers (which RECORDS the
 // look-top triggers) and then this, so draining here resolves them on every such route with no
@@ -14941,15 +15008,22 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // put, a champion return), executor and rollout alike. One pointer test for every other entrant.
     const CardDefinition* champ_def = nullptr;
     int champ_number = 0;
+    // VEXING DEVIL: same placement and reasons as champion (after the entrant's other own ETBs, out of
+    // reach of the body's early returns). One pointer test for every other entrant.
+    const CardDefinition* devil_def = nullptr;
+    int devil_number = 0;
     if (entered_index >= 0 && entered_index < static_cast<int>(state.battlefield.size()))
     {
         const Permanent& ep = state.battlefield[static_cast<std::size_t>(entered_index)];
         const CardDefinition* ed = ep.def_absent ? nullptr : CardDatabase::Instance().LookupCached(ep.card);
         if (ed != nullptr && !ed->params.champion_subtype.empty()) { champ_def = ed; champ_number = ep.card.m_number; }
+        if (ed != nullptr && ed->params.etb_opp_may_take_damage_to_sac > 0
+            && ep.controller_index == controller) { devil_def = ed; devil_number = ep.card.m_number; }
     }
     ++g_own_etb_depth;
     FireOwnEtbTriggersBody(state, controller, entered_index, chosen_tutor, etb_kx);
     if (champ_def != nullptr) { ResolveChampionEtb(state, controller, champ_number, *champ_def); }
+    if (devil_def != nullptr) { ResolveVexingDevilEtb(state, controller, devil_number, *devil_def); }
     --g_own_etb_depth;
     if (g_own_etb_depth == 0 && !g_pending_look_top.empty()) { DrainPendingLookTop(state); }
 }
@@ -15991,7 +16065,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             const int dmg   = wp.dies_trigger_damage * heads;
             const int before = state.players[opp].life;
             state.players[opp].life -= dmg;                      // "1 damage to any target" -> face
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, dmg);
             // The history panel had NO entry for this damage. Near-invisible while the only card
             // here was Pashalik Mons (it fires rarely); with Slimefoot it fires on EVERY Saproling
             // sacrifice, so a human would watch the opponent's life fall all game with nothing
@@ -16910,7 +16984,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         // Bolas -9: 7 damage to the opponent's face (the discard-7 / sacrifice-7 riders are
         // inert vs a hand-less opponent whose only permanents are spawn tokens; user-approved).
         state.players[1 - controller].life -= ab.amount;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, ab.amount);
     }
     else if (ab.effect == "food_token")
     {
@@ -18026,6 +18100,7 @@ inline bool DealPermanentAbilityDamage(GameState& s, int controller, const CardD
         {
             s.players[self ? controller : 1 - controller].life -= amount;
             if (!self) { s.opponent_lost_life_this_turn = true; }
+            s.MarkPlayerDealtDamage(self ? controller : 1 - controller, amount);   // Needle Drop's damaged-this-turn: ANY damaged player
         }
         RecordNoncombatDamageToPlayer(s, controller, self ? controller : 1 - controller, actual_dealt);
         return true;
@@ -18139,6 +18214,46 @@ inline std::string WithFixedBurnPin(const std::string& token, const FixedBurnPin
     if (prefix.empty() || prefix.rfind("@burn/", 0) == 0) { return EncodeFixedBurnPin(p); }
     return prefix + "|" + EncodeFixedBurnPin(p);
 }
+// ---- NEEDLE DROP (CardParams::target_dealt_damage_this_turn): "any target that was dealt damage this
+// turn" -------------------------------------------------------------------------------------------------
+// A fixed-burn pin's legality under the restriction. Players: GameState::player_dealt_damage_this_turn
+// (DAMAGE, never bare life loss). Creatures: damage marked (Permanent::damage > 0) -- marked damage is
+// exactly "dealt damage this turn", since cleanup removes it. NOT MODELLED: a planeswalker (its damage is
+// removed loyalty, with no per-turn record) -- inert, no Needle Drop deck faces or runs one; and a
+// creature dealt damage that was then regenerated away (no deck holds regeneration).
+inline bool DamagedThisTurnPinLegal(const GameState& s, int caster, int target)
+{
+    if (target <= 0)
+    {
+        const int pl = target == -1 ? caster : 1 - caster;
+        return pl >= 0 && pl < 2 && s.player_dealt_damage_this_turn[static_cast<std::size_t>(pl)];
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number != target) { continue; }
+        return (p.card.IsCreature() || p.is_animated) && p.damage > 0 && BurnPermanentTargetLegal(s, caster, p);
+    }
+    return false;
+}
+// Does ANY legal target exist (the opponent, the caster, a damaged creature)? The free-cast walks' test.
+inline bool DamagedThisTurnTargetExists(const GameState& s, int caster)
+{
+    if (DamagedThisTurnPinLegal(s, caster, 0) || DamagedThisTurnPinLegal(s, caster, -1)) { return true; }
+    for (const Permanent& p : s.battlefield)
+    { if (DamagedThisTurnPinLegal(s, caster, p.card.m_number)) { return true; } }
+    return false;
+}
+// THE pre-payment cast gate both apply worlds read (AIEngine::CastSpellFromHand, TurnSolver's apply_one),
+// beside the Path / Aura / Magnetic Theft gates: a spell with no legal target cannot be cast (CR 601.2c),
+// so nothing is paid and the card stays in hand. On the searched-target route (FixedBurnSearchEnabled)
+// PrepareFixedBurnPin already refuses on the filtered pin list, so this passes; on the autonomous
+// face-only route the spell can only target the opponent, so that is the one test.
+inline bool DamagedTargetCastLegal(const GameState& s, int caster, const CardDefinition& d)
+{
+    if (!d.params.target_dealt_damage_this_turn) { return true; }
+    if (FixedTargetedBurn(d) && FixedBurnSearchEnabled(s)) { return true; }
+    return DamagedThisTurnPinLegal(s, caster, 0);
+}
 inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int caster,
                                                     const CardDefinition& d, bool pending = false)
 {
@@ -18182,6 +18297,14 @@ inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int cas
             for (const auto& p : out) { if (p.first == w.first) { seen = true; break; } }
             if (!seen) { out.push_back({w.first, -2, -1}); }
         }
+    }
+    // Needle Drop: the CAST-TIME list (the human's `target` decision, PrepareFixedBurnPin) holds only
+    // targets dealt damage this turn. The ENUMERATION list (pending) keeps every target: a cast earlier
+    // in the same plan can damage one first, and the cast-time check rejects the variants it did not.
+    if (d.params.target_dealt_damage_this_turn && !pending)
+    {
+        out.erase(std::remove_if(out.begin(), out.end(), [&](const FixedBurnPin& pin)
+        { return !DamagedThisTurnPinLegal(s, caster, pin.first); }), out.end());
     }
     // Blaze can target our own surviving Swiftspear without landfall to buy a
     // prowess attack when the goldfish opponent has no creature. Keep its axis.
@@ -18293,6 +18416,9 @@ inline bool ResolveFixedBurnPin(GameState& s, int caster, const CardDefinition& 
     // Legality is checked independently: losing the creature does not counter the player/walker hit.
     auto hit = [&](int target, bool creature_only) -> bool
     {
+        // Needle Drop: the target must still have been dealt damage this turn on resolution (CR 608.2b).
+        if (d.params.target_dealt_damage_this_turn && !creature_only
+            && !DamagedThisTurnPinLegal(s, caster, target)) { return false; }
         if (target <= 0)
         {
             if (!creature_only && (target == 0 || target == -1))
@@ -21130,7 +21256,7 @@ inline void PerformDamageEachCreatureAndPlayer(GameState& state, int controller,
     }
     state.players[controller].life     -= amt;
     state.players[1 - controller].life -= opp_hit;
-    state.opponent_lost_life_this_turn  = true;
+    state.opponent_lost_life_this_turn  = true; state.MarkPlayerDealtDamage(1 - controller, opp_hit); state.MarkPlayerDealtDamage(controller, amt);
 }
 
 // ---- Surtland Flinger: attack-trigger fling -----------------------------------------------------
@@ -21308,7 +21434,7 @@ inline void FireAttackSacFlingImpl(GameState& state, int controller,
         if (dmg > 0)
         {
             state.players[1 - controller].life -= dmg;
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, dmg);
         }
         if (g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
         {
@@ -23156,7 +23282,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     else if (mana_any && !any_color_float.empty())
     { AddChosenColorFloat(state, any_color_float, std::max(1, mana_amt)); }
-    if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
+    if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, dmg); }
     // LIFE payload (Brindle Boar): ONE gain event through the shared hook -> life_gained_this_turn
     // (Accomplished Alchemist's X) and the lifegain watchers, identically in both worlds.
     if (sac_gain > 0) { GainLife(state, controller, sac_gain); }
@@ -24622,7 +24748,7 @@ inline void ApplyChannel(GameState& state, int controller, int hand_index,
     DiscardCardFromHand(state, controller, idx, &mq, card_name);
     ResolvePendingMadness(state, mq, MadnessWindowNow(state), TakeMadnessPin(), card_name);
     state.players[1 - controller].life -= damage;
-    state.opponent_lost_life_this_turn = true;
+    state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, damage);
 }
 
 // TRANSMUTE (Dimir House Guard, CR 702.53): "{1}{B}{B}, Discard this card: Search your library for a
@@ -25558,7 +25684,7 @@ inline void ApplyAttackTriggerDamage(GameState& state, int controller,
         if (!d || d->params.attack_trigger_damage_any <= 0) { continue; }
         const int dmg = d->params.attack_trigger_damage_any;
         state.players[opp].life -= dmg;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, dmg);
         if (g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
         {
             EmitPlayEvent(state.turn_number, "damage",
@@ -25776,7 +25902,7 @@ inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
             if (dmg <= 0) { continue; }
             const int heads = gamesetup::OpponentHeads();
             state.players[1 - controller].life -= dmg * heads;
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, dmg);
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "damage",
@@ -26686,7 +26812,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 const int opp = 1 - controller;
                 const int before = state.players[opp].life;
                 state.players[opp].life -= d->params.firebreathing_threshold_damage;
-                state.opponent_lost_life_this_turn = true;
+                state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, d->params.firebreathing_threshold_damage);
                 if (g_play_event_sink && !g_tap_speculating)
                 {
                     EmitPlayEvent(state.turn_number, "damage",
@@ -30880,7 +31006,7 @@ inline void RunDrawPingStack(GameState& state, std::vector<DrawPingItem>& st, co
             const int idx = t.idx[it.slot];
             const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(idx)].card);
             state.players[opp].life -= d->params.draw_trigger_damage;   // "any target" -> face (fold)
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, d->params.draw_trigger_damage);
             ++pings;
             if (OpponentHasLost(state)) { return; }
             // Damage dealt TO AN OPPONENT by this creature: its Curiosity / Lookout draws trigger, mandatory
@@ -34631,7 +34757,7 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
         // Shivan Gorge: "deals 1 damage to each opponent" -- once per head (2HG = x2, shared pool).
         const int dmg = d->params.tap_damage_each_opponent * gamesetup::OpponentHeads();
         state.players[1 - controller].life -= dmg;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, dmg);
         dealt += dmg;
         if (g_play_event_sink)
         {
@@ -37591,6 +37717,7 @@ inline bool ResolveCounterPing(GameState& state, int controller, int source_id, 
         {
             state.players[t_player].life -= dmg;
             if (!to_me) { state.opponent_lost_life_this_turn = true; }
+            state.MarkPlayerDealtDamage(t_player, dmg);   // Needle Drop's damaged-this-turn: ANY damaged player
         }
         dealt = true;
         what  = to_me ? std::string("you") : std::string("the opponent");
@@ -38801,7 +38928,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // "Each opponent" -- once per head (2HG = x2, shared pool).
             const int dmg = d->params.tap_damage_each_opponent * gamesetup::OpponentHeads();
             state.players[1 - controller].life -= dmg;
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, dmg);
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "damage",
@@ -43873,7 +44000,7 @@ inline void CrackleHitExtraTargets(GameState& state, int controller, int per_tar
         if (bi == CRACKLE_OPP_FACE2)   // 2HG second head: 5X more into the shared team pool
         {
             state.players[1 - controller].life -= per_target_dmg;
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - controller, per_target_dmg);
             continue;
         }
         if (bi < 0) { state.players[controller].life -= per_target_dmg; continue; }   // self
@@ -49693,7 +49820,7 @@ inline void FireCycleWatchers(GameState& state, int controller)
                              * gamesetup::OpponentHeads();
         const int before = state.players[opp].life;
         state.players[opp].life -= dmg;
-        state.opponent_lost_life_this_turn = true;
+        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp, dmg);
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "damage",
@@ -57673,6 +57800,8 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
     {
         return RemovalControllerCastLegal(s, controller, 0, HumanPlayActive() || g_play_target_chooser != nullptr);
     }
+    // Needle Drop: "any target that was dealt damage this turn" -- some such target must exist.
+    if (pp.target_dealt_damage_this_turn) { return DamagedThisTurnTargetExists(s, controller); }
     switch (pp.targeting)
     {
         case Targeting::Creature:

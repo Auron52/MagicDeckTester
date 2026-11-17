@@ -76,6 +76,10 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
+        // NEEDLE DROP (2026-11-17): "any target that was dealt damage this turn" -- the spectacle bucket
+        // again, keyed on DAMAGE: combat damage is what makes the opponent a legal target, so its
+        // post-combat cast is a real line.
+        if (def->params.target_dealt_damage_this_turn) { return true; }
         // FALKENRATH PIT FIGHTER (Vampires A2, 2026-10-18): "Activate only if an opponent lost life this
         // turn" -- the spectacle bucket: combat damage is what unlocks the activation, so its whole line
         // ("attack, then discard + sacrifice a Vampire: draw two") lives in the post-combat main.
@@ -1729,6 +1733,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Shadowborn INT-2 (GameState::deck_has_morbid / deck_has_count_anthem / deck_has_demon_triggers).
         bool morbid = false, count_anthem = false, demon_triggers = false, sac_named = false;
         bool revolt = false;
+        bool reads_damage_dealt = false;   // Needle Drop (GameState::deck_reads_damage_dealt)
         bool ripple = false;   // Shadowborn INT-3: Thrumming Stone (grants_ripple) / innate ripple
         // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
         bool sac_tutor = false;
@@ -1830,6 +1835,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.echo_cost.has_value())          { echo = true; }
                 if (d->params.endstep_morbid_destroy_target_creature) { morbid = true; }
                 if (d->params.revolt_destroy_max_mv > 0) { revolt = true; }
+                if (d->params.target_dealt_damage_this_turn) { reads_damage_dealt = true; }
                 if (!d->params.creature_count_anthem_tiers.empty())  { count_anthem = true; }
                 if (d->params.sac_named_count > 0)                    { sac_named = true; }
                 if (d->params.grants_ripple > 0 || d->params.ripple > 0) { ripple = true; }
@@ -1934,6 +1940,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // walks (both worlds) and the demon-trigger plan axis are dead code for that deck.
         state.deck_has_morbid              = garth || morbid;
         state.deck_has_revolt              = garth || revolt;
+        // Same reasoning, no lever: a clear bit proves no card reads player_dealt_damage_this_turn, so
+        // its key folds are dead for that deck.
+        state.deck_reads_damage_dealt      = garth || reads_damage_dealt;
         state.deck_has_count_anthem        = garth || count_anthem;
         state.deck_has_demon_triggers      = garth || demon_triggers;
         state.deck_has_sac_named           = garth || sac_named;
