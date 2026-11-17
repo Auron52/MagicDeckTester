@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:17 UTC
+## Live status, updated 07:19 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -22,8 +22,8 @@ suite passed **3,385/3,385**, zero failures, console
 `build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
 The PGO rebuild is running in exec session `38090`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_spirits_shock_pair.out`.
-Its instrumented compile finished and the pooled 275-job/7,447-game
-profile training batch is active (07:13 UTC); optimized link follows.
+Its instrumented compile and pooled 275-job/7,447-game profile training
+batch finished; the optimized compile is active (07:19 UTC).
 The paired 5,000-game manifest is ready at
 `build/scratch/spirits_shock_pair_5k/manifest.json`, indices 45,000–49,999.
 `build/scratch/spirits_shock_pair_5k/run.sh` runs the default and lever-off
