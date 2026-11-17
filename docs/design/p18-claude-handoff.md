@@ -88,3 +88,20 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
 - No per-decision stop rule found (simllx.py): pass-1 rollout/leafless ratio does not separate the decks, and leafless
   growth extrapolation stops before cheap deep commits. Shipping model: per-deck opt-in on measurement.
 - H1 (running): 56 decks x 400 games, seeds 10,000,000+, arms heur / `m2_pll_pllr` / live shipped shape (all at d5/b20).
+- H1 (56 decks, seeds 10,000,000+, ALL arms at each deck's SHIPPED depth/budget; `LIVE_SETTINGS=1 mkfleet.py`): ABORTED
+  by the 20 GB RSS cap after 2,737/6,720 jobs (~170 paired games/deck, all decks). Lookahead vs heur: 0.31-0.9x CPU with
+  no later game on the rollout-heavy decks; later games only on Mill/Gods/Hinata/Cyclone/Melira/Shadowborn/NivMizzet/
+  Kitty/LFE/Eldrazi and 2 Alchemist. Vs the LIVE shipped shape (paired): cheaper with no later game on Red Elementals
+  0.63x, Morph 0.64x (3 earlier), Spirits 0.72x, Angels 0.79x, Boars 0.83x (1 earlier), Treasure Hunt 0.90x, Slivers
+  0.93x; the shipped no-leaf shapes are cheaper still on Critter/White Knights/Kithkin/Breaching/Dragons/etc.
+- TOOLING BUG FIXED: a `live` arm symlinked decks/*.value.json and mkfleet wrote mode 2 THROUGH it (48 deck sidecars in
+  this worktree overwritten, never committed; restored with git checkout). mkfleet now unlinks before writing.
+- Production mode `value_play.sampled_gate = 3` = `_pll` + `_pllr` (TurnSolver.cpp Knobs()).
+- H2 (RUNNING at compaction, `build/scratch/p18g/H2`, DONE marker H2/DONE, binary mtg_i6): 9 candidate decks x 1000
+  games, seeds 11,000,000+, shipped settings, arms heur / live / m3 / m2_pll_pllr. Read: `H2/summary.txt` (vs heur),
+  `H2/summary_vs_live.txt` (m3 vs live); also check m3 == m2_pll_pllr digests (identity of the production mode).
+- Next: if H2 is clean, adopt mode 3 on the bare-ladder decks (Red Elementals, Morph, Spirits: new
+  `{"value_play":{"sampled_gate":3}}`; Boars 2 -> 3), surface Angels/Treasure Hunt/Slivers to the USER (they ship other
+  shapes whose sidecars carry more than play settings); then unit tests, smoke + regression GT for the adopted decks'
+  rows, update docs/design/sampled-gate-ladder.md, push wip branch, watch CI. Open: CPU >> units on Kitty/Gods/Extra
+  Turns under the lookahead (unprofiled); memory growth at deep shipped settings (H1 abort).

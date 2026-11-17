@@ -96,7 +96,7 @@ struct ValuePlay
     // ladder's own order and STOPS as soon as the rollouts done so far bound the pass's full cost below the
     // threshold at which the ladder's gate admits the next pass. The final pass starts at the best bound found.
     // Only for decks with no value model. See docs/design/sampled-gate-ladder.md.
-    int sampled_gate = 0;   // 0 off, 1 raw research sampler, 2 measured fast shape (see TurnSolver.cpp)
+    int sampled_gate = 0;   // 0 off, 1 raw research sampler, 2 measured fast shape, 3 leafless lookahead (see TurnSolver.cpp)
     // Defer FIT's per-game R calibration to first use. -1 unset => the engine default (ON). Melira ships
     // false: it is the one deck where deferring measures worse.
     int    fit_lazy_r = -1;

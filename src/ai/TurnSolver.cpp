@@ -108366,7 +108366,16 @@ namespace p18
     inline Knob Knobs()
     {
         Knob o; const std::string& k = valuearm::t_deck_key;
-        if (valuearm::t_deck_sampled_gate >= 2)
+        if (valuearm::t_deck_sampled_gate == 3)
+        {
+            // Mode 3 (P18i): the LEAFLESS LOOKAHEAD (_pll) with no replay of its commits (_pllr). Leafless passes
+            // 1..depth; the first proven in-window win commits for the current turn only; otherwise the ordinary
+            // heuristic ladder runs from pass 1 with the lookahead's spend credited to its start gate. Measured
+            // 2026-11-17 (docs/design/sampled-gate-ladder.md, P18i): 0.31-0.80x heur CPU on rollout-heavy decks
+            // with no later game; worse than heur on gate-bound decks, so it is opt-in per deck.
+            o.ll = o.llr = true;
+        }
+        else if (valuearm::t_deck_sampled_gate == 2)
         {
             o.z = 0.0;   // the measured H7 shape; earlier `_pzn` arm names accidentally parsed as `_pz0`
             o.b1 = o.b2 = o.b3 = true;

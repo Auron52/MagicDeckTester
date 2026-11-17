@@ -232,7 +232,8 @@ inline thread_local double      t_deck_fit_alpha = 0.0;
 inline thread_local int         t_deck_fit_gate_ladder = -1;
 // value_play.rollout_from (P16 skip-leaves ladder): 0 = off; s >= 2 = passes 1..s-1 leafless, rollouts from s.
 inline thread_local int         t_deck_rollout_from = 0;
-// value_play.sampled_gate (P18 sampled-gate ladder): 0 = off; 1 = raw research mode; 2 = measured fast mode.
+// value_play.sampled_gate (P18 sampled-gate ladder): 0 = off; 1 = raw research mode; 2 = measured fast mode;
+// 3 = leafless lookahead (P18i, commits proven in-window wins without rollouts, else the ordinary ladder).
 inline thread_local int         t_deck_sampled_gate = 0;
 // The sidecar string -> the code above. Unknown strings read as unset (-1), like a missing key.
 inline int FitGateCode(const std::string& s)
