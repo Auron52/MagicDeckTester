@@ -9115,6 +9115,28 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
         else if (need[0] == 1 && need[1] >= 1 && karoo_wu >= 0
                  && black_white && other_generic)
         { mask |= 1ull << karoo_wu; }
+        // Spirits s30040647 T4: Souls {1}{B} before Millicent {W}{U}
+        // can use the two Godless Shrines for this bill, leaving Hallowed
+        // Fountain and Watery Grave for Millicent. The ordinary payer
+        // spends a blue land on Souls' generic pip and strands her. This
+        // is the deck's exact four-shockland route, so the held attempt
+        // costs nothing on other boards and still retries unrestricted.
+        static const bool s_shock_pair = EnvOn("MTG_SPIRITS_SHOCK_PAIR_HOLD", true); // DEFAULT ON; =0 restores
+        if (s_shock_pair && need[0] == 1 && need[1] >= 1)
+        {
+            int fountain = -1, watery = -1, godless = 0;
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+                if (p.controller_index != active || p.tapped) { continue; }
+                const std::string name = p.card.m_name.str();
+                if (name == "Hallowed Fountain") { fountain = i; }
+                else if (name == "Watery Grave") { watery = i; }
+                else if (name == "Godless Shrine") { ++godless; }
+            }
+            if (fountain >= 0 && watery >= 0 && godless >= 2)
+            { mask |= (1ull << fountain) | (1ull << watery); }
+        }
     }
     // The hand-cast Souls {2}{W} before Phantom {W}{W} has three white
     // providers: Chancery, an ordinary white land, and one creature-only

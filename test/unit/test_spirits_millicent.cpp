@@ -488,6 +488,24 @@ TEST_CASE("Millicent SAME TURN: FLASHBACK Souls first discounts her -- flashback
     MlCheckBothWorlds(s, *both, 2, 4);
 }
 
+TEST_CASE("Spirits: two Godless Shrines pay Souls before Millicent uses Fountain and Watery Grave")
+{
+    // s30040647 T4: ordinary Souls payment spends one blue land on its
+    // generic pip and strands Millicent's {W}{U}, although the two
+    // Godless Shrines can pay Souls together.
+    GameState s = MlBoard({ "Hallowed Fountain", "Watery Grave", "Godless Shrine", "Godless Shrine" });
+    MlPut(s, "Supreme Phantom", 1);
+    MlPut(s, "Mausoleum Wanderer", 2);
+    MlPut(s, "Shacklegeist", 3);
+    s.players[0].graveyard.push_back(MlZone(kSouls, 40));
+    s.players[0].hand.push_back(MlZone(kMill, 31));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = MlFindPlan(plans, {{Action::Kind::CastFromGraveyard, kSouls},
+                                                      {Action::Kind::CastFromHand, kMill}});
+    REQUIRE(both != nullptr);
+    MlCheckBothWorlds(s, *both, 2, 4);
+}
+
 TEST_CASE("Millicent after a flashback is not a free lunch: THREE lands cannot pay flashback Souls + Millicent")
 {
     GameState s = MlBoard({ "Godless Shrine", "Hallowed Fountain", "Island" });
