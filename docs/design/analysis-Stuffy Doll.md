@@ -75,7 +75,7 @@ implementer agent per step, serial.
 | 8 | Nomads en-Kor shields (sweeper rider) | DONE a4f820e2a (unit 3441, scen 573/573, smoke 0/219 moved vs 7; shield allocation = pins chosen at sweep resolution (dmgrx::AddShieldRider/PinnedChoice), shields live on the damage Batch (no GameState list); tie fold narrower than §4.2 (face-only reflectors folded; Reckoner/Nemesis/GC'd/Doll-chose-us kept apart); autonomous play never redirects onto a live non-reflector (viewer `divide` still offers all); Nomads+Act+Doll = 26 kills T4, control fixture leaves opp at 8; Q-R1 default: shield to a departed target not spent (CR 614.9)) |
 | 9 | Shaman en-Kor {1}{W} pull | DONE 268e96f4a (unit 3447, scen 576/576, smoke 0/219 moved vs 8; pulls on the damage Batch applied before shields (CR 616.1); count/targets searched with folds P0-P3; {1}{W} paid at sweep resolution via TapForCostDirect, offered only while affordable; Shaman pull Spirit kill from 39 T4, Nomads control no win by T6) |
 | 10 | StuffyDollProvider + ExtraLethalDamage | IN PROGRESS (~20:15 UTC) |
-| 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35) | pending (after 10) |
+| 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35); provider GC-host restriction to loop-sustaining creatures (USER 20:40) | pending (after 10) |
 | 11 | second main (Q-U4) | pending |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
@@ -98,6 +98,13 @@ deferrals provisional.
   => step 9b also makes the Nomads/Shaman {0} shields apply to ANY damage event in the engine, with the provider
   restricting them to our sweeper (same shape as the pull). Low priority within 9b: the other in-deck routes onto an
   en-Kor are corner cases (a reflection aimed at an en-Kor; GC on an attacking en-Kor).
+- USER RULING 2026-11-17 ~20:40 UTC (verbatim, GC host): "Fair enough, the Guilty Conscience is something that can
+  actually happen in practice. That said, it's not a good play to put it on the en-Kor. You should always choose
+  something that can keep the loop going."
+  => StuffyDollProvider RESTRICTS Guilty Conscience hosts to creatures that keep the loop going: our creatures whose
+  being dealt damage makes them deal damage (Doll, Reckoner, Nemesis, Mogg Maniac, Slivers under a Spiteful grant).
+  Restrict-only heuristic (engine still models every host; lifted by MTG_UNPRUNE / human play). If no such host
+  exists the provider must not empty the list (keep the engine's list). Built in step 9b with the pull/shield hooks.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
