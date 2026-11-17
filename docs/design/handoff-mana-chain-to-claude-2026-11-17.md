@@ -46,9 +46,20 @@ plans). Deferred doc: `docs/design/merfolk-turns-champion-fan-rss-2026-11-17.md`
 {B} and even `MTG_UNSEEN_KEEP_SCARCE` cannot keep Bloom's black through ten payments. This is the same open design
 question as s30086338: carry a visible-but-unnamed closer's colour (or spend a banked land) under an opener line.
 
-**IN FLIGHT (18:54 UTC): near-clean six-deck gate** `claude-nearclean-20261117` (pirates, shadowborn_apostle,
-fluctuator, minotaur, angels, vampires; 5,000 each). Console `build/scratch/claude_gate/nearclean.out`, pid in
-`nearclean.pid`. Next: read the report, commit the record, fix any small concrete flags.
+**DONE 19:14 UTC: near-clean six-deck gate** `claude-nearclean-20261117` (record `fe5ca5ef1`): Fluctuator CLEAN,
+Minotaur CLEAN; Pirates 6, Shadowborn 11, Angels 27 (23 APPLY-DROP-ORDER), Vampires 2. Report
+`logs/mana_clean/claude-nearclean-20261117/report.md`.
+
+**DONE 19:31 UTC: Pirates s30108757** `7c1733619` (`MTG_PREPAY_CCO_CAST_DIG`, ON): every Pirates issue,
+6 -> 0. Knights + Pirates A/B identical. `docs/design/prepay-cco-cast-dig-2026-11-17.md`.
+
+**LESSON + CORRECTION (same commit):** never cache a heurarm-backed lever reader in a function-local
+`static const`. The first caller's value freezes, so a pooled A/B runs every job on the first job's arm.
+`MTG_ONDEMAND_VISIBLE_CONTRIB` (pushed 16:44) had that bug, and its "byte-identical" A/B was invalid. It is now read
+per call and re-measured: Dragonstorm 10,000 pairs, 1 earlier / 0 later (net -1). The other new levers were
+already per call.
+
+**NEXT:** push at >= 20:44 UTC (smoke first). Then Vampires s30230089, Shadowborn, Angels' order drops.
 
 **THEN:** the PD CAPPED fold, then the deck queue (Pirates, Extra
 Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph, Landfall Elementals, Dragons, stale-clean decks). Then the Merfolk Turns RSS runaway, the PD CAPPED
