@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:27 UTC
+## Live status, updated 07:30 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -46,7 +46,8 @@ The fresh PGO Spirits mana-clean gate is now active in exec session
 --games 5000 --name codex-spirits-shock-pair-20261117`, console
 `build/scratch/spirits_shock_pair_5k/mana_clean.out`. It covers indices
 45,000–49,999 (the next due block, also used by the paired A/B). After
-it completes, inspect its report and commit
+the oracle-on arm finished all 52 chunks, and the oracle-off arm is now
+active. After it completes, inspect its report and commit
 `test/mana_clean.json`; then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
