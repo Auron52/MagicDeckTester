@@ -2,7 +2,15 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 04:39 UTC
+## Current state, updated 04:42 UTC
+
+**Active batch:** refreshing four older issue records at source
+`fcb9352608ea`, 5,000 games each: Anti-Lifegain, Bruna, Midrange Burn,
+and Selesnya Lifegain. Command:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run anti_lifegain bruna midrange_burn selesnya_lifegain --games 5000 --name codex-due-four-20261117`.
+Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
+`logs/mana_clean/codex-due-four-20261117/report.md` when complete.
+Commit the updated `test/mana_clean.json` and this handoff after it finishes.
 
 **Six due-issue decks now refreshed:** Boars, Dragons, Goblins, Hydras,
 Jumbo Cactuar, and Morph each ran 5,000 games at PGO source
