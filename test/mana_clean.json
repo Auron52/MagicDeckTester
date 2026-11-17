@@ -3135,6 +3135,52 @@
      "seed": 30077000,
      "src": "7ecf53121b172fb2cbf078f7e5f554086b7b28fe",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 66,
+      "APPLY-DROP-ORDER": 4,
+      "CAPPED-DECISION": 79,
+      "CONTINUATION-DIFFERS": 28,
+      "DECISION-COST": 1,
+      "DOMINATED-LAND": 15268,
+      "DROP-COVERED": 3153,
+      "ENUM-GAP": 2,
+      "HIDDEN-INFO": 88,
+      "ORACLE-GAP": 1,
+      "PHANTOM": 10832
+     },
+     "commit": "4c59da8c69bca7d12c9046e351533f856169fbe8",
+     "date": "2026-11-17T17:02:06Z",
+     "decisions": 38647,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 82000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 152,
+     "life_breakpoints": [],
+     "ms_off": 453986,
+     "ms_on": 3012709,
+     "report": "logs/mana_clean/claude-dragonstorm-swap-20261117/report.md",
+     "run": "claude-dragonstorm-swap-20261117",
+     "seed": 30082000,
+     "src": "c19b4de92077d4d5e16298615a6a4eda69d748ed",
+     "verdict": "issues"
     }
    ]
   },
