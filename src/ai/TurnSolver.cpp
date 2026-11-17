@@ -117734,7 +117734,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, nmw = false, pfp = false, paw = false, pkt = false, plx = false, pzb = false, pxa = false; double pwc = 0.0, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, nmw = false, pfp = false, paw = false, pkt = false, plx = false, pzb = false, pxa = false, pip = false; double pwc = 0.0, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -117753,8 +117753,10 @@ namespace p18
         {
             // Mode 4 (P18j): the WIN-TRIGGERED lookahead (_pllw) with a refunded miss (_plrf) and no replay (_pllr),
             // before pass 1 only (_pnm), its target pass and cheap leafless passes walked past the predicted reach
-            // (_pkt, _plx). Screened on P1..P16 (docs/design/sampled-gate-ladder.md, P18j).
-            o.llw = o.lrf = o.llr = o.nmw = o.pkt = o.plx = true;
+            // (_pkt, _plx), the root rollout backed off for the rest of a game after two consecutive cuts (_pzb), and a
+            // past-reach allowance of the whole decision budget (_pal100; the priced cap bounds it). Screened on P1..P16
+            // and S2..S5 (docs/design/p18-claude-handoff.md, P18j): S5 0.959x heur CPU, 2 earlier / 0 later games.
+            o.llw = o.lrf = o.llr = o.nmw = o.pkt = o.plx = o.pzb = true; o.pal = 1.0;
         }
         else if (valuearm::t_deck_sampled_gate == 2)
         {
@@ -117974,6 +117976,11 @@ namespace p18
         // _pal<percent> (screen): the past-reach allowance as a fraction of the decision budget (default 10). S4: at 10% a
         // Kithkin / Minotaur / Soldiers intermediate pass was cut ~2.2k units in where S2 (no allowance) hit at ~8k.
         { const std::size_t p = k.find("_pal"); if (p != std::string::npos) { o.pal = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pip (screen): before walking an intermediate pass k (k < target - 1), extrapolate passes k..target-1 (price growth
+        // for the reach gate, leafless growth for _plx) and stop now if one of them would be refused -- the walk could not
+        // reach its target, and every pass walked would only duplicate the ladder's own (Melira H1: W3 44,933 units, heur's
+        // H3 44,935, then W4 refused).
+        if (k.find("_pip") != std::string::npos) { o.pip = true; }
         // _pzc<permille> (screen): the root rollout's cap as a fraction of the decision budget (default 10 = 1%).
         { const std::size_t q = k.find("_pzc"); if (q != std::string::npos) { o.pzc = std::atof(k.c_str() + q + 4) / 1000.0; } }
         // _pwc<x10> (screen): a walked leafless pass may spend at most x times the ladder gate's estimate of the
@@ -128015,7 +128022,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // (every pass below kfrom refuted: no in-window win, so the first in-window win a pass returns is the minimum) and
     // commits the first in-window win for the current turn only. Without a commit the spend since u0 is refunded
     // (_plrf), so the ladder continues on exactly its own budget. Returns true when it committed.
-    bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_nmw = false, p18_llt = false, p18_pfp = false, p18_pkt = false, p18_plx = false, p18_pxa = false; double p18_pwc = 0.0, p18_pal = 0.1;
+    bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_nmw = false, p18_llt = false, p18_pfp = false, p18_pkt = false, p18_plx = false, p18_pxa = false, p18_pip = false; double p18_pwc = 0.0, p18_pal = 0.1;
     std::unique_ptr<TranspositionTable> p18_wtt;   // _pllt with _pllw: the walks' own table, built on first use
     int  p18_walks = 0;                 // mid-ladder walks taken this decision
     long long p18_z_add = 0;            // the root rollout's units: they warmed pass 1's rollouts, so its gate cost carries them
@@ -128078,8 +128085,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (ol_saved > 0) { cap_abs = std::min(cap_abs, ol_saved); }
         }
         bool won = false;
+        double pl1 = 0.0, pl2 = 0.0;   // _pip: this walk's leafless costs of the two passes below k
         for (int k = kfrom; k <= kto; ++k)
         {
+            if (p18_pip && !unl && k >= 2 && k < kto - 1)
+            {
+                double pc1 = cm1, pc2 = cm2, ql1 = pl1, ql2 = pl2, sp = spent; bool ok = true;
+                for (int dd = k; dd < kto; ++dd)
+                {
+                    const double ratio = pc2 > 0.0 ? pc1 / pc2 : kDefaultGrowth;
+                    const double est = pc1 * ratio;
+                    const double lest = ql2 > 0.0 ? ql1 * ql1 / ql2 : ql1 * kDefaultGrowth;
+                    if (dd > k && est > gate_alpha * std::max(0.0, rem_ref - sp) && !(p18_plx && lest <= pc1)) { ok = false; break; }
+                    sp += est; pc2 = pc1; pc1 = est; ql2 = ql1; ql1 = lest;
+                }
+                if (!ok) { p16::Rec('W', k, 0, 0, 7, max_turns + 1, 0); break; }
+            }
             double est_k = 0.0;
             long long beyond = 0;   // > 0: this pass is past the predicted reach, with this allowance
             if (!unl && k >= 2)
@@ -128141,7 +128162,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const double r = q * static_cast<double>(std::max(0, W - state.turn_number - k));
             const double ck = k < 16 ? static_cast<double>(p18_wl[k]) + static_cast<double>(p18_wn[k]) * r
                                      : static_cast<double>(lk) + static_cast<double>(nk) * r;   // rollout pass k's price
-            spent += ck; cm2 = cm1; cm1 = ck;
+            spent += ck; cm2 = cm1; cm1 = ck; pl2 = pl1; pl1 = static_cast<double>(lk);
             p16::Rec('W', k, lk, static_cast<long long>(ck), 0, pr.win_turn, p18_ms);   // leaf field = the price; dvs = ms
             if (pr.win_turn <= state.turn_number + k - 1)
             {
@@ -128200,7 +128221,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         int p18_k3_gap = INT_MAX;        // exact pass-three rollout win minus its searched horizon
         long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
         bool p18_ll_done = false;         // _pll: the lookahead decided this decision (commit or ladder fallback)
-        p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_nmw = kn.nmw; p18_pwc = kn.pwc; p18_llt = kn.llt; p18_pfp = kn.pfp; p18_pkt = kn.pkt; p18_plx = kn.plx; p18_pxa = kn.pxa; p18_pal = kn.pal;
+        p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_nmw = kn.nmw; p18_pwc = kn.pwc; p18_llt = kn.llt; p18_pfp = kn.pfp; p18_pkt = kn.pkt; p18_plx = kn.plx; p18_pxa = kn.pxa; p18_pip = kn.pip; p18_pal = kn.pal;
         if (p18_llw)
         {
             // EPOCH-ISOLATED: the per-decision memos (the rollout main-1 solve memo, the enumeration and greedy-Solve
