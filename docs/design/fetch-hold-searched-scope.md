@@ -16,6 +16,9 @@
 * *"(or if they would actually die from fetching, but in that case you usually cannot crack at all)"* --
   i.e. the one non-landfall hold is "cracking would kill me", where the fetch is effectively uncrackable,
   not a timing choice. In goldfish that means life 1: the fetch's own 1 life is lethal.
+* *"(die or put yourself at an easy life breakpoint like 3 life vs burn)"* -- the breakpoint case needs an
+  opponent that can punish low life, so it is a Phase-2 (real opponent) concern; against the passive
+  goldfish opponent only the lethal case can arise.
 
 ## What this means
 
