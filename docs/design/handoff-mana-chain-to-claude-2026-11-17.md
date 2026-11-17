@@ -12,6 +12,11 @@ Check its exit and PGO source stamp before any fresh mana gate. A
 second reference safety scan is also running (session `70825`, output
 `build/scratch/dragonstorm_visible_lump_ab/reference_check_pre_push.out`)
 but the push now waits on this new source validation.
+The second reference scan passed after 210 checkouts/worktrees. With
+the new source hash, `python3 scripts/mana_clean.py status` reads 56
+decks: **36 issues, 18 stale-clean, two never-run; 38 DUE**. These are
+source-stamp statuses, not evidence that the Boars change broke clean
+decks. Fresh blocks are needed before calling the queue current again.
 
 **Upstream source integration supersedes the active gate:** at 05:15
 UTC, `origin/phase-1-2-deck-analyzer` gained three Boars label-memory
