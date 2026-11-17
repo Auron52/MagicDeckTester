@@ -52164,6 +52164,11 @@ constexpr int kCrossingLandPinMask     = (1 << kCrossingLandPinBits) - 1;
 constexpr int kCrossingLandMaxOrdinals = 12;   // 60 bits of the int64 pin; a 13th+ decision takes its front
 struct CrossingLandProbe { int n = 0; int size[kCrossingLandMaxOrdinals] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }; };
 inline thread_local CrossingLandProbe* t_crossing_land_probe = nullptr;
+// MTG_CROSSING_LAND_STATS (TurnSolver.cpp crossinglandcensus, I3b): the no-greedy census for the crossing-land pin.
+// `unpinned` = an UNPINNED decision with a real choice (width > 1), classified by frame (searched-frame must read
+// 0); `overflow` = a fanned crossing's decision past the pin's kCrossingLandMaxOrdinals (it takes its front).
+using CrossingLandUnpinnedHook = void (*)(const GameState&, int width, bool overflow);
+inline CrossingLandUnpinnedHook g_crossing_land_unpinned_hook = nullptr;
 
 // Take the next ordinal's rank for a decision of `width` options (width <= 1: no decision, nothing consumed).
 inline int TakeCrossingLandRank(GameState& state, int width)
@@ -52173,9 +52178,14 @@ inline int TakeCrossingLandRank(GameState& state, int width)
     if (CrossingLandProbe* pr = t_crossing_land_probe)
     {
         if (pr->n < kCrossingLandMaxOrdinals) { pr->size[pr->n] = width; }
+        else if (g_crossing_land_unpinned_hook != nullptr) { g_crossing_land_unpinned_hook(state, width, true); }
         ++pr->n;
     }
-    if (state.scripted_crossing_lands < 0) { return 0; }
+    if (state.scripted_crossing_lands < 0)
+    {
+        if (g_crossing_land_unpinned_hook != nullptr) { g_crossing_land_unpinned_hook(state, width, false); }
+        return 0;
+    }
     const int r = static_cast<int>(state.scripted_crossing_lands & kCrossingLandPinMask);
     state.scripted_crossing_lands >>= kCrossingLandPinBits;
     return std::min(r, width - 1);
@@ -52291,6 +52301,12 @@ inline void PerformEndStepManabond(GameState& state)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d != nullptr && d->card.IsLand()) { ++lands; }
         }
+        // A "yes" with NO land in hand only reveals and discards the hand. The provider may prove that dominated
+        // (a deck where no card gains from a discard or an emptier hand: MazesEndProvider) -- a RESTRICTION of the
+        // menu to {no}, never consulted in human play (the person is asked).
+        if (lands == 0 && !(g_play_dig_chooser && !g_tap_speculating)
+            && ResolveProvider(state).CrossingDumpWithoutLandDominated(state, me))
+        { return; }   // every later copy meets the same hand
         // rank 0 = the default answer (yes with a land to put, else no); rank 1 = the other.
         const bool default_yes = lands > 0;
         bool yes = TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes;

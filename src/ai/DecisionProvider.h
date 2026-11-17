@@ -4858,6 +4858,22 @@ public:
         else if (p.etb_sacrifice_unless_pay.has_value()) { out = { 1, 0 }; }
         return out;
     }
+
+    // CrossingDumpWithoutLandDominated -- Manabond's end-step "you may reveal your hand and put all land cards
+    // from it onto the battlefield. If you do, discard your hand" with NO land in hand: "yes" only discards the
+    // hand. A RESTRICTION hook (Maze's End I3b; core/SpellEffects.h PerformEndStepManabond): true drops "yes"
+    // from the searched menu, sound only for a deck where no card gains from a discard, a card in the
+    // graveyard, or a smaller hand. Default false: both answers are searched. Never consulted in human play.
+    virtual bool CrossingDumpWithoutLandDominated(const GameState&, int /*controller*/) const { return false; }
+
+    // AlternateWinNeedsAction -- is ProjectsAlternateWin's win one that only a specific ACTION realises (Maze's
+    // End's {3},{T} activation), rather than a board-level loss the turn produces whatever the plan does (a
+    // deck-out)? True keeps the board-level projection OFF the plan enumeration's per-plan `wins` label
+    // (TurnSolver.cpp, EnumeratePlansWithLand's subset loop), where it marked EVERY plan of the turn a win --
+    // and SolveWithLookahead returns the first such plan unexecuted at an interior node, so a plan that does not
+    // activate was adopted unsearched and the line's later crossing choices fell to their fronts in the window
+    // (Maze's End I3b, MTG_CROSSING_LAND_STATS). The activation plan's win is found by execution. Default false.
+    virtual bool AlternateWinNeedsAction() const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

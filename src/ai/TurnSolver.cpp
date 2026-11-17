@@ -84902,7 +84902,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // alternate-win model -> byte-identical. NOTE this site deliberately does NOT add
         // ExtraLethalDamage, which its twin in Solve does -- that asymmetry is pre-existing and is
         // its own question; widening it here would change other decks.
-        if (!wins && has_extra_lethal
+        if (!wins && has_extra_lethal && !ResolveProvider(state).AlternateWinNeedsAction()   // Maze's End: I3b
             && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
         if (xw_early && !(iren_waste && !wins)) { xwearly::g_v_reach.fetch_add(1, std::memory_order_relaxed); }
         if (iren_waste && gefcensus::On())
@@ -110065,15 +110065,18 @@ static bool CrossingLandUncoveredPending(const GameState& state)
         manabond   = manabond || d->params.endstep_may_dump_hand_lands_discard_hand;
         burgeoning = burgeoning || d->params.opponent_land_play_put_land_from_hand;
     }
+    if (!manabond && !(burgeoning && state.opponent_plays_lands)) { return false; }
     const Player& ap = state.players[static_cast<std::size_t>(me)];
-    if (manabond && !ap.hand.empty()) { return true; }
-    if (!burgeoning || !state.opponent_plays_lands) { return false; }
+    bool has_land = false;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && d->card.IsLand()) { return true; }
+        if (d != nullptr && d->card.IsLand()) { has_land = true; break; }
     }
-    return false;
+    if (has_land) { return true; }
+    // No land in hand: Burgeoning has nothing to put; Manabond's yes only discards -- a choice unless the provider
+    // proves it dominated (PerformEndStepManabond's same restriction, I3b).
+    return manabond && !ap.hand.empty() && !ResolveProvider(state).CrossingDumpWithoutLandDominated(state, me);
 }
 // HERALD'S HORN (Boars I1): the next upkeep's take/leave is decided at this crossing when a Horn we control is on
 // the battlefield and the state's pin does not already cover that upkeep. Same scope as the face-up axis above
@@ -110197,6 +110200,51 @@ struct Installer
 static Installer s_installer;
 }
 long long TurnSolver::FaceUpSearchedFrameUnpinnedForTest() { return faceupcensus::g_searched.load(); }
+
+// MTG_CROSSING_LAND_STATS (Maze's End I3b): the no-greedy census for the crossing-land pin (SpellEffects.h
+// TakeCrossingLandRank) -- Manabond's yes/no, each dumped land's as-enters value, Burgeoning's which-land. An
+// UNPINNED decision with a real choice is classified exactly like the face-up census above: searched-frame (no
+// BoundaryFan covered the crossing -- must read 0), playout beyond the horizon / the d0 runner (permitted),
+// constant-leaf edge (the identity fold), outside any search, or the executor's real crossing (the committed line
+// recorded nothing and ChooseRealCrossingLands did not decide it). `overflow` counts decisions past the pin's 12
+// ordinals inside a fanned crossing (each takes its front unsearched: must read 0, or the pin needs widening).
+// =2 prints each searched-frame / overflow hit.
+namespace crossinglandcensus
+{
+inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_edge{0}, g_outside{0}, g_real{0}, g_overflow{0};
+static void Note(const GameState& s, int width, bool overflow)
+{
+    const bool loud = EnvInt("MTG_CROSSING_LAND_STATS", 0) >= 2;
+    if (overflow)
+    {
+        g_overflow.fetch_add(1, std::memory_order_relaxed);
+        if (loud) { std::fprintf(stderr, "[crossing-land] OVERFLOW ordinal: seed=%llu T%d width=%d\n",
+                                 static_cast<unsigned long long>(s.game_seed), s.turn_number, width); }
+        return;
+    }
+    if (g_real_resolution) { g_real.fetch_add(1, std::memory_order_relaxed); return; }
+    if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    if (EchoEdgeFoldHere(s)) { g_edge.fetch_add(1, std::memory_order_relaxed); return; }
+    g_searched.fetch_add(1, std::memory_order_relaxed);
+    if (loud) { std::fprintf(stderr, "[crossing-land] SEARCHED-FRAME unpinned decision: seed=%llu T%d width=%d\n",
+                             static_cast<unsigned long long>(s.game_seed), s.turn_number, width); }
+}
+struct Installer
+{
+    Installer() { if (EnvOn("MTG_CROSSING_LAND_STATS")) { g_crossing_land_unpinned_hook = &Note; } }
+    ~Installer()
+    {
+        if (g_crossing_land_unpinned_hook == nullptr) { return; }
+        std::fprintf(stderr, "[crossing-land] unpinned decisions: searched-frame=%lld (must be 0) playout=%lld "
+                             "edge=%lld outside-window=%lld real-crossing=%lld | fanned overflow=%lld (must be 0)\n",
+                     g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load(), g_real.load(),
+                     g_overflow.load());
+    }
+};
+static Installer s_installer;
+}
 
 // MTG_CHAMPION_AXIS_STATS: the no-greedy census for CHAMPION's exile pick (Nova Chaser; ResolveChampionEtb's
 // unpinned branch, the provider's front). Every in-window pick is a searched variant (the cast / put menus, and
@@ -122161,6 +122209,35 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
     return best;
 }
 
+// MAZE'S END I3b -- the group-wave tranche scorer's crossing (SolveWithLookahead `score_gw`). That host crossed with
+// a bare SimulateEndAndStartNextTurn, so a tranche plan adopted as the pass best carried NO boundary pin, and every
+// crossing choice under it fell to its unpinned front INSIDE the search window (MTG_CROSSING_LAND_STATS read 66
+// searched-frame decisions on one Maze's End game, seed 91051 gi50 d3 b10). Here the crossing-land digit alone is
+// fanned and recorded (the bp-wave / main-loop hosts' BoundaryChooseByRollout shape, cl_only). Deck-gated: no other
+// deck reaches the fan. The same host leaves the OTHER boundary axes (echo, Defense of the Heart, face-up, ...)
+// unfanned -- a pre-existing hole, owed (fixing it moves those decks' play: a held-out A/B, the USER's call).
+static BoundaryChoice BoundaryChooseCrossingLandsByRollout(GameState& copy, int sub_depth, int max_turns,
+                                                           SearchBudget* budget, int cutoff, bool second_main,
+                                                           TranspositionTable* tt)
+{
+    BoundaryChoice best;
+    if (!copy.deck_has_crossing_land_put) { return best; }
+    BoundaryFan fan(copy, /*with_echo=*/false, false, false, false, false, false, false, /*cl_only=*/true);
+    if (!fan.CrossingLandLive()) { return best; }
+    int best_wt = max_turns + 2;
+    while (fan.Next())
+    {
+        GameState ce = copy;
+        fan.Stamp(ce);
+        int wt = max_turns + 1;
+        const int cut = best_wt <= max_turns ? std::min(cutoff, best_wt - 1) : cutoff;
+        if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub_depth, max_turns, budget, cut, second_main, tt); }
+        if (wt < best_wt) { best_wt = wt; best.crossing_lands = fan.CrossingLandPin(); }
+    }
+    if (best.crossing_lands != -2) { copy.scripted_crossing_lands = best.crossing_lands; }
+    return best;
+}
+
 static thread_local const GameState* g_current_search_root_state = nullptr;
 
 const GameState* TurnSolver::CurrentSearchRootState()
@@ -124695,6 +124772,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     return true;
                 }
                 if (ko) { ko_rolled = true; }
+                // The crossing-land digit (Maze's End I3b; see BoundaryChooseCrossingLandsByRollout).
+                const BoundaryChoice gw_bc = BoundaryChooseCrossingLandsByRollout(
+                    copy, sub_depth, max_turns, budget, pass_has_best ? pass_best_win : max_turns + 1, second_main, tt);
                 if (!SimulateEndAndStartNextTurn(copy)) { return true; }
                 if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
                 { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } return true; }
@@ -124708,6 +124788,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
                 pass_best_win = win_turn;
                 pass_best     = v;
+                RecordBoundaryChoice(pass_best, gw_bc);
                 pass_has_best = true;
                 return true;
             };
