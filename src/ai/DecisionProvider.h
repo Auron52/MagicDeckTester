@@ -4882,6 +4882,25 @@ public:
     // (Maze's End P1: the per-subset call was 10.7% + its Gate-name scans ~12% of a tail game's wall). Default
     // false: every override that might read `casting` keeps the per-subset call.
     virtual bool AlternateWinProjectionIgnoresCasting() const { return false; }
+
+    // NoWinLeafProgress -- DEFAULT 0 (every deck byte-identical). ALTERNATE-WIN PROGRESS for the graded no-win
+    // leaf (leafeval::Quantity, GradesNoWinLeaf): a value SUBTRACTED from the leaf quantity (lower = better), in
+    // the quantity's own units -- 1,000,000 per point of opponent life -- so a deck whose win is not damage can
+    // state its progress as LIFE-EQUIVALENT. Read only when a rollout reaches the horizon with no win, so it
+    // only ever orders equal-win-turn no-win lines; a win inside the horizon still beats any of them. For a deck
+    // whose opponent life never moves (Maze's End: ten Gate names) the life term ties every no-win leaf and the
+    // search is blind beyond the win turn without this (P1: 18.6M life-equal ties of 33.9M published).
+    // Evaluation, not a prune: it removes no option.
+    virtual long long NoWinLeafProgress(const GameState&) const { return 0; }
+
+    // TapTutorPutEval -- DEFAULT 0 (byte-identical). The plan-scoring `eval` of a TapTutorPut activation that
+    // fetches `target` (kTutorDeclineTarget = the fail-to-find). The greedy walk ranks a subset by the sum of
+    // its candidates' evals, so at 0 an activation whose value is progress toward an alternate win (Maze's End
+    // fetching a NEW Gate name) ties with not activating and the beyond-horizon playout leaves it to the
+    // tie-break (P1: the d0 policy won 21/60 games by T8). Evaluation of an option, never a prune: the searched
+    // walk still enumerates every target.
+    virtual int TapTutorPutEval(const GameState&, const CardDefinition& /*source*/, const std::string& /*target*/) const
+    { return 0; }
 };
 
 // ---------------------------------------------------------------------------------------------------

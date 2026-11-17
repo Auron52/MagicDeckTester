@@ -66573,3 +66573,59 @@ int MazesEndProvider::ActivationOrderRankForAction(const GameState& s, const Car
     if (a.kind == Action::Kind::Channel && d.params.hand_put_self_cost.has_value()) { return -1; }
     return DeckProvider::ActivationOrderRankForAction(s, d, a);
 }
+
+// Maze's End P1b: ALTERNATE-WIN PROGRESS in the graded no-win leaf (see the base hook). The opponent's life never
+// moves for this deck, so without it every no-win rollout end ties and the search cannot tell a line that reached
+// eight Gate names from one that reached four. Life-equivalent: ten names win, as twenty life does, so one NEW
+// name is worth two life (2,000,000). Under it, never adding up to one name (900,000 at most): Maze's End held
+// (battlefield or hand -- the activation returns it to hand, so both are "the engine is ours") 500,000, and each
+// distinct Gate name in hand that we do not control yet (next turn's land drop adds it) 100,000, at most four.
+// The library is deliberately NOT read (a per-leaf scan of ~40 cards on every graded leaf, and it rarely binds).
+long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
+{
+    static const bool s_on = EnvOn("MTG_MAZE_LEAF_PROGRESS", true);   // DEFAULT ON; =0 -> opponent life alone
+    if (!heurarm::Flag(heurarm::MAZE_LEAF_PROGRESS, s_on)) { return 0; }
+    static const CardDefinition* maze = CardDatabase::Instance().Lookup("Maze's End");
+    if (maze == nullptr || maze->params.alt_win_distinct_named_count <= 0) { return 0; }
+    const CardParams& mp = maze->params;
+    const int me = s.active_player_index;
+    const int need = mp.alt_win_distinct_named_count;
+    const int names = CountDistinctNamedLandsWithSubtype(s, me, mp.alt_win_distinct_named_subtype, need);
+    long long p = static_cast<long long>(names) * 2000000LL;
+    bool held = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index == me && q.card.m_name == maze->card.m_name) { held = true; break; }
+    }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    int hand_new = 0;
+    std::array<const std::string*, 8> seen{};
+    for (const Card& c : pl.hand)
+    {
+        if (!held && c.m_name == maze->card.m_name) { held = true; continue; }
+        if (hand_new >= 4) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsLand() || !CardHasSubtype(d->card, mp.alt_win_distinct_named_subtype)) { continue; }
+        const std::string& nm = c.m_name.str();
+        bool dup = false;
+        for (int i = 0; i < hand_new; ++i) { if (*seen[static_cast<std::size_t>(i)] == nm) { dup = true; break; } }
+        if (dup || MazeControlsGateNamed(s, me, nm)) { continue; }
+        seen[static_cast<std::size_t>(hand_new++)] = &nm;
+    }
+    if (held) { p += 500000LL; }
+    p += static_cast<long long>(hand_new) * 100000LL;
+    return p;
+}
+
+// Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two
+// damage-equivalents, the same life-equivalence as NoWinLeafProgress) so the greedy walk takes it over leaving
+// the {3} unspent. A duplicate name and the fail-to-find stay 0 (the activation then only moves Maze's End to
+// hand). Evaluation only: the searched walk enumerates every target whatever its eval.
+int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const
+{
+    static const bool s_on = EnvOn("MTG_MAZE_FETCH_EVAL", true);   // DEFAULT ON; =0 -> every fetch 0
+    if (!heurarm::Flag(heurarm::MAZE_FETCH_EVAL, s_on)) { return 0; }
+    if (source.params.alt_win_distinct_named_count <= 0 || target == kTutorDeclineTarget) { return 0; }
+    if (!MazeNameIsGate(target) || MazeControlsGateNamed(s, s.active_player_index, target)) { return 0; }
+    return 200;
+}

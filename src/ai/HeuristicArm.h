@@ -959,6 +959,8 @@ enum Slot : int
     REDELEM_TRICK_FOLD,       // MTG_REDELEM_TRICK_FOLD  Red Elementals Stage 5f (sound dominance fold): RedElementalsProvider::TrickTargetsAttackersOnly + TrickTargetCandidates -- Legion Leadership (a solo-target trick whose payload is until-end-of-turn combat power) is not aimed at a creature that cannot attack this turn, and not cast at all once this turn's combat is over; nothing in the list reads a non-attacker's power. Never under human play or MTG_UNPRUNE=tricktarget. Default ON; =0 -> every target
     KAROO_FLOAT_RESTRICTED_C, // MTG_KAROO_FLOAT_RESTRICTED_C  a Karoo-returned colour-for-creatures-only land (Unclaimed Territory, Secluded Courtyard, Cavern of Souls) is tapped in response for its plain {C} (KarooFloatRestrictedCOn, EngineFlags.h). Minotaur mana-clean s30284922 T5. Default ON; =0 -> not floatable, byte-identical to before
     KAROO_FLOAT_LINE_COLOUR,  // MTG_KAROO_FLOAT_LINE_COLOUR  a land tapped in response to its own bounce / sacrifice (FloatLandBeforeSacrifice) that makes ONE mana of a choice of colours commits the colour the rest of the applying line still owes (g_line_unpaid_cost, net of the float) instead of its first listed colour. Minotaur mana-clean s30289322 T4: Blood Crypt floated {B} and the continuation's Boros Reckoner {R/W}{R/W} was dropped. Default ON; =0 -> first listed colour, byte-identical to before
+    MAZE_LEAF_PROGRESS,       // MTG_MAZE_LEAF_PROGRESS    Maze's End P1b: the graded no-win leaf subtracts the deck's alternate-win PROGRESS (distinct Gate names controlled, life-equivalent 2 per name, plus Maze's End held and new-name Gates in hand under it) -- MazesEndProvider::NoWinLeafProgress. Evaluation, not a prune. Default ON; =0 -> opponent life alone (every no-win leaf ties)
+    MAZE_FETCH_EVAL,          // MTG_MAZE_FETCH_EVAL       Maze's End P1b: a Maze's End activation that fetches a NEW Gate name carries plan eval 200 (MazesEndProvider::TapTutorPutEval), so the greedy walk (beyond-horizon playout / d0 runner) prefers making progress over leaving the {3} idle; a duplicate name or the fail-to-find stays 0. Default ON; =0 -> every fetch 0
     COUNT
 };
 
@@ -1862,6 +1864,8 @@ inline const char* Name(int slot)
         "MTG_REDELEM_TRICK_FOLD",
         "MTG_KAROO_FLOAT_RESTRICTED_C",
         "MTG_KAROO_FLOAT_LINE_COLOUR",
+        "MTG_MAZE_LEAF_PROGRESS",
+        "MTG_MAZE_FETCH_EVAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
