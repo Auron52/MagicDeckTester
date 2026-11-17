@@ -137,8 +137,9 @@ static std::string TapTargetPumpPaidLabel(const GameState& s, const CardDefiniti
     const int x = pin.x == kTapTargetPumpXAll ? 0 : std::max(0, pin.x);
     std::string who = "target creature";
     for (const Permanent& q : s.battlefield) { if (q.card.m_number == pin.target) { who = q.card.m_name.str(); break; } }
-    return "X=" + std::to_string(x) + ": " + who + " gets +" + std::to_string(TapTargetPumpPowerAt(d, x)) + "/+"
-         + std::to_string(TapTargetPumpToughAt(d, x))
+    const int mult = TapTargetPumpSubtypeBothMultiplier(s, s.active_player_index, d);   // Basilisk Gate; 1 otherwise
+    return "X=" + std::to_string(x) + ": " + who + " gets +" + std::to_string(TapTargetPumpPowerAt(d, x) * mult) + "/+"
+         + std::to_string(TapTargetPumpToughAt(d, x) * mult)
          + (d.params.tap_target_pump_grants_trample ? " and gains trample" : "") + " until end of turn";
 }
 
@@ -7588,19 +7589,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const ActivationDiscardPinScope _discard_pin(&a.discard_name.str());   // BloodDraw
                 const MadnessHostScope _mh(&MadnessPayer(), MadnessPinOf(a));       // A1 (rollout twin)
                 if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
+                // Heap Gate's other-Gate tap (rollout twin: ApplyPlanDirect). 0 for every other mode.
+                const int other_tap = PayActivationOtherTap(state, state.active_player_index, src_id,
+                                                            a.ability_mode, *a.def);
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 ManaPool avail = AvailableManaPool(state);
                 // Kessig Wolf Run: {X}{R}{G} at the pinned X, or the max-X fold's largest payable X
                 // (TapTargetPumpPay -- each attempt a fresh pool, the way every activation here pays).
-                const bool paid = tpump
+                const bool paid = other_tap >= 0 && (tpump
                     ? TapTargetPumpPay(state, state.active_player_index, src_id, *a.def,
                                        [this, &state](const ManaCost& c)
                                        { ManaPool av = AvailableManaPool(state);
                                          return TapForCost(state, c, av, /*for_creature=*/false); })
-                    : TapForCost(state, act_cost, avail, /*for_creature=*/false);
+                    : TapForCost(state, act_cost, avail, /*for_creature=*/false));
                 if (!paid)
                 {
                     if (taps) { SetPermTapped(state, state.active_player_index, src_id, false); }
+                    UndoActivationOtherTap(state, state.active_player_index, other_tap);   // Heap Gate
                     // MTG_ACT_DROP_AUDIT "unpaid": the mana half failed and rolled back, so a pip the
                     // casts already spent is what lost this activation. Counter only -- see GameLogger.h.
                     if (ActDropAuditOn())
@@ -8207,9 +8212,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::Channel)
         {
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+            // Talon Gates of Madara's put (rollout twin: TurnSolver's apply): nothing is paid unless the
+            // card is still in hand.
+            if (chd && chd->params.hand_put_self_cost.has_value())
             {
-                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                if (HandHoldsName(state.players[state.active_player_index], a.card_name.str())
+                    && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                { ApplyHandPutSelf(state, state.active_player_index, a.hand_index, a.card_name.str()); }
+            }
+            else if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
                 if (chd && chd->params.transmute_cost.has_value())
                 { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
                 else

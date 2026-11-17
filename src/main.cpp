@@ -1379,6 +1379,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     tag = a.card_name + ": transmute (discard)";
                     if (!a.tutor_target.str().empty()) { tag += " \xE2\x86\x92 " + a.tutor_target.str(); }
                 }
+                else if (chd && chd->params.hand_put_self_cost.has_value())
+                { tag = a.card_name + ": put onto the battlefield from hand"; }   // Talon Gates of Madara
                 else { tag = a.card_name + ": channel (discard)"; }
                 break;
             }
@@ -3375,6 +3377,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // relabels the GUI badge.
                 const CardDefinition* chd = CardDatabase::Instance().Lookup(ac.card_name);
                 if (chd && chd->params.transmute_cost.has_value()) { os << ", \"transmute\": true"; }
+                // Talon Gates of Madara's "{4}: put this card from your hand" rides it too (Maze's End I4).
+                if (chd && chd->params.hand_put_self_cost.has_value()) { os << ", \"hand_put\": true"; }
             }
             //  * SUSPEND (Lotus Bloom) is the third shape: a from-hand ALTERNATIVE to casting, which
             //    serialises as a bare {"card": "Lotus Bloom"} exactly like the cast would. Its own

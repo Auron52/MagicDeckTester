@@ -32306,10 +32306,29 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 // control of the type chosen as this copy entered. The basic "{T}: Add {C}" mode lives in `produces` (handled by
 // the normal source path). A card is a scaled-mana land iff it declares a subtype AND a positive
 // feeder cost; empty subtype -> not a scaled land, so every non-Three-Tree deck stays byte-identical.
+// Maze's End I4: Baldur's Gate ("{2}, {T}: Add X mana of any one color, where X is the number of other
+// Gates you control") is the same shape with N = OTHER permanents we control of mana_per_other_controlled_
+// subtype (tapped or not, counted NOW) instead of creatures of a chosen type.
 inline bool IsScaledManaLand(const CardDefinition& def)
 {
-    return !def.params.mana_per_creature_subtype.empty()
+    return (!def.params.mana_per_creature_subtype.empty()
+            || !def.params.mana_per_other_controlled_subtype.empty())
         && def.params.mana_per_creature_feeder_generic > 0;
+}
+
+// Baldur's Gate's N: permanents `controller` controls with land subtype `sub` NOW (LandHasSubtypeNow for
+// a land -- an Islandized Gate is not a Gate, Planar Nexus is one; CardHasSubtype otherwise), EXCLUDING
+// the permanent numbered `except` ("other Gates").
+inline int CountOtherControlledWithSubtype(const GameState& state, int controller, const std::string& sub,
+                                           int except)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.card.m_number == except) { continue; }
+        if (q.card.IsLand() ? LandHasSubtypeNow(state, q, sub) : CardHasSubtype(q.card, sub)) { ++n; }
+    }
+    return n;
 }
 
 // N = creatures the active player controls of this source's chosen type. This is the raw yield of
@@ -32317,6 +32336,28 @@ inline bool IsScaledManaLand(const CardDefinition& def)
 inline int ScaledManaCreatureCount(const GameState& state, const Permanent* source = nullptr)
 {
     const int active = state.active_player_index;
+    // Baldur's Gate: "other Gates you control". The counting source is `source`, else the first scaled
+    // land the active player controls (the null-source callers' convention below). Param-gated: a Three
+    // Tree City never carries mana_per_other_controlled_subtype, so its count below is unchanged.
+    {
+        const Permanent* cs = source;
+        const CardDefinition* cd = cs ? CardDatabase::Instance().LookupCached(cs->card) : nullptr;
+        if (cs == nullptr)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && IsScaledManaLand(*d)) { cs = &p; cd = d; break; }
+            }
+        }
+        if (cs != nullptr && cd != nullptr && !cd->params.mana_per_other_controlled_subtype.empty())
+        {
+            return CountOtherControlledWithSubtype(state, cs->controller_index,
+                                                   cd->params.mana_per_other_controlled_subtype,
+                                                   cs->card.m_number);
+        }
+    }
     uint16_t chosen = source ? source->chosen_subtype_id : SubtypeRegistry::kNone;
     if (chosen == SubtypeRegistry::kNone && source)
     {
@@ -35809,6 +35850,15 @@ inline int TapTargetPumpToughAt(const CardDefinition& d, int x)
     const bool per_x = d.params.tap_target_pump_cost.has_value() && d.params.tap_target_pump_cost->has_x;
     return per_x ? d.params.tap_target_pump_tough * std::max(0, x) : d.params.tap_target_pump_tough;
 }
+// Basilisk Gate (Maze's End I4): "+X/+X ..., where X is the number of Gates you control" -- the flat
+// +power/+tough times the controller's permanents of tap_target_pump_per_subtype_both, counted at
+// RESOLUTION (the source included: it is still a Gate we control). 1 when the param is empty.
+inline int TapTargetPumpSubtypeBothMultiplier(const GameState& state, int controller, const CardDefinition& d)
+{
+    if (d.params.tap_target_pump_per_subtype_both.empty()) { return 1; }
+    return CountOtherControlledWithSubtype(state, controller, d.params.tap_target_pump_per_subtype_both,
+                                           /*except=*/INT_MIN);
+}
 
 // PAY the TapTargetPump the pin names, through the CALLER's world's payer -- the rollout's
 // TapForCostDirect, the executor's TapForCost: the pair every ActivatePermAbility already pays through,
@@ -37290,6 +37340,64 @@ struct SacNamedPinScope
 // no-greedy rule: must read 0 -- every emitted variant carries its code).
 inline std::atomic<long long> g_sac_named_unpinned{0};
 
+// HEAP GATE's extra cost (Maze's End I4): "Tap an untapped Gate you control" -- the battlefield indices of
+// the controller's UNTAPPED permanents with `sub` (LandHasSubtypeNow for a land), the source EXCLUDED (its
+// own {T} is paid first, CR 601.2h: one object cannot pay both). Unordered.
+inline std::vector<int> ActivationOtherTapEligible(const GameState& state, int controller, const std::string& sub,
+                                                   int source_id)
+{
+    std::vector<int> v;
+    if (sub.empty()) { return v; }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || q.tapped || q.card.m_number == source_id) { continue; }
+        if (q.card.IsLand() ? LandHasSubtypeNow(state, q, sub) : CardHasSubtype(q.card, sub)) { v.push_back(i); }
+    }
+    return v;
+}
+inline const std::string& ActivationOtherTapSubtype(const CardDefinition& d, PermAbilityMode mode)
+{
+    static const std::string kNone;
+    return mode == PermAbilityMode::TapTreasure ? d.params.tap_treasure_tap_other_subtype : kNone;
+}
+
+// ...and PAY it, in BOTH worlds' apply (rollout ApplyPlanDirect / executor AIEngine), right after the source's own
+// {T} and BEFORE the mana half (CR 601.2h orders nothing, but tapping it first is what keeps the mana payer
+// from spending the Gate the cost needs). WHICH Gate: the provider's EtbTapSubtypeOrder (the Guild Summit
+// order: Gates with a non-mana {T} ability and the most valuable mana sources last -- the mana-payment
+// exemption's ordering, ledger decision 30); a human picks on the board (g_play_loyalty_chooser, default =
+// that order's first). Returns the tapped permanent's number, 0 when the mode has no such cost, -1 when no
+// eligible permanent remains (the caller treats it as unpayable). UndoActivationOtherTap reverses it when
+// the mana half then fails.
+inline int PayActivationOtherTap(GameState& state, int controller, int source_id, PermAbilityMode mode,
+                                 const CardDefinition& def)
+{
+    const std::string& sub = ActivationOtherTapSubtype(def, mode);
+    if (sub.empty()) { return 0; }
+    std::vector<int> elig = ActivationOtherTapEligible(state, controller, sub, source_id);
+    if (elig.empty()) { return -1; }
+    ResolveProvider(state).EtbTapSubtypeOrder(state, controller, elig);
+    int pick = 0;
+    if (g_play_loyalty_chooser != nullptr && !g_tap_speculating && elig.size() > 1)
+    {
+        const int h = (*g_play_loyalty_chooser)(state, controller, def.card.m_name.str(),
+                                                "tap (cost: Tap an untapped " + sub + " you control)", elig, 0);
+        if (h >= 0 && h < static_cast<int>(elig.size())) { pick = h; }
+    }
+    Permanent& q = state.battlefield[static_cast<std::size_t>(elig[static_cast<std::size_t>(pick)])];
+    q.tapped = true;
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "ability", def.card.m_name.str() + ": taps " + q.card.m_name.str() + " (cost)"); }
+    return q.card.m_number;
+}
+inline void UndoActivationOtherTap(GameState& state, int controller, int tapped_number)
+{
+    if (tapped_number <= 0) { return; }
+    for (Permanent& q : state.battlefield)
+    { if (q.card.m_number == tapped_number && q.controller_index == controller) { q.tapped = false; break; } }
+}
+
 // Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
 // both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
 // plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
@@ -37346,6 +37454,14 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         if (mode == PermAbilityMode::ThresholdLoot
             && state.players[static_cast<std::size_t>(controller)].graveyard.size() < 7)
         { return false; }
+        // Heap Gate: the cost taps ANOTHER untapped Gate -- none, no activation (checked before paying).
+        if (mode == PermAbilityMode::TapTreasure)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(p.card);
+            if (hd == nullptr
+                || ActivationOtherTapEligible(state, controller, ActivationOtherTapSubtype(*hd, mode), source_id).empty())
+            { return false; }
+        }
         // BOAST (Usher of the Fallen: "Activate only if this creature attacked this turn and only once each
         // turn", CR 702.142 / 602.5b) -- both RESTRICTIONS of the PayToken ability, checked before anything is
         // paid: the count NoteAttacksDeclared bumped at declare-attackers this turn (both worlds), and the
@@ -37620,6 +37736,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::ReconfigureUnattach:
                                               return "reconfigure: unattach it (it becomes a creature again)";
         case PermAbilityMode::TapBlood:       return "create a Blood token";
+        case PermAbilityMode::TapTreasure:    return "tap an untapped Gate you control: create a Treasure token";
         case PermAbilityMode::BloodDraw:      return "discard a card, sacrifice it: draw a card";
         case PermAbilityMode::TapSubtypeSteal:
                                               return "tap five untapped Vampires: gain control of target creature";
@@ -38597,6 +38714,15 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // -- quest counters, the sacrifice -- and the search: core/LandSearch.h.
             ApplyLandSearchActivation(state, controller, idx, *d);
             break;
+        case PermAbilityMode::TapTreasure:
+        {
+            // Heap Gate: the {T}, the other Gate's tap (PayActivationOtherTap) and the {1} were paid by the
+            // caller. Not a mana ability (it makes a token, CR 605.1a): the Treasure is created on resolution.
+            CreateTreasureTokens(state, controller, 1);
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "ability", src_name + ": created a Treasure token"); }
+            break;
+        }
         case PermAbilityMode::TapBlood:
         {
             // Voldaren Estate: the {T} and the (Vampire-reduced) mana were paid by the caller.
@@ -38885,7 +39011,14 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 }
                 pp *= count;
             }
-            const int pt = TapTargetPumpToughAt(*d, x);
+            int pt = TapTargetPumpToughAt(*d, x);
+            // Basilisk Gate: both halves times the Gates we control now (1 for every other card).
+            if (!d->params.tap_target_pump_per_subtype_both.empty())
+            {
+                const int mult = TapTargetPumpSubtypeBothMultiplier(state, controller, *d);
+                pp *= mult;
+                pt *= mult;
+            }
             // Until end of turn: temp_power_bonus / temp_tough_bonus, which both cleanup sites zero
             // (CR 514.2) and the sim key folds. TRAMPLE is not applied -- structurally inert here
             // (no blocker path in Combat.cpp, no Keyword::Trample reader; tap_target_pump_grants_trample).
@@ -43117,6 +43250,9 @@ inline const std::vector<Color>& ControlledSubtypeColors(const GameState& state,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !d->params.mana_colors_of_controlled_subtype.empty()) { continue; }
         if (!d->card.m_subtypes.HasId(sub_id)) { continue; }
+        // Baldur's Gate: its "{2}, {T}: Add X mana of any one color" COULD produce every colour (CR 106.7:
+        // costs ignored, and the amount is irrelevant), though its `produces` is the free {C} only.
+        if (IsScaledManaLand(*d)) { for (int ci = 0; ci < 5; ++ci) { have[ci] = true; } }
         for (Color c : EffectiveProducesFor(state, controller, *d, &p, /*in_hand=*/false))
         { if (c != Color::Colorless) { have[static_cast<int>(c)] = true; } }
     }
@@ -52274,6 +52410,40 @@ inline void ResolveBurgeoningTriggers(GameState& state)
         LandEntryPinScope pin_scope(pin);
         EnterLand(state, *def, number, /*resolve_full_etb=*/true, /*fire_landfall=*/true, LandEntryTap::Natural, me);
     }
+}
+
+// TALON GATES OF MADARA (Maze's End I4): "{4}: Put this card from your hand onto the battlefield." A from-HAND
+// activated ability riding Action::Kind::Channel (the Transmute precedent: the caller pays hand_put_self_cost
+// in both worlds, then calls this). The card leaves the hand and enters through EnterLand under `controller`
+// -- NOT a land play (lands_played_this_turn untouched), so Amulet / Gond / Guild Summit's draw / landfall all
+// fire through the shared entry. Its own pin is installed EMPTY (-1): Talon Gates has no as-enters choice, and
+// an outer scope's pin must never leak onto it. Offered in our main phases only (sound: ledger I4), so no
+// no-float scope is needed. The ETB "up to one target creature phases out" is not modelled (inert in a goldfish:
+// the list has no creature; see the card's bracket note). Returns false when the card is no longer in hand.
+inline bool HandHoldsName(const Player& p, const std::string& name)
+{
+    for (const Card& c : p.hand) { if (!c.m_is_staged && c.m_name.str() == name) { return true; } }
+    return false;
+}
+inline bool ApplyHandPutSelf(GameState& state, int controller, int hand_index, const std::string& card_name)
+{
+    Player& ap = state.players[controller];
+    int idx = -1;
+    if (hand_index >= 0 && hand_index < static_cast<int>(ap.hand.size())
+        && ap.hand[static_cast<std::size_t>(hand_index)].m_name == card_name) { idx = hand_index; }
+    else { for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+           { if (ap.hand[static_cast<std::size_t>(i)].m_name == card_name) { idx = i; break; } } }
+    if (idx < 0) { return false; }
+    const Card c = ap.hand[static_cast<std::size_t>(idx)];
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr) { return false; }
+    ap.hand.erase(ap.hand.begin() + idx);
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "land", card_name + ": put onto the battlefield from hand"); }
+    LandEntryPinScope pin_scope(-1);
+    EnterLand(state, *d, c.m_number, /*resolve_full_etb=*/true, /*fire_landfall=*/true, LandEntryTap::Natural,
+              controller);
+    return true;
 }
 
 // MANABOND -- "At the beginning of your end step, you may reveal your hand and put all land cards from it onto the

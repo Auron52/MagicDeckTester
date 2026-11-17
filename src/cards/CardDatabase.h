@@ -5130,6 +5130,27 @@ struct CardParams
     // the land enters (the 2009 ruling; CR 113.6k: the ability functions only there).
     bool                     landfall_return_self_from_gy = false;
 
+    // ---- Maze's End I4 (2026-11-17): the utility Gates. Every field is new and gated (nullopt / empty
+    // inert), so every deck without one is byte-identical. Ledger: docs/design/analysis-Maze's End.md.
+    // Heap Gate: "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token." PermAbilityMode::
+    // TapTreasure -- a {T} mode on a LAND whose cost also taps ANOTHER untapped permanent of
+    // tap_treasure_tap_other_subtype (the source's own {T} is paid first, so it can never be that Gate).
+    std::optional<ManaCost>  tap_treasure_cost;
+    std::string              tap_treasure_tap_other_subtype;
+    // Baldur's Gate: "{2}, {T}: Add X mana of any one color, where X is the number of other Gates you
+    // control." The Three Tree City scaled-mana-land shape (feeder = mana_per_creature_feeder_generic),
+    // with N = OTHER permanents the controller controls with this subtype (tapped or not) instead of
+    // creatures of a chosen type. IsScaledManaLand / ScaledManaCreatureCount read it.
+    std::string              mana_per_other_controlled_subtype;
+    // Basilisk Gate: "Target creature gets +X/+X ..., where X is the number of Gates you control." The
+    // TapTargetPump's flat +power/+tough is multiplied by the controller's permanents of this subtype,
+    // counted at resolution (the source included).
+    std::string              tap_target_pump_per_subtype_both;
+    // Talon Gates of Madara: "{4}: Put this card from your hand onto the battlefield." A from-HAND
+    // activation riding Action::Kind::Channel (the Transmute precedent): pay the cost, the card leaves the
+    // hand and enters through EnterLand (NOT a land play). Offered in our main phases only (ledger I4).
+    std::optional<ManaCost>  hand_put_self_cost;
+
     // ---- Vampires A1 (2026-10-18): MADNESS + Asylum Visitor ------------------------------------
     // Every field below is new and gated (nullopt / empty / 0 / false inert), so every deck that does
     // not carry one is byte-identical. Design: docs/design/vampires/design_A1_madness.md.

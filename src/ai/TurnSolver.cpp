@@ -6784,6 +6784,7 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::ThresholdLoot,      &sd.params.threshold_loot_cost           },
         { PermAbilityMode::SelfBounce,         &sd.params.self_bounce_cost             },
         { PermAbilityMode::TapTutorPut,         &sd.params.tap_tutor_put_cost            },
+        { PermAbilityMode::TapTreasure,         &sd.params.tap_treasure_cost             },   // Heap Gate (I4), LAST
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -6801,6 +6802,9 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
             && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         if (m.mode == PermAbilityMode::ThresholdLoot
             && state.players[ctrl].graveyard.size() < 7) { continue; }
+        // Heap Gate: its cost also taps ANOTHER untapped Gate (the shared liveness predicate).
+        if (m.mode == PermAbilityMode::TapTreasure
+            && !PermAbilitySourceLive(state, ctrl, src.card.m_number, m.mode, nullptr)) { continue; }
         // Bilbo's "Activate only if you have 111 or more life" (the shared gate) -- and boast's
         // attacked-this-turn / once-each-turn restrictions (Usher of the Fallen; param-gated).
         if ((m.mode == PermAbilityMode::LifeGatedPutCreatures
@@ -32696,6 +32700,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::CounterDestroyArtEnch, &pp.remove_counter_destroy_art_ench_cost },
         { PermAbilityMode::SelfBounce,         &pp.self_bounce_cost            },
         { PermAbilityMode::TapTutorPut, &pp.tap_tutor_put_cost },
+        { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -32728,6 +32733,8 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         }
         if (modes[i].mode == PermAbilityMode::BloodDraw
             && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
+        if (modes[i].mode == PermAbilityMode::TapTreasure
+            && !PermAbilitySourceLive(state, ctrl, num, modes[i].mode, nullptr)) { continue; }
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
     }
@@ -48123,6 +48130,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::FigureEight,    &sd->params.figure_eight_cost    },
                     { Action::AbilityMode::ThresholdLoot,  &sd->params.threshold_loot_cost  },
                     { Action::AbilityMode::SelfBounce,     &sd->params.self_bounce_cost     },
+                    // Heap Gate (Maze's End I4) -- appended LAST, same order as the other tables.
+                    { Action::AbilityMode::TapTreasure,    &sd->params.tap_treasure_cost    },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -48228,6 +48237,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         others.AddPool(state.floating_mana);
                         SubtractPoolClamped(others,
                             PermAbilityTapDebitOf(state, turn_pool(), src.card.m_number));
+                        if (!others.CanPay(cost)) { continue; }
+                    }
+                    // Heap Gate: "{1}, {T}, Tap an untapped Gate you control". Live only with another untapped
+                    // Gate (the shared predicate), and the {1} must come from what is left once the source
+                    // AND the Gate the apply will tap (PayActivationOtherTap's order: its first) are debited.
+                    if (m.mode == Action::AbilityMode::TapTreasure)
+                    {
+                        const int me = state.active_player_index;
+                        std::vector<int> elig = ActivationOtherTapEligible(
+                            state, me, ActivationOtherTapSubtype(*sd, PermAbilityMode::TapTreasure), src.card.m_number);
+                        if (elig.empty()) { continue; }
+                        ResolveProvider(state).EtbTapSubtypeOrder(state, me, elig);
+                        ManaPool others = turn_pool();
+                        others.AddPool(state.floating_mana);
+                        SubtractPoolClamped(others, PermAbilityTapDebitOf(state, turn_pool(), src.card.m_number));
+                        SubtractPoolClamped(others, PermAbilityTapDebitOf(
+                            state, turn_pool(), state.battlefield[static_cast<std::size_t>(elig[0])].card.m_number));
                         if (!others.CanPay(cost)) { continue; }
                     }
                     if (m.mode == Action::AbilityMode::TapDraw && sd->params.tap_draw_cost_less_per_rad)
@@ -51195,6 +51221,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             a.eval           = cd->params.channel_damage * DMG;
             a.is_noncreature = true;
             actions.push_back(std::move(a));
+        }
+        // Talon Gates of Madara (Maze's End I4): "{4}: Put this card from your hand onto the battlefield." A
+        // from-HAND activation riding the Channel kind (the Transmute precedent; ApplyHandPutSelf in both
+        // worlds), ONE action per distinct name (copies are interchangeable: every apply world puts BY NAME).
+        // Offered here, in our main phases only: the goldfish opponent's turn offers no information or mana
+        // a main-phase put lacks (ledger I4: an end-step put leaves the same board at our next untap, and a
+        // Burgeoning put of another land commutes with it), so the instant-speed timing is a sound fold.
+        // Gated on hand_put_self_cost -> byte-identical for every other deck.
+        {
+            std::vector<std::string> hp_seen;
+            for (int i = 0; i < n; ++i)
+            {
+                if (ap.hand[i].m_is_staged) { continue; }
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                if (!cd || !cd->params.hand_put_self_cost.has_value()) { continue; }
+                if (std::find(hp_seen.begin(), hp_seen.end(), ap.hand[i].m_name.str()) != hp_seen.end()) { continue; }
+                hp_seen.push_back(ap.hand[i].m_name.str());
+                Action a;
+                a.kind           = Action::Kind::Channel;
+                a.card_name      = ap.hand[i].m_name;
+                a.def            = cd;
+                a.hand_index     = i;
+                a.cost           = cd->params.hand_put_self_cost.value();
+                a.direct_damage  = 0;
+                a.eval           = 1;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
         }
         // SEARCHED CYCLING (Unpredictable Cyclone phase 3, 2026-10-27): WHICH hand card to cycle is a plan
         // action, one per DISTINCT name the provider admits (DecisionProvider::SearchedCycleSources --
@@ -76358,9 +76412,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (a.kind == Action::Kind::Channel)
         {
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
+            // Talon Gates of Madara's put: the card must still be in hand BEFORE anything is paid (a
+            // stranded put spends nothing). Executor twin: AIEngine.
+            const bool hand_put = chd && chd->params.hand_put_self_cost.has_value();
+            if (hand_put)
             {
-                const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
+                if (HandHoldsName(state.players[state.active_player_index], a.card_name.str())
+                    && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                { ApplyHandPutSelf(state, state.active_player_index, a.hand_index, a.card_name.str()); }
+            }
+            else if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
                 if (chd && chd->params.transmute_cost.has_value())
                 { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
                 else
@@ -76599,13 +76662,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     && !HumanPlayActive() && greedywindow::InWindow(0))
                 { g_activation_discard_unpinned.fetch_add(1, std::memory_order_relaxed); }
                 if (taps) { SetPermTapped(state, state.active_player_index, src_id, true); }
+                // Heap Gate's "Tap an untapped Gate you control", paid after the {T} and before the mana
+                // (0 for every other mode; -1 = none left -> unpayable). Executor twin: AIEngine.
+                const int other_tap = PayActivationOtherTap(state, state.active_player_index, src_id,
+                                                            a.ability_mode, *a.def);
                 ActLinePayScope _act_line_pay(act_cost);   // this activation's pips are NOT hold demand
                 // Kessig Wolf Run pays {X}{R}{G} at the pinned X -- or, for the provider's max-X fold, the
                 // largest X the remaining mana pays (TapTargetPumpPay; executor twin in AIEngine).
-                if (tpump ? TapTargetPumpPay(state, state.active_player_index, src_id, *a.def,
+                if (other_tap >= 0 && (tpump ? TapTargetPumpPay(state, state.active_player_index, src_id, *a.def,
                                              [&state](const ManaCost& c)
                                              { return TapForCostDirect(state, c, /*for_creature=*/false); })
-                          : TapForCostDirect(state, act_cost, /*for_creature=*/false))
+                          : TapForCostDirect(state, act_cost, /*for_creature=*/false)))
                 {
                     _act_line_pay.Paid();
                     // A joint payment's act hold (g_line_hold_has_acts, ManaPayment.h) gives this step's share back
@@ -76885,6 +76952,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     }
                     if (taps)
                     { SetPermTapped(state, state.active_player_index, src_id, false); }
+                    UndoActivationOtherTap(state, state.active_player_index, other_tap);   // Heap Gate
                     // MTG_ACT_DROP_AUDIT "unpaid" -- the cross-world, cross-deck twin of the
                     // thread_local counter above (which only ever surfaces under DedupCensusOn and
                     // only in this world). See GameLogger.h.
@@ -132602,6 +132670,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 // Kessig Wolf Run's "{X}{R}{G}, {T}" pump, priced at its cheapest (X = 0): the line names
                 // no X, and the validator must never call a payable line Illegal.
                 { Action::AbilityMode::TapTargetPump,  &bd->params.tap_target_pump_cost },
+                // Heap Gate's "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token" (I4).
+                { Action::AbilityMode::TapTreasure,    &bd->params.tap_treasure_cost    },
             };
             for (const auto& m : modes)
             {
@@ -134291,7 +134361,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
         "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
-        "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut"
+        "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

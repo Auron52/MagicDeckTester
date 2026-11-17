@@ -4723,6 +4723,12 @@ public:
     bool CrossingDumpWithoutLandDominated(const GameState&, int) const override { return true; }
     // I3b: Maze's End's win needs the activation; the projection must not label a plan that does not activate.
     bool AlternateWinNeedsAction() const override { return true; }
+    // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate
+    // with a live non-mana {T} ability last; ManaSourceRank inside each tier (ledger decisions 10 / 30).
+    void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const override;
+    // I4: the trailing-pass order -- Talon Gates' from-hand put runs FIRST (before Maze's End's activation,
+    // the win check): a sound order, the put only adds resources (ledger decision 31).
+    int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
