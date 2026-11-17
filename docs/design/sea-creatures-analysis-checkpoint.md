@@ -16,10 +16,14 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
 * Stage 1 coverage: DONE.
 * Stage 2 research fan-out: DONE (6 drafts: mana, combat, sagas, bounce, sin, gorger; see ledger).
 * Integration plan (serial, one Opus agent each, brief `logs/sea-research/INTEGRATOR-BRIEF.md`):
-  I1 mana + SeaCreaturesProvider (IN FLIGHT 2026-11-16) -> I2 combat (Koma, Kraken, Serpent, Lorthos,
+  I1 mana + SeaCreaturesProvider DONE (4eb5a3e10 core, 4cf605b4f Misty viewer-only hold, 8682648b6
+  ledger); I2 combat IN FLIGHT (2026-11-17) -> I2 combat (Koma, Kraken, Serpent, Lorthos,
   Wave + shared bounce helper + Wave-skip prune) -> I3 sagas (Summon uses the bounce helper) -> I4
   bounce (Hullbreaker, Brinelin + decline prunes) -> I5 Sin -> I6 Gorger (exile-all >=6 lands prune).
-* Expected GT movers from I1: Creature Giving, Five Colour (Misty migration) -- accept at the end.
+* I1 movers: none from Misty (fetch_hold_human_only keeps autonomous on the old route). Creature Giving
+  moves on ANY CardParams layout change and with batch job mix (pre-existing) -- separate investigation
+  agent in worktree `.claude/worktrees/cg-jobmix` (detached at 8cd0bbf23, branch cg-jobmix-fix when it
+  commits), findings to docs/design/creature-giving-jobmix-nondeterminism.md there.
 
 ## Next steps
 
