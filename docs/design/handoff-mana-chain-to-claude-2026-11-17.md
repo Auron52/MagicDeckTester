@@ -13,13 +13,25 @@ end-of-main-1 pain sweep is life-dependent, so a healthier oracle payment swept 
 became incomparable; a fail-closed sweep-undone cover fallback (`UnSwept`) now classes it DOMINATED-LIFE. Unit suite
 3,385/3,385. A fresh PGO Prevent Damage gate is still owed.
 
-**Minotaur APPLY-DROP x2 (s30284922) root-caused and fixed, UNCOMMITTED pending A/B:** `KarooBounceFloatable`
-refused every `colored_creature_only` land, so a Karoo returned an untapped Unclaimed Territory without floating its
-plain `{C}`. New lever `MTG_KAROO_FLOAT_RESTRICTED_C` (heurarm slot, default ON) floats exactly `{C}`. Seed replay:
-zero oracle issues (lever off: APPLY-DROP=2). Two new unit tests in `test/unit/test_karoo_tap_in_response.cpp`.
-Pooled paired A/B running: `build/scratch/claude_karoo_c_ab/` (Minotaur, Spirits, Landfall Elementals, Dragons;
-games 500,000-504,999, both arms in one Release batch, PID 1862694). Then commit, PGO, and one pooled mana-clean
-gate for Prevent Damage + Minotaur + the moved decks.
+**Minotaur APPLY-DROP x2 (s30284922) fixed, committed `e6ffcefd7`** (`HEAD:src=34fb8c52119d`):
+`MTG_KAROO_FLOAT_RESTRICTED_C` (heurarm slot, default ON) lets the bounce's own float tap a creature-only land for
+its plain `{C}`; the ranking, user-rule filters and Satyr float are unchanged. Paired A/B (5,000 x 4 decks): 0 slower,
+Landfall Elementals 1 faster, Minotaur +4.02% units on 4,999 identical games. Note:
+`docs/design/karoo-float-restricted-c-2026-11-17.md`. Unit suite 3,387/3,387.
+
+**State at 10:30 UTC (both commits LOCAL, NOT pushed; push window is open, last push 05:35 UTC):**
+1. PGO+LTO built and stamped `34fb8c52119d` (`build/scratch/claude_pd/pgo.out`).
+2. Smoke RUNNING: `VPC_ALWAYS=1 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`, console
+   `build/scratch/claude_pd/smoke.out`. Expect the known 39 GT failures. Diff `test/logs/smoke/wins/` against
+   `build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins/`: only Minotaur / Spirits /
+   Landfall Elementals / Dragons rows may move (Spirits also has Codex's `bd7c05019`). Every other row must be
+   byte-identical, and the viewer stage must have zero play-drift / board-diverged / enum-gap.
+3. NEXT: one pooled gate, `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run prevent_damage minotaur spirits
+   <landfall elementals key> dragons --games 5000 --name claude-pd-karoo-20261117` (check keys with `status`).
+   Commit `test/mana_clean.json` and the design notes with the verdicts.
+4. Then push (check_references_safe, rebase, smoke if src replays, background CI watch with `--interval 60`).
+5. Then the wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras /
+   Fungus / Shadowborn / Morph, and every stale-clean deck (all 15 clean records are stale after these commits).
 
 **Open for the USER:** painlands (`tap_self_damage > 0`) are also refused by `KarooBounceFloatable`, though their
 `{C}` mode is painless: the same shape, a wider play change, not made.
