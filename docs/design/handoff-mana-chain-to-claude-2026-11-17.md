@@ -2,7 +2,15 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:42 UTC
+## Live status, updated 07:46 UTC
+
+**Active capped-plan diagnostic:** Prevent Damage seed `30111776` T8 is
+running with `MTG_MANA_ORACLE_NODES_RETRY=400000` (default 200,000),
+`MTG_MANA_ORACLE=2`, exec session `6458`, console
+`build/scratch/spirits_shock_pair_5k/pd_30111776_cap400k.out`.
+This is one exact Release replay, no source changes. Compare its final
+classes and work/time to the default report; increasing a global audit
+ceiling is justified only if the added cost is acceptable.
 
 **Current read-only audit complete:** Prevent Damage ORACLE-GAP seed
 `30109140` turn five replayed with `MTG_MANA_ORACLE=3`; console
