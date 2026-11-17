@@ -186,3 +186,7 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   did not reach it. Recovers at d8 b0 (adoption bar); a budget-time refutation trusted past heur's reach.
   Repro: `build/scratch/p18g/AA131/manifest.json`.
 - Tally (pzb+pal100): S5 2/0, H1 5/0, H2 2/1 -> 9 earlier / 1 later.
+- USER ruling 2026-11-17 (ship shape): mode 4 will be turned on PER DECK for the clear winners only (not default-on).
+  The user may hold the flip until mode 4 is in its final state ("I want to see it in its final state before flipping
+  it on"), so finish the residual-loser work and the ship steps first, then present the per-deck winner list for the flip.
+  Still open (USER): the AA gi131 later game; Treasure Hunt -> mode 3.
