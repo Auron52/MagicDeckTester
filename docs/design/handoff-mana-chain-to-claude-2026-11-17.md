@@ -284,6 +284,15 @@ a likely guard mismatch, not yet a proven fix. A scoped trial should
 compare the after-payment pools and preserve the two later colored
 sources when early Bloom:red pays the current generic bill. The user
 already authorized early Bloom cracking for a visible later cast.
+The existing focused test is in `test/unit/test_dragonstorm_followups.cpp`
+("visible Karrthus needs Bloom black with one wild Territory"); add a
+two-Territory + Mountain + Bloom Song/Karrthus case alongside it. After
+paying Song, require Bloom spent and both Territories untapped; after
+crediting Song's five red, Karrthus should pay. Removing the prepayment
+`short_with_shared` filter while retaining the after-payment
+`saves_later_source` comparison is the smallest candidate, but it has
+not been A/B tested and must not be assumed correct. Check exact older
+Ruby/Bloom seeds and held-out turns.
 
 1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `e09d0ca2b`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
 2. Work the new Dragonstorm issue clusters with exact on/off repros, narrow deterministic payment/order fixes, 5,000 paired A/B where material, Release unit/regression/viewer validation, and a fresh PGO 5,000-game gate. Avoid adding searched options or costly broad branches. One top-level simulation batch at a time, `MTG_RSS_CAP_GB=40`, use `nproc` for worker count. Build only via `./build.sh`; PGO+LTO for long runs.
