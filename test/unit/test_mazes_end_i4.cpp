@@ -283,8 +283,12 @@ TEST_CASE("Maze's End I4: the search puts Talon Gates from hand to reach the ten
     GameState s = board(true);
     CHECK(play(s) == 5);
     CHECK(s.won_by_effect);
-    GameState c = board(false);   // control: one name short this turn
-    CHECK(play(c) > 5);
+    // Control: without Talon only nine names are ever reachable (the library holds one Gate), so the game is
+    // not won at all (PlayOutFrom returns -1 for no win inside max_turns) -- in particular not on turn 5.
+    GameState c = board(false);
+    const int rc = play(c);
+    CHECK((rc < 0 || rc > 5));
+    CHECK_FALSE(c.won_by_effect);
 }
 
 TEST_CASE("Maze's End I4: the Gate tap order -- pure-mana Gates first, Baldur's next, a live non-mana {T} last")
