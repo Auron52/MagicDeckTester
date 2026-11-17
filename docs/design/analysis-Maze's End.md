@@ -42,7 +42,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 
 | Phase | Scope | Status |
 |---|---|---|
-| I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke attribution in progress (see below) |
+| I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
 | I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + `land_color` axis, The Black Gate | pending |
 | I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | pending |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
@@ -95,6 +95,11 @@ SeahunterCandidates` does not narrow (Prophets out, a cast-then-tutor line, Sove
 Seahunter target but the first library name is folded away, an unsearched pick inside the search window.
 Tagging it too would move Merfolk Turns play, so it is left for the user to schedule (it needs a Merfolk
 A/B and a GT accept).
+
+Smoke (I1b, 2026-11-17): the I1 binary reports 175 passed / 44 failed against committed GT, and so does
+the BASE binary (`18ab35ca8`, built separately, same tree, same flags): all 219 case digests are identical
+between the two, so I1 changes no other deck's play. The 44 failures are GT staleness already present at
+the base (src commits after the last smoke accept, 09:03 UTC) -- not ours to accept. No GT accepted.
 
 Viewer audit (I1b): `draw_on_other_subtype_enter` (Kili's and Guild Summit's mandatory draw trigger) was
 unclassified; classified INERT (no 'may', no target). Sign-off collected, not blocking.
