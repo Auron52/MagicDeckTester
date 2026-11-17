@@ -30,8 +30,18 @@ agent recommends adopting. `docs/design/unseen-keep-scarce-2026-11-17.md`.
 **Found defect (pre-existing, not yet investigated):** Merfolk Turns game 560698 (seed 30560698) drives one
 process past 42 GB RSS within a minute, on the current and the pre-rebase binary alike.
 
-**NEXT:** trace s30086338 T6 (the oracle pays Apex with Needle + Bazaar and keeps Bloom for Kolaghan; the engine
-spends Bloom) and s30083522 T6 (Karrthus beyond two Apexes). Then the Merfolk Turns RSS runaway, the PD CAPPED
+**s30086338 T6 diagnosed (not fixed):**
+- The visible-closer rule cracks Bloom for `{B}{B}{B}` at the first Pyretic, so Kolaghan has black later.
+- The opener-line WUBRG drain then spends that black: Pyretic's own generic, the second Pyretic's `{1}`, and Apex.
+- With `MTG_UNSEEN_KEEP_SCARCE=1` the black survives both Pyretics and Desperate Ritual, but Apex `{7}{R}{R}{R}`
+  still takes it: the float (`{B}{B}` + 5 `{R}`) plus Mountain and Needle is exactly 10.
+- The oracle pays with Mercadian Bazaar's stored red. The engine holds the Bazaar on purpose: storage and depletion
+  lands are never "spare" in the LINE_FLOAT_TAP_FIRST rung, so their banked mana is kept.
+- So this is a float-vs-TAP decision: spend the banked counter when the named line is otherwise short a colour
+  that no other source makes. That is a design question about banked lands; not started.
+
+**NEXT:** the Merfolk Turns RSS runaway (game 560698; a run hazard: one game kills a pooled batch). Then s30083522 T6
+(Karrthus beyond two Apexes). Then the Merfolk Turns RSS runaway, the PD CAPPED
 fold, and the deck queue. Next push not before 20:44 UTC.
 
 **DONE 16:15 UTC: s30072155 T5 + s30074081 T4** (`MTG_LEFTOVER_LINE_SWAP`, ON; `SwapLeftoverForLine` in
