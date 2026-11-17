@@ -10337,6 +10337,9 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // supply compared with the ordinary payment. Both candidate payments are tried
     // through the same payer before either is committed.
     static const bool s_visible_lump = EnvOn("MTG_ONDEMAND_VISIBLE_LUMP", true);
+    // DEFAULT ON; =0 restores the prepayment-shortage check and coloured-only
+    // after-payment comparison for the paired Dragonstorm A/B.
+    static const bool s_afterpay_wild = EnvOn("MTG_ONDEMAND_VISIBLE_AFTERPAY_WILD", true);
     if (s_visible_lump && cost_in.generic > 0 && lands.empty() && !lumps.empty()
         && std::strcmp(ResolveProvider(state).Name(), "Dragonstorm") == 0)
     {
@@ -10373,21 +10376,26 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             }
             const ManaPool before = AvailableManaPool(state);
             const int have[5] = { before.white, before.blue, before.black, before.red, before.green };
-            const int non_lump_wild = std::max(0, before.wild - OnDemandSacSupplyNow(state).any);
+            const int non_lump_wild = s_afterpay_wild ? 0
+                : std::max(0, before.wild - OnDemandSacSupplyNow(state).any);
             static const char* kCol[5] = { "W", "U", "B", "R", "G" };
             std::unique_ptr<GameState> ordinary;
             ManaPool trial_avail;
             for (int c = 0; c < 5; ++c)
             {
-                int competing_need = 0;
-                for (int d = 0; d < 5; ++d)
-                { if (d != c) { competing_need += std::max(0, later_pips[d] - have[d]); } }
-                // One wild source cannot cover two later coloured pips at once.
-                // Karrthus owes {B}{G}, while Territory is the sole flexible
-                // source: Bloom must provide one of those colours.
-                const bool short_with_shared = have[c]
-                    + std::max(0, non_lump_wild - competing_need) < later_pips[c];
-                if (later_pips[c] <= 0 || !short_with_shared) { continue; }
+                if (!s_afterpay_wild)
+                {
+                    int competing_need = 0;
+                    for (int d = 0; d < 5; ++d)
+                    { if (d != c) { competing_need += std::max(0, later_pips[d] - have[d]); } }
+                    const bool short_with_shared = have[c]
+                        + std::max(0, non_lump_wild - competing_need) < later_pips[c];
+                    if (!short_with_shared) { continue; }
+                }
+                // Judge shortages after paying this bill: two Territories
+                // cover Karrthus's {B}{G} before Song, but ordinary Song
+                // payment spends both as generic and strands Karrthus.
+                if (later_pips[c] <= 0) { continue; }
                 bool other_colour_owed = false;
                 for (int d = 0; d < 5; ++d)
                 { if (d != c && later_pips[d] > 0) { other_colour_owed = true; } }
@@ -10415,9 +10423,21 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                                              ordinary_pool.red, ordinary_pool.green };
                     const int new_col[5] = { early_pool.white, early_pool.blue, early_pool.black,
                                              early_pool.red, early_pool.green };
+                    // An uncracked Bloom contributes three speculative wild
+                    // units to AvailableManaPool, but it cannot replace two
+                    // distinct Territory colours after Song. Compare the
+                    // ordinary board's *non-lump* wild sources here.
+                    const int old_wild = s_afterpay_wild
+                        ? std::max(0, ordinary_pool.wild - OnDemandSacSupplyNow(*ordinary).any) : 0;
+                    const int new_wild = s_afterpay_wild
+                        ? std::max(0, early_pool.wild - OnDemandSacSupplyNow(*early).any) : 0;
                     bool saves_later_source = false;
                     for (int d = 0; d < 5; ++d)
-                    { if (d != c && later_pips[d] > 0 && new_col[d] > old_col[d]) { saves_later_source = true; } }
+                    {
+                        if (d != c && later_pips[d] > 0
+                            && new_col[d] + new_wild > old_col[d] + old_wild)
+                        { saves_later_source = true; }
+                    }
                     if (saves_later_source)
                     { return OnDemandPayWith(state, { k }, true, cost_in, for_creature, available, honor_legacy_cco); }
                 }
