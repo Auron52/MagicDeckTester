@@ -275,6 +275,40 @@ resolution, so the draws follow the discard -- correct. Controller-aware entry f
 Ordering note: Manabond is fixed before Abiding Grace at the end step; a real controller orders its own
 simultaneous end-step triggers (CR 603.3b), but no other end-step trigger exists in this list. No defect found.
 
+### I4 cards (2026-11-17)
+
+| Card | Tier | Params | Viewer bucket |
+|---|---|---|---|
+| Heap Gate | 3 | `produces WUBRG`, `any_color_filter`, `tap_treasure_cost {1}`, `tap_treasure_tap_other_subtype Gate` | A: `main_phase` activation (new `PermAbilityMode::TapTreasure`), then `target` (loyalty chooser) for WHICH Gate pays the tap cost |
+| Baldur's Gate | 2 | `produces [C]`, `mana_per_creature_feeder_generic 2`, `mana_per_other_controlled_subtype Gate` (Legendary) | none (mana: the payment exemption) |
+| Basilisk Gate | 2 | `produces [C]`, `tap_target_pump_cost {2}`, `tap_target_pump_power 1`, `tap_target_pump_tough 1`, `tap_target_pump_per_subtype_both Gate` | A: `target` on the live board (TapTargetPump); never offered autonomously here (no creature) |
+| Talon Gates of Madara | 3 | `produces WUBRG`, `any_color_filter`, `hand_put_self_cost {4}` | A: `main_phase` from-hand action on the Channel kind (`channel=` verb, badged "put") |
+
+Oracle text and mana cost pasted verbatim from `build/scratch/maze/oracle.jsonl` (`logs/maze/i4_add_cards.py`); modelling
+commentary in each bracket note.
+
+* **Heap Gate.** Mana is the Capital City shape. The Treasure ability is NOT a mana ability (CR 605.1a: it makes a
+  token), so it is a searched `ActivatePermAbility` (`TapTreasure`, appended LAST to the enum and to all four ModeSpec
+  tables, the plan-dump names). Costs in order, in BOTH apply worlds: the source's `{T}` (`SetPermTapped`), then the
+  OTHER Gate's tap (`PayActivationOtherTap`, core/SpellEffects.h; `UndoActivationOtherTap` if the mana half then
+  fails), then the `{1}`. Liveness (`PermAbilitySourceLive`) needs another untapped Gate we control; the enumeration
+  also debits the source and the Gate the apply will tap before pricing the `{1}` (a Heap + one Gate board is never
+  offered an unpayable activation). Which Gate: decision 30.
+* **Baldur's Gate.** `IsScaledManaLand` accepts `mana_per_other_controlled_subtype`; `ScaledManaCreatureCount` counts
+  the OTHER permanents the counting source's controller has with that subtype (tapped or not, `LandHasSubtypeNow` --
+  Planar Nexus counts, an Islandized Gate does not), resolving a null source to the first scaled land as before.
+  Every Three Tree City consumer (payer fed face, colour reachability, bounds, human fed face) reads it unchanged.
+  Gond Gate: `ControlledSubtypeColors` adds WUBRG for a scaled-mana Gate (CR 106.7: it COULD produce any colour).
+  Inherited approximation (Q4): the payer takes the fed mode only at net >= 1 over the free `{C}`.
+* **Basilisk Gate.** The TapTargetPump resolver multiplies BOTH halves by `TapTargetPumpSubtypeBothMultiplier` (our
+  Gates at resolution, the source included); the executor's log label too. Sorcery speed holds by construction
+  (TapTargetPump is enumerated only in our main phases). Inert in this list (decision 3).
+* **Talon Gates of Madara.** The `{4}` put rides `Action::Kind::Channel` (the Transmute precedent): one action per
+  distinct hand name; both worlds check the card is still in hand BEFORE paying, then `ApplyHandPutSelf` (EnterLand
+  under the controller, its own pin scope EMPTY so an outer pin cannot leak onto it; not a land play). Main-phase
+  timing: decision 32. Trailing order: decision 31. ETB phase-out: not modelled (decision 33).
+* **Guild Summit order (decision 10, now built):** `MazesEndProvider::EtbTapSubtypeOrder` -- decision 30.
+
 ## Decisions and provisional deferrals (USER sign-off pending)
 
 Defaults taken so the work can proceed (raised to the user; none blocks anything):
@@ -301,7 +335,7 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
 9. **Archdruid's Charm mode 2 is NOT modelled** (PROVISIONAL deferral, USER sign-off pending): it needs a
    target creature we control, the list has none and makes none, so it can never be chosen (CR 601.2c).
    The card's bracket note says so.
-10. **Guild Summit's which-Gates order is ManaSourceRank ascending** (decision 2). Protecting Gates with
+10. **Guild Summit's which-Gates order is ManaSourceRank ascending** (decision 2). BUILT in I4 (decision 30). Protecting Gates with
    non-mana {T} abilities is NOT yet implemented: I4 must add it in `MazesEndProvider::EtbTapSubtypeOrder`.
 11. **A land that has already left before `OnLandEntered` runs** (a self-bouncing Karoo) draws nothing off
    Guild Summit. No Gate does that.
@@ -387,6 +421,28 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
 29. **The in-window audit for the crossing choices** (I3b, coordinator requirement): `MTG_CROSSING_LAND_STATS=1`
    (TurnSolver.cpp `crossinglandcensus`, the face-up census's shape) classifies every UNPINNED crossing decision with
    a real choice by frame, plus fanned-crossing overflow past the 12 ordinals. Result in "I3 cards" below.
+
+30. **The Gate TAP ORDER** (I4; Guild Summit's which-Gates, decision 2/10, and Heap Gate's cost Gate) is
+   `MazesEndProvider::EtbTapSubtypeOrder`: tier 0 pure-mana Gates, tier 1 Baldur's Gate (a scaled mana land: one tap
+   can be worth several mana), tier 2 a Gate with a LIVE non-mana `{T}` ability (Heap Gate's Treasure; a targeted
+   pump -- Basilisk Gate, The Black Gate -- only while we control a creature, so in this list they read as the plain
+   `{C}` / `{B}` sources they are); ManaSourceRank inside each tier. An ORDER, never a restriction; the Summit count
+   and whether Heap activates stay searched. Heap Gate's cost Gate rests on the same mana-payment-exemption reading as
+   decision 2 (the alternative is a searched pin per Gate class). Maze's End itself is not a Gate, so it is never
+   eligible. USER sign-off pending.
+31. **Talon Gates' put runs FIRST in its plan's trailing pass** (`MazesEndProvider::ActivationOrderRankForAction`,
+   rank -1; every other action keeps rank 0, so their order is unchanged). Sound: the put only adds resources (an
+   untapped Gate -- a new name for Maze's End's win check, an "other Gate" for Heap's cost -- and its own `{T}` mana)
+   and its `{4}` comes from the same pool in any position. Without it the pass runs in emission order and Maze's End's
+   activation (the win check) preceded the put, so "put Talon Gates, then win" was unfindable in one plan.
+32. **Talon Gates' put is offered in OUR main phases only.** The real ability is instant-speed. Sound fold: in a
+   goldfish the opponent's turn offers no mana or information a main-phase put lacks -- an end-step put with the same
+   untapped mana leaves the same board at our next untap, a Burgeoning put of another land commutes with it, and a
+   main-phase put sees Guild Summit's draw earlier. So no opponent-turn put route (and no no-float scope) exists.
+33. **Talon Gates' ETB "up to one target creature phases out" is NOT modelled** (inert collapse, disclosed in the
+   bracket note; the engine has no phasing). Every choice reaches the same game in a goldfish: the list has no creature
+   of ours and makes none, and the passive opponent's creatures never attack or block. Not offered as a viewer choice.
+   PROVISIONAL (USER sign-off pending) -- re-check if the list gains a creature.
 
 ## Approved deferrals
 

@@ -2534,6 +2534,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("modal_exile_target_artifact_enchantment", false);
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
+    // Maze's End I4: the utility Gates (see CardDatabase.h).
+    if (params.contains("tap_treasure_cost"))
+        p.tap_treasure_cost = ManaCostFromString(params["tap_treasure_cost"].get<std::string>());
+    p.tap_treasure_tap_other_subtype    = params.value("tap_treasure_tap_other_subtype", std::string{});
+    p.mana_per_other_controlled_subtype = params.value("mana_per_other_controlled_subtype", std::string{});
+    p.tap_target_pump_per_subtype_both  = params.value("tap_target_pump_per_subtype_both", std::string{});
+    if (params.contains("hand_put_self_cost"))
+        p.hand_put_self_cost = ManaCostFromString(params["hand_put_self_cost"].get<std::string>());
 
     // ---- Vampires A1 (2026-10-18): madness + Asylum Visitor -- see CardParams.
     if (params.contains("madness_cost"))

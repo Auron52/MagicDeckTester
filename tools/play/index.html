@@ -1294,7 +1294,7 @@ function channelSources() {
   if (S._chFor === d.decision_index && S._ch) return S._ch;
   const out = {};
   // Value 'transmute' (Dimir House Guard's Transmute rides the channel verb) only relabels the badge.
-  (d.plans || []).forEach(p => (p.actions || []).forEach(a => { if (a && a.channel && a.card) out[a.card] = a.transmute ? 'transmute' : true; }));
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => { if (a && a.channel && a.card) out[a.card] = a.transmute ? 'transmute' : a.hand_put ? 'hand_put' : true; }));
   S._chFor = d.decision_index; S._ch = out;
   return out;
 }
@@ -2933,7 +2933,7 @@ function renderPlanbar() {
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
-    const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : ' ⚡ channel (discard)')
+    const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : channelSources()[p.name]==='hand_put' ? ' ⚡ put onto the battlefield' : ' ⚡ channel (discard)')
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
               : p.kind==='cycle' ? ' ↻ cycle (discard)'
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
@@ -3110,7 +3110,7 @@ function renderHand() {
       // Channel: the other way to play this card. Its own badge for the same reason the land face has
       // one -- every other route on this thumb casts the creature, so without it the ability could
       // not be expressed at all (user report #1).
-      (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="${channelSources()[c.name]==='transmute'?'TRANSMUTE — discard '+esc(c.name)+' to search your library for a card with the same mana value (you pick it when it resolves)':'CHANNEL — discard '+esc(c.name)+' from hand to use its ability instead of casting it'}${chN?' (click again to take it back)':''}">⚡ ${channelSources()[c.name]==='transmute'?'transmute':'channel'}${chN>1?` ×${chN}`:''}</span>`:'')+
+      (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="${channelSources()[c.name]==='transmute'?'TRANSMUTE — discard '+esc(c.name)+' to search your library for a card with the same mana value (you pick it when it resolves)':channelSources()[c.name]==='hand_put'?'PUT — pay the cost to put '+esc(c.name)+' from your hand onto the battlefield (not a land drop)':'CHANNEL — discard '+esc(c.name)+' from hand to use its ability instead of casting it'}${chN?' (click again to take it back)':''}">⚡ ${channelSources()[c.name]==='transmute'?'transmute':channelSources()[c.name]==='hand_put'?'put':'channel'}${chN>1?` ×${chN}`:''}</span>`:'')+
       // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
       // cast gesture would silently take instead.
       (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suCanAdd?' (click to queue another copy)':suN?' (click to take back one copy)':' (all copies are already queued)'}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+

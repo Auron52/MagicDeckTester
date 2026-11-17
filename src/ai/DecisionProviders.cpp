@@ -67330,3 +67330,52 @@ bool MazesEndProvider::LandEntersUntapped(const GameState& s, const CardDefiniti
     { return false; }
     return DeckProvider::LandEntersUntapped(s, def, heuristic);
 }
+
+// Maze's End I4 (ledger decision 10 / 30): the Gate TAP ORDER for Guild Summit's "tap any number of untapped
+// Gates" and Heap Gate's "Tap an untapped Gate you control" cost -- an ORDER only (every eligible Gate stays;
+// first = tapped first). Three tiers, ManaSourceRank (the base order) inside each:
+//   0  a pure-mana Gate (Guildgates, the CLB Gates, Gond Gate, Thran Portal, Planar Nexus, ...);
+//   1  Baldur's Gate -- a scaled mana land ("{2}, {T}: Add X mana", X = the other Gates): one tap of it can be
+//      worth several mana, which the flat rank does not see;
+//   2  a Gate with a LIVE non-mana {T} ability: Heap Gate's Treasure, and a targeted pump (Basilisk Gate, The
+//      Black Gate) only while we control a creature to receive it -- the list has none, so those two read
+//      as the pure {C} / {B} sources they effectively are.
+// The mana-payment exemption's ordering (decision 2): tapping a Gate for a cost is the same "which land" call
+// as paying mana, and the count (Summit) / whether to activate (Heap) stays searched.
+static bool MazeGateNonManaTapLive(const GameState& s, int controller, const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (p.tap_treasure_cost.has_value() || p.tap_tutor_put_cost.has_value() || p.tap_draw_cost.has_value()
+        || p.tap_damage_cost.has_value() || p.tap_investigate_cost.has_value() || p.tap_blood_cost.has_value())
+    { return true; }
+    if (p.tap_target_pump_cost.has_value())
+    {
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)) { return true; } }
+    }
+    return false;
+}
+
+void MazesEndProvider::EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const
+{
+    auto key = [&](int i) -> std::pair<int, int> {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+        if (d == nullptr) { return { 0, 0 }; }
+        const int tier = MazeGateNonManaTapLive(s, controller, *d) ? 2 : IsScaledManaLand(*d) ? 1 : 0;
+        return { tier, ManaSourceRank(s, *d) };
+    };
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return key(a) < key(b); });
+}
+
+// Maze's End I4 (ledger decision 31): Talon Gates of Madara's from-hand put runs FIRST in its plan's trailing
+// pass. A SOUND order: the put only ADDS resources -- an untapped Gate (a new name for Maze's End's win check,
+// an "other Gate" for Heap Gate's cost) and its own {T} mana -- and its {4} is paid from the same pool in any
+// position, so every trailing activation legal after it in another order is legal (and sees a superset board)
+// after it here. Without a rank the pass runs in emission order, which puts Maze's End's activation (the win
+// check) BEFORE the put, so "put Talon Gates, then win" was unfindable in one plan. Every other action keeps
+// the base rank (0), so their relative order is unchanged.
+int MazesEndProvider::ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const
+{
+    if (a.kind == Action::Kind::Channel && d.params.hand_put_self_cost.has_value()) { return -1; }
+    return DeckProvider::ActivationOrderRankForAction(s, d, a);
+}

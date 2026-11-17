@@ -372,6 +372,11 @@ enum class PermAbilityMode
     TurnFaceUpLate,
     SelfBounce,       // Oboro, Palace in the Clouds: {1}: return itself to owner's hand
     TapTutorPut,  // Seahunter: {3}, {T}: put a Merfolk permanent from library
+    // {1}, {T}, Tap an untapped Gate you control: Create a Treasure token  (Heap Gate; CardParams::
+    // tap_treasure_cost / tap_treasure_tap_other_subtype; Maze's End I4). A {T} mode on a LAND: the source's
+    // {T} is paid first, then the OTHER permanent's tap (PayActivationOtherTap, both worlds), then the mana.
+    // Appended LAST.
+    TapTreasure,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)

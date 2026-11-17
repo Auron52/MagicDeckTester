@@ -18418,6 +18418,100 @@
     "tap_target_pump_cost": "{1}{B}",
     "tap_target_pump_grants_unblockable": true
    }
+  },
+  {
+   "name": "Heap Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\n{1}, {T}, Tap an untapped Gate you control: Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\") [Mana: the Capital City shape (any_color_filter): the free {C}, or {1} fed in -> one mana of any colour (the colour is the mana-payment exemption). Treasure (PermAbilityMode::TapTreasure, tap_treasure_cost {1} + tap_treasure_tap_other_subtype Gate): NOT a mana ability (it makes a token), a SEARCHED plan action like every activation, once per untap. Costs in order: the source's {T} (so the cost Gate is necessarily ANOTHER Gate, CR 601.2h), then the other Gate's tap (PayActivationOtherTap, both worlds), then the {1}. WHICH Gate the cost taps follows the deck's Gate tap order (pure-mana Gates first, Baldur's Gate next, a Gate with a live non-mana {T} ability last; ManaSourceRank inside) -- the mana-payment exemption's ordering, ledger decision 30; a human picks it on the board. The Treasure is the shared 'Treasure Token' (a payment source). By CR 106.7 it makes Gond Gate produce every colour. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "tap_treasure_cost": "{1}",
+    "tap_treasure_tap_other_subtype": "Gate"
+   }
+  },
+  {
+   "name": "Baldur's Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{2}, {T}: Add X mana of any one color, where X is the number of other Gates you control. [The Three Tree City scaled-mana-land shape: the free {C} is `produces`; the {2}, {T} mode (mana_per_creature_feeder_generic 2) adds N mana of ONE colour, N = the OTHER Gates we control at activation, tapped or not (mana_per_other_controlled_subtype Gate; ScaledManaCreatureCount). The colour is the payment's (mana-payment exemption). Like Three Tree City the payer takes the fed mode only when it nets at least one mana over the free {C} (net = N - 2 >= 1, the inherited approximation; ScaledManaNetYield). By CR 106.7 it makes Gond Gate produce every colour (ControlledSubtypeColors). LEGENDARY: one copy; the legend rule applies. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "mana_per_creature_feeder_generic": 2,
+    "mana_per_other_controlled_subtype": "Gate"
+   }
+  },
+  {
+   "name": "Basilisk Gate",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{2}, {T}: Target creature gets +X/+X until end of turn, where X is the number of Gates you control. Activate only as a sorcery. [The pump is the TapTargetPump {T} mode (Kessig Wolf Run): +1/+1 times the Gates we control at RESOLUTION, the source included (tap_target_pump_per_subtype_both Gate). Sorcery speed: TapTargetPump is enumerated only in our main phases' plans. The target is searched among OUR creatures autonomously (one per identity class); an opponent's creature is legal but never offered autonomously (the passive goldfish opponent never attacks or blocks), and a human is offered every legal target. INERT in this list: no creature of ours, none made, so the ability is never offered autonomously (implemented anyway, ledger decision 3). Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_target_pump_cost": "{2}",
+    "tap_target_pump_power": 1,
+    "tap_target_pump_tough": 1,
+    "tap_target_pump_per_subtype_both": "Gate"
+   }
+  },
+  {
+   "name": "Talon Gates of Madara",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Gate"
+   ],
+   "keywords": [],
+   "oracle_text": "When this land enters, up to one target creature phases out.\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\n{4}: Put this card from your hand onto the battlefield. [Mana: the Capital City shape (any_color_filter). {4} put (hand_put_self_cost): a from-HAND activated ability riding the Channel action (one per distinct name; viewer verb channel=, badged 'put'): pay {4}, the card leaves the hand and enters through EnterLand -- NOT a land play (the land drop is untouched), untapped, so Guild Summit's draw, Amulet / Gond, landfall all fire, and it can tap for mana at once. Offered in OUR main phases only: an instant-speed put on the goldfish opponent's turn leaves the same board at our next untap and commutes with a Burgeoning put of another land, so main-phase timing is a sound fold (ledger decision 32). In its plan's trailing pass it runs FIRST, before Maze's End's activation (sound order: it only adds a Gate and mana; ledger decision 31). ETB 'up to one target creature phases out': NOT modelled (the engine has no phasing) -- inert in a goldfish: the list has no creature of ours, and the passive opponent's creatures never attack or block, so every choice (none included) reaches the same game; disclosed as an inert collapse, never offered as a choice. By CR 106.7 it makes Gond Gate produce every colour. Gate (CR 205.3i): counted BY NAME for Maze's End, never folded with another Gate.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "hand_put_self_cost": "{4}"
+   }
   }
  ]
 }

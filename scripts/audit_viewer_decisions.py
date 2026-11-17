@@ -552,6 +552,13 @@ MANIFEST = {
     # Manabond's end-step "you may reveal your hand and put all land cards ...": yes/no on the `dig` chooser
     # (PerformEndStepManabond, both worlds' end step); one examined card (Manabond), legal {0}, -1 = decline.
     "endstep_may_dump_hand_lands_discard_hand": ("dig", truthy),
+    # ---- Maze's End (I4, 2026-11-17) ----
+    # Heap Gate "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token": WHETHER to activate is a
+    # main_phase plan action (ActivatePermAbility/TapTreasure); WHICH Gate pays the tap cost is asked on the
+    # board (g_play_loyalty_chooser, PayActivationOtherTap -- both worlds' apply, so ApplyPlan / the viewer
+    # asks) when more than one untapped Gate is eligible; default = the deck's Gate tap order.
+    "tap_treasure_cost":              ("main_phase",  present),
+    "tap_treasure_tap_other_subtype": ("target",      truthy),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
     # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
@@ -974,6 +981,11 @@ BOARD_ACTIVATIONS = {
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
     # Dimir House Guard's Transmute rides the Channel kind and its verb (a from-HAND activation).
     "transmute_cost":                            ("verb:channel",   truthy,   "transmute_cost"),
+    # Maze's End I4: Talon Gates of Madara's "{4}: Put this card from your hand onto the battlefield" rides
+    # the Channel kind (channel= verb; the plan JSON flags it hand_put, the GUI badges it "put").
+    "hand_put_self_cost":                        ("verb:channel",   truthy,   "hand_put_self_cost"),
+    # Heap Gate's Treasure ({1}, {T}, tap another untapped Gate): a verbless board activation.
+    "tap_treasure_cost":                         ("activate",       present,  "tap_treasure_cost"),
     # NOT listed (deliberately): unearth_cost, for the eternalize reason below (a graveyard activation:
     # "source reached play" is the wrong evidence). Timeless Witness's eternalize_cost (activated from the GRAVEYARD --
     # "source reached play" is the wrong evidence for it, so this check would read every sweep where
@@ -1035,6 +1047,9 @@ INERT_PARAMS = {
     "etb_choose_color_fixed": "the CLB Gates' printed colour, excluded from the etb_choose_color menu (the choice itself rides etb_choose_color -> choose_color)",
     "chosen_color_adds_basic_land_type": "Thran Portal -- the chosen basic land type is the colour chosen by etb_choose_color -> choose_color; no second choice",
     "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
+    # Maze's End (I4, 2026-11-17).
+    "mana_per_other_controlled_subtype": "Baldur's Gate -- the scaled mana ability's X (the other Gates you control); colour and amount are the mana-payment exemption (the Three Tree City shape), no choice",
+    "tap_target_pump_per_subtype_both": "Basilisk Gate -- the pump's X (the Gates you control at resolution), a computed magnitude; the TARGET rides tap_target_pump_cost (chosen on the live battlefield)",
     # Mill: printed magnitudes and legality thresholds. Their action/target choices
     # are classified above; resolving these riders is mandatory.
     "cycling_mill_opponent": "mandatory mill count on cycling Fractured Sanity; cycling timing is the existing main_phase action",
@@ -2072,6 +2087,7 @@ MAINPHASE_PARAMS = {
     # search (full range); the human reaches K by choosing it again after each re-prompt.
     "ping_all_cost":       "mana-only, no-{T} repeatable sweeper ping = a main_phase board activation (ActivatePermAbility/PingAll); K rides chosen_x",
     "evoke_cost":          "EVOKE vs hard cast (Reveillark, Shriekmaw) = two main_phase CastFromHand variants of one hand slot (Action::evoke, #E1/#E0 in the plan signature, the CheckLine `evoke` sub in the choose-variant dialog) -- the choice is surfaced at queue/commit time, not at resolution",
+    "hand_put_self_cost":  "Talon Gates of Madara's {4} put-from-hand = a from-HAND activation (Channel kind, channel= verb, badged 'put') = a main_phase plan action; the land enters through the shared EnterLand (not a land drop), no further choice (its ETB phase-out is inert and not modelled -- bracket note)",
     "transmute_cost":      "Dimir House Guard Transmute = a from-HAND {1}{B}{B}-discard activation (Channel kind, channel= verb) = a main_phase plan action; the FOUND card is one searched variant per legal MV-4 library name autonomously, and the shared tutor chooser at resolution in human play",
     "unearth_cost":        "Unearth (Hellspark Elemental) = a from-GRAVEYARD sorcery-speed activation = a main_phase plan action (Action::Kind::Unearth, unearth= verb, the viewer's graveyard click via unearth_gy; one action per graveyard copy); returns with haste, exiled at end step / if it would leave -- no further choice",
     "eternalize_cost":     "Timeless Witness Eternalize = a from-GRAVEYARD {5}{G}{G} activation = a main_phase plan action (Action::Kind::Eternalize, eternalize= verb, the viewer's graveyard click); the token's ETB return is the `dig` decision (etb_return_gy_to_hand)",
