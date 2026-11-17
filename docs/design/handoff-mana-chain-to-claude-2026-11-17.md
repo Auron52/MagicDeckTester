@@ -2,7 +2,25 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:04 UTC
+## Current state, updated 05:10 UTC
+
+**Push temporarily held by smoke failure:** the full post-rebase
+`bash test/regression.sh --smoke` finished with 180 passed, 39 failed,
+zero new. Its per-game audit found 15 searched slower games and 345
+same-score searched play changes; 248 d0 slower games are reported under
+the lighter d0 bar. Failures include Mill, White Knights, Anti-Lifegain,
+Unpredictable Cyclone, Creature Giving, Five Colour, Critter Lifegain,
+Heliod, Melira, Minotaur, Selesnya, Prevent Damage, Galadriel, and
+Vampires. Full output:
+`build/scratch/dragonstorm_visible_lump_ab/rebase_smoke.out`.
+The source hash is unchanged by the rebase, and the remote's three new
+commits touched only the Red Elementals value sidecar and its GT; this
+is not automatically attributable to the rebase. Classify the 15
+searched slower games before accepting GT or pushing; use
+`bash test/classify_turn_later.sh smoke`, investigate any persistent
+regressions, then rerun smoke/accept only with evidence. The due-four
+mana gate remains paused at completed chunks and can resume after the
+smoke investigation. The 05:09 push window is open, but no push yet.
 
 The eight-worker due-four gate was intentionally stopped at chunk
 boundary for the post-rebase smoke and upcoming push. It had completed
