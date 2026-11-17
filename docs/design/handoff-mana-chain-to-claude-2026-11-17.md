@@ -2,9 +2,9 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:50 UTC
+## Live status, updated 06:57 UTC
 
-**Active Breaching Dragonstorm diagnosis and audit-only trial:** The two
+**Breaching Dragonstorm diagnosis and audit fix complete:** The two
 fresh ENUM-GAP flags are **hidden future mana**, not a visible pre-cast
 source shortage. Exact repros in
 `build/scratch/dragonstorm_visible_lump_ab/breaching_gap_30222319_t6.out`
@@ -28,15 +28,22 @@ HIDDEN-INFO=1, **zero ENUM-GAP**, naming Mountain #52; outputs
 `build/scratch/dragonstorm_visible_lump_ab/breaching_gap_30222319_hiddenfix.out`
 and `breaching_gap_30221073_hiddenfix.out`. The 31 focused oracle unit
 cases passed. The source commit is `79d7b898b`, with
-`HEAD:src=342674496bfb8ddc912cee3193513f41b0388d58`. A PGO+LTO
-rebuild is **active** in exec session `88239`, console
+`HEAD:src=342674496bfb8ddc912cee3193513f41b0388d58`. The PGO+LTO
+rebuild completed in exec session `88239`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_hidden_freecast_oracle.out`.
-Its compile completed and its pooled 275-job/7,447-game training batch
-was progressing normally at 06:50. Training progress is in
-`build/pgo-work/train.log`; the final PGO compile follows.
-Verify its source stamp, run the fresh Breaching Dragonstorm 5,000-game
-gate, then strict viewer and broader regression checks. Do not widen the
-player search gate to exploit the future reveal.
+Its compile, pooled 275-job/7,447-game training batch, and final link
+passed. `build/PGO/SRC_TREE` matches
+`342674496bfb8ddc912cee3193513f41b0388d58`. The fresh PGO gate
+`codex-breaching-hidden-freecast-20261117` then passed on indices
+225,000–229,999: **Breaching Dragonstorm clean, 5,000 games, zero issue
+flags**, oracle-on/off play byte-identical; four HIDDEN-INFO cases are
+disclosed. Report:
+`logs/mana_clean/codex-breaching-hidden-freecast-20261117/report.md`.
+`test/mana_clean.json` carries the record. Next run smoke plus strict
+viewer reference checks on this source and compare to the known 39
+unrelated GT failures from the previous full smoke. Then inspect the
+Spirits seed 30040647 T4 one APPLY-DROP. Do not widen the player search
+gate to exploit the future reveal.
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:

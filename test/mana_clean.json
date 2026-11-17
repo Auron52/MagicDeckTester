@@ -1179,6 +1179,45 @@
      "seed": 30220000,
      "src": "f7cce0693b6a16d779df5ac756af16100e3b677d",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 77,
+      "DOMINATED-LAND": 431,
+      "HIDDEN-INFO": 4,
+      "PHANTOM": 21
+     },
+     "commit": "bced88d9ad1c4a6800b7c0210d775cd496610520",
+     "date": "2026-11-17T06:55:16Z",
+     "decisions": 26098,
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+     "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
+     "game_index": 225000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 17005,
+     "ms_on": 105149,
+     "report": "logs/mana_clean/codex-breaching-hidden-freecast-20261117/report.md",
+     "run": "codex-breaching-hidden-freecast-20261117",
+     "seed": 30225000,
+     "src": "342674496bfb8ddc912cee3193513f41b0388d58",
+     "verdict": "clean"
     }
    ]
   },
