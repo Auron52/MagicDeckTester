@@ -72298,6 +72298,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (take && state.casts_remaining_this_turn != 0)
             {
                 const std::string fname = found.m_name.str();
+                manaoracle::NoteTopFreeCast(state, found.m_number);
                 EnterHand(state, state.active_player_index, std::move(found),
                           HandEntryReason::Reveal);
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
@@ -72397,6 +72398,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (take && state.casts_remaining_this_turn != 0)
                 {
                     const std::string hname = hit.m_name.str();
+                    manaoracle::NoteTopFreeCast(state, hit.m_number);
                     EnterHand(state, state.active_player_index, std::move(hit),
                               HandEntryReason::Reveal);
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
@@ -72470,6 +72472,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (take && state.casts_remaining_this_turn != 0)
                     {
                         const std::string fname = found.m_name.str();
+                        manaoracle::NoteTopFreeCast(state, found.m_number);
                         EnterHand(state, pe.controller, std::move(found),
                                   HandEntryReason::Reveal);
                         cascade_free = true;
@@ -74712,7 +74715,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             FireProwess(state, *md);
             FlushNoncombatTriggersAtPriorityBoundary(state);
             if (state.own_death_live && SelfHasLost(state)) { return; }
-            manaoracle::NoteRippleFreeCast(state, c.m_number);
+            manaoracle::NoteTopFreeCast(state, c.m_number);
             casts.push_back(RippleCast{ std::move(c), md, std::move(tut) });
         }
         std::vector<std::vector<int>> inst(casts.size());
@@ -74861,6 +74864,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         BottomInRandomOrder(state, me, std::move(w.rest));
         const std::string hname = w.hit.m_name.str();
+        manaoracle::NoteTopFreeCast(state, w.hit.m_number);
         // At the FRONT of the hand, so apply_one (which casts the first copy of a name) casts THIS card, not a
         // same-name copy already held (the executor casts the hit itself, by its copy number).
         EnterHand(state, me, std::move(w.hit), HandEntryReason::Reveal);

@@ -55,7 +55,7 @@ namespace manaoracle
     // A ripple copy was cast from a library reveal during this oracle apply.
     // Record its physical id before a later tutor shuffles away the evidence
     // from the final library order (Shadowborn's Dark Ritual chains).
-    void NoteRippleFreeCast(const GameState& state, int card_number);
+    void NoteTopFreeCast(const GameState& state, int card_number);
 
     // One way to pay one payment: the taps to make (in order), and the floating units to set aside
     // for the duration of the payment so the payer cannot spend them (restored afterwards). The
@@ -122,7 +122,9 @@ namespace manaoracle
         // Titania's Elves), so a yield raised by a card the plan took off the library's top is hidden information
         // (ManaOracle.cpp, BoostedByHiddenCard).
         std::vector<int>       scaled_counted;
-        std::vector<int>       ripple_free_casts;
+        // A top-of-library free cast may become a mana source before a later
+        // shuffle erases its provenance from the final library order.
+        std::vector<int>       top_free_casts;
         // Past the script's end, keep making ENGINE steps instead of stopping at a frontier: the pure
         // replay of the engine's own line, whose first failing step the census measures from.
         bool                   all_engine = false;
