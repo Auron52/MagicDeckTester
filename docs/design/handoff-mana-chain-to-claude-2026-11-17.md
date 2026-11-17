@@ -2,19 +2,20 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:14 UTC
+## Current state, updated 03:19 UTC
 
-The next due **Shadowborn Apostle** PGO mana-clean gate is active as the
-only top-level simulation batch, exec session 84136:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run shadowborn_apostle --games 5000 --name codex-shadowborn-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/shadowborn_fresh_gate.out`.
-It covers indices 100,000–104,999; when done, inspect
-`logs/mana_clean/codex-shadowborn-fresh-20261117/report.md`, update this
-handoff, and commit the `test/mana_clean.json` record.
+**Shadowborn Apostle fresh gate complete:** indices 100,000–104,999 at
+PGO source `fcb9352608ea` yielded three issues: two APPLY-DROP, one
+ORACLE-GAP, no cap/enum/order issue. Oracle-on/off play byte-identical.
+Report: `logs/mana_clean/codex-shadowborn-fresh-20261117/report.md`.
+The oracle gap is seed 30103262 T5, Dark Ritual → Diabolic Intent on a
+board with two Lakes of the Dead; the oracle's nearest outcome taps
+Swamp#42 and leaves B3, while the engine leaves that Swamp untapped and
+B2. Investigate oracle payment coverage first. The drops are seeds
+30104750 T4 (Bloom/Lake, Thrumming Stone continuation) and 30104985
+T3 (Lake, double Diabolic Intent); both need depth 3+ rollback, so the
+one-step rollback does not rescue them. The gate record is committed in
+`test/mana_clean.json`. No simulation batch is active after this gate.
 
 **Pirates fresh gate complete:** indices 99,000–103,999 at PGO source
 `fcb9352608ea` yielded two APPLY-DROP flags in one seed, no enum/oracle
