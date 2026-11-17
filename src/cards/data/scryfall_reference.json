@@ -8299,5 +8299,27 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Enchantment Creature — Saga Leviathan"
+  },
+  "Hullbreaker Horror": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flash"
+    ],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "Flash\nThis spell can't be countered.\nWhenever you cast a spell, choose up to one —\n• Return target spell you don't control to its owner's hand.\n• Return target nonland permanent to its owner's hand.",
+    "power": "7",
+    "toughness": "8",
+    "type_line": "Creature — Kraken Horror"
+  },
+  "Brinelin, the Moon Kraken": {
+    "cmc": 8.0,
+    "keywords": [
+      "Partner"
+    ],
+    "mana_cost": "{6}{U}{U}",
+    "oracle_text": "When Brinelin enters and whenever you cast a spell with mana value 6 or greater, you may return target nonland permanent to its owner's hand.\nPartner (You can have two commanders if both have partner.)",
+    "power": "6",
+    "toughness": "8",
+    "type_line": "Legendary Creature — Kraken"
   }
 }

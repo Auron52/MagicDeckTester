@@ -367,6 +367,9 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
     // without the param.
     DrainPendingSelfBounces(state);
+    // ...and Brinelin's enter bounce (Sea Creatures I4): after the legend rule above (CR 704.3 / 603.3), where the
+    // rollout drains it too (apply_one, right after its EnforceLegendRule). Empty check for every other deck.
+    DrainPendingEtbBounces(state);
     // ...and a Walking Ballista that entered at 0 toughness (X = 0) dies now (CR 704.5f), its enter
     // watchers having already fired. Rollout twin: apply_one's DrainPendingZeroToughness calls.
     DrainPendingZeroToughness(state);

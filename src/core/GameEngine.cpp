@@ -402,6 +402,7 @@ void GameEngine::UntapStep(GameState& state)
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingZeroToughness(state);   // safety net: a 0/0 Walking Ballista entrant (lockstep w/ the rollout)
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
+    DrainPendingEtbBounces(state);      // safety net (Sea Creatures I4): an off-cascade Brinelin entry resolves by turn start
     DrainPendingLookTop(state);         // safety net (lockstep w/ SimulateEndAndStartNextTurn): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
     SweepOrphanedAuras(state);          // CR 704.5m SBA checkpoint (lockstep w/ SimulateEndAndStartNextTurn)

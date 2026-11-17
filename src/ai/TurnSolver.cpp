@@ -6064,7 +6064,7 @@ static bool BpCondemnTreasureSitePositiveEnabled()
 // replicate spells must extend it). NO CAP. Every deck without the card: one battlefield walk, returns 0 -- and the
 // whole axis is behind deck_has_cast_target_trigger anyway.
 //   (1) RESOLVED in I4c: the rank is now PER TRIGGER INSTANCE (AppendRaggaInstanceVariants below; one digit per
-// qualifying cast in plan order, decoded by UntapPumpRankFor), so two qualifying casts take independent targets. (2)
+// qualifying cast in plan order, decoded by CastTargetTriggerRankFor), so two qualifying casts take independent targets. (2)
 // the axis skips plans that already carry another axis (sac_pins, ...). I4 (Decimator's emerge) does NOT ride
 // sac_pins: its victim is a per-CAST variant (Action::emerge + soulfire_own_targets, the SAC-ANY-CREATURE
 // post-pass), so every emerge plan is a BASE plan and is crossed with this axis like any other (MV 10 reaches
@@ -6133,6 +6133,55 @@ static long long RaggaUntapPumpAxisWidth(const GameState& state, const TurnSolve
 // Instances fired by a breakpoint CONTINUATION's casts are that continuation's own digits: the axis also fans
 // continuation plans (cont_axes_only) for this card, so the instance a site-9 refund makes affordable is searched
 // in the rollout too, not inherited as the front.
+// HULLBREAKER HORROR / BRINELIN BOUNCE-TRIGGER AXIS (Sea Creatures I4; ChooseBounceTrigger's per-instance digit). Only
+// SEARCHED sources count: a source the provider prunes to decline (BounceTriggerDeclineOnly -- Sea Creatures by
+// default, USER 2026-11-16) fires no digit. `instances` = the bounce trigger INSTANCES the plan's own hand casts fire,
+// in plan order: each cast fires one per searched cast-trigger source we control whose MV gate it meets (the
+// battlefield's, plus any the plan cast EARLIER -- a source never triggers off its own cast), and a Brinelin cast adds
+// its ETB instance after them. Width = an UPPER BOUND on one instance's options: decline + our nonland permanents
+// now (the search folds the opponent's side away) + TWO per nonland permanent the plan casts (the permanent and one
+// enter token, e.g. Kiora's Kraken). NO CAP. 0 when the plan fires no searched instance. [OWED: casts that are not
+// CastFromHand (free casts, flashback) are not counted; a deck adding a bounce source beside them must extend this.]
+static long long BounceTriggerAxisWidth(const GameState& state, const TurnSolver::Plan& p, int* instances = nullptr)
+{
+    if (instances) { *instances = 0; }
+    const int me = state.active_player_index;
+    const DecisionProvider& prov = ResolveProvider(state);
+    std::vector<int> gates;   // min MV of each searched cast-trigger source we control
+    long long own = 0;
+    bool any = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        if (!q.card.IsLand()) { ++own; }
+        if (q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.cast_trigger_bounce_nonland && !prov.BounceTriggerDeclineOnly(state, me, *d))
+        { gates.push_back(d->params.cast_trigger_bounce_min_mv); }
+    }
+    int inst = 0;
+    long long added = 0;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        for (const int g : gates) { if (mv >= g) { ++inst; } }
+        if (d->card.IsPermanentCard() && !d->card.IsLand()) { added += 2; }
+        if ((d->params.cast_trigger_bounce_nonland || d->params.etb_bounce_nonland)
+            && !prov.BounceTriggerDeclineOnly(state, me, *d))
+        {
+            if (d->params.etb_bounce_nonland) { ++inst; }
+            if (d->params.cast_trigger_bounce_nonland) { gates.push_back(d->params.cast_trigger_bounce_min_mv); }
+        }
+        any = true;
+    }
+    if (!any || inst == 0) { return 0; }
+    if (instances) { *instances = inst; }
+    return 1 + own + added;
+}
+
 static void AppendRaggaInstanceVariants(const GameState& state, const TurnSolver::Plan& p, long long w, int instances,
                                         std::vector<TurnSolver::Plan>& extra)
 {
@@ -6158,7 +6207,7 @@ static void AppendRaggaInstanceVariants(const GameState& state, const TurnSolver
     }
     std::vector<int> inh(static_cast<std::size_t>(m), 0);
     for (int j = 0; j < m; ++j)
-    { inh[static_cast<std::size_t>(j)] = std::min<int>(std::max(0, UntapPumpRankFor(state, j)), static_cast<int>(w - 1)); }
+    { inh[static_cast<std::size_t>(j)] = std::min<int>(std::max(0, CastTargetTriggerRankFor(state, j)), static_cast<int>(w - 1)); }
     const int inh_k = UntapPumpRankPack(inh, b);
     std::vector<int> d(static_cast<std::size_t>(m), 0);
     for (;;)
@@ -69791,7 +69840,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedLandfallTarget _slft(plan.landfall_target_choice, state.TurnSeq());
     // ...and the searched CAST-TRIGGER target policy (Plan::cast_trigger_target_choice; Ulamog), the same
     // shape: -1 installs nothing. Lockstep: AIEngine::TakeTurn's cast_trigger_target_exec.
-    ScriptedCastTriggerTarget _sctt(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal);
+    ScriptedCastTriggerTarget _sctt(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_target_trigger_ordinal);
     ScriptedSweep _ssw(plan.sweep_choice);            // searched end-of-main-1 sweep; -1 = the rule
     struct LeFirePin { int saved; explicit LeFirePin(int k) : saved(g_le_fire_pin) { g_le_fire_pin = k; }
                        ~LeFirePin() { g_le_fire_pin = saved; } } _lefp(plan.le_fire_choice);
@@ -73354,6 +73403,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
+            // Brinelin's enter bounce (Sea Creatures I4): AFTER the legend rule (CR 704.3 / 603.3), lockstep with the
+            // executor's end-of-Resolve drain (which also follows its legend rule). Empty check for every other deck.
+            DrainPendingEtbBounces(state);
 
             // EVOKE (Reveillark): the evoke-cost cast self-sacrifices once its enter cascade has
             // fired -- through the SHARED cascade, so the LTB fires exactly as on any other
@@ -74480,6 +74532,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
+            DrainPendingEtbBounces(state);   // Sea Creatures I4: after the legend rule (the creature branch's twin)
             // Same-turn loyalty activation carried on this cast (see ApplyCastLoyaltyActivation):
             // AFTER the legend rule, exactly where the real game's priority window falls.
             if (cast_loyalty >= 0 && def.params.loyalty_start > 0)
@@ -79199,6 +79252,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingZeroToughness(state);              // safety net (lockstep w/ UntapStep): a 0/0 Ballista entrant
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
+    DrainPendingEtbBounces(state);                 // safety net (Sea Creatures I4), lockstep w/ UntapStep
     DrainPendingLookTop(state);                    // safety net (lockstep w/ UntapStep): a watcher-only entry's Risen Reef trigger
     DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
     SweepOrphanedAuras(state);                     // CR 704.5m SBA checkpoint (lockstep w/ GameEngine::UntapStep)
@@ -89486,6 +89540,14 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     // Gated on the deck constant inside PlanLookTopShape.
     if (look_top_route && BpPutInHandEnabled() && !(mask & (1 << 10)) && PlanLookTopShape(state, p).total > 0)
     { mask |= 1 << 10; }
+    // SITE 10's BOUNCE-TRIGGER ROUTE (Hullbreaker Horror / Brinelin, Sea Creatures I4). A SEARCHED bounce instance
+    // can return one of our permanents to HAND mid-phase (ReturnPermanentToOwnersHand -> EnterHand, Bounce), which
+    // arms site 10 in both worlds (HandGainedACard). "If a route is ever added, ADD IT HERE TOO": without the bit the
+    // re-solve's continuation is BpUnbranchedCanon's front -- an in-window greedy pick of whether to recast the
+    // returned card. 0 whenever the provider declines every source (Sea Creatures' default).
+    if (BpPutInHandEnabled() && !(mask & (1 << 10)) && state.deck_has_cast_target_trigger
+        && BounceTriggerAxisWidth(state, p) > 0)
+    { mask |= 1 << 10; }
     // Site 9, the COUNTER-FILLED activation (Khalni Heart Expedition, 2026-10-15). The clause above
     // keys on a CAST that lands an activatable permanent; an Expedition ALREADY on the battlefield
     // below its count becomes activatable when this plan's own lands enter (each landfall adds a
@@ -94813,7 +94875,20 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 || p.putback_choice >= 0 || p.tutor_choice >= 0 || p.discard_choice >= 0
                 || p.etbcounter_choice >= 0 || !p.sac_pins.empty()) { continue; }
             int ragga_inst = 0;
-            const long long ragga_w = RaggaUntapPumpAxisWidth(state, p, &ragga_inst);   // Raggadragga (Boars I3b/I4c)
+            long long ragga_w = RaggaUntapPumpAxisWidth(state, p, &ragga_inst);   // Raggadragga (Boars I3b/I4c)
+            // Hullbreaker / Brinelin bounce instances (Sea Creatures I4) share the per-instance digits and the ordinal:
+            // instances interleave in firing order, so the tuple has (untap-pump + bounce) digits, each over the
+            // larger of the two widths (a digit past an instance's real option count clamps). 0 for every deck
+            // without a searched bounce source (and while the provider declines them all).
+            {
+                int bounce_inst = 0;
+                const long long bounce_w = BounceTriggerAxisWidth(state, p, &bounce_inst);
+                if (bounce_w > 0)
+                {
+                    ragga_w = std::max(ragga_w, bounce_w);
+                    ragga_inst += bounce_inst;
+                }
+            }
             if (cont_axes_only)
             {
                 AppendRaggaInstanceVariants(state, p, ragga_w, ragga_inst, extra);

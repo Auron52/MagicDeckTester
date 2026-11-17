@@ -1391,7 +1391,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && (d->params.cast_trigger_exile_target_permanents > 0
                       || d->params.cast_trigger_destroy_target_permanents > 0
-                      || d->params.cast_trigger_untap_pump_target_min_spent > 0)) { return true; }   // + Raggadragga
+                      || d->params.cast_trigger_untap_pump_target_min_spent > 0     // + Raggadragga
+                      || d->params.cast_trigger_bounce_nonland || d->params.etb_bounce_nonland)) { return true; }   // + Hullbreaker / Brinelin (Sea I4)
         }
         return false;
     }();
@@ -1560,7 +1561,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
-    g_pending_self_bounces.clear();   // thread-scoped queue: a fresh game must never inherit a stray record
+    g_pending_self_bounces.clear();
+    g_pending_etb_bounces.clear();    // Sea Creatures I4: same per-game reset   // thread-scoped queue: a fresh game must never inherit a stray record
     g_pending_look_top.clear();       // ...the same for the look-top queue (Risen Reef)
     g_pending_zero_toughness.clear(); // ...and the doomed 0/0 entrant queue (Walking Ballista X = 0)
     g_own_etb_depth     = 0;

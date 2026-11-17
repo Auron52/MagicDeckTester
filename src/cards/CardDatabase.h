@@ -3923,6 +3923,26 @@ struct CardParams
     int  cast_trigger_untap_pump_power = 0;
     int  cast_trigger_untap_pump_tough = 0;
     bool cast_trigger_untap_pump_grants_trample = false;
+    // Hullbreaker Horror + Brinelin, the Moon Kraken (Sea Creatures I4). ONE optional, targeted "return target
+    // nonland permanent to its owner's hand" trigger body (ChooseBounceTrigger / ResolveBounceTrigger, the shared
+    // ReturnPermanentToOwnersHand), fired from two sites:
+    //   * cast_trigger_bounce_nonland (+ cast_trigger_bounce_min_mv): a battlefield cast-watcher in the shared
+    //     FireOnCastTriggers -- "Whenever you cast a spell [with mana value N or greater], you may return target
+    //     nonland permanent ..." (Hullbreaker's "choose up to one" mode 2; Brinelin's MV>=6 clause). The PRINTED
+    //     mana value gates (a reduction never changes MV). Never triggers off itself (it is on the stack).
+    //   * cast_trigger_bounce_spell_opponent: Hullbreaker's mode 1, "return target spell you don't control to its
+    //     owner's hand" -- the legal set is the opponent's spells on the stack (always EMPTY against the goldfish).
+    //   * etb_bounce_nonland: Brinelin's "When Brinelin enters, you may return target nonland permanent ...",
+    //     RECORDED by FireOwnEtbTriggersBody and resolved at each world's post-resolution drain (after the legend
+    //     rule, DrainPendingEtbBounces).
+    // Either side's permanents are legal (ours included); decline is always an option. In SEARCH the per-instance
+    // target is the searched cast-trigger rank digit (Plan::cast_trigger_target_choice), unless the deck's
+    // provider prunes to decline (BounceTriggerDeclineOnly: Sea Creatures, USER 2026-11-16); human play picks on
+    // the board with a (no target) option.
+    bool cast_trigger_bounce_nonland = false;
+    int  cast_trigger_bounce_min_mv = 0;
+    bool cast_trigger_bounce_spell_opponent = false;
+    bool etb_bounce_nonland = false;
     // Decimator of the Provinces (Boars I4). Two clauses:
     //   * emerge_cost "{6}{G}{G}{G}": EMERGE (CR 702.119) -- an ALTERNATIVE cost, "sacrifice a creature and pay
     //     the emerge cost reduced by that creature's mana value". A searched cast variant (Action::emerge, one

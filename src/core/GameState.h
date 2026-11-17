@@ -1309,12 +1309,15 @@ struct GameState
     // matters, never the absolute value: two states that differ only here have identical futures (Dominance.h
     // classification: nothing to fold). 0 for every deck without the card. In the bool padding (sizeof unchanged).
     std::uint8_t             cast_untap_refunds = 0;
-    // Raggadragga's untap-pump trigger INSTANCE ordinal (Boars I4c): a MONOTONIC count (wraps at 256; never reset),
-    // bumped once per untap-pump trigger by FireOnCastTriggers (both worlds). Its ONLY reader is UntapPumpRankFor,
+    // The per-instance TARGETED-TRIGGER ordinal (Boars I4c for Raggadragga's untap-pump; renamed and shared by Sea
+    // Creatures I4): a MONOTONIC count (wraps at 256; never reset), bumped once per Raggadragga untap-pump instance
+    // (FireOnCastTriggers) AND once per SEARCHED Hullbreaker / Brinelin bounce instance (the cast trigger, and
+    // Brinelin's ETB at DrainPendingEtbBounces; a provider-declined instance takes no digit and does not bump), in
+    // firing order, in both worlds. Its ONLY reader is CastTargetTriggerRankFor,
     // which takes it relative to the ordinal saved when the live cast-trigger target pin was installed -- so only the
     // CHANGE since an install matters, never the absolute value (Dominance.h: nothing to fold). 0 for every deck
     // without the card. In the bool padding (sizeof unchanged).
-    std::uint8_t             cast_untap_pump_ordinal = 0;
+    std::uint8_t             cast_target_trigger_ordinal = 0;
     // THE COMBAT LANDFALL-TARGET RANK (Plan::combat_landfall_target_choice, 2026-10-17) -- a per-turn
     // COMBAT PIN like scripted_combat_land_search_crack, placed HERE (int8_t, in this bool padding) because
     // an int beside the other combat pins costs sizeof(GameState) +8 (measured). The rank into

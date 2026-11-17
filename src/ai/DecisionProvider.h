@@ -1252,6 +1252,20 @@ public:
     // ours (highest power first); the opponent's last. Stable (oldest first on a tie).
     virtual void UntapPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const;
 
+    // BounceTriggerDeclineOnly -- Hullbreaker Horror's / Brinelin's optional "return target nonland permanent to its
+    // owner's hand" trigger (Sea Creatures I4). true = a ONE-OPTION PRUNE to DECLINE for this source in autonomous
+    // play: the trigger offers no target and takes no searched digit (the per-instance ordinal is not bumped). The
+    // engine never asks it under human play (the board click offers every target). Default false (searched).
+    virtual bool BounceTriggerDeclineOnly(const GameState& s, int controller, const CardDefinition& src) const
+    { (void)s; (void)controller; (void)src; return false; }
+    // BounceTriggerTargetOrder -- the same trigger's options when searched: `reps` holds -1 = DECLINE plus one
+    // battlefield index per identity class (BounceTriggerTargetClasses), DECLINE first. ORDER ONLY here (the
+    // engine rejects an add or a drop); rank 0 = the front = the playout policy beyond the horizon. Base rule:
+    // no reorder (decline, then battlefield order).
+    virtual void BounceTriggerTargetOrder(const GameState& s, int controller, const CardDefinition& src,
+                                          std::vector<int>& reps) const
+    { (void)s; (void)controller; (void)src; (void)reps; }
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one

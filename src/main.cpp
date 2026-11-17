@@ -7591,7 +7591,13 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // controller"), so self-targeting gains US life and is a real line in a lifegain deck.
             // Path to Exile (land_search_for_removal_controller): the rider is a LAND SEARCH by the exiled
             // creature's controller -- the Swords life wording would be wrong for it.
-            const std::string remove_desc = def.params.bounce_opponent_nonland_permanent
+            // Hullbreaker Horror / Brinelin (Sea Creatures I4): the optional bounce TRIGGER, asked by
+            // FireBounceTriggerInstance with the source's def. Either side, (no target) declines.
+            const bool bounce_trigger = def.params.cast_trigger_bounce_nonland || def.params.etb_bounce_nonland;
+            const std::string remove_desc = bounce_trigger
+                ? std::string("returned to its owner's hand (a token ceases to exist; counters and Auras are lost) "
+                              "-- pick the (no target) option to decline")
+                : def.params.bounce_opponent_nonland_permanent
                 ? std::string("returned to its owner's hand (tokens cease to exist)")
                 : mill_removal ? std::string("destroyed if it still meets the mana-value limit at resolution")
                 : !exile_removal ? std::string()
@@ -7743,6 +7749,30 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // Self-targeting removal (user, 2026-09-18): with allow_self_target the human sees BOTH
             // sides -- Swords on our own creature gains US its power in life. CollectCreatureTargets is
             // the existing both-sides collector and already filters shroud on the own side.
+            else if (bounce_trigger)
+            {
+                // Every nonland permanent, BOTH sides (the shared legal test of BounceTriggerLegal, unfolded), plus
+                // Hullbreaker's mode 1: each spell on the stack the controller does not control (never present
+                // against the goldfish).
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[bi];
+                    if (p.card.IsLand() || !SpellCanTargetPermanent(s, controller, p) || DoomedEntrant(p, s)) { continue; }
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s)
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                }
+                if (def.params.cast_trigger_bounce_spell_opponent)
+                {
+                    for (int si = 0; si < static_cast<int>(s.stack.size()); ++si)
+                    {
+                        const StackEntry& spell = s.stack[si];
+                        if (spell.type != StackEntry::EntryType::Spell || spell.controller_index == controller) { continue; }
+                        legal.push_back({ 2, si, 0 });
+                        legal_labels.push_back(spell.source.m_name.str() + " (opponent's spell on stack)");
+                    }
+                }
+            }
             else if (def.params.bounce_opponent_nonland_permanent)
             {
                 for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
@@ -7832,6 +7862,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const int min_targets =
                   crackle ? std::max(1, static_cast<int>(heuristic.size()))
                 : copy_entrant ? 0   // "you MAY have it enter as a copy": decline is a real option
+                : bounce_trigger ? 0 // Hullbreaker's "choose up to one" / Brinelin's "you may"
                 : (trick && def.params.trick_up_to_one && max_targets == 1) ? 0
                 : trick   ? std::min(max_targets, std::max(1, static_cast<int>(heuristic.size())))
                 : 1;

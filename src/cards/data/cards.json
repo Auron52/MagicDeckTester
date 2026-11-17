@@ -17750,6 +17750,52 @@
      "Serpent"
     ]
    }
+  },
+  {
+   "name": "Hullbreaker Horror",
+   "mana_cost": "{5}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kraken",
+    "Horror"
+   ],
+   "keywords": [
+    "Flash"
+   ],
+   "power": 7,
+   "toughness": 8,
+   "oracle_text": "Flash\nThis spell can't be countered.\nWhenever you cast a spell, choose up to one —\n• Return target spell you don't control to its owner's hand.\n• Return target nonland permanent to its owner's hand. [Cast trigger: cast_trigger_bounce_nonland -- a battlefield cast-watcher in the shared FireOnCastTriggers (every cast site, both worlds), one instance per spell we cast per Hullbreaker we control; Hullbreaker is on the stack during its own cast and never triggers off itself. It resolves at cast time, ahead of the spell (the real stack order: nothing can respond). 'Choose up to one' = one target or none: mode 2 = any nonland permanent; mode 1 (cast_trigger_bounce_spell_opponent, 'target spell you don't control') is evaluated over the stack and is ALWAYS EMPTY here (the goldfish opponent never casts; our own spells are excluded), resolving through BounceTargetSpellAt if it were ever legal. ONE trigger body shared by Hullbreaker Horror and Brinelin (FireBounceTriggerInstance -> the shared ReturnPermanentToOwnersHand + one orphaned-Aura sweep), executor and rollout in lockstep. Each trigger INSTANCE takes one target or NONE. Legal: every nonland permanent on the battlefield, EITHER side (ours included: a Saga, a tapped Sol Ring, a land Aura, the source itself), shroud honoured, hexproof only against the opponent's side; a legend-rule loser is already gone. A returned card is a NEW object (counters, lore and Auras lost; an Aura on it goes to the graveyard, CR 704.5m); a token or opponent spawn ceases to exist; a card returned to our hand mid-phase re-plans the rest of the phase (breakpoint site 10). Resolution re-finds the target (CR 608.2b: gone or now a land -> nothing). SEARCH: the per-instance searched target digit (Plan::cast_trigger_target_choice, the Raggadragga per-instance machinery, ordinal shared), decline included, identity-folded, with the opponent's permanents folded into decline (a sound weak dominance against a passive opponent). In THIS deck the SeaCreaturesProvider DECLINES every instance (a one-option prune, USER 2026-11-16) -- MTG_SEA_HULLBREAKER_DECLINE=0 restores the searched digit; human play picks on the board (the target decision, min 0: '(no target)' declines) over the full legal set. This spell can't be countered: cant_be_countered, inert (no counterspell exists in this goldfish). [PARTIAL, PROVISIONAL (user sign-off, ledger Q4): Flash is inert -- the engine opens no priority window for our casts outside our own main phase, and in a goldfish an instant-speed cast is weakly dominated by casting it in the main phase before: the same untapped mana pays for it, it attacks on the same next turn, no information is gained (our next draw is unseen at the opponent's end step), the passive opponent gives nothing to respond to, and a main-phase cast turns the cast trigger on SOONER. The keyword is still listed.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cant_be_countered": true,
+    "cast_trigger_bounce_nonland": true,
+    "cast_trigger_bounce_spell_opponent": true
+   }
+  },
+  {
+   "name": "Brinelin, the Moon Kraken",
+   "mana_cost": "{6}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Kraken"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 8,
+   "oracle_text": "When Brinelin enters and whenever you cast a spell with mana value 6 or greater, you may return target nonland permanent to its owner's hand.\nPartner (You can have two commanders if both have partner.) [Two triggers, one body (Hullbreaker Horror's). (1) cast_trigger_bounce_nonland + cast_trigger_bounce_min_mv 6 -- a battlefield cast-watcher in the shared FireOnCastTriggers on every spell we cast whose PRINTED mana value is 6 or more (a cost reduction never changes MV); Brinelin is on the stack during its own cast and never triggers off itself, but Brinelin #2's cast DOES trigger Brinelin #1, which may return ITSELF (then #2 enters with no legend rule). (2) etb_bounce_nonland -- an enter trigger RECORDED by the shared enter cascade and resolved at each world's post-resolution drain AFTER the legend rule (DrainPendingEtbBounces; CR 704.3 / 603.3): the copy the legend rule removed is not a legal target, and the trigger still resolves if Brinelin itself was that copy. Both are 'you may': one target or NONE. ONE trigger body shared by Hullbreaker Horror and Brinelin (FireBounceTriggerInstance -> the shared ReturnPermanentToOwnersHand + one orphaned-Aura sweep), executor and rollout in lockstep. Each trigger INSTANCE takes one target or NONE. Legal: every nonland permanent on the battlefield, EITHER side (ours included: a Saga, a tapped Sol Ring, a land Aura, the source itself), shroud honoured, hexproof only against the opponent's side; a legend-rule loser is already gone. A returned card is a NEW object (counters, lore and Auras lost; an Aura on it goes to the graveyard, CR 704.5m); a token or opponent spawn ceases to exist; a card returned to our hand mid-phase re-plans the rest of the phase (breakpoint site 10). Resolution re-finds the target (CR 608.2b: gone or now a land -> nothing). SEARCH: the per-instance searched target digit (Plan::cast_trigger_target_choice, the Raggadragga per-instance machinery, ordinal shared), decline included, identity-folded, with the opponent's permanents folded into decline (a sound weak dominance against a passive opponent). In THIS deck the SeaCreaturesProvider DECLINES every instance (a one-option prune, USER 2026-11-16) -- MTG_SEA_BRINELIN_DECLINE=0 restores the searched digit; human play picks on the board (the target decision, min 0: '(no target)' declines) over the full legal set. Legend rule: the shared searched keep (EnforceLegendRule / legend_keep). [PARTIAL, PROVISIONAL (user sign-off, ledger Q4): Partner is a Commander deck-construction ability with no meaning in a 60-card game; it is NOT listed under keywords because KeywordFromString throws on an unmapped keyword (the Ardenn precedent).]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_trigger_bounce_nonland": true,
+    "cast_trigger_bounce_min_mv": 6,
+    "etb_bounce_nonland": true
+   }
   }
  ]
 }
