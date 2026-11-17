@@ -12,6 +12,10 @@
   goldfish but, if we were to do so, the best way to handle it would actually be in fetching shocklands
   tapped when we don't need the mana or fetching basics when we don't need the colours. Holding is not
   the correct solution to that problem."*
+* *"In real 1v1 play all players I have seen only hold when they actually have something like landfall."*
+* *"(or if they would actually die from fetching, but in that case you usually cannot crack at all)"* --
+  i.e. the one non-landfall hold is "cracking would kill me", where the fetch is effectively uncrackable,
+  not a timing choice. In goldfish that means life 1: the fetch's own 1 life is lethal.
 
 ## What this means
 
