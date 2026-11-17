@@ -451,4 +451,13 @@ its 5,000-game gate can be practical.
 
 ## User decisions and operational constraints
 
-Gods should dredge toward Mystic Retrieval for Replenish, use Loam to recover lands, and natural-draw when graveyard has one or zero lands; a non-clairvoyant A/B supported the strict dredge policy, which is shipped. Study → Loam original plans continue across the Study breakpoint; new plans there are pruned. User allows a visible later cast to justify cracking Dragonstorm Lotus Bloom early. For EDF, spend colorless for generic when free, but preserve `{C}` for Eldrazi Displacer loops and the final kill. User permits narrow non-searched line-opening options. Windows CI is the useful compatibility check; run asynchronously, do other work, and respond only to failure. Linux CI can be dropped. Latest Windows run 43993315542 succeeded. Prior branch push was at 01:09 UTC Nov17; shared-branch cadence says next ordinary push at or after 05:09 UTC. Before any push or worktree removal, run `python3 scripts/check_references_safe.py`; promptly push new user references if any. The user explicitly asked this local handoff be kept up to date for Claude because Codex usage is nearly exhausted.
+Gods should dredge toward Mystic Retrieval for Replenish, use Loam to recover lands, and natural-draw when graveyard has one or zero lands; a non-clairvoyant A/B supported the strict dredge policy, which is shipped. Study → Loam original plans continue across the Study breakpoint; new plans there are pruned. User allows a visible later cast to justify cracking Dragonstorm Lotus Bloom early. For EDF, spend colorless for generic when free, but preserve `{C}` for Eldrazi Displacer loops and the final kill. User permits narrow non-searched line-opening options. Windows CI is the useful compatibility check; run asynchronously, do other work, and respond only to failure. Linux CI can be dropped. Prior Windows run 43993315542 succeeded; current run 44025173062 is watched asynchronously. The branch was pushed at 05:35 UTC Nov17; next ordinary push is at or after 09:35 UTC. Before any push or worktree removal, run `python3 scripts/check_references_safe.py`; promptly push new user references if any. The user explicitly asked this local handoff be kept up to date for Claude because Codex usage is nearly exhausted.
+
+EDF follow-up source lead: `src/ai/ManaPayment.cpp` already drains
+floating colorless before W/U/B/R/G for generic costs in the normal
+route, while `MTG_HOLD_C_FOR_SINK` and `MTG_HOLD_C_IN_PAYMENT` protect
+human-play `{C}` sinks when `BoardHasColorlessPipSink` sees one. The
+current guard is board-based and human-only; verify the user's final
+kill case separately, including any visible hand/graveyard sink that
+is not yet on the board, before broadening the rule. This is an
+unverified lead, not a newly adopted EDF change.
