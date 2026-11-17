@@ -45,7 +45,8 @@ The fresh PGO Spirits mana-clean gate is now active in exec session
 `78520`: `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run spirits
 --games 5000 --name codex-spirits-shock-pair-20261117`, console
 `build/scratch/spirits_shock_pair_5k/mana_clean.out`. It covers indices
-50,000–54,999. After it completes, inspect its report and commit
+45,000–49,999 (the next due block, also used by the paired A/B). After
+it completes, inspect its report and commit
 `test/mana_clean.json`; then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
