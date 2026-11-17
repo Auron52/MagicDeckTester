@@ -46,8 +46,26 @@ CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were le
 2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
    Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
 
-**Open for the USER:** painlands (`tap_self_damage > 0`) are still refused by `KarooBounceFloatable`, though their
-`{C}` mode is painless: the same shape as `e6ffcefd7`, a wider play change, not made.
+**IN FLIGHT (13:00 UTC): painland float.** USER 2026-11-17: *"I certainly see no reason not to float mana. The bigger
+question is whether to float colourless or something else?"* Uncommitted in the primary checkout: a Karoo-returned
+painland with a separate painless `{C}` (Brushland, Llanowar Wastes, Caves of Koilos, Tarnished Citadel...) floats
+that `{C}` (`MTG_KAROO_FLOAT_PAINLAND_C`), or, with `MTG_KAROO_FLOAT_PAINLAND_OWED`, the colour the rest of the line
+owes (`FloatLineOwedColour`) paying its damage. Both default ON. Unit 3,392/3,392 (also fixed a test leak:
+`test_human_line_joint_pay.cpp` called `HumanLineJointPrepay` bare and left `{G}` in `g_line_unpaid_cost` for every
+later test). Three-arm A/B running: `build/scratch/claude_painland_ab/` (manifest 300 jobs = EDF + Melira Pod x
+games 520,000-524,999 x arms old / cee / owed; pid in `pid`; `batch.out`). Only those two decks hold both a Karoo and
+a {C}-mode painland. Then: compare (adapt `build/scratch/claude_karoo_line_ab/compare.py`), pick the arm by the bar,
+report both arms to the USER, write `docs/design/karoo-float-painland-2026-11-17.md`, commit.
+
+**Queue reorder (13:05 UTC):** after the painland A/B, the Dragonstorm APPLY-DROP clusters go BEFORE the PD CAPPED
+fold. The Dragonstorm flags are real engine drops (gate `codex-dragonstorm-ruby-song-20261117`: 28 APPLY-DROP, 16
+signatures; leading: s30075408 T4 Apex continuation loses Dragonlord Kolaghan x6 -- the oracle cracks Lotus Bloom for
+{B} and keeps one {B} floating; s30073082 T5 Apex/Scourge continuation loses Karrthus x10). The PD item is the
+analyzer giving up on one seed (CAPPED is disclosed, not a play defect), and its fold needs a sound mid-plan mask: a
+continuation re-solve may spend floats on hand casts AND battlefield activations, whose cost colours no card's mana
+cost carries. Do it after Dragonstorm.
+
+**Session timer:** a 2-hourly session-only cron (`7 */2 * * *`) checks this file and the box (USER: run overnight).
 
 ## Codex status, updated 07:42 UTC
 
