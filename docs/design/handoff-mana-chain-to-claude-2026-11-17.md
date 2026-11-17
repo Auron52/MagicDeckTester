@@ -320,7 +320,7 @@ at seed 9,820,001 had identical win turns (4,957 wins each). The combined
 Ruby flag (old and new rule) adds 2.0% CPU in this sample, so that is not
 an isolated cost for the new rule. PGO+LTO has since rebuilt successfully.
 Full evidence is appended to `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
-The source/doc commit is `cf5f44488`, and the PGO source tree stamp is
+The source/doc commit is `5e9c477e9`, and the PGO source tree stamp is
 `fcb9352608ea7e19580916d696643bc094d6ef3a`.
 
 **Fresh PGO Dragonstorm gate complete** on indices 72,000–76,999:
@@ -340,9 +340,9 @@ and run another fresh gate after any accepted fix.
 
 The earlier three source commits following pushed `f2156d4e6` are:
 
-* `5962de0db` Dragonstorm Ruby funding order fallback in `src/ai/DecisionProviders.cpp` (`MTG_DRAGONSTORM_RUBY_FUNDING`, default on). Four exact old APPLY-DROP-ORDER seeds clear; 5,000 paired games had identical win turns and play digests, +0.8% CPU and +1.6% work units.
-* `8ed008406` visible two-copy Apex line gate in `src/ai/TurnSolver.cpp` and focused tests (`MTG_APEX_VISIBLE_LINE_MANA`, default on). Old ENUM-GAP seed 30062821 clears. Narrowed from a costly one-copy trial; 5,000 paired: two earlier wins, none later, +5% CPU, +1.37% units. Human play menu excluded to preserve reference order.
-* `c7e154a88` storage-land full burst backtracker and cached replay in `src/core/SpellEffects.cpp` (`MTG_STORAGE_BACKTRACK_FULL_BURST`, default on). Old ORACLE-GAP seed 30062628 clears; off control restores it. This matches the simulator's existing greedy/executor full-burst **simplification**; actual MTG storage lands may remove fewer counters.
+* `b82aee80c` Dragonstorm Ruby funding order fallback in `src/ai/DecisionProviders.cpp` (`MTG_DRAGONSTORM_RUBY_FUNDING`, default on). Four exact old APPLY-DROP-ORDER seeds clear; 5,000 paired games had identical win turns and play digests, +0.8% CPU and +1.6% work units.
+* `d06b9559c` visible two-copy Apex line gate in `src/ai/TurnSolver.cpp` and focused tests (`MTG_APEX_VISIBLE_LINE_MANA`, default on). Old ENUM-GAP seed 30062821 clears. Narrowed from a costly one-copy trial; 5,000 paired: two earlier wins, none later, +5% CPU, +1.37% units. Human play menu excluded to preserve reference order.
+* `126872514` storage-land full burst backtracker and cached replay in `src/core/SpellEffects.cpp` (`MTG_STORAGE_BACKTRACK_FULL_BURST`, default on). Old ORACLE-GAP seed 30062628 clears; off control restores it. This matches the simulator's existing greedy/executor full-burst **simplification**; actual MTG storage lands may remove fewer counters.
 
 Full Release unit suite: 3,383 passed, 3,614,946 assertions. Combined Dragonstorm/Shadowborn smoke and regression: 5,762 games, 561 scenarios pass, strict viewer 864 refs with zero drift/divergence/enum gap, both suboptimal references beaten. Shadowborn unchanged. Nine Dragonstorm GT logs, `test/regression_gt.txt`, `test/job_cost.tsv` were updated and accepted. Four depth-zero turn changes derive from previously shipped `MTG_ONDEMAND_VISIBLE_LUMP`, not these three new fixes. PGO+LTO build succeeded at source stamp `7940651a93b1749003e268106ee064aa5264b50b`; use `build/PGO/mtg` for long runs. Detailed evidence: `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
 
@@ -352,7 +352,7 @@ Full Release unit suite: 3,383 passed, 3,614,946 assertions. Combined Dragonstor
 MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name codex-dragonstorm-ruby-apex-storage-20261117
 ```
 
-Report: `logs/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/report.md`; `test/mana_clean.json` is committed in `e09d0ca2b`. **157 issues:** 121 APPLY-DROP (40 signatures), 4 APPLY-DROP-ORDER (4), 4 ENUM-GAP (4), 28 CAPPED-DECISION (19); ORACLE-GAP=0. Oracle-on/off play byte-identical. The increase from the prior block's 93 issues is a fresh seed block, not evidence of a regression; compare exact old seeds separately. Capped decisions deserve focused rerun/analysis, not assumed correctness failures. Report says 129 misses, 28 caps. Top new APPLY-DROP clusters: seed 30068634 T7 Karrthus/Apex, seed 30070527 T5 Dragonlord Kolaghan/Apex. New ENUM-GAP seed 30068175 T4 (two plan variants) and 30070173 T5 (two). New order-drop seed 30068752 T3 (two variants) and 30071498 T4 (two). Exact repro commands are in the report; substitute `build/PGO/mtg` if its stamp still matches. The older unresolved seed 30065244 T6 had 24 Karrthus/Apex drops; changing Lotus color order alone had no effect and was removed. Seed 30062531 T4 may have a `LineFloatTapFirstPlan` ordering issue: oracle spends Unclaimed Territory as colorless for Lathliss to preserve floating red for Irencrag Feat, while engine spends red. Check fresh signatures before prioritizing it.
+Report: `logs/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/report.md`; `test/mana_clean.json` is committed in `304d1fed8`. **157 issues:** 121 APPLY-DROP (40 signatures), 4 APPLY-DROP-ORDER (4), 4 ENUM-GAP (4), 28 CAPPED-DECISION (19); ORACLE-GAP=0. Oracle-on/off play byte-identical. The increase from the prior block's 93 issues is a fresh seed block, not evidence of a regression; compare exact old seeds separately. Capped decisions deserve focused rerun/analysis, not assumed correctness failures. Report says 129 misses, 28 caps. Top new APPLY-DROP clusters: seed 30068634 T7 Karrthus/Apex, seed 30070527 T5 Dragonlord Kolaghan/Apex. New ENUM-GAP seed 30068175 T4 (two plan variants) and 30070173 T5 (two). New order-drop seed 30068752 T3 (two variants) and 30071498 T4 (two). Exact repro commands are in the report; substitute `build/PGO/mtg` if its stamp still matches. The older unresolved seed 30065244 T6 had 24 Karrthus/Apex drops; changing Lotus color order alone had no effect and was removed. Seed 30062531 T4 may have a `LineFloatTapFirstPlan` ordering issue: oracle spends Unclaimed Territory as colorless for Lathliss to preserve floating red for Irencrag Feat, while engine spends red. Check fresh signatures before prioritizing it.
 
 ## Immediate continuation
 
@@ -364,7 +364,7 @@ visible Scourge of Valkas**; their oracle order casts Apex before Scourge.
 This points to the pair-only guard as the gate, but broad one-copy credit
 previously cost +22% CPU. Seek a narrower visible-payoff condition and A/B
 it; the sequential payment walk already applies the Apex mana after cast.
-The new Ruby/Seething order gaps are fixed in `cf5f44488`; see the update
+The new Ruby/Seething order gaps are fixed in `5e9c477e9`; see the update
 above and the design note. The Apex one-copy gaps remain open.
 
 One residual payment lead is especially concrete: seed 30074224 T5,
@@ -390,7 +390,7 @@ crediting Song's five red, Karrthus should pay. Removing the prepayment
 not been A/B tested and must not be assumed correct. Check exact older
 Ruby/Bloom seeds and held-out turns.
 
-1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `e09d0ca2b`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
+1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `304d1fed8`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
 2. Work the new Dragonstorm issue clusters with exact on/off repros, narrow deterministic payment/order fixes, 5,000 paired A/B where material, Release unit/regression/viewer validation, and a fresh PGO 5,000-game gate. Avoid adding searched options or costly broad branches. One top-level simulation batch at a time, `MTG_RSS_CAP_GB=40`, use `nproc` for worker count. Build only via `./build.sh`; PGO+LTO for long runs.
 3. Separate Gods trial worktree `.claude/worktrees/codex-gods-hold-20261117` has only a dirty provider edit adding a `ready >= 3` floor to the default-off `MTG_GODS_LOAM_GREEN_HOLD`. It is unbuilt/untested. The broad green hold cleared exact seeds 30037134 and 30037273 but caused 2 later wins/0 earlier and +12.1% recorded time in 5,000 paired games. User wants a less costly fix and full mana completeness. See `docs/design/gods-loam-line-green-hold-2026-11-16.md`. Do not run its long test concurrently with Dragonstorm gates.
 4. Resume the wider queue from `python3 scripts/mana_clean.py status` and the older handoff: Pirates, Extra Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph and due decks. The target is a fresh 5,000-game block for every shipping deck and every issue class repaired; stale-clean records also need fresh runs.
