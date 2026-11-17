@@ -50,3 +50,21 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
 1. Read ab-rootcause.md; surface fetch + main-2 findings to the USER with amended-rule proposals.
 2. Read tiebreak, discard bound, verify_deck results; author the discard bucket proposal (USER approves first).
 3. Stage 6 report with the open-question list. Push (4h rhythm) after rebase + rebuild + smoke + check_gt_logs.
+
+## Landing, 2026-11-17 ~13:40 UTC (USER: "Please continue autonomously overnight")
+
+* Stages 1-5 done; 5c2/5i, verify_deck (GATE PASS), land-Aura main-1 fix and Q12 re-measure all in the ledger.
+* Branch rebased TWICE: onto origin 82f5... earlier, then onto origin `18ab35ca8` (67 new upstream commits with
+  src changes to ManaPayment / TurnSolver / SpellEffects / ManaOracle and NO GT accept). Backups:
+  `backup/2026-11-17/sea-prerebase2` (pre-2nd-rebase tip). Only conflict: HeuristicArm.h list appends (kept both).
+* The first `--both` (pre-2nd-rebase) failed 118 rows across ~30 decks: far beyond Sea + land-Aura decks.
+  Running now: `build/scratch/sea/land2.sh` (rebuild, units, origin-tip worktree `.claude/worktrees/sea-origin`
+  + build, tip `--both`, origin binary on the tip's failing non-Sea rows, `attrib.py cmp` -> `land2/attrib.txt`).
+  Rows where the origin binary reproduces the tip's digest are UPSTREAM drift (not ours, not accepted blind);
+  rows that differ must be Sea / land-Aura decks (Alchemist, EDF, Jumbo) and are the accept candidates
+  (`regression.sh --accept --deck=` scoping).
+* Hedge Maze flag `MTG_SEA_FETCH_MAZE` (USER 2026-11-17, "if we do not need it for mana this turn it is
+  possible, otherwise not"; Triomes "similar"): worktree `.claude/worktrees/sea-maze`, branch `sea-maze-fetch`
+  (uncommitted). Build + units + A/B chain `build/scratch/sea/maze/{build.sh,ab.sh}` -> `maze/result.txt`.
+  Design note `docs/design/fetch-tapped-typed-land.md` (there).
+* Next: per-row verdicts -> scoped accept -> check_gt_logs -> push -> CI watch -> Stage 6 report.
