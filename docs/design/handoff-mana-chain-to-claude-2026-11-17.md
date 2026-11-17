@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:24 UTC
+## Live status, updated 07:27 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -33,12 +33,15 @@ fix, `mana_clean.py status` marks all 15 formerly clean decks
 **stale-clean by source hash**; that is expected and requires refresh gates.
 The paired result parser is ready at
 `build/scratch/spirits_shock_pair_5k/compare.py`; run it after both arms.
-The same-binary 5,000-game paired run is now active in exec session `6176`,
+The same-binary 5,000-game paired run passed in exec session `6176`,
 console `build/scratch/spirits_shock_pair_5k/runner.out`. It runs default
-and `MTG_SPIRITS_SHOCK_PAIR_HOLD=0` arms sequentially. The default arm
-finished all 50 jobs (5,000 games); the lever-off arm is now active.
-After it finishes,
-run `python3 build/scratch/spirits_shock_pair_5k/compare.py`, then
+and `MTG_SPIRITS_SHOCK_PAIR_HOLD=0` arms sequentially. The comparator
+reports **all 5,000 per-game records byte-identical**, zero earlier/later
+wins, zero changed play digests at the same score; loss-penalized score
+sum is 23,111 in both arms. New work 204,827,597 versus old 204,827,599
+units (two fewer); recorded job ms 4,924,122 versus 4,955,036. Outputs
+and the parser are under `build/scratch/spirits_shock_pair_5k/`.
+The next step is a fresh PGO Spirits mana-clean gate, then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 

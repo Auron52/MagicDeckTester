@@ -136,5 +136,11 @@ has zero oracle issues; the off control restores its APPLY-DROP. Release
 committed as `bd7c05019`. The fresh PGO build passed its pooled
 7,447-game training suite and optimized link; its source stamp matches
 `72188b700b83bfbd66f13db98870583d61d5dd21`. A 5,000-game
-same-binary paired comparison is in progress; consult the live Claude
-handoff for its status and results.
+same-binary paired comparison on games 45,000–49,999 found **all 5,000
+per-game records byte-identical** with the hold on and off: zero earlier
+or later wins and zero play-digest changes at the same score. Both arms
+scored 23,111 loss-penalized turn-games. New work was 204,827,597 units
+versus 204,827,599 old (two fewer); recorded job ms was 4,924,122
+versus 4,955,036. Artifacts are under
+`build/scratch/spirits_shock_pair_5k/`. A fresh mana-clean gate is next;
+consult the live Claude handoff for its status.
