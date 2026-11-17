@@ -22,6 +22,20 @@ Report: `logs/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/report.md`
 
 ## Immediate continuation
 
+First-pass source diagnosis after the gate: `ApexPairGateCredit` in
+`src/ai/TurnSolver.cpp` credits Apex's ten mana to both scalar and
+selection-exact gates only when **two unstaged Apex copies** are in hand.
+The new seed 30068175 T4 and 30070173 T5 enum gaps are **one Apex plus a
+visible Scourge of Valkas**; their oracle order casts Apex before Scourge.
+This points to the pair-only guard as the gate, but broad one-copy credit
+previously cost +22% CPU. Seek a narrower visible-payoff condition and A/B
+it; the sequential payment walk already applies the Apex mana after cast.
+The new seed 30068752 T3 order gap is Seething Song → Ruby Medallion →
+Irencrag Feat → Dragonlord Kolaghan. The current Ruby fallback requires at
+least two *cheap* rituals before Ruby; Seething is cost three, so that rule
+does not see this line. Seed 30071498 similarly needs Rite → Seething →
+Ruby → Feat → Kolaghan. These are diagnosis leads, not fixes yet.
+
 1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `e09d0ca2b`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
 2. Work the new Dragonstorm issue clusters with exact on/off repros, narrow deterministic payment/order fixes, 5,000 paired A/B where material, Release unit/regression/viewer validation, and a fresh PGO 5,000-game gate. Avoid adding searched options or costly broad branches. One top-level simulation batch at a time, `MTG_RSS_CAP_GB=40`, use `nproc` for worker count. Build only via `./build.sh`; PGO+LTO for long runs.
 3. Separate Gods trial worktree `.claude/worktrees/codex-gods-hold-20261117` has only a dirty provider edit adding a `ready >= 3` floor to the default-off `MTG_GODS_LOAM_GREEN_HOLD`. It is unbuilt/untested. The broad green hold cleared exact seeds 30037134 and 30037273 but caused 2 later wins/0 earlier and +12.1% recorded time in 5,000 paired games. User wants a less costly fix and full mana completeness. See `docs/design/gods-loam-line-green-hold-2026-11-16.md`. Do not run its long test concurrently with Dragonstorm gates.
