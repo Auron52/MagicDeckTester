@@ -1984,6 +1984,22 @@ inline bool Site9ReopenEnabled()
 // made a NEW ability activatable, so a real chain is a handful deep; this only stops a mis-modelled
 // ability that re-keys itself forever. Never a lever.
 constexpr int kSite9ReopenCeiling = 32;
+// MTG_SITE9_CYCLE_STOP (DEFAULT ON; =0 reverts to the snapshot-delta test alone) -- a re-open also stops
+// when the applied continuation returned the chain to a state it has ALREADY been at in this apply (full
+// mid-turn identity, TurnSolver::Site9ChainRepeats). The delta rule compares only against the snapshot
+// right before the continuation, so a cycle re-keys forever: Lightning Greaves' equip {0} moved between
+// two Flinthoof Boars hands the un-equipped Boar its {R} haste activation back each time (Boars seed
+// 900115 gi115 T4: every re-open on the identical board, to the ceiling, ~2^32 deviation sequences).
+// SOUND: within one apply the remaining plan is fixed and the game is deterministic, so a repeated state
+// offers exactly the continuations it offered the first time; every line through the repeat is the line
+// that deviates at the EARLIER occurrence of that state. A state-closure collapse (USER 2026-09-09:
+// "If we cannot do anything that creates a new state ... then we are done"), not a cap. Shared by
+// ApplyPlanDirect's re-open loop and the executor's twin, which test it at the same point.
+inline bool Site9CycleStopEnabled()
+{
+    static const bool v = EnvOn("MTG_SITE9_CYCLE_STOP", true);   // DEFAULT ON; =0 disables
+    return v;
+}
 
 // MTG_ACQ_DIG=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): extend the
 // MTG_ACQ_RESOLVE acquisition family to the ETB library dig (etb_dig_count -- Acclaimed Contender,

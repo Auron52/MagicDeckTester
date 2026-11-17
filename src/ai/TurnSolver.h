@@ -2896,6 +2896,10 @@ public:
     // witness (MTG_BP_TUTOR_PIN_ALIAS), because a payment never resolves a spell and so no entry it keys
     // can carry a dependence on the searched tutor pin. Same value as MidTurnStateKeyOf.
     static std::uint64_t     MidTurnStateKeyOfPayment(const GameState& state);
+    // MTG_SITE9_CYCLE_STOP: has this site-9 re-open CHAIN already been at `state` (the full mid-turn
+    // identity)? True on a repeat; otherwise records it and returns false. Side-effect free for play (no
+    // work unit, no pin-witness read). Shared by ApplyPlanDirect's re-open loop and the executor's twin.
+    static bool              Site9ChainRepeats(std::vector<std::uint64_t>& chain, const GameState& state);
     // The PASS a PRE-combat search host appends when a main enumerates nothing (FSLineWin's idle node:
     // land decided), routed through the post-dedup sub-decision fan-out like an enumerated plan
     // (AppendIdlePassAxes: the no-dig twin AND every pin it carries into this turn's combat and beyond).

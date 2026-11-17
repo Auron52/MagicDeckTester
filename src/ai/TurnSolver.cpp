@@ -77702,6 +77702,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool s9_reopen = Site9ReopenEnabled();
         std::vector<uint64_t> s9_keys;
         if (s9_reopen) { s9_keys = TurnSolver::SnapshotActivatableAbilities(state); }
+        // MTG_SITE9_CYCLE_STOP: every state this chain has been at, from the one the first occurrence opens on.
+        const bool s9_cyc = s9_reopen && Site9CycleStopEnabled();
+        std::vector<uint64_t> s9_chain;
+        if (s9_cyc) { TurnSolver::Site9ChainRepeats(s9_chain, state); }
         TurnSolver::Plan extra;
         bool s9_applied = bp_searched_plan(9, extra);
         for (int reopen = 0; ; ++reopen)
@@ -77720,7 +77724,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // bp_searched_plan's section-window reset -- after a loop's Staff draws that erased the hand
             // entry the deferred site-10 continuation (the drawn Stroke's cast) arms on.
             if (!s9_reopen || reopen >= kSite9ReopenCeiling || extra.actions.empty()
-                || OpponentHasLost(state))
+                || OpponentHasLost(state)
+                // ...or the continuation brought the chain back to a state it was already at: nothing
+                // past here is new (MTG_SITE9_CYCLE_STOP). BEFORE the latent record below, so a cycle
+                // never seeds a compound slot. Executor twin: the same test at the same point.
+                || (s9_cyc && TurnSolver::Site9ChainRepeats(s9_chain, state)))
             { break; }
             // Targeted: bp_all, bp_at == the next index, or a deviation sequence's entry there
             // (TurnSolver::BpChoiceAt -- the executor twin asks the same reader).
@@ -106556,6 +106564,25 @@ std::uint64_t TurnSolver::MidTurnStateKeyOfPayment(const GameState& state)
     const TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
     t_bpkey_payment_key = sv;
     return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+// MTG_SITE9_CYCLE_STOP (see Site9CycleStopEnabled). The key is the full mid-turn identity, built with NO
+// side effect a decision could read: the sim-key work bill is muted (it feeds the priced meter the
+// decision ceiling reads), and neither pin witness counts it (the tutor-pin witness via the payment flag,
+// the combat-pin witness restored) -- so the only thing this changes is the work the stop removes.
+bool TurnSolver::Site9ChainRepeats(std::vector<std::uint64_t>& chain, const GameState& state)
+{
+    const unsigned long long cp_reads0 = combatpin::t_reads;
+    const bool sv = t_bpkey_payment_key;
+    t_bpkey_payment_key = true;
+    ++workctr::t_mute;
+    const TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/true);
+    --workctr::t_mute;
+    t_bpkey_payment_key = sv;
+    combatpin::t_reads = cp_reads0;
+    const std::uint64_t h = k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+    for (const std::uint64_t x : chain) { if (x == h) { return true; } }
+    chain.push_back(h);
+    return false;
 }
 
 std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithAxes(const GameState& state)

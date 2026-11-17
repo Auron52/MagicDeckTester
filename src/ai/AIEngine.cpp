@@ -9200,6 +9200,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const bool s9_reopen = Site9ReopenEnabled();
         std::vector<uint64_t> s9_keys;
         if (s9_reopen) { s9_keys = TurnSolver::SnapshotActivatableAbilities(state); }
+        // MTG_SITE9_CYCLE_STOP, rollout twin: the states this chain has been at.
+        const bool s9_cyc = s9_reopen && Site9CycleStopEnabled();
+        std::vector<uint64_t> s9_chain;
+        if (s9_cyc) { TurnSolver::Site9ChainRepeats(s9_chain, state); }
         for (int reopen = 0; ; ++reopen)
         {
             TurnSolver::Plan extra;
@@ -9383,6 +9387,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             if (!pe_searched || !s9_reopen || reopen >= kSite9ReopenCeiling || extra.actions.empty()
                 || OpponentHasLost(state)
+                || (s9_cyc && TurnSolver::Site9ChainRepeats(s9_chain, state))   // a state the chain was already at (rollout twin)
                 || !(plan.bp_all || TurnSolver::BpChoiceAt(plan, bp_seen_exec) >= 0)   // targeted occurrences only (rollout twin; MTG_BP_DEV_SEQ's bp_pre too)
                 || !TurnSolver::PostEntryActivationPending(state, s9_keys))
             { break; }
