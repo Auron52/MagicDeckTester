@@ -2,18 +2,26 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:50 UTC
+## Current state, updated 04:01 UTC
 
-A second pooled fresh PGO gate for 13 inexpensive stale-clean decks is
-the only active simulation batch, exec session 27562:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run auras colossus_hammer critter_lifegain fluctuator kithkin knights lifegain_heliod_combo merfolk minotaur modern_rw_burn soldiers vampires white_knights --games 5000 --name codex-clean-refresh-two-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_two_gate.out`.
-Read `logs/mana_clean/codex-clean-refresh-two-20261117/report.md` on
-completion, update this handoff, and commit `test/mana_clean.json`.
+**Second pooled fresh PGO gate complete:** 5,000 games each for 13
+decks at source `fcb9352608ea`, oracle-on/off play byte-identical.
+Auras, Colossus Hammer, Critter Lifegain, Kithkin, Knights, Lifegain
+Heliod Combo, Merfolk, Modern RW Burn, Soldiers, and White Knights are
+**clean**. Fluctuator has one APPLY-DROP; Minotaur has two APPLY-DROP;
+Vampires has 26 ORACLE-GAP. Report:
+`logs/mana_clean/codex-clean-refresh-two-20261117/report.md`.
+Fluctuator's exact seed 30218614 T4 drops Drannith Stinger after
+Fluctuator and a cycling chain (rollback depth 3+). Minotaur's seed
+30284922 T5 drops Deathbellow Raider after Slaughter-Priest; oracle
+spends Rakdos Carnarium B plus Territory C first, preserving Secluded
+Courtyard's creature-only R (rollback depth one). Vampires' nine oracle
+signatures all involve Voldaren Estate activation after Stromkirk
+Condemned, sometimes with a pump or Vial put; leading seed 30228525
+T4 has six flags. Nearest oracle outcomes differ in tapped Courtyard,
+Blood Token count, life, or float; investigate oracle fidelity before
+claiming a mana drop. All 13 records are committed in
+`test/mana_clean.json`. No simulation batch is active after this gate.
 
 **Six-deck fresh PGO gate complete:** all at source `fcb9352608ea`,
 5,000 games per deck, oracle-on/off play byte-identical. Burn,
