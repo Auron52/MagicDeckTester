@@ -856,3 +856,76 @@ canaries from the P18 checkout with identical deck/profile inputs. All 41 jobs m
 P18 binary in every per-game win file, job digest, and charged-unit total. The 39 mismatches
 were already present on the shared parent; P18 caused no additional smoke drift, and no
 ground truth was rebaselined.
+
+## P18i: the leafless lookahead (`sampled_gate = 3`), 2026-11-17
+
+Claude session; scratch `build/scratch/p18g`, checkpoint `docs/design/p18-claude-handoff.md` (P18i section).
+
+### Why mode 2 saves only 1-3%, and what the ceiling is
+
+Every F2/F5 mode-2 loss is a COLD PRICE: (A) a pass refused on a cold over-price after heur's own real-cost gate
+admitted it (Gods 38, 124, 336); (B) `phx` pre-refusing on a cold price (Mill 197); (C) cross-turn cache warming,
+where heur's low passes are cache hits and `c_k^2/c_{k-1}` over a ZERO-LEAF cached denominator refuses (Dragonstorm
+149, Gods 51/58/250, Merfolk Turns 317); (D) a cold commit (Kithkin 100). Guards for each (`_pqg`, `_pqh`, `_pqr`,
+`_pqf`, `_pqz`; screen-only knobs, default off) repair all 11 but cost 1.011-1.015x heur CPU on 56 decks x 400 and
+introduce new Gods / Alchemist losses: repairing a priced gate costs more than the gate saves. `_pqk` (keep a better
+exact line) is UNSOUND: a rollout's win turn is not a realised outcome (Gods 312's "proven T4" exact line won T8).
+
+The oracle ceiling (`MTG_P16_ORACLE`, keep-k from heur's own trace; 56 decks x 60) is 0.925x CPU overall with no
+later game, and 0.36-0.60x on the rollout-heavy decks (Breaching Dragonstorm, Angels, White Knights, Critter, Burn,
+Knights, Slivers, Red Elementals). Mode 2 captures under a fifth of it. On those decks heur's committing pass is set
+by an IN-WINDOW WIN in 80-100% of decisions, which a leafless pass proves exactly; on the gate-bound decks (Mill, Gods,
+Hinata, Cyclone, Melira, Shadowborn) the ceiling is only 2-4%.
+
+### The shape
+
+Leafless passes 1..depth first; the first proven in-window win commits; otherwise the ORDINARY heur ladder runs from
+pass 1 with the lookahead's spend credited to its start gate (`p18_credit`). Uncertainty still only moves rollout
+count; the whole ladder is never re-run as a fallback of a sampled gate. A lookahead commit is NOT a verified line
+for AIEngine's cross-turn replay (`TurnSolver::TakeNoReplay`): replaying it skipped the next turn's re-search where
+heur, whose budget never reached that depth, found a faster line (Alchemist 9500073: proved T5 at T1 and replayed;
+heur found T4 at T2). Rejected refinements: a scratch TT for the leafless walks (`_pllt`, costs CPU, fixed nothing)
+and a predictive stop on the leafless growth extrapolation (`_pllg`, forfeits the cheap deep commits). No
+per-decision stop rule separates the decks (pass-1 rollout/leafless ratio, growth extrapolation), so the shape is a
+per-deck opt-in.
+
+### Measurements
+
+- H1 (56 decks, seeds 10,000,000+, every arm at the deck's shipped depth/budget; aborted by the 20 GB RSS cap at
+  ~170 paired games/deck): 0.31-0.9x heur CPU with no later game on the rollout-heavy decks; later games only on
+  Mill/Gods/Hinata/Cyclone/Melira/Shadowborn/NivMizzet/Kitty/LFE/Eldrazi and 2 Alchemist, where it also costs more.
+- H2 (9 candidates x 1000, seeds 11,000,000+, shipped settings; binary at 11808b8e8's parent tree + mode 3):
+  vs heur, mode 3 0.698x CPU / 0.746x units, 38 earlier / 0 later (the shipped shapes: 0.879x, 17/3).
+  Vs each deck's SHIPPED shape:
+
+  | Deck | shipped shape | mode 3 CPU | units | earlier / later |
+  |---|---|---:|---:|---:|
+  | Boars | mode 2 | 0.786x | 0.839x | 12 / 0 |
+  | Morph | bare ladder | 0.652x | 0.758x | 7 / 0 |
+  | Spirits | bare ladder | 0.758x | 0.824x | 1 / 0 |
+  | Red Elementals | bare ladder (at H2) | 0.619x | 0.676x | 2 / 0 |
+  | Treasure Hunt | no-leaf escalation d5/b40 | 0.870x | 0.906x | 2 / 1 |
+  | Angels | no-leaf d6/b20 | 0.997x | 1.055x | 0 / 0 |
+  | Slivers | no-leaf d5/b20 | 0.998x | 1.057x | 0 / 0 |
+  | Mirrorwing Dragon | shipped sidecar | 1.069x | 1.097x | 1 / 0 |
+  | Selesnya Lifegain | shipped sidecar | 1.084x | 1.126x | 0 / 0 |
+
+  Treasure Hunt's later game (432) is identical to heur's (same digest on its block): the shipped no-leaf
+  escalation finds T7, heur's ladder T8; both heur and mode 3 recover T7 at 4x/16x budget and at d8 b0 (churn).
+  Production mode 3 is `_pll_pllr` over the BARE ladder, not over mode 2's priced gate (`m2_pll_pllr`), and is
+  cheaper (0.698x vs 0.711x heur CPU) at the same quality.
+- H3 (rebased onto 1e36f852b; 5 decks x 1000, seeds 12,000,000+, shipped settings): vs heur, mode 3 0.690x CPU
+  21/0; the committed sidecars (`live`) are digest-identical to the mode-3 arm on every Boars/Morph/Spirits block.
+  Vs the shape each deck shipped before: Boars (mode 2) 0.735x CPU 14/0 (mode 2 itself is 0/2 vs heur on these
+  seeds), Morph (bare) 0.690x 3/0, Spirits (bare) 0.691x 0/0, Treasure Hunt (no-leaf escalation) 0.857x 2/0.
+  Red Elementals' new no-leaf final-depth d6/b20 sidecar (ac857d69f, adopted the same day) is digest-identical to
+  mode 3 at d6 on all 100 blocks at 0.989x mode 3's CPU, so it keeps its sidecar.
+
+### Adopted
+
+`value_play.sampled_gate = 3` on Boars (was 2), Morph and Spirits (new play-settings-only sidecars, the Boars
+precedent). Treasure Hunt (0.86x CPU, 4 earlier / 1 recoverable later over H2+H3) ships a no-leaf escalation sidecar
+whose file also carries its learned leaf table and mulligan-generation settings; switching it is a shape decision
+surfaced to the USER, not taken here. Angels and Slivers are neutral against their shipped no-leaf shapes (H2);
+Mirrorwing and Selesnya cost more. Open: CPU well above units on Kitty / Gods / Extra Turns under the lookahead
+(unprofiled), and RSS growth with every arm at deep shipped settings (H1's abort).

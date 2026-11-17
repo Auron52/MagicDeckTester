@@ -105,3 +105,13 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   shapes whose sidecars carry more than play settings); then unit tests, smoke + regression GT for the adopted decks'
   rows, update docs/design/sampled-gate-ladder.md, push wip branch, watch CI. Open: CPU >> units on Kitty/Gods/Extra
   Turns under the lookahead (unprofiled); memory growth at deep shipped settings (H1 abort).
+- H2 DONE (clean): vs heur m3 0.698x CPU 38/0; vs shipped: Boars 0.786x 12/0, Morph 0.652x 7/0, Spirits 0.758x 1/0,
+  Treasure Hunt 0.870x 2/1 (game 432 = heur's line, recovers at 4x/16x/d8b0), Angels/Slivers ~1.0x, Mirrorwing/Selesnya
+  worse. m3 != m2_pll_pllr by design (m3's fallback is the bare ladder; 0.698x vs 0.711x).
+- Rebased onto 1e36f852b (upstream adopted Red Elementals no-leaf d6/b20; it is digest-identical to m3 at d6, so
+  Red keeps it). Sidecars committed (9f5a38ed7 pre-rebase): Boars 2->3, Morph and Spirits new. H3 (5 decks x 1000,
+  seeds 12,000,000+, mtg_i7 = rebased): clean, committed sidecars digest-identical to m3.
+- RUNNING: `test/regression.sh --both` (log build/scratch/p18g/reg_both.log). Next: accept GT with
+  `--deck=boars,boars2hg,morph,morph2hg,spirits,spirits2hg` after auditing; any other mismatch -> parent-binary audit
+  (build 1e36f852b in a separate worktree); push wip branch; shared-branch push at the 4h window; CI watch.
+- USER decision surfaced: Treasure Hunt -> mode 3 (needs a sidecar that drops the leaf-table shape; not done).
