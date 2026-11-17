@@ -36,6 +36,18 @@ run both arms sequentially on the same binary, default versus
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 
+**Next focused queue item after Spirits:** Prevent Damage's fresh 5,000-game
+gate has 30 issues: eight ORACLE-GAP flags (six in seed `30109140` T5,
+Green Sun's Zenith X=3 into Rolling Earthquake; two in seed `30111507`
+T5, Pyrohemia) and 22 CAPPED flags (eight each in seed `30111776`
+T8 Manabarbs/Spellshock plus Dina, three each in seed `30108897` T8
+Living Wish). Exact repro commands and full board snapshots are in
+`logs/mana_clean/codex-clean-refresh-newsrc-c-20261117/report.md`.
+The older `docs/design/prevent-damage-terminal-oracle-payment-cap-2026-11-16.md`
+documents prior terminal-loss and Dina-sacrifice oracle repairs; do not
+assume the fresh flags have the same cause. The current audit retries
+capped plans at 200,000 applies by default (`MTG_MANA_ORACLE_NODES_RETRY`).
+
 **Prior completed status (chronological history follows):**
 
 **Smoke + strict viewer validation complete:**
