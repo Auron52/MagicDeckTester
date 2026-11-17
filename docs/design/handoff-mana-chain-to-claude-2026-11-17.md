@@ -2,18 +2,20 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:45 UTC
+## Current state, updated 03:47 UTC
 
-The next due **Treasure Hunt** PGO mana-clean gate is the only active
-simulation batch, exec session 39546:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run treasure_hunt --games 5000 --name codex-treasure-hunt-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/treasure_hunt_fresh_gate.out`.
-Read `logs/mana_clean/codex-treasure-hunt-fresh-20261117/report.md` on
-completion, update this handoff, and commit `test/mana_clean.json`.
+**Treasure Hunt fresh gate complete:** indices 80,000–84,999 at PGO
+source `fcb9352608ea` yielded 289 issues: 20 ENUM-GAP, 217
+APPLY-DROP, and 52 APPLY-DROP-ORDER. There are 370 disclosed
+DOMINATED-LIFE observations, not counted as issues. Zero oracle gap or
+cap; oracle-on/off play byte-identical. Report:
+`logs/mana_clean/codex-treasure-hunt-fresh-20261117/report.md`.
+The 20 enum gaps are mostly a same-plan double Treasure Hunt on turn
+three; seeds 30081492, 30081921 and 30082722 have two flags each.
+Payment drops cluster around Cascade Bluffs plus Land's Edge and Hunt,
+with several 16-flag signatures; the same filter/source ordering also
+appears in Throes of Chaos lines. The `test/mana_clean.json` record is
+committed with this handoff. No batch is active after this gate.
 
 **Fungus fresh gate complete:** indices 80,000–84,999 at PGO
 source `fcb9352608ea` yielded 486 issues: 137 ENUM-GAP, 116

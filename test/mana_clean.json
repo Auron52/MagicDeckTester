@@ -11375,6 +11375,50 @@
      "seed": 30075000,
      "src": "6858f5eb9750eff98dd30f3cb93ff88ae177e56e",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 217,
+      "APPLY-DROP-ORDER": 52,
+      "CONTINUATION-DIFFERS": 94,
+      "DOMINATED-LAND": 16130,
+      "DOMINATED-LIFE": 370,
+      "DROP-COVERED": 31107,
+      "ENUM-GAP": 20,
+      "HIDDEN-INFO": 1,
+      "PHANTOM": 2811
+     },
+     "commit": "1bec4cf03f731ec0cf7a2c6a8e24f4b55f2d4416",
+     "date": "2026-11-17T03:46:03Z",
+     "decisions": 35546,
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 80000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 289,
+     "life_breakpoints": [],
+     "ms_off": 790973,
+     "ms_on": 1152503,
+     "report": "logs/mana_clean/codex-treasure-hunt-fresh-20261117/report.md",
+     "run": "codex-treasure-hunt-fresh-20261117",
+     "seed": 30080000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "issues"
     }
    ]
   },
