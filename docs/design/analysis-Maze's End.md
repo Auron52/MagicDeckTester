@@ -43,7 +43,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 | Phase | Scope | Status |
 |---|---|---|
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
-| I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | IN PROGRESS |
+| I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | DONE `c71d96361` + `699e1137a` (wip/maze-end); unit suite 3411/3411; smoke byte-identical to I1 (all 219 cases' per-game digests) |
 | I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | pending |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
 
@@ -141,6 +141,35 @@ Shared infrastructure landed in I2 (the LAND-ENTRY PIPELINE, `core/SpellEffects.
   enumerated once would leave the other choice's lines unfindable. `DecisionProvider::LandEntryPinCandidates`
   (appended at the END of the class) supplies the values; `MazesEndProvider` restricts colours to those the
   list spends (decision 1). Plan label: `[color=X]` / `[pay]` / `[sacrifice]`.
+
+Verification (I2b, 2026-11-17): `./build.sh` Release clean (two transient 9p `Cannot allocate memory` reruns, no
+code errors); I2 tests compiled after two fixture fixes (`GenericProvider` for the base menu -- `DeckProvider` is
+abstract; Sylvan Scrying stands in for Exploration, which is I3's card) and pass; new test for decision 15.
+Unit suite 3411/3411. `provider_audit.py --check` exit 0 (Maze's End "NOT AUDITED": no profile until I4).
+`audit_viewer_decisions.py --no-sweep` exit 0: expected decision types choose_color / dig / land_entry / target /
+x_value; the oracle cross-check flags only Maze's End's search/bounce and the Charm's modal/target, all with
+their disclosed notes. Smoke (worktree, Release): 175 passed / 44 failed -- the same 44 stale-GT cases as the base
+and I1; the per-game `.wins` of all 219 cases (outcomes + play digests) are byte-identical to I1's
+(`build/scratch/maze/smoke-i1/wins` vs `smoke-i2b/wins` on the primary build volume). No GT accepted.
+
+Rules review of the I2 code (I2b, against `.claude/skills/mtg-rules.md` and the CR): no defect found.
+- Gond Gate (CR 614.12 / 616.1): the predicate reads the board BEFORE the entry, so a Gond entering does not
+  untap itself or a land entering with it (simultaneous multi-puts are I3's, note below); a Gate with its own
+  "enters tapped" or The Black Gate's pay-3 replacement is untapped with no life paid -- the controller orders
+  the replacements (enters-tapped first, Gond last). Planar Nexus counts as a Gate (the `HasId` fallback), for
+  the untap and for Gond's colours (WUBRG). A second Gond's reflected mode is skipped (Reflecting Pool rule).
+- Amulet of Vigor (CR 603.2 / 603.6a): one trigger per Amulet the ENTERING permanent's controller controls,
+  counted after the entry, so an Amulet entering tapped sees itself; no trigger for a permanent that entered
+  untapped (Gond). N copies float N-1 mana by tapping in response, main phase only.
+- Gateway Plaza (CR 603.3b): Amulet's trigger resolves before the Plaza's, the controller's ordering and a
+  sound dominance (it can then pay with the Plaza itself); payment through the shared payer; the affordability
+  probe is the Mihail precedent's copy probe.
+- Chosen colour / basic land type: locked as the land enters (a replacement, CR 614.12), before Amulet and the
+  enter triggers; a CLB Gate's menu excludes its printed colour; Thran Portal's chosen type is its colour.
+- Thran Portal's 1 life is an additional COST of its mana abilities (payable only at life >= 1, CR 119.4), not
+  damage (the existing `tap_is_life_payment` path).
+- Controller-aware: "Gates YOU control" (Gond), the Black Gate's life and Amulet's "you control" all read the
+  entering land's controller.
 
 ## Decisions and provisional deferrals (USER sign-off pending)
 
