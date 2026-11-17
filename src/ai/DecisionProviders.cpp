@@ -202,6 +202,18 @@ static bool SeaSprawlGreenNeedOn()
     static const bool e = EnvOn("MTG_SEA_SPRAWL_GREEN_NEED");         // DEFAULT OFF (exception E1, pending the USER)
     return heurarm::Flag(heurarm::SEA_SPRAWL_GREEN_NEED, e);
 }
+static bool SeaWaveNeverOn()
+{
+    static const bool e = EnvOn("MTG_SEA_WAVE_NEVER", true);          // DEFAULT ON (USER ruling); =0 -> Wave is searched
+    return heurarm::Flag(heurarm::SEA_WAVE_NEVER, e);
+}
+
+// Whelming Wave is never cast autonomously (the class note; USER 2026-11-16). Keyed on the param, not the name.
+bool SeaCreaturesProvider::NeverCast(const CardDefinition& def) const
+{
+    if (!def.params.bounce_all_creatures || !SeaWaveNeverOn()) { return false; }
+    return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SeaWave);
+}
 
 // The fetch rule's rank: Breeding Pool, then Island / Forest (MTG_SEA_FETCH_ISLAND_FIRST), then Hedge Maze (Q2,
 // agent default), then anything else. Each fetch's legal set does the rest: Windswept Heath has no Island and
@@ -882,6 +894,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"fixedburntarget", UnprunedGate::FixedBurnTarget},
     {"champion", UnprunedGate::Champion},
     {"championmain2", UnprunedGate::ChampionMain2},
+    {"seawave",    UnprunedGate::SeaWave},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -28621,8 +28634,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         { boars = true; }
         // Sea Creatures (INTERIM, I1): Worn Powerstone (an enters-tapped two-mana rock), Flooded Grove (a G/U filter
         // land), Hedge Maze (a Forest Island surveil land), and Spawning Kraken's combat-damage watch naming Kraken
-        // (no card carries it yet). TODO(Sea integration): OR in the Sea-only creature params as they land, then
-        // DELETE the three staple terms (an enters-tapped {C}{C} rock / a filter / a surveil dual are generic).
+        // (Spawning Kraken, I2). I2 also ORs Koma's self-scoped Serpent tokens and Whelming Wave's Kraken-sparing
+        // bounce. TODO(Sea integration): OR in Summon: Leviathan's / Hullbreaker's / Brinelin's / Trench Gorger's
+        // Sea-only params as they land, then DELETE the three staple terms (an enters-tapped {C}{C} rock / a filter /
+        // a surveil dual are generic). Kept through I2: three Sea-only cards (one of them the never-cast Wave, an
+        // easy deckbuilding cut) is not yet the several-card OR the Pirates precedent asks for.
         {
             const auto has_col = [&](Color c)
             { return std::find(p.produces.begin(), p.produces.end(), c) != p.produces.end(); };
@@ -28631,7 +28647,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
                 || (def->card.IsLand() && p.etb_surveil > 0 && CardHasSubtype(def->card, "Forest")
                     && CardHasSubtype(def->card, "Island"))
                 || std::find(p.combat_damage_watch_subtypes.begin(), p.combat_damage_watch_subtypes.end(),
-                             "Kraken") != p.combat_damage_watch_subtypes.end())
+                             "Kraken") != p.combat_damage_watch_subtypes.end()
+                // I2: Koma's self-scoped combat-damage Serpent tokens, Whelming Wave's mass bounce sparing Krakens.
+                || (p.combat_damage_watch_self
+                    && std::find(p.combat_damage_token_subtypes.begin(), p.combat_damage_token_subtypes.end(),
+                                 "Serpent") != p.combat_damage_token_subtypes.end())
+                || std::find(p.bounce_all_creatures_except_subtypes.begin(),
+                             p.bounce_all_creatures_except_subtypes.end(),
+                             "Kraken") != p.bounce_all_creatures_except_subtypes.end())
             { sea = true; }
         }
         if (!p.champion_subtype.empty() || p.attack_trigger_reanimate

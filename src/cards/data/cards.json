@@ -17563,6 +17563,126 @@
     "enters_tapped": true,
     "etb_surveil": 1
    }
+  },
+  {
+   "name": "Spawning Kraken",
+   "mana_cost": "{5}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kraken"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Whenever a Kraken, Leviathan, Octopus, or Serpent you control deals combat damage to a player, create a 9/9 blue Kraken creature token. [combat_damage_tokens_per_trigger 1 + combat_damage_watch_subtypes [Kraken, Leviathan, Octopus, Serpent] (an OR over the ATTACKER's card subtypes, tokens included) in the shared FireCombatDamageTokens, fired inside ResolveCombatDamage -- the ONE combat core GameEngine::CombatPhase and the rollout both call, so executor/rollout lockstep is by construction. ONE TRIGGER PER (Spawning Kraken, connecting sea creature) PAIR (CR 603.2): two Krakens and three connecting sea creatures make six 9/9s. Spawning Kraken is itself a Kraken and watches its own damage. The 9/9 blue Kraken tokens ('9/9 Kraken Token') enter untapped and summoning-sick AFTER combat damage, do not join that combat, and are themselves Krakens, so they feed every Spawning Kraken on later turns (as do Koma's Coils, Serpents). 'To a player' is exact: the goldfish opponent never blocks, so every attacker with power > 0 connects. Mandatory and untargeted: no viewer decision; the CR 603.3b order among simultaneous copies is inert (each only ADDS tokens, none reads a count). Not second-main relevant: the tokens are bodies only, and nothing in this list spends a body in main 2.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "combat_damage_tokens_per_trigger": 1,
+    "combat_damage_watch_subtypes": [
+     "Kraken",
+     "Leviathan",
+     "Octopus",
+     "Serpent"
+    ],
+    "combat_damage_token_power": 9,
+    "combat_damage_token_toughness": 9,
+    "combat_damage_token_subtypes": [
+     "Kraken"
+    ],
+    "combat_damage_token_color": "U"
+   }
+  },
+  {
+   "name": "Koma, World-Eater",
+   "mana_cost": "{3}{G}{G}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Serpent"
+   ],
+   "keywords": [
+    "Trample",
+    "Ward"
+   ],
+   "power": 8,
+   "toughness": 12,
+   "oracle_text": "This spell can't be countered.\nTrample, ward {4}\nWhenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil. [COMBAT-DAMAGE TOKENS, SELF-SCOPED: combat_damage_tokens_per_trigger 4 + combat_damage_watch_self in the shared FireCombatDamageTokens (inside ResolveCombatDamage, the ONE combat core both the executor and the rollout call -- lockstep by construction): only KOMA's own connection triggers it (not another Serpent's), four 3/3 blue Serpent tokens NAMED Koma's Coil (combat_damage_token_name, passed through CreateTokens) per damage step it connects in. The Coils enter untapped and summoning-sick AFTER damage and do not join that combat; they are Serpents, so from the next turn every connecting Coil triggers every Spawning Kraken, and Koma's own connection does too (separate triggers, same step). 'To a player' is exact against a never-blocking opponent. Mandatory and untargeted: no viewer decision. 'Can't be countered' is cant_be_countered (inert: the passive opponent casts nothing). TRAMPLE and WARD are carried in keywords and are structurally inert: there is no blocker path, and ward triggers only on an OPPONENT's spell or ability -- our own Hullbreaker Horror / Brinelin bounce of Koma is not taxed. LEGENDARY (2 copies): the generic searched legend keep; a human gets the legend_keep decision. Not second-main relevant: the Coils are bodies only.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cant_be_countered": true,
+    "combat_damage_tokens_per_trigger": 4,
+    "combat_damage_watch_self": true,
+    "combat_damage_token_power": 3,
+    "combat_damage_token_toughness": 3,
+    "combat_damage_token_subtypes": [
+     "Serpent"
+    ],
+    "combat_damage_token_color": "U",
+    "combat_damage_token_name": "Koma's Coil"
+   }
+  },
+  {
+   "name": "Serpent of Yawning Depths",
+   "mana_cost": "{4}{U}{U}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Serpent"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Krakens, Leviathans, Octopuses, and Serpents you control can't be blocked except by Krakens, Leviathans, Octopuses, and Serpents. [A 6/6 ENCHANTMENT CREATURE -- Serpent; both types are carried faithfully (a nonland permanent for Hullbreaker Horror / Brinelin bounce, an enchantment for Sin's counter removal), and as a Serpent it triggers every Spawning Kraken when it connects. [PARTIAL/PROVISIONAL (user sign-off): the evasion static is not modelled; WHY inert: structural -- src/ai/Combat.cpp has no blocker path and the goldfish opponent never blocks, so a restriction on which creatures may block ours changes no game (the Master of the Pearl Trident islandwalk class, USER-approved 2026-11-01). Becomes LIVE only against a blocking opponent.]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Lorthos, the Tidemaker",
+   "mana_cost": "{5}{U}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Octopus"
+   ],
+   "keywords": [],
+   "power": 8,
+   "toughness": 8,
+   "oracle_text": "Whenever Lorthos attacks, you may pay {8}. If you do, tap up to eight target permanents. Those permanents don't untap during their controllers' next untap steps. [An 8/8 legendary Octopus (a sea creature: it triggers every Spawning Kraken when it connects). [PARTIAL/PROVISIONAL (user sign-off): the attack trigger's optional {8} is ALWAYS DECLINED and the tap/freeze effect is not modelled (attack_may_pay_tap_permanents is recorded, unread). WHY: declining is a SOUND DOMINANCE in this list -- paying only removes 8 mana that main 2 or a flash Hullbreaker Horror could have spent (paying is not casting, so no Hullbreaker/Brinelin trigger); tapping an attacker does not remove it from combat; tapping our own lands or creatures and freezing them only loses mana; the opponent's permanents (scheduled spawns, never blocking or attacking) gain or lose nothing by being tapped; nothing here watches a permanent becoming tapped or reads mana spent. The Beastmaster Ascension always-take / Daring Buccaneer never-pay class. Becomes LIVE with a tap-matters or untap-matters card, a mana-spent reader, or an interactive opponent.] Legend rule generic (1 copy).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_may_pay_tap_permanents": 8
+   }
+  },
+  {
+   "name": "Whelming Wave",
+   "mana_cost": "{2}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and Serpents. [bounce_all_creatures_except_subtypes [Kraken, Leviathan, Octopus, Serpent] -- an UNTARGETED, SYMMETRIC, simultaneous bounce through the shared PerformBounceAllCreaturesExcept (one body, the executor's Custom-spell resolution and the rollout's sorcery dispatch -- lockstep; each creature goes through the shared ReturnPermanentToOwnersHand). The exception reads each permanent's own card subtypes (tokens and a Mimic-appended type count; an all-types animated land is excepted). Each returned card goes to its OWNER's hand -- a creature stolen with Kiora Bests the Sea God III goes back to the OPPONENT -- and a token (or a scheduled opponent spawn, the engine's token) ceases to exist (CR 111.7); auras fall off to the graveyard, equipment unattaches, counters and temporary effects are lost (CR 400.7). In this list every creature we can own is a Kraken, Leviathan, Octopus or Serpent, so it never touches our own board except a stolen creature; against the goldfish it only removes opponent spawns, which never block or attack (payoff <= 0). NEVER CAST AUTONOMOUSLY (USER 2026-11-16: 'Yes, I would heuristically skip Whelming Wave'): SeaCreaturesProvider::NeverCast drops it from the search, the breakpoint continuations and the rollouts -- MTG_SEA_WAVE_NEVER=0 searches it again; human play and MTG_UNPRUNE=seawave always offer it. No targets, no modes, no 'may': no viewer decision beyond the cast.]",
+   "template": "custom",
+   "parameters": {
+    "bounce_all_creatures_except_subtypes": [
+     "Kraken",
+     "Leviathan",
+     "Octopus",
+     "Serpent"
+    ]
+   }
   }
  ]
 }

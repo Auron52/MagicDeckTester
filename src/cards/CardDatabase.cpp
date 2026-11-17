@@ -1316,6 +1316,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.enter_as_copy_of_creature  = params.value("enter_as_copy_of_creature",  false);
     p.damage_opp_creatures_mv_cast = params.value("damage_opp_creatures_mv_cast", false);
     p.damage_all_creatures       = params.value("damage_all_creatures", 0);
+    // Whelming Wave (Sea Creatures I2): the mass bounce; a non-empty except list implies the bool.
+    p.bounce_all_creatures       = params.value("bounce_all_creatures", false);
+    for (const std::string& s : params.value("bounce_all_creatures_except_subtypes", json::array()))
+        p.bounce_all_creatures_except_subtypes.push_back(s);
+    if (!p.bounce_all_creatures_except_subtypes.empty()) { p.bounce_all_creatures = true; }
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);
 
@@ -1483,12 +1488,23 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.combat_damage_token_color       = params.value("combat_damage_token_color", std::string{});
     p.combat_damage_tokens_per_trigger = params.value("combat_damage_tokens_per_trigger", 0);   // Millicent
     p.combat_damage_watch_nontoken     = params.value("combat_damage_watch_nontoken", false);
+    p.combat_damage_watch_self         = params.value("combat_damage_watch_self", false);       // Koma
+    p.combat_damage_token_name         = params.value("combat_damage_token_name", std::string{});
+    p.attack_may_pay_tap_permanents    = params.value("attack_may_pay_tap_permanents", 0);     // Lorthos (recorded)
     for (const std::string& s : params.value("combat_damage_watch_subtypes", json::array()))
         p.combat_damage_watch_subtypes.push_back(s);
     for (const std::string& s : params.value("combat_damage_token_subtypes", json::array()))
         p.combat_damage_token_subtypes.push_back(s);
     for (const std::string& s : params.value("combat_damage_token_keywords", json::array()))
         p.combat_damage_token_keywords.push_back(s);
+    // Koma's self scope is meaningless beside a subtype / nontoken watch, and inert without a count.
+    if (p.combat_damage_watch_self
+        && (!p.combat_damage_watch_subtypes.empty() || p.combat_damage_watch_nontoken
+            || (p.combat_damage_tokens_per_damage <= 0 && p.combat_damage_tokens_per_trigger <= 0)))
+    {
+        throw std::runtime_error("combat_damage_watch_self needs a per-damage / per-trigger count and no "
+                                 "combat_damage_watch_subtypes / combat_damage_watch_nontoken");
+    }
 
     if (params.contains("firebreathing_cost"))
         p.firebreathing_cost = ManaCostFromString(params["firebreathing_cost"].get<std::string>());

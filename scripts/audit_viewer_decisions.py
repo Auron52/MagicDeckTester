@@ -1640,6 +1640,11 @@ INERT_PARAMS = {
     # two token filters on her mandatory, untargeted triggers -- no target, mode, 'may' or division.
     "combat_damage_tokens_per_trigger": "automatic combat-damage token trigger (Millicent: one 1/1 Spirit per connecting nontoken Spirit), mandatory and untargeted; simultaneous copies only ADD tokens, so their CR 603.3b order is inert",
     "combat_damage_watch_nontoken": "combat-damage watch filter detail (connecting tokens do not trigger), no choice",
+    "combat_damage_watch_self": "Koma: the combat-damage token trigger watches only the source's own connection -- a scope qualifier of the mandatory, untargeted trigger, no choice",
+    "combat_damage_token_name": "Koma's Coil: the created tokens' printed name -- cosmetic qualifier of the mandatory token trigger, no choice",
+    "attack_may_pay_tap_permanents": "Lorthos: the optional {8} tap-up-to-eight is STRICTLY DOMINATED (mana spent mid-combat buys nothing; tapping or freezing never helps vs the passive opponent and hurts on our side) -- recorded, unread, always declined, DISCLOSED 6a, PROVISIONAL (ledger Q5)",
+    "bounce_all_creatures": "Whelming Wave: an untargeted symmetric mass bounce ('all creatures ... except'), no target / mode / may; exhaustive. The only decision is whether to cast it (main_phase plan; the Sea provider never casts it autonomously, human play is offered it)",
+    "bounce_all_creatures_except_subtypes": "Whelming Wave: the excepted subtypes of the untargeted mass bounce, no choice",
     "dies_watch_nontoken": "death-watch filter detail (a dying token does not trigger), no choice",
     # The three riders below are MAGNITUDE/SCOPE on that same static reduction (Dragonspeaker Shaman
     # and Urza's Incubator read "{2} less"; the Incubator's applies to creature spells only). A cost

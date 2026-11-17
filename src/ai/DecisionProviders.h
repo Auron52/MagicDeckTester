@@ -188,6 +188,7 @@ enum class UnprunedGate
                      // (RedElementalsProvider::PruneChampionCandidates' doomed-attacker prune)
     ChampionMain2,   // Red Elementals: a no-haste champion card's PRE-combat hardcast restored
                      // (RedElementalsProvider::CollectedActionAllowed, the USER's Nova Chaser main-2 rule)
+    SeaWave,         // Sea Creatures: Whelming Wave's cast restored (SeaCreaturesProvider::NeverCast, USER 2026-11-16)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -629,6 +630,13 @@ public:
 //     DEFAULT OFF pending the USER (Q3): green is admitted as a SECOND searched branch when the controller has at
 //     most one green-producing permanent and the hand holds two or more other {G} pips.
 //
+//   * WHELMING WAVE IS NEVER CAST (I2; USER 2026-11-16: "Yes, I would heuristically skip Whelming Wave. Neither of
+//     Hullbreaker's abilities are useful in Goldfish, so we can opt out heuristically as well."). NeverCast drops
+//     every bounce_all_creatures spell from CollectActions (search, breakpoint continuations, rollouts) with no
+//     Hullbreaker exception: in this list every creature we can own is a Kraken / Leviathan / Octopus / Serpent,
+//     so the bounce only removes opponent spawns (payoff <= 0) and its one upside, a cast for Hullbreaker
+//     Horror's trigger, is itself declined. MTG_SEA_WAVE_NEVER=0 searches the cast again; human play and
+//     MTG_UNPRUNE=seawave always offer it.
 // ConsiderFetchHold is NOT overridden: the root default (false, USER 2026-11-14) cracks on play, which is the
 // reviewed answer for this list (analysis ledger, fetch_hold_review).
 //
@@ -661,6 +669,7 @@ public:
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
                                          const CardDefinition& def) const override;
     int EtbChosenColor(const GameState& s, int controller, const CardDefinition& def) const override;
+    bool NeverCast(const CardDefinition& def) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "

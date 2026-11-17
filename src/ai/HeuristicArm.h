@@ -961,6 +961,7 @@ enum Slot : int
     SEA_FETCH_ISLAND_FIRST,   // MTG_SEA_FETCH_ISLAND_FIRST  Sea Creatures: under the fetch prune, Island before Forest once the Pools are gone (USER "might"). Default ON; =0 -> Forest first
     SEA_SPRAWL_BLUE,          // MTG_SEA_SPRAWL_BLUE  Sea Creatures (USER 2026-11-16 "we should try a prune to always use blue"): Utopia Sprawl's colour axis is {U}. Default ON; =0 -> the sound {U, G} fold, searched
     SEA_SPRAWL_GREEN_NEED,    // MTG_SEA_SPRAWL_GREEN_NEED  Sea Creatures exception E1 (proposed, pending the USER): admit G as a second searched Sprawl branch when we have <= 1 green source and the hand holds 2+ other {G} pips. Default OFF
+    SEA_WAVE_NEVER,           // MTG_SEA_WAVE_NEVER  Sea Creatures (USER 2026-11-16 "I would heuristically skip Whelming Wave"): SeaCreaturesProvider::NeverCast never offers a bounce_all_creatures spell autonomously. Default ON; =0 -> the cast is searched again (human play / MTG_UNPRUNE=seawave always offer it)
     COUNT
 };
 
@@ -1866,6 +1867,7 @@ inline const char* Name(int slot)
         "MTG_SEA_FETCH_ISLAND_FIRST",
         "MTG_SEA_SPRAWL_BLUE",
         "MTG_SEA_SPRAWL_GREEN_NEED",
+        "MTG_SEA_WAVE_NEVER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
