@@ -85,3 +85,12 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
   Hedge Maze T3 (mechanism confirmed; arms already diverge at T1, so draw order is mixed in). Default OFF ->
   USER. To cherry-pick onto this branch for the NEXT push window (needs build + units + smoke byte-identity).
 * Next: push phase-1-2-deck-analyzer, CI watch, remove `.claude/worktrees/sea-origin`, Stage 6 report.
+
+## Closed, 2026-11-17 ~20:20 UTC
+
+* Pushed `f4ca329c9` (15:45 UTC; CI run 44117980440 green) and, after a rebase onto origin `8c99d110b` (only the
+  HeuristicArm list-append conflict; order verified), the Hedge Maze commits as `c6e703ab2` (20:19 UTC; CI run
+  44168117332). Post-rebase: units 3463/3463, Sea-scoped smoke + regression ALL PASS byte-identical (flag OFF).
+* Stage 6 report delivered. Everything left is a USER decision (ledger "Open USER questions", the Hedge Maze
+  section, `docs/design/fetch-tapped-typed-land.md`, `docs/design/sea-creatures-discard-policy-proposal.md`) or
+  belongs to another owner (104 upstream-drift GT rows + Creature Giving: `build/scratch/sea/land2/attrib.txt`).
