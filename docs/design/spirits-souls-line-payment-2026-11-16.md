@@ -116,3 +116,23 @@ PGO mana-clean gate on games 30,000–34,999 is clean: zero issues, zero
 misses, zero oracle gaps, and byte-identical oracle-on/off play. Spirits
 is recorded clean in `test/mana_clean.json`; the report is
 `logs/mana_clean/codex-spirits-line-surplus2-20261116/report.md`.
+
+## Four-shockland Souls → Millicent route (2026-11-17)
+
+A new fresh-source PGO gate at game indices 40,000–44,999 found one
+`APPLY-DROP`, seed 30,040,647 turn four. A fetched Godless Shrine joins
+an existing Godless Shrine, Hallowed Fountain, and Watery Grave before
+Souls flashback `{1}{B}`. The ordinary payer spends a blue land on Souls'
+generic pip and strands Millicent's later `{W}{U}`. The two Godless
+Shrines can pay Souls while Fountain and Watery pay Millicent.
+
+`MTG_SPIRITS_SHOCK_PAIR_HOLD` is default on (`=0` restores the old
+payment). Under the existing Spirits Souls line condition, the held-first
+payer temporarily reserves Fountain and Watery on the exact four-shockland
+board and retries unrestricted if needed. The focused rollout/executor
+unit test fails on baseline and passes with the change. The exact seed now
+has zero oracle issues; the off control restores its APPLY-DROP. Release
+`./build.sh` and the full 3,385-case unit suite pass. Source and test are
+committed as `bd7c05019`. A fresh PGO build and 5,000-game same-binary
+paired comparison are in progress; consult the live Claude handoff for
+their status and results.
