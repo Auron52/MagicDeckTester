@@ -44,6 +44,16 @@ f2156d4e6 with dirty state). Investigate this GT/snapshot mismatch
 before accepting, and review the same-score changes by affected deck.
 No GT acceptance or push has occurred. The mana gate can resume in
 parallel with read-only GT analysis, one simulation batch at a time.
+Source scope check at 05:15 UTC: the only four unpushed source commits
+since `origin/phase-1-2-deck-analyzer` are Dragonstorm Ruby and Apex
+provider/solver changes plus the storage-land backtracker repair.
+`cards.json` marks only Dwarven Hold and Mercadian Bazaar as
+`storage_land`, and `rg` finds those only in the Dragonstorm shipping
+deck. **None of the 39 failed smoke rows is Dragonstorm.** The upstream
+Red Elementals sidecar also has no failed row. Thus these smoke failures
+are baseline drift already present outside the new source paths, not a
+reason to change or reject the four mana fixes. Keep GT unchanged and
+continue their separate audit; do not silently accept the drift.
 
 The eight-worker due-four gate was intentionally stopped at chunk
 boundary for the post-rebase smoke and upcoming push. It had completed
