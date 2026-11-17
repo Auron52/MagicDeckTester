@@ -4734,7 +4734,8 @@ inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, co
         || (pp.pay_token_cost.has_value()       && PermAbilityTaps(PermAbilityMode::PayToken))
         || (pp.ping_all_cost.has_value()        && PermAbilityTaps(PermAbilityMode::PingAll))
         || (pp.tap_lifegain_cost.has_value()    && PermAbilityTaps(PermAbilityMode::TapLifegain))
-        || (pp.activated_dig_cost.has_value()   && PermAbilityTaps(PermAbilityMode::ActivatedDig));
+        || (pp.activated_dig_cost.has_value()   && PermAbilityTaps(PermAbilityMode::ActivatedDig))
+        || (pp.self_ping_cost.has_value()       && PermAbilityTaps(PermAbilityMode::SelfPing));   // Stuffy Doll
     // Bloodline Keeper / Lord of Lineage (Vampires B): "{T}: Create a 2/2 black Vampire token with
     // flying" -- tapping the body for convoke forfeits its token, so a live one is COSTLY (the A1 hand-off
     // note). TapTokenSourceLive is the family's one predicate (untapped, summoning sickness, Speaker's
@@ -9599,6 +9600,7 @@ inline bool LegendCopiesInterchangeable(const GameState& state, const std::vecto
             || p.destroy_at_end_if_attacked || p.return_at_end_step || p.AttacksThisTurn() != 0 || p.is_animated
             || !static_cast<const std::string&>(p.copy_printed_name).empty() || p.chosen_color != -1
             || p.chosen_subtype_id != 0 || p.chosen_keyword_mask != 0 || p.linked_exile_number != 0
+            || p.chosen_player >= 0
             || p.once_per_turn_used || p.skip_next_untap || p.paired_with != 0)
         { return false; }
         if (p.tapped != a.tapped || p.entered_this_turn != a.entered_this_turn
@@ -11165,7 +11167,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.landfall_resolved_once || p.landfall_resolved_twice
         || (!mix_doom && p.AttacksThisTurn() != 0) || p.enduring_noncreature)     { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
-        || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
+        || p.chosen_subtype_id != 0 || p.linked_exile_number != 0 || p.chosen_player >= 0) { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty()
         || !p.lens_imprinted_land.empty())                                         { return false; }
     // ...and nothing attached TO it / paired WITH it: that link lives on the OTHER permanent.
@@ -13491,6 +13493,8 @@ inline int ConsumeProphetsChampionPin()
         : g_prophets_champion_pins != nullptr ? -2 : -1;
 }
 inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
+namespace dmgrx { inline void EtbChoosePlayer(GameState& s, int controller, int entered_index,
+                                              const CardDefinition& def, int etb_kx); }   // DamageReflection.h
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
                                    const std::string& chosen_tutor, int etb_kx)
 {
@@ -13546,6 +13550,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         g_pending_saga_enters.push_back(
             PendingSagaEnter{ controller, state.battlefield[entered_index].card.m_number });
     }
+
+    // Stuffy Doll: "As this creature enters, choose a player." A REPLACEMENT (CR 614.12), resolved here
+    // ahead of every trigger like the colour choice below; the fold / the ETB CHOICE AXIS pin (etb_kx 1 =
+    // the opponent, 2 = us) / the viewer prompt live in dmgrx::EtbChoosePlayer. Param-gated.
+    if (p.etb_choose_player) { dmgrx::EtbChoosePlayer(state, controller, entered_index, *def, etb_kx); }
 
     // "As this permanent enters, choose a color" (Coldsteel Heart). A REPLACEMENT effect, not a
     // trigger (CR 614 / the rules skill's "as [source] enters" row): it does not use the stack and
@@ -38167,6 +38176,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
         case PermAbilityMode::UntapLand:      return "untap target land";
         case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
+        case PermAbilityMode::SelfPing:       return "it deals 1 damage to itself";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
@@ -38311,6 +38321,8 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
         if (d->params.tap_target_pump_grants_trample) { t += " and gains trample"; }
         return t + " until end of turn";
     }
+    if (mode == PermAbilityMode::SelfPing && d != nullptr && d->params.self_ping_damage != 1)
+    { return "it deals " + std::to_string(d->params.self_ping_damage) + " damage to itself"; }
     if (mode == PermAbilityMode::TapLifegain && d != nullptr && d->params.tap_lifegain_per_subtype.empty()
         && d->params.tap_lifegain_flat > 0)
     { return "gain " + std::to_string(d->params.tap_lifegain_flat) + " life"; }
@@ -39470,6 +39482,13 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 EmitPlayEvent(state.turn_number, "ability",
                               src_name + ": reconfigure -- unattached, it is a creature again");
             }
+            break;
+        }
+        case PermAbilityMode::SelfPing:
+        {
+            // Stuffy Doll: "{T}: This creature deals 1 damage to itself." ONE pipeline damage event
+            // (dmgrx::SelfPingAt), so the Doll's reflection deals that much to its chosen player.
+            dmgrx::SelfPingAt(state, controller, idx, *d);
             break;
         }
         case PermAbilityMode::TapLifegain:
@@ -57415,6 +57434,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     if (p.return_at_end_step) { k += "|ret"; }   // Ilharg put body: returns to hand at end step (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
+    if (p.chosen_player >= 0) { k += "|cp"; add(p.chosen_player); }   // Stuffy Doll's chosen player (gated)
     if (p.temp_vigilance) { k += "|vig"; }   // End-Raze Forerunners' until-EOT vigilance (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);

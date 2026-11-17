@@ -44715,6 +44715,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.colored_cast_lifegain_used_this_turn); v.push_back(p.storied_draw_used_this_turn);
         v.push_back(p.lifegain_counters_used_this_turn); v.push_back(p.chosen_color); v.push_back(p.garth_chosen_mask);
         v.push_back(p.chosen_keyword_mask); v.push_back(p.chosen_subtype_id); v.push_back(p.paired_with);
+        if (p.chosen_player >= 0) { v.push_back(0xD011); v.push_back(p.chosen_player); }   // Stuffy Doll (gated)
         v.push_back(p.damage); v.push_back(p.temp_power_bonus); v.push_back(p.temp_tough_bonus); v.push_back(p.equipped_to);
         v.push_back(p.aura_attached_to); v.push_back(p.pending_death_trigger); v.push_back(p.charge_counters);
         v.push_back(p.verse_counters); v.push_back(p.lore_counters); v.push_back(p.storage_counters); v.push_back(p.loyalty);

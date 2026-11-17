@@ -1351,9 +1351,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         else if (rf == "any_target")       { p.reflect_dealt_damage = RT::AnyTarget; }
         else if (rf == "any_other_target") { p.reflect_dealt_damage = RT::AnyOtherTarget; }
         else if (rf == "target_player")    { p.reflect_dealt_damage = RT::TargetPlayer; }
+        else if (rf == "chosen_player")    { p.reflect_dealt_damage = RT::ChosenPlayer; }
         else { throw std::runtime_error("cards.json reflect_dealt_damage \"" + rf + "\" is not a known recipient"); }
     }
     p.reflect_player_cant_gain_life        = params.value("reflect_player_cant_gain_life", false);
+    p.etb_choose_player = params.value("etb_choose_player", false);   // Stuffy Doll
+    p.self_ping_damage  = params.value("self_ping_damage", 0);         // Stuffy Doll's {T}
+    if (p.self_ping_damage > 0) { p.self_ping_cost = ManaCostFromString(std::string{}); }   // {T} is the whole cost
     p.damage_all_creatures_count_creatures = params.value("damage_all_creatures_count_creatures", false);
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);

@@ -117,6 +117,7 @@
   //   untapact=   Crab Umbra / Galvanic Alchemist's grant / Staff of Domination / Seedcradle Witch,
   //               "<source>[#<source m_number>][@<target m_number>]"       (LineSpec::untap_acts)
   //   tapdraw=    Staff of Domination's "{5},{T}: draw" (names the SOURCE)  (LineSpec::tap_draws)
+  //   selfping=   Stuffy Doll's "{T}: 1 damage to itself" (names the SOURCE)  (LineSpec::self_pings)
   //   untaploop=  the closed-form untap LOOP on an untapper (same "#src@target" shape as untapact=;
   //               runs until the float funds the kill -- chunk C2b)        (LineSpec::untap_acts, loop)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one

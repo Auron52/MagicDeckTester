@@ -3540,6 +3540,9 @@ public:
             }
             for (int n = 0; n <= u; ++n) { out.push_back(n + 1); }
         }
+        // Stuffy Doll's "choose a player": 1 = the opponent, 2 = the controller. Consulted only where the
+        // engine's sound chosen-player fold does not hold (dmgrx::ChosenPlayerFoldHolds).
+        else if (p.etb_choose_player) { out = { 1, 2 }; }
         return out;
     }
 

@@ -377,6 +377,12 @@ enum class PermAbilityMode
     // {T} is paid first, then the OTHER permanent's tap (PayActivationOtherTap, both worlds), then the mana.
     // Appended LAST.
     TapTreasure,
+    // {T}: This creature deals N damage to itself  (Stuffy Doll, N = 1; CardParams::self_ping_damage /
+    // the derived empty self_ping_cost). A {T} mode with NO mana half (Wellwisher's shape): summoning
+    // sickness applies (CR 302.6), once per untap. Resolution is ONE damage event through the shared
+    // creature-damage pipeline (dmgrx::DealDamageBatch), so the Doll's "whenever this creature is dealt
+    // damage" reflection triggers off it. Appended LAST (plan signatures, ActKey slots).
+    SelfPing,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
@@ -740,6 +746,13 @@ struct Permanent
     // chosen_subtype_id, so sizeof(Permanent) does not move. Folded into the sim / dominance keys
     // NONZERO-gated.
     uint8_t   chosen_keyword_mask  = 0;
+    // Stuffy Doll: "As this creature enters, choose a player" (CardParams::etb_choose_player) -- the
+    // PLAYER INDEX its reflection deals damage to (ReflectTo::ChosenPlayer), locked per OBJECT at the
+    // universal enter cascade (dmgrx::EtbChoosePlayer; a re-entering Doll chooses afresh). -1 = chose
+    // nothing, which is every other permanent -> byte-identical. Sits in the pad byte after
+    // chosen_keyword_mask, so sizeof(Permanent) does not move. Exact-match per-object state: folded
+    // into the sim / dominance keys only when >= 0.
+    int8_t    chosen_player        = -1;
     // "As this permanent enters, choose a creature type" (Urza's Incubator). The chosen type is
     // carried here as an INTERNED SUBTYPE ID (SubtypeRegistry), fixed at ETB and never changed, so
     // the card is generic -- the type is a property of the DECK it is played in, not baked into

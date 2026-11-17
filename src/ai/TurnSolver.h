@@ -4098,6 +4098,11 @@ public:
         // TapLifegain plan alike. EMPTY keeps the legacy name-in-casts matching, so every other
         // TapDraw source (Scrying Sheets, Frost Augur, ...) and every saved line is unchanged.
         std::vector<std::string> tap_draws;
+        // "selfping=<source name>": Stuffy Doll's "{T}: This creature deals 1 damage to itself"
+        // (PermAbilityMode::SelfPing). The taplife= reason: the list runs two Dolls, so `cast=Stuffy Doll`
+        // cannot say whether the human meant the board activation or a hard cast of the copy in hand.
+        // EMPTY keeps the legacy name-in-casts matching.
+        std::vector<std::string> self_pings;
         // "tap=<card name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this
         // source for this face into the float before the line's payments run (see
         // TurnSolver::PreTap). NOT part of the plan multiset: a pre-tap changes how the line is

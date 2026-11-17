@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Stuffy Doll, design step 4 (docs/design/damage-reflection-pipeline.md 10). The Doll's",
+    "'{T}: This creature deals 1 damage to itself' (PermAbilityMode::SelfPing) is ONE damage event",
+    "through the shared pipeline; its reflection deals that much (1) to the CHOSEN player -- the",
+    "opponent, the as-enters choice the fold takes (staged here by the scenario loader's default).",
+    "Opponent at 1: the Doll has power 0, so the ping is the only way to win this turn."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 1,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Stuffy Doll", "chosen_player": "opponent" }
+  ],
+  "hand": [],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

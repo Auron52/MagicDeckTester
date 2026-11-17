@@ -7112,6 +7112,17 @@
     "toughness": "2",
     "type_line": "Creature — Vampire Horror"
   },
+  "Stuffy Doll": {
+    "cmc": 5.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{5}",
+    "oracle_text": "Indestructible\nAs this creature enters, choose a player.\nWhenever this creature is dealt damage, it deals that much damage to the chosen player.\n{T}: This creature deals 1 damage to itself.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Artifact Creature — Construct"
+  },
   "Sulfur Falls": {
     "cmc": 0.0,
     "keywords": [],

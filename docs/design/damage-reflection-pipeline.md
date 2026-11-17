@@ -1261,3 +1261,43 @@ Where the code departs from the sections above, and why. Each entry names the sy
   mult = 1, so no fixture can show a non-front target winning strictly. Step 3 tests that the axis
   BRANCHES and replays instead: a unit fan test, a unit executor-lockstep test, and the
   `stuffy_chain_reckoner_survives_target_fan.json` scenario, which was the old tripwire case.
+
+### Step 4 (Stuffy Doll)
+
+* **The chosen-player fold is DECK-level, not board-level** (`dmgrx::ChosenPlayerFoldHolds`). Section 4.6
+  says "the same predicate as F1", which is a BOARD test (Purity / Tamanoa on the battlefield now). The
+  Doll's choice is locked for the object's lifetime, so a board test at ETB is not sound: a Purity cast a
+  turn later would make "us" the better choice after the fact. The fold therefore holds iff
+  `!GameState::dmg_events_armed` -- the deck-constant superset (main + sideboard) of every card that turns
+  damage to us into something -- and not under human play or `MTG_UNPRUNE=reflecttarget`. The rest of the
+  proof is F1's (no own-life reader rewards lower life; damage to the opponent is monotone good).
+* **Where the fold fails, the ETB CHOICE AXIS fans it** (the Utopia Sprawl / Trufflesnout vehicle, not a
+  new pin): `CastCarriesEtbChoice` admits `etb_choose_player`, the post-pass skips the fan while the fold
+  holds, and the base `EtbChoiceCandidates` returns `{1 = opponent, 2 = us}`. The pin reaches
+  `FireOwnEtbTriggersBody` as `etb_kx`. No current deck pairs a Doll with a dmgev arming card, so the fan
+  is live machinery that never fires today (a unit test drives it with `dmg_events_armed` set). An
+  UNPINNED entry takes the opponent -- under the fold the dominant choice; otherwise only where the fan does
+  not score (beyond the horizon, the d0 runner, a speculative apply) or on a put (no route puts a Doll).
+* **The reflection's recipient is read at the SNAPSHOT** (`PendingTrig::fixed_player`, LKI), so a Doll
+  killed by the same event still hits its chosen player. `LegalReflectTargets` returns the singleton, and
+  `ResolveTrig` neither consults the provider hook nor prompts for `ChosenPlayer`. A Doll staged without the
+  as-enters replacement (`chosen_player` -1) takes the opponent; the scenario loader stages one with an
+  explicit `"chosen_player": "opponent" | "you"` (default opponent).
+* **`own_death_live` is armed from `etb_choose_player`** (GoldFishRunner), never from `reflect_armed`, so
+  Minotaur does not move. A human may choose themself, and then the Doll can kill us (the ruling's SBA order
+  is step 1's pipeline order).
+* **SelfPing** is the `{T}`-only Wellwisher shape: `self_ping_damage` plus a loader-DERIVED empty
+  `self_ping_cost`, appended LAST to the enum, the three ModeSpec tables and the plan-dump name table; added
+  to `ConvokeBodyTapAbilityLive`, `BpActivationAbilityUnambiguous`, `NumberedTapSource`, the untap-target
+  "can get tapped" list and `DefCanDamageCreatures`. Resolution `dmgrx::SelfPingAt` is one pipeline event.
+  F5 (ping weakly dominates not pinging in the last main's trailing pass) is NOT applied here: both twins
+  are searched; the prune belongs to the step-10 provider.
+* **`Permanent::chosen_player`** (int8, -1) sits in the pad byte after `chosen_keyword_mask` (sizeof stays
+  328). Folded, gated on `>= 0`, into `dominance::Build`, `BuildSimKey`'s per-permanent mix, the turn key,
+  the transposition key, the permanent equality, the removal fold key, the provider state key, and both
+  plain-for-fold predicates (a Doll with a choice is not plain).
+* **Viewer.** The as-enters choice is a players-only `target` prompt flagged `choose_player` (no
+  `per_target_damage`; its own GUI branch); the activation has the line verb `selfping=<source>` (two Dolls
+  in the list: the `taplife=` reason) through `LineSpec::self_pings` and every CheckLine site. The auditor
+  maps `etb_choose_player -> target`, `self_ping_damage -> main_phase` (+ `verb:selfping`), and no longer
+  expects a reflection prompt for `chosen_player`.

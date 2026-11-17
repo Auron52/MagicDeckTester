@@ -1884,6 +1884,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : opt.verb==='taplife' ? `${src}: tapping it to gain life. Commit the phase to resolve it.`
     : opt.verb==='tapdraw' ? `${src}: tapping it to draw a card. Commit the phase to resolve it.`
+    : opt.verb==='selfping' ? `${src}: tapping it to deal 1 damage to itself (its chosen player is dealt that much). Commit the phase to resolve it.`
     : (opt.verb==='untapact' && opt.untapLoop) ? `${src}: ${untapActText(opt)}. Commit the phase to run the loop; the rest of the main phase then spends the floating mana.`
     : opt.verb==='untapact' ? `${src}: ${untapActText(opt)}. Click again to repeat it, then commit.`
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
@@ -2945,6 +2946,7 @@ function renderPlanbar() {
               : p.verb==='taptoken'  ? ' ⟳ make a token'
               : p.verb==='taplife'   ? ' ⟳ gain life'
               : p.verb==='tapdraw'   ? ' ⟳ draw a card'
+              : p.verb==='selfping'  ? ' ⟳ 1 damage to itself'
               : p.verb==='untapact'  ? ' ⟳ ' + untapActText(p)
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
@@ -4777,6 +4779,7 @@ function activationPickerHtml(pick){
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
                    : o.verb==='taplife'   ? `Tap ${o.name} — gain life`
                    : o.verb==='tapdraw'   ? `Tap ${o.name} — draw a card`
+                   : o.verb==='selfping'  ? `Tap ${o.name} — 1 damage to itself`
                    : o.verb==='untapact'  ? `${o.name} — ${untapActText(o)}`
                    : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
                    : o.verb==='steal'     ? `${o.name} — tap five untapped Vampires: gain control of target creature (you pick it and the five as it resolves)`
@@ -5854,6 +5857,15 @@ function promptPanelHtml(d, dec){
   // The legal set is the two PLAYERS (labels "You (self)" / "Opponent", so faceTarget's matching makes
   // both life totals clickable); nothing is damaged, so the generic "N damage" wording must not show.
   // The AI's pick (you -- the autonomous search prunes the opponent target) is preselected.
+  // Stuffy Doll's "As this creature enters, choose a player" (d.choose_player): a CHOICE, not a target, of
+  // one of the two players (labels "You (face)" / "Opponent (face)", so both life totals are clickable).
+  // Nothing is damaged now; every point the Doll is dealt later goes to the chosen player.
+  if (d.choose_player){
+    return `<h3>Choose a player — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">As it enters, choose a player — from now on <b>${esc(d.source||'it')} deals the damage it is dealt to the chosen player</b> · pick 1. Click your own life total or the opponent's on the board. The AI's pick (the opponent) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   if (d.lifegain){
     return `<h3>Target player — ${esc(d.source||'')}</h3>`+
       `<div class="sub">The chosen player <b>${esc(d.lifegain)}</b> · pick 1. Click your own life total or the opponent's on the board. The AI's pick (you) is preselected.</div>`+

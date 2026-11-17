@@ -3230,6 +3230,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                                  return td && (td->params.self_untap_cost.has_value()
                                                || td->params.tap_lifegain_cost.has_value()); }())
                 { os << ", \"verb\": \"tapdraw\""; }
+                // Stuffy Doll's "{T}: deals 1 damage to itself": its own verb for the taplife= reason
+                // (the list runs two Dolls; `cast=Stuffy Doll` cannot tell activation from hard cast).
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::SelfPing)
+                { os << ", \"verb\": \"selfping\""; }
                 // Evolving Wilds / Terramorphic Expanse / Myriad Landscape / Khalni Heart Expedition:
                 // an activated land search names its SOURCE (a land is never cast; a Khalni may also
                 // sit in hand). The basics it finds are asked at resolution (`tutor_etb`).
@@ -4252,7 +4257,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::string& loyalty_desc = "",
                                     const std::string& copy_desc = "",
                                     const std::string& lifegain_desc = "",
-                                    bool mills_target_player = false)
+                                    bool mills_target_player = false,
+                                    const std::string& choose_player_desc = "")
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s);
@@ -4261,6 +4267,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // damaged, and the viewer must word it as life gained, not "N damage".
     if (!lifegain_desc.empty()) { d.Str("lifegain", lifegain_desc); }
     if (mills_target_player) { d.Int("mill_cards", per_target); }
+    // A non-empty choose_player_desc flags Stuffy Doll's "As this creature enters, choose a player": the
+    // legal set is the two PLAYERS, it is a CHOICE (not a target) and nothing is damaged now.
+    if (!choose_player_desc.empty()) { d.Str("choose_player", choose_player_desc); }
     // A non-empty loyalty_desc (e.g. "turned into a green 3/3 Elk with no abilities") flags this as
     // a PLANESWALKER LOYALTY ability's target: no damage number, and the legal set is whatever that
     // ability's printed restriction allows (artifacts and lands included), so the viewer must not
@@ -4284,7 +4293,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // deals no fixed per-target damage, so it carries no `per_target_damage` at all: a literal 0 there
     // read as "this deals 0 damage" (Hydras sweep, seed 50002 T4). The viewer words those prompts from
     // `loyalty` and never reads the number.
-    if (!loyalty_desc.empty() || mills_target_player)
+    if (!loyalty_desc.empty() || mills_target_player || !choose_player_desc.empty())
     { os << "  \"max_targets\": " << max_targets << ", \"min_targets\": " << min_targets << ",\n"; }
     else
     {
@@ -4314,7 +4323,10 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // ("Each chosen target takes 7 damage ... (face)") -- the GUI words it from `lifegain`, but the
     // claude-play note misled sweep agents (SelesnyaLifegain v2 sweep, 8 of 16 agents, 2026-10-22).
     // `per_target_damage` still carries the amount for the historic layout; nothing is damaged.
-    if (!lifegain_desc.empty())
+    if (!choose_player_desc.empty())
+    { d.Note("reply an option index -- the PLAYER " + choose_player_desc + " (a choice, not a target; "
+             "no damage is dealt now). Default = the AI's pick (heuristic_default)."); }
+    else if (!lifegain_desc.empty())
     { d.Note("reply an option index -- the PLAYER who " + lifegain_desc + " (no damage is dealt). "
              "Default = the AI's pick (heuristic_default)."); }
     else if (mills_target_player)
@@ -6096,6 +6108,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         // is a castable nonland card (Staff of Domination's "{5}, {T}: Draw a card") -- the
         // taplife= reason. A LAND tap-draw source keeps the verbless cast= matching.
         else if (key == "tapdraw")   { ls.tap_draws.push_back(val); }
+        else if (key == "selfping")  { ls.self_pings.push_back(val); }    // Stuffy Doll "{T}: 1 damage to itself"
     }
     return ls;
 }
@@ -7698,6 +7711,10 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const bool lifegain_player = def.params.cast_lifegain_target_player;
             const std::string lifegain_desc = lifegain_player
                 ? ("gains " + std::to_string(per_target_damage) + " life") : std::string();
+            // Stuffy Doll's as-enters choice (dmgrx::EtbChoosePlayer sets t_viewer_legal to the two players).
+            // The Doll's reflection itself never prompts: its recipient is this choice, fixed.
+            const std::string choose_player_desc = (dmgrx::t_viewer_legal != nullptr && def.params.etb_choose_player)
+                ? std::string("this creature deals the damage it is dealt to") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
             if (dmgrx::t_viewer_legal != nullptr && def.params.reflect_dealt_damage != CardParams::ReflectTo::None)
             {
@@ -7966,14 +7983,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_8; }
@@ -10321,6 +10338,14 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             {
                 // Rick's chosen keyword pair: an explicit "keywords" list pins it (e.g.
                 // ["Vigilance","Lifelink"]); otherwise the provider's pick, as a played Rick makes.
+                // Stuffy Doll's chosen player: an explicit "chosen_player" ("opponent" / "you") pins it;
+                // otherwise the opponent -- the pick a played Doll makes under the design-4.6 fold.
+                if (pd->params.etb_choose_player)
+                {
+                    const std::string cp = e.value("chosen_player", std::string("opponent"));
+                    p.chosen_player = static_cast<int8_t>(cp == "you" ? p.controller_index
+                                                                      : 1 - p.controller_index);
+                }
                 if (pd->params.etb_choose_keyword_count > 0)
                 {
                     if (e.contains("keywords"))

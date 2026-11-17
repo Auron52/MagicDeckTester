@@ -868,9 +868,24 @@ struct CardParams
     // Carrying it (main or sideboard) ARMS the pipeline for the deck (GameState::reflect_armed,
     // GoldFishRunner::StampDeckTraits); every other deck keeps its legacy damage bodies byte-for-byte.
     // JSON strings: "target_opponent" (Mogg Maniac), "any_target" (Boros Reckoner),
-    // "any_other_target" (Screaming Nemesis), "target_player". None = inert.
-    enum class ReflectTo : std::uint8_t { None = 0, TargetOpponent, AnyTarget, AnyOtherTarget, TargetPlayer };
+    // "any_other_target" (Screaming Nemesis), "target_player", "chosen_player" (Stuffy Doll: the
+    // FIXED recipient its as-enters choice locked, Permanent::chosen_player -- never a target, never a
+    // choice at resolution). None = inert. New values are APPENDED (the enum is cast to int for the
+    // provider hook).
+    enum class ReflectTo : std::uint8_t { None = 0, TargetOpponent, AnyTarget, AnyOtherTarget, TargetPlayer,
+                                          ChosenPlayer };
     ReflectTo reflect_dealt_damage = ReflectTo::None;
+    // Stuffy Doll: "As this creature enters, choose a player." A REPLACEMENT (CR 614.12 "as ... enters"),
+    // not a trigger: resolved in FireOwnEtbTriggersBody before any enter trigger, locked per OBJECT in
+    // Permanent::chosen_player (dmgrx::EtbChoosePlayer; the fold / search of design 4.6). It also arms
+    // GameState::own_death_live (GoldFishRunner::StampDeckTraits): a Doll that chose us can kill us.
+    bool etb_choose_player = false;
+    // Stuffy Doll: "{T}: This creature deals N damage to itself" (PermAbilityMode::SelfPing). One damage
+    // event through the shared pipeline (dmgrx::DealDamageBatch), so the Doll's own reflection triggers.
+    // 0 = inert. self_ping_cost is DERIVED by the loader as an EMPTY ManaCost when N > 0 (the tap is the
+    // whole cost; the ModeSpec tables key on optional<ManaCost>::has_value() -- Wellwisher's shape).
+    int self_ping_damage = 0;
+    std::optional<ManaCost> self_ping_cost;
     // Screaming Nemesis's rider on its reflection: "If a player is dealt damage this way, they can't
     // gain life for the rest of the game." Sets GameState::cant_gain_life_rest_of_game_mask for each
     // player its reflection actually deals damage to (the bit outlives the creature, rulings).

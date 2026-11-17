@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Stuffy Doll, design step 4. Doll + four opponent Spirits = 5 creatures, so Blasphemous Act",
+    "({8}{R}, {1} less per creature on the battlefield, BOTH sides) costs {3}{R} off four lands. Its",
+    "13 to each creature is ONE event: the Spirits die, the INDESTRUCTIBLE Doll survives with 13",
+    "marked, and its reflection deals that much -- 13, not 1 (ruling) -- to the chosen player, the",
+    "opponent at 13. Without the Act the best is one ping a turn, so a T4 win needs the sweep."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 13,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Stuffy Doll" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

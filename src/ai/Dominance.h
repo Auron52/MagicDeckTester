@@ -213,6 +213,10 @@
 // team grant), a bool in existing padding -- THE TRIPWIRE DID NOT FIRE. Classification: BOUNDARY
 // ASSERTION, the verbatim temp_double_strike argument (until-EOT, cleared at cleanup; refused in
 // AtCleanBoundary, never compared). Also folded into the sim keys, gated on set.
+// 328 -> 328 (2026-11-17, Stuffy Doll step 4): Permanent gained `chosen_player` (int8, the Doll's "as
+// this enters, choose a player"), in the pad byte after chosen_keyword_mask -- THE TRIPWIRE DID NOT
+// FIRE. Classification: EXACT-MATCH per-object state (which player the Doll's reflection hits),
+// folded below and in the sim keys, gated on >= 0.
 static_assert(sizeof(Permanent) == 328,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1548,6 +1552,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // exile (WHICH opponent creature returns when it leaves): per-object, exact-match, and
         // NOT until-EOT. Nonzero-gated -> every other deck's key is unchanged.
         if (p.chosen_keyword_mask != 0) { mfold(0xC4057ull); mfold(static_cast<std::uint64_t>(p.chosen_keyword_mask)); }
+        // Stuffy Doll's chosen player (who its reflection hits): per-object, exact-match. >= 0-gated.
+        if (p.chosen_player >= 0) { mfold(0xD011ull); mfold(static_cast<std::uint64_t>(p.chosen_player)); }
         if (p.linked_exile_number != 0) { mfold(0x11E7Eull); mfold(static_cast<std::uint64_t>(p.linked_exile_number)); }
         if (!p.lens_imprinted_land.empty())
         { mfold(0x1E45ull); mfold(std::hash<std::string>{}(p.lens_imprinted_land.str())); }

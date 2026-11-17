@@ -105,6 +105,7 @@ struct PendingTrig
     int       self_number = 0;  // its m_number ("any OTHER target" excludes it; may be gone already)
     int       amount      = 0;  // "that much damage"
     bool      lock_life   = false;
+    int       fixed_player = -1;  // ReflectTo::ChosenPlayer: the Doll's locked player index (LKI), else -1
 };
 
 struct BatchResult
@@ -270,8 +271,14 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
             if (amt <= 0) { continue; }
             const CardDefinition* d = Def(q);
             if (d == nullptr || d->params.reflect_dealt_damage == CardParams::ReflectTo::None) { continue; }
+            // Stuffy Doll: the recipient is the player its as-enters choice locked (read NOW -- LKI, the
+            // Doll may die to this very event). A Doll staged onto the battlefield without the as-enters
+            // replacement (chosen_player -1; no current entry path does this) takes the opponent, the
+            // design-4.6 fold's pick.
+            const int fixed = d->params.reflect_dealt_damage != CardParams::ReflectTo::ChosenPlayer ? -1
+                            : q.chosen_player >= 0 ? q.chosen_player : 1 - q.controller_index;
             raised.push_back({ d->params.reflect_dealt_damage, SourceRef{ q.card, q.controller_index, true },
-                               q.card.m_number, amt, d->params.reflect_player_cant_gain_life });
+                               q.card.m_number, amt, d->params.reflect_player_cant_gain_life, fixed });
         }
     }
 
@@ -422,6 +429,7 @@ inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTri
 {
     using RT = CardParams::ReflectTo;
     const int ctrl = t.src.controller, opp = 1 - ctrl;
+    if (t.kind == RT::ChosenPlayer) { return { PlayerId(t.fixed_player) }; }   // a fixed recipient, not a target
     std::vector<int> legal{ PlayerId(opp) };
     if (t.kind == RT::TargetOpponent) { return legal; }
     if (!OwnFaceDominated(s, t)) { legal.push_back(PlayerId(ctrl)); }
@@ -510,26 +518,29 @@ struct PinScope
 // sound only while this list is complete. Today the one route is PerformDamageAllCreatures: the
 // damage_all_creatures sweeps (Pyroclasm, Blasphemous Act), Chain Reaction's counted X, Rolling
 // Earthquake (x_damage_each_creature_and_player) and Pyrohemia's activation (ping_all_amount).
-// (Design steps 4-5 add Stuffy Doll's self-ping, Guilty Conscience and combat: extend it there.)
+// Step 4 adds Stuffy Doll's {T} self-ping (self_ping_damage, PermAbilityMode::SelfPing -> SelfPingAt).
+// (Design step 5 adds Guilty Conscience and combat: extend it there.)
 inline bool DefCanDamageCreatures(const CardDefinition& d)
 {
     return d.params.damage_all_creatures > 0 || d.params.damage_all_creatures_count_creatures
         || d.params.x_damage_each_creature_and_player || d.params.ping_all_amount > 0
-        || d.params.ping_all_cost.has_value();
+        || d.params.ping_all_cost.has_value() || d.params.self_ping_damage > 0;
 }
 // Does `d` carry a reflection trigger whose target can be a CHOICE? Mogg Maniac's "target opponent"
 // is always the singleton {opponent} (one opponent pool, also in 2HG), so it never needs the fan.
 inline bool DefReflectsWithChoice(const CardDefinition& d)
 {
     using RT = CardParams::ReflectTo;
-    return d.params.reflect_dealt_damage != RT::None && d.params.reflect_dealt_damage != RT::TargetOpponent;
+    // Stuffy Doll's ChosenPlayer is a FIXED recipient (the as-enters choice), never a choice here either.
+    return d.params.reflect_dealt_damage != RT::None && d.params.reflect_dealt_damage != RT::TargetOpponent
+        && d.params.reflect_dealt_damage != RT::ChosenPlayer;
 }
 
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
 {
     using RT = CardParams::ReflectTo;
     if (t.kind != RT::TargetOpponent && t.kind != RT::AnyTarget && t.kind != RT::AnyOtherTarget
-        && t.kind != RT::TargetPlayer)
+        && t.kind != RT::TargetPlayer && t.kind != RT::ChosenPlayer)
     {
         std::fprintf(stderr, "[rfx] FATAL: unresolvable trigger kind %d from %s\n",
                      static_cast<int>(t.kind), t.src.card.m_name.str().c_str());
@@ -537,7 +548,8 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
     }
     const std::vector<int> engine_legal = LegalReflectTargets(s, t);
     std::vector<int> legal = engine_legal;
-    if (!HumanPlayActive())   // human play sees every legal target (the provider may not prune it)
+    // Stuffy Doll: "it deals that much damage to the chosen player" -- no target, no hook, no prompt.
+    if (!HumanPlayActive() && t.kind != RT::ChosenPlayer)   // human play sees every legal target (the provider may not prune it)
     {
         ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
                                                    static_cast<int>(t.kind), legal);
@@ -607,6 +619,79 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
         EmitPlayEvent(s.turn_number, "trigger",
                       "\xE2\x9A\xA1 " + t.src.card.m_name.str() + " was dealt " + std::to_string(t.amount)
                       + " damage -- it deals " + std::to_string(t.amount) + " to " + to);
+    }
+    DealDamageBatch(s, b);
+}
+
+// ---- STUFFY DOLL (design 4.6 / step 4) ----------------------------------------------------------------
+//
+// THE CHOSEN-PLAYER FOLD (SOUND, design 4.6; the F1 argument made deck-level). "As this creature enters,
+// choose a player": the choice is locked for the object's lifetime, and its ONLY reader is the Doll's own
+// reflection ("it deals that much damage to the chosen player", ReflectTo::ChosenPlayer). Choosing the
+// opponent sends every point the Doll is ever dealt to the opponent instead of to us. Proof that this
+// weakly dominates choosing ourselves, for the rest of the game: damage to the opponent is monotone good
+// in the goldfish, and our own life is read DOWNWARD by nothing in the engine (F1's proof at
+// OwnFaceDominated: every own-life reader is a floor) -- EXCEPT the cards that turn damage to us into
+// something (Purity, Tamanoa, and the other dmgev arming terms). Because the choice outlives the board it
+// was made on, the fold tests the DECK, not the board: GameState::dmg_events_armed is the deck-constant
+// superset of every such card (main + sideboard), so while it is false none can ever reach our
+// battlefield. Lifted under human play (the viewer asks) and MTG_UNPRUNE=reflecttarget. When it does not
+// hold, the cast is fanned on the ETB CHOICE AXIS (CollectActions' post-pass: chosen_x 1 = the opponent,
+// 2 = us), so the search -- not a default -- picks.
+inline bool ChosenPlayerFoldHolds(const GameState& s)
+{
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::ReflectTarget)) { return false; }
+    return !s.dmg_events_armed;
+}
+
+// The as-enters replacement itself, called from FireOwnEtbTriggersBody (both worlds) ahead of every enter
+// trigger. etb_kx is the ETB CHOICE AXIS pin (1 = the opponent, 2 = the controller; anything else = no
+// pin). With no pin the opponent is taken: under the fold that IS the dominant choice; without it, an
+// unpinned entry is one the fan does not score (a rollout leaf beyond the horizon, the depth-0 runner, a
+// speculative apply) -- the sanctioned front-candidate greedy. A put onto the battlefield (no current
+// route puts a Doll) also arrives unpinned. Human play is asked through the viewer's `target` prompt with
+// the two players (t_viewer_legal), worded by main.cpp as the Doll's choice.
+inline void EtbChoosePlayer(GameState& s, int controller, int entered_index, const CardDefinition& def,
+                            int etb_kx)
+{
+    if (s.battlefield[static_cast<std::size_t>(entered_index)].chosen_player >= 0) { return; }
+    const int opp = 1 - controller;
+    int pick = (etb_kx == 2) ? controller : opp;
+    if (g_play_target_chooser != nullptr && !TapSpeculatingNow())
+    {
+        const std::vector<int> legal{ PlayerId(opp), PlayerId(controller) };
+        const std::vector<int>* saved = t_viewer_legal;
+        t_viewer_legal = &legal;
+        const auto chosen = (*g_play_target_chooser)(s, def, controller, 1, 0,
+                                                     { ChosenTarget{ 0, pick, 0 } });
+        t_viewer_legal = saved;
+        if (chosen.size() == 1 && chosen[0].kind == 0 && (chosen[0].index == 0 || chosen[0].index == 1))
+        { pick = chosen[0].index; }
+    }
+    s.battlefield[static_cast<std::size_t>(entered_index)].chosen_player = static_cast<int8_t>(pick);
+    if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+    {
+        EmitPlayEvent(s.turn_number, "choose_player",
+                      def.card.m_name.str() + " -- chose " + (pick == controller ? "you" : "the opponent"));
+    }
+}
+
+// "{T}: This creature deals N damage to itself" (PermAbilityMode::SelfPing; the {T} is already paid by
+// the caller). ONE damage event, the Doll both source and recipient, through the shared pipeline, so its
+// own reflection (and any later damage watcher) sees it -- in both worlds, which share ApplyPermAbility.
+// Not combat damage. Indestructible keeps the Doll alive whatever accumulates (CR 702.12b).
+inline void SelfPingAt(GameState& s, int controller, int idx, const CardDefinition& def)
+{
+    const int n = def.params.self_ping_damage;
+    if (n <= 0) { return; }
+    const Permanent& me = s.battlefield[static_cast<std::size_t>(idx)];
+    Batch b;
+    b.src.push_back({ me.card, controller, me.card.IsCreature() });
+    b.hits.push_back({ 0, { false, me.card.m_number }, n, false, false });
+    if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+    {
+        EmitPlayEvent(s.turn_number, "damage",
+                      "\xE2\x9B\x88 " + me.card.m_name.str() + " deals " + std::to_string(n) + " damage to itself");
     }
     DealDamageBatch(s, b);
 }

@@ -17526,6 +17526,29 @@
    }
   },
   {
+   "name": "Stuffy Doll",
+   "mana_cost": "{5}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Construct"
+   ],
+   "keywords": [
+    "Indestructible"
+   ],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "Indestructible. As this creature enters, choose a player. Whenever this creature is dealt damage, it deals that much damage to the chosen player. {T}: This creature deals 1 damage to itself. [etb_choose_player: an AS-ENTERS REPLACEMENT (CR 614.12), not a trigger -- resolved in FireOwnEtbTriggersBody ahead of every enter trigger and locked per OBJECT in Permanent::chosen_player (a re-entering Doll chooses afresh). Autonomous play takes the OPPONENT under a SOUND fold (dmgrx::ChosenPlayerFoldHolds, design 4.6): the choice's only reader is this card's own reflection, damage to the opponent is monotone good in the goldfish, and nothing in the engine rewards lower own life (the F1 proof) unless the DECK carries a damage/lifegain payoff such as Purity or Tamanoa (GameState::dmg_events_armed, deck-constant because the choice outlives the board). Where the fold does not hold, the cast is fanned on the searched ETB CHOICE AXIS (chosen_x 1 = opponent, 2 = you). Human play is asked with a players-only `target` prompt (choose_player). reflect_dealt_damage chosen_player: raised by the shared creature-damage pipeline (core/DamageReflection.h) once per damage event for the total dealt (\"if dealt 3, it deals 3\", ruling), to the FIXED recipient the as-enters choice locked (read as last-known information) -- never a target and never a choice at resolution; noncombat damage. The life SBA runs before the trigger is put on the stack (ruling: a player at 0 loses first), and the card arms own_death_live, so a Doll that chose you can kill you. self_ping_damage 1: PermAbilityMode::SelfPing (appended LAST), a {T}-only activation (self_ping_cost is DERIVED as an empty ManaCost), summoning sickness applies (CR 302.6); ONE pipeline damage event, the Doll both source and recipient. Human play line verb `selfping=<source>` (the deck runs two copies). Indestructible: the keyword, so the self-ping and a 13-damage Blasphemous Act never kill it (CR 702.12b). In Two-Headed Giant the chosen opponent is the shared team pool (one option).]",
+   "template": "custom",
+   "parameters": {
+    "etb_choose_player": true,
+    "reflect_dealt_damage": "chosen_player",
+    "self_ping_damage": 1
+   }
+  },
+  {
    "name": "Screaming Nemesis",
    "mana_cost": "{2}{R}",
    "types": [

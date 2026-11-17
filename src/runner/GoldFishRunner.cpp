@@ -2059,8 +2059,22 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             }
             return false;
         };
+        // STUFFY DOLL (step 4, 2026-11-17): a Doll whose chosen player is US deals us the damage it is
+        // dealt, so our own death must be able to end the game (CR 704.5a; the Doll ruling "you lose the
+        // game before its triggered ability goes on the stack"). Armed from the Doll's OWN param, never
+        // from reflect_armed -- that would move Minotaur (Boros Reckoner), whose play this must not touch.
+        auto doll_live = [](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.etb_choose_player) { return true; }
+            }
+            return false;
+        };
         state.own_death_live = state.dmg_events_armed || s_own_death_all
-                            || life_cost_live(deck.mainboard) || life_cost_live(deck.sideboard);
+                            || life_cost_live(deck.mainboard) || life_cost_live(deck.sideboard)
+                            || doll_live(deck.mainboard) || doll_live(deck.sideboard);
     }
     // SPELL-COST REDUCERS (see GameState::deck_has_cost_reducer): can anything that ever reaches a
     // battlefield in this game reduce the cost of a spell we cast? EffectiveSpellCost walks the

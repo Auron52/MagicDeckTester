@@ -412,3 +412,203 @@ TEST_CASE("rfx step 3: every pinned branch replays identically in the executor (
     }
     CHECK(checked == 2);
 }
+
+// ---- STEP 4: Stuffy Doll (design 4.6) ---------------------------------------------------------------
+
+namespace
+{
+// A Doll on the battlefield (chosen player set as the as-enters replacement would) plus `lands` Mountains.
+GameState DollBoard(int chosen, bool sick, int lands)
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < lands; ++i) { PutRfx(s, "Mountain", 1210 + i); }
+    Permanent& d = PutRfx(s, "Stuffy Doll", 1201);
+    d.chosen_player     = static_cast<int8_t>(chosen);
+    d.entered_this_turn = sick;
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1230 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+bool PlanPings(const TurnSolver::Plan& p)
+{
+    return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+        { return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SelfPing; });
+}
+}   // namespace
+
+TEST_CASE("rfx step 4: Stuffy Doll's card data (oracle shape, params, arming)")
+{
+    const CardDefinition& d = DefRfx("Stuffy Doll");
+    CHECK(d.card.IsCreature());
+    CHECK(d.card.HasType(CardType::Artifact));
+    CHECK(d.card.m_power == 0);
+    CHECK(d.card.m_toughness == 1);
+    CHECK(d.params.etb_choose_player);
+    CHECK(d.params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer);
+    CHECK(d.params.self_ping_damage == 1);
+    REQUIRE(d.params.self_ping_cost.has_value());
+    CHECK(d.params.self_ping_cost->ManaValue() == 0);
+    CHECK(dmgrx::DefCanDamageCreatures(d));      // the fan's pre-check sees the self-ping route
+    CHECK_FALSE(dmgrx::DefReflectsWithChoice(d)); // a fixed recipient is never a choice
+}
+
+TEST_CASE("rfx step 4: a summoning-sick Doll offers no ping; a settled untapped one does")
+{
+    {
+        const GameState s = DollBoard(1, /*sick=*/true, 0);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        for (const auto& p : plans) { CHECK_FALSE(PlanPings(p)); }
+    }
+    {
+        const GameState s = DollBoard(1, /*sick=*/false, 0);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(std::any_of(plans.begin(), plans.end(), PlanPings));   // the activation is offered
+        for (const auto& p : plans) { CHECK(p.reflect_targets.empty()); }   // never a reflection pin
+    }
+}
+
+TEST_CASE("rfx step 4: the Doll's {T} deals 1 to itself and its reflection deals 1 to the CHOSEN player")
+{
+    {
+        GameState s = DollBoard(/*chosen=*/1, false, 0);
+        ApplyPermAbility(s, 0, 1201, PermAbilityMode::SelfPing);
+        REQUIRE(Find(s, 1201) != nullptr);            // indestructible: 1 on a 0/1 does not kill it
+        CHECK(Find(s, 1201)->damage == 1);
+        CHECK(s.players[1].life == 19);
+        CHECK(s.players[0].life == 20);
+        CHECK(dmgrx::t_frame.stack.empty());
+    }
+    {
+        GameState s = DollBoard(/*chosen=*/0, false, 0);  // a Doll that chose its controller (human play)
+        ApplyPermAbility(s, 0, 1201, PermAbilityMode::SelfPing);
+        CHECK(s.players[0].life == 19);
+        CHECK(s.players[1].life == 20);
+    }
+}
+
+TEST_CASE("rfx step 4: the ping plan replays identically in the executor (lockstep)")
+{
+    const GameState initial = DollBoard(1, false, 0);
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    int checked = 0;
+    for (const auto& p : plans)
+    {
+        if (!PlanPings(p)) { continue; }
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(roll.players[1].life == 19);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        ++checked;
+    }
+    CHECK(checked >= 1);
+}
+
+TEST_CASE("rfx step 4: Blasphemous Act / Chain Reaction reflect the FULL amount to the chosen player")
+{
+    {
+        GameState s = DollBoard(1, false, 0);
+        for (int i = 0; i < 4; ++i) { TokenRfx(s, 1250 + i, 1, 1, 1, "Spirit"); }
+        PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+        REQUIRE(Find(s, 1201) != nullptr);          // indestructible Doll survives the Act
+        CHECK(Find(s, 1201)->damage == 13);
+        CHECK(s.players[1].life == 20 - 13);         // "if dealt 13, it deals 13" (ruling)
+        for (int i = 0; i < 4; ++i) { CHECK(Find(s, 1250 + i) == nullptr); }
+    }
+    {
+        GameState s = DollBoard(1, false, 0);
+        for (int i = 0; i < 2; ++i) { TokenRfx(s, 1260 + i, 1, 1, 1, "Spirit"); }
+        const CardDefinition& chain = DefRfx("Chain Reaction");
+        PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));   // X = 3 creatures
+        CHECK(s.players[1].life == 20 - 3);
+        REQUIRE(Find(s, 1201) != nullptr);
+        CHECK(Find(s, 1201)->damage == 3);
+    }
+}
+
+TEST_CASE("rfx step 4: the as-enters choice -- the fold takes the opponent; without it the cast is FANNED")
+{
+    auto board = [](bool payoff_deck)
+    {
+        GameState s = ArmedState();
+        s.phase = Phase::PreCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        s.dmg_events_armed = payoff_deck;   // a deck carrying Purity / Tamanoa breaks the fold (design 4.6)
+        for (int i = 0; i < 5; ++i) { PutRfx(s, "Mountain", 1310 + i); }
+        Card doll = DefRfx("Stuffy Doll").card;
+        doll.m_number = 1301;
+        s.players[0].hand.push_back(doll);
+        for (int i = 0; i < 10; ++i)
+        { Card m = DefRfx("Mountain").card; m.m_number = 1330 + i; s.players[0].library.push_back(m); }
+        return s;
+    };
+    auto doll_casts = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        std::set<int> xs;
+        for (const auto& p : plans)
+            for (const Action& a : p.actions)
+                if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Stuffy Doll") { xs.insert(a.chosen_x); }
+        return xs;
+    };
+    {
+        const GameState s = board(false);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(doll_casts(plans) == std::set<int>{ 0 });   // the SOUND fold: unpinned, no fan
+        for (const auto& p : plans)
+        {
+            if (doll_casts({ p }).empty()) { continue; }
+            GameState roll = s;
+            TurnSolver::ApplyPlan(roll, p, true);
+            const Permanent* d = Find(roll, 1301);
+            REQUIRE(d != nullptr);
+            CHECK(d->chosen_player == 1);                // the opponent
+        }
+    }
+    {
+        const GameState s = board(true);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(doll_casts(plans) == std::set<int>{ 1, 2 });   // both players, searched
+        for (const auto& p : plans)
+        {
+            const std::set<int> xs = doll_casts({ p });
+            if (xs.empty()) { continue; }
+            GameState roll = s;
+            TurnSolver::ApplyPlan(roll, p, true);
+            const Permanent* d = Find(roll, 1301);
+            REQUIRE(d != nullptr);
+            CHECK(d->chosen_player == (*xs.begin() == 2 ? 0 : 1));
+        }
+    }
+}
+
+TEST_CASE("rfx step 4: human play is ASKED the chosen player, players only, opponent preselected")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Stuffy Doll", 1401);
+    std::vector<int> seen_legal;
+    int seen_default = -2;
+    TargetChooser chooser = [&](const GameState&, const CardDefinition& def, int, int, int,
+                                const std::vector<ChosenTarget>& dflt) -> std::vector<ChosenTarget>
+    {
+        CHECK(def.params.etb_choose_player);
+        REQUIRE(dmgrx::t_viewer_legal != nullptr);
+        seen_legal = *dmgrx::t_viewer_legal;
+        if (dflt.size() == 1) { seen_default = dflt[0].index; }
+        return { ChosenTarget{ 0, 0, 0 } };   // the human picks THEMSELF
+    };
+    TargetChooser* saved = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+    dmgrx::EtbChoosePlayer(s, 0, 0, DefRfx("Stuffy Doll"), 0);
+    g_play_target_chooser = saved;
+    CHECK(seen_legal == std::vector<int>{ dmgrx::PlayerId(1), dmgrx::PlayerId(0) });
+    CHECK(seen_default == 1);
+    CHECK(s.battlefield[0].chosen_player == 0);
+    // Locked per object: a second call (no re-entry) does not ask again or change it.
+    dmgrx::EtbChoosePlayer(s, 0, 0, DefRfx("Stuffy Doll"), 2);
+    CHECK(s.battlefield[0].chosen_player == 0);
+}

@@ -222,7 +222,13 @@ MANIFEST = {
     # Damage reflection (Boros Reckoner "any target", Screaming Nemesis "any other target", Spiteful Sliver
     # "target player"): the trigger's target is a `target` decision at resolution (dmgrx::ResolveTrig ->
     # g_play_target_chooser). Mogg Maniac's "target opponent" is a forced singleton, never prompted.
-    "reflect_dealt_damage": ("target", lambda v: bool(v) and v != "target_opponent"),
+    # Stuffy Doll's "chosen_player" is a FIXED recipient (never prompted at resolution); its as-enters
+    # "choose a player" is the players-only `target` prompt keyed on etb_choose_player below.
+    "reflect_dealt_damage": ("target", lambda v: bool(v) and v not in ("target_opponent", "chosen_player")),
+    "etb_choose_player":    ("target", truthy),   # Stuffy Doll: dmgrx::EtbChoosePlayer -> choose_player prompt
+    # Stuffy Doll's "{T}: deals 1 damage to itself" (PermAbilityMode::SelfPing): a main_phase plan line,
+    # verb selfping= (two copies in the list -- the taplife= reason).
+    "self_ping_damage":     ("main_phase", positive),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
     # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
@@ -928,6 +934,7 @@ BOARD_ACTIVATIONS = {
     # ActivateUntap (verb "untapact" + "untap_loop": true in the plan JSON), written `untaploop=` on the
     # line by linebuild.js -- so no new manifest entry; DECISIONS.md carries its own row.
     "tap_lifegain_cost":                         ("verb:taplife",   truthy,   "tap_lifegain_cost"),  # Staff {2},{T}
+    "self_ping_damage":                          ("verb:selfping",  positive, None),  # Stuffy Doll's {T}
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     # Lizard Blades: reconfigure's ATTACH half rides the Equip kind, so it is offered as verb:equip at
     # the reconfigure cost. (Its UNATTACH half is a verbless `activate` ActivatePermAbility on the

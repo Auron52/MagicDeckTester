@@ -716,6 +716,7 @@ inline uint64_t FungibilityKey(const Permanent& p)
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
     Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
     if (p.chosen_keyword_mask != 0) { Mix(h, 0xC4057ull ^ p.chosen_keyword_mask); }   // Rick
+    if (p.chosen_player >= 0) { Mix(h, 0xD01100ull ^ static_cast<uint64_t>(p.chosen_player)); }   // Stuffy Doll
     if (p.linked_exile_number != 0) { Mix(h, 0x11E7E00000000ull ^ static_cast<uint64_t>(p.linked_exile_number)); }
     if (!p.lens_imprinted_land.empty())
     { Mix(h, std::hash<std::string>{}(p.lens_imprinted_land.str()) ^ 0x1E451E45ull); }
@@ -6427,6 +6428,7 @@ static bool BpActivationAbilityUnambiguous(const CardParams& p)
     if (p.sac_lifegain_per_creature_cost) { ++n; }
     if (p.tap_lifegain_cost)              { ++n; }
     if (p.land_search_activation_cost)    { ++n; }   // Evolving Wilds / Myriad / Khalni (one each)
+    if (p.self_ping_cost)                 { ++n; }   // Stuffy Doll's {T} self-ping
     return n == 1;
 }
 
@@ -6840,6 +6842,7 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::SelfBounce,         &sd.params.self_bounce_cost             },
         { PermAbilityMode::TapTutorPut,         &sd.params.tap_tutor_put_cost            },
         { PermAbilityMode::TapTreasure,         &sd.params.tap_treasure_cost             },   // Heap Gate (I4), LAST
+        { PermAbilityMode::SelfPing,            &sd.params.self_ping_cost                },   // Stuffy Doll, appended LAST
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -20057,7 +20060,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
     // same-named permanents play differently. Zero for every other deck -> byte-identical.
     if (p.chosen_keyword_mask != 0 || p.linked_exile_number != 0
-        || !p.lens_imprinted_land.empty()) { return false; }
+        || !p.lens_imprinted_land.empty() || p.chosen_player >= 0) { return false; }
     why = foldcensus::kAnimatedToken;
     if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
     // A copy effect can make two same-named permanents differ, and a token is never plain above.
@@ -33057,6 +33060,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::SelfBounce,         &pp.self_bounce_cost            },
         { PermAbilityMode::TapTutorPut, &pp.tap_tutor_put_cost },
         { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
+        { PermAbilityMode::SelfPing,    &pp.self_ping_cost     },   // Stuffy Doll -- appended LAST (slots = table INDEX)
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -37893,7 +37897,10 @@ static bool CastCarriesEtbChoice(const CardDefinition& d)
         || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0)
         || !d.params.etb_tap_subtype_draw.empty()    // Guild Summit: how many Gates to tap
         // Galvanic Alchemist: the soulbond PARTNER (an ability-granting pair) -- SoulbondPinForCast.
-        || (d.params.soulbond && d.params.soulbond_grants_untap_self_cost.has_value());
+        || (d.params.soulbond && d.params.soulbond_grants_untap_self_cost.has_value())
+        // Stuffy Doll's chosen player (1 = the opponent, 2 = us) -- fanned only where the design-4.6 fold
+        // does not hold (dmgrx::ChosenPlayerFoldHolds, tested in the post-pass).
+        || d.params.etb_choose_player;
 }
 
 // The ETB CHOICE AXIS values for an ability-granting soulbond cast (Galvanic Alchemist): every
@@ -48063,7 +48070,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (td && CanTapNow(tgt, state.battlefield)
                         && (!td->params.produces.empty() || td->params.tap_damage_cost
                             || td->params.tap_draw_cost || td->params.tap_lifegain_cost
-                            || td->params.tap_investigate_cost))
+                            || td->params.tap_investigate_cost || td->params.self_ping_cost))
                     { can_get_tapped = true; }
                 }
                 for (const UntapAbilityRef& r : refs)
@@ -48488,6 +48495,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::SelfBounce,     &sd->params.self_bounce_cost     },
                     // Heap Gate (Maze's End I4) -- appended LAST, same order as the other tables.
                     { Action::AbilityMode::TapTreasure,    &sd->params.tap_treasure_cost    },
+                    // Stuffy Doll's "{T}: deals 1 damage to itself" -- appended LAST. A {T}-only mode
+                    // (an EMPTY self_ping_cost, the Wellwisher shape), once per untap: a single emission.
+                    { Action::AbilityMode::SelfPing,       &sd->params.self_ping_cost       },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -53523,6 +53533,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // never enters and makes no ETB choice: no variants for it (they would be identical).
             if (!actions[i].remand_by.empty() && actions[i].remand_chain_by.empty()
                 && !actions[i].def->params.cant_be_countered) { continue; }
+            // Stuffy Doll: under the SOUND chosen-player fold the opponent dominates and the cast stays
+            // unpinned (EtbChoosePlayer takes it); otherwise both players are fanned (the provider may
+            // restrict / order).
+            if (actions[i].def->params.etb_choose_player && dmgrx::ChosenPlayerFoldHolds(state)) { continue; }
             const std::vector<int> vals =
                 (actions[i].def->params.soulbond && actions[i].def->params.soulbond_grants_untap_self_cost)
                 ? SoulbondPartnerPinCandidates(state)
@@ -69456,6 +69470,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.lifegain_counters_used_this_turn == b.lifegain_counters_used_this_turn
         && a.chosen_color == b.chosen_color && a.garth_chosen_mask == b.garth_chosen_mask
         && a.chosen_keyword_mask == b.chosen_keyword_mask && a.chosen_subtype_id == b.chosen_subtype_id
+        && a.chosen_player == b.chosen_player
         && a.paired_with == b.paired_with && a.damage == b.damage
         && a.temp_power_bonus == b.temp_power_bonus && a.temp_tough_bonus == b.temp_tough_bonus
         && a.equipped_to == b.equipped_to && a.aura_attached_to == b.aura_attached_to
@@ -103254,6 +103269,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.unearthed) << 48));        // Unearth (0 elsewhere)
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
+        if (pm.chosen_player >= 0) { mix(0xD011ull ^ (static_cast<std::uint64_t>(pm.chosen_player) << 20)); }   // Stuffy Doll
         mix(static_cast<std::uint64_t>(pm.paired_with));
         mix(static_cast<std::uint64_t>(pm.damage));
         mix(static_cast<std::uint64_t>(pm.temp_power_bonus) ^ (static_cast<std::uint64_t>(pm.temp_tough_bonus) << 32));
@@ -104632,7 +104648,7 @@ inline bool NumberedTapSource(const Permanent& perm)
         || pp.tap_draw_cost.has_value()       || pp.tap_lifegain_cost.has_value()
         || pp.tap_blood_cost.has_value()      || pp.blood_draw_cost.has_value()
         || pp.tap_target_pump_cost.has_value() || pp.tap_token_cost.has_value()
-        || pp.tap_put_from_hand_cost.has_value()
+        || pp.tap_put_from_hand_cost.has_value() || pp.self_ping_cost.has_value()
         || pp.life_gated_put_creatures_cost.has_value() || pp.sac_lifegain_per_creature_cost.has_value()
         || (pp.land_search_activation_taps && pp.land_search_activation_cost.has_value());
 }
@@ -105575,6 +105591,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
         { Fold(tk, 0xC4057); Fold(tk, static_cast<uint64_t>(perm.chosen_keyword_mask)); }
+        if (perm.chosen_player >= 0)   // Stuffy Doll's chosen player (>= 0-gated)
+        { Fold(tk, 0xD011); Fold(tk, static_cast<uint64_t>(perm.chosen_player)); }
         if (perm.linked_exile_number != 0)
         { Fold(tk, 0x11E7E); Fold(tk, static_cast<uint64_t>(perm.linked_exile_number)); }
         if (!perm.lens_imprinted_land.empty())
@@ -131125,6 +131143,17 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         { return "'" + u.name + "' can only untap a creature, and its declared target is not one"; }
     }
 
+    // --- selfping= : Stuffy Doll's "{T}: deals 1 damage to itself". Source presence + the ability.
+    // (A sick or tapped Doll is the search's LegalNotEnumerated grade, as taplife= explains.)
+    for (const std::string& name : spec.self_pings)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.self_ping_cost.has_value())
+        { return "'" + name + "' has no '{T}: deals damage to itself' ability"; }
+    }
+
     // --- tapdraw= : a {T}-draw on a source with a second {T} ability (Staff of Domination).
     for (const std::string& name : spec.tap_draws)
     {
@@ -131830,7 +131859,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       && spec.steals.empty() && spec.transforms.empty() && spec.face_ups.empty()
                       && spec.face_downs.empty() && spec.face_down_ups.empty()
                       && spec.sac_nameds.empty()
-                      && spec.untap_acts.empty() && spec.tap_draws.empty()))
+                      && spec.untap_acts.empty() && spec.tap_draws.empty()
+                      && spec.self_pings.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -132025,6 +132055,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     std::vector<std::string> sortedTapDraws = spec.tap_draws;
     std::sort(sortedTapDraws.begin(), sortedTapDraws.end());
     const bool tapdraw_declared   = !spec.tap_draws.empty();
+    // selfping= (Stuffy Doll's "{T}: deals 1 damage to itself"), the same declared-vs-legacy split.
+    std::vector<std::string> sortedSelfPings = spec.self_pings;
+    std::sort(sortedSelfPings.begin(), sortedSelfPings.end());
+    const bool selfping_declared  = !spec.self_pings.empty();
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -132113,6 +132147,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<LineSpec::EquipSpec> equipActs;
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
         std::vector<std::string> tapLifeNames;
+        std::vector<std::string> selfPingNames;
         std::vector<std::string> landSearchNames;
         std::vector<std::string> stealNames;
         std::vector<std::string> transformNames;
@@ -132226,6 +132261,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (tapdraw_declared && a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::TapDraw)
             { tapDrawNames.push_back(a.card_name); continue; }
+            if (selfping_declared && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::SelfPing)
+            { selfPingNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::ActivateUntap)
             { untapActs.push_back({ a.card_name.str(), a.sac_source_id, a.sac_victim_id,
                                     a.chosen_x >= kUntapLoopToNeed }); continue; }
@@ -132389,6 +132427,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = tapDrawNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTapDraws) { continue; }
+        }
+        if (selfping_declared)
+        {
+            std::vector<std::string> v2 = selfPingNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSelfPings) { continue; }
         }
         if (gyexile_declared)
         {
@@ -135369,7 +135413,8 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
         "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
-        "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure"
+        "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure",
+        "SelfPing"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
