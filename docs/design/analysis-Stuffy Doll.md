@@ -127,7 +127,11 @@ deferrals provisional.
   ordered so the reflector that can loop this turn comes first.
   => Loran's Escape target (provider, heuristic): a creature carrying Guilty Conscience first when one exists.
   => CAST ORDER (USER-proposed, marked "?"): Guilty Conscience before Loran's Escape, so the Escape can see the GC'd
-  creature. Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
+  creature. USER rationale: "The idea here being that summoning sickness is an issue since we need damage to start
+  the chain." => "can loop this turn" = has a STARTER this turn: the Doll's {T} ping or an attack (both need it
+  unsick), OR any other damage reaching it this turn (our sweeper in hand and castable, a reflection aimed at it),
+  which works on a summoning-sick creature too. The provider's host order uses that starter test.
+  Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
