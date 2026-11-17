@@ -2,20 +2,19 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 04:01 UTC
+## Current state, updated 04:27 UTC
 
-The final three stale-clean decks are in one pooled PGO gate as the only
-active simulation batch, exec session 4701:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run martyr_lifegain prevent_damage spirits --games 5000 --name codex-clean-refresh-heavy-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_heavy_gate.out`.
-Read `logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md` on
-completion, update this handoff, and commit `test/mana_clean.json`.
-Their prior combined measured cost is about 10 seconds per paired game;
-this batch may take considerably longer than the earlier refreshes.
+**Final stale-clean refresh complete:** Martyr Lifegain, Prevent
+Damage, and Spirits each ran a fresh 5,000-game PGO mana-clean block at
+source `fcb9352608ea`; all three are **clean**, with zero issue flags
+and byte-identical oracle-on/off play. Prevent Damage had 16,985
+disclosed DOMINATED-LIFE observations, which this gate does not count as
+issues. Report:
+`logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md`.
+The three records are committed in `test/mana_clean.json`. There are no
+stale-clean decks remaining at this source; the open queue consists of
+issue decks and the never-run Extra Turns/Merfolk Turns decks.
+No simulation batch is active after this gate.
 
 **Second pooled fresh PGO gate complete:** 5,000 games each for 13
 decks at source `fcb9352608ea`, oracle-on/off play byte-identical.

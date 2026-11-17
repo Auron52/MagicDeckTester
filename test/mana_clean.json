@@ -6633,6 +6633,47 @@
      "seed": 30005000,
      "src": "c3e08706c7d078abb4c1a7a4bcd9b6ad11e34e85",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 1595,
+      "DROP-COVERED": 147
+     },
+     "commit": "378ccc59e7e076ea9d300049073a5606bd621ccb",
+     "date": "2026-11-17T04:16:41Z",
+     "decisions": 46155,
+     "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+     "deck_sha": "58964b76067d4a0d51bea0070abd2e8e50dbbdb6",
+     "game_index": 10000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION",
+      "DOMINATED-LIFE"
+     ],
+     "issues": 0,
+     "life_breakpoints": [
+      "Serra Ascendant",
+      "Speaker of the Heavens"
+     ],
+     "ms_off": 2611963,
+     "ms_on": 3265340,
+     "report": "logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md",
+     "run": "codex-clean-refresh-heavy-20261117",
+     "seed": 30010000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "clean"
     }
    ]
   },
@@ -9562,6 +9603,46 @@
      "seed": 30097000,
      "src": "23aa72bcc9697326b9f9742b74edb5485fa6ff2c",
      "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 69,
+      "DOMINATED-LAND": 9984,
+      "DOMINATED-LIFE": 16985,
+      "DROP-COVERED": 4,
+      "PHANTOM": 52
+     },
+     "commit": "378ccc59e7e076ea9d300049073a5606bd621ccb",
+     "date": "2026-11-17T04:16:41Z",
+     "decisions": 49520,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 102000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4184084,
+     "ms_on": 15228355,
+     "report": "logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md",
+     "run": "codex-clean-refresh-heavy-20261117",
+     "seed": 30102000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "clean"
     }
    ]
   },
@@ -11603,6 +11684,45 @@
      "run": "codex-spirits-line-surplus2-20261116",
      "seed": 30030000,
      "src": "d2733ac68ff4002fecc21dc8640a52e6dce136db",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 508,
+      "DOMINATED-LAND": 3158,
+      "DROP-COVERED": 646,
+      "PHANTOM": 2911
+     },
+     "commit": "378ccc59e7e076ea9d300049073a5606bd621ccb",
+     "date": "2026-11-17T04:16:41Z",
+     "decisions": 41449,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 35000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4652608,
+     "ms_on": 5639226,
+     "report": "logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md",
+     "run": "codex-clean-refresh-heavy-20261117",
+     "seed": 30035000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
      "verdict": "clean"
     }
    ]
