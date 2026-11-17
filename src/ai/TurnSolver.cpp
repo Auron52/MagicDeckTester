@@ -4537,7 +4537,7 @@ bool RippleCensusBeyondHorizon() { return TurnSolver::InRolloutPlayout() || Turn
 static thread_local uint64_t g_decision_epoch = 0;
 // P18j (sampled_gate 4): > 0 while the lookahead runs ahead of the ladder; the game-level caches (rollout game cache,
 // game line cache, in-window cache) take no store from it, so a miss leaves the ladder the caches it would have had.
-namespace p18 { inline thread_local int t_nostore = 0; }
+namespace p18 { inline thread_local int t_nostore = 0; inline thread_local int t_zcuts = 0; }   // t_zcuts: _pzb, per game
 std::uint64_t TurnSolver::DecisionEpoch() { return g_decision_epoch; }
 
 // MTG_CANTRIP_ORDER watermark: the cantrip-class cast whose breakpoint CONTINUATION is being
@@ -103240,6 +103240,7 @@ void TurnSolver::ClearBreakpointCachesForDiagnostic()
 
 void TurnSolver::ClearPerGameCaches()
 {
+    p18::t_zcuts = 0;          // _pzb: the root rollout's consecutive cuts this game
     IdHintGameClear();         // MTG_ID_HINT_GAME: the previous decision's hints are this game's only
     InWinCacheClear();         // MTG_INWIN_CACHE (empty when off)
     RolloutSuffixProbeClear(); // MTG_ROLLOUT_SUFFIX_PROBE (empty when off)
@@ -108364,7 +108365,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, nmw = false, pfp = false, paw = false, pkt = false, plx = false; double pwc = 0.0, pzc = 0.01; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, nmw = false, pfp = false, paw = false, pkt = false, plx = false, pzb = false, pxa = false; double pwc = 0.0, pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -108595,6 +108596,15 @@ namespace p18
         // _plx (screen): an intermediate pass past the predicted reach is still walked when its LEAFLESS cost,
         // extrapolated, is no more than the price of the rollout pass below it.
         if (k.find("_plx") != std::string::npos) { o.plx = true; }
+        // _pzb (screen): after two consecutive root rollouts of this game were cut at their cap, run no more of them this
+        // game (Extra Turns: 421 of 424 cut, 0 hits; S3 2026-11-17).
+        if (k.find("_pzb") != std::string::npos) { o.pzb = true; }
+        // _pxa (screen): _plx admits a past-reach pass on lest <= cm1 alone; the 0.1 x Limit allowance only CAPS its
+        // spend (S3: requiring lest <= the allowance refused Kithkin 14250007 T1's W4, a 218-unit hit).
+        if (k.find("_pxa") != std::string::npos) { o.pxa = true; }
+        // _pal<percent> (screen): the past-reach allowance as a fraction of the decision budget (default 10). S4: at 10% a
+        // Kithkin / Minotaur / Soldiers intermediate pass was cut ~2.2k units in where S2 (no allowance) hit at ~8k.
+        { const std::size_t p = k.find("_pal"); if (p != std::string::npos) { o.pal = std::atof(k.c_str() + p + 4) / 100.0; } }
         // _pzc<permille> (screen): the root rollout's cap as a fraction of the decision budget (default 10 = 1%).
         { const std::size_t q = k.find("_pzc"); if (q != std::string::npos) { o.pzc = std::atof(k.c_str() + q + 4) / 1000.0; } }
         // _pwc<x10> (screen): a walked leafless pass may spend at most x times the ladder gate's estimate of the
@@ -117692,7 +117702,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // (every pass below kfrom refuted: no in-window win, so the first in-window win a pass returns is the minimum) and
     // commits the first in-window win for the current turn only. Without a commit the spend since u0 is refunded
     // (_plrf), so the ladder continues on exactly its own budget. Returns true when it committed.
-    bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_nmw = false, p18_llt = false, p18_pfp = false, p18_pkt = false, p18_plx = false; double p18_pwc = 0.0;
+    bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_nmw = false, p18_llt = false, p18_pfp = false, p18_pkt = false, p18_plx = false, p18_pxa = false; double p18_pwc = 0.0, p18_pal = 0.1;
     std::unique_ptr<TranspositionTable> p18_wtt;   // _pllt with _pllw: the walks' own table, built on first use
     int  p18_walks = 0;                 // mid-ladder walks taken this decision
     long long p18_z_add = 0;            // the root rollout's units: they warmed pass 1's rollouts, so its gate cost carries them
@@ -117772,8 +117782,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     // Past the reach a pass gets a SMALL allowance: a tenth of the decision budget (_pkt's target pass is
                     // usually cheap because its first in-window win exits it, but on Five Colour a target pass ran to the
                     // whole remaining budget, 17 times in 100 games, with no win).
-                    const double allow = 0.1 * static_cast<double>(budget->Limit());
-                    const bool ext = (p18_pkt && k == kto) || (p18_plx && k < kto && lest <= cm1 && lest <= allow);
+                    const double allow = p18_pal * static_cast<double>(budget->Limit());
+                    const bool ext = (p18_pkt && k == kto) || (p18_plx && k < kto && lest <= cm1 && (p18_pxa || lest <= allow));
                     if (!ext) { p16::Rec('W', k, 0, 0, 4, max_turns + 1, 0); break; }
                     est_k = 0.0;   // no per-pass cap (_pwc) from a rollout estimate past the reach
                     beyond = static_cast<long long>(allow);
@@ -117877,7 +117887,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         int p18_k3_gap = INT_MAX;        // exact pass-three rollout win minus its searched horizon
         long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
         bool p18_ll_done = false;         // _pll: the lookahead decided this decision (commit or ladder fallback)
-        p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_nmw = kn.nmw; p18_pwc = kn.pwc; p18_llt = kn.llt; p18_pfp = kn.pfp; p18_pkt = kn.pkt; p18_plx = kn.plx;
+        p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_nmw = kn.nmw; p18_pwc = kn.pwc; p18_llt = kn.llt; p18_pfp = kn.pfp; p18_pkt = kn.pkt; p18_plx = kn.plx; p18_pxa = kn.pxa; p18_pal = kn.pal;
         if (p18_llw)
         {
             // EPOCH-ISOLATED: the per-decision memos (the rollout main-1 solve memo, the enumeration and greedy-Solve
@@ -117930,7 +117940,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 budget->SetOverrunLimit(zc_abs);
             }
             bool z_ptrip = false;
-            if (s_p18_zx != 2)
+            const bool z_skip = kn.pzb && p18::t_zcuts >= 2;
+            if (s_p18_zx != 2 && !z_skip)
             { // Its PRICED bound is a tenth of the decision budget, not its 1% unit cap: a rollout step costs ~5x an
               // interior unit (units-misprice), and at 1% priced the root rollout was cut on most Gods decisions.
               P18PricedCap _pc(!unl && budget != nullptr
@@ -117944,7 +117955,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const bool z_cut = (!unl && budget != nullptr && budget->Overrun()) || z_ptrip;
             if (!unl && budget != nullptr) { budget->SetOverrunLimit(z_ol); }
             if (z_cut) { r0.win_turn = max_turns + 1; }
-            p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, 0, z_cut ? 3 : 0, r0.win_turn, 0);
+            if (!z_skip) { p18::t_zcuts = z_cut ? p18::t_zcuts + 1 : 0; }
+            p16::Rec('Z', 0, (budget ? budget->Used() : 0) - u0, 0, z_skip ? 6 : (z_cut ? 3 : 0), r0.win_turn, 0);
             // r = the root rollout's units. Answered from the rollout table (0 units: an earlier decision rolled it
             // out), it prices nothing, so the walk stops at leafless pass 1 and the ladder's own costs gate the rest.
             const long long z = (budget ? budget->Used() : 0) - u0;
