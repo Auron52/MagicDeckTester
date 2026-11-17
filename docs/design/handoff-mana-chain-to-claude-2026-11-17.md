@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status (Claude), updated 12:25 UTC
+## Live status (Claude), updated 12:40 UTC
 
 **PUSHED 12:21 UTC** (`687062e15..71c72cb17`, next shared-branch push not before 16:21 UTC), rebased onto origin's P18i /
 site-9 commits: `7a289ca75` oracle repairs (Prevent Damage 30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float
@@ -23,12 +23,18 @@ CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were le
 
 **NEXT, in order:**
 1. Prevent Damage CAPPED s30115319 T8 (`{land=Reflecting Pool + GSZ + act:Pyrohemia(xN)}`, even x3 caps at 400K;
-   replay `build/scratch/claude_pd/s30115319_t8.out`, 870 MB). Cause: GSZ's pay1 fans to 2,724 surviving pay2
-   frontiers that differ only in the COLOUR of the units kept floating from any-colour sources (City of Brass,
-   Grand Coliseum, Reflecting Pool, Tarnished Citadel), so the Pareto prune cannot merge them. The engine floats a
-   full-rainbow source as `wild` (AddRefloatContribution); the oracle's per-face picks commit a colour. Fix shape:
-   an oracle fold that floats a full-rainbow face's leftover as wild exactly where the engine would (not a cap
-   raise). Then re-gate Prevent Damage and Minotaur.
+   replay `build/scratch/claude_pd/s30115319_t8.out`, 870 MB; 96 capped plans retried, 87 finished, 9 CAPPED).
+   Diagnosis: Green Sun's Zenith's payment (pay1) fans to 2,724 surviving pay2 frontiers. They differ in the COLOUR
+   of the units over-tapped to float from any-colour sources (City of Brass x2, Grand Coliseum, Reflecting Pool x2,
+   Tarnished Citadel, Battlefield Forge / Brushland {C} vs colour), so the Pareto prune cannot merge them. The
+   face builder's "useful colours + one representative" fold (`UsefulColorMask`) is DECK-wide (hand, library,
+   graveyard, battlefield), and Prevent Damage is five-colour, so nothing folds. Measured on the log: mapping every
+   floated colour the rest of the plan cannot spend on a coloured pip (all but {R}) to one bucket takes the 2,724
+   frontiers to 458 before any Pareto prune. Open design question (why it is not done yet): a sound MID-PLAN
+   useful mask must include every colour the rest of the turn could still want, i.e. the remaining actions' pips
+   AND anything a remaining draw / tutor / breakpoint continuation could put in hand. A conservative version: fold
+   only when the remaining actions hold no draw, dig, tutor, reveal or breakpoint (here: after GSZ the hand is
+   empty and only Pyrohemia {R} activations remain). Then re-gate Prevent Damage and Minotaur.
 2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
    Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
 
