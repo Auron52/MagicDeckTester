@@ -75,7 +75,11 @@ B. **Ponder before Brainstorm by default**, with Brainstorm → Ponder as the sh
    USER 2026-11-17 (while ruling on which cantrip to cast ALONE on turns 1-2, `MTG_CYCLONE_PONDER_FIRST_T1/_T2`):
    *"this does not imply anything about the order when you do cast both. On Turn 2, Brainstorm before Ponder is
    quite possibly better, since you can shuffle if you have a fetchland or use ponder to shuffle for Brainstorm."*
-   So the within-turn default here is NOT settled by that ruling; B stays open.
+   So the within-turn default here is NOT settled by that ruling.
+   **CLOSED as superseded (USER 2026-11-17, "Sounds good"):** the drafted order is not adopted (measured worse
+   at d3, clairvoyance), draw turns are search-ordered with a breakpoint after each cantrip, and the shuffle-line
+   fallback needs a searched dual slot (Q60). If the cast order is ever revisited, B should be hand-conditional
+   (throw junk away -> Brainstorm first; set up the top -> Ponder first), like `MTG_CYCLONE_PONDER_FIRST_T2_HAND`.
 C. **Long-Term Plans first**, before the cantrips (its shuffle would erase their setup), with the shuffle line
    as its fallback. Agree?
 D. **Should the order also govern draw turns?** Today any turn holding a draw spell skips the rank, and the

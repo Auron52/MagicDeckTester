@@ -980,6 +980,7 @@ enum Slot : int
     CYCLONE_PONDER_FIRST_T1,  // MTG_CYCLONE_PONDER_FIRST_T1  Unpredictable Cyclone: on turn 1, a plan casting Ponder (cast_reorder, no put-back) and no put-back cantrip is TRIED FIRST among its peers (CycloneProvider::PlanMoveOrderFront; ORDER only, nothing removed). USER 2026-11-17: "Ponder should be cast earlier because Brainstorm is more useful later." Default OFF pending the A/B
     CYCLONE_PONDER_FIRST_T2,  // MTG_CYCLONE_PONDER_FIRST_T2  extends MTG_CYCLONE_PONDER_FIRST_T1's tier to turn 2 (inert without it). USER: "I think 1 and 2 is probably fine ... we can A/B a few different options." Default OFF
     CYCLONE_PONDER_FIRST_T2_HAND, // MTG_CYCLONE_PONDER_FIRST_T2_HAND  on turn 2 (needs _T2), junk in hand to put back + a shuffle to follow (Ponder in hand, open fetch, Myriad, LTP) fronts the BRAINSTORM-led plans instead. USER: "if we want to toss back cards the Brainstorm -> Ponder order is indeed better." Default OFF
+    CYCLONE_PONDER_FIRST_DEMOTE,  // MTG_CYCLONE_PONDER_FIRST_DEMOTE   the T1/T2 tier DEMOTES a plan casting a put-back cantrip without a Ponder (every other plan, a cast-nothing or cycling plan included, keeps its relative order) instead of fronting the Ponder plans over everything. A/B 2026-11-17: fronting Ponder also pulled it ahead of T1 pass/cycle lines (net +4 of +11). Default OFF
     COUNT
 };
 
@@ -1904,6 +1905,7 @@ inline const char* Name(int slot)
         "MTG_CYCLONE_PONDER_FIRST_T1",
         "MTG_CYCLONE_PONDER_FIRST_T2",
         "MTG_CYCLONE_PONDER_FIRST_T2_HAND",
+        "MTG_CYCLONE_PONDER_FIRST_DEMOTE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

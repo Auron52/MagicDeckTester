@@ -52,7 +52,20 @@ solid, but given that this is just a reorder it might be fine. we can A/B a few 
 off, Ponder-first T1 only, Ponder-first T1-T2. USER again, verbatim: "I think it might make sense to do it first in
 both of the 2 turns, since that saves Brainstorm for the later turns. Of course, this does not imply anything about
 the order when you do cast both. On Turn 2, Brainstorm before Ponder is quite possibly better, since you can shuffle
-if you have a fetchland or use ponder to shuffle for Brainstorm." Built (uncommitted): CycloneProvider::
+if you have a fetchland or use ponder to shuffle for Brainstorm."
+**USER rulings 22:5x UTC, verbatim:** on the Ponder-first variant: *"I'll want whichever gets the best results."*
+So: adopt the best-measuring arm (pf1 / pf12 / pf12h) that clears the adoption bar (every slower game recovers at
+d8 b0, net <= 0); not an open decision. On `MTG_UNSEEN_KEEP_SCARCE`: *"I agree we can turn on if and when the issue
+is resolved."* So: turn it ON once the adopted Ponder-first arm removes gi 560506's later game (re-measure the lever
+on Cyclone with that arm in place).
+**A/B 1 DONE 23:05 UTC** (`build/scratch/claude_ponderfirst_ab/`, 5,000 pairs, games 570000-574999): pf1 net +11
+(53/64), pf12 +10 (77/87), pf12h +9 (81/90); units ~0. NONE adoptable. Traces of the 178 changed games
+(`div/an.txt`): T1 Brainstorm->Ponder swap is noise (pf1 +5, pf12h -1); T1 cast-nothing -> Ponder +4 (the FRONT
+shape also pulls Ponder ahead of pass/cycle lines, which the USER's rule never asked for); pf12h's T2 change +6.
+**A/B 2 IN FLIGHT 23:15 UTC** (`build/scratch/claude_ponderfirst_ab2/`, pid file, DONE, `compare.py`; base reused
+from A/B 1 plus a 500-game `ctl` byte-identity control): the DEMOTE shape, new lever `MTG_CYCLONE_PONDER_FIRST_DEMOTE`
+(uncommitted): a plan casting a put-back cantrip and no Ponder goes BEHIND every other plan on the early turns. Arms
+pf1d / pf12d / pf12hd. Built (commit ca2ae14a6): CycloneProvider::
 PlanMoveOrderFront, levers MTG_CYCLONE_PONDER_FIRST_T1 / _T2 (heurarm slots); fronts a plan casting Ponder and NO
 put-back cantrip, so a both-cast plan is untouched. CAUTION: the default search is CLAIRVOYANT (knows library order; `cyclone-discard-buckets.md` lists
 T1 Brainstorm-vs-Ponder as a known (b) clairvoyance divergence, d5 34), so a pure ORDER may not move a fully searched

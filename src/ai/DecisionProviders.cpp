@@ -38323,6 +38323,17 @@ static bool CyclonePonderFirstT2HandOn()
     return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T2_HAND, on);
 }
 
+// THE DEMOTE SHAPE (MTG_CYCLONE_PONDER_FIRST_DEMOTE, DEFAULT OFF; needs _T1). The 5,000-pair A/B of the fronting shape
+// (games 570000-574999) was net +11 (T1), +10 (T1-2), +9 (T1-2 + hand); per-game traces of the changed games put +4 of
+// pf1's +11 on games where the committed play cast NOTHING on T1 and the fronted tier pulled Ponder ahead of that line.
+// The USER's rule compares Ponder with BRAINSTORM ("Brainstorm is more useful later"), not with passing, so this shape
+// sends a plan that casts a put-back cantrip and no Ponder BEHIND every other plan, which keep their relative order.
+static bool CyclonePonderFirstDemoteOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_DEMOTE");   // DEFAULT OFF; needs _T1
+    return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_DEMOTE, on);
+}
+
 bool CycloneProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool projected_lethal) const
 {
@@ -38357,16 +38368,18 @@ bool CycloneProvider::PlanMoveOrderFront(const GameState& s, const std::vector<A
         return false;
     }
     bool ponder = false;
+    bool putback = false;
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr) { continue; }
-        if (d->params.put_back_from_hand > 0) { return false; }
-        if (d->params.cast_reorder > 0) { ponder = true; }
+        if (d->params.put_back_from_hand > 0) { putback = true; }
+        else if (d->params.cast_reorder > 0) { ponder = true; }
     }
-    return ponder;
+    if (CyclonePonderFirstDemoteOn()) { return !(putback && !ponder); }
+    return ponder && !putback;
 }
 
 // ---- THE DRAFTED CAST ORDER (MTG_CYCLONE_CAST_ORDER, DEFAULT OFF) -------------------------------------------------
