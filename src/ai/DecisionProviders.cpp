@@ -17857,6 +17857,48 @@ void DragonstormProvider::ArrangeCastOrder(const GameState& s, const std::vector
     static const bool s_funding = EnvOn("MTG_DRAGONSTORM_RUBY_FUNDING", true); // DEFAULT ON; =0 control
     if (!s_funding || meds.size() != 1 || order.size() > 7
         || best_reach >= static_cast<int>(order.size())) { return; }
+    // A Seething Song can fund Ruby even though its printed cost is three.
+    // The cheap-ritual permutation below intentionally stops before Song;
+    // move Ruby behind the contiguous pre-Feat ritual run only when this
+    // smaller, visible line fails as arranged and exact payment proves the
+    // move. This covers Song -> Ruby -> Feat -> Dragon without adding a
+    // searched cast order or moving Ruby past a cast limiter/breakpoint.
+    const auto ruby_it = std::find(order.begin(), order.end(), meds[0]);
+    if (ruby_it != order.end())
+    {
+        const int ruby_pos = static_cast<int>(ruby_it - order.begin());
+        int end = ruby_pos + 1;
+        bool song = false;
+        for (; end < static_cast<int>(order.size()); ++end)
+        {
+            const int i = order[static_cast<std::size_t>(end)];
+            const CardDefinition* d = def_of(i);
+            if (!is_cast(i) || acts[i].splice_count != 0 || d == nullptr
+                || !IsManaRitual(*d) || d->params.max_casts_after >= 0
+                || d->params.impulse_exile > 0 || d->card.m_mana_cost.ManaValue() > 3) { break; }
+            song |= d->card.m_name == "Seething Song";
+        }
+        int cheap = 0;
+        for (int k = 0; k < end; ++k)
+        {
+            const int i = order[static_cast<std::size_t>(k)];
+            const CardDefinition* d = def_of(i);
+            if (i != meds[0] && is_cast(i) && d != nullptr && IsManaRitual(*d)
+                && d->card.m_mana_cost.ManaValue() <= 2) { ++cheap; }
+        }
+        if (song && cheap < 2
+            && std::any_of(order.begin() + end, order.end(), [&](int i)
+               { const CardDefinition* d = def_of(i); return d != nullptr && d->card.IsCreature(); })
+            && !TurnSolver::OrderPrepaysWholeTurn(s, acts, order)
+            && !TurnSolver::OrderPaysSequentially(s, acts, order))
+        {
+            std::vector<int> candidate(order);
+            candidate.erase(candidate.begin() + ruby_pos);
+            candidate.insert(candidate.begin() + end - 1, meds[0]);
+            if (TurnSolver::OrderPaysSequentially(s, acts, candidate))
+            { order = std::move(candidate); return; }
+        }
+    }
     const auto is_cheap = [&](int i)
     {
         const CardDefinition* d = def_of(i);

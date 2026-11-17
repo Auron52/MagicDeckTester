@@ -83,3 +83,28 @@ count. See
 `logs/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/report.md`
 for exact new repros, including seeds 30,068,634, 30,070,527, 30,068,175,
 30,070,173, 30,068,752, and 30,071,498. The queue remains open.
+
+## Seething Song funds Ruby
+
+The fresh gate's four `APPLY-DROP-ORDER` flags are two plan variants each
+in seeds 30,068,752 turn three and 30,071,498 turn four. The first needs
+Seething Song before Ruby Medallion; the second needs Rite of Flame and
+Seething Song before Ruby. The existing Ruby fallback handled only a run
+of two or more rituals with printed cost at most two, so neither case
+entered it. The provider now tries moving Ruby after a contiguous ritual
+run containing Song, before Irencrag Feat, when fewer than two cheap
+rituals precede Song, a later creature is visible, and the original order
+fails both payment probes. It adopts the move only if the sequential payer
+proves the complete new order. This is one provider order choice, not a
+new searched branch.
+
+Both exact games now report zero `APPLY-DROP-ORDER`; turning off
+`MTG_DRAGONSTORM_RUBY_FUNDING` restores two flags in each. The four older
+Ruby repros remain clear. Release units passed 3,383 cases and 3,614,946
+assertions. Combined Dragonstorm/Shadowborn smoke and regression passed all
+cells, 561 scenarios, and 864 strict viewer references with zero drift,
+board divergence, or enum gap. In 5,000 paired held-out games at seed
+9,820,001, both arms won 4,957 games with identical per-game win turns.
+The flag-off arm disables the earlier Ruby fallback as well, so its
+493.34 CPU seconds versus 503.26 seconds with the combined rule on
+(+2.0%) does not isolate the new move's cost. A new PGO gate remains.

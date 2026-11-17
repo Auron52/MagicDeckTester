@@ -4,26 +4,24 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state at 02:28 UTC
 
-**02:42 UTC work in progress:** `src/ai/DecisionProviders.cpp` has a dirty,
-uncommitted scoped Ruby Song ordering change after local commit `0911e7a9f`.
-It moves Ruby behind a contiguous Rite/Seething ritual run only when the
-current order fails both payment probes, a later creature is visible, fewer
-than two cheap rituals precede Song, and the exact sequential payer accepts
-the reordered line. New seeds 30068752 T3 and 30071498 T4 each clear both
-APPLY-DROP-ORDER flags; `MTG_DRAGONSTORM_RUBY_FUNDING=0` restores both.
-The four older Ruby seeds 30064556 T3, 30064889 T2, 30065592 T3, and
-30066357 T2 stay clear. Release build and all 3,383 unit tests / 3,614,946
-assertions pass. Dragonstorm/Shadowborn smoke+regression is **currently
-running** in exec session 18833 with output at
-`build/scratch/dragonstorm_visible_lump_ab/ruby_song_regression.out`.
-Resume checking that job, then do a held-out paired A/B, accept changed GT
-only if the result supports the rule, and commit the source plus this update.
-If the job was interrupted, rerun the same command from the output path;
-do not assume a detached process wakes an agent session. The pending source
-edit makes the previous PGO stamp stale; use Release until a new `./build.sh
-pgo` completes.
+**02:47 UTC update:** The scoped Ruby/Seething ordering repair in
+`src/ai/DecisionProviders.cpp` is complete and committed with this
+handoff. The provider moves Ruby behind a contiguous Rite/Seething ritual
+run only when the current order fails both payment probes, a later creature
+is visible, fewer than two cheap rituals precede Song, and exact sequential
+payment accepts the new order. Seeds 30068752 T3 and 30071498 T4 clear
+both APPLY-DROP-ORDER flags each; `MTG_DRAGONSTORM_RUBY_FUNDING=0` restores
+them. Four older Ruby exact repros remain clear. Release units pass 3,383
+cases and 3,614,946 assertions. Dragonstorm/Shadowborn smoke+regression
+passes all cells, 561 scenarios and strict viewer replay of 864 references
+with zero drift/divergence/enum gap. Five thousand paired held-out games
+at seed 9,820,001 had identical win turns (4,957 wins each). The combined
+Ruby flag (old and new rule) adds 2.0% CPU in this sample, so that is not
+an isolated cost for the new rule. Source PGO stamp is stale; after the
+commit, run `./build.sh pgo` and a fresh Dragonstorm mana-clean gate.
+Full evidence is appended to `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
 
-Three local source commits follow pushed `f2156d4e6`:
+The earlier three source commits following pushed `f2156d4e6` are:
 
 * `5962de0db` Dragonstorm Ruby funding order fallback in `src/ai/DecisionProviders.cpp` (`MTG_DRAGONSTORM_RUBY_FUNDING`, default on). Four exact old APPLY-DROP-ORDER seeds clear; 5,000 paired games had identical win turns and play digests, +0.8% CPU and +1.6% work units.
 * `8ed008406` visible two-copy Apex line gate in `src/ai/TurnSolver.cpp` and focused tests (`MTG_APEX_VISIBLE_LINE_MANA`, default on). Old ENUM-GAP seed 30062821 clears. Narrowed from a costly one-copy trial; 5,000 paired: two earlier wins, none later, +5% CPU, +1.37% units. Human play menu excluded to preserve reference order.
