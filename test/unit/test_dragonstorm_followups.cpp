@@ -757,6 +757,33 @@ TEST_CASE("Dragonstorm: visible Karrthus needs Bloom black with one wild Territo
     { return p.card.m_name == "Mountain" && !p.tapped; }) >= 2);
 }
 
+TEST_CASE("Dragonstorm: Song spends Bloom red to save two Territories for visible Karrthus")
+{
+    // s30074224 T5: ordinary Song payment taps both Territories for its generic
+    // bill, leaving no black or green for Karrthus after Song adds five red.
+    GameState s = BoardFu({ "Mountain", "Unclaimed Territory", "Unclaimed Territory", "Lotus Bloom" },
+                          { "Seething Song", "Karrthus, Tyrant of Jund" }, 5);
+    ManaCost song;
+    song.generic = 2;
+    song.red = 1;
+    const ManaCost karrthus = DefFu("Karrthus, Tyrant of Jund").card.m_mana_cost;
+    ManaCost line = song;
+    line.generic += karrthus.generic;
+    line.black += karrthus.black;
+    line.red += karrthus.red;
+    line.green += karrthus.green;
+    {
+        LineCostFu lc(line);
+        REQUIRE(TapForCostDirect(s, song, /*for_creature=*/false));
+    }
+    CHECK(std::none_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Lotus Bloom"; }));
+    CHECK(std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Unclaimed Territory" && !p.tapped; }) == 2);
+    s.floating_mana.red += 5;  // Song resolves.
+    CHECK(TapForCostDirect(s, karrthus, /*for_creature=*/true));
+}
+
 TEST_CASE("Dragonstorm: two visible closers do not select an unseen Apex continuation's Bloom colour")
 {
     GameState s = BoardFu({ "Mountain", "Mountain", "Mountain", "Lotus Bloom" },
