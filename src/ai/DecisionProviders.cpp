@@ -192,6 +192,11 @@ static bool SeaFetchIslandFirstOn()
     static const bool e = EnvOn("MTG_SEA_FETCH_ISLAND_FIRST", true);  // DEFAULT ON (USER "might"); =0 -> Forest first
     return heurarm::Flag(heurarm::SEA_FETCH_ISLAND_FIRST, e);
 }
+static bool SeaFetchMazeOn()
+{
+    static const bool e = EnvOn("MTG_SEA_FETCH_MAZE", false);         // DEFAULT OFF pending the USER; =1 -> admit Maze
+    return heurarm::Flag(heurarm::SEA_FETCH_MAZE, e);
+}
 static bool SeaSprawlBlueOn()
 {
     static const bool e = EnvOn("MTG_SEA_SPRAWL_BLUE", true);         // DEFAULT ON (USER ruling); =0 -> {U, G} searched
@@ -367,6 +372,56 @@ static int SeaFetchRank(const std::string& name)
     if (name == "Hedge Maze")    { return 3; }
     return 4;
 }
+// MTG_SEA_FETCH_MAZE (USER 2026-11-17: "Hedge maze is a maybe if we absolutely do not need it for mana." and "(if we
+// do not need it for mana this turn it is possible, otherwise not)"; and on the general shape: "Honestly, Triomes have
+// a similar disposition where they appear."). Hedge Maze enters TAPPED, so it can pay for nothing this turn; what it
+// buys is surveil 1 and a library with one fewer tapped land in it. So it is admitted -- as a SECOND searched target
+// beside the untapped pick, never instead of it (the search decides) -- exactly when the untapped pick's mana is not
+// needed this turn.
+//
+// "Needed" is FiveColour's RULE 6 test (USER 2026-08-19, "triomes are STRICTLY for times when you cannot use the
+// mana"), the union of (a) SOLO: some hand card is not castable from the current pool but is with one more mana of a
+// colour the untapped pick makes, and (b) SEQUENCE: that one more mana casts one MORE hand card in sequence
+// (cheapest-first greedy, CastableCount). Either yes -> needed -> Maze is not offered. Approximations, all in the
+// direction of offering Maze LESS often only where noted: the pool is AvailableManaPool (the active player's untapped
+// sources; goldfish: always ours); a land Aura's bonus on the fetched land itself is not counted (a land Aura in hand
+// castable with the extra mana already reads as "needed"); mana-costed activations are not scanned (none in this
+// list spends mana on an activation that a fetched land would pay this turn); a never-cast card (Whelming Wave under
+// MTG_SEA_WAVE_NEVER) is not counted.
+namespace { int CastableCount(ManaPool p, const std::vector<const ManaCost*>& costs); }   // FiveColour's, below
+static bool SeaFetchManaNeeded(const GameState& s, int controller, const std::vector<Color>& colours)
+{
+    std::vector<const ManaCost*> costs;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (d->params.bounce_all_creatures && SeaWaveNeverOn()) { continue; }   // never cast (NeverCast)
+        costs.push_back(&d->card.m_mana_cost);
+    }
+    if (costs.empty()) { return false; }
+    std::stable_sort(costs.begin(), costs.end(),
+                     [](const ManaCost* a, const ManaCost* b) { return a->ManaValue() < b->ManaValue(); });
+    const ManaPool pool_now = AvailableManaPool(s);
+    const int base = CastableCount(pool_now, costs);
+    for (Color col : colours)
+    {
+        ManaPool p = pool_now;
+        p.Add(col);
+        for (const ManaCost* mc : costs) { if (!pool_now.CanPay(*mc) && p.CanPay(*mc)) { return true; } }   // (a)
+        if (CastableCount(p, costs) > base) { return true; }                                                 // (b)
+    }
+    return false;
+}
+// Admit Hedge Maze beside `top` (the rule's untapped pick)? Under the fetch prune only; never when Maze IS the top
+// pick (nothing else left) or the top pick itself enters tapped.
+static bool SeaFetchMazeAdmitted(const GameState& s, int controller, const std::string& top, bool maze_present)
+{
+    if (!SeaFetchMazeOn() || !SeaFetchPruneOn() || !maze_present || top == "Hedge Maze") { return false; }
+    const CardDefinition* d = CardDatabase::Instance().Lookup(top);
+    if (d == nullptr || d->params.enters_tapped) { return false; }
+    return !SeaFetchManaNeeded(s, controller, d->params.produces);
+}
 // A fetchland-shaped single-land pick list (one land per pick, onto the battlefield): every fetch of the list.
 static bool SeaSingleLandPicks(int count, int to_hand, bool basic_only,
                                const std::vector<std::vector<std::string>>& picks)
@@ -403,6 +458,12 @@ void SeaCreaturesProvider::LandSearchFetchPickOrder(const GameState& s, int cont
         if (ra != rb) { return ra < rb; }
         return a.front() < b.front();
     });
+    // MTG_SEA_FETCH_MAZE: an admitted Maze sits right after the untapped pick, so the width-2 prune keeps both.
+    auto maze = std::find_if(picks.begin(), picks.end(),
+                             [](const std::vector<std::string>& pk) { return pk.front() == "Hedge Maze"; });
+    if (maze != picks.end() && maze != picks.begin() + 1
+        && SeaFetchMazeAdmitted(s, controller, picks.front().front(), true))
+    { std::rotate(picks.begin() + 1, maze, maze + 1); }
 }
 
 int SeaCreaturesProvider::LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
@@ -413,7 +474,11 @@ int SeaCreaturesProvider::LandSearchFetchPickWidth(const GameState& s, int contr
     // only under LandSearchPickPruned (never in human play or under MTG_UNPRUNE=landpick).
     if (SeaFetchPruneOn() && picks.size() >= 2 && SeaSingleLandPicks(count, to_hand, basic_only, picks)
         && !SeaFetchLowLife(s, controller))
-    { return 1; }
+    {
+        if (picks[1].front() == "Hedge Maze" && SeaFetchMazeAdmitted(s, controller, picks.front().front(), true))
+        { return 2; }   // MTG_SEA_FETCH_MAZE: the untapped pick AND the tapped Maze, searched
+        return 1;
+    }
     return DecisionProvider::LandSearchFetchPickWidth(s, controller, count, to_hand, basic_only, share_land_type,
                                                       subtype, subtype_alt, picks);
 }
@@ -424,7 +489,12 @@ std::vector<std::string> SeaCreaturesProvider::FetchSearchCandidates(const GameS
     // The LEGACY immediate route's prune (Misty Rainforest's model in autonomous play): `ranked` is
     // GenericProvider::FetchCandidates, already in the rule's order (it orders through LandSearchFetchPickOrder).
     // Engine-side, human play and MTG_UNPRUNE=fetch never reach here.
-    if (SeaFetchPruneOn() && !SeaFetchLowLife(s, controller)) { return FetchTopPickOnly(ranked); }
+    if (SeaFetchPruneOn() && !SeaFetchLowLife(s, controller))
+    {
+        if (ranked.size() >= 2 && ranked[1] == "Hedge Maze" && SeaFetchMazeAdmitted(s, controller, ranked[0], true))
+        { return { ranked[0], ranked[1] }; }   // MTG_SEA_FETCH_MAZE (ranked is the rule's order, Maze moved up)
+        return FetchTopPickOnly(ranked);
+    }
     return DecisionProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked);   // =0: every target
 }
 
@@ -435,7 +505,10 @@ int SeaCreaturesProvider::OnPlayFetchWidth(const GameState& s, const CardDefinit
     // legal target -- the "full searched target set" the lever restores (the base default would still cap the land
     // drop at the top of the base order). A/B caveat: judge that arm on decoupled shuffle salts (a wide fetch fan's
     // edge can be clairvoyance of the post-fetch shuffle).
-    return SeaFetchPruneOn() ? 1 : 0;
+    // MTG_SEA_FETCH_MAZE: a cap of 2, never a widening -- the list already carries the pick width (1, or 2 with an
+    // admitted Maze).
+    if (!SeaFetchPruneOn()) { return 0; }
+    return SeaFetchMazeOn() ? 2 : 1;
 }
 
 bool SeaCreaturesProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
@@ -447,6 +520,16 @@ bool SeaCreaturesProvider::LandSearchPickOrderKey(const GameState& s, int contro
     if (SeaFetchPruneOn())          { key |= std::uint64_t{ 1 } << 5; }
     if (SeaFetchIslandFirstOn())    { key |= std::uint64_t{ 1 } << 6; }
     if (SeaFetchLowLife(s, controller)) { key |= std::uint64_t{ 1 } << 7; }
+    // MTG_SEA_FETCH_MAZE: the flag, and the "needed" verdict for each colour pair a top pick can make (it reads the
+    // hand and the untapped pool, neither of which is otherwise in the key). Computed for {G, U} (Breeding Pool),
+    // {U} (Island) and {G} (Forest) so the key is right whichever pick tops the list.
+    if (SeaFetchMazeOn() && SeaFetchPruneOn())
+    {
+        key |= std::uint64_t{ 1 } << 8;
+        if (SeaFetchManaNeeded(s, controller, { Color::Green, Color::Blue })) { key |= std::uint64_t{ 1 } << 9; }
+        if (SeaFetchManaNeeded(s, controller, { Color::Blue }))               { key |= std::uint64_t{ 1 } << 10; }
+        if (SeaFetchManaNeeded(s, controller, { Color::Green }))              { key |= std::uint64_t{ 1 } << 11; }
+    }
     return cacheable;
 }
 

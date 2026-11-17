@@ -336,6 +336,58 @@ TEST_CASE("Sea fetch prune: =0 restores every target on both routes; <= 3 life k
     }
 }
 
+TEST_CASE("Sea fetch Maze (MTG_SEA_FETCH_MAZE): admitted beside the untapped pick only when its mana is not needed")
+{
+    EnsureCardsSea();
+    ArmScope prune(heurarm::SEA_FETCH_PRUNE, 1), isl(heurarm::SEA_FETCH_ISLAND_FIRST, 1);
+    const CardDefinition& misty = DefSea("Misty Rainforest");
+    const CardDefinition& heath = DefSea("Windswept Heath");
+    const std::vector<std::string> pool_maze{ "Breeding Pool", "Hedge Maze" };
+    GameState idle = BaseSea(1);                           // T1, no mana, hand: only Koma (7 mana) -> not needed
+    HandSea(idle, { "Misty Rainforest", "Koma, World-Eater" });   // a land in hand never reads as "needed"
+    LibSea(idle, { "Island", "Forest", "Hedge Maze", "Breeding Pool" });
+    GameState busy = idle;                                 // + Utopia Sprawl ({G}): one more mana casts it -> needed
+    HandSea(busy, { "Utopia Sprawl" });
+    {
+        ArmScope maze(heurarm::SEA_FETCH_MAZE, 0);         // OFF (the default): the one-option rule, unchanged
+        CHECK(OnPlayNarrowed(idle, misty) == std::vector<std::string>{ "Breeding Pool" });
+        CHECK(ActivationNamesSea(idle, heath.params) == std::vector<std::string>{ "Breeding Pool" });
+    }
+    {
+        ArmScope maze(heurarm::SEA_FETCH_MAZE, 1);
+        // Not needed: both routes and the legacy prune search the Pool AND the Maze.
+        CHECK(OnPlayNarrowed(idle, misty) == pool_maze);
+        CHECK(ActivationNamesSea(idle, heath.params) == pool_maze);
+        const std::vector<std::string> ranked = ProvSea().FetchCandidates(idle, 0, misty.params);
+        CHECK(ProvSea().FetchSearchCandidates(idle, 0, misty.params, ranked) == pool_maze);
+        bool pool = false, mz = false;
+        for (const TurnSolver::Plan& pl : TurnSolver::EnumerateMainPlans(idle, true))
+        {
+            if (pl.land_to_play != "Misty Rainforest") { continue; }
+            pool = pool || pl.fetch_target == "Breeding Pool";
+            mz   = mz   || pl.fetch_target == "Hedge Maze";
+            CHECK(pl.fetch_target != "Island");
+        }
+        CHECK(pool);
+        CHECK(mz);
+        // Needed (solo): one more {G} casts the Sprawl -> the untapped Pool alone.
+        CHECK(OnPlayNarrowed(busy, misty) == std::vector<std::string>{ "Breeding Pool" });
+        CHECK(ActivationNamesSea(busy, heath.params) == std::vector<std::string>{ "Breeding Pool" });
+        // The memo key separates the two hands (the verdict is a key bit): re-reading idle after busy is right.
+        CHECK(ActivationNamesSea(idle, heath.params) == pool_maze);
+        // No Pool left: Island is the untapped pick and Maze rides beside it.
+        GameState nopool = idle;
+        LibSea(nopool, { "Forest", "Hedge Maze", "Island" });
+        CHECK(OnPlayNarrowed(nopool, misty) == std::vector<std::string>{ "Island", "Hedge Maze" });
+        // Maze the only target: just Maze.
+        LibSea(nopool, { "Hedge Maze" });
+        CHECK(OnPlayNarrowed(nopool, misty) == std::vector<std::string>{ "Hedge Maze" });
+        // Prune off: the flag is inert (every target, as before).
+        ArmScope off(heurarm::SEA_FETCH_PRUNE, 0);
+        CHECK(OnPlayNarrowed(idle, misty).size() == 4);
+    }
+}
+
 TEST_CASE("Sea fetch prune: human play / the unpruned audit is never narrowed (process-static gates)")
 {
     EnsureCardsSea();
