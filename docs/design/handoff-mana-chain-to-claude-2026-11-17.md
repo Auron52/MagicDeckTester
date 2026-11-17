@@ -35,6 +35,14 @@ CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were le
    AND anything a remaining draw / tutor / breakpoint continuation could put in hand. A conservative version: fold
    only when the remaining actions hold no draw, dig, tutor, reveal or breakpoint (here: after GSZ the hand is
    empty and only Pyrohemia {R} activations remain). Then re-gate Prevent Damage and Minotaur.
+   Facts already checked for the fold: the float enters ONLY the frontier prune (`Realize`, `Resources(..., true)`
+   at the Pareto layer); every end-of-plan verdict (cover, domination, sweep-undone) reads `with_float=false`, and
+   `CoreKey` clears the pools, so folding the frontier's spare colours into one "F:~" resource cannot create a
+   false end verdict. The open part is the MASK: `FrontierRec::line_unpaid` holds the remaining casts (activations
+   only when `line_has_acts`), and `PlanOpensBreakpointForTest` flags lifegain breakpoints. Pyrohemia -> Tamanoa
+   life gain is one, so this plan probably carries continuations, and a continuation may spend any colour of the
+   hand, graveyard or battlefield abilities. A mask = remaining plan pips + hand + graveyard castables + battlefield
+   activation costs, applied only when nothing left can move a card to hand, is the candidate.
 2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
    Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
 
