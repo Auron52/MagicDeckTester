@@ -173,3 +173,16 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   below), so a hit saves little and a miss doubles the passes walked.
 - RUNNING: H1 = held-out 300 games x 14 budget-bound decks, heur vs m4_pzb_pal100 (seeds 15,000,000+), mtg_j25,
   `build/scratch/p18g/H1/` -- which of the residual losses are real.
+- H1 (held-out, 14 budget-bound decks x 300, seeds 15M, m4_pzb_pal100): 1.000x CPU, 5 earlier / 0 later; real losers
+  Melira 1.034x, Martyr 1.017x, Shadowborn 1.009x; EDF/Hinata/Landfall/LFE/Niv 0.99-1.00x (S5 readings were noise).
+- Mode 4 DEFAULTS now include _pzb + _pal100 (ce91ddeba); j27 plain m4 digest-identical to S5's m4_pzb_pal100 arm.
+- H2 (held-out, 56 decks x 200, seeds 16M, mtg_j27; `build/scratch/p18g/H2/summary.txt`): m4 0.954x CPU / 0.954x units,
+  2 earlier / 1 later. >= 1.00x on CPU and units: Extra Turns 1.006/1.022, Melira 1.025/1.012, Landfall 1.011/1.011,
+  Shadowborn 1.009/1.015, Martyr 1.008/1.010, Mill, Hinata, Hydras, LFE, Niv (<= +0.5%). `_pip` (intermediate path
+  check) 0.957x: Melira 1.018x but Pirates/BDS +3%; not adopted.
+- The LATER game: Accomplished Alchemist seed 16000131 gi131 (T4 -> T5). T1: walk hit at W5 (proven T5; W4 complete,
+  no T4 found) past heur's reach (heur commits H3, rollout w5, then finds T4 at T2). At b0 (d5 and d8) BOTH arms win
+  T4 (T1's unbudgeted search commits depth 4, win T4): a T4 win existed inside W4's tree but the budgeted enumeration
+  did not reach it. Recovers at d8 b0 (adoption bar); a budget-time refutation trusted past heur's reach.
+  Repro: `build/scratch/p18g/AA131/manifest.json`.
+- Tally (pzb+pal100): S5 2/0, H1 5/0, H2 2/1 -> 9 earlier / 1 later.
