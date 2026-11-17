@@ -64,7 +64,7 @@ implementer agent per step, serial.
 | step | content | status |
 |---|---|---|
 | 1 | pipeline core, no cards | DONE 773bfef4b (unit 3403/3403, scen 561/561) |
-| 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | DONE 2a3d5db13 (scen 563/563; smoke pending at 14:30; cost audit re-run + full field --update owed, Scryfall 429). Deviations: design §14. Handoff: logs/stuffy/impl-step1-2-handoff.md |
+| 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | DONE 2a3d5db13 (scen 563/563; smoke PLAY-NEUTRAL: 219/219 job digests identical to a base binary (src b6d0cd16e, 18ab35ca8) on the same manifest; the 44 smoke FAILs vs GT are stale origin GT from 7 src commits since the last accept (6112caed4..b25400e31), not ours; cost audit re-run + full field --update owed, Scryfall 429). Deviations: design §14. Handoff: logs/stuffy/impl-step1-2-handoff.md |
 | 3 | searched reflection-target axis (Incinerator precedent) | IN PROGRESS (fresh Opus implementer, ~14:35 UTC) |
 | 4 | Stuffy Doll (choose player, {T} self-ping) | pending |
 | 5 | Guilty Conscience (+ combat damage hook, loops) | pending |
