@@ -4298,8 +4298,8 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
-   "template": "basic_land",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland for a HUMAN (Sea Creatures I1, 2026-11-16; the Windswept Heath / Wooded Foothills shape): in the viewer its land drop offers every target to crack on play AND a hold, and a held Misty's activation pays 1 life and sacrifices it as costs, then searches a Forest or Island card by CURRENT subtype (Breeding Pool, Hedge Maze, a basic) and shuffles; it cannot tap for mana. AUTONOMOUS play has NO hold (USER 2026-11-16: 'We don't need the hold option for those decks or for this deck.' '(in searched)' 'The viewer can keep it.'): fetch_hold_human_only keeps the legacy immediate route at every life total (PerformFetch at the land drop: pulls the provider's FetchCandidates pick, that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard) -- the Scalding Tarn / Polluted Delta shim, per card. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (its Forest/Island-typed targets reach all five colours via duals); a fetchland on the battlefield has no mana ability (EffectiveProducesFor). 'Then shuffle' IS modelled (ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle). Instant-speed activation is collapsed to the searched main-phase activation slots.]",
+   "template": "custom",
    "parameters": {
     "produces": [
      "W",
@@ -4311,7 +4311,13 @@
     "fetch_land_types": [
      "Forest",
      "Island"
-    ]
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1,
+    "fetch_hold_human_only": true
    }
   },
   {

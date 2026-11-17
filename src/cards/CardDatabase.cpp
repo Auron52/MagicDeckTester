@@ -202,7 +202,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "produces", "hand_fixing_produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
                 "etb_pay_life_to_untap", "checkland_subtypes", "etb_bounce_land",
                 "fetch_land_types", "land_search_count", "land_search_activation_cost", "land_search_activation_taps",
-                "land_search_activation_sacrifice_self", "land_search_activation_life_cost",
+                "land_search_activation_sacrifice_self", "land_search_activation_life_cost", "fetch_hold_human_only",
                 "is_equipment", "equip_cost_generic", "equip_grants_haste", "equip_grants_shroud",
                 "self_pump_if_land_subtype", "self_haste_cost",
                 "chooses_creature_type", "reduces_spell_subtype_amount", "reduces_spell_subtype_creature_only",
@@ -1813,6 +1813,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_activation_remove_quest   = params.value("land_search_activation_remove_quest", 0);
     p.land_search_activation_sacrifice_self = params.value("land_search_activation_sacrifice_self", false);
     p.land_search_activation_life_cost = params.value("land_search_activation_life_cost", 0);
+    p.fetch_hold_human_only            = params.value("fetch_hold_human_only", false);
 
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);

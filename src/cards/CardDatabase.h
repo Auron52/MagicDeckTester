@@ -2841,6 +2841,12 @@ struct CardParams
     int  land_search_activation_remove_quest     = 0;
     bool land_search_activation_sacrifice_self   = false;
     int  land_search_activation_life_cost         = 0; // fetchlands: pay life as activation cost
+    // A battlefield-model fetchland whose battlefield HOLD exists for a HUMAN only (Misty Rainforest, Sea Creatures
+    // I1 2026-11-16; USER: "We don't need the hold option for those decks or for this deck." "(in searched)" "The
+    // viewer can keep it."). Autonomous play (HumanPlayActive() false) resolves it through the LEGACY immediate
+    // route at every life total -- FetchCandidates + FetchSearchCandidates + PerformFetch at the land drop, never
+    // held, never the <= 3-life hold -- exactly as before it had activation data (LegacyImmediateOutsideMill).
+    bool fetch_hold_human_only                    = false;
 
     // Expressive Iteration: "look at the top 3; 1 to hand, 1 to bottom, 1 exiled & playable THIS
     // turn." Resolved by ResolveExpressiveIteration (NOT the normal draw/scry path). A DrawSpell so

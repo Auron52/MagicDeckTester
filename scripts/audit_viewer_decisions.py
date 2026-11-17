@@ -1314,6 +1314,10 @@ INERT_PARAMS = {
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
     "hand_fixing_produces": "Windswept Heath: an IN-HAND colour hint for Creature Giving's discard cover; never a mana ability, no choice",
+    # Misty Rainforest (Sea Creatures I1): its battlefield hold is offered to the HUMAN (the land drop's hold variant +
+    # the held activation's tutor_etb target, both existing decisions); the flag only keeps AUTONOMOUS play on the
+    # immediate route. It creates no decision of its own.
+    "fetch_hold_human_only": "Misty Rainforest: autonomous play keeps the immediate fetch; the human's hold/targets ride the existing fetch decisions",
     "mdfc_back_produces": "MDFC back-face mana (colour auto-resolves once the face is picked; the face pick itself rides main_phase via mdfc_back_name)",
     "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
     "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",

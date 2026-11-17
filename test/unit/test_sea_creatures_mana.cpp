@@ -402,3 +402,39 @@ TEST_CASE("Sea routing: the list resolves to SeaCreaturesProvider")
     const Decklist d = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Sea Creatures/Sea Creatures.cod"));
     CHECK(std::string(DetectDecisionProvider(d).Name()) == "SeaCreatures");
 }
+
+// ---- Misty Rainforest: the battlefield model for a HUMAN, the immediate route for the search ---------------
+// USER 2026-11-16: "We don't need the hold option for those decks or for this deck." / "(in searched)" / "The viewer
+// can keep it." -- fetch_hold_human_only. Autonomous play cracks on play at EVERY life total (no <= 3-life hold) and
+// reads the legacy list (FetchCandidates), so Creature Giving / Five Colour play is unchanged.
+TEST_CASE("Sea I1: Misty Rainforest is a battlefield fetchland whose hold is the viewer's only")
+{
+    EnsureCardsSea();
+    const CardDefinition& misty = DefSea("Misty Rainforest");
+    const CardDefinition& heath = DefSea("Windswept Heath");
+    CHECK(misty.params.land_search_activation_cost.has_value());
+    CHECK(misty.params.land_search_activation_sacrifice_self);
+    CHECK(misty.params.land_search_activation_life_cost == 1);
+    CHECK(misty.params.fetch_hold_human_only);
+    CHECK_FALSE(heath.params.fetch_hold_human_only);
+    if (HumanPlayActive()) { return; }   // process-static: the human contract is the viewer's (HumanFetchHoldVariant)
+    static const CreatureGivingProvider cg;
+    for (const DecisionProvider* prov : { static_cast<const DecisionProvider*>(&ProvSea()),
+                                          static_cast<const DecisionProvider*>(&cg) })
+    {
+        GameState s = BaseSea(2);
+        s.m_provider = prov;
+        LibSea(s, { "Island", "Breeding Pool", "Forest" });
+        for (int life : { 20, 3, 1 })
+        {
+            s.players[0].life = life;
+            CHECK_MESSAGE(FetchResolvesOnPlay(s, misty), prov->Name(), " life ", life);   // never held in search
+            CHECK_FALSE(FetchCrackOnPlayOffered(s, misty));
+            // The legacy candidate list: the provider's FetchCandidates, exactly.
+            CHECK(OnPlayFetchCandidates(s, 0, misty) == prov->FetchCandidates(s, 0, misty.params));
+        }
+        // A battlefield fetch without the flag keeps its existing <= 3-life autonomous hold (unchanged).
+        s.players[0].life = 3;
+        CHECK_FALSE(FetchResolvesOnPlay(s, heath));
+    }
+}

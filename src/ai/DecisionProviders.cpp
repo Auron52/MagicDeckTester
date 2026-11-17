@@ -24726,8 +24726,11 @@ static bool ModernFetchCollapsible(const GameState& state, const CardParams& p)
 // Tarn and Delta were legacy immediate fetches before Mill needed battlefield timing.
 // Their activated shape is now in card data, but existing decks keep that prior play
 // surface; only Mill offers the hold and the accompanying crack-on-play branch.
+// A fetch_hold_human_only fetchland (Misty Rainforest, Sea Creatures I1) is the same shim for AUTONOMOUS play
+// in every deck: the battlefield model (and its hold) is the viewer's; the search keeps the immediate route.
 static bool LegacyImmediateOutsideMill(const GameState& state, const CardDefinition& land)
 {
+    if (land.params.fetch_hold_human_only && !HumanPlayActive()) { return true; }
     const std::string& name = land.card.m_name.str();
     return (name == "Scalding Tarn" || name == "Polluted Delta")
         && std::string(ResolveProvider(state).Name()) != "Mill";
