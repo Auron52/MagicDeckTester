@@ -226,6 +226,10 @@ MANIFEST = {
     # "choose a player" is the players-only `target` prompt keyed on etb_choose_player below.
     "reflect_dealt_damage": ("target", lambda v: bool(v) and v not in ("target_opponent", "chosen_player")),
     "etb_choose_player":    ("target", truthy),   # Stuffy Doll: dmgrx::EtbChoosePlayer -> choose_player prompt
+    # Spiteful Sliver's GRANTED reflection ("Sliver creatures you control have 'whenever this creature is
+    # dealt damage, it deals that much damage to target player'"): the same `target` prompt at the same
+    # resolver, once per instance, for whichever Sliver was dealt damage (dmgrx::t_viewer_reflection).
+    "grants_reflect_to_subtype": ("target", lambda v: bool(v) and v not in ("target_opponent", "chosen_player")),
     # Stuffy Doll's "{T}: deals 1 damage to itself" (PermAbilityMode::SelfPing): a main_phase plan line,
     # verb selfping= (two copies in the list -- the taplife= reason).
     "self_ping_damage":     ("main_phase", positive),

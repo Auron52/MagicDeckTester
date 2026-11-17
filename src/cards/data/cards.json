@@ -17526,6 +17526,27 @@
    }
   },
   {
+   "name": "Spiteful Sliver",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Sliver"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Sliver creatures you control have \"Whenever this creature is dealt damage, it deals that much damage to target player or planeswalker.\" [grants_reflect_to_subtype target_player + subtypes_affected [Sliver]: a GRANTED reflection. The shared creature-damage pipeline (core/DamageReflection.h, executor and rollout alike) gives every damaged Sliver we control -- this one included -- ONE reflection instance per Spiteful Sliver on the battlefield when the damage is dealt (CR 113.2c: each instance triggers separately), so with two Spiteful Slivers each Sliver dealt N reflects N twice. Read at the event's snapshot (last-known information): a Sliver killed by the damage still triggers (ruling), and a Spiteful Sliver killed by the same event still grants its instance for that event. One damage event = one trigger per instance for the total (ruling: multiple sources at once trigger once); the damage it deals is noncombat (ruling). The target is chosen as the trigger resolves (the lazy-target equivalence, docs/design/damage-reflection-pipeline.md 4.1) between the opponent and us; our own face is folded away while nothing rewards damage to us (sound fold F1), so autonomously it hits the opponent, and the viewer asks. [PARTIAL: planeswalkers are not offered as targets -- the goldfish opponent never controls one, and damage to our own only removes loyalty. PROVISIONAL.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "grants_reflect_to_subtype": "target_player",
+    "subtypes_affected": [
+     "Sliver"
+    ]
+   }
+  },
+  {
    "name": "Stuffy Doll",
    "mana_cost": "{5}",
    "types": [

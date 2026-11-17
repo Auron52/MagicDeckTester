@@ -875,6 +875,14 @@ struct CardParams
     enum class ReflectTo : std::uint8_t { None = 0, TargetOpponent, AnyTarget, AnyOtherTarget, TargetPlayer,
                                           ChosenPlayer };
     ReflectTo reflect_dealt_damage = ReflectTo::None;
+    // Spiteful Sliver: "<subtypes_affected> creatures you control have 'Whenever this creature is dealt
+    // damage, it deals that much damage to <recipient>.'" A GRANTED reflection (same JSON strings as
+    // reflect_dealt_damage). The pipeline's snapshot (dmgrx::DealDamageBatch step 3, LKI) gives every
+    // damaged creature of the granter's controller that has one of subtypes_affected (itself included)
+    // ONE instance per granting permanent on the battlefield at that moment (CR 113.2c: each instance
+    // triggers separately), so two Spiteful Slivers make each Sliver reflect twice. Carrying it ARMS the
+    // pipeline (GameState::reflect_armed) like a reflector does. None = inert.
+    ReflectTo grants_reflect_to_subtype = ReflectTo::None;
     // Stuffy Doll: "As this creature enters, choose a player." A REPLACEMENT (CR 614.12 "as ... enters"),
     // not a trigger: resolved in FireOwnEtbTriggersBody before any enter trigger, locked per OBJECT in
     // Permanent::chosen_player (dmgrx::EtbChoosePlayer; the fold / search of design 4.6). It also arms

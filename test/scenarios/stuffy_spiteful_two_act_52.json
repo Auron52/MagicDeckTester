@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Damage reflection, design step 6 (docs/design/damage-reflection-pipeline.md 10). Two Spiteful Slivers +",
+    "four opponent Spirits = 6 creatures, so Blasphemous Act costs {2}{R} off three Mountains. Each Spiteful",
+    "Sliver grants EVERY Sliver we control its own instance of 'whenever this creature is dealt damage, it",
+    "deals that much damage to target player' (CR 113.2c: each instance triggers separately), so each of the",
+    "two Slivers reflects 13 TWICE: 2 x 2 x 13 = 52 -- exactly the opponent's life. Both Slivers die to the",
+    "same Act and still grant for that event (the trigger snapshot is taken before SBA). One instance per",
+    "Sliver (26) or none (a snapshot after SBA) leaves the opponent alive, and attacking for 4 a turn cannot",
+    "reach 52 by turn 6."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 52,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Spiteful Sliver" },
+    { "name": "Spiteful Sliver" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Mountain", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

@@ -7716,8 +7716,10 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const std::string choose_player_desc = (dmgrx::t_viewer_legal != nullptr && def.params.etb_choose_player)
                 ? std::string("this creature deals the damage it is dealt to") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (dmgrx::t_viewer_legal != nullptr && def.params.reflect_dealt_damage != CardParams::ReflectTo::None)
+            if (dmgrx::t_viewer_legal != nullptr && dmgrx::t_viewer_reflection)
             {
+                // (Keyed on the resolver's flag, not on def.params.reflect_dealt_damage: a Spiteful Sliver's
+                // GRANTED reflection resolves with the damaged Sliver's def, which carries no own reflection.)
                 // A damage-reflection trigger resolving (dmgrx::ResolveTrig, design 4.1 / 6): "whenever this
                 // creature is dealt damage, it deals that much damage to <target>". The legal set is the
                 // ENGINE's own (stable ids, opponent's face first; human play lifts F1 and the provider

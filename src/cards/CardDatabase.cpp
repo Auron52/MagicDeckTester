@@ -1344,15 +1344,22 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         // Damage reflection (core/DamageReflection.h). An unknown string is a cards.json typo, and
         // silently reading it as None would make the card's trigger inert -- so it is fatal.
-        const std::string rf = params.value("reflect_dealt_damage", std::string());
         using RT = CardParams::ReflectTo;
-        if      (rf.empty())               { p.reflect_dealt_damage = RT::None; }
-        else if (rf == "target_opponent")  { p.reflect_dealt_damage = RT::TargetOpponent; }
-        else if (rf == "any_target")       { p.reflect_dealt_damage = RT::AnyTarget; }
-        else if (rf == "any_other_target") { p.reflect_dealt_damage = RT::AnyOtherTarget; }
-        else if (rf == "target_player")    { p.reflect_dealt_damage = RT::TargetPlayer; }
-        else if (rf == "chosen_player")    { p.reflect_dealt_damage = RT::ChosenPlayer; }
-        else { throw std::runtime_error("cards.json reflect_dealt_damage \"" + rf + "\" is not a known recipient"); }
+        auto read_rt = [&](const char* key) -> RT {
+            const std::string rf = params.value(key, std::string());
+            if      (rf.empty())               { return RT::None; }
+            else if (rf == "target_opponent")  { return RT::TargetOpponent; }
+            else if (rf == "any_target")       { return RT::AnyTarget; }
+            else if (rf == "any_other_target") { return RT::AnyOtherTarget; }
+            else if (rf == "target_player")    { return RT::TargetPlayer; }
+            else if (rf == "chosen_player")    { return RT::ChosenPlayer; }
+            throw std::runtime_error(std::string("cards.json ") + key + " \"" + rf + "\" is not a known recipient");
+        };
+        p.reflect_dealt_damage      = read_rt("reflect_dealt_damage");
+        p.grants_reflect_to_subtype = read_rt("grants_reflect_to_subtype");   // Spiteful Sliver
+        // A granted "chosen player" has no as-enters choice to read on the granted creature.
+        if (p.grants_reflect_to_subtype == RT::ChosenPlayer)
+        { throw std::runtime_error("cards.json grants_reflect_to_subtype \"chosen_player\" is not supported"); }
     }
     p.reflect_player_cant_gain_life        = params.value("reflect_player_cant_gain_life", false);
     p.etb_choose_player = params.value("etb_choose_player", false);   // Stuffy Doll

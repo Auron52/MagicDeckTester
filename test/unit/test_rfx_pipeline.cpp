@@ -863,3 +863,178 @@ TEST_CASE("rfx step 5b: no GC anywhere -> no combat probe, no combat pin (the pr
     CHECK(plans.size() == 1);
     for (const auto& p : plans) { CHECK(p.reflect_targets.empty()); }
 }
+
+// ---- STEP 6: Spiteful Sliver -- a GRANTED reflection, one instance per granter (design 2.2 step 3, 4.1) ----
+
+TEST_CASE("rfx step 6: Spiteful Sliver's card data (a grant, not an own reflection; arms; a choice kind)")
+{
+    const CardDefinition& d = DefRfx("Spiteful Sliver");
+    CHECK(d.card.IsCreature());
+    CHECK(d.card.m_subtypes.size() == 1);
+    CHECK(d.card.m_power == 2);
+    CHECK(d.card.m_toughness == 2);
+    CHECK(d.params.reflect_dealt_damage == CardParams::ReflectTo::None);
+    CHECK(d.params.grants_reflect_to_subtype == CardParams::ReflectTo::TargetPlayer);
+    CHECK(d.params.subtypes_affected == std::vector<std::string>{ "Sliver" });
+    CHECK(dmgrx::DefReflectsWithChoice(d));        // the fan's pre-check sees the granter
+    CHECK_FALSE(dmgrx::DefCanDamageCreatures(d));  // "target player": no new route to a creature
+}
+
+TEST_CASE("rfx step 6: two Spiteful Slivers under Blasphemous Act -- every Sliver reflects TWICE, LKI grants")
+{
+    // CR 113.2c: each instance of the granted trigger triggers separately. Both Spiteful Slivers die to the
+    // same Act and STILL grant for that event (the snapshot is taken before SBA). Our three Slivers (two
+    // Spiteful + a Sliver token) each reflect 13 twice: 3 x 2 x 13 = 78. Not granted: our Goblin token (not
+    // a Sliver) and the OPPONENT's Sliver token ("Sliver creatures YOU control").
+    GameState s = ArmedState();
+    s.players[1].life = 200;
+    PutRfx(s, "Spiteful Sliver", 1701);
+    PutRfx(s, "Spiteful Sliver", 1702);
+    TokenRfx(s, 1703, 0, 1, 1, "Sliver");
+    TokenRfx(s, 1704, 0, 1, 1, "Goblin");
+    TokenRfx(s, 1705, 1, 1, 1, "Sliver");
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    CHECK(s.battlefield.empty());
+    CHECK(s.players[1].life == 200 - 3 * 2 * 13);
+    CHECK(s.players[0].life == 20);                // F1: "target player" never picks our own face
+    CHECK(dmgrx::t_frame.stack.empty());
+    {   // the paper count: two Spiteful + Reckoner under the Act = 2 x 2 x 13 + 13
+        GameState t = ArmedState();
+        t.players[1].life = 200;
+        PutRfx(t, "Spiteful Sliver", 1711);
+        PutRfx(t, "Spiteful Sliver", 1712);
+        PutRfx(t, "Boros Reckoner", 1713);
+        PerformDamageAllCreatures(t, 0, DefRfx("Blasphemous Act"), 13);
+        CHECK(t.players[1].life == 200 - 4 * 13 - 13);
+    }
+}
+
+TEST_CASE("rfx step 6: ONE Spiteful Sliver under Chain Reaction reflects X once")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Spiteful Sliver", 1721);
+    TokenRfx(s, 1722, 1, 1, 1, "Spirit");
+    TokenRfx(s, 1723, 1, 1, 1, "Spirit");
+    const CardDefinition& chain = DefRfx("Chain Reaction");
+    const int x = SweepDamageAmount(s, chain);
+    CHECK(x == 3);
+    PerformDamageAllCreatures(s, 0, chain, x);
+    CHECK(s.battlefield.empty());
+    CHECK(s.players[1].life == 20 - 3);
+}
+
+TEST_CASE("rfx step 6: the grant ends when the Spiteful Sliver leaves; a lone Sliver token then reflects nothing")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Spiteful Sliver", 1731);
+    TokenRfx(s, 1732, 0, 3, 3, "Sliver");
+    auto ping = [&](int number) {
+        dmgrx::Batch b;
+        b.src.push_back({ DefRfx("Pyroclasm").card, 0, false });
+        b.hits.push_back({ 0, { false, number }, 1, false, false });
+        dmgrx::DealDamageBatch(s, b);
+    };
+    ping(1732);
+    CHECK(s.players[1].life == 19);                // granted: one instance
+    CHECK(dmgrx::GrantedInstances(s, *Find(s, 1732)) == 1);
+    s.battlefield.erase(s.battlefield.begin());    // the Spiteful Sliver leaves
+    CHECK(dmgrx::GrantedInstances(s, *Find(s, 1732)) == 0);
+    ping(1732);
+    CHECK(s.players[1].life == 19);                // no grant, no trigger
+    REQUIRE(Find(s, 1732) != nullptr);
+    CHECK(Find(s, 1732)->damage == 2);
+}
+
+TEST_CASE("rfx step 6: a granted reflection with a real choice reaches the viewer as a REFLECTION prompt")
+{
+    // Purity lifts F1 (our face is then a real option), so the granted "target player" list is {opp, us}
+    // and the resolver asks the chooser -- with the damaged Sliver's def, whose OWN reflection is None, so
+    // main.cpp keys on t_viewer_reflection, not on the def.
+    GameState s = ArmedState();
+    s.dmg_events_armed = true;                     // a Purity deck arms the player-damage events
+    PutRfx(s, "Spiteful Sliver", 1741);
+    PutRfx(s, "Purity", 1742);
+    int asked = 0;
+    std::vector<int> seen_legal;
+    TargetChooser chooser = [&](const GameState&, const CardDefinition& def, int, int, int,
+                                const std::vector<ChosenTarget>&) -> std::vector<ChosenTarget>
+    {
+        ++asked;
+        CHECK(def.card.m_name.str() == "Spiteful Sliver");
+        CHECK(dmgrx::t_viewer_reflection);
+        REQUIRE(dmgrx::t_viewer_legal != nullptr);
+        seen_legal = *dmgrx::t_viewer_legal;
+        return { ChosenTarget{ 0, 0, 0 } };        // aim it at OURSELVES (Purity turns it into life)
+    };
+    TargetChooser* saved = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+    dmgrx::Batch b;
+    b.src.push_back({ DefRfx("Pyroclasm").card, 0, false });
+    b.hits.push_back({ 0, { false, 1741 }, 1, false, false });
+    dmgrx::DealDamageBatch(s, b);
+    g_play_target_chooser = saved;
+    CHECK(asked == 1);
+    CHECK_FALSE(dmgrx::t_viewer_reflection);
+    CHECK(seen_legal == std::vector<int>{ dmgrx::PlayerId(1), dmgrx::PlayerId(0) });
+    CHECK(s.players[1].life == 20);
+    CHECK(s.players[0].life == 21);                // the pick was honoured (prevented and gained)
+}
+
+namespace
+{
+// A settled Boros Reckoner with GC attacks beside two summoning-sick Spiteful Slivers. Combat: 3 to the face,
+// GC deals 3 back, the Reckoner dies and its LKI reflection of 3 is a CHOICE: the face (opponent at 14), or
+// a Spiteful Sliver -- an AMPLIFIER (design 4.1, mult 2): it dies to the 3, and its two instances deal 6.
+GameState SliverAmplifierBoard()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    PutRfx(s, "Boros Reckoner", 1801);
+    AttachGc(s, 1802, 1801);
+    PutRfx(s, "Spiteful Sliver", 1803).entered_this_turn = true;
+    PutRfx(s, "Spiteful Sliver", 1804).entered_this_turn = true;
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1830 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 6: the search BRANCHES the Reckoner's target over the Slivers; a Sliver beats the face")
+{
+    const GameState s = SliverAmplifierBoard();
+    TurnSolver::Plan pass;
+    pass.land_decided = true;
+    const auto plans = TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { pass });
+    REQUIRE_FALSE(plans.empty());
+    std::set<std::vector<int>> combat_pins;
+    for (const auto& p : plans)
+    {
+        CHECK(dmgrx::HasCombatPins(p.reflect_targets));
+        combat_pins.insert(dmgrx::CombatPinsOf(p.reflect_targets));
+    }
+    // Every admitted target is its own line: the face and each Spiteful Sliver. The Slivers' own granted
+    // "target player" triggers are singletons after F1 and take no pin.
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1803 }, { 1804 } });
+    for (const auto& p : plans)
+    {
+        const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
+        INFO("combat pin ", pins.front());
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, true);
+        RolloutSimulateCombat(roll);
+        const bool sliver = pins.front() != dmgrx::PlayerId(1);
+        CHECK(roll.players[1].life == (sliver ? 20 - 3 - 2 * 3 : 20 - 3 - 3));
+        if (sliver) { CHECK(Find(roll, pins.front()) == nullptr); }   // the amplifier died to the 3 ...
+        // ... and the other Spiteful is untouched
+        CHECK(Find(roll, pins.front() == 1803 ? 1804 : 1803) != nullptr);
+        GameState exec = s;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        exec.phase = Phase::Combat;
+        GameEngine ge(eng);
+        ge.PlayOutFrom(exec, exec.turn_number, GameEngine::ResumeAt::Combat);
+        CHECK(exec.players[1].life == roll.players[1].life);
+    }
+}

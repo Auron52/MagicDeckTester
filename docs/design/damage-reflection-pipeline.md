@@ -1385,3 +1385,35 @@ Where the code departs from the sections above, and why. Each entry names the sy
 * **Audit.** `audit_viewer_decisions.py --no-sweep` now passes: `cost_less_per_creature_on_battlefield`,
   `damage_all_creatures_count_creatures`, `reflect_player_cant_gain_life` classified INERT (no choice), surfaced
   to the USER for sign-off.
+
+### Step 6 (Spiteful Sliver)
+
+* **The grant is a SNAPSHOT count, no new state.** `CardParams::grants_reflect_to_subtype` (the `ReflectTo`
+  enum, JSON strings shared with `reflect_dealt_damage` through one reader; `chosen_player` is refused by the
+  loader) + the existing `subtypes_affected`. `dmgrx::DealDamageBatch` step 3 reads `dmgrx::Granters(s)` once
+  per event, before apply and SBA, and raises, for every damaged creature, its own reflection first and then
+  ONE `PendingTrig` per granter that covers it (`GrantCovers`: same controller, one of the listed subtypes, an
+  all-types animation counts), in the granters' battlefield order. CR 113.2c (each instance of an ability
+  functions independently; two Spiteful Slivers = two triggers per Sliver). A granter killed by the same event
+  still grants for that event (LKI, section 2.4); after it leaves, nothing is granted. No `GameState` /
+  `Permanent` / `Plan` field: every plan-fold site of steps 3/5b is untouched.
+* **Arming / gates.** `rfx_arms` (GoldFishRunner) adds the param. `DefReflectsWithChoice` is true for a granter
+  of a choice kind, so the main-phase and combat fans' pre-checks see it; testing the GRANTER suffices, since a
+  granted trigger exists only while one is on the battlefield (or cast by the plan). `DefCanDamageCreatures` is
+  unchanged: "target player" adds no route into a creature.
+* **The searched choice.** The granted "target player" list is {opponent} after F1 (no pin, no probe), and
+  {opponent, us} under Purity / a noncreature-source Tamanoa / human play / `MTG_UNPRUNE=reflecttarget`, which
+  the existing axis fans. The amplifier case of section 4.1 (a Reckoner's reflection aimed at a Sliver with k = 2
+  instances beats the face) is the existing Reckoner "any target" axis: the scenario
+  `stuffy_spiteful_reckoner_gc_aims_sliver.json` (combat-time choice via step 5b's fan, win T4 only through the
+  Sliver) and a unit test that branches the face and both Slivers and replays each in the executor.
+* **Section 10's numbers.** "2 Spiteful + Act -> 4 x 13" holds: `stuffy_spiteful_two_act_52.json` (opponent at
+  52, exactly lethal). Unit: 2 Spiteful + a Sliver token = 3 x 2 x 13 = 78 (the opponent's Sliver token and our
+  Goblin token are not granted); 2 Spiteful + Reckoner = 4 x 13 + 13.
+* **Viewer.** The `target` prompt per trigger instance already existed, but main.cpp keyed it on the def's own
+  `reflect_dealt_damage`, and a granted reflection resolves with the damaged Sliver's def (Spiteful Sliver's own
+  is None). New `dmgrx::t_viewer_reflection` (set by `ResolveTrig`, cleared by `EtbChoosePlayer`) is the key now.
+  Unit-tested under Purity. DECISIONS.md row extended; auditor maps `grants_reflect_to_subtype -> target`.
+  **Disclosed gap:** a granted reflection on a Sliver TOKEN (no `CardDefinition`) is not prompted -- the
+  resolver takes the front (the opponent). No card in the pool makes a Sliver token.
+* **Planeswalkers** stay unoffered (the step-2 PARTIAL, PROVISIONAL), stated in the card's oracle note.

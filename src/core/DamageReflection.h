@@ -137,6 +137,38 @@ inline thread_local DrainStats t_last_drain;
 inline const CardDefinition* Def(const Permanent& p)
 { return p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card); }
 
+// Spiteful Sliver (CardParams::grants_reflect_to_subtype). The granting permanents on the battlefield, in
+// battlefield order (empty on every board without one -- the common case, one def lookup per permanent).
+inline std::vector<const Permanent*> Granters(const GameState& s)
+{
+    std::vector<const Permanent*> g;
+    for (const Permanent& q : s.battlefield)
+    {
+        const CardDefinition* d = Def(q);
+        if (d != nullptr && d->params.grants_reflect_to_subtype != CardParams::ReflectTo::None) { g.push_back(&q); }
+    }
+    return g;
+}
+// Does granter g's "<subtypes_affected> creatures you control have ..." cover creature q? Same controller,
+// and q has one of the listed subtypes (an all-types animation counts, the subtype counters' convention).
+// The granter itself is covered when it has the subtype ("Sliver creatures you control" includes it).
+inline bool GrantCovers(const Permanent& g, const Permanent& q)
+{
+    if (g.controller_index != q.controller_index || !q.card.IsCreature()) { return false; }
+    const CardDefinition* d = Def(g);
+    if (d == nullptr) { return false; }
+    for (const std::string& sub : d->params.subtypes_affected)
+    { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { return true; } }
+    return false;
+}
+// How many granted reflection instances creature q carries right now (design 4: mult(T)).
+inline int GrantedInstances(const GameState& s, const Permanent& q)
+{
+    int n = 0;
+    for (const Permanent* g : Granters(s)) { if (GrantCovers(*g, q)) { ++n; } }
+    return n;
+}
+
 inline void Log(const GameState& s, const char* kind, const std::string& text)
 {
     if (g_play_event_sink != nullptr && !TapSpeculatingNow()) { EmitPlayEvent(s.turn_number, kind, text); }
@@ -309,6 +341,10 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     std::vector<PendingTrig> raised;
     if (!ct.empty())
     {
+        // Spiteful Sliver (grants_reflect_to_subtype): every granting permanent on the battlefield NOW --
+        // before apply and SBA, so a granter this very event kills still grants its instance for this
+        // event (design 2.4: the granted ability existed when the damage was dealt).
+        const std::vector<const Permanent*> granters = Granters(s);
         for (const Permanent& q : s.battlefield)
         {
             if (!q.card.IsCreature()) { continue; }
@@ -316,7 +352,20 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
             for (const CreatureTotal& c : ct) { if (c.number == q.card.m_number) { amt = c.amount; break; } }
             if (amt <= 0) { continue; }
             const CardDefinition* d = Def(q);
-            if (d == nullptr || d->params.reflect_dealt_damage == CardParams::ReflectTo::None) { continue; }
+            // The granted instances, ONE per granter that covers q (CR 113.2c: multiple instances of the
+            // same triggered ability each trigger; two Spiteful Slivers -> each Sliver reflects twice).
+            // Raised AFTER q's own reflection, in the granters' battlefield order (design 4.7).
+            auto raise_granted = [&]() {
+                for (const Permanent* g : granters)
+                {
+                    if (!GrantCovers(*g, q)) { continue; }
+                    raised.push_back({ Def(*g)->params.grants_reflect_to_subtype,
+                                       SourceRef{ q.card, q.controller_index, true },
+                                       q.card.m_number, amt, false, -1 });
+                }
+            };
+            if (d == nullptr || d->params.reflect_dealt_damage == CardParams::ReflectTo::None)
+            { raise_granted(); continue; }
             // Stuffy Doll: the recipient is the player its as-enters choice locked (read NOW -- LKI, the
             // Doll may die to this very event). A Doll staged onto the battlefield without the as-enters
             // replacement (chosen_player -1; no current entry path does this) takes the opponent, the
@@ -325,6 +374,7 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
                             : q.chosen_player >= 0 ? q.chosen_player : 1 - q.controller_index;
             raised.push_back({ d->params.reflect_dealt_damage, SourceRef{ q.card, q.controller_index, true },
                                q.card.m_number, amt, d->params.reflect_player_cant_gain_life, fixed });
+            raise_granted();
         }
     }
 
@@ -563,6 +613,10 @@ inline thread_local int t_probe_fan_depth = -1;
 // The legal set of the choice the viewer is being asked about (stable ids, front = the engine's
 // default), read by the human-play target chooser (main.cpp) while it builds the prompt.
 inline thread_local const std::vector<int>* t_viewer_legal = nullptr;
+// True while t_viewer_legal is a REFLECTION trigger's target list (ResolveTrig), false for the Doll's
+// as-enters choice. main.cpp cannot tell them apart by the def: a Spiteful Sliver's GRANTED reflection
+// resolves with the damaged Sliver's def, whose own reflect_dealt_damage is None.
+inline thread_local bool t_viewer_reflection = false;
 
 // Probe ownership follows the plan VECTOR (IncineratorTargetProbeScope): a nested continuation with its
 // own pins searches its own targets and cannot add speculative choices to its parent's fan.
@@ -626,8 +680,10 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
 {
     using RT = CardParams::ReflectTo;
     // Stuffy Doll's ChosenPlayer is a FIXED recipient (the as-enters choice), never a choice here either.
-    return d.params.reflect_dealt_damage != RT::None && d.params.reflect_dealt_damage != RT::TargetOpponent
-        && d.params.reflect_dealt_damage != RT::ChosenPlayer;
+    auto choice = [](RT k) { return k != RT::None && k != RT::TargetOpponent && k != RT::ChosenPlayer; };
+    // Spiteful Sliver's GRANTED "target player" reflection: a choice on whichever creature it covers, and
+    // only a granter on the battlefield or in the plan can raise one -- so testing the granter suffices.
+    return choice(d.params.reflect_dealt_damage) || choice(d.params.grants_reflect_to_subtype);
 }
 
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
@@ -693,9 +749,12 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
                     return { 0, 1 - t.src.controller, 0 };
                 };
                 const std::vector<int>* saved = t_viewer_legal;
+                const bool saved_rx = t_viewer_reflection;
                 t_viewer_legal = &legal;
+                t_viewer_reflection = true;
                 const auto chosen = (*g_play_target_chooser)(s, *def, t.src.controller, 1, t.amount, { to_ct(pick) });
                 t_viewer_legal = saved;
+                t_viewer_reflection = saved_rx;
                 if (chosen.size() == 1)
                 {
                     int id = 0;
@@ -839,10 +898,13 @@ inline void EtbChoosePlayer(GameState& s, int controller, int entered_index, con
     {
         const std::vector<int> legal{ PlayerId(opp), PlayerId(controller) };
         const std::vector<int>* saved = t_viewer_legal;
+        const bool saved_rx = t_viewer_reflection;
         t_viewer_legal = &legal;
+        t_viewer_reflection = false;   // the as-enters choice, not a reflection target
         const auto chosen = (*g_play_target_chooser)(s, def, controller, 1, 0,
                                                      { ChosenTarget{ 0, pick, 0 } });
         t_viewer_legal = saved;
+        t_viewer_reflection = saved_rx;
         if (chosen.size() == 1 && chosen[0].kind == 0 && (chosen[0].index == 0 || chosen[0].index == 1))
         { pick = chosen[0].index; }
     }

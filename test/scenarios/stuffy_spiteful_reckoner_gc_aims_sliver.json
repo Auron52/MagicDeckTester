@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Design step 6 (the step-3 'two Spiteful Slivers + Reckoner, a Sliver beats the face' scenario, moved",
+    "here). A settled Boros Reckoner carrying Guilty Conscience attacks for 3 (9 -> 6); GC deals 3 back, the",
+    "Reckoner dies and its last-known reflection of 3 is a CHOICE made inside combat (step 5b's combat fan).",
+    "Aimed at the face it leaves the opponent at 3. Aimed at a summoning-sick Spiteful Sliver -- an AMPLIFIER,",
+    "mult 2 (design 4.1): two Spiteful Slivers grant it two instances -- the Sliver dies to the 3 and still",
+    "reflects 3 twice (LKI): 6 -> 0. Only that choice wins turn 4; the face line wins turn 5 (the Slivers",
+    "attack). resume_at main1: the fixture starts INSIDE turn 4's first main, so no untap step clears the",
+    "Slivers' summoning sickness (without it a new-turn entry would let them attack)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "resume_at": "main1", "lands_played_this_turn": 1,
+  "on_the_play": false, "active_life": 20, "opponent_life": 9,
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Boros Reckoner" },
+    { "name": "Guilty Conscience", "equips": "Boros Reckoner" },
+    { "name": "Spiteful Sliver", "sick": true },
+    { "name": "Spiteful Sliver", "sick": true }
+  ],
+  "hand": [],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}
