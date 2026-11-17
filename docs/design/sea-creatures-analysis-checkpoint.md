@@ -23,11 +23,14 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
   * CG investigation doc cherry-picked `7374f09b1`: the CG churn was an A/B artifact (base binary on the
     new cards.json). RULE: every byte-identity arm uses its OWN commit's cards.json.
   * I4 DONE `8e1be70c1` + `314dbfc9c` (Hullbreaker, Brinelin; search declines by USER ruling).
-  * I5 Sin IN FLIGHT (agent launched 2026-11-17 on base `314dbfc9c`), incl. the USER ruling: engine searches
-    the subset, provider prune `MTG_SEA_SIN_STRIP_SAGAS` strips every Saga and nothing else.
-  * I6 Trench Gorger NEXT: engine full menu; provider prune exile all lands if >= 6 in library, else decline.
-* Smoke (d3 b10, 40 g): I2 37/40 avg 6.20; I3 40/40 avg 5.925; I4 40/40 avg 6.225 (I5 checks whether the
-  I4 move is just composition -- missing cards dropped -- or a play defect).
+  * I5 DONE `03c800faf` + `e9815ca9c` (Sin: searched as-enters counter harvest; provider prune
+    `MTG_SEA_SIN_STRIP_SAGAS` strips every Saga, nothing else; open Q18).
+  * I6 Trench Gorger IN FLIGHT (agent launched 2026-11-17 on base `e9815ca9c`): engine full menu; provider
+    prune `MTG_SEA_GORGER_ALL` exile all lands if >= 6 in library, else decline; bounced-Gorger P/T fix.
+* Smoke (d3 b10, 40 g, avg counts losses as 9): I2 37/40 avg 6.20; I3 avg 5.925; I4 37/40 avg 6.225 (the
+  earlier "40/40" was a misread); I5 37/40 avg 6.15. Losses gi 6/21/33 persist -> explain in Stage 5.
+  The I3->I4 move is NOT composition: missing cards are dead placeholder slots (DeckLoader::MakePlaceholder),
+  so I4 turned two dead slots into castable 7-8 drops (a play change, ~1.5-2 se).
 
 ## Next steps
 
