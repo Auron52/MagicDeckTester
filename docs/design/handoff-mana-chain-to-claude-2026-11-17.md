@@ -20,6 +20,11 @@ Ruby flag (old and new rule) adds 2.0% CPU in this sample, so that is not
 an isolated cost for the new rule. Source PGO stamp is stale; after the
 commit, run `./build.sh pgo` and a fresh Dragonstorm mana-clean gate.
 Full evidence is appended to `docs/design/dragonstorm-ruby-apex-storage-mana-2026-11-17.md`.
+The source/doc commit is `cf5f44488`. A PGO+LTO rebuild is running in
+exec session 90786; its output is
+`build/scratch/dragonstorm_visible_lump_ab/ruby_song_pgo_build.out`.
+When it finishes, run a fresh 5,000-game Dragonstorm mana-clean gate on
+indices 72,000–76,999 and update this document with its report.
 
 The earlier three source commits following pushed `f2156d4e6` are:
 
