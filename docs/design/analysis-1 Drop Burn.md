@@ -71,3 +71,28 @@ Started 2026-11-17 on `phase-1-2-deck-analyzer` @ 17262a61f.
 ## Open questions for the USER
 
 1. Vexing Devil opponent policy (above).
+
+## CHECKPOINT 2026-11-17 (orchestrator; resume here)
+
+* **Committed (local, NOT pushed):** 15a6a5c86 -- Needle Drop + Vexing Devil (impl agent; handoff
+  `logs/1dropburn/impl-handoff.md`). Cost audit rc 0 (658/658). Field audit: snapshot refreshed
+  (`src/cards/data/scryfall_reference.json`, UNCOMMITTED) and offline audit rc 0; the Vexing Devil oracle
+  advisory is only its bracket note.
+* **UNCOMMITTED, NOT YET BUILT:** `OneDropBurnProvider` (empty DeckProvider derivation, DecisionProviders.h
+  beside MidrangeBurn; routed by `one_drop_burn` flag = target_dealt_damage_this_turn ||
+  etb_opp_may_take_damage_to_sac, returned right after `lfe`); the Needle Drop cast-order tier 29 MOVED
+  from GenericProvider::CastOrderRank into `OneDropBurnProvider::CastOrderRank`; tests updated
+  (test_needle_drop_vexing_devil.cpp sets the provider; test_pirates_provider.cpp table row
+  `{"1 Drop Burn","OneDropBurn"}`). Before this the deck routed to `Generic`.
+* **RESOLVED -- the 39 smoke mismatches are PRE-EXISTING upstream drift, not 15a6a5c86.** An exact
+  parent build (17262a61f, scratch worktree, since removed) replayed all 39 failing smoke jobs plus two
+  passing canaries (midrangeburn d0/d3) from the primary checkout: all 41 per-game `.wins` files are
+  byte-identical to the 15a6a5c86 smoke run (`build/scratch/1dropburn/parent_replay.json`). Same 39 keys
+  P18i recorded as unaccepted upstream drift (sampled-gate-ladder.md). Left alone; not accepted here.
+* **Next after the fix:** build, unit tests, smoke byte-identity -> commit provider + snapshot -> Stage 3
+  coverage re-run -> Stage 4 profile (`analyze_deck.py --no-rebuild`) -> 4a provider_audit -> 4-bis suite
+  rows in all 3 tiers (template: midrangeburn rows) + accept -> Stage 5 (verify_deck.py, 5a-5i, claude-play
+  sweep on Opus/Sonnet) -> Stage 6 report.
+* **Open USER questions:** (1) Vexing Devil opponent policy (PROVISIONAL: take 4 unless lethal);
+  (2) Needle Drop cast-order tier 29 (after creatures + other spells) -- user-owned; (3) deferrals:
+  Needle Drop cannot target planeswalkers; painland self-damage not marked (both inert for this deck).

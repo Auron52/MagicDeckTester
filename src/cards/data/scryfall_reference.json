@@ -8694,5 +8694,23 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Creature — Leviathan"
+  },
+  "Needle Drop": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Needle Drop deals 1 damage to any target that was dealt damage this turn.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Vexing Devil": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "When this creature enters, any opponent may have it deal 4 damage to them. If a player does, sacrifice this creature.",
+    "power": "4",
+    "toughness": "3",
+    "type_line": "Creature — Devil"
   }
 }

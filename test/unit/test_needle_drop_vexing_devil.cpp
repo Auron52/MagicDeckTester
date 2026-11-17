@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
+#include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -178,9 +179,10 @@ TEST_CASE("Needle Drop: castable after a burn spell this turn -- 1 to the oppone
     CHECK(exec.players[0].library.size() == 4);
 }
 
-TEST_CASE("Needle Drop: the plan order cannot strand it -- the generic cast order puts it after the burn")
+TEST_CASE("Needle Drop: the plan order cannot strand it -- the deck's cast order puts it after the burn")
 {
     GameState s = NBoard(2, {"Needle Drop", "Lightning Bolt"});
+    static const OneDropBurnProvider provider; s.m_provider = &provider;
     Action nd = NCast("Needle Drop"), bolt = NCast("Lightning Bolt");
     CHECK(CastOrderLess(s, bolt, nd));
     CHECK_FALSE(CastOrderLess(s, nd, bolt));

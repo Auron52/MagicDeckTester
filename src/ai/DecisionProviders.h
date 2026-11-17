@@ -1832,6 +1832,23 @@ public:
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
 };
 
+// 1 Drop Burn (onboarding 2026-11-17, Stage 4a): its OWN provider, an empty DeckProvider derivation of
+// the Generic provider it routed to before (play-neutral by construction). Routed by the two params only
+// this list carries: Needle Drop's target_dealt_damage_this_turn and Vexing Devil's
+// etb_opp_may_take_damage_to_sac. Without them it carries Grim Lavamancer (midrange_burn) and Boltwave /
+// Sunbaked Canyon (modern_rw_burn) but neither conjunct's `burn` / `anti`, so it fell to Generic.
+// The one hook it owns is the Needle Drop cast-order tier (CastOrderRank below).
+class OneDropBurnProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Bound direct burn (incl. Fireblast's free "
+        "alternative cost and Skewer's spectacle), Vexing Devil's ETB 4, Needle Drop, Grim Lavamancer "
+        "activations, Rift Bolt's suspend and haste/prowess combat before claiming a winless turn" }; }
+    const char* Name() const override { return "OneDropBurn"; }
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+};
+
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
 // Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
 // permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider
