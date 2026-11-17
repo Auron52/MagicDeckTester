@@ -15,74 +15,31 @@ verified. After the rebase:
 The pushed fixes are the painland float, `MTG_CONT_UNSEEN_PENDING`, `MTG_ONDEMAND_VISIBLE_CONTRIB` and
 `MTG_LEFTOVER_LINE_SWAP`. The Windows CI watch runs in the background (REST API poll).
 
-**IN FLIGHT (16:47 UTC): fresh Dragonstorm gate** `claude-dragonstorm-swap-20261117` (5,000 games; console
-`build/scratch/claude_gate/ds_gate.out`, pid in `ds_gate.pid`). Next: read the report, then reproduce and fix the
-leading signatures (s30072022 known, low priority), commit the gate record. Then the PD CAPPED fold, then the deck
-queue.
+**Windows CI for the 16:44 push:** run 44129190474, success.
 
-**(earlier) PUSHED 12:21 UTC** (`687062e15..71c72cb17`, next shared-branch push not before 16:21 UTC), rebased onto origin's P18i /
-site-9 commits: `7a289ca75` oracle repairs (Prevent Damage 30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float
-(`MTG_KAROO_FLOAT_RESTRICTED_C`), the gate record, `d85bc8c5a` Karoo line-colour float
-(`MTG_KAROO_FLOAT_LINE_COLOUR`), and the checkpoints (hashes above are pre-rebase). After the rebase: gt_logs
-consistent, unit 3,391/3,391, smoke 44 failed = the known 39 + Minotaur / Dragons / Landfall Elementals / Spirits d0
-and Bruna 2HG d5 (all faster or digest-only), viewer zero drift. Windows CI run 44082387807 was in progress at push
-(`gh` is not logged in here; the public REST API answers unauthenticated). Notes:
-`docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`, `karoo-float-restricted-c-2026-11-17.md`,
-`karoo-float-line-colour-2026-11-17.md`.
+**DONE 17:02 UTC: Dragonstorm gate** `claude-dragonstorm-swap-20261117` (indices 82,000-86,999, record `9639593e6`):
+152 issues = 66 APPLY-DROP, 79 CAPPED-DECISION, 4 APPLY-DROP-ORDER, 2 ENUM-GAP, 1 ORACLE-GAP; oracle-on/off
+byte-identical. Report `logs/mana_clean/claude-dragonstorm-swap-20261117/report.md`. Top seeds (APPLY-DROP):
+s30083167 T7 x14, s30086717 T4 x12, s30083522 T6 x10, s30086338 T6 x10 (replays in `build/scratch/claude_ds2/`).
 
-**Gate `claude-pd-karoo-20261117`** (PGO `34fb8c52119d`, before `d85bc8c5a`): Spirits CLEAN; Minotaur 2 (new
-signature s30289322, fixed by `d85bc8c5a`: replay 0 issues, lever off APPLY-DROP=2); Prevent Damage 9 = one
-CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were left out: their own queue items.
+**IN FLIGHT (18:10 UTC): `MTG_UNSEEN_KEEP_SCARCE`, uncommitted** (SpendFloatingTowardCost in SpellEffects.h +
+UnseenScarceNamedMask in ManaPayment.cpp). An opener line (g_line_opens_unseen) keeps the historical WUBRG generic
+order. The exception: a floating colour the named line owes, which no untapped source (and no uncracked lump) can
+make, pays generic last. s30083167: Seething Song's {2} drained Bloom's {B}{B} before red, and the plan's Kolaghan
+lost {B}. Exact seeds: s30083167 14 -> 0, s30086717 12 -> 8, s30083522 and s30086338 unchanged (other shapes).
+Unit 3,462/3,462.
 
-**`d85bc8c5a` A/B** (16 Karoo / Lake decks x 2,000 held-out pairs, `build/scratch/claude_karoo_line_ab/`): 0 earlier,
-0 later, 12 digest-only, work within +/-0.17%. Unit 3,388/3,388.
+All-deck A/B `build/scratch/claude_unseen_scarce_ab/` (games 560,000+, Sea Creatures added):
+- **So far:** one LATER game, Cyclone gi 560506 T4 -> T5 (Cyclone net +1, FAILS the bar as it stands). Root-cause
+  it next: replay with the lever on/off, then narrow the rule.
+- **Memory:** the batch aborted twice on the 40 GB RSS cap with Merfolk Turns games in flight (both arms). The
+  runner schedules expensive jobs first, so manifest order does not help. The missing 289 jobs are re-running
+  as a chain: 280 pooled at full concurrency, then Merfolk Turns' 9 jobs at 12 threads (`run_rest.sh`, DONE
+  marker `DONE`). Merfolk Turns ran fine in the 14:31 A/B (games 530,000+); whether the seed block or an upstream
+  change is behind the memory is not diagnosed.
 
-**NEXT, in order:**
-1. Prevent Damage CAPPED s30115319 T8 (`{land=Reflecting Pool + GSZ + act:Pyrohemia(xN)}`, even x3 caps at 400K;
-   replay `build/scratch/claude_pd/s30115319_t8.out`, 870 MB; 96 capped plans retried, 87 finished, 9 CAPPED).
-   Diagnosis: Green Sun's Zenith's payment (pay1) fans to 2,724 surviving pay2 frontiers. They differ in the COLOUR
-   of the units over-tapped to float from any-colour sources (City of Brass x2, Grand Coliseum, Reflecting Pool x2,
-   Tarnished Citadel, Battlefield Forge / Brushland {C} vs colour), so the Pareto prune cannot merge them. The
-   face builder's "useful colours + one representative" fold (`UsefulColorMask`) is DECK-wide (hand, library,
-   graveyard, battlefield), and Prevent Damage is five-colour, so nothing folds. Measured on the log: mapping every
-   floated colour the rest of the plan cannot spend on a coloured pip (all but {R}) to one bucket takes the 2,724
-   frontiers to 458 before any Pareto prune. Open design question (why it is not done yet): a sound MID-PLAN
-   useful mask must include every colour the rest of the turn could still want, i.e. the remaining actions' pips
-   AND anything a remaining draw / tutor / breakpoint continuation could put in hand. A conservative version: fold
-   only when the remaining actions hold no draw, dig, tutor, reveal or breakpoint (here: after GSZ the hand is
-   empty and only Pyrohemia {R} activations remain). Then re-gate Prevent Damage and Minotaur.
-   Facts already checked for the fold: the float enters ONLY the frontier prune (`Realize`, `Resources(..., true)`
-   at the Pareto layer); every end-of-plan verdict (cover, domination, sweep-undone) reads `with_float=false`, and
-   `CoreKey` clears the pools, so folding the frontier's spare colours into one "F:~" resource cannot create a
-   false end verdict. The open part is the MASK: `FrontierRec::line_unpaid` holds the remaining casts (activations
-   only when `line_has_acts`), and `PlanOpensBreakpointForTest` flags lifegain breakpoints. Pyrohemia -> Tamanoa
-   life gain is one, so this plan probably carries continuations, and a continuation may spend any colour of the
-   hand, graveyard or battlefield abilities. A mask = remaining plan pips + hand + graveyard castables + battlefield
-   activation costs, applied only when nothing left can move a card to hand, is the candidate.
-2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
-   Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
-
-**DONE 13:17 UTC: painland float** `811f019c1` (unpushed). USER 2026-11-17: *"I certainly see no reason not to float
-mana. The bigger question is whether to float colourless or something else?"* A Karoo-returned painland floats the
-colour the rest of the line owes (paying its damage), otherwise its painless `{C}`
-(`MTG_KAROO_FLOAT_PAINLAND_C` + `_OWED`, both ON). Three-arm A/B, EDF + Melira Pod x 5,000: no slower game in either
-arm; the owed arm has 1 earlier (EDF gi 524423). `docs/design/karoo-float-painland-2026-11-17.md`.
-
-**DONE 14:35 UTC: Dragonstorm s30075408 continuation flag** `e720dc68d` (unpushed; `MTG_CONT_UNSEEN_PENDING`, ON).
-All-deck A/B (Dragonstorm 5,000 + every suite deck 1,000): 0 later, 1 earlier, every deck net <= 0.
-`docs/design/cont-unseen-pending-2026-11-17.md`.
-
-**Exact-seed recheck at e720dc68d** of the remaining gate signatures: s30074224 and s30076435 now replay clean;
-s30072155 APPLY-DROP 2, s30074081 1, s30072022 1 remain (outputs `build/scratch/claude_ds/s<seed>.out`).
-
-**DONE 14:53 UTC: s30073082 T5** `0d8f9a4bd` (unpushed; `MTG_ONDEMAND_VISIBLE_CONTRIB`, ON). Exact seed APPLY-DROP
-10 -> 0; Dragonstorm A/B 10,000 pairs byte-identical. `docs/design/ondemand-visible-contrib-2026-11-17.md`.
-
-**Push prep done 15:05 UTC:**
-- origin had not moved since 12:21;
-- smoke 46 failed: the 44 at the 12:21 push, plus Dragonstorm d0 (digest-only) and Melira d0 (6.2590 -> 6.2580);
-  none slower;
-- gt_logs consistent; references safe.
+Next: Cyclone gi 560506, then trace s30086338 (Apex is paid with Bloom; the oracle uses Needle + Bazaar and keeps
+Bloom for Kolaghan) and s30083522.
 
 **DONE 16:15 UTC: s30072155 T5 + s30074081 T4** (`MTG_LEFTOVER_LINE_SWAP`, ON; `SwapLeftoverForLine` in
 ManaPayment.cpp). After an outermost payment, a floating colour that the payment drained into its generic is
