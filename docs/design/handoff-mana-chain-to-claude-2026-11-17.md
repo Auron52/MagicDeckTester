@@ -20,8 +20,13 @@ issues**; lever-off still has APPLY-DROP=1. Outputs are
 and `_legacy.out`. Release `./build.sh` passed; the full Release unit
 suite passed **3,385/3,385**, zero failures, console
 `build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
-Next rebuild PGO (current PGO is on the prior source tree), run same-PGO
-5,000 paired Spirits games with the lever and
+The PGO rebuild is running in exec session `38090`, console
+`build/scratch/dragonstorm_visible_lump_ab/pgo_spirits_shock_pair.out`.
+The paired 5,000-game manifest is ready at
+`build/scratch/spirits_shock_pair_5k/manifest.json`, indices 45,000–49,999.
+After PGO passes and its source stamp matches `git rev-parse HEAD:src`,
+run both arms sequentially on the same binary, default versus
+`MTG_SPIRITS_SHOCK_PAIR_HOLD=0`, then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 
