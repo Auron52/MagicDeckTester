@@ -24,6 +24,10 @@ The PGO rebuild is running in exec session `38090`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_spirits_shock_pair.out`.
 The paired 5,000-game manifest is ready at
 `build/scratch/spirits_shock_pair_5k/manifest.json`, indices 45,000–49,999.
+`build/scratch/spirits_shock_pair_5k/run.sh` runs the default and lever-off
+arms sequentially after checking the PGO source stamp. Since this source
+fix, `mana_clean.py status` marks all 15 formerly clean decks
+**stale-clean by source hash**; that is expected and requires refresh gates.
 After PGO passes and its source stamp matches `git rev-parse HEAD:src`,
 run both arms sequentially on the same binary, default versus
 `MTG_SPIRITS_SHOCK_PAIR_HOLD=0`, then
