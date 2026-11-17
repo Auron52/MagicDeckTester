@@ -2,20 +2,9 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:37 UTC
+## Live status, updated 07:38 UTC
 
-**Current uncommitted Minotaur fixture:** A focused payment test was added
-at the end of `test/unit/test_depletion_hold.cpp` for the exact Territory,
-Carnarium, Courtyard, Priest, Raider board. It requires the first `{B}{R}`
-payment to leave Courtyard untapped. Release `./build.sh` is running in
-exec session `12529`, console
-`build/scratch/spirits_shock_pair_5k/build_minotaur_fixture.out`. Run
-`build/Release/mtg-test --test-case='Minotaur: leave Courtyard red for visible Deathbellow Raider after Slaughter-Priest'`
-and check that it fails baseline before implementing a narrow payer hold.
-This fixture is uncommitted and may need adjustment if baseline takes
-another payment route; do not claim it as proven yet.
-
-**Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
+**Spirits 30040647 T4 correction complete, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
 Flooded Strand, Lingering Souls flashback `{1}{B}`, then Millicent `{W}{U}`.
 At Souls payment, Hallowed Fountain, Watery Grave, and two Godless Shrines
@@ -60,10 +49,10 @@ The fresh PGO Spirits mana-clean gate passed in exec session
 **Spirits clean, zero issue flags**, 41,221 decisions and 342,409 plans,
 oracle-on/off play byte-identical. Report:
 `logs/mana_clean/codex-spirits-shock-pair-20261117/report.md`.
-`test/mana_clean.json` was committed as `133a723c0`. Next inspect the
-small Minotaur APPLY-DROP and Prevent Damage issues; then
-then a fresh Spirits mana-clean gate. If the measured cost is significant,
-look for a narrower fix. Update this handoff after each milestone.
+`test/mana_clean.json` was committed as `133a723c0`. The Spirits design
+note `docs/design/spirits-souls-line-payment-2026-11-16.md` carries the
+result. Continue the unresolved queue and update this handoff after
+each milestone.
 
 **Next focused queue item after Spirits:** Prevent Damage's fresh 5,000-game
 gate has 30 issues: eight ORACLE-GAP flags (six in seed `30109140` T5,
@@ -77,21 +66,27 @@ documents prior terminal-loss and Dina-sacrifice oracle repairs; do not
 assume the fresh flags have the same cause. The current audit retries
 capped plans at 200,000 applies by default (`MTG_MANA_ORACLE_NODES_RETRY`).
 
-**Minotaur read-only repro after Spirits gate:** seed `30284922` T5 still
+**Minotaur diagnosis corrected after a failed fixture assumption:**
+Seed `30284922` T5 still
 has two APPLY-DROP flags on the current Release binary. Exact command is
 in `logs/mana_clean/codex-clean-refresh-two-20261117/report.md`;
 the full trace is
 `build/scratch/spirits_shock_pair_5k/minotaur_30284922.out`. The outer
 plan lists only Slaughter-Priest of Mogis; its continuation tries
-Deathbellow Raider, which the plan did **not declare**. The first
-payment can use Rakdos Carnarium's B plus Unclaimed Territory's C,
-leaving Secluded Courtyard to pay Raider's R. The engine instead pays the
-first spell in a way that loses Raider. Forced `MTG_PAY_ROLLBACK` does
-not rescue this because the continuation was not in the outer plan.
-The user permits narrow, non-searched visible line-opening options, so
-a later visible Raider in hand may justify a payment hold. Diagnose the
-exact engine assignment and add a focused rollout/executor test before
-changing the payer. This case has no code fix yet.
+Deathbellow Raider, which the plan did **not declare**. The oracle has
+a payable route using Rakdos Carnarium, Unclaimed Territory, then
+Secluded Courtyard. A proposed first-payment hold was **falsified** by
+a direct executor/rollout fixture: Carnarium alone pays the first
+`{B}{R}`, leaving both Territory and Courtyard untapped. The engine's
+continuation instead plays a *second* Rakdos Carnarium after that cast,
+bounces Territory, and then drops Raider; the oracle route retains
+Territory on the battlefield. The faulty fixture was removed, leaving
+the working tree clean. The full `MTG_DBG_MULTI=5` replay is at
+`build/scratch/spirits_shock_pair_5k/minotaur_30284922_multi.out`.
+Inspect the continuation's land-play choice and its visibility of Raider,
+then add a focused test at the land-play decision before changing code.
+Forced `MTG_PAY_ROLLBACK` cannot rescue a continuation absent from the
+outer plan. No Minotaur fix has been made.
 
 **Prior completed status (chronological history follows):**
 
