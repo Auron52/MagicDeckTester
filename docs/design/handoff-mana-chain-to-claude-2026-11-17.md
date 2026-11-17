@@ -2,7 +2,18 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:33 UTC
+## Live status, updated 07:37 UTC
+
+**Current uncommitted Minotaur fixture:** A focused payment test was added
+at the end of `test/unit/test_depletion_hold.cpp` for the exact Territory,
+Carnarium, Courtyard, Priest, Raider board. It requires the first `{B}{R}`
+payment to leave Courtyard untapped. Release `./build.sh` is running in
+exec session `12529`, console
+`build/scratch/spirits_shock_pair_5k/build_minotaur_fixture.out`. Run
+`build/Release/mtg-test --test-case='Minotaur: leave Courtyard red for visible Deathbellow Raider after Slaughter-Priest'`
+and check that it fails baseline before implementing a narrow payer hold.
+This fixture is uncommitted and may need adjustment if baseline takes
+another payment route; do not claim it as proven yet.
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
