@@ -146,6 +146,10 @@ deferrals provisional.
   better on a higher-power creature. That makes a clear order." => host ORDER (and which 1-2 survive the cap):
   (1) a Stuffy Doll with a starter this turn; (2) a reflector that can go off this turn; (3) ties broken by higher
   power (an attacking GC'd reflector deals power + reflects power, so the combat-damage win favours the bigger one).
+  USER (~21:08): "In rare cases we could have a lower-power attacker able to attack and a higher-power one with
+  summoning sickness. I would choose the lower-power one unless we have a good chance of lethal next turn with the
+  other." => the starter test outranks power (lower-power unsick attacker first); the sick higher-power one stays as
+  the 2nd candidate, so the search (not the provider) decides whether next turn's lethal with it is worth waiting for.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
