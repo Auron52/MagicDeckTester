@@ -108358,7 +108358,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -108502,6 +108502,34 @@ namespace p18
         // _pne (screen only, with exact pass three): a no-win result gives no useful incumbent to bound a
         // leafless fourth pass. Continue the exact ladder so its later passes retain the ordinary rollout cache.
         o.ne = k.find("_pne") != std::string::npos;
+        // _pqg (screen only, P18i): a growth ratio c_k / c_{k-1} whose denominator pass rolled out NO leaf is a
+        // cache artefact, not tree growth (the previous decision's rollout passes answered it). Use the bootstrap
+        // growth instead when the ratio exceeds it. F2 class C (Gods 51/58/250, Dragonstorm 149, Merfolk Turns
+        // 317): T2 passes 1-2 cost 3-21 units from cache, the first uncached pass extrapolated 50-500x and refused.
+        o.qg = k.find("_pqg") != std::string::npos;
+        // _pqh (screen only, P18i): a _phx pre-refusal of pass K+1 used the PRICED (cold) cost of pass K. Pass K is
+        // then committed on rollouts, so its real cost is free: continue the ordinary ladder from K and let its gate
+        // decide K+1 on that real cost (Mill 8010197: priced c4 4516 refused pass 5 by 1.8%; real c4 1625).
+        o.qh = k.find("_pqh") != std::string::npos;
+        // _pqk (screen only, P18i): the gate's committing pass is cold (its passes below ran leafless), so it can
+        // return a worse win than an exact rollout pass of the same decision already proved (Kithkin 5250100: exact
+        // pass 2 proved T4, the committing pass 4 found T5). Keep the proven better line.
+        o.qk = k.find("_pqk") != std::string::npos;
+        // _pqf (screen only, P18i): after an exact pass k-1 the heuristic ladder's own start gate already admitted pass
+        // k on REAL costs (the b2/b3 adm checks). That admission binds, as it does for pass 2 under _pb1: pass k is
+        // priced only to inform pass k+1, never refused on its (cold) price or leafless cap. F2 Gods 5210336 T1: heur
+        // admitted pass 4 on 4322^2/1689 = 11.1k; mode 2 priced it 11.9k (2 samples, real 3.1k) and refused.
+        o.qf = k.find("_pqf") != std::string::npos;
+        // _pqr (screen only, P18i; implies _pqh): any refusal of pass K+1 taken while pass K was only PRICED is re-checked
+        // on pass K's real cost once K runs as the commit -- the ordinary ladder continues from K on its own gate. With
+        // _pqf, every refusal is then the heuristic ladder's gate on a real cost.
+        o.qr = k.find("_pqr") != std::string::npos;
+        if (o.qr) { o.qh = true; }
+        // _pqz (screen only, P18i): _pzn at every pass k >= 3. A leafless pass that offered no leaf walked the same
+        // tree its rollout pass would walk, but into the leafless cache, so the next pass runs cold (Kithkin 5250100:
+        // heur's leafless-equivalent H3 warmed H4 to 7 units and kept T4; mode 2's cold H4 found T5). Continue the
+        // ordinary ladder from pass k; its real cost gates pass k+1.
+        o.qz = k.find("_pqz") != std::string::npos;
         // _paf<pct> (screen only, with _pb2): when the exact depth-two pass spends too little of its work in
         // rollouts, a leafless walk at the next depth is unlikely to save enough to pay for itself. Continue the
         // ordinary ladder from depth three, using the two exact costs already measured; no sampled pass was run.
@@ -116998,6 +117026,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
     bool      have_prev = false, have_prev2 = false;
+    long long l_prev = -1, l_prev2 = -1;     // rollout-leaf units of passes k-1, k-2 (sampled gate _pqg only)
     long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
 
     // Value-leaf start-gate relaxation (MTG_VALUE_STARTGATE_ALPHA, ADOPTED default 8.0; 1.0 == off): when the
@@ -117592,9 +117621,23 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     int  p18_stop = 0;                  // the pass whose refusal (price, cap, truncation) ended the pricing (0 = none)
     int  p18_wb = 0;                    // the best win a sampled rollout of pass p18_K reached (0 = none)
     bool p18_done = false;              // a leafless pass proved an in-window win: committed, no rollout pass at all
+    bool p18_qg = false, p18_qk = false; // _pqg / _pqk (see p18::Knobs), read by the ladder below
+    bool p18_exact_prev = false;        // _pqk: prev_line was set by an exact rollout pass of this decision
+    long long p18_lfK1 = -1;            // _pqg: rollout-leaf units of pass p18_K-1 when it ran exactly (-1 = priced)
     if (p18_on)
     {
         const p18::Knob kn = p18::Knobs();
+        p18_qg = kn.qg; p18_qk = kn.qk;
+        std::vector<long long> p18_lf(static_cast<std::size_t>(depth) + 2, -1);   // _pqg: leaf units of exact passes
+        // _pqg: c_k x growth, the growth c_k / c_{k-1} replaced by the bootstrap growth when pass k-1 rolled out no
+        // leaf (answered from cache) and the observed ratio exceeds it.
+        auto p18_ext = [&](double ck, double ckm1, long long lfkm1) -> double
+        {
+            if (ckm1 <= 0.0) { return ck * kDefaultGrowth; }
+            if (kn.qg && lfkm1 == 0 && ck > kDefaultGrowth * ckm1) { return ck * kDefaultGrowth; }
+            return ck * ck / ckm1;   // the exact expression the gate used before _pqg (byte-identical when off)
+        };
+        bool p18_hxstop = false;        // _pqh: the pricing ended on a _phx pre-refusal
         const bool unl = (budget == nullptr || budget->Unlimited());
         const double rem0 = unl ? 0.0 : static_cast<double>(budget->Remaining());
         double priced = 0.0;            // the heuristic ladder's spend so far: the priced costs of passes 1..k-1
@@ -117650,16 +117693,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; p18_done = true; break;
                 }
                 p18_force2 = true; priced = static_cast<double>(c1); p18_est[1] = priced;
+                p18_lf[1] = p16::t_leaf_units - leaf0;
                 const double leaf_share = c1 > 0 ? static_cast<double>(p16::t_leaf_units - leaf0) / static_cast<double>(c1) : 0.0;
                 if (kn.a1 > 0.0 && leaf_share < kn.a1)
                 {
                     // The exact pass-one bootstrap admitted depth two. Continue with exact leaves: in this
                     // part of the tree they cost less than the leafless traversal and sample bookkeeping.
-                    line = p1; committed_depth = 1; prev_line = line; prev_committed = 1;
-                    p18_K = 2; p18_rx = true; p18_c2 = static_cast<double>(c1); p18_wb = 0;
+                    line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; p18_exact_prev = true;
+                    p18_K = 2; p18_rx = true; p18_c2 = static_cast<double>(c1); p18_wb = 0; p18_lfK1 = p18_lf[1];
                     break;
                 }
-                if (kn.b2) { line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; }
+                if (kn.b2) { line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; p18_exact_prev = true; }
                 if (p1.win_turn <= max_turns) { wb_prev = p1.win_turn; p18_wb = p1.win_turn; }
                 continue;
             }
@@ -117686,10 +117730,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 p16::Rec('H', 2, c2, 0, 0, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                 p18_K = 2;
                 if (p2.truncated) { p18_stop = 2; break; }
-                line = p2; committed_depth = 2; prev_line = line; prev_committed = 2;
+                line = p2; committed_depth = 2; prev_line = line; prev_committed = 2; p18_exact_prev = true;
                 p18_k2_complete = true;
+                p18_lf[2] = p16::t_leaf_units - leaf0;
                 const double c1 = p18_est[1];
-                const double e3 = c1 > 0.0 ? static_cast<double>(c2) * c2 / c1 : static_cast<double>(c2) * kDefaultGrowth;
+                const double e3 = p18_ext(static_cast<double>(c2), c1, p18_lf[1]);
                 const double rem = static_cast<double>(budget->Remaining());
                 const bool adm3 = depth >= 3 && (g_reserve_value_pass ? e3 + e3 <= gate_alpha * rem : e3 <= gate_alpha * rem);
                 if (p2.win_turn <= state.turn_number + 1 || !adm3) { p18_done = true; break; }
@@ -117698,12 +117743,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 {
                     // The depth-three pass is already admitted by the exact c2^2/c1 check above. Resume the
                     // ordinary ladder there; after that pass, c2 is its true predecessor cost for the next gate.
-                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0; p18_lfK1 = p18_lf[2];
                     break;
                 }
                 if (kn.ag > 0.0 && c1 > 0.0 && static_cast<double>(c2) >= kn.ag * c1)
                 {
-                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0; p18_lfK1 = p18_lf[2];
                     break;
                 }
                 priced += static_cast<double>(c2); p18_est[2] = static_cast<double>(c2);
@@ -117714,6 +117759,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 && (kn.b3r <= 0.0 || p18_est[1] <= 0.0 || p18_est[2] <= kn.b3r * p18_est[1]))
             {
                 const long long r0 = budget->Used();
+                const long long leaf0 = p16::t_leaf_units;
                 if (s_overrun_prop)
                 { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
                 else
@@ -117733,18 +117779,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 p16::Rec('H', 3, c3, 0, 0, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                 p18_K = 3;
                 if (p3.truncated) { p18_stop = 3; break; }
-                line = p3; committed_depth = 3; prev_line = line; prev_committed = 3;
+                line = p3; committed_depth = 3; prev_line = line; prev_committed = 3; p18_exact_prev = true;
                 p18_k3_complete = true;
+                p18_lf[3] = p16::t_leaf_units - leaf0;
                 p18_k3_gap = p3.win_turn - (state.turn_number + 2);
                 const double c2 = p18_est[2];
-                const double e4 = c2 > 0.0 ? static_cast<double>(c3) * c3 / c2 : static_cast<double>(c3) * kDefaultGrowth;
+                const double e4 = p18_ext(static_cast<double>(c3), c2, p18_lf[2]);
                 const double rem = static_cast<double>(budget->Remaining());
                 const bool adm4 = depth >= 4 && (g_reserve_value_pass ? e4 + e4 <= gate_alpha * rem : e4 <= gate_alpha * rem);
                 if (p3.win_turn <= state.turn_number + 2 || !adm4) { p18_done = true; break; }
                 if ((kn.ne && p3.win_turn > max_turns)
                     || (kn.wn > 0 && p3.win_turn <= state.turn_number + 2 + kn.wn))
                 {
-                    p18_K = 4; p18_rx = true; p18_c2 = static_cast<double>(c3); p18_wb = 0;
+                    p18_K = 4; p18_rx = true; p18_c2 = static_cast<double>(c3); p18_wb = 0; p18_lfK1 = p18_lf[3];
                     break;
                 }
                 priced += static_cast<double>(c3); p18_est[3] = static_cast<double>(c3);
@@ -117789,17 +117836,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     p18_stop = k; break;
                 }
             }
+            // _pqf: the heuristic ladder's own gate admitted pass k on the real cost of an exact pass k-1.
+            const bool p18_forced = (k == 2 && p18_force2) || (kn.qf && !unl && !kn.verify
+                                     && ((k == 3 && p18_k2_complete) || (k == 4 && p18_k3_complete)));
             if (kn.hx && !unl && !kn.verify && k >= kn.hxd && p18_est[static_cast<std::size_t>(k - 2)] > 0.0
-                && !(kn.hw > 0 && p18_k3_complete && k >= 5 && p18_k3_gap <= kn.hw))
+                && !(kn.hw > 0 && p18_k3_complete && k >= 5 && p18_k3_gap <= kn.hw) && !(kn.qf && p18_forced))
             {
                 const double pe = p18_est[static_cast<std::size_t>(k - 1)];
-                const double e = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double e = p18_ext(pe, p18_est[static_cast<std::size_t>(k - 2)], p18_lf[static_cast<std::size_t>(k - 2)]);
                 const double remh = std::max(0.0, rem0 - priced);
                 const bool fitsh = g_reserve_value_pass ? (e + e <= kn.hxf * gate_alpha * remh) : (e <= kn.hxf * gate_alpha * remh);
                 if (!fitsh)
                 {
                     if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remh, e, 0.0, 0, 0, 0, 0, std::string("phx")}); }
-                    p18_stop = k; break;
+                    p18_stop = k; p18_hxstop = true; break;
                 }
             }
             if (kn.fd && k == depth && !kn.verify)
@@ -117823,7 +117873,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             smp.rng = state.game_seed ^ (0xA24BAED4963EE407ULL * static_cast<unsigned long long>(state.TurnSeq() * 16 + k));
             const long long u0 = pb ? pb->Used() : 0;
             // _plc: the threshold before the pass bounds the one after it (the remaining only falls), so the cap is sound.
-            const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
+            const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !p18_forced;
             const double la = kn.lean * kStartGateAlpha;
             const double rnow = capk ? static_cast<double>(budget->Remaining()) : 0.0;
             const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, (kn.nr ? rem0 - priced : std::min(rem0 - priced, (kn.rr && !kn.rr2) ? rnow / (1.0 + la) : rnow)))) : 0;
@@ -117880,11 +117930,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 // A proven in-window win: the heuristic ladder's rollout pass k finds it and stops here too.
                 if (!kn.verify) { line = pr; committed_depth = k; prev_line = line; prev_committed = k; p18_done = true; } break;
             }
-            if (kn.zn && k == 4 && p18_k3_complete && smp.n == 0 && !pr.truncated && !kn.verify)
+            if (((kn.zn && k == 4 && p18_k3_complete) || (kn.qz && k >= 3)) && smp.n == 0 && !pr.truncated && !kn.verify && !unl)
             {
                 // No leaf was available to sample, but the leafless cache cannot substitute for the rollout
                 // line cache. Continue exactly from pass four; its real c4 gates the final pass.
-                p18_K = 4; p18_rx = true; p18_c2 = p18_est[3]; p18_wb = 0;
+                p18_K = k; p18_rx = true; p18_c2 = p18_est[static_cast<std::size_t>(k - 1)]; p18_wb = 0;
+                p18_lfK1 = p18_lf[static_cast<std::size_t>(k - 1)];
                 break;
             }
             if (unl) { p18_K = k; continue; }   // nothing to price: every pass fits an unlimited budget
@@ -118073,7 +118124,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, thr, est, se, m, su, fit, best, std::move(ck)}); }
             // (3) Pass k is admitted iff its price fits. Pass 1 always runs (the heuristic ladder never gates it), and
             // a pass 1 that does not fit leaves nothing deeper that could.
-            if (k == 2 && p18_force2) { fit = 1; }   // _pb1: admitted on the real pass-1 cost; priced only for pass 3's check
+            if (p18_forced) { fit = 1; }   // _pb1 / _pqf: admitted on a real cost; priced only for the next pass's check
             p18_su[static_cast<std::size_t>(k)] = static_cast<double>(su);
             if (fit == 0 && !kn.verify) { p18_stop = k; break; }
             if (fit == 2 && !kn.verify) { p18_fb = true; break; }
@@ -118095,7 +118146,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             p18_K = 0; p18_wb = 0;
             if (!kn.nocredit && pb) { p18_credit = static_cast<double>(pb->Used() - p18_u0); }
         }
-        else if ((kn.rx || p18_free_rx || (kn.rx2 && p18_K == 2 && p18_stop == 3)) && !kn.verify && !unl && !p18_done && p18_K >= 1)
+        else if ((kn.rx || p18_free_rx || (kn.rx2 && p18_K == 2 && p18_stop == 3)
+                  || (kn.qh && p18_hxstop && p18_K >= 2 && p18_stop == p18_K + 1)
+                  || (kn.qr && p18_K >= 2 && p18_stop == p18_K + 1
+                      && !(p18_K == 2 && p18_k2_complete) && !(p18_K == 3 && p18_k3_complete)))
+                 && !kn.verify && !unl && !p18_done && p18_K >= 1)
         {
             // REFUSE-EXACT: the heuristic ladder's remaining at its next check is the decision's budget less ITS spend
             // (the priced passes below p18_K stand in for its superseded rollout passes) -- not less the pricing spend.
@@ -118104,6 +118159,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             for (int j = 1; j < p18_K; ++j) { below += p18_est[static_cast<std::size_t>(j)]; }
             p18_credit = static_cast<double>(pb->Used() - p18_u0) - below;
             p18_c2 = p18_K >= 2 ? p18_est[static_cast<std::size_t>(p18_K - 1)] : 0.0;
+            p18_lfK1 = p18_K >= 2 ? p18_lf[static_cast<std::size_t>(p18_K - 1)] : -1;
             if (kn.rx2) { p18_cK_add = p18_su[static_cast<std::size_t>(p18_K)]; }
         }
     }
@@ -118150,6 +118206,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             double ratio    = (have_prev2 && c_prev2 > 0)
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
                             : kDefaultGrowth;
+            if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && ratio > kDefaultGrowth) { ratio = kDefaultGrowth; }
             double estimate = static_cast<double>(c_prev) * ratio;
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
@@ -118284,6 +118341,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (full.truncated) { g_fillin_still_truncated.fetch_add(1, std::memory_order_relaxed); }
             if (!(budget != nullptr && budget->Overrun())) { attempt = full; }
         }
+        // _pqk (sampled gate): the cold committing pass returned a worse win than an exact rollout pass of this
+        // decision already proved; keep the proven line (win turns are realized lines, as the anytime commit uses).
+        if (p18_qk && p18_K > 0 && pass_depth == p18_K && p18_exact_prev && !attempt.truncated
+            && prev_line.win_turn <= max_turns && attempt.win_turn > prev_line.win_turn)
+        {
+            if (g_fsline_nest == 0 && g_rollout_nest == 0) { p16::Rec('K', pass_depth, 0, 0, 0, prev_line.win_turn, 0); }
+            attempt = prev_line;
+        }
         line = attempt;
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
@@ -118326,7 +118391,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
-        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; }
+        l_prev2 = l_prev;   l_prev = p16::t_leaf_units - p16_leaf0;
+        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; l_prev2 = p18_lfK1; }
         if (p18_rx && pass_depth == p18_K) { c_prev += static_cast<long long>(p18_cK_add); }   // _prx2: the samples that warmed it
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
 

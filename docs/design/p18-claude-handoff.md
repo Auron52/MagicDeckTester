@@ -44,3 +44,22 @@ Gods and the other losses may have different causes (including earlier pass refu
 5. Update `docs/design/sampled-gate-ladder.md` with the new candidate and all-deck results. Commit locally. Follow the repository's four-hour shared-push rhythm; personal `wip/*` branches may be pushed sooner. Run `python3 scripts/check_references_safe.py` before pushing or ending. Watch Windows CI after a platform-sensitive push.
 
 Relevant instructions: repository `CLAUDE.md`; `.claude/skills/mtg-ai.md`, `.claude/skills/regression-testing.md`, and `.claude/skills/coding-conventions.md` if adding a diagnostic lever. The user's stated bar is stronger than the current mode 2 result: **do not report the project complete while quality losses or merely neutral runtime remain.**
+
+## Claude session checkpoint (P18i, 2026-11-17)
+
+Scratch: `/workspaces/MagicDeckTester/build/scratch/p18g` (`diff.py` side-by-side p16/p18 traces, `mkcases.py`,
+`mkfleet.py`, `summ.py`, `run.sh` = pooled batch under `build/scratch/box.lock`). All runs launch from this worktree.
+
+Classification of the 11 F2/F5 later games (first divergence; T1 actions are identical in all class C/D games):
+- A (cold over-priced pass 4 refused after heur's own real-cost gate admitted it): Gods 38, 124, 336.
+- B (`phx` pre-refused pass 5 on a cold pass-4 price): Mill 197.
+- C (T1 depth identical; at T2 heur's low passes are cache hits from T1's superseded rollout passes, mode 2's are not,
+  and `c_k^2/c_{k-1}` over a zero-leaf cached denominator refuses): Dragonstorm 149, Gods 51/58/250, Merfolk Turns 317.
+- D (cold committing pass returns a worse win than an exact pass already found): Kithkin 100.
+
+New screen-only arm-key knobs (default off; mode 2 unchanged): `_pqg` zero-leaf growth -> bootstrap growth;
+`_pqh` re-check a `phx` refusal on the commit's real cost; `_pqr` the same for every refusal taken while pass K was
+priced; `_pqf` heur's real-cost admission after an exact pass binds; `_pqk` keep a better exact line (UNSOUND as a
+rationale: Gods 312's "proven T4" exact line actually won T8; it reverses mode 2's one gain).
+Repro T2 (12 games): `_pqg` repairs 6 (Dragonstorm 149, Gods 51/58/250, Merfolk Turns 317, Mill 197); `_pqh` repairs
+Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `_pqg_pqf_pqr`, then a 56-deck screen.
