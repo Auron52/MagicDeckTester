@@ -150,6 +150,14 @@ deferrals provisional.
   summoning sickness. I would choose the lower-power one unless we have a good chance of lethal next turn with the
   other." => the starter test outranks power (lower-power unsick attacker first); the sick higher-power one stays as
   the 2nd candidate, so the search (not the provider) decides whether next turn's lethal with it is worth waiting for.
+  USER (~21:10): "(in which case you can search)" and "I don't want an order for the most part. We should prune it."
+  => GC HOST IS A PRUNE, NOT AN ORDER. The provider RESTRICTS the candidate set; order inside it is immaterial:
+     * ONE host when one dominates: a Doll with a starter this turn; else the single reflector with a starter this
+       turn when no Doll/bigger reflector is worth waiting for; or the only loop-sustaining creature.
+     * TWO hosts only in the split case: the best creature that can go off THIS turn (starter; among those the
+       higher power) + the best wait-a-turn host (the Doll if on board, else the higher-power sick reflector).
+       The search decides between them.
+     * Everything else pruned (non-reflectors, en-Kors, lower-power duplicates of the same role).
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
