@@ -15,7 +15,7 @@ Knights. Report:
 Prevent Damage, and Spirits remain stale-clean at this source; refresh
 those next. The CI watcher is still active.
 
-**Active final stale-clean batch:** 5,000 games each for Martyr Lifegain,
+**Active final stale-clean batch, exec session `74609`:** 5,000 games each for Martyr Lifegain,
 Prevent Damage, and Spirits, command
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run martyr_lifegain prevent_damage spirits --games 5000 --name codex-clean-refresh-newsrc-c-20261117`.
 Console `build/scratch/dragonstorm_visible_lump_ab/clean_newsrc_c.out`,
