@@ -309,6 +309,35 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   into the per-game gain.
 * **Status:** commit `4147878d2` (branch `sea-maze-fetch`), cherry-picked here. Adopt as default ON? USER Q.
 
+## Main-phase shape: USER rule `MTG_SEA_MAIN1_KRAKEN_ONLY` (2026-11-17, default OFF -> USER)
+
+* **USER (verbatim, in order):** "Another option could be to cast everything main 2 except for Spawning Kraken which
+  goes in main 1?" / "There is no haste in the deck and only Spawning Kraken gives an attacking benefit that I can
+  see." / "(and Leviathan, but that happens automatically in upkeep)" / "So we only do Main 1 if Spawning Kraken is
+  cast there, in which case the mana spells can also be done." / "(land drop also included main 1 if spawning kraken
+  is cast)" / "We should only consider them in one of the two to avoid unnecessary branches." / "Worn Powerstone
+  can't generate mana this turn, so it could be left in main 2." / "we don't need to reconsider lands we didn't draw
+  (or any other mana card). This is just for new card types or additional copies of things we already played."
+* **Built** (`d5e1c8f45`): a full searched main 2 every turn. Main 1 is used only by a plan that casts Spawning
+  Kraken; that plan also takes the land drop and mana that pays back this turn (land Auras, Sol Ring). Every other
+  turn, main 1 is empty and the drop moves to main 2 (new hook `Main1LandDropFolded`, default false). On a Kraken
+  turn, main 2 does not reconsider a Kraken or payback mana held since main 1; cards that arrived after main 1
+  (Leviathan draws, other copies) always are. Agent refinement `MTG_SEA_MAIN1_KRAKEN_ATTACKER`: the main-1 Kraken only
+  with a watched sea creature able to attack.
+* **Held-out paired A/B** (d5 b20, std 600 g base 9600001 + 2HG 200 g base 9700001, one pooled batch,
+  `build/scratch/sea/m1k/`), vs the current conditional main 2:
+
+  | arm | std faster / slower (delta) | 2HG faster / slower (delta) | units std / 2HG |
+  |---|---|---|---|
+  | USER rule | 0 / 1 (+0.0017) | 1 / 0 (-0.0050) | **0.894** / 1.007 |
+  | USER rule + attacker | 0 / 1 (+0.0017) | 1 / 0 (-0.0050) | 0.892 / 1.012 |
+  | main 2 every turn | 0 / 1 (+0.0017) | 1 / 0 (-0.0050) | 1.100 / 1.127 |
+
+  The one slower std game under the USER rule (gi348, 6 -> 7) is fetch-shuffle variance: T2 base plays Island,
+  the rule's arm cracks Flooded Strand, and the draws differ from T3. Quality is equal; the USER rule is ~11% cheaper
+  in standard, flat in 2HG. The attacker refinement changes nothing measurable.
+* **Open:** adopt the USER rule as the default (replacing the conditional main 2)? Attacker refinement on or off?
+
 ## Approved deferrals
 
 (none yet)
