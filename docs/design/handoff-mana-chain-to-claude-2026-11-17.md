@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:10 UTC
+## Live status, updated 06:16 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -17,20 +17,30 @@ and Merfolk Turns are never-run. No simulation batch is active.
 Windows CI `44025173062` was still in its Release build at 06:07 UTC;
 the watcher output is
 `build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
-Keep the CI check asynchronous. An incremental `./build.sh` Release build
-for the focused Dragonstorm unit test is active in exec session `29259`,
-console `build/scratch/dragonstorm_visible_lump_ab/build_after_test.out`;
-at 06:10 it was compiling the large `TurnSolver.cpp` object. When it
-finishes, run the focused test on the current payer, then work seed
-30074224 T5 early Bloom payment
-and the Breaching Dragonstorm two ENUM-GAP seeds. The queue remains open.
+Keep the CI check asynchronous. The focused Dragonstorm test **failed on
+the shipped payer** (Bloom left intact, both Territories tapped,
+Karrthus unpayable). A dirty source trial in `src/ai/ManaPayment.cpp` now
+passes that case plus the two adjacent visible-closer cases. It removes
+the prepayment `short_with_shared` gate and compares coloured plus
+**non-lump wild** supply after trial payment: an uncracked Bloom otherwise
+counts as three speculative wild units and obscures the two Territories
+saved by an early crack. `MTG_ONDEMAND_VISIBLE_AFTERPAY_WILD=0` restores
+both old conditions for a paired A/B. Exact seed **30074224 T5** has
+zero oracle issues with the trial, but APPLY-DROP=1 with the legacy lever;
+outputs `build/scratch/dragonstorm_visible_lump_ab/seed_30074224_afterpay.out`
+and `seed_30074224_legacy.out`. The full Release unit suite is active in
+exec session `20045`, console
+`build/scratch/dragonstorm_visible_lump_ab/unit_bloom_afterpay.out`.
+Wait for it, commit the source if green, rebuild PGO at the new source,
+and run a same-binary paired A/B over held-out Dragonstorm games. Then
+check Breaching Dragonstorm's two ENUM-GAP seeds. The queue remains open.
 
 A focused unit case for seed 30074224's payment shape has been added to
 `test/unit/test_dragonstorm_followups.cpp`, immediately after the existing
 one-Territory visible-Karrthus case. It sets Mountain + two Unclaimed
 Territories + Lotus Bloom, pays Song, then credits five red and checks
-Karrthus payment. **It is building but not validated yet.** First run it against the
-current payer to establish failure, then trial a scoped payer correction.
+Karrthus payment. Its baseline failure and trial success are confirmed;
+the complete unit suite and held-out A/B remain.
 
 The paragraphs below are a chronological work log. Older statements
 that say a batch or build is active describe its state at that time;
