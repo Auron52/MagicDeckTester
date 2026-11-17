@@ -2,11 +2,15 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status (Claude), updated 12:00 UTC
+## Live status (Claude), updated 12:25 UTC
 
-**Committed locally (NOT pushed; last push 05:35 UTC, window open):** `7a289ca75` oracle repairs (Prevent Damage
-30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float (`MTG_KAROO_FLOAT_RESTRICTED_C`), `1a3f5e1dc` gate record,
-`d85bc8c5a` Karoo line-colour float (`MTG_KAROO_FLOAT_LINE_COLOUR`), plus checkpoint docs. Notes:
+**PUSHED 12:21 UTC** (`687062e15..71c72cb17`, next shared-branch push not before 16:21 UTC), rebased onto origin's P18i /
+site-9 commits: `7a289ca75` oracle repairs (Prevent Damage 30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float
+(`MTG_KAROO_FLOAT_RESTRICTED_C`), the gate record, `d85bc8c5a` Karoo line-colour float
+(`MTG_KAROO_FLOAT_LINE_COLOUR`), and the checkpoints (hashes above are pre-rebase). After the rebase: gt_logs
+consistent, unit 3,391/3,391, smoke 44 failed = the known 39 + Minotaur / Dragons / Landfall Elementals / Spirits d0
+and Bruna 2HG d5 (all faster or digest-only), viewer zero drift. Windows CI run 44082387807 was in progress at push
+(`gh` is not logged in here; the public REST API answers unauthenticated). Notes:
 `docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`, `karoo-float-restricted-c-2026-11-17.md`,
 `karoo-float-line-colour-2026-11-17.md`.
 
@@ -17,20 +21,15 @@ CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were le
 **`d85bc8c5a` A/B** (16 Karoo / Lake decks x 2,000 held-out pairs, `build/scratch/claude_karoo_line_ab/`): 0 earlier,
 0 later, 12 digest-only, work within +/-0.17%. Unit 3,388/3,388.
 
-**RUNNING:** smoke on `d85bc8c5a` (Release), console `build/scratch/claude_mino2/smoke.out`. Diff
-`test/logs/smoke/wins/` against `build/scratch/claude_mino2/prev_smoke_wins/` (the 10:28 run, post-`e6ffcefd7`):
-only Karoo / Lake deck rows may move, none slower; viewer zero drift.
-
 **NEXT, in order:**
-1. Push: check_references_safe, rebase onto origin, rebuild + smoke if src replays, background CI watch.
-2. Prevent Damage CAPPED s30115319 T8 (`{land=Reflecting Pool + GSZ + act:Pyrohemia(xN)}`, even x3 caps at 400K;
+1. Prevent Damage CAPPED s30115319 T8 (`{land=Reflecting Pool + GSZ + act:Pyrohemia(xN)}`, even x3 caps at 400K;
    replay `build/scratch/claude_pd/s30115319_t8.out`, 870 MB). Cause: GSZ's pay1 fans to 2,724 surviving pay2
    frontiers that differ only in the COLOUR of the units kept floating from any-colour sources (City of Brass,
    Grand Coliseum, Reflecting Pool, Tarnished Citadel), so the Pareto prune cannot merge them. The engine floats a
    full-rainbow source as `wild` (AddRefloatContribution); the oracle's per-face picks commit a colour. Fix shape:
    an oracle fold that floats a full-rainbow face's leftover as wild exactly where the engine would (not a cap
    raise). Then re-gate Prevent Damage and Minotaur.
-3. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
+2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
    Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
 
 **Open for the USER:** painlands (`tap_self_damage > 0`) are still refused by `KarooBounceFloatable`, though their
