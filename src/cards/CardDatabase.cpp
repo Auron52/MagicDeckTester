@@ -2094,6 +2094,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.solo_target_trick           = params.value("solo_target_trick", false);
     p.trick_up_to_one             = params.value("trick_up_to_one", false);
     p.trick_own_target_only       = params.value("trick_own_target_only", false);
+    p.trick_targets_artifact_or_creature = params.value("trick_targets_artifact_or_creature", false);   // Loran's Escape
+    p.grants_temp_indestructible  = params.value("grants_temp_indestructible", false);
+    p.grants_temp_hexproof        = params.value("grants_temp_hexproof", false);   // recorded, inert (goldfish)
     p.pump_per_cards_drawn_power  = params.value("pump_per_cards_drawn_power", 0);
     p.gy_self_power_bonus         = params.value("gy_self_power_bonus", 0);
     p.pump_per_treasure_power     = params.value("pump_per_treasure_power", 0);

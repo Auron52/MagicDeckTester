@@ -1342,6 +1342,10 @@ INERT_PARAMS = {
     # never be chosen, CR 115.4) rather than creating a choice. The choice that remains, WHICH of
     # your creatures, rides `solo_target_trick` -> main_phase, already mapped.
     "trick_own_target_only": "targeting restriction (CR 115.4); the target pick itself rides solo_target_trick -> main_phase",
+    # Loran's Escape ("target artifact or creature", either side): WIDENS the legal set rather than creating a
+    # choice. The pick itself rides solo_target_trick -> main_phase (one searched variant per target) and the
+    # viewer's board-click `target` prompt (ResolveSoloTargetTrick -> g_play_target_chooser, the same chooser).
+    "trick_targets_artifact_or_creature": "targeting scope (artifact or creature, either side); the pick rides solo_target_trick -> main_phase + the trick's target prompt",
     # Frontline Heroism's copy clause. THE HONEST NOTE: unlike the two above, this one does create
     # a real choice -- Heroism's trigger and a Zada/Mirrorwing magnet trigger fire on the same cast
     # and CR 603.3b lets the controller order them, which changes the outcome (5 payload instances
@@ -1854,6 +1858,9 @@ INERT_PARAMS = {
     "pump_per_treasure_tough": "computed pump (rides solo_target_trick)",
     "creates_treasures": "automatic token creation (Treasure; sac-for-mana is a searched plan action)",
     "grants_temp_haste": "automatic until-EOT grant to the chosen target (rides solo_target_trick)",
+    # Loran's Escape (Stuffy Doll step 7). Hexproof is recorded only (goldfish-inert, PROVISIONAL).
+    "grants_temp_indestructible": "automatic until-EOT indestructible on the chosen target (rides solo_target_trick)",
+    "grants_temp_hexproof": "automatic until-EOT hexproof on the chosen target; recorded, not modelled (the passive opponent never targets) -- no choice",
     # Morph INT-1 pump family (the target rides solo_target_trick; Vines' kicked/unkicked rides kicker_cost):
     "grants_temp_double_strike": "automatic until-EOT double strike on the chosen target (rides solo_target_trick)",
     "trick_double_power": "computed +X/+0, X = the target's power at resolution (rides solo_target_trick)",

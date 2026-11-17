@@ -31225,6 +31225,25 @@ inline void FireSpellTargetWatchers(GameState& state, const CardDefinition& def,
     }
 }
 
+// Loran's Escape (CardParams::trick_targets_artifact_or_creature): may a spell of `controller` that reads
+// "target artifact or creature" target `p`? An artifact or a creature (an animated permanent is one) on
+// EITHER side, minus what the spell cannot target (SpellCanTargetPermanent: shroud; an opponent's printed
+// hexproof). One shared predicate for the enumeration, the resolver (CR 608.2b re-check) and the viewer.
+//
+// An OPPONENT's permanent carrying temp_indestructible is refused. In this engine the only until-end-of-turn
+// indestructible grant that can land on an opponent's permanent is an earlier Loran's Escape of ours (Boros
+// Charm's mode 2 covers only "permanents you control"; the passive opponent casts nothing), and that grant
+// came WITH hexproof, which is not stored (CardParams::grants_temp_hexproof). So the test is exactly "it has
+// hexproof from that Escape, and we are its opponent" (CR 702.11b). A future card that grants an opponent's
+// permanent indestructible WITHOUT hexproof must store hexproof instead of relying on this.
+inline bool ArtifactOrCreatureTrickTargetLegal(const GameState& s, int controller, const Permanent& p)
+{
+    if (!p.card.IsCreature() && !p.is_animated && !p.card.HasType(CardType::Artifact)) { return false; }
+    if (!SpellCanTargetPermanent(s, controller, p)) { return false; }
+    if (p.controller_index != controller && p.temp_indestructible) { return false; }
+    return true;
+}
+
 // Apply ONE resolution instance of a trick's payload to the creature at battlefield index `ti`
 // (-1 = the untargeted "up to one target, chose none" instance: only the untargeted payloads
 // resolve). Every dynamic count (cards drawn this turn, Treasures, graveyard copies) is
@@ -31241,6 +31260,14 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     if (pp.creates_treasures > 0) { CreateTreasureTokens(state, controller, pp.creates_treasures); }
     if (pp.cast_lifegain > 0)     { GainLife(state, controller, pp.cast_lifegain); }
     if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
+    // Loran's Escape: "... Scry 1." Through ScryTop, the one scry chokepoint (the viewer's `scry` prompt under
+    // human play; the provider's disposition otherwise -- the engine-wide treatment of a spell's cast_scry,
+    // an in-window single pick pending the USER's ruling Q-U3, docs/design/damage-reflection-pipeline.md 11).
+    // Per resolved INSTANCE, like every rider here: a copy resolves the whole spell, scry included. Placed
+    // with the untargeted riders: the scry and the target payload touch disjoint state (library vs the
+    // target), so their order is unobservable; a fizzled cast (illegal target, CR 608.2b) never reaches here.
+    // cast_scry is 0 on every other solo_target_trick -> byte-identical.
+    if (pp.cast_scry > 0) { ScryTop(state, pp.cast_scry, def.card.m_name.str()); }
 
     if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
     // Doubler-after-exalted (NoteDoublerResolved below): the recipient's power BEFORE this instance.
@@ -31257,6 +31284,10 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
         RefreshCounterThresholdKeywords(tgt);
     }
     if (pp.grants_temp_haste) { tgt.temp_haste = true; }
+    // Loran's Escape: indestructible until end of turn (Permanent::temp_indestructible, the Boros Charm field;
+    // every lethal-damage / destroy kill path reads Permanent::HasKeyword(Indestructible)). Its hexproof is
+    // recorded only (CardParams::grants_temp_hexproof).
+    if (pp.grants_temp_indestructible) { tgt.temp_indestructible = true; }
     // Temur Battle Rage: double strike until end of turn (read only by CreatureHasDoubleStrike).
     if (pp.grants_temp_double_strike) { tgt.temp_double_strike = true; }
     // Berserk: the delayed "destroy that creature if it attacked this turn" (DestroyAttackedAtEndStep).
@@ -31436,9 +31467,18 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     }
     else if (target_number != 0)
     {
+        // Loran's Escape ("target artifact or creature", either side): the declared id resolves on whichever
+        // side holds it, re-checked for legality on resolution (CR 608.2b) by the enumeration's own predicate.
+        const bool any_art_or_cre = def.params.trick_targets_artifact_or_creature;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& p = state.battlefield[i];
+            if (any_art_or_cre)
+            {
+                if (p.card.m_number == target_number && ArtifactOrCreatureTrickTargetLegal(state, controller, p))
+                { ti = i; break; }
+                continue;
+            }
             if (p.controller_index == controller && p.card.m_number == target_number
                 && (p.card.IsCreature() || p.is_animated))
             { ti = i; break; }
@@ -31470,7 +31510,10 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
                 for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                 {
                     const Permanent& p = state.battlefield[i];
-                    if (p.controller_index != controller || !p.card.IsCreature()
+                    // (Loran's Escape may also name a same-plan hand ARTIFACT -- a Mind Stone cast first.)
+                    const bool kind_ok = p.card.IsCreature()
+                        || (any_art_or_cre && ArtifactOrCreatureTrickTargetLegal(state, controller, p));
+                    if (p.controller_index != controller || !kind_ok
                         || p.card.m_name.str() != tgt_name) { continue; }
                     if (CanAttackFull(p, state.battlefield, controller)) { ti = i; break; }
                     if (fallback < 0) { fallback = i; }
@@ -31506,7 +31549,9 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         // the declared target stays. Display only: the human still picks any legal target, and this branch never
         // runs in autonomous play (the chooser is null there).
         int rec = ti;
-        if (ti >= 0 && !def.params.grants_temp_haste && !def.params.token_copy_of_target)
+        // (Nor for Loran's Escape: its best recipient is a reflector about to be swept, not an attacker.)
+        if (ti >= 0 && !def.params.grants_temp_haste && !def.params.token_copy_of_target
+            && !def.params.trick_targets_artifact_or_creature)
         {
             int best = (redirect_to != 0) ? FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/true, def) : -1;
             if (best < 0) { best = FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/false, def); }
@@ -31540,7 +31585,12 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
             if (c.kind != 1 || c.index < 0 || c.index >= static_cast<int>(state.battlefield.size()))
             { continue; }
             const Permanent& p = state.battlefield[c.index];
-            if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated))
+            if (def.params.trick_targets_artifact_or_creature)
+            {
+                // Loran's Escape: the rules-legal set is every artifact or creature, either side.
+                if (!ArtifactOrCreatureTrickTargetLegal(state, controller, p)) { continue; }
+            }
+            else if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated))
             { continue; }
             own.push_back(c.index);
         }
@@ -31612,10 +31662,17 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // before the magnet scan below, so the magnet also fans onto them (5 instances on a Zada +
     // 2-creature board). OFF = make them after, so the magnet never sees them (4). Heroism's own
     // copy is +1 either way -- it is NOT a magnet and never fans.
+    // Both Heroism and the copy magnet need a single target that is a CREATURE WE CONTROL. Every own-creature
+    // trick has nothing else here (the opponent sentinel returned above); Loran's Escape may hold an artifact
+    // or an opponent's creature, which triggers neither.
+    const bool own_creature_target = ti >= 0
+        && state.battlefield[static_cast<std::size_t>(ti)].controller_index == controller
+        && (state.battlefield[static_cast<std::size_t>(ti)].card.IsCreature()
+            || state.battlefield[static_cast<std::size_t>(ti)].is_animated);
     std::vector<int> frontline_tokens;
     auto make_frontline_tokens = [&]()
     {
-        if (ti < 0 || strive_extras > 0) { return; }
+        if (!own_creature_target || strive_extras > 0) { return; }
         const int bf_before = static_cast<int>(state.battlefield.size());
         for (int i = 0; i < bf_before; ++i)
         {
@@ -31635,7 +31692,7 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     if (FrontlineTriggerFirst()) { make_frontline_tokens(); }
 
     std::vector<int> order;
-    const bool magnet = ti >= 0 && strive_extras <= 0
+    const bool magnet = own_creature_target && strive_extras <= 0
         && CardDatabase::Instance().LookupCached(state.battlefield[ti].card)
         && CardDatabase::Instance().LookupCached(state.battlefield[ti].card)
                ->params.copies_solo_targeted_spells;

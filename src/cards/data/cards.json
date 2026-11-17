@@ -17639,6 +17639,24 @@
    }
   },
   {
+   "name": "Loran's Escape",
+   "mana_cost": "{W}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target artifact or creature gains hexproof and indestructible until end of turn. Scry 1. [solo_target_trick + trick_targets_artifact_or_creature: the target is any artifact or creature on EITHER side (no \"you control\"), each one a searched cast variant (the stable id rides enchant_target and the executor replays it through the same shared resolver); identical targets fold (four opponent Spirits = one), and every target the grant cannot change (Mind Stone, Stuffy Doll's printed indestructible, an already-Escaped creature) is one scry-only line. grants_temp_indestructible -> Permanent::temp_indestructible, read by every lethal-damage and destroy kill path, so an Escaped Boros Reckoner / Screaming Nemesis / Mogg Maniac survives Blasphemous Act and reflects again on the next damage event (with Guilty Conscience, a loop to the kill). cast_scry 1 through ScryTop, resolved per instance in the shared resolver (both worlds; the viewer's scry prompt under human play). PROVISIONAL / PARTIAL: (1) hexproof is RECORDED, NOT MODELLED (grants_temp_hexproof) -- goldfish-inert, the passive opponent never targets and hexproof does not stop our own spells or triggers; the one place it binds (our later spell targeting an opponent's Escaped creature) is honoured by the target-legality predicate. (2) The scry is the provider's keep/bottom pick, the engine-wide treatment of a spell's cast_scry, not a searched axis -- an in-window single pick pending the USER's ruling (design 11, Q-U3). (3) Instant speed collapses to casting in the main phase before the sorcery-speed sweeper: nothing happens between the two in a goldfish, so the in-response line is the same line (design 4.5).]",
+   "template": "custom",
+   "parameters": {
+    "solo_target_trick": true,
+    "trick_targets_artifact_or_creature": true,
+    "grants_temp_indestructible": true,
+    "grants_temp_hexproof": true,
+    "cast_scry": 1
+   }
+  },
+  {
    "name": "Worn Powerstone",
    "mana_cost": "{3}",
    "types": [

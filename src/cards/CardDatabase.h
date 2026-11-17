@@ -3735,6 +3735,23 @@ struct CardParams
     // stripped from the canonical form in CardDatabase.cpp). Drift is caught instead by
     // audit_card_fields.py, which cross-checks this flag against the authoritative Scryfall text.
     bool trick_own_target_only = false;
+    // Loran's Escape: "Target ARTIFACT OR CREATURE gains ..." -- the legal set is every artifact or
+    // creature on the battlefield, EITHER side (no "you control"), minus what the spell cannot target
+    // (shroud; an opponent's hexproof -- ArtifactOrCreatureTrickTargetLegal). Each legal target is its
+    // own searched cast variant (CollectActions' artifact-or-creature branch, with the identity and
+    // no-effect folds stated there) and ResolveSoloTargetTrick resolves the declared id on either side.
+    // Every other solo_target_trick keeps the own-creature machinery (false = byte-identical).
+    bool trick_targets_artifact_or_creature = false;
+    // Loran's Escape: "gains ... indestructible until end of turn" -> Permanent::temp_indestructible
+    // (the Boros Charm field: read by Permanent::HasKeyword(Indestructible), i.e. by every lethal-damage
+    // and destroy kill path, and cleared at cleanup in both worlds).
+    bool grants_temp_indestructible = false;
+    // Loran's Escape: "gains hexproof until end of turn". RECORDED, NOT MODELLED (PROVISIONAL, goldfish-
+    // inert): hexproof stops only OPPONENTS' spells and abilities (CR 702.11b) and the passive opponent
+    // never targets; our own reflection triggers may still target it. No Permanent state is set. The one
+    // place it would bite -- OUR spell targeting an OPPONENT's Loran'd creature -- is honoured by
+    // ArtifactOrCreatureTrickTargetLegal (see there).
+    bool grants_temp_hexproof = false;
     // Fists of Flame: "+N/+0 for each card you've drawn this turn", computed AT RESOLUTION per
     // copy, after that copy's own cast_draw (draw first, then count -- oracle order), off
     // Player::cards_drawn_this_turn. 0 = no drawn-count pump.

@@ -1038,3 +1038,203 @@ TEST_CASE("rfx step 6: the search BRANCHES the Reckoner's target over the Sliver
         CHECK(exec.players[1].life == roll.players[1].life);
     }
 }
+
+// ---- STEP 7: Loran's Escape (design 4.5 / 9 / 10 step 7) --------------------------------------------------
+
+namespace
+{
+const Permanent* FindByName(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return &p; } }
+    return nullptr;
+}
+// A board where Loran's Escape is cast in main 1 alongside Blasphemous Act: a summoning-sick Boros Reckoner
+// (#1901, no attack line) and a summoning-sick Mogg Maniac (#1902) -- the two NON-inert targets -- plus the
+// three no-effect targets (Mind Stone #1903, Stuffy Doll #1904 with its printed indestructible, chosen the
+// opponent) and two identical opponent Spirits (#1905, #1906). Five creatures: the Act costs 9 - 5 = {3}{R};
+// lands: Plains + 6 Mountains (the Escape's {W} and the Act together).
+GameState LoranBoard(bool with_act, bool gc_on_reckoner)
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    PutRfx(s, "Plains", 1910);
+    for (int i = 0; i < 6; ++i) { PutRfx(s, "Mountain", 1911 + i); }
+    PutRfx(s, "Boros Reckoner", 1901).entered_this_turn = true;
+    PutRfx(s, "Mogg Maniac", 1902).entered_this_turn = true;
+    PutRfx(s, "Mind Stone", 1903);
+    Permanent& d = PutRfx(s, "Stuffy Doll", 1904);
+    d.chosen_player = 1;
+    d.entered_this_turn = true;
+    d.tapped = true;   // no ping line: keep the plan set to the Loran's / Act axes
+    TokenRfx(s, 1905, 1, 1, 1, "Spirit");
+    TokenRfx(s, 1906, 1, 1, 1, "Spirit");
+    if (gc_on_reckoner) { AttachGc(s, 1907, 1901); }
+    Card lor = DefRfx("Loran's Escape").card; lor.m_number = 1920;
+    s.players[0].hand.push_back(lor);
+    if (with_act) { Card act = DefRfx("Blasphemous Act").card; act.m_number = 1921; s.players[0].hand.insert(s.players[0].hand.begin(), act); }
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1930 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+int LoranTargetOf(const TurnSolver::Plan& p)
+{
+    for (const Action& a : p.actions) { if (a.card_name.str() == "Loran's Escape") { return a.enchant_target; } }
+    return 0;
+}
+}   // namespace
+
+TEST_CASE("rfx step 7: Loran's Escape's card data (artifact-or-creature target, indestructible, inert hexproof, scry 1)")
+{
+    const CardDefinition& d = DefRfx("Loran's Escape");
+    CHECK(d.card.IsInstant());
+    CHECK(d.card.m_mana_cost.ManaValue() == 1);
+    CHECK(d.params.solo_target_trick);
+    CHECK(d.params.trick_targets_artifact_or_creature);
+    CHECK_FALSE(d.params.trick_own_target_only);
+    CHECK(d.params.grants_temp_indestructible);
+    CHECK(d.params.grants_temp_hexproof);
+    CHECK(d.params.cast_scry == 1);
+    // Legal set: artifacts and creatures, either side; not lands; not an opponent's Escaped (hexproof) creature.
+    GameState s = LoranBoard(false, false);
+    for (const Permanent& p : s.battlefield)
+    {
+        INFO(p.card.m_name.str());
+        CHECK(ArtifactOrCreatureTrickTargetLegal(s, 0, p) == !p.card.IsLand());
+    }
+    Permanent* spirit = nullptr;
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 1905) { spirit = &p; } }
+    REQUIRE(spirit != nullptr);
+    spirit->temp_indestructible = true;
+    CHECK_FALSE(ArtifactOrCreatureTrickTargetLegal(s, 0, *spirit));
+}
+
+TEST_CASE("rfx step 7: an Escaped Boros Reckoner survives Blasphemous Act and reflects 13; the scry fires")
+{
+    GameState s = LoranBoard(false, false);
+    const CardDefinition& lor = DefRfx("Loran's Escape");
+    // The scry goes through ScryTop: under a top chooser (the viewer's) it is ASKED, with this card as the source.
+    int asked = 0;
+    TopChooser chooser = [&](const GameState&, const std::string& source, const std::vector<Card>& looked, LookKind kind)
+    {
+        ++asked;
+        CHECK(source == "Loran's Escape");
+        CHECK(looked.size() == 1);
+        CHECK(kind == LookKind::Scry);
+        return TopDisposition{};   // bottom it
+    };
+    const int top_before = s.players[0].library.front().m_number;
+    g_play_top_chooser = &chooser;
+    const bool resolved = ResolveSoloTargetTrick(s, 0, lor, 1901, 0, 0);
+    g_play_top_chooser = nullptr;
+    CHECK(resolved);
+    CHECK(asked == 1);
+    CHECK(s.players[0].library[s.players[0].library.size() - 1].m_number == top_before);   // bottomed
+    REQUIRE(Find(s, 1901) != nullptr);
+    CHECK(Find(s, 1901)->temp_indestructible);
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    REQUIRE(Find(s, 1901) != nullptr);                     // survived 13 (CR 702.12b)
+    CHECK(Find(s, 1901)->damage == 13);
+    CHECK(Find(s, 1904) != nullptr);                       // the Doll (printed indestructible) too
+    CHECK(Find(s, 1902) == nullptr);                       // the Maniac died (LKI reflection still dealt)
+    CHECK(Find(s, 1905) == nullptr);
+    CHECK(Find(s, 1903) != nullptr);                       // Mind Stone is not a creature
+    // Reckoner 13 (front: the face) + Maniac 13 + the Doll 13 (chosen: the opponent) -> 20 - 39.
+    CHECK(s.players[1].life == 20 - 39);
+    {   // the same Act WITHOUT the Escape: the Reckoner dies
+        GameState t = LoranBoard(false, false);
+        PerformDamageAllCreatures(t, 0, DefRfx("Blasphemous Act"), 13);
+        CHECK(Find(t, 1901) == nullptr);
+    }
+}
+
+TEST_CASE("rfx step 7: an Escaped Reckoner with Guilty Conscience loops to the kill under one sweep, and stops")
+{
+    for (int life : { 20, 60 })
+    {
+        INFO("opponent life ", life);
+        GameState s = ArmedState();
+        s.players[1].life = life;
+        PutRfx(s, "Boros Reckoner", 1950);
+        AttachGc(s, 1951, 1950);
+        REQUIRE(ResolveSoloTargetTrick(s, 0, DefRfx("Loran's Escape"), 1950, 0, 0));
+        PerformDamageAllCreatures(s, 0, DefRfx("Chain Reaction"), 1);   // a ping-sized sweep: X = 1
+        CHECK(s.players[1].life <= 0);
+        CHECK(s.players[1].life > -1 * 1 - 1);    // stops AT the kill: each cycle moves exactly 1
+        CHECK(s.players[0].life == 20);
+        REQUIRE(Find(s, 1950) != nullptr);
+        CHECK(dmgrx::t_last_drain.stop == dmgrx::DrainStop::GameOver);
+        CHECK(dmgrx::t_last_drain.resolutions <= 2 * life + 1);
+    }
+}
+
+TEST_CASE("rfx step 7: the Escape's target is SEARCHED (folds stated), and every branch replays in the executor")
+{
+    const GameState initial = LoranBoard(false, false);
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    std::set<int> targets;
+    for (const auto& p : plans) { const int t = LoranTargetOf(p); if (t != 0) { targets.insert(t); } }
+    // Reckoner and Maniac each; ONE opponent Spirit (the identity fold); ONE no-effect representative (Mind
+    // Stone and the Doll are the same scry-only line; own battlefield first, in battlefield order).
+    CHECK(targets.count(1901) == 1);
+    CHECK(targets.count(1902) == 1);
+    CHECK(targets.count(1905) + targets.count(1906) == 1);
+    CHECK(targets.count(1903) + targets.count(1904) == 1);
+    CHECK(targets.size() == 4);
+    int checked = 0;
+    for (const auto& p : plans)
+    {
+        const int t = LoranTargetOf(p);
+        if (t == 0) { continue; }
+        INFO("Loran's target ", t);
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        REQUIRE(Find(roll, t) != nullptr);
+        REQUIRE(Find(exec, t) != nullptr);
+        CHECK(Find(roll, t)->temp_indestructible);
+        CHECK(Find(exec, t)->temp_indestructible);
+        for (const Permanent& q : roll.battlefield)
+        {
+            const Permanent* e = Find(exec, q.card.m_number);
+            REQUIRE(e != nullptr);
+            CHECK(e->temp_indestructible == q.temp_indestructible);
+        }
+        // The scry fired in both worlds the same way (same library order).
+        REQUIRE(roll.players[0].library.size() == exec.players[0].library.size());
+        for (std::size_t i = 0; i < roll.players[0].library.size(); ++i)
+        { CHECK(roll.players[0].library[i].m_number == exec.players[0].library[i].m_number); }
+        ++checked;
+    }
+    CHECK(checked >= 4);
+}
+
+TEST_CASE("rfx step 7: the Escape before the Act is a reachable plan, and it keeps the Reckoner")
+{
+    // The Act sits FIRST in hand: the line must not depend on hand order.
+    const GameState initial = LoranBoard(true, false);
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    int found = 0;
+    for (const auto& p : plans)
+    {
+        if (LoranTargetOf(p) != 1901) { continue; }
+        const bool act = std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+            { return a.card_name.str() == "Blasphemous Act"; });
+        if (!act) { continue; }
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        if (Find(roll, 1901) == nullptr) { continue; }
+        // (the Reckoner's own 13 is a searched target too: the face gives 20 - 39)
+        if (roll.players[1].life == 20 - 39) { ++found; }
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(Find(exec, 1901) != nullptr);
+        CHECK(exec.players[1].life == roll.players[1].life);
+    }
+    CHECK(found >= 1);
+}

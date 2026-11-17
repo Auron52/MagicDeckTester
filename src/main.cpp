@@ -7686,7 +7686,10 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
             const bool trick = def.params.solo_target_trick;
             const bool activated_target = def.params.tap_target_pump_cost.has_value();
-            const std::string ability_desc = !activated_target ? std::string()
+            const std::string ability_desc = (trick && def.params.grants_temp_indestructible)
+                ? std::string("given indestructible (and hexproof) until end of turn")
+                  + (def.params.cast_scry > 0 ? "; then you scry " + std::to_string(def.params.cast_scry) : std::string())
+                : !activated_target ? std::string()
                 : def.params.tap_target_pump_sets_island ? "made an Island until end of turn"
                 : def.params.tap_target_pump_taps_target_land ? "tapped"
                 : def.params.tap_target_pump_grants_unblockable ? "unblockable this turn"
@@ -7826,6 +7829,19 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     if (!TapTargetPumpTargetLegalFor(s, p, controller, def)) { continue; }
                     legal.push_back({1, bi, 0});
                     legal_labels.push_back(p.card.m_name.str()
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                }
+            }
+            else if (trick && def.params.trick_targets_artifact_or_creature)
+            {
+                // Loran's Escape: "target artifact or creature" -- every artifact or creature, EITHER side, the
+                // engine's own legality predicate (shroud; an opponent's hexproof, incl. an earlier Escape's).
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+                    if (!ArtifactOrCreatureTrickTargetLegal(s, controller, p)) { continue; }
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s)
                         + (p.controller_index == controller ? " (yours)" : " (opponent)"));
                 }
             }

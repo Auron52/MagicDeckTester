@@ -22882,6 +22882,75 @@ static bool SubsetHasIllegalSplice(const GameState& state,
     return false;
 }
 
+// LORAN'S ESCAPE no-effect fold (CollectActions' artifact-or-creature branch). Is a target-number choice of
+// `def` (a trick_targets_artifact_or_creature spell) one whose resolution changes NOTHING but the untargeted
+// riders (the scry)? Every such target is the same line, so one representative stands for all of them -- a
+// SOUND identity fold (the boards after resolution are equal), not a preference.
+//
+//   * The TARGETED payload must be exactly "indestructible (+ hexproof, recorded only)": every other term
+//     ApplyTrickPayload writes onto the recipient is zero. A card adding one is not folded (false).
+//   * The recipient already has indestructible (printed -- the Doll -- or an earlier grant): setting
+//     temp_indestructible again is a no-op, and nothing reads it apart from HasKeyword(Indestructible).
+//     For an OWN creature the targeting itself must also be inert: no spell-target watcher (Wild Defiance),
+//     no copy magnet as the recipient, no Frontline Heroism live or in hand ("targets only a single creature
+//     you control" fires for ANY payload).
+//   * Or the recipient is a NONCREATURE artifact (Mind Stone) that cannot become a creature this turn (not
+//     animated, no can_animate) and that nothing this turn could DESTROY: indestructible is read only by
+//     lethal damage (creatures) and destroy effects, and the engine's only destroy of a noncreature permanent
+//     is the cast trigger of cast_trigger_destroy_target_permanents (Ulamog, the Infinite Gyre) -- refused
+//     while such a card is in the caster's hand or library.
+// `hand_def` != nullptr asks the question for a same-plan HAND target (its battlefield state is fresh).
+static bool IndestructibleOnlyTargetPayload(const CardParams& pp)
+{
+    return pp.grants_temp_indestructible
+        && pp.power_bonus == 0 && pp.tough_bonus == 0 && pp.counters_on_target == 0
+        && !pp.grants_temp_haste && !pp.grants_temp_double_strike && !pp.trick_destroy_at_end_if_attacked
+        && !pp.trick_double_power && !pp.token_copy_of_target
+        && pp.mainphase_power_bonus == 0 && pp.mainphase_tough_bonus == 0
+        && pp.gy_self_power_bonus == 0 && pp.pump_per_cards_drawn_power == 0
+        && pp.pump_per_treasure_power == 0 && pp.pump_per_treasure_tough == 0
+        && pp.pump_per_life_gained_power == 0 && pp.pump_per_life_gained_tough == 0
+        && pp.pump_per_x_power == 0 && pp.pump_per_x_tough == 0
+        && pp.kicked_power_bonus == 0 && pp.kicked_tough_bonus == 0;
+}
+static bool IndestructibleGrantTargetInert(const GameState& state, int controller, const CardDefinition& def,
+                                           const Permanent* p, const CardDefinition* hand_def)
+{
+    if (!IndestructibleOnlyTargetPayload(def.params)) { return false; }
+    const Card& c = p != nullptr ? p->card : hand_def->card;
+    const CardDefinition* cd = p != nullptr ? (p->def_absent ? nullptr : CardDatabase::Instance().LookupCached(p->card))
+                                            : hand_def;
+    const bool own = p == nullptr || p->controller_index == controller;
+    const bool creature = c.IsCreature() || (p != nullptr && p->is_animated);
+    if (creature)
+    {
+        const bool indestructible = p != nullptr ? p->HasKeyword(Keyword::Indestructible)
+                                                 : c.HasKeyword(Keyword::Indestructible);
+        if (!indestructible) { return false; }
+        if (!own) { return true; }
+        if (state.deck_has_spell_target_watch) { return false; }
+        if (cd != nullptr && cd->params.copies_solo_targeted_spells) { return false; }
+        if (HeroismCopiesLive(state, controller) > 0) { return false; }
+        for (const Card& h : state.players[static_cast<std::size_t>(controller)].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd != nullptr && hd->params.frontline_copy_tokens > 0) { return false; }
+        }
+        return true;
+    }
+    if (!c.HasType(CardType::Artifact)) { return false; }
+    if (cd == nullptr || cd->params.can_animate) { return false; }
+    const Player& pl = state.players[static_cast<std::size_t>(controller)];
+    auto destroyer = [](const Card& h)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        return hd != nullptr && hd->params.cast_trigger_destroy_target_permanents > 0;
+    };
+    for (const Card& h : pl.hand)    { if (destroyer(h)) { return false; } }
+    for (const Card& h : pl.library) { if (destroyer(h)) { return false; } }
+    return true;
+}
+
 // Reject a solo-target trick cast whose declared target (enchant_target = a card.m_number) is
 // neither an own battlefield creature nor a creature this same subset casts from hand -- a
 // targeted spell cannot be cast without its target (CR 601.2c). Same shape as
@@ -23028,7 +23097,12 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
             }
             if (cands[k].kind != Action::Kind::CastFromHand) { continue; }
             const CardDefinition* kd = cands[k].def;
-            if (kd && kd->card.IsCreature() && cands[k].card_name == cands[j].trick_hand_target)
+            // Loran's Escape ("target artifact or creature") may name a same-plan hand ARTIFACT too.
+            const bool art_ok = kd != nullptr && !kd->card.IsCreature() && kd->card.HasType(CardType::Artifact)
+                && [&] { const CardDefinition* jd = cands[j].def ? cands[j].def
+                             : CardDatabase::Instance().LookupInterned(cands[j].card_name);
+                         return jd != nullptr && jd->params.trick_targets_artifact_or_creature; }();
+            if (kd && (kd->card.IsCreature() || art_ok) && cands[k].card_name == cands[j].trick_hand_target)
             { found = true; break; }
         }
         if (!found) { return true; }
@@ -43450,6 +43524,72 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
               }
               }
             };
+            // LORAN'S ESCAPE ("target artifact or creature", either side; trick_targets_artifact_or_creature).
+            // Its own legal set, every member a SEARCHED variant (enchant_target = the permanent's stable id,
+            // replayed by the executor through the same ResolveSoloTargetTrick), with two SOUND folds:
+            //   * IDENTITY: two battlefield targets with equal CastTriggerTargetFoldKey (the "identical in all
+            //     state" key: name, characteristics, counters, tapped / sick / control age, token provenance,
+            //     controller; anything attached, damaged or otherwise marked is a singleton) and equal
+            //     temp_indestructible are the same line -- the boards after resolution differ only in which
+            //     per-copy number holds the grant (four opponent Spirits = one target);
+            //   * NO EFFECT (IndestructibleGrantTargetInert): every target whose resolution changes nothing
+            //     but the scry -- Mind Stone, the Doll (printed indestructible), an already-Loran'd creature --
+            //     is one line; ONE representative is emitted (own battlefield first, then the opponent's, then
+            //     a same-plan hand card only when no battlefield one exists: a hand target needs its cast too,
+            //     so with a battlefield representative it is the same line under a stricter subset).
+            // Same-plan HAND creatures are offered (deduped by name, the SubsetHasMissingTrickTarget pairing):
+            // "cast Boros Reckoner, Loran's it, then Blasphemous Act". The provider's TrickTargetCandidates is
+            // NOT consulted: it speaks own-creature ids for the pump tricks; a Loran's restriction is a hook of
+            // its own (design 4.5 / 8, step 10). Timing within the main (before / after a sweeper) is the cast
+            // order, not a variant here. Only this card carries the param -> every other trick is unchanged.
+            if (def.params.trick_targets_artifact_or_creature)
+            {
+                const int me = state.active_player_index;
+                std::vector<std::uint64_t> seen_keys;
+                std::vector<int> linked;
+                LandfallTargetLinks(state, linked);
+                int inert_own = 0, inert_opp = 0, inert_hand = 0;
+                std::string inert_hand_name;
+                std::vector<int> opp_targets;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (!ArtifactOrCreatureTrickTargetLegal(state, me, p)) { continue; }
+                    if (IndestructibleGrantTargetInert(state, me, def, &p, nullptr))
+                    {
+                        int& slot = p.controller_index == me ? inert_own : inert_opp;
+                        if (slot == 0) { slot = p.card.m_number; }
+                        continue;
+                    }
+                    std::uint64_t k = 0;
+                    if (CastTriggerTargetFoldKey(state, p, k, &linked))
+                    {
+                        k ^= p.temp_indestructible ? 0x1D357ull : 0ull;
+                        if (std::find(seen_keys.begin(), seen_keys.end(), k) != seen_keys.end()) { continue; }
+                        seen_keys.push_back(k);
+                    }
+                    if (p.controller_index == me) { emit(p.card.m_number, 0); }
+                    else                          { opp_targets.push_back(p.card.m_number); }
+                }
+                std::unordered_set<std::string> seen_hand;
+                for (const Card& hc : ap.hand)
+                {
+                    if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd == nullptr || !(hd->card.IsCreature() || hd->card.HasType(CardType::Artifact))) { continue; }
+                    if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
+                    if (IndestructibleGrantTargetInert(state, me, def, nullptr, hd))
+                    {
+                        if (inert_hand == 0) { inert_hand = hc.m_number; inert_hand_name = hc.m_name.str(); }
+                        continue;
+                    }
+                    emit(hc.m_number, 0, hc.m_name.str());
+                }
+                for (int num : opp_targets) { emit(num, 0); }
+                if (inert_own != 0)       { emit(inert_own, 0); }
+                else if (inert_opp != 0)  { emit(inert_opp, 0); }
+                else if (inert_hand != 0) { emit(inert_hand, 0, inert_hand_name); }
+                continue;
+            }
             // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
             // fold: two targets whose (name, attack-eligibility, temp bonuses, counters,
             // temp-haste) match are interchangeable for EVERY trick payload -- the pump/haste/
