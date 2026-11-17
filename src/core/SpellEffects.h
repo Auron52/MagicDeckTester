@@ -48180,6 +48180,15 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         const int keep = UnseenScarceNamedMask(*t_pay_hand_ctx->s, t_pay_hand_ctx->active, later, reserve);
         if (keep != 0)
         {
+            // TEMP DIAGNOSTIC (MTG_UNSEEN_SCARCE_TRACE, default off): every live reorder, real or searched.
+            static const bool s_trace = EnvOn("MTG_UNSEEN_SCARCE_TRACE");
+            if (s_trace)
+            {
+                std::fprintf(stderr, "[unseen-scarce] T%d gen=%d keep=%d float=W%dU%dB%dR%dG%dC%d later=%d/%d/%d/%d/%d\n",
+                             t_pay_hand_ctx->s->turn_number, cost.generic, keep, reserve.white, reserve.blue,
+                             reserve.black, reserve.red, reserve.green, reserve.colorless,
+                             later[0], later[1], later[2], later[3], later[4]);
+            }
             int* res[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
             int ord[5] = { 0, 1, 2, 3, 4 };
             if (const int* hp = PayHandPips(reserve, -1)) { PayHandColorOrder(reserve, hp, ord); }

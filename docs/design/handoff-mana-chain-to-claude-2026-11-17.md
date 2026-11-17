@@ -6,8 +6,12 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 **LATEST PUSH 21:04 UTC** (`af685ee3e`, rebased onto origin's Sea Creatures Hedge Maze commits, HeuristicArm.h
 appends kept on both sides; units 3,465/3,465, smoke same 46-row failset; next push not before 01:04 UTC 11-18).
-In flight: Cyclone gi 560506 trace (`build/scratch/claude_cyc/tr/run.sh`, prints TRACE-DONE), then the Ponder-first
-A/B. Uncommitted WIP: the three Ponder-first levers + `MTG_UNSEEN_SCARCE_TRACE` print.
+Trace gi 560506 DONE: UNSEEN_KEEP_SCARCE=1 reorders 46 payments, all in SIMULATED T4-T6 of the T1 search (none T1-3),
+and the T1 pick flips to Brainstorm (wins T5); =0 Ponder (T4). Every Ponder-first arm (T1, T1-2, T1-2+hand; lever on or
+off) casts T1 Ponder and wins T4: an ORDER-only change flips it, so the T1 choice is a near-tie the lever nudged
+(budget/tie channel, not a wrong payment). NC check (MTG_NC_SEARCH=1) killed after 85 min on one game (agent's own run).
+In flight: Ponder-first A/B, `build/scratch/claude_ponderfirst_ab/` (pid file `pid`, DONE marker, `compare.py`): arms
+base/pf1/pf12/pf12h, Cyclone games 570000-574999, binary = uncommitted WIP Release build copied to mtg.bin. Uncommitted WIP: the three Ponder-first levers + `MTG_UNSEEN_SCARCE_TRACE` print.
 
 Earlier: **PUSHED 16:44 UTC** (`f4ca329c9..8c99d110b`, next shared-branch push not before 20:44 UTC). It is rebased onto
 origin's Sea Creatures integration; the only conflict was HeuristicArm.h appends, with both kept and the order

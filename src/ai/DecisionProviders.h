@@ -4412,6 +4412,9 @@ public:
     bool CastOrderingCandidates(const GameState& s, const std::vector<Action>& plan_actions,
                                  const std::vector<Action>& reorder,
                                  std::vector<std::vector<int>>& out) const override;
+    // PONDER FIRST EARLY (MTG_CYCLONE_PONDER_FIRST_T1 / _T2, default OFF): a move-order tier, nothing removed.
+    bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                            const std::vector<int>& sel, bool projected_lethal) const override;
 };
 
 // ---- THE CYCLONE BUCKET MODEL, the USER's expendability rank (shared by the cleanup discard and, under

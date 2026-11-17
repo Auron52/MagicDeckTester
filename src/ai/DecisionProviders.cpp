@@ -38291,6 +38291,84 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
     return CyclonePonderKeepShuffleOn();
 }
 
+// ---- PONDER FIRST EARLY (MTG_CYCLONE_PONDER_FIRST_T1 / MTG_CYCLONE_PONDER_FIRST_T2, DEFAULT OFF) ------------------
+// USER 2026-11-17 on Cyclone gi 560506 (T1 Brainstorm, won T5; the other arm's T1 Ponder won T4): "Ponder should be
+// cast earlier because Brainstorm is more useful later. T1 is the worst time to cast Brainstorm typically, because you
+// cannot set up your topdeck or immediately shuffle away garbage." Then: "it could make sense to reorder them. I
+// wouldn't do that for all turns, though. It's important here that Brainstorm be a priority in later turns", and "I
+// think 1 and 2 is probably fine, though Brainstorm turn 2 is still solid, but given that this is just a reorder it
+// might be fine. we can A/B a few different options." So: on the early turns, a plan that casts a Ponder-shaped
+// cantrip (cast_reorder, no put-back) and no put-back cantrip (Brainstorm, Brainsurge) is TRIED FIRST among its peers
+// (MoveOrderLess's move_front tier, below wins_this_turn, above value). ORDER only: every plan is still searched and a
+// strictly better one still wins its pass; it matters for ties, cutoffs and what a cut-short pass reached.
+static bool CyclonePonderFirstT1On()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_T1");   // DEFAULT OFF
+    return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T1, on);
+}
+static bool CyclonePonderFirstT2On()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_T2");   // DEFAULT OFF; needs _T1
+    return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T2, on);
+}
+// THE TURN-2 HAND CONDITION (MTG_CYCLONE_PONDER_FIRST_T2_HAND, DEFAULT OFF; needs _T2). USER, same day: "I almost wonder
+// if it should be conditional on what we have in hand. Kind of complicated, but if we want to toss back cards the
+// Brainstorm -> Ponder order is indeed better." So on turn 2, when the hand holds JUNK to put back (cards the go-off
+// model rates dead, plus lands beyond the ones still needed -- CycloneGoOff, hand and board only, never the library)
+// AND a shuffle can follow (a Ponder in hand, or CycloneGoOff's shuffle_after: an open fetch, Myriad, LTP), the tier
+// fronts the BRAINSTORM-led plans instead (a put-back cantrip in the plan). Otherwise the Ponder-alone tier as above.
+static bool CyclonePonderFirstT2HandOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_T2_HAND");   // DEFAULT OFF; needs _T2
+    return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T2_HAND, on);
+}
+
+bool CycloneProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel, bool projected_lethal) const
+{
+    (void)projected_lethal;
+    if (!CyclonePonderFirstT1On()) { return false; }
+    const int last_turn = CyclonePonderFirstT2On() ? 2 : 1;
+    if (s.turn_number > last_turn) { return false; }
+    bool want_putback = false;
+    if (s.turn_number == 2 && CyclonePonderFirstT2HandOn())
+    {
+        const int me = s.active_player_index;
+        CantripReadiness r;
+        CycloneGoOff(s, me, r);
+        const int junk = r.dead_in_hand + std::max(0, r.aux[kAuxLandsHand] - r.aux[kAuxLandsNeeded]);
+        bool ponder_in_hand = false;
+        for (const auto& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.cast_reorder > 0 && d->params.put_back_from_hand == 0) { ponder_in_hand = true; }
+        }
+        want_putback = junk >= 1 && (ponder_in_hand || r.shuffle_after);
+    }
+    if (want_putback)
+    {
+        for (int j : sel)
+        {
+            const Action& a = cands[static_cast<std::size_t>(j)];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d != nullptr && d->params.put_back_from_hand > 0) { return true; }
+        }
+        return false;
+    }
+    bool ponder = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.put_back_from_hand > 0) { return false; }
+        if (d->params.cast_reorder > 0) { ponder = true; }
+    }
+    return ponder;
+}
+
 // ---- THE DRAFTED CAST ORDER (MTG_CYCLONE_CAST_ORDER, DEFAULT OFF) -------------------------------------------------
 // docs/design/cyclone-cast-order.md; USER review 2026-10-29: "The order looks reasonable" (judgement calls A, B, C at
 // the drafted defaults). Measured and reported; the USER adopts. MTG_CYCLONE_ORDER_DRAW_TURNS (the draft's item D, a

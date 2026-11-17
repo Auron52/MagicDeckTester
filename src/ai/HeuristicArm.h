@@ -977,6 +977,9 @@ enum Slot : int
     SEA_FETCH_MAZE,           // MTG_SEA_FETCH_MAZE  Sea Creatures (USER 2026-11-17 "Hedge maze is a maybe if we absolutely do not need it for mana." / "(if we do not need it for mana this turn it is possible, otherwise not)"): under the one-option fetch prune, Hedge Maze is admitted as a SECOND searched target, right after the untapped pick, exactly when one more mana of that pick's colours casts nothing more this turn (SeaFetchManaNeeded, the FiveColour RULE 6 solo + sequence test). Default OFF pending the USER; =1 -> admit
     UNSEEN_KEEP_SCARCE,       // MTG_UNSEEN_KEEP_SCARCE  a line that opens a breakpoint (g_line_opens_unseen) keeps the historical generic order, except that a floating colour the NAMED line still owes and no untapped source can make again pays generic last (SpendFloatingTowardCost, SpellEffects.h; UnseenScarceNamedMask, ManaPayment.cpp). Dragonstorm gate claude-dragonstorm-swap-20261117 s30083167 T7: Seething Song's {2} drained Lotus Bloom's {B}{B} before the red and the plan's Dragonlord Kolaghan lost its {B}. Default OFF pending the USER (Cyclone net +1 in the A/B); =1 enables
     PREPAY_CCO_CAST_DIG,      // MTG_PREPAY_CCO_CAST_DIG  the PREPAY_CCO_VIAL_DIG decline also covers a HARD-CAST ETB-dig creature (BatchPrepayMainCasts, TurnSolver.cpp). Pirates mana-clean claude-nearclean-20261117 s30108757 T4: the joint prepay of {Goblin Tomb Raider, Staunch Crewmate} tapped Spirebluff Canal and both Fiery Islets, left Secluded Courtyard's creature-only red, and the Bolt the dig's continuation casts was dropped. Default ON; =0 -> Vial puts only
+    CYCLONE_PONDER_FIRST_T1,  // MTG_CYCLONE_PONDER_FIRST_T1  Unpredictable Cyclone: on turn 1, a plan casting Ponder (cast_reorder, no put-back) and no put-back cantrip is TRIED FIRST among its peers (CycloneProvider::PlanMoveOrderFront; ORDER only, nothing removed). USER 2026-11-17: "Ponder should be cast earlier because Brainstorm is more useful later." Default OFF pending the A/B
+    CYCLONE_PONDER_FIRST_T2,  // MTG_CYCLONE_PONDER_FIRST_T2  extends MTG_CYCLONE_PONDER_FIRST_T1's tier to turn 2 (inert without it). USER: "I think 1 and 2 is probably fine ... we can A/B a few different options." Default OFF
+    CYCLONE_PONDER_FIRST_T2_HAND, // MTG_CYCLONE_PONDER_FIRST_T2_HAND  on turn 2 (needs _T2), junk in hand to put back + a shuffle to follow (Ponder in hand, open fetch, Myriad, LTP) fronts the BRAINSTORM-led plans instead. USER: "if we want to toss back cards the Brainstorm -> Ponder order is indeed better." Default OFF
     COUNT
 };
 
@@ -1898,6 +1901,9 @@ inline const char* Name(int slot)
         "MTG_SEA_FETCH_MAZE",
         "MTG_UNSEEN_KEEP_SCARCE",
         "MTG_PREPAY_CCO_CAST_DIG",
+        "MTG_CYCLONE_PONDER_FIRST_T1",
+        "MTG_CYCLONE_PONDER_FIRST_T2",
+        "MTG_CYCLONE_PONDER_FIRST_T2_HAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
