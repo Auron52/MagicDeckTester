@@ -2447,6 +2447,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.gates_enter_untapped              = params.value("gates_enter_untapped", false);
     p.mana_colors_of_controlled_subtype = params.value("mana_colors_of_controlled_subtype", std::string{});
     p.untap_own_permanent_entering_tapped = params.value("untap_own_permanent_entering_tapped", false);
+    // Maze's End I3: the land-drop engines (see CardDatabase.h).
+    p.static_extra_land_drops                  = params.value("static_extra_land_drops", 0);
+    p.opponent_land_play_put_land_from_hand    = params.value("opponent_land_play_put_land_from_hand", false);
+    p.endstep_may_dump_hand_lands_discard_hand = params.value("endstep_may_dump_hand_lands_discard_hand", false);
     if (params.contains("etb_sacrifice_unless_pay"))
         p.etb_sacrifice_unless_pay = ManaCostFromString(params["etb_sacrifice_unless_pay"].get<std::string>());
     p.chosen_color_adds_basic_land_type = params.value("chosen_color_adds_basic_land_type", false);

@@ -1713,6 +1713,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("echo", first.echo_choice != dup.echo_choice);
     pl("doth", first.doth_put_choice != dup.doth_put_choice);
     pl("eotfu", first.eot_face_up_choice != dup.eot_face_up_choice);
+    pl("xland", first.crossing_land_choice != dup.crossing_land_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
@@ -29603,6 +29604,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x4B4552414E4F53ull); fold(static_cast<uint64_t>(p.next_keranos_choice)); }
     if (p.eot_face_up_choice >= 0)
     { fold(0x454F54465550ull); fold(static_cast<uint64_t>(p.eot_face_up_choice)); }
+    if (p.crossing_land_choice >= 0)   // Maze's End I3: Manabond / Burgeoning (value-gated, own domain tag)
+    { fold(0x584C414E44ull); fold(static_cast<uint64_t>(p.crossing_land_choice)); }
     // Shadowborn INT-2's demon-trigger pin -- same must-fold rule, value-gated (own domain tag).
     if (p.demon_trigger_choice >= 0)
     { fold(0x44454D4F4Eull); fold(static_cast<uint64_t>(p.demon_trigger_choice)); }   // "DEMON"
@@ -30041,7 +30044,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.suspend_tutor_choice == -1
         && p.next_draw_dredge_choice == -1 && p.next_draw_dredge_pins.empty()
         && p.next_klothys_choice == -1 && p.next_keranos_choice == -1
-        && p.eot_face_up_choice == -1
+        && p.eot_face_up_choice == -1 && p.crossing_land_choice == -1
         && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
@@ -30106,6 +30109,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.next_klothys_choice >= 0
         || p.next_keranos_choice >= 0
         || p.eot_face_up_choice >= 0
+        || p.crossing_land_choice >= 0
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
@@ -31069,6 +31073,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x4B455241ull + static_cast<std::uint64_t>(p.next_keranos_choice)); }
     if (p.eot_face_up_choice >= 0)
     { h = Mix(h, 0x46435550ull + static_cast<std::uint64_t>(p.eot_face_up_choice)); }
+    if (p.crossing_land_choice >= 0)
+    { h = Mix(Mix(h, 0x584C414E44ull), static_cast<std::uint64_t>(p.crossing_land_choice)); }
     if (p.demon_trigger_choice >= 0)
     { h = Mix(h, 0x444Dull + static_cast<std::uint64_t>(p.demon_trigger_choice)); }   // value-gated (Shadowborn)
     if (!p.champion_pins.empty())
@@ -35721,6 +35727,30 @@ bool TurnSolver::TopLandNewlyPlayable(int top_snapshot, const GameState& state, 
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
     const int n = PlayableTopLandNumber(state);
     return n != 0 && n != top_snapshot;
+}
+
+int TurnSolver::LandDropSnapshot(const GameState& state)
+{
+    if (!state.deck_has_static_land_drops) { return 0; }
+    const Player& ap = state.players[state.active_player_index];
+    return (ap.LandDropsAvailable() << 8) | (ap.lands_played_this_turn & 0xFF);
+}
+
+bool TurnSolver::LandDropNewlyOpen(int snapshot, const GameState& state, bool drop_reserved)
+{
+    if (!state.deck_has_static_land_drops || drop_reserved) { return false; }
+    const Player& ap = state.players[state.active_player_index];
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    const bool played = ap.lands_played_this_turn > (snapshot & 0xFF);
+    const bool opened = ap.LandDropsAvailable() > (snapshot >> 8);
+    if (!played && !opened) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { return true; }
+    }
+    return false;
 }
 
 std::vector<int> TurnSolver::GraveyardEquipmentNumbers(const GameState& state)
@@ -58406,6 +58436,7 @@ namespace solvememo
             || a.next_klothys_choice != b.next_klothys_choice
             || a.next_keranos_choice != b.next_keranos_choice
             || a.eot_face_up_choice != b.eot_face_up_choice
+            || a.crossing_land_choice != b.crossing_land_choice
             || a.bp_pre != b.bp_pre
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
@@ -70046,6 +70077,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the plan's own land block, so a top play that leaves another top behind for an extra drop arms
     // too. 0 (one bool test) for every deck without a play-from-top card.
     int top_at_section = PlayableTopLandNumber(state);
+    // ...and the EXTRA-DROP half (Exploration; LandDropNewlyOpen), reset with the others. 0 for every other deck.
+    int drops_at_section = TurnSolver::LandDropSnapshot(state);
     // ...and the GRAVEYARD-EQUIPMENT half (Forge Anew; EquipmentReturnedFromGraveyard), reset with
     // the other two at every breakpoint. Empty for every deck without a graveyard-Equipment return.
     std::vector<int> gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
@@ -70831,6 +70864,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             seq_at_section  = g_hand_entry_seq;
         }
         top_at_section = PlayableTopLandNumber(state);   // ...and its library-top half (Courser)
+        drops_at_section = TurnSolver::LandDropSnapshot(state);   // ...and the extra-drop half (Exploration)
         gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);   // ...and Forge Anew's
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
@@ -77888,7 +77922,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
              && TurnSolver::SectionHandGainedACard(hand_at_section, state))
             || TurnSolver::TopLandNewlyPlayable(top_at_section, state, karoo_deferred)
             // the graveyard-Equipment half (Forge Anew), likewise outside the sequence pre-filter
-            || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_section, state)))
+            || TurnSolver::EquipmentReturnedFromGraveyard(gyeq_at_section, state)
+            // the extra-drop half (Exploration): a land played, another drop open, a land in hand
+            || TurnSolver::LandDropNewlyOpen(drops_at_section, state, karoo_deferred)))
     {
         deferred_cantrip_resolve = true;
         deferred_hand_before     = hand_at_section;
@@ -79046,6 +79082,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Pyrohemia's no-creatures end-step sacrifice (lockstep twin of GameEngine::EndStep).
     PerformEndStepNoCreatureSacrifice(state);
     // Abiding Grace's end-step "choose one" (lockstep twin of GameEngine::EndStep, same position: last).
+    // Manabond's optional end-step dump (Maze's End I3; the searched crossing-land pin). Lockstep twin in the
+    // other world, same position. Deck-gated -> a no-op for every other deck.
+    PerformEndStepManabond(state);
     PerformEndStepAbidingGrace(state, grace_snapshot);
     // Reaper's morbid destroy + Sire's discard (lockstep twin of GameEngine::EndStep, same position/order).
     PerformEndStepMorbidDestroy(state, morbid_triggers);
@@ -79236,6 +79275,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
     { if (!opponent_turn()) { return false; } }
     state.scripted_eot_face_up = -1;   // twin of RunTurnFrom's expiry
+    state.scripted_crossing_lands = -1;   // Manabond / Burgeoning pin (I3): consumed by this crossing, expires here
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
     state.ephara_creature_entered_this_turn = false;
     // DAY / NIGHT turn-based check (CR 726.3a) -- lockstep twin of GameEngine::RunTurnFrom's call,
@@ -79306,7 +79346,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
     ap.lands_played_this_turn     = 0;
-    ap.bonus_land_drops_this_turn = 0;
+    ap.bonus_land_drops_this_turn = StaticExtraLandDrops(state, state.active_player_index);   // Exploration (I3); 0 elsewhere
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // Niv watermark backstop (lockstep w/ UntapStep)
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
     ap.first_draw_card_number_this_turn = 0;
@@ -79841,7 +79881,24 @@ static bool RolloutLandActColorEnabled()
 // colorless-only lands (e.g. Mutavault) so colored spells stay castable.
 // Two-pass: multi-color first, then any land. Used as the fallback when a plan did
 // not search its land (depth-0 static Solve plans and the rollout horizon leaf).
+static std::string SimulateLandPlayOne(GameState& state);
+// EXPLORATION (Maze's End I3): the greedy drop -- the PERMITTED policy beyond the horizon and the depth-0 static
+// plans, never a searched frame's land (those carry land_decided) -- takes EVERY open drop, one greedy land at a
+// time, so a playout does not undervalue a static extra drop. Deck-gated: one call for every other deck.
+// Returns the FIRST land played (its callers' contract).
 static std::string SimulateLandPlay(GameState& state)
+{
+    std::string first = SimulateLandPlayOne(state);
+    if (!state.deck_has_static_land_drops || first.empty()) { return first; }
+    for (int guard = 0; guard < 8; ++guard)
+    {
+        const Player& ap = state.ActivePlayer();
+        if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { break; }
+        if (SimulateLandPlayOne(state).empty()) { break; }
+    }
+    return first;
+}
+static std::string SimulateLandPlayOne(GameState& state)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable())
@@ -89568,6 +89625,34 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (d && d->params.etb_return_equipment_from_gy) { mask |= 1 << 10; break; }
         }
     }
+    // SITE 10's EXTRA-DROP ROUTE (Exploration, Maze's End I3; TurnSolver::LandDropNewlyOpen at the section window
+    // in both worlds). A plan that PLAYS a land, or CASTS a static extra-drop source, while another drop would
+    // still be open and another land would still be in hand, is marked so the continuation (the next drop and
+    // what follows it) is fanned -- else BpUnbranchedCanon's front would pick the second land greedily inside the
+    // window. A SUPERSET (a marked plan whose continuation plays nothing collapses onto its base -- wasted nodes,
+    // never a wrong answer). Deck-constant gated: one bool test for every other deck.
+    if (state.deck_has_static_land_drops && BpPutInHandEnabled() && !(mask & (1 << 10)))
+    {
+        const Player& ap = state.ActivePlayer();
+        const bool plays = p.land_decided && !p.land_to_play.empty();
+        int avail = ap.LandDropsAvailable();
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d) { avail += d->params.static_extra_land_drops; }
+        }
+        const int used = ap.lands_played_this_turn + (plays ? 1 : 0);
+        int lands_left = 0;
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand()) { ++lands_left; }
+        }
+        if (plays && !p.land_from_top) { --lands_left; }
+        if ((plays || avail > ap.LandDropsAvailable()) && used < avail && lands_left > 0) { mask |= 1 << 10; }
+    }
     // SITE 10's LOOK-TOP ROUTE (Risen Reef, 2026-10-18). An entering Elemental with a look-top watcher
     // out (or one the plan brings -- Reef's own entry is self-inclusive) puts the library top into HAND
     // whenever it is a nonland or a land not put onto the battlefield, and both worlds arm site 10 for
@@ -99270,7 +99355,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 744;   // Recheck after integrating Boars axes with dynamic Mihail choices.
+static constexpr std::size_t kPlanDomAssertedSize = 752;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below)   // Recheck after integrating Boars axes with dynamic Mihail choices.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -99457,6 +99542,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (int v : pl.next_draw_dredge_pins) { add(v); }
             add(pl.next_klothys_choice);
             add(pl.next_keranos_choice);
+            add(pl.crossing_land_choice);   // Manabond / Burgeoning (I3): in padding, so the size pin cannot catch it
             add(pl.eot_face_up_choice);   // morph's opponent-end-step flip: in padding, so the size pin cannot catch it
             add(pl.demon_trigger_choice);   // Shadowborn's demon triggers: in padding, so the size pin cannot catch it
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
@@ -99682,6 +99768,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (a.next_klothys_choice != b.next_klothys_choice) { d += " next_klothys_choice"; }
     if (a.next_keranos_choice != b.next_keranos_choice) { d += " next_keranos_choice"; }
     if (a.eot_face_up_choice != b.eot_face_up_choice) { d += " eot_face_up_choice"; }
+    if (a.crossing_land_choice != b.crossing_land_choice) { d += " crossing_land_choice"; }
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
@@ -102237,6 +102324,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         if (state.scripted_boundary_klothys >= 0) { mix(0x4B4C4F54ull + state.scripted_boundary_klothys); }
         if (state.scripted_boundary_keranos >= 0) { mix(0x4B455241ull + state.scripted_boundary_keranos); }
         if (state.scripted_eot_face_up >= 0) { mix(0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
+        if (state.scripted_crossing_lands >= 0) { mix(0x584C414E44ull); mix(static_cast<std::uint64_t>(state.scripted_crossing_lands)); }
         if (state.m1_hand_turn == state.TurnSeq())
         {
             mix(0x11BA + static_cast<std::uint64_t>(state.m1_hand_n));
@@ -106635,6 +106723,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
     { Fold(k, 0x4B455241ull + state.scripted_boundary_keranos); }
     if (state.scripted_eot_face_up >= 0)
     { Fold(k, 0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
+    if (state.scripted_crossing_lands >= 0)   // Manabond / Burgeoning (I3)
+    { Fold(k, 0x584C414E44ull); Fold(k, static_cast<std::uint64_t>(state.scripted_crossing_lands)); }
     if (state.deck_has_turn_gods)
     {
         Fold(k, 0x474F44530000ull + (state.keranos_first_own_draw_seen ? 1ull : 0ull));
@@ -109954,6 +110044,37 @@ static bool FaceUpUncoveredPending(const GameState& state)
         && !HumanPlayActive() && !EchoEdgeFoldHere(state)
         && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state));
 }
+// MAZE'S END I3 -- THE CROSSING LAND PUTS (SpellEffects.h, "THE CROSSING LAND PUTS"): Manabond's end-step yes/no
+// (+ each dumped land's as-enters choice) and Burgeoning's which-land per trigger on the opponent's land play.
+// Live when the state's pin does not cover the crossing and a source of ours could ask: a Manabond with a non-empty
+// hand, or a Burgeoning with a land in hand while the opponent plays lands. Same scope as the face-up axis above
+// (beyond the horizon -- a narrowed playout, the d0 runner -- the front is the permitted playout greedy; at a
+// constant-leaf edge a deeper pass searches the crossing; human play answers the prompts). Each ordinal's width is
+// learned per crossing (t_crossing_land_probe), the Defense of the Heart odometer shape. False for every other deck.
+static bool CrossingLandUncoveredPending(const GameState& state)
+{
+    if (!state.deck_has_crossing_land_put || state.scripted_crossing_lands >= 0 || g_bp_enum_depth != 0
+        || t_rollout_narrow || HumanPlayActive() || EchoEdgeFoldHere(state)) { return false; }
+    const int me = state.active_player_index;
+    bool manabond = false, burgeoning = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        manabond   = manabond || d->params.endstep_may_dump_hand_lands_discard_hand;
+        burgeoning = burgeoning || d->params.opponent_land_play_put_land_from_hand;
+    }
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    if (manabond && !ap.hand.empty()) { return true; }
+    if (!burgeoning || !state.opponent_plays_lands) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { return true; }
+    }
+    return false;
+}
 // HERALD'S HORN (Boars I1): the next upkeep's take/leave is decided at this crossing when a Horn we control is on
 // the battlefield and the state's pin does not already cover that upkeep. Same scope as the face-up axis above
 // (beyond the horizon the take default is the permitted playout policy; at a constant-leaf edge a deeper pass
@@ -110132,8 +110253,9 @@ public:
     // which records that pin alone, so no other axis may be iterated beside it).
     BoundaryFan(const GameState& pre, bool with_echo, bool stut_only = false,
                 bool reanim_only = false, bool land_only = false, bool face_up_only = false,
-                bool horn_only = false, bool ulk_only = false)
+                bool horn_only = false, bool ulk_only = false, bool cl_only = false)
     {
+        if (cl_only) { cl_ = CrossingLandUncoveredPending(pre); return; }
         if (ulk_only) { ulk_ = UpkeepLegendUncoveredPending(pre); return; }
         if (horn_only) { horn_ = HornUncoveredPending(pre); return; }
         if (face_up_only) { fu_ = FaceUpUncoveredPending(pre); return; }
@@ -110211,10 +110333,14 @@ public:
         horn_ = HornUncoveredPending(pre);
         // The next upkeep's legend keep (Boars LK3): an inner digit whose menu is learned per crossing (the Horn shape).
         ulk_ = UpkeepLegendUncoveredPending(pre);
+        // Manabond / Burgeoning (Maze's End I3): an odometer over the crossing's land-put decisions, in event order,
+        // each ordinal's width learned by the crossing that resolves it. False for every other deck.
+        cl_ = CrossingLandUncoveredPending(pre);
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_ || horn_ || ulk_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_ || horn_ || ulk_ || cl_; }
+    bool CrossingLandLive() const { return cl_; }
     bool FaceUpLive() const { return fu_; }
     bool HornLive() const { return horn_; }
     bool UpkeepLegendLive() const { return ulk_; }
@@ -110241,6 +110367,7 @@ public:
             ulk_rank_ = 0; ulk_width_ = 1;
             klothys_rank_ = 0; klothys_width_ = 1;
             keranos_rank_ = 0; keranos_width_ = 1;
+            ResetCl();
             if (!dredge_pending_.empty())
             {
                 dredge_current_ = std::move(dredge_pending_.back());
@@ -110266,6 +110393,22 @@ public:
         if (keranos_ && keranos_rank_ + 1 < keranos_width_)
         { ++keranos_rank_; return true; }
         keranos_rank_ = 0; keranos_width_ = 1;
+        // The crossing land puts (I3): an inner odometer (its events -- our end step, the opponent's land play --
+        // precede the upkeep digits' reads only in the Klothys sense: each ordinal's width is re-learned per crossing).
+        if (cl_)
+        {
+            for (int j = std::min(cl_nobs_, kCrossingLandMaxOrdinals) - 1; j >= 0; --j)
+            {
+                if (cl_ranks_[j] + 1 < cl_sizes_[j])
+                {
+                    ++cl_ranks_[j];
+                    for (int k = j + 1; k < kCrossingLandMaxOrdinals; ++k) { cl_ranks_[k] = 0; cl_sizes_[k] = 1; }
+                    cl_nobs_ = j + 1;   // the later ordinals are re-learned by the next crossing
+                    return true;
+                }
+            }
+            ResetCl();
+        }
         if (dredge_ && !dredge_pending_.empty())
         {
             dredge_current_ = std::move(dredge_pending_.back());
@@ -110380,6 +110523,7 @@ public:
         if (fu_) { sx.scripted_eot_face_up = static_cast<std::int16_t>(fu_rank_); }
         if (horn_) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_rank_); }
         if (ulk_) { SetLegendKeepUpkeepPin(sx, ulk_menu_[ulk_rank_]); }
+        if (cl_) { sx.scripted_crossing_lands = ClPack(); }
     }
     // The crossing itself (SimulateEndAndStartNextTurn), with the probe open when a Defense of the Heart is live
     // so the fan learns the menu sizes this crossing met.
@@ -110424,6 +110568,13 @@ public:
     int FaceUpPin() const { return fu_ && fu_width_ > 1 ? fu_rank_ : -2; }
     int HornPin() const { return horn_ && horn_width_ > 1 ? horn_rank_ : -2; }
     int UpkeepLegendPin() const { return ulk_ && ulk_width_ > 1 ? ulk_menu_[ulk_rank_] : -2; }
+    // The crossing-land pin to RECORD: the ranks this crossing resolved, when any ordinal had a choice (-2 = none).
+    std::int64_t CrossingLandPin() const
+    {
+        if (!cl_) { return -2; }
+        for (int j = 0; j < std::min(cl_nobs_, kCrossingLandMaxOrdinals); ++j) { if (cl_sizes_[j] > 1) { return ClPack(); } }
+        return -2;
+    }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
@@ -110440,13 +110591,16 @@ public:
         if (FaceUpPin() != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(FaceUpPin()); }
         if (HornPin() != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(HornPin()); }
         if (UpkeepLegendPin() != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(UpkeepLegendPin()); }
+        if (CrossingLandPin() != -2) { p.crossing_land_choice = CrossingLandPin(); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
     void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin, int stut_pin,
                        int miracle_pin, int grace_pin, int emeria_pin, int land_pin,
                        const std::vector<int>& dredge_pins, int klothys_pin, int keranos_pin,
-                       int face_up_pin = -2, int horn_pin = -2, int ulk_pin = -2) const
+                       int face_up_pin = -2, int horn_pin = -2, int ulk_pin = -2,
+                       std::int64_t cl_pin = -2) const
     {
+        if (cl_pin != -2) { sx.scripted_crossing_lands = cl_pin; }
         if (ulk_pin != -2) { SetLegendKeepUpkeepPin(sx, ulk_pin); }
         if (horn_pin != -2) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin); }
         if (face_up_pin != -2) { sx.scripted_eot_face_up = static_cast<std::int16_t>(face_up_pin); }
@@ -110469,6 +110623,18 @@ private:
         for (int j = 0; j < kLandSearchPinOrdinals; ++j)
         { pin |= l_ranks_[j] << (kLandSearchPinBits * j); }
         return pin;
+    }
+    std::int64_t ClPack() const
+    {
+        std::int64_t pin = 0;
+        for (int j = 0; j < kCrossingLandMaxOrdinals; ++j)
+        { pin |= static_cast<std::int64_t>(cl_ranks_[j] & kCrossingLandPinMask) << (kCrossingLandPinBits * j); }
+        return pin;
+    }
+    void ResetCl()
+    {
+        cl_nobs_ = 0;
+        for (int k = 0; k < kCrossingLandMaxOrdinals; ++k) { cl_ranks_[k] = 0; cl_sizes_[k] = 1; }
     }
     void ResetLand()
     {
@@ -110570,6 +110736,10 @@ private:
     int              horn_width_ = 1;
     bool             ulk_ = false;                    // the next upkeep's legend keep is decided at this crossing (LK3)
     int              ulk_rank_ = 0;
+    bool             cl_ = false;   // the crossing land puts (Manabond / Burgeoning, I3)
+    int              cl_nobs_ = 0;
+    int              cl_ranks_[kCrossingLandMaxOrdinals] = {};
+    int              cl_sizes_[kCrossingLandMaxOrdinals] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
     int              ulk_width_ = 1;
     int              ulk_menu_[3] = { kLegendKeepUpkeepFollow, 1, 2 };   // rank -> pin; [0] = the provider's own pick
     int              fu_rank_ = 0;
@@ -110603,8 +110773,12 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 bool BoundaryFan::Cross(GameState& sx)
 {
     if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_ && !fu_
-        && !horn_ && !ulk_)
+        && !horn_ && !ulk_ && !cl_)
     { return SimulateEndAndStartNextTurn(sx); }
+    // The crossing land puts (I3): the probe records each ordinal's width as this crossing resolves it.
+    CrossingLandProbe cl_probe;
+    CrossingLandProbe* prior_cl_probe = t_crossing_land_probe;
+    if (cl_) { t_crossing_land_probe = &cl_probe; }
     // Herald's Horn: count the residual take/leave decisions this crossing's upkeep meets (the digit's width).
     int horn_residuals = 0;
     int* prior_horn_probe = t_upkeep_horn_probe;
@@ -110688,6 +110862,12 @@ bool BoundaryFan::Cross(GameState& sx)
     if (keranos_) { keranos_width_ = std::max(1, keranos_width); }
     t_upkeep_horn_probe = prior_horn_probe;
     if (horn_) { horn_width_ = 1 << std::min(horn_residuals, kHornPinOrdinals); }
+    t_crossing_land_probe = prior_cl_probe;
+    if (cl_)
+    {
+        cl_nobs_ = std::min(cl_probe.n, kCrossingLandMaxOrdinals);
+        for (int j = 0; j < cl_nobs_; ++j) { cl_sizes_[j] = std::max(1, cl_probe.size[j]); }
+    }
     t_upkeep_legend_keep_probe = prior_ulk_probe;
     // The menu is learned on the rank-0 crossing (stamped "follow the provider", so the probe reads the provider's own
     // pick); a later rank re-crosses the same state with the other answers and keeps it.
@@ -110735,6 +110915,19 @@ bool BoundaryFan::Cross(GameState& sx)
         if (first && ei_ == 0) { g_doth_fans.fetch_add(1, std::memory_order_relaxed); }
     }
     return ok;
+}
+std::vector<long long> TurnSolver::CrossingLandBoundaryPinsForTest(const GameState& state)
+{
+    std::vector<long long> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        fan.Cross(sx);
+        out.push_back(fan.CrossingLandPin() == -2 ? -1 : static_cast<long long>(fan.CrossingLandPin()));
+    }
+    return out;
 }
 std::vector<int> TurnSolver::DothBoundaryPinsForTest(const GameState& state)
 {
@@ -110945,6 +111138,39 @@ int TurnSolver::ChooseRealCrossingFaceUp(GameState& state, int depth, int max_tu
         chosen = best_pin;
     }
     if (chosen != -2) { state.scripted_eot_face_up = static_cast<std::int16_t>(chosen); }
+    return chosen;
+}
+// THE EXECUTOR'S CROSSING NODE for the crossing land puts (Maze's End I3) -- ChooseRealCrossingFaceUp's shape.
+std::int64_t TurnSolver::ChooseRealCrossingLands(GameState& state, int depth, int max_turns,
+                                                 SearchBudget* budget, bool second_main)
+{
+    if (depth <= 0 || !CrossingLandUncoveredPending(state)) { return -2; }
+    RevealLogPause _rlp;
+    TranspositionTable tt;
+    std::int64_t chosen = -2;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, false, /*cl_only=*/true);
+        if (!fan.CrossingLandLive()) { return -2; }
+        int best_wt = max_turns + 2;
+        std::int64_t best_pin = -2;
+        bool wide = false;
+        while (fan.Next())
+        {
+            GameState ce = state;
+            fan.Stamp(ce);
+            int wt = max_turns + 1;
+            const int cut = best_wt <= max_turns ? best_wt - 1 : max_turns + 1;
+            if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (fan.CrossingLandPin() != -2) { wide = true; }
+            if (wt < best_wt) { best_wt = wt; best_pin = fan.CrossingLandPin(); }
+        }
+        if (!wide) { return -2; }
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
+    }
+    if (chosen != -2) { state.scripted_crossing_lands = chosen; }
     return chosen;
 }
 std::vector<std::pair<int, int>> TurnSolver::FaceUpBoundaryForTest(const GameState& state)
@@ -112762,6 +112988,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             int  best_klothys = -2;
             int  best_keranos = -2;
             int  best_face_up = -2;
+            std::int64_t best_cl = -2;
             int  best_horn = -2;
             int  best_ulk = -2;
             std::vector<int> best_dredge;
@@ -112795,6 +113022,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_klothys = fan.KlothysPin();
                     best_keranos = fan.KeranosPin();
                     best_face_up = fan.FaceUpPin();
+                    best_cl = fan.CrossingLandPin();
                     best_horn = fan.HornPin();
                     best_ulk = fan.UpkeepLegendPin();
                     best_dredge = fan.DredgePins();
@@ -112813,6 +113041,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             best_tail.boundary_klothys = best_klothys;
             best_tail.boundary_keranos = best_keranos;
             best_tail.boundary_face_up = best_face_up;
+            best_tail.boundary_crossing_lands = best_cl;
             best_tail.boundary_horn = best_horn;
             best_tail.boundary_ulk = best_ulk;
             best_tail.boundary_dredge_pins = std::move(best_dredge);
@@ -112846,6 +113075,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     tail_line.boundary_klothys = -2;
     tail_line.boundary_keranos = -2;
     tail_line.boundary_face_up = -2;
+    tail_line.boundary_crossing_lands = -2;
     tail_line.boundary_horn = -2;
     tail_line.boundary_ulk = -2;
     tail_line.boundary_dredge_pins.clear();
@@ -112866,6 +113096,7 @@ static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine&
     if (tail.boundary_klothys != -2) { p.next_klothys_choice = tail.boundary_klothys; }
     if (tail.boundary_keranos != -2) { p.next_keranos_choice = tail.boundary_keranos; }
     if (tail.boundary_face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(tail.boundary_face_up); }
+    if (tail.boundary_crossing_lands != -2) { p.crossing_land_choice = tail.boundary_crossing_lands; }
     if (tail.boundary_horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(tail.boundary_horn); }
     if (tail.boundary_ulk != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(tail.boundary_ulk); }
     if (!tail.boundary_dredge_pins.empty()) { p.next_draw_dredge_pins = tail.boundary_dredge_pins; }
@@ -121504,6 +121735,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("echo", q.echo_choice, -1);
                 iv("doth", q.doth_put_choice, -1);
                 iv("eotfu", q.eot_face_up_choice, -1);
+                iv("xland", q.crossing_land_choice, -1);
                 std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
             }
         }
@@ -121868,6 +122100,7 @@ struct BoundaryChoice
 {
     int echo = -2, doth = -2, tutor = -2, stut = -2, miracle = -2, grace = -2, emeria = -2, land = -2;
     int klothys = -2, keranos = -2, face_up = -2, horn = -2, ulk = -2;
+    std::int64_t crossing_lands = -2;   // Manabond / Burgeoning (I3)
     std::vector<int> dredge;
 };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
@@ -121884,6 +122117,7 @@ static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
     if (bc.klothys != -2) { p.next_klothys_choice = bc.klothys; }
     if (bc.keranos != -2) { p.next_keranos_choice = bc.keranos; }
     if (bc.face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(bc.face_up); }
+    if (bc.crossing_lands != -2) { p.crossing_land_choice = bc.crossing_lands; }
     if (bc.horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(bc.horn); }
     if (bc.ulk != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(bc.ulk); }
 }
@@ -121915,13 +122149,15 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
             best.land = fan.LandPin();
             best.dredge = fan.DredgePins(); best.klothys = fan.KlothysPin(); best.keranos = fan.KeranosPin();
             best.face_up = fan.FaceUpPin();
+            best.crossing_lands = fan.CrossingLandPin();
             best.horn = fan.HornPin();
             best.ulk = fan.UpkeepLegendPin();
         }
     }
     fan.RecordOnState(copy, best.echo, best.doth, best.tutor, best.stut,
                       best.miracle, best.grace, best.emeria, best.land,
-                      best.dredge, best.klothys, best.keranos, best.face_up, best.horn, best.ulk);
+                      best.dredge, best.klothys, best.keranos, best.face_up, best.horn, best.ulk,
+                      best.crossing_lands);
     return best;
 }
 
@@ -125597,6 +125833,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         { Fold(k, 0x4B455241ull + static_cast<std::uint64_t>(state.scripted_boundary_keranos)); }
         if (state.scripted_eot_face_up >= 0)
         { Fold(k, 0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
+        if (state.scripted_crossing_lands >= 0)   // Manabond / Burgeoning (I3)
+        { Fold(k, 0x584C414E44ull); Fold(k, static_cast<std::uint64_t>(state.scripted_crossing_lands)); }
     }
     // Shadowborn's demon-trigger pin (Reaper end step + Overlord next upkeep): the axis skips the variant
     // equal to the inherited pin, so a memoised list under one pin is not another's. Value-gated.
@@ -134293,6 +134531,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.next_keranos_choice >= 0) { s.scripted_boundary_keranos = p.next_keranos_choice; }
     // Morph's opponent-end-step flip, chosen where the turn's line crossed the boundary (BoundaryFan) -- write-when-set.
     if (p.eot_face_up_choice >= 0) { s.scripted_eot_face_up = p.eot_face_up_choice; }
+    // Manabond / Burgeoning (I3), chosen where the line crossed the boundary (BoundaryFan) -- write-when-set.
+    if (p.crossing_land_choice >= 0) { s.scripted_crossing_lands = p.crossing_land_choice; }
     // Shadowborn's demon triggers (Reaper end step + Overlord next upkeep): the end step and the upkeep
     // consume their own halves (PerformEndStepMorbidDestroy / PerformUpkeepSacrificeCreature).
     if (p.demon_trigger_choice >= 0) { s.scripted_demon_trigger = p.demon_trigger_choice; }

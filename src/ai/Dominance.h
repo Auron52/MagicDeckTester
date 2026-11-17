@@ -638,7 +638,11 @@ static_assert(sizeof(Player) == 216,
 // (PrepayWildTrueKey mixes the loaded credits, which are 0 whenever gtot no longer matches the float).
 // Mill/Archive Trap, Fatal Push revolt, and Merfolk tap watchers occupy upstream storage.
 // Boars adds the Horn upkeep pin and the Ilharg / legend pins. Recheck this size after merging fields.
-static_assert(sizeof(GameState) == 1608,   // Boars fields fit in upstream storage
+// +8 bytes (2026-11-17, Maze's End I3; 1608 -> 1616): `scripted_crossing_lands` (int64, Manabond / Burgeoning's
+// searched crossing pin). Classification: FUTURE-DETERMINING (set by the turn's plan apply or the crossing fan,
+// consumed by our end step and the opponent's land play), FOLDED in Build() value-gated (and in the TurnSolver keys).
+// `deck_has_static_land_drops` / `deck_has_crossing_land_put` (bools in padding): DECK CONSTANTS, never folded.
+static_assert(sizeof(GameState) == 1616,   // Boars fields fit in upstream storage; +8 Maze's End I3
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1113,6 +1117,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x4B4552410000ull + static_cast<std::uint64_t>(s.scripted_boundary_keranos)); }
     if (s.scripted_eot_face_up >= 0)   // the searched opponent-end-step flip (morph), same class, value-gated
     { fold(0x464355500000ull + static_cast<std::uint64_t>(s.scripted_eot_face_up)); }
+    if (s.scripted_crossing_lands >= 0)   // Manabond / Burgeoning (Maze's End I3), same class, value-gated
+    { fold(0x584C414E440000ull); fold(static_cast<std::uint64_t>(s.scripted_crossing_lands)); }
     if (s.deck_has_turn_gods)
     {
         fold(0x474F44530000ull + (s.keranos_first_own_draw_seen ? 1ull : 0ull));

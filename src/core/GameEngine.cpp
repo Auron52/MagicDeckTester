@@ -376,6 +376,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
     state.scripted_eot_face_up = -1;   // a pin no opponent end step consumed (an extra turn of ours) expires here
+    state.scripted_crossing_lands = -1;   // Manabond / Burgeoning pin (I3): consumed by this crossing, expires here
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
     state.ephara_creature_entered_this_turn = false;
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one
@@ -438,7 +439,7 @@ void GameEngine::UntapStep(GameState& state)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
-    ap.bonus_land_drops_this_turn = 0;
+    ap.bonus_land_drops_this_turn = StaticExtraLandDrops(state, state.active_player_index);   // Exploration (I3); 0 elsewhere
     // Backstop for the Niv loop's watermark, which resets just below: a draw no earlier flush saw
     // (none exists today) still resolves its triggers instead of being forgotten. Lockstep w/ the
     // rollout's reset. No-op without the loop.
@@ -1465,6 +1466,9 @@ void GameEngine::EndStep(GameState& state)
     // Plan::grace_choice pin. Last: the intervening-ifs above (Ocelot's "if you gained life this
     // turn", Pyrohemia's "if no creatures") were checked as the step began (CR 603.4), so neither may
     // see this trigger's gain or body. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
+    // Manabond's optional end-step dump (Maze's End I3; the searched crossing-land pin). Lockstep twin in the
+    // other world, same position. Deck-gated -> a no-op for every other deck.
+    PerformEndStepManabond(state);
     PerformEndStepAbidingGrace(state, grace_snapshot);
     // Shadowborn INT-2: Reaper from the Abyss's morbid destroy (the searched Plan::demon_trigger_choice
     // target, consumed here) and Sire of Insanity's hand discard. They COMMUTE (a destroy does not touch a
