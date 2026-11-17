@@ -59,7 +59,15 @@ Minotaur CLEAN; Pirates 6, Shadowborn 11, Angels 27 (23 APPLY-DROP-ORDER), Vampi
 per call and re-measured: Dragonstorm 10,000 pairs, 1 earlier / 0 later (net -1). The other new levers were
 already per call.
 
-**NEXT:** push at >= 20:44 UTC (smoke first). Then Vampires s30230089, Shadowborn, Angels' order drops.
+**Vampires s30230089 (2 flags, not changed): a pain-vs-flexibility call.** The engine pays Stromkirk Condemned
+{B}{B} with the new Unclaimed Territory rather than Voldaren Estate, which costs 1 life. Legion Lieutenant {W}{B}
+(unnamed in the plan) then lacks a colour. The oracle pays the life and keeps the Territory. Paying life now for an
+UNNAMED later cast is a policy question, not a defect.
+
+**IN FLIGHT (19:31 UTC): moderate seven-deck gate** `claude-moderate-20261117` (mill, treasure_hunt,
+creature_giving, jumbo_cactuar, fungus, dragons, goblins; 5,000 each). Console
+`build/scratch/claude_gate/moderate.out`, pid in `moderate.pid`. Next: commit the record, smoke, push (>= 20:44 UTC),
+then work the leading signatures.
 
 **THEN:** the PD CAPPED fold, then the deck queue (Pirates, Extra
 Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph, Landfall Elementals, Dragons, stale-clean decks). Then the Merfolk Turns RSS runaway, the PD CAPPED
