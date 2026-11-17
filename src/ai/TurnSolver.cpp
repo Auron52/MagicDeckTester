@@ -59664,6 +59664,75 @@ static int DropGreedyDominatedUntapCounts(const std::vector<Action>& cands, std:
     return dropped;
 }
 
+// ---- GREEDY RETURN-SELF TUTOR TARGET TIE (MTG_GREEDY_TUTOR_TARGET_TIE; DEFAULT ON, =0 walks every target) ----
+// Maze's End P1 (2026-11-17, docs/design/analysis-Maze's End.md "Performance"). Maze's End's {3},{T}, return-
+// to-hand activation (TapTutorPut with tap_tutor_put_return_self) is emitted as one option per legal Gate NAME
+// in the library (plus the fail-to-find and, for a Gate with an as-enters choice, one per admitted pin) -- up
+// to ~25 options in ONE group (one source). In the GREEDY walk below (the horizon playout / d0 runner, outside
+// every search window) nothing reads which Gate a variant fetches: consider() sums the candidates' cost /
+// eval / damage / power fields, its feasibility tests read the bill and the source, never `tutor_target` or a
+// TapTutorPut's `chosen_x` (the pin), and the alternate-win projection reads the board alone. Every variant
+// of one source therefore carries the same key (UntapKDomKey: kind, source, bill, every scored field) and the
+// same eval, gets IDENTICAL verdicts, and the walk's (wins, rank, smallest mask) order hands the tie to the
+// LOWER candidate index -- the FIRST-emitted target, which is the provider's order (MazesEndProvider::
+// TapTutorPutCandidates: a new Gate name first). The later variants can never be the walk's choice; walking
+// them multiplies every subset of the turn by the group's width for nothing. They are dropped from the walk's
+// GROUPS only (`cands` untouched), so the walk returns what it returned before byte for byte while the
+// candidates fit its 31-bit tie-break mask; past it the old tie was resolved by an aliased bit pattern and
+// the fold resolves it to the first target -- another member of a set the greedy scores as exactly equal.
+// The SEARCHED walk (EnumeratePlans) keeps every target: in the window, which Gate is fetched is a real
+// choice the rollout scores. Scoped to the return-self form (Maze's End): Seahunter's TapTutorPut feeds
+// Merfolk projections that read the target, so it keeps its full family. Stands down with a learned d0
+// model (the caller's ev == nullptr gate) and in human play.
+static bool GreedyTutorTargetTieOn()
+{
+    if (t_greedy_fold_force_off) { return false; }
+    static const bool env = EnvOn("MTG_GREEDY_TUTOR_TARGET_TIE", true);   // DEFAULT ON; =0 walks every target
+    return env;
+}
+namespace tutortie
+{
+inline std::atomic<long long> g_walks{0}, g_dropped{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_walks.load() == 0 || !EnvOn("MTG_GREEDY_TUTOR_TARGET_TIE_STATS")) { return; }
+        std::fprintf(stderr, "[greedy-tutor-target-tie] %lld walks folded, %lld options dropped\n",
+                     g_walks.load(), g_dropped.load());
+    }
+};
+inline Dumper g_dumper;
+}
+static int DropGreedyTutorTargetTies(const std::vector<Action>& cands, std::vector<std::vector<int>>& groups)
+{
+    int dropped = 0;
+    static thread_local std::vector<std::uint64_t> seen;
+    static thread_local std::vector<int> kept;
+    for (std::vector<int>& gp : groups)
+    {
+        if (gp.size() < 2) { continue; }
+        seen.clear();
+        kept.clear();
+        for (int j : gp)
+        {
+            const Action& a = cands[static_cast<std::size_t>(j)];
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+                && a.def != nullptr && a.def->params.tap_tutor_put_return_self)
+            {
+                std::uint64_t k = UntapKDomKey(a);
+                FoldMix(k, 0x7E70ull + static_cast<std::uint64_t>(a.ability_mode));
+                FoldMix(k, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.eval)));
+                if (std::find(seen.begin(), seen.end(), k) != seen.end()) { ++dropped; continue; }
+                seen.push_back(k);
+            }
+            kept.push_back(j);
+        }
+        if (kept.size() != gp.size()) { gp.assign(kept.begin(), kept.end()); }
+    }
+    return dropped;
+}
+
 // ---- GREEDY CREATURE-AURA HOST COLLAPSE (MTG_GREEDY_AURA_HOST_LATE; DEFAULT ON, =0 walks every host) -----
 // Branching optimisation, AccomplishedAlchemist 2026-10-20. A plain creature Aura (Crab Umbra) is emitted as
 // one cast option per legal host, and every option carries the same bill, eval and damage -- only
@@ -60812,6 +60881,27 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // enumstats::Enabled() read once for the walk (a function-local static: a guard load + call per read,
     // ~2 reads per visited subset -- 0.2% of a Vampires d5 game). The flag is process-constant.
     const bool es_on_c = enumstats::Enabled();
+    // BOARD-ONLY PREDICATES, ASKED ONCE PER WALK (Maze's End P1, 2026-11-17). `state` is const for the whole
+    // walk, so a predicate of the board alone cannot differ between subsets; asking it per visited subset is
+    // pure per-node cost (seed 91054 gi53, d3 b10: FreshMintSpendableNow 7.1% and ProjectsAlternateWin + its
+    // Gate-name scans ~23% of the game's wall, all inside this lambda). Lazily memoised so a subset that never
+    // reached the call before still never reaches it now: byte-identical by construction.
+    //   * FreshMintSpendableNow(state, active) -- the fresh-hold / magnet / Heroism read (every deck).
+    //   * ProjectsAlternateWin(state, casting) -- only where the provider declares it ignores `casting`.
+    int fresh_mint_memo = -1;
+    auto fresh_mint_now = [&]() -> bool
+    {
+        if (fresh_mint_memo < 0) { fresh_mint_memo = FreshMintSpendableNow(state, state.active_player_index) ? 1 : 0; }
+        return fresh_mint_memo == 1;
+    };
+    const bool alt_win_board_only = has_extra_lethal && provider.AlternateWinProjectionIgnoresCasting();
+    int alt_win_memo = -1;
+    auto projects_alt_win = [&](const std::vector<const CardDefinition*>& casting_now) -> bool
+    {
+        if (!alt_win_board_only) { return provider.ProjectsAlternateWin(state, casting_now); }
+        if (alt_win_memo < 0) { alt_win_memo = provider.ProjectsAlternateWin(state, casting_now) ? 1 : 0; }
+        return alt_win_memo == 1;
+    };
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -61303,7 +61393,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
             // A same-plan Heroism is live by the time the mint is spent, so it releases the hold
             // the way a live one does (HeroismFreshHoldOn -- PaySacSpendableNow's own clause).
             const bool spendable = mint_exact
-                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet
+                ? (fresh_mint_now() || hand_magnet
                    || (hero_credit && HeroismFreshHoldOn()))
                 : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs) && spendable)
@@ -61898,7 +61988,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // condition, and expressing it as a huge damage number would corrupt every consumer below
         // that reads the projection as a damage rate (BurnProvider::HoldsSacLandBurn, the Irencrag waste guard,
         // the ritual-payoff guard).
-        if (!wins && has_extra_lethal && provider.ProjectsAlternateWin(state, casting))
+        if (!wins && has_extra_lethal && projects_alt_win(casting))
         { wins = true; }
         // MTG_SOLVE_VERIFIED_WIN (see route_win_j): the trial-verified COMBO OFF route wins this turn
         // whatever the damage projection says. `sel` was sorted on entry.
@@ -62959,6 +63049,18 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         {
             untapkdom::g_calls.fetch_add(1, std::memory_order_relaxed);
             untapkdom::g_dropped.fetch_add(dropped, std::memory_order_relaxed);
+        }
+    }
+
+    // GREEDY RETURN-SELF TUTOR TARGET TIE (see DropGreedyTutorTargetTies): Maze's End's per-Gate-name family
+    // collapses to its first-emitted target; same placement and gates as the untap fold above.
+    if (ev == nullptr && GreedyTutorTargetTieOn() && !HumanPlayActive())
+    {
+        const int dropped = DropGreedyTutorTargetTies(cands, groups);
+        if (dropped > 0)
+        {
+            tutortie::g_walks.fetch_add(1, std::memory_order_relaxed);
+            tutortie::g_dropped.fetch_add(dropped, std::memory_order_relaxed);
         }
     }
 
@@ -83350,6 +83452,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // USER 2026-10-06, so a Pirate put that ranks after Daring Buccaneer is still in hand for the
     // reveal under the ordinary pricing -- SameSubsetRevealSurcharge prices the put at its position.)
     auto eval_and_push = [&](const std::vector<int>& sel) { eval_and_push_body(sel); };
+    // FreshMintSpendableNow, asked once per walk (Maze's End P1): a predicate of the const board alone, lazily
+    // memoised -- the lockstep twin of SolveUncachedBody's fresh_mint_now. Byte-identical by construction.
+    int fresh_mint_memo = -1;
+    auto fresh_mint_now = [&]() -> bool
+    {
+        if (fresh_mint_memo < 0) { fresh_mint_memo = FreshMintSpendableNow(state, state.active_player_index) ? 1 : 0; }
+        return fresh_mint_memo == 1;
+    };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
         // Both provenance flags must be consumed even when pricing stops this walk.
@@ -83935,7 +84045,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // there): a magnetless mint is banked this turn, so it can fund nothing. A same-plan
             // Heroism releases the hold the way a live one does.
             const bool spendable = mint_exact
-                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet
+                ? (fresh_mint_now() || hand_magnet
                    || (hero_credit && HeroismFreshHoldOn()))
                 : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs))

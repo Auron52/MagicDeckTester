@@ -4876,6 +4876,9 @@ public:
     bool CrossingDumpWithoutLandDominated(const GameState&, int) const override { return true; }
     // I3b: Maze's End's win needs the activation; the projection must not label a plan that does not activate.
     bool AlternateWinNeedsAction() const override { return true; }
+    // P1: ProjectsAlternateWin reads the board only (`casting` is ignored -- see its body), so the walks ask it
+    // once per call (a pure per-node fix; byte-identical).
+    bool AlternateWinProjectionIgnoresCasting() const override { return true; }
     // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate
     // with a live non-mana {T} ability last; ManaSourceRank inside each tier (ledger decisions 10 / 30).
     void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const override;
