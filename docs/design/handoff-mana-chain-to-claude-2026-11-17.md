@@ -2,7 +2,12 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:38 UTC
+## Live status, updated 07:40 UTC
+
+**Current read-only audit:** Prevent Damage ORACLE-GAP seed `30109140`
+turn five is replaying with `MTG_MANA_ORACLE=3` in exec session `27330`,
+console `build/scratch/spirits_shock_pair_5k/pd_30109140_t5.out`.
+No source edits or top-level simulation batch are active otherwise.
 
 **Spirits 30040647 T4 correction complete, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
