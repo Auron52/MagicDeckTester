@@ -66627,5 +66627,25 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
     if (!heurarm::Flag(heurarm::MAZE_FETCH_EVAL, s_on)) { return 0; }
     if (source.params.alt_win_distinct_named_count <= 0 || target == kTutorDeclineTarget) { return 0; }
     if (!MazeNameIsGate(target) || MazeControlsGateNamed(s, s.active_player_index, target)) { return 0; }
+    // P1c DEFER (MTG_MAZE_FETCH_DEFER, default ON): the win check runs only at the activation, and the activation
+    // returns Maze's End to hand, so while a land drop is still open AND a Gate of a new name is in hand, the fetch
+    // is better taken AFTER that Gate lands (the fetched name is still in the library then). The eval is read on the
+    // state the activation is enumerated in -- after the plan's own land play -- so "Gate + fetch" with the drops
+    // used up keeps 200, while "fetch now, Gate still to play" scores 0. Without it the value-ranked breakpoint list
+    // (wave-0 width W = 2) put two such dead-end activations ahead of the land play an Exploration win needs and lost
+    // the three-drop turn-5 win at an unlimited budget (unit "THREE land drops"). Evaluation / order only.
+    static const bool s_defer = EnvOn("MTG_MAZE_FETCH_DEFER", true);
+    if (heurarm::Flag(heurarm::MAZE_FETCH_DEFER, s_defer))
+    {
+        const Player& pl = s.players[static_cast<std::size_t>(s.active_player_index)];
+        if (pl.LandDropsAvailable() - pl.lands_played_this_turn >= 1)
+        {
+            for (const Card& c : pl.hand)
+            {
+                const std::string& nm = c.m_name.str();
+                if (MazeNameIsGate(nm) && !MazeControlsGateNamed(s, s.active_player_index, nm)) { return 0; }
+            }
+        }
+    }
     return 200;
 }

@@ -961,6 +961,7 @@ enum Slot : int
     KAROO_FLOAT_LINE_COLOUR,  // MTG_KAROO_FLOAT_LINE_COLOUR  a land tapped in response to its own bounce / sacrifice (FloatLandBeforeSacrifice) that makes ONE mana of a choice of colours commits the colour the rest of the applying line still owes (g_line_unpaid_cost, net of the float) instead of its first listed colour. Minotaur mana-clean s30289322 T4: Blood Crypt floated {B} and the continuation's Boros Reckoner {R/W}{R/W} was dropped. Default ON; =0 -> first listed colour, byte-identical to before
     MAZE_LEAF_PROGRESS,       // MTG_MAZE_LEAF_PROGRESS    Maze's End P1b: the graded no-win leaf subtracts the deck's alternate-win PROGRESS (distinct Gate names controlled, life-equivalent 2 per name, plus Maze's End held and new-name Gates in hand under it) -- MazesEndProvider::NoWinLeafProgress. Evaluation, not a prune. Default ON; =0 -> opponent life alone (every no-win leaf ties)
     MAZE_FETCH_EVAL,          // MTG_MAZE_FETCH_EVAL       Maze's End P1b: a Maze's End activation that fetches a NEW Gate name carries plan eval 200 (MazesEndProvider::TapTutorPutEval), so the greedy walk (beyond-horizon playout / d0 runner) prefers making progress over leaving the {3} idle; a duplicate name or the fail-to-find stays 0. Default ON; =0 -> every fetch 0
+    MAZE_FETCH_DEFER,         // MTG_MAZE_FETCH_DEFER      Maze's End P1c: the new-name fetch eval (MAZE_FETCH_EVAL) is 0 while a land drop is open AND a new-name Gate is in hand (read after the plan's own land play) -- the win check runs only at the activation, so activating before the hand's Gates are down spends the check early; the value-ranked breakpoint list (wave-0 width W=2) otherwise put two such dead-end activations ahead of the land play the win needs (unit "THREE land drops"). Evaluation/order only. Default ON; =0 -> the P1b eval in every state
     COUNT
 };
 
@@ -1866,6 +1867,7 @@ inline const char* Name(int slot)
         "MTG_KAROO_FLOAT_LINE_COLOUR",
         "MTG_MAZE_LEAF_PROGRESS",
         "MTG_MAZE_FETCH_EVAL",
+        "MTG_MAZE_FETCH_DEFER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
