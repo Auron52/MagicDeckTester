@@ -513,6 +513,98 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
    of ours and makes none, and the passive opponent's creatures never attack or block. Not offered as a viewer choice.
    PROVISIONAL (USER sign-off pending) -- re-check if the list gains a creature.
 
+## Performance (P1 / P1b, 2026-11-17)
+
+**Yardstick:** Hinata 5,170 ms/game; the suite-admission limit is 3x = **15,510 ms/game** at the deck's most
+expensive searched shape (USER 3x rule). Census set: d3 b10 60 games (seed 91001) + d5 b10 30 games (seed 92001).
+
+### Attribution (P1)
+* ~80% of a tail game's wall is the GREEDY subset walk (`SolveUncachedBody`: the horizon playout and the d0 runner),
+  which the budget did not charge, so units and wall diverged (50-430 us/unit). Inside it, per-subset recomputation of
+  board-only predicates (`ProjectsAlternateWin` + its Gate-name scans, `FreshMintSpendableNow`) was ~30-35% of wall,
+  and Maze's End's per-Gate-name TapTutorPut family (~20-25 options per copy) multiplied every subset.
+* Quality side: the no-win leaf grade was opponent life, which never moves for this deck (18.6M of 33.9M published
+  leaves life-equal ties), and the d0 greedy left Maze's End's activation to the tie-break (eval 0): it won 20/60 by
+  T8 (avg 8.25). d3 leaned on blind T8 rollouts, hence d3 (109 s/game) costing more than d5 (54 s/game).
+
+### Fixes (all on `wip/maze-end`)
+1. **Board-only predicate hoist** (P1, every deck): `FreshMintSpendableNow` and (provider opt-in
+   `AlternateWinProjectionIgnoresCasting`) `ProjectsAlternateWin` asked once per walk. VERIFIED byte-identical:
+   seed 91005 gi4 d3 b10 with the fold off reproduces the pre-P1 units (371,372) and game log (runId aside).
+2. **Canonical greedy tie-break past 32 candidates + the tutor-target fold** (P1b). The greedy walk breaks an exact
+   (wins, rank) tie by the smaller `int` subset mask, but `1 << j` wraps from j = 32, so subsets aliased and the pick
+   among exact ties depended on VISIT ORDER. `MTG_GREEDY_FOLD_VERIFY` on gi4: 75,881 of 186,698 walks differed, every
+   one past 31 candidates, 0 at or under -- the fold (`MTG_GREEDY_TUTOR_TARGET_TIE`) was an identity fold whose
+   result moved only because the tie-break was not canonical (e.g. "Exploration + Heap Gate" vs the same plus an
+   eval-0 Maze's End activation, both v=101). Fix: `CanonSubsetMaskLess` compares the un-aliased masks (exactly
+   `mask < best_mask` inside 0..31, so a walk with no index >= 32 is unchanged); the mana-verdict cache, keyed on the
+   same int mask, is armed only up to 32 candidates; the fold keeps the member the tie-break prefers. After it:
+   verify reads **0 of 99,174** walks differing; gi4 fold on/off game logs identical; fold on 20.8 s vs off 33.6 s.
+   The fold is KEPT (default ON) as a sound identity fold. Other decks: changes only walks with >= 33 candidates
+   whose best ties exactly -- see the smoke result below.
+3. **Alternate-win progress evaluation** (P1b; evaluation, not a prune -- every option stays enumerated):
+   * `DecisionProvider::NoWinLeafProgress` (end of class, default 0): subtracted from the graded no-win leaf in its
+     own units. `MazesEndProvider`: distinct Gate names x 2,000,000 (life-equivalent: ten names = twenty life), plus
+     Maze's End held (battlefield or hand) 500,000, plus each new-name Gate in hand 100,000 (at most 4). Lever
+     `MTG_MAZE_LEAF_PROGRESS` (default ON).
+   * `DecisionProvider::TapTutorPutEval` (end of class, default 0): the plan-scoring eval of a TapTutorPut fetch.
+     `MazesEndProvider`: 200 for a Gate name we do not control, 0 for a duplicate or the fail-to-find. This is what
+     the greedy walk (beyond-horizon playout / d0 runner) ranks by, so the playout now activates Maze's End for
+     progress instead of leaving `{3}` idle. Lever `MTG_MAZE_FETCH_EVAL` (default ON).
+   * Measured (census set + 60 d0 games, 4 arms innermost, one pooled manifest run as 4 resumed sub-batches because
+     of the RSS cap -- see Memory):
+
+     | shape | arm | avg win turn | wins <= T8 | ms/game | units/game | vs off (better/worse) |
+     |---|---|---|---|---|---|---|
+     | d0 | off | 8.2500 | 20/60 | 6 | - | |
+     | d0 | leaf | 8.2500 | 20/60 | 6 | - | 0/0 (inert at d0) |
+     | d0 | eval | 7.1167 | 46/60 | 5 | - | 35/0 |
+     | d0 | both | 7.1167 | 46/60 | 4 | - | 35/0 |
+     | d3 b10 | off | 6.5333 | 56/60 | 46,380 | 1,532,303 | |
+     | d3 b10 | leaf | 6.6000 | 56/60 | 44,758 | 1,568,822 | 6/10 |
+     | d3 b10 | eval | 6.4833 | 57/60 | 28,782 | 1,247,026 | 11/9 |
+     | d3 b10 | **both** | **6.4167** | **59/60** | **29,263** | 1,262,083 | 15/10 |
+     | d5 b10 | off | 6.6667 | 26/30 | 22,498 | 712,449 | |
+     | d5 b10 | leaf | 6.6000 | 28/30 | 18,972 | 642,154 | 2/2 |
+     | d5 b10 | eval | 6.6333 | 28/30 | 14,822 | 585,511 | 3/4 |
+     | d5 b10 | **both** | **6.6333** | **28/30** | **14,277** | 551,039 | 3/4 |
+
+     ADOPTED (both ON): win turn better at every shape (d3 -0.117, d5 -0.033, d0 -1.133), ~1.6x cheaper. The leaf
+     term alone is slightly worse at d3 (6.600) but helps on top of the fetch eval (6.417 vs 6.483). USER sign-off
+     pending on the weights (2 life per Gate name; 200 per new-name fetch) -- an evaluation choice, surfaced.
+
+4. **Greedy-walk charge weight (`SolveChargeWeightOptIn`) -- swept, NOT adopted.** Census set with fixes 1-3 on,
+   5 arms innermost in ONE batch (10 workers, `same_seed_inflight` 1; build/scratch/maze/p1b/s3):
+
+   | shape | W | avg win turn | wins <= T8 | ms/game | units/game | vs W=0 (better/worse) |
+   |---|---|---|---|---|---|---|
+   | d3 b10 | 0 (current) | **6.4167** | 59/60 | 30,470 | 1,262,083 | |
+   | d3 b10 | 1 | 6.5500 | 59/60 | 21,973 | 1,490,767 | 6/13 |
+   | d3 b10 | 4 | 6.4833 | 58/60 | 28,364 | 1,302,470 | 3/7 |
+   | d3 b10 | 8 | 6.4833 | 57/60 | 27,238 | 1,239,042 | 2/6 |
+   | d3 b10 | 16 | 6.4667 | 59/60 | 27,704 | 1,247,209 | 1/3 |
+   | d5 b10 | 0 (current) | 6.6333 | 28/30 | 12,781 | 551,039 | |
+   | d5 b10 | 1 | 6.6000 | 28/30 | 8,323 | 646,198 | 4/3 |
+   | d5 b10 | 4 | 6.7000 | 28/30 | 12,207 | 550,547 | 0/2 |
+   | d5 b10 | 8 | 6.6667 | 28/30 | 12,793 | 538,539 | 0/1 |
+   | d5 b10 | 16 | 6.7000 | 28/30 | 13,479 | 548,600 | 1/3 |
+
+   No W brings d3 b10 under 15,510 ms/game, and every W is worse on d3's win turn (W=1 by 0.133). DEFAULT: **no
+   charge (W = 0)**, USER sign-off pending (precedent: Snow's W was the USER's). W=1 is cheaper AND not worse at d5
+   (8.3 s, 6.600) -- worth surfacing if the suite ends up gating Maze's End at d5 only. d3's cost is concentrated:
+   seed 91021 gi20 alone is 465 s (20.4M units, ~7.7 s of the 30.5 s/game average; ~23.1 s/game without it).
+   **Status vs the 3x rule: d5 b10 12.8 s/game is under 15,510; d3 b10 30.5 s/game is ~5.9x Hinata -- over.** (ms
+   here are under 10-worker contention, not the suite's pooled measurement; `suite_gate.py --cost` not yet run.)
+
+### Memory (new finding, P1b)
+A heavy Maze's End d3 game holds ~1.5-2+ GB of transient RSS beyond the bounded pools (the pools read fsl 0 /
+plan 512M / t2 256M at the cap), so a census batch at 32, 20, 12 and 8 workers with the heaviest seeds first
+tripped the 16 GB `MTG_RSS_CAP_GB` within 20 s-5 min. What ran: 8-16 workers in natural order with
+`same_seed_inflight` 1-2 (peak 13.6 GB at 8 workers; s3 peaked 16.3 GB at 10 workers but finished). Worker count
+was reduced for MEMORY (coordinator rule: workers x peak RSS < ~18 GB), recorded here per the CPU rule. NOTE for
+suite admission: the regression tiers pool 32 workers; Maze's End rows there could hit the same wall. Also seen:
+`MemBudget`'s split assumes the affinity count (32) even under `--threads N`.
+
 ## Approved deferrals
 
 (none)
