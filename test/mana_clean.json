@@ -3054,6 +3054,48 @@
      "seed": 30072000,
      "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 70,
+      "APPLY-DROP-ORDER": 1,
+      "CONTINUATION-DIFFERS": 58,
+      "DOMINATED-LAND": 14764,
+      "DROP-COVERED": 2764,
+      "HIDDEN-INFO": 73,
+      "PHANTOM": 10005
+     },
+     "commit": "d82ee0660c3155c5000ca8c0b5abb3e91f42f0f4",
+     "date": "2026-11-17T06:32:53Z",
+     "decisions": 38562,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 77000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 71,
+     "life_breakpoints": [],
+     "ms_off": 415116,
+     "ms_on": 2907479,
+     "report": "logs/mana_clean/codex-dragonstorm-afterpay-wild-20261117/report.md",
+     "run": "codex-dragonstorm-afterpay-wild-20261117",
+     "seed": 30077000,
+     "src": "7ecf53121b172fb2cbf078f7e5f554086b7b28fe",
+     "verdict": "issues"
     }
    ]
   },

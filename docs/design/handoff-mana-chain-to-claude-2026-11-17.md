@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:32 UTC
+## Live status, updated 06:35 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -46,13 +46,18 @@ search work was 9,985,030 units versus 9,976,007 old (+0.09%); recorded
 job ms 464,651 versus 465,987. Outputs and per-game `.wins` are under
 `build/scratch/dragonstorm_visible_lump_ab/afterpay_wild_5k/`.
 
-A fresh PGO mana-clean gate is **active** in exec session `36993`:
+A fresh PGO mana-clean gate **finished** in exec session `36993`:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name codex-dragonstorm-afterpay-wild-20261117`.
 Console `build/scratch/dragonstorm_visible_lump_ab/clean_afterpay_wild.out`;
-report `logs/mana_clean/codex-dragonstorm-afterpay-wild-20261117/report.md`
-after it finishes. Check its issue signatures, commit `test/mana_clean.json`
-with this handoff, then
-check Breaching Dragonstorm's two ENUM-GAP seeds. The queue remains open.
+report `logs/mana_clean/codex-dragonstorm-afterpay-wild-20261117/report.md`.
+It found **71 issues: 70 APPLY-DROP and one APPLY-DROP-ORDER**, zero
+ENUM-GAP/ORACLE-GAP/CAPPED, oracle-on/off play byte-identical. The top
+cluster is seed 30078447 T4, a Pyretic→Apex→Irencrag→Kolaghan line
+whose Bloom-black payment differs; see the report for 29 APPLY-DROP
+signatures. `test/mana_clean.json` carries the new record. Next reproduce
+Breaching Dragonstorm seeds **30222319 T6** and **30221073 T7** with
+`MTG_DBG_MULTI=6` and `=7`, identify the exact rejecting gate, and make a
+narrow deterministic correction. The queue remains open.
 
 The paired A/B manifest and runner are prepared under
 `build/scratch/dragonstorm_visible_lump_ab/afterpay_wild_5k/`:

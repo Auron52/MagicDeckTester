@@ -80,5 +80,7 @@ On 5,000 paired held-out Dragonstorm games (indices 77,000–81,999,
 PGO+LTO binary, same seeds), no win turn moved; four play digests changed
 at the same win turn. Search work was 9,985,030 units new versus
 9,976,007 old (+0.09%). The fresh 5,000-game mana-clean gate on these
-indices is running; its verdict belongs in
+indices found 71 issues: 70 APPLY-DROP, one APPLY-DROP-ORDER, zero
+ENUM-GAP or ORACLE-GAP; the oracle did not change play. Its residual
+signatures and repros are in
 `logs/mana_clean/codex-dragonstorm-afterpay-wild-20261117/report.md`.
