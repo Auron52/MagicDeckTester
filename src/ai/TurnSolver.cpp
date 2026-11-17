@@ -30031,6 +30031,11 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         fold(0x1C1DE + p.incinerator_targets.size());
         for (int id : p.incinerator_targets) { fold(static_cast<uint64_t>(id)); }
     }
+    if (!p.reflect_targets.empty())   // damage-reflection targets; value-gated (empty on every other deck)
+    {
+        fold(0x8EF1EC70ull + p.reflect_targets.size());
+        for (int id : p.reflect_targets) { fold(static_cast<uint64_t>(static_cast<std::int64_t>(id) + 0x40000000LL)); }
+    }
     if (!p.look_top_pins.empty())
     {
         fold(0x100C7000ull + static_cast<uint64_t>(p.look_top_pins.size()));
@@ -30387,6 +30392,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_search_act_slot == -1
         && !p.land_search_before_land
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
+        && p.reflect_targets.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.putback_choice == -1
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
@@ -30466,6 +30472,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
         || !p.look_top_pins.empty() || !p.dredge_pins.empty() || !p.keranos_targets.empty() || !p.incinerator_targets.empty()
+        || !p.reflect_targets.empty()
         // The cycle / sac-draw dig variants (0 = the no-dig twin / never, 1 = dig-while-affordable) --
         // NOT the 2 mark, which is a base plan. Missing from the 9d widening: a dig variant whose world
         // its base already reached (the gate refused, the source was unaffordable) paid a full rollout
@@ -31439,6 +31446,7 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     for (int x : p.sac_pins) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
     for (int x : p.dredge_pins) { h = Mix(h, 0xD0ED6Eull + static_cast<std::uint64_t>(x)); }
     for (int x : p.keranos_targets) { h = Mix(h, 0x4B455241ull + static_cast<std::uint64_t>(x)); }
+    for (int x : p.reflect_targets) { h = Mix(h, 0x8EF1EC70ull + static_cast<std::uint64_t>(static_cast<std::int64_t>(x) + 0x40000000LL)); }
     h = Mix(h, p.atk_forfeit ? 1u : 0u);
     h = Mix(h, p.soulbond_decline ? 1u : 0u);
     return h;
@@ -58870,6 +58878,7 @@ namespace solvememo
             || a.look_top_pins != b.look_top_pins || a.dredge_pins != b.dredge_pins
             || a.keranos_targets != b.keranos_targets
             || a.incinerator_targets != b.incinerator_targets
+            || a.reflect_targets != b.reflect_targets
             || a.next_draw_dredge_choice != b.next_draw_dredge_choice
             || a.next_draw_dredge_pins != b.next_draw_dredge_pins
             || a.next_klothys_choice != b.next_klothys_choice
@@ -68762,6 +68771,7 @@ struct BpPrefixSnap
     int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
     int  pin_champion_cursor = 0;
     std::size_t pin_incinerator_cursor = 0;
+    std::size_t pin_reflect_cursor = 0;   // dmgrx::t_pin_cursor (the list is re-installed by _reflect_pins)
     int  pin_look_top_land_cursor  = 0;   // ...and Plan::look_top_pins' two streams (Risen Reef):
     int  pin_look_top_order_cursor = 0;   // the list is re-installed by _slt, the cursors are prefix state
     int  pin_bounce = -1;            // the put-Karoo bounce pin (ScriptedPutBounce) as the prefix left it
@@ -70590,6 +70600,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedProphetsChampion _spc(plan.champion_pins);
                                                       // ordinal (core/LandSearch.h); empty inert
     IncineratorPinScope _incinerator_pins(plan.incinerator_targets);
+    dmgrx::PinScope _reflect_pins(plan.reflect_targets);   // damage-reflection targets (empty inert)
     ScriptedLookTop _slt(plan.look_top_pins);   // searched Risen Reef land / trigger-order entries (two
                                                 // per-ordinal streams, core/SpellEffects.h); empty inert
     ScriptedDredge _sdredge(plan.dredge_pins,
@@ -78148,6 +78159,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
         g_prophets_champion_cursor = bp_resume->pin_champion_cursor;
         g_incinerator_pin_cursor = bp_resume->pin_incinerator_cursor;
+        dmgrx::t_pin_cursor = bp_resume->pin_reflect_cursor;
         g_scripted_look_top_land_cursor  = bp_resume->pin_look_top_land_cursor;    // ...and by _slt
         g_scripted_look_top_order_cursor = bp_resume->pin_look_top_order_cursor;
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
@@ -78714,6 +78726,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
+            bp_capture->pin_reflect_cursor = dmgrx::t_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -78754,6 +78767,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
+            bp_capture->pin_reflect_cursor = dmgrx::t_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
             bp_capture->pin_bounce   = g_scripted_bounce_choice;
@@ -98918,6 +98932,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // a land-search position twin IS a base here (2026-10-19): a crack before the look
                 // changes the card it sees, so the land / order answer and the position interact
                 && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
+        && p.reflect_targets.empty()
                 && p.sac_pins.empty() && p.rad_mode == -1
                 && p.saga_target_choice == -1 && p.grace_choice == -1 && p.upkeep_gy_reanimate_choice == -1 && p.demon_trigger_choice == -1 && p.saga_ch1_choice == -1
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
@@ -99361,6 +99376,84 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     {
                         TurnSolver::Plan v = p;
                         v.incinerator_targets.push_back(*it);
+                        work.push_back(std::move(v));
+                    }
+                }
+            }
+            all = std::move(expanded);
+        }
+    }
+
+    // ---- DAMAGE-REFLECTION TARGETS (design docs/design/damage-reflection-pipeline.md 4.1, step 3) --------
+    // The probe-and-fan of the Incinerator block above, for dmgrx::ResolveTrig's choices: apply each plan
+    // under a probe, and at the first reflection CHOICE (a target list of size > 1) the plan does not pin
+    // yet, clone it once per admitted option; repeat until every choice its apply reaches is pinned. Each
+    // option the engine's sound folds (F1) and the provider (restrict/order only) leave is BRANCHED -- none
+    // is picked. Armed decks only (reflect_armed). The per-plan pre-check is a sound shortcut, not a fold:
+    // a plan with no action that can damage a creature (dmgrx::DefCanDamageCreatures, which lists every
+    // route into the pipeline) raises no trigger, and with no reflector whose target can be a choice on the
+    // battlefield or in the plan (dmgrx::DefReflectsWithChoice) no trigger offers one -- so its probe would
+    // find nothing, and the plan passes through unchanged (Minotaur's Boros Reckoner without a sweeper).
+    if (state.reflect_armed && !HumanPlayActive()
+        && (!dmgrx::t_probe || g_apd_depth > dmgrx::t_probe_fan_depth))
+    {
+        bool chooser_on_board = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            if (d && dmgrx::DefReflectsWithChoice(*d)) { chooser_on_board = true; break; }
+        }
+        auto plan_may_choose = [&](const TurnSolver::Plan& p) {
+            bool damages = false, chooser = chooser_on_board;
+            auto scan = [&](const Action& a) {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (!d) { return; }
+                if (dmgrx::DefCanDamageCreatures(*d)) { damages = true; }
+                if (dmgrx::DefReflectsWithChoice(*d)) { chooser = true; }
+            };
+            for (const Action& a : p.actions)
+            {
+                scan(a);
+                for (const Action& c : a.breakpoint_casts) { scan(c); }
+            }
+            for (const Action& a : p.breakpoint_actions) { scan(a); }
+            return damages && chooser;
+        };
+        // A lazy fan's clones differ from their prototype only in a pin, never in actions, so scanning the
+        // prototypes decides for them too; the list is materialized only when some plan needs the probe.
+        bool any = false;
+        for (const TurnSolver::Plan& p : all) { if (plan_may_choose(p)) { any = true; break; } }
+        if (!any && pb_lazy && pb_lazy->active)
+        { for (const TurnSolver::Plan& p : pb_lazy->protos) { if (plan_may_choose(p)) { any = true; break; } } }
+        if (any)
+        {
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> expanded;
+            expanded.reserve(all.size());
+            std::reverse(all.begin(), all.end());
+            std::vector<TurnSolver::Plan> work = std::move(all);
+            while (!work.empty())
+            {
+                TurnSolver::Plan p = std::move(work.back()); work.pop_back();
+                if (!plan_may_choose(p)) { expanded.push_back(std::move(p)); continue; }
+                std::vector<int> next;
+                std::size_t ordinal = 0;
+                dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
+                    if (ordinal++ == p.reflect_targets.size()) { next = legal; }
+                };
+                GameState copy = state;
+                {
+                    RevealLogPause quiet;
+                    dmgrx::TargetProbeScope probing(probe, p.reflect_targets, g_apd_depth);
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                }
+                if (next.empty()) { expanded.push_back(std::move(p)); }
+                else
+                {
+                    for (auto it = next.rbegin(); it != next.rend(); ++it)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.reflect_targets.push_back(*it);
                         work.push_back(std::move(v));
                     }
                 }
@@ -100233,7 +100326,8 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 752;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below)   // Recheck after integrating Boars axes with dynamic Mihail choices.
+static constexpr std::size_t kPlanDomAssertedSize = 776;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below); +24: Plan::reflect_targets (Stuffy Doll step 3).
+// Recheck after integrating Boars axes with dynamic Mihail choices.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -100460,6 +100554,11 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
                 add(0x1C1DE); add(static_cast<int>(pl.incinerator_targets.size()));
                 for (int id : pl.incinerator_targets) { add(id); }
             }
+            if (!pl.reflect_targets.empty())
+            {
+                add(0x8EF1EC7); add(static_cast<int>(pl.reflect_targets.size()));
+                for (int id : pl.reflect_targets) { add(id); }
+            }
             x += "|bpacts";
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
@@ -100641,6 +100740,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.look_top_pins == b.look_top_pins)) { d += " look_top_pins"; }
     if (!(a.dredge_pins == b.dredge_pins)) { d += " dredge_pins"; }
     if (!(a.keranos_targets == b.keranos_targets)) { d += " keranos_targets"; }
+    if (!(a.reflect_targets == b.reflect_targets)) { d += " reflect_targets"; }
     if (a.next_draw_dredge_choice != b.next_draw_dredge_choice) { d += " next_draw_dredge_choice"; }
     if (a.next_draw_dredge_pins != b.next_draw_dredge_pins) { d += " next_draw_dredge_pins"; }
     if (a.next_klothys_choice != b.next_klothys_choice) { d += " next_klothys_choice"; }
@@ -102576,6 +102676,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     b += p.keranos_targets.capacity() * sizeof(int);
     b += p.next_draw_dredge_pins.capacity() * sizeof(int);
     b += p.incinerator_targets.capacity() * sizeof(int);
+    b += p.reflect_targets.capacity() * sizeof(int);
     b += p.bp_pre.capacity() * sizeof(int);   // MTG_BP_DEV_SEQ (empty but on a walker compound variant)
     b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
     return b;
@@ -122723,7 +122824,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 if (!q.fetch_target.empty()) { ax += " fetch=" + q.fetch_target; }
                 vv("land_search_pins", q.land_search_pins); vv("sac_pins", q.sac_pins);
                 vv("look_top_pins", q.look_top_pins); vv("dredge_pins", q.dredge_pins);
-                vv("keranos_targets", q.keranos_targets);
+                vv("keranos_targets", q.keranos_targets); vv("reflect_targets", q.reflect_targets);
                 iv("atk_land_search", q.attack_land_search_choice, -1); iv("upk_land_search", q.upkeep_land_search_choice, -1);
                 iv("combat_crack", q.combat_crack_choice, -1); iv("landfall_target", q.landfall_target_choice, -1);
                 iv("vial_charge", q.vial_charge_choice, -1); iv("tapmode", q.tapmode_choice, 0); iv("freshmode", q.freshmode_choice, 0);
@@ -123608,6 +123709,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { mix(0x50524F50ull); for (int v : p.prophets_sac_choice) { mix(static_cast<std::uint64_t>(v + 7)); } }
                 if (!p.incinerator_targets.empty())
                 { mix(0x1C1DE); for (int id : p.incinerator_targets) { mix(static_cast<std::uint64_t>(id)); } }
+                if (!p.reflect_targets.empty())
+                { mix(0x8EF1EC70ull); for (int id : p.reflect_targets) { mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(id) + 0x40000000LL)); } }
                 if (!p.look_top_pins.empty())   // value-gated: every other deck's bucket hash unchanged
                 {
                     mix(p.look_top_pins.size());
@@ -126696,6 +126799,13 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
             Fold(k, static_cast<uint64_t>(g_incinerator_pin_cursor));
             for (int id : *g_incinerator_pins) { Fold(k, id); }
         }
+    }
+    // Damage-reflection pins (dmgrx::t_pins): folded only while installed and non-empty, for the reason the
+    // Incinerator note above gives -- an uninstalled cursor is thread history, not state.
+    if (state.reflect_armed && dmgrx::t_pins != nullptr && !dmgrx::t_pins->empty())
+    {
+        Fold(k, 0x8EF1EC70ull); Fold(k, static_cast<uint64_t>(dmgrx::t_pin_cursor));
+        for (int id : *dmgrx::t_pins) { Fold(k, static_cast<uint64_t>(static_cast<std::int64_t>(id) + 0x40000000LL)); }
     }
 
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset

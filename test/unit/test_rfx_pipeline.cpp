@@ -9,12 +9,19 @@
 // PerformDamageAllCreatures body, pinned at the end.
 #include <doctest/doctest.h>
 
+#include "ai/AIEngine.h"
 #include "ai/ManaPayment.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/EffectHandler.h"
+#include "core/GameEngine.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "mtg_test_seam.h"
 
+#include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -285,4 +292,123 @@ TEST_CASE("rfx step 2: an UNARMED deck's reflector is a vanilla creature (Minota
     PerformDamageAllCreatures(s, 0, DefRfx("Pyroclasm"), 13);
     CHECK(Find(s, 1031) == nullptr);
     CHECK(s.players[1].life == 20);                    // the legacy body raises no trigger
+}
+
+// ---- design step 3: the SEARCHED reflection-target axis (dmgrx::t_pins, Plan::reflect_targets) ----------
+
+namespace
+{
+// Chain Reaction X = 2 on Boros Reckoner (#1101) + one opponent Spirit (#1102): the Spirit dies, the
+// Reckoner survives with 2 marked, and its "any target" trigger has TWO legal targets -- the opponent's
+// face (-2) and the Reckoner itself (F1 folds our own face). The step-2 tripwire case.
+GameState ChainOnSurvivingReckoner()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 4; ++i) { PutRfx(s, "Mountain", 1110 + i); }
+    PutRfx(s, "Boros Reckoner", 1101).entered_this_turn = true;   // summoning-sick: no attack line
+    TokenRfx(s, 1102, 1, 1, 1, "Spirit");
+    Card chain = DefRfx("Chain Reaction").card;
+    chain.m_number = 1120;
+    s.players[0].hand.push_back(chain);
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1130 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+void ResolveStackRfx(GameState& s)
+{
+    while (!s.stack.empty())
+    {
+        const StackEntry e = s.stack.back();
+        s.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(s, e, *d); }
+    }
+}
+}   // namespace
+
+TEST_CASE("rfx step 3: a CHOICE takes its pin; a singleton takes no ordinal; no pin = the front")
+{
+    const CardDefinition& chain = DefRfx("Chain Reaction");
+    {   // no pins installed: the front (the opponent's face) -- the beyond-horizon / executor default
+        GameState s = ChainOnSurvivingReckoner();
+        PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));
+        REQUIRE(Find(s, 1101) != nullptr);
+        CHECK(Find(s, 1101)->damage == 2);
+        CHECK(s.players[1].life == 18);
+    }
+    {   // pin the Reckoner itself: dealt 2 more (4 >= 3) -> it dies; its NEW trigger (LKI) has only the
+        // face left -- a singleton, so it consumes no ordinal -- and the 2 still reach the opponent
+        GameState s = ChainOnSurvivingReckoner();
+        const std::vector<int> pins{ 1101 };
+        dmgrx::PinScope scope(pins);
+        PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));
+        CHECK(Find(s, 1101) == nullptr);
+        CHECK(GyCount(s, 0, "Boros Reckoner") == 1);
+        CHECK(s.players[1].life == 18);
+        CHECK(dmgrx::t_pin_cursor == 1);
+    }
+    {   // a pin that is not legal falls back to the front
+        GameState s = ChainOnSurvivingReckoner();
+        const std::vector<int> pins{ 9999 };
+        dmgrx::PinScope scope(pins);
+        PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));
+        REQUIRE(Find(s, 1101) != nullptr);
+        CHECK(s.players[1].life == 18);
+    }
+    {   // the probe sees the choice's full list, front first
+        GameState s = ChainOnSurvivingReckoner();
+        const std::vector<int> pins;
+        std::vector<std::vector<int>> seen;
+        dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { seen.push_back(legal); };
+        dmgrx::TargetProbeScope probing(probe, pins, 0);
+        dmgrx::PinScope scope(pins);
+        PerformDamageAllCreatures(s, 0, chain, SweepDamageAmount(s, chain));
+        REQUIRE(seen.size() == 1);
+        CHECK(seen[0] == std::vector<int>{ dmgrx::PlayerId(1), 1101 });
+    }
+}
+
+TEST_CASE("rfx step 3: the search BRANCHES a reflection choice (no in-window pick, no tripwire)")
+{
+    const GameState s = ChainOnSurvivingReckoner();
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    std::set<std::vector<int>> pinned;
+    for (const auto& p : plans)
+    {
+        const bool casts_chain = std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+            { return a.card_name.str() == "Chain Reaction"; });
+        if (casts_chain) { pinned.insert(p.reflect_targets); }
+        else             { CHECK(p.reflect_targets.empty()); }   // no sweeper -> no probe, no pin
+    }
+    // Exactly the two admitted targets, each its own plan: the face, and the Reckoner itself (whose own
+    // re-trigger then has the face alone -- a singleton, not a second pin).
+    CHECK(pinned == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1101 } });
+}
+
+TEST_CASE("rfx step 3: every pinned branch replays identically in the executor (lockstep)")
+{
+    const GameState initial = ChainOnSurvivingReckoner();
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    int checked = 0;
+    for (const auto& p : plans)
+    {
+        if (p.reflect_targets.empty()) { continue; }
+        INFO("reflect pin ", p.reflect_targets.front());
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        CHECK(exec.players[0].life == roll.players[0].life);
+        const bool roll_alive = Find(roll, 1101) != nullptr, exec_alive = Find(exec, 1101) != nullptr;
+        CHECK(exec_alive == roll_alive);
+        CHECK(roll_alive == (p.reflect_targets.front() != 1101));   // the pin is what decided it
+        if (roll_alive && exec_alive) { CHECK(Find(exec, 1101)->damage == Find(roll, 1101)->damage); }
+        ++checked;
+    }
+    CHECK(checked == 2);
 }

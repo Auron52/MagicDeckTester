@@ -52,6 +52,7 @@ struct ContPins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
     std::vector<int> champion;      // Prophets ETB choices inside a continuation
     std::vector<int> incinerator_targets;
+    std::vector<int> reflect_targets;   // Plan::reflect_targets (the continuation's own sweeper's reflections)
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     std::vector<int> dredge;        // physical graveyard card number per optional draw; 0 = normal draw
     int put_bounce = -1;   // Plan::bounce_choice as the put-Karoo pin (a Genesis Wave the continuation
@@ -62,6 +63,7 @@ struct ContPins
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
             || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty()
+            || !reflect_targets.empty()
             || !champion.empty();
     }
 };
@@ -1784,6 +1786,11 @@ public:
         int next_klothys_choice = -1; // resolution-time graveyard card and mana mode
         int next_keranos_choice = -1; // resolution-time damage target
         std::vector<int> incinerator_targets; // stable target id per actual queued trigger ordinal
+        // Damage-reflection trigger targets (core/DamageReflection.h, dmgrx::t_pins): one stable target id
+        // (player p = -1 - p, a permanent its m_number) per reflection CHOICE (a target list of size > 1)
+        // in resolution order. Empty == every choice takes the list's front. A DURING-CAST axis
+        // (ContPins::reflect_targets), fanned by AppendSubdecisionAxes on reflect_armed decks only.
+        std::vector<int> reflect_targets;
         // bp_pre -- the FOURTH breakpoint axis beside bp_choice / bp_at / bp_all: the earlier entries
         // of a deviation SEQUENCE (MTG_BP_DEV_SEQ; docs/design/bp-empty-arm-deferred-site.md 6.1).
         // bp_pre[i] is the continuation choice at

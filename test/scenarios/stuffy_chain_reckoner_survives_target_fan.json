@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Damage reflection, design step 3 (the searched reflection-target axis). The step-2 TRIPWIRE case:",
+    "Chain Reaction's X = 2 (a summoning-sick Boros Reckoner + one opponent Spirit), so the Reckoner is",
+    "dealt 2 and SURVIVES, and its 'any target' trigger has two legal targets at resolution (the",
+    "opponent's face, and the Reckoner itself; our own face is folded by F1). Inside the search window",
+    "that used to ABORT (greedywindow::Trip). Now the plan is fanned once per target",
+    "(Plan::reflect_targets) and the face line wins: 2 to the opponent at 2 life. The Reckoner is sick,",
+    "so the T4 win needs the Chain Reaction."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 2,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Boros Reckoner", "sick": true },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Chain Reaction" ],
+  "library_filler": "Mountain", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

@@ -5325,6 +5325,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                     // sac-land picks (one entry per sac ordinal,
                                                     // resolved at the true state); empty inert
     IncineratorPinScope _incinerator_pins_exec(plan.incinerator_targets);
+    dmgrx::PinScope _reflect_pins_exec(plan.reflect_targets);   // lockstep: searched damage-reflection targets
     ScriptedLookTop _slt_exec(plan.look_top_pins);   // executor/rollout lockstep for the searched Risen
     ScriptedDredge _sdredge_exec(plan.dredge_pins);
     ScriptedKeranosTargets _skeranos_exec(plan.keranos_targets);

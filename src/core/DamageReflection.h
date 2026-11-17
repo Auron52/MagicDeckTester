@@ -45,8 +45,10 @@
 #include "GameState.h"
 #include "GameLogger.h"
 #include "../cards/CardDatabase.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -435,6 +437,94 @@ inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTri
     return legal;
 }
 
+// ---- THE SEARCHED REFLECTION-TARGET AXIS (design 4.1 / step 3; the Incinerator shape) -------------
+// A trigger whose target list (after the engine's sound folds and the provider's restrict/order) holds
+// MORE THAN ONE option is a CHOICE. Choices are numbered in resolution order, and the plan carries one
+// pin per choice (TurnSolver::Plan::reflect_targets, a stable id: player p = -1 - p, a permanent its
+// Card::m_number -- never a rank, since ranks shift as creatures die). A singleton is not a choice and
+// takes no ordinal, so a plan whose cascade offers no choice carries no pin.
+//
+//   * t_pins / t_pin_cursor: the installed plan's pins and the next choice ordinal. ApplyPlanDirect, the
+//     executor's committed plan (AIEngine) and a breakpoint continuation (ContPinScope) install them;
+//     the breakpoint capture/resume carries the cursor as prefix state.
+//   * t_probe: AppendSubdecisionAxes' probe-and-fan. While it applies a plan it is told each choice's
+//     list, and clones the plan once per option at the first ordinal the plan does not pin yet. So every
+//     plan the search scores inside the window has a pin for every choice its apply reaches: each
+//     admitted option is BRANCHED, none is picked.
+//   * an ordinal without a (legal) pin takes the list's FRONT. That is reached only where a one-shot
+//     policy is permitted -- beyond the horizon (the rollout's greedy playout and the depth-0 runner,
+//     whose plans the fan does not see), a speculative apply that is not scoring a line (another axis's
+//     probe, this axis's own probe), and the executor if its state drifted from the plan's -- exactly as
+//     for Chandra's Incinerator (g_incinerator_pins, SpellEffects.h), the precedent this mirrors.
+//   * human play is asked through the viewer's `target` prompt (g_play_target_chooser) with the full
+//     legal set (F1 and the provider prune are lifted there); the fan does not run under human play.
+inline thread_local const std::vector<int>* t_pins = nullptr;
+inline thread_local std::size_t t_pin_cursor = 0;
+using TargetProbe = std::function<void(const std::vector<int>&)>;
+inline thread_local TargetProbe* t_probe = nullptr;
+inline thread_local const std::vector<int>* t_probe_owner = nullptr;
+inline thread_local int t_probe_fan_depth = -1;
+// The legal set of the choice the viewer is being asked about (stable ids, front = the engine's
+// default), read by the human-play target chooser (main.cpp) while it builds the prompt.
+inline thread_local const std::vector<int>* t_viewer_legal = nullptr;
+
+// Probe ownership follows the plan VECTOR (IncineratorTargetProbeScope): a nested continuation with its
+// own pins searches its own targets and cannot add speculative choices to its parent's fan.
+struct TargetProbeScope
+{
+    TargetProbe* old_probe = t_probe;
+    const std::vector<int>* old_owner = t_probe_owner;
+    int old_depth = t_probe_fan_depth;
+    TargetProbeScope(TargetProbe& probe, const std::vector<int>& owner, int depth)
+    { t_probe = &probe; t_probe_owner = &owner; t_probe_fan_depth = depth; }
+    ~TargetProbeScope() { t_probe = old_probe; t_probe_owner = old_owner; t_probe_fan_depth = old_depth; }
+    TargetProbeScope(const TargetProbeScope&) = delete;
+    TargetProbeScope& operator=(const TargetProbeScope&) = delete;
+};
+struct PinScope
+{
+    const std::vector<int>* old;
+    std::size_t cursor;
+    TargetProbe* old_probe;
+    const std::vector<int>* old_probe_owner;
+    int old_probe_depth;
+    explicit PinScope(const std::vector<int>& pins)
+        : old(t_pins), cursor(t_pin_cursor), old_probe(t_probe), old_probe_owner(t_probe_owner),
+          old_probe_depth(t_probe_fan_depth)
+    {
+        t_pins = &pins; t_pin_cursor = 0;
+        if (t_probe && t_probe_owner != &pins) { t_probe = nullptr; t_probe_owner = nullptr; t_probe_fan_depth = -1; }
+    }
+    ~PinScope()
+    {
+        t_pins = old; t_pin_cursor = cursor;
+        t_probe = old_probe; t_probe_owner = old_probe_owner; t_probe_fan_depth = old_probe_depth;
+    }
+    PinScope(const PinScope&) = delete;
+    PinScope& operator=(const PinScope&) = delete;
+};
+
+// Can resolving / activating `d` deal damage to creatures through this pipeline (and so raise a
+// reflection trigger)? EVERY route into DealDamageBatch must be listed here: the fan's per-plan
+// pre-check (AppendSubdecisionAxes) skips the probe for a plan none of whose actions passes, which is
+// sound only while this list is complete. Today the one route is PerformDamageAllCreatures: the
+// damage_all_creatures sweeps (Pyroclasm, Blasphemous Act), Chain Reaction's counted X, Rolling
+// Earthquake (x_damage_each_creature_and_player) and Pyrohemia's activation (ping_all_amount).
+// (Design steps 4-5 add Stuffy Doll's self-ping, Guilty Conscience and combat: extend it there.)
+inline bool DefCanDamageCreatures(const CardDefinition& d)
+{
+    return d.params.damage_all_creatures > 0 || d.params.damage_all_creatures_count_creatures
+        || d.params.x_damage_each_creature_and_player || d.params.ping_all_amount > 0
+        || d.params.ping_all_cost.has_value();
+}
+// Does `d` carry a reflection trigger whose target can be a CHOICE? Mogg Maniac's "target opponent"
+// is always the singleton {opponent} (one opponent pool, also in 2HG), so it never needs the fan.
+inline bool DefReflectsWithChoice(const CardDefinition& d)
+{
+    using RT = CardParams::ReflectTo;
+    return d.params.reflect_dealt_damage != RT::None && d.params.reflect_dealt_damage != RT::TargetOpponent;
+}
+
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
 {
     using RT = CardParams::ReflectTo;
@@ -445,24 +535,57 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
                      static_cast<int>(t.kind), t.src.card.m_name.str().c_str());
         std::abort();
     }
-    std::vector<int> legal = LegalReflectTargets(s, t);
-    ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
-                                               static_cast<int>(t.kind), legal);
-    if (legal.empty()) { return; }   // no legal target: the trigger is removed (CR 603.3d)
-    // THE STEP-2 TRIPWIRE (design 10, step 2). Until the searched reflection-target axis exists (design
-    // step 3: Plan::reflect_targets, the Incinerator probe-and-fan), a choice of more than one target
-    // inside the search window has NO searched host, and taking the front there would be a greedy pick
-    // (CLAUDE.md, NO GREEDY PICK INSIDE THE SEARCH WINDOW). So it is fatal, never silently picked. The
-    // front is taken only where it is not a choice (a singleton), or where a one-shot policy is
-    // permitted: beyond the horizon (greedywindow depth 0), the depth-0 runner and the executor
-    // replaying a plan (no frame). Human play reaches the front too until design step 3 wires the
-    // viewer's `target` prompt here.
-    if (legal.size() > 1 && !HumanPlayActive() && greedywindow::InWindow(0))
+    const std::vector<int> engine_legal = LegalReflectTargets(s, t);
+    std::vector<int> legal = engine_legal;
+    if (!HumanPlayActive())   // human play sees every legal target (the provider may not prune it)
     {
-        greedywindow::Trip("damage-reflection trigger target (dmgrx::ResolveTrig; searched from design step 3)",
-                           greedywindow::t_depth);
+        ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
+                                                   static_cast<int>(t.kind), legal);
+        // The hook may only RESTRICT or ORDER: drop anything it added, and a mandatory trigger with a
+        // legal target cannot be emptied (CR 603.3d) -- an emptied list falls back to the engine's.
+        legal.erase(std::remove_if(legal.begin(), legal.end(), [&](int id)
+                    { return std::find(engine_legal.begin(), engine_legal.end(), id) == engine_legal.end(); }),
+                    legal.end());
+        if (legal.empty()) { legal = engine_legal; }
     }
-    const int pick = legal.front();
+    if (legal.empty()) { return; }   // no legal target: the trigger is removed (CR 603.3d)
+    int pick = legal.front();
+    if (legal.size() > 1)   // a CHOICE: searched (the pin), probed (the fan), or asked (the viewer)
+    {
+        const std::size_t ordinal = t_pin_cursor++;
+        if (t_probe) { (*t_probe)(legal); }
+        if (t_pins && ordinal < t_pins->size())
+        {
+            const int pin = (*t_pins)[ordinal];
+            if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { pick = pin; }
+        }
+        if (g_play_target_chooser)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(t.src.card);
+            if (def)
+            {
+                auto to_ct = [&](int id) -> ChosenTarget {
+                    if (id < 0) { return { 0, -1 - id, 0 }; }
+                    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+                    { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == id) { return { 1, i, 0 }; } }
+                    return { 0, 1 - t.src.controller, 0 };
+                };
+                const std::vector<int>* saved = t_viewer_legal;
+                t_viewer_legal = &legal;
+                const auto chosen = (*g_play_target_chooser)(s, *def, t.src.controller, 1, t.amount, { to_ct(pick) });
+                t_viewer_legal = saved;
+                if (chosen.size() == 1)
+                {
+                    int id = 0;
+                    if (chosen[0].kind == 0 && (chosen[0].index == 0 || chosen[0].index == 1)) { id = PlayerId(chosen[0].index); }
+                    else if (chosen[0].kind == 1 && chosen[0].index >= 0
+                             && chosen[0].index < static_cast<int>(s.battlefield.size()))
+                    { id = s.battlefield[static_cast<std::size_t>(chosen[0].index)].card.m_number; }
+                    if (id != 0 && std::find(legal.begin(), legal.end(), id) != legal.end()) { pick = id; }
+                }
+            }
+        }
+    }
     Batch b;
     b.src.push_back(t.src);
     DmgAssign a;

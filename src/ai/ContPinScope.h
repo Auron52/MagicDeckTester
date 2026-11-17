@@ -20,6 +20,7 @@ struct ContPinScope
     std::optional<ScriptedLandSearch> land_search;
     std::optional<ScriptedProphetsChampion> champion;
     std::optional<IncineratorPinScope> incinerator;
+    std::optional<dmgrx::PinScope>     reflect;      // the continuation's damage-reflection targets
     std::optional<ScriptedLookTop>    look_top;     // the continuation's Risen Reef looks / trigger orders
     std::optional<ScriptedDredge>     dredge;
     std::optional<ScriptedPutBounce>  put_bounce;   // the continuation's Genesis Wave put Karoo
@@ -37,6 +38,7 @@ struct ContPinScope
         if (!p->land_search.empty()) { land_search.emplace(p->land_search); }
         if (!p->champion.empty()) { champion.emplace(p->champion); }
         if (!p->incinerator_targets.empty()) { incinerator.emplace(p->incinerator_targets); }
+        if (!p->reflect_targets.empty()) { reflect.emplace(p->reflect_targets); }
         if (!p->look_top.empty())    { look_top.emplace(p->look_top); }
         if (!p->dredge.empty())      { dredge.emplace(p->dredge); }
         if (p->put_bounce >= 1)      { put_bounce.emplace(p->put_bounce); }
@@ -63,6 +65,7 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.look_top    = p.look_top_pins;
     c.dredge      = p.dredge_pins;
     c.incinerator_targets = p.incinerator_targets;
+    c.reflect_targets = p.reflect_targets;
     c.put_bounce  = PutBouncePinOf(p.bounce_choice, p.land_decided, p.land_to_play);
     c.putback     = p.putback_choice;
     return c;

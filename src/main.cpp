@@ -7699,7 +7699,33 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const std::string lifegain_desc = lifegain_player
                 ? ("gains " + std::to_string(per_target_damage) + " life") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (def.params.incinerator_damage_trigger)
+            if (dmgrx::t_viewer_legal != nullptr && def.params.reflect_dealt_damage != CardParams::ReflectTo::None)
+            {
+                // A damage-reflection trigger resolving (dmgrx::ResolveTrig, design 4.1 / 6): "whenever this
+                // creature is dealt damage, it deals that much damage to <target>". The legal set is the
+                // ENGINE's own (stable ids, opponent's face first; human play lifts F1 and the provider
+                // prune, so our own face and every creature it may target are offered).
+                for (int id : *dmgrx::t_viewer_legal)
+                {
+                    if (id < 0)
+                    {
+                        const int pl = -1 - id;
+                        legal.push_back({ 0, pl, 0 });
+                        legal_labels.push_back(pl == controller ? "You (face)" : "Opponent (face)");
+                        continue;
+                    }
+                    for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                    {
+                        const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+                        if (p.card.m_number != id) { continue; }
+                        legal.push_back({ 1, bi, 0 });
+                        legal_labels.push_back(ProtocolPTLabel(p, s)
+                            + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                        break;
+                    }
+                }
+            }
+            else if (def.params.incinerator_damage_trigger)
             {
                 for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
                 {

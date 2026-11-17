@@ -1155,7 +1155,7 @@ cards are in `build/scratch/stuffy/rulings/` (build volume; regenerable from eac
 
 ---
 
-## 14. Implementation notes (steps 1-2, 2026-11-17)
+## 14. Implementation notes (steps 1-3, 2026-11-17)
 
 Where the code departs from the sections above, and why. Each entry names the symbol.
 
@@ -1215,3 +1215,49 @@ Where the code departs from the sections above, and why. Each entry names the sy
 * **Chain Reaction's X** is `SweepDamageAmount` (`SpellEffects.h`). Both dispatch sites read it at
   resolution: `CreatureCount(0) + CreatureCount(1)`, animated lands included as the count's
   convention.
+
+### Step 3 (searched reflection-target axis)
+
+* **Pins index CHOICES, not triggers** (`dmgrx::t_pins` / `t_pin_cursor`, `Plan::reflect_targets`). A
+  trigger whose list (after F1 and the provider) is a singleton takes no ordinal. Section 4.1 says
+  "pins[cursor++]" per trigger, as Incinerator does. Counting only choices means a cascade with no choice
+  carries no pin and costs no probe beyond the first, and the vector stays short. Probe, apply and
+  executor all use the same rule, so the ordinals agree.
+* **No in-window tripwire remains.** An ordinal with no legal pin takes the list's front, exactly as
+  `FlushIncineratorDamageTriggers` does. The step-2 `greedywindow::Trip` cannot stay. Many speculative
+  applies run inside the window before the fan has pinned anything: other axes' probes, this axis's own
+  probe, breakpoint discovery. Each of those would abort. What guarantees "no in-window pick" is the fan:
+  every plan `AppendSubdecisionAxes` emits carries a pin for every choice its apply reaches.
+* **The per-plan pre-check is generic, not section 4.1's "no GC and ≤ 1 Spiteful".** That pre-check
+  assumes the step-10 provider folds (F2/F3, the Spirit prune). Without them the generic list after
+  any surviving creature is never a singleton. The engine instead skips the probe for a plan with no
+  action that can damage a creature (`dmgrx::DefCanDamageCreatures`), or with no reflector whose target can
+  be a choice on the board or in the plan (`dmgrx::DefReflectsWithChoice`; Mogg Maniac is always a
+  singleton). That is sound because `DefCanDamageCreatures` lists every route into `DealDamageBatch`
+  today (the `damage_all_creatures` sweeps, Chain Reaction's counted X, Rolling Earthquake, Pyrohemia).
+  **Steps 4-5 must extend it** (the Doll's self-ping, GC, combat). This also keeps Minotaur's armed Boros
+  Reckoner probe-free, since that deck has no sweeper.
+* **Breakpoint key / fold sites.** The field is folded into `BpCandFingerprint`, `IsApplyEmptyPlan`, the
+  base-plan predicate beside it, `PlanIsAxisVariantExceptOrder`, `SamePlan`, `PlanDomCensus` (with
+  `kPlanDomAssertedSize` 744 → 768), `ApproxPlanBytes`, the candidate-share bucket hash, the plan hash
+  (where only Keranos was folded), the plan diff string, the JSON dump, `ContPins`/`ContPinsOf`/
+  `ContPinScope`, the bp capture/resume cursor (`pin_reflect_cursor`), and `BuildBreakpointKey` (only
+  while pins are installed and non-empty, as for Incinerator). `test/check_plan_sig_lockstep.py` reads
+  action fields only, so a plan pin does not touch it. It already exits 1 on the base commit
+  (`#BB` and `crackle_targets`/`splice_count` fast-only), unrelated to this step.
+* **`sizeof(Plan)` grows by 24 bytes for every deck.** No hole fits a vector. Tier-1 admission uses the
+  portable constant (`tier1::kPlanB`), so it does not move. The byte-budgeted plan caches are
+  result-neutral by contract.
+* **Provider hook hardening.** The engine drops ids the hook added. A hook that empties a non-empty list
+  falls back to the engine's list, because a mandatory trigger with a legal target must target (CR 603.3d).
+  Under human play the hook is not consulted, so the viewer always shows the full legal set.
+* **Viewer.** At a choice, `ResolveTrig` calls `g_play_target_chooser` with the reflector's def. It
+  exposes the engine's own legal list through `dmgrx::t_viewer_legal`, and main.cpp's `target` builder
+  renders it (faces, then creatures with P/T). Mogg Maniac and singletons are not prompted. A
+  `tools/play/DECISIONS.md` row and the `reflect_dealt_damage → target` auditor mapping were added.
+  Stage 5h still owes a forced-type scenario run through the viewer.
+* **The design's "two Spiteful Slivers + Reckoner, a Sliver beats the face" scenario moves to step 6.**
+  Spiteful Sliver does not exist until then. With step-3 cards, F2 holds: every non-face target has
+  mult = 1, so no fixture can show a non-front target winning strictly. Step 3 tests that the axis
+  BRANCHES and replays instead: a unit fan test, a unit executor-lockstep test, and the
+  `stuffy_chain_reckoner_survives_target_fan.json` scenario, which was the old tripwire case.

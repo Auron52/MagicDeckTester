@@ -219,6 +219,10 @@ MANIFEST = {
     "buyback_sacrifice_islands": ("sacrifice", truthy),
     "chain_lightning_copy": ("free_cast", truthy),
     "incinerator_damage_trigger": ("target", truthy),
+    # Damage reflection (Boros Reckoner "any target", Screaming Nemesis "any other target", Spiteful Sliver
+    # "target player"): the trigger's target is a `target` decision at resolution (dmgrx::ResolveTrig ->
+    # g_play_target_chooser). Mogg Maniac's "target opponent" is a forced singleton, never prompted.
+    "reflect_dealt_damage": ("target", lambda v: bool(v) and v != "target_opponent"),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
     # Snarl, reveal a matching land). One shared `land_entry` binary modal. SURFACED, but repetitive:
