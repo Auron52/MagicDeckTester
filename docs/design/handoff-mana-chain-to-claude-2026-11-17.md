@@ -4,6 +4,18 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:11 UTC
 
+Pirates' stale-clean record is being rechecked on a fresh 5,000-game
+block as the only active simulation batch, exec session 31763. Command:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run pirates --games 5000 --name codex-pirates-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/pirates_fresh_gate.out`.
+When complete, inspect
+`logs/mana_clean/codex-pirates-fresh-20261117/report.md`, record the
+verdict here, and commit the new `test/mana_clean.json` entry.
+
 An **Extra Turns first-ever gate attempt** was stopped during its
 64-game sizing probe. After six minutes at 32 threads, only ten one-game
 jobs had finished and the process was at about 21 GB RSS; the enforced
