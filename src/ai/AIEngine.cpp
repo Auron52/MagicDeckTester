@@ -755,7 +755,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
         || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.upkeep_legend_keep_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
-        || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0
+        || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0 || p.crossing_land_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
@@ -823,6 +823,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.echo_choice >= 0             && s.scripted_echo != p.echo_choice)                        { ok = false; }
     if (p.doth_put_choice >= 0         && s.scripted_doth_put != p.doth_put_choice)                { ok = false; }
     if (p.eot_face_up_choice >= 0      && s.scripted_eot_face_up != p.eot_face_up_choice)          { ok = false; }
+    if (p.crossing_land_choice >= 0    && s.scripted_crossing_lands != p.crossing_land_choice)     { ok = false; }
     if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
     if (p.vial_charge_choice >= 0      && vial_pin != p.vial_charge_choice)                        { ok = false; }
     if (p.atk_dork_release >= 0        && dork_pin != p.atk_dork_release)                          { ok = false; }
@@ -3299,6 +3300,15 @@ void AIEngine::DecideCrossingFetch(GameState& state)
         state.scripted_eot_face_up = static_cast<std::int16_t>(fu_pin);
         if (fu_pin != 0) { m_committed_line.clear(); }
     }
+    // Manabond / Burgeoning (Maze's End I3), when the committed line's crossing recorded none (no-op without either).
+    // A pick other than all-front deviates from what the queued line assumed, so it clears that line.
+    const std::int64_t cl_pin = TurnSolver::ChooseRealCrossingLands(view, m_lookahead_depth, m_max_turns, &budget,
+                                                                    m_search_post_combat);
+    if (cl_pin != -2)
+    {
+        state.scripted_crossing_lands = cl_pin;
+        if (cl_pin != 0) { m_committed_line.clear(); }
+    }
 }
 // ...and its RESOLUTION node (TurnSolver::ChooseRealResolutionFetch has the why): an uncovered suspended-tutor search
 // met by the REAL upkeep is searched there, from the search's view of the real state, under the same scopes and
@@ -3598,6 +3608,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ...and the LIBRARY-TOP half (Courser of Kruphix) -- lockstep twin of ApplyPlanDirect's
     // top_at_section: the playable top as the pass opens, reset with the hand half.
     int exec_top_at_section = PlayableTopLandNumber(state);
+    // ...and the EXTRA-DROP half (Exploration) -- twin of ApplyPlanDirect's drops_at_section.
+    int exec_drops_at_section = TurnSolver::LandDropSnapshot(state);
     // ...and the GRAVEYARD-EQUIPMENT half (Forge Anew) -- twin of ApplyPlanDirect's gyeq_at_section.
     std::vector<int> exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
     auto exec_section_reset = [&]()
@@ -3607,6 +3619,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // bp_searched_plan's flush). No-op without the loop.
         if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
         exec_top_at_section = PlayableTopLandNumber(state);
+        exec_drops_at_section = TurnSolver::LandDropSnapshot(state);
         exec_gyeq_at_section = TurnSolver::GraveyardEquipmentNumbers(state);
         if (!BpHandEntryEnabled()) { return; }
         exec_hand_at_section = TurnSolver::HandCardNumbers(state);
@@ -9447,7 +9460,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // the library-top half, outside the sequence pre-filter (rollout twin: the same OR)
             || TurnSolver::TopLandNewlyPlayable(exec_top_at_section, state, karoo_deferred)
             // ...and the graveyard-Equipment half (Forge Anew; rollout twin: the same OR)
-            || TurnSolver::EquipmentReturnedFromGraveyard(exec_gyeq_at_section, state)))
+            || TurnSolver::EquipmentReturnedFromGraveyard(exec_gyeq_at_section, state)
+            // ...and the extra-drop half (Exploration; rollout twin: the same OR)
+            || TurnSolver::LandDropNewlyOpen(exec_drops_at_section, state, karoo_deferred)))
     {
         cast_draw_engine = true;
         section_fallback = s_full_depth && m_lookahead_depth > 0
@@ -9671,8 +9686,23 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
 // Land-priority knobs (MTG_LEGACY_STATIC_TAPPED / MTG_LAND_CLOSING_WINDOW): shared readers in
 // EngineFlags.h -- TurnSolver's greedy_land_name mirrors these passes and must read the same flags.
 
+// EXPLORATION (Maze's End I3): the greedy drop takes EVERY open drop (lockstep twin of the rollout's
+// SimulateLandPlay wrapper). Deck-gated: one bool test for every other deck.
+static thread_local bool t_try_land_one = false;
 bool AIEngine::TryPlayLand(GameState& state)
 {
+    if (state.deck_has_static_land_drops && !t_try_land_one)
+    {
+        t_try_land_one = true;
+        const bool any = TryPlayLand(state);
+        for (int guard = 0; any && guard < 8; ++guard)
+        {
+            const Player& lp = state.ActivePlayer();
+            if (lp.lands_played_this_turn >= lp.LandDropsAvailable() || !TryPlayLand(state)) { break; }
+        }
+        t_try_land_one = false;
+        return any;
+    }
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
 

@@ -1776,6 +1776,10 @@ public:
         // axis on the plan of the turn that crossed; written write-when-set by WritePostApplyStatePins. In the
         // int16 hole after next_draw_dredge_choice (sizeof(Plan) unchanged).
         std::int16_t eot_face_up_choice = -1;
+        // Maze's End I3: the CROSSING LAND PUTS pin (Manabond's end-step yes/no + each dumped land's as-enters
+        // choice, then Burgeoning's which-land per trigger), recorded where the turn's line crossed the boundary
+        // (BoundaryFan's crossing-land digit) -> GameState::scripted_crossing_lands. -1 = none recorded.
+        std::int64_t crossing_land_choice = -1;
         std::vector<int> next_draw_dredge_pins; // all eligible boundary draws, in event order
         int next_klothys_choice = -1; // resolution-time graveyard card and mana mode
         int next_keranos_choice = -1; // resolution-time damage target
@@ -2457,6 +2461,17 @@ public:
     // section twin), so they count the same breakpoints. Deck-constant gated: false at the first test
     // for every deck without a play-from-top card.
     static bool TopLandNewlyPlayable(int top_snapshot, const GameState& state, bool drop_reserved);
+    // THE EXTRA-DROP TWIN (Exploration, Maze's End I3). A Plan carries ONE land drop, so with a static extra drop
+    // (CardParams::static_extra_land_drops) a second / third land in one main phase is reachable only through a
+    // re-solve after the first: when a section PLAYED a land (or opened a drop -- an Exploration cast) and a drop
+    // is still open with a land in hand, the remaining drop is a NEW OPTION and arms site 10 at the section window
+    // in both worlds (ApplyPlanDirect, AIEngine's section twin), exactly like TopLandNewlyPlayable. The continuation
+    // re-enumerates the land drop (EnumeratePlansWithLand offers it while lands_played < LandDropsAvailable), each
+    // land with its own searched choices (fetch target, the land-entry pin on the continuation's own Action).
+    // `snapshot` = LandDropSnapshot as the section opened. Deck-constant gated (deck_has_static_land_drops): false
+    // at the first test for every deck without such a card.
+    static int  LandDropSnapshot(const GameState& state);
+    static bool LandDropNewlyOpen(int snapshot, const GameState& state, bool drop_reserved);
     // THE GRAVEYARD-EQUIPMENT TWIN (Forge Anew, 2026-10-17): an Equipment CARD that sat in the active
     // player's graveyard at the snapshot is on their battlefield NOW. The plan's equip candidates were
     // built from the battlefield and hand only, so a piece returned mid-plan has no Equip action in
@@ -2996,6 +3011,10 @@ public:
     // nothing to decide: no face-down permanent, or a one-entry menu).
     static int ChooseRealCrossingFaceUp(GameState& state, int depth, int max_turns,
                                         SearchBudget* budget, bool second_main);
+    // ...and the crossing land puts (Manabond / Burgeoning, Maze's End I3), same shape: the executor's crossing node
+    // when the committed line's crossing recorded no Plan::crossing_land_choice. -2 = nothing to decide.
+    static std::int64_t ChooseRealCrossingLands(GameState& state, int depth, int max_turns,
+                                                SearchBudget* budget, bool second_main);
     // Test hooks: the MTG_FACEUP_AXIS_STATS searched-frame count (must read 0), and every crossing the face-up
     // axis makes from `state` as (recorded pin or -2, flipped-permanent count after the crossing).
     static long long FaceUpSearchedFrameUnpinnedForTest();
@@ -3145,6 +3164,8 @@ public:
     // Test hook (searched Defense of the Heart, MTG_DOTH_AXIS): every crossing the boundary fan makes from `state`
     // (a state at the end of its turn), in order, as the pin it would record (-1 = that crossing decided nothing).
     static std::vector<int> DothBoundaryPinsForTest(const GameState& state);
+    // Every crossing the fan makes from `state`, as the crossing-land pin it records (-1 = decided nothing). I3.
+    static std::vector<long long> CrossingLandBoundaryPinsForTest(const GameState& state);
     static std::vector<int> DredgeBoundaryPinsForTest(const GameState& state);
     static std::vector<std::vector<int>> DredgeBoundaryPinSequencesForTest(const GameState& state);
     static std::vector<std::pair<int, int>> GodBoundaryPinsForTest(const GameState& state);
@@ -4225,6 +4246,7 @@ public:
         int boundary_klothys = -2;
         int boundary_keranos = -2;
         int boundary_face_up = -2;   // morph's opponent-end-step flip (Plan::eot_face_up_choice)
+        std::int64_t boundary_crossing_lands = -2;   // Manabond / Burgeoning (Plan::crossing_land_choice, I3)
         int boundary_dredge = -2; // next draw step's physical dredger, 0 = normal draw
         std::vector<int> boundary_dredge_pins;
     };

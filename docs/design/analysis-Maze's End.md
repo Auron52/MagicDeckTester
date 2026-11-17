@@ -44,7 +44,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 |---|---|---|
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
 | I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | DONE `c71d96361` + `699e1137a` (wip/maze-end); unit suite 3411/3411; smoke byte-identical to I1 (all 219 cases' per-game digests) |
-| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | pending |
+| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | IN PROGRESS (see I3 cards) |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
 
 ### I1 cards (2026-11-17)
@@ -170,6 +170,59 @@ Rules review of the I2 code (I2b, against `.claude/skills/mtg-rules.md` and the 
   damage (the existing `tap_is_life_payment` path).
 - Controller-aware: "Gates YOU control" (Gond), the Black Gate's life and Amulet's "you control" all read the
   entering land's controller.
+
+### I3 cards (2026-11-17)
+
+| Card | Tier | Params | Viewer bucket |
+|---|---|---|---|
+| Exploration | 3 | `static_extra_land_drops 1` | none of its own (`main_phase` land drop while a drop remains) |
+| Burgeoning | 3 | `opponent_land_play_put_land_from_hand` | A: `dig` (which land / none) on the opponent's land play |
+| Manabond | 3 | `endstep_may_dump_hand_lands_discard_hand` | A: `dig` (yes/no) at our end step |
+
+Oracle text and mana cost pasted verbatim from `build/scratch/maze/oracle.jsonl`; modelling commentary in the bracket note.
+
+**Exploration -- the multi-drop route (the search gap).** A Plan carries ONE `land_to_play`, so a second / third land in
+one main phase was unfindable at any budget. Static drops: `StaticExtraLandDrops` (core/SpellEffects.h) seeds
+`Player::bonus_land_drops_this_turn` at both untap resets (GameEngine::UntapStep and the rollout twin); a copy entering
+mid-turn adds its drop in `FireEtbWatchers`. The search route is **site 10's extra-drop clause**, the
+`TopLandNewlyPlayable` twin: `TurnSolver::LandDropSnapshot` is taken with the other section-window halves (both worlds:
+ApplyPlanDirect's `drops_at_section`, AIEngine's `exec_drops_at_section`, each reset at every breakpoint decision point),
+and `TurnSolver::LandDropNewlyOpen` arms site 10 at the section window when the section PLAYED a land (or a cast opened
+a drop) and a drop is still open with a land in hand. `PlanOpensBreakpoint` marks such a plan (land played or an
+extra-drop source cast, a drop left, a land left) so its continuation is fanned (searched), never BpUnbranchedCanon's
+front. The continuation re-enumerates the land drop (`EnumeratePlansWithLand` offers it while `lands_played <
+LandDropsAvailable`), each land with its own fetch / as-enters choices recorded on its OWN continuation Action
+(`land_rad_mode`), never the outer plan's `rad_mode`.
+*Completeness argument:* any legal sequence `c0 L1 c1 L2 c2 ... Lk ck` (c = cast sets in plan order, L = drops) is a
+chain of plans `{c0, L1 at its slot, c1}` -> breakpoint -> `{L2, c2}` -> breakpoint -> ...: each link is an ordinary plan
+(land slot + casts) of the state the previous link leaves, every link's land option set is the full enumeration, and
+each breakpoint is a searched site-10 node (root turn) / fanned variant -- so at an unlimited budget every sequence of
+drops is reachable; a budget re-prices nodes and never removes a link. Gated on `deck_has_static_land_drops` (stamped
+from the param; Garth holds it open), so no other deck moves -- including Scale the Heights decks (see the open item).
+Beyond the horizon the greedy drop takes EVERY open drop (`SimulateLandPlay` / `AIEngine::TryPlayLand` loop, the
+permitted playout policy, deck-gated).
+
+**Burgeoning and Manabond -- the crossing-land pin.** Every decision either card makes between the end of our turn and
+our next untap is one ORDINAL of `GameState::scripted_crossing_lands` (int64, 12 x 5 bits), in event order: each
+Manabond at our end step (yes/no; rank 0 = yes with a land in hand), then -- on a yes -- each dumped land's as-enters
+value (only when it has more than one admitted value), then each Burgeoning trigger on the opponent's land play (one
+rank per distinct (land name in hand, admitted as-enters value), then none LAST). The pin is consumed as read (shifted),
+-1 = unpinned = every ordinal at rank 0 (the playout default beyond the horizon). `BoundaryFan` gains a crossing-land
+digit (an inner odometer, the Defense-of-the-Heart shape: each ordinal's width learned per crossing through
+`t_crossing_land_probe`), recorded on `Plan::crossing_land_choice` (written by `WritePostApplyStatePins`), threaded
+through both one-rollout hosts (FS tail, BoundaryChoice) and the executor's crossing node
+(`TurnSolver::ChooseRealCrossingLands`, called from `AIEngine::DecideCrossingFetch`), folded into every state key and the
+plan signatures, expired at the turn boundary in both worlds. Scope = the morph face-up axis's (not human play, not a
+narrowed playout / d0 runner / breakpoint enumeration, not a constant-leaf edge).
+* Burgeoning: `ResolveBurgeoningTriggers`, from `ResolvePassiveOpponentLandTurn` right after the opponent's land PLAY.
+  The land enters through `EnterLand(..., controller = us)` under `LandEntryNoFloatScope` and its own `LandEntryPinScope`
+  (decision 15's rule): enters-tapped, Gond Gate, Amulet (no float), Gateway Plaza, Guild Summit's draw all for us.
+  `DeckNeedsOpponentLandPlay` turns on for the param (decision 6).
+* Manabond: `PerformEndStepManabond`, both worlds' end step right before Abiding Grace. A SIMULTANEOUS put: every land's
+  tapped-ness is pre-decided against the pre-event board (CR 614.12: a Gond Gate in the batch untaps none of them), the
+  lands enter with `fire_landfall = false` and their own pins, the rest of the hand is discarded (part of the
+  resolution), then the batch's enter triggers resolve in put order (land extras, Gateway Plaza with its pin, landfall /
+  Guild Summit -- those draws are kept).
 
 ## Decisions and provisional deferrals (USER sign-off pending)
 

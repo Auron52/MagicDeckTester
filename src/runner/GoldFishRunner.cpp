@@ -673,6 +673,8 @@ bool GoldFishRunner::DeckNeedsOpponentLandPlay(const Decklist& deck)
             // real library from the same fifty-deck opponent pool.
             if (p.archive_trap_free_if_opponent_searched || p.damage_per_nonbasic_land > 0
                 || p.spell_exile_opponent_until_mv > 0) { return true; }
+            // Burgeoning triggers on the opponent's land PLAY (Maze's End ledger decision 6): the Mill model.
+            if (p.opponent_land_play_put_land_from_hand) { return true; }
             has_hinata = has_hinata || p.hinata_cost_reducer;
             targets_permanents = targets_permanents || p.discount_targets_permanents;
         }
@@ -1711,6 +1713,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Courser of Kruphix's top-of-library land drop (see GameState::deck_has_top_land_play): the
         // same param TopLandPlayStaticSource tests on the battlefield.
         bool top_land = false;
+        // Maze's End I3: Exploration's static drops / Burgeoning + Manabond's crossing puts (GameState flags).
+        bool static_land_drops = false, crossing_land_put = false;
         // The land-search cluster (see GameState::deck_has_land_search): the master param.
         bool land_search = false;
         // FireEtbWatchers' "another <subtype> enters: draw" walk (GameState::
@@ -1820,6 +1824,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 { track_noncombat = true; }
                 if (d->params.scry_reveal_land_to_battlefield) { scry_watcher = true; }
                 if (d->params.play_lands_from_library_top) { top_land = true; }
+                if (d->params.static_extra_land_drops > 0) { static_land_drops = true; }
+                if (d->params.opponent_land_play_put_land_from_hand
+                    || d->params.endstep_may_dump_hand_lands_discard_hand) { crossing_land_put = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
                 if (d->params.etb_destroy_nonbasic_land_optional) { land_search = true; }   // White Orchid Phantom's basic search
                 if (d->params.etb_exile_library_lands_set_base_pt) { land_search = true; }   // Trench Gorger's exile search (the in-plan pin fan)
@@ -1898,6 +1905,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit PROVES TopLandPlayStaticSource's walk finds no
         // play-from-top permanent, so every library-top land read is dead code for that deck.
         state.deck_has_top_land_play     = garth || top_land;
+        // Same reasoning, no lever (Maze's End I3): a clear bit proves no Exploration / Burgeoning / Manabond exists,
+        // so the untap walk, the site-10 extra-drop route and the crossing-land digit are dead code for that deck.
+        state.deck_has_static_land_drops = garth || static_land_drops;
+        state.deck_has_crossing_land_put = garth || crossing_land_put;
         // Same reasoning: a clear bit proves no land-search source can exist (the stamp IS the
         // master param every land-search site tests), so skipping its walks is dead-code elimination.
         state.deck_has_land_search       = garth || land_search;

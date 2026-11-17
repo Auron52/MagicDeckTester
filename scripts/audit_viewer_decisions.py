@@ -543,6 +543,15 @@ MANIFEST = {
     # the entry (ResolveEtbSacUnlessPay, every land-entry route) on the `dig` chooser -- one examined card
     # (the Plaza), 0 = pay, -1 = sacrifice; the Mihail pay-{1} shape. Only when the {1} is affordable.
     "etb_sacrifice_unless_pay":       ("dig",         present),
+    # ---- Maze's End (I3, 2026-11-17) ----
+    # Burgeoning "you may put a land card from your hand onto the battlefield" on the opponent's land play: WHICH
+    # land (or none) is asked on the `dig` chooser (ResolveBurgeoningTriggers, from ResolvePassiveOpponentLandTurn);
+    # examined = one card per distinct land name in hand, -1 = put nothing. The land's own as-enters choice
+    # (colour, Plaza pay) is then asked at the entry by its own chooser.
+    "opponent_land_play_put_land_from_hand": ("dig", truthy),
+    # Manabond's end-step "you may reveal your hand and put all land cards ...": yes/no on the `dig` chooser
+    # (PerformEndStepManabond, both worlds' end step); one examined card (Manabond), legal {0}, -1 = decline.
+    "endstep_may_dump_hand_lands_discard_hand": ("dig", truthy),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
     # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
@@ -1020,6 +1029,8 @@ INERT_PARAMS = {
     # Maze's End (I2, 2026-11-17).
     "gates_enter_untapped": "Gond Gate -- 'Gates you control enter untapped': a static replacement, no choice (it also overrides a forced-tapped put; ledger decision 5)",
     "mana_colors_of_controlled_subtype": "Gond Gate -- its reflected mana colours (the Gates you control could produce); the colour per tap is the mana-payment exemption",
+    # Maze's End (I3, 2026-11-17).
+    "static_extra_land_drops": "Exploration -- a static extra land drop; WHICH lands are played is the main_phase land drop the viewer already offers while a drop remains, no choice of its own",
     "untap_own_permanent_entering_tapped": "Amulet of Vigor -- a mandatory untap trigger; its order (before the land's own triggers) and the multi-Amulet float are sound dominances, no choice",
     "etb_choose_color_fixed": "the CLB Gates' printed colour, excluded from the etb_choose_color menu (the choice itself rides etb_choose_color -> choose_color)",
     "chosen_color_adds_basic_land_type": "Thran Portal -- the chosen basic land type is the colour chosen by etb_choose_color -> choose_color; no second choice",

@@ -1093,6 +1093,14 @@ struct GameState
     // walk finds nothing (dead-code elimination, no lever). DEFAULT TRUE == walk, so an unstamped
     // GameState (the scenario harness, a unit test) can never silently lose a Courser. Only ever err true.
     bool                     deck_has_top_land_play          = true;  // Courser of Kruphix
+    // Maze's End I3 -- Exploration's static extra land drops (CardParams::static_extra_land_drops). Gates the
+    // untap-step walk (StaticExtraLandDrops) and the site-10 "drop still open after a land" route
+    // (TurnSolver::LandDropNewlyOpen). DEFAULT TRUE == walk (an unstamped scenario/unit state keeps the drops);
+    // StampDeckTraits clears it for every deck without the param, so no other deck's play moves.
+    bool                     deck_has_static_land_drops      = true;
+    // ...and the crossing land puts (Burgeoning's opponent-land-play put, Manabond's end-step dump): gates their
+    // battlefield walks and the BoundaryFan digit. Same convention.
+    bool                     deck_has_crossing_land_put      = true;
     // Deeproot Pilgrimage's tap-event watcher. Default true keeps hand-built scenario
     // states faithful; StampDeckTraits clears it only when the deck cannot contain one.
     bool                     deck_has_deeproot_pilgrimage   = true;
@@ -1465,6 +1473,12 @@ struct GameState
     // opponent_turn lambdas; -1 = unpinned (beyond the horizon the front, the permitted playout greedy).
     // FUTURE-DETERMINING: folded value-gated. An int16 in the hole after the turn-god bools (sizeof unchanged).
     std::int16_t             scripted_eot_face_up = -1;
+    // Maze's End I3: the CROSSING LAND PUTS pin -- Manabond's end-step yes/no and Burgeoning's which-land, one
+    // ordinal per trigger in event order (Manabonds at our end step, then each Burgeoning on the opponent's land
+    // play), kCrossingLandPinBits each (core/SpellEffects.h CrossingLandRank). -1 = unpinned (the provider's
+    // front: rank 0). Chosen where the line crosses the boundary (BoundaryFan), consumed by that crossing,
+    // expired at the turn boundary like scripted_eot_face_up.
+    std::int64_t             scripted_crossing_lands = -1;
     // Physical IDs with Athreos coin counters. Kept until a marked permanent
     // leaves, so the death/exile event can read its last-known counter state.
     std::vector<int>         athreos_coin_ids;

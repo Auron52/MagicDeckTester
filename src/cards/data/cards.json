@@ -18164,6 +18164,48 @@
    }
   },
   {
+   "name": "Exploration",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may play an additional land on each of your turns. [STATIC: one extra land drop per copy, copies stack (CR 305.2), folded into the player's bonus land drops (the untap step seeds the controlled-copy total; a copy entering adds its drop that turn). Every extra drop is SEARCHED: a plan carries one land drop, so a section that plays a land while another drop is open and a land is in hand opens the site-10 breakpoint, whose continuation enumerates the next drop (and its own fetch / as-enters choices) -- every sequence of drops is findable at an unlimited budget. Beyond the horizon the greedy drop takes every open drop (the permitted playout policy). Losing a copy mid-turn does not remove its drop this turn (only our own Archdruid's Charm could exile it, never chosen autonomously; disclosed).]",
+   "template": "custom",
+   "parameters": {
+    "static_extra_land_drops": 1
+   }
+  },
+  {
+   "name": "Burgeoning",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever an opponent plays a land, you may put a land card from your hand onto the battlefield. [One trigger per copy per opponent land PLAYED (a fetch's search is not a play), on the passive opponent's turn: the card turns the 50-card opponent land model on (ledger decision 6), so the trigger frequency is that model's (at most one land per opponent turn, only while it holds one -- disclosed). WHICH land (each distinct name in hand, crossed with its searched as-enters choice: a colour, Gateway Plaza's pay-or-sacrifice) or NONE is SEARCHED where the line crosses into the opponent's turn (the crossing-land pin); beyond the horizon the first land is the playout default. The land is OURS on their turn: enters-tapped, Gond Gate, Amulet of Vigor (no mana float off our main phase), Gateway Plaza and Guild Summit's draw all apply to us. Not a land drop.]",
+   "template": "custom",
+   "parameters": {
+    "opponent_land_play_put_land_from_hand": true
+   }
+  },
+  {
+   "name": "Manabond",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of your end step, you may reveal your hand and put all land cards from it onto the battlefield. If you do, discard your hand. [One optional trigger per copy. Yes/no is SEARCHED where the line crosses the turn boundary (the crossing-land pin; rank 0 = yes with a land in hand), together with each put land's own as-enters choice. The lands enter SIMULTANEOUSLY: each one's tapped-ness is judged against the board before the event (CR 614.12: a Gond Gate put in the same batch untaps none of them). Then the rest of the hand is discarded, then the enter triggers resolve (Gateway Plaza's pay, Guild Summit's draws -- those cards are kept). Amulet of Vigor untaps but floats no mana (an end step). The reveal is unobservable to the goldfish.]",
+   "template": "custom",
+   "parameters": {
+    "endstep_may_dump_hand_lands_discard_hand": true
+   }
+  },
+  {
    "name": "Amulet of Vigor",
    "mana_cost": "{1}",
    "types": [

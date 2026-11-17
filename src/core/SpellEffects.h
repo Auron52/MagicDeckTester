@@ -2913,6 +2913,25 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// EXPLORATION (Maze's End I3): the extra land drops `player` gets from static "you may play an additional land on
+// each of your turns" permanents it controls (CardParams::static_extra_land_drops, copies stack). Both untap resets
+// (GameEngine::UntapStep, the rollout's twin) seed Player::bonus_land_drops_this_turn with it; a copy entering
+// mid-turn adds its own count (FireEtbWatchers). 0 for every deck without the param (deck-gated, no walk).
+inline int StaticExtraLandDrops(const GameState& state, int player)
+{
+    if (!state.deck_has_static_land_drops) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != player || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr) { n += d->params.static_extra_land_drops; }
+    }
+    return n;
+}
+// Burgeoning's triggers on the opponent's land play (defined with the crossing land puts, after EnterLand).
+inline void ResolveBurgeoningTriggers(GameState& state);
+
 // The passive opponent plays one land from hand during its simplified main phase. A
 // fetch search opens a real opponent-turn instant window for each Archive Trap
 // already in our hand; the autonomous policy casts it for {0} immediately.
@@ -2933,6 +2952,8 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
     if (!play.played) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     { EmitPlayEvent(state.turn_number, "land", "opponent plays " + play.land_name); }
+    // Burgeoning (Maze's End I3): "whenever an opponent PLAYS a land" -- the play, not a fetch's search.
+    if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
     if (!play.searched) { return; }
     state.opponent_searched_library_this_turn = true;
     ShuffleAfterSearch(state, 1);
@@ -11920,6 +11941,15 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     if (state.battlefield[static_cast<std::size_t>(entered_index)].tapped
         && !state.battlefield[static_cast<std::size_t>(entered_index)].card.IsLand())
     { ResolveEnteredTappedUntaps(state, entered_index); }
+    // EXPLORATION entering mid-turn (Maze's End I3): its extra drop is live this turn at once (the untap
+    // reset seeds the copies already out). Deck-gated: one bool for every other deck.
+    if (state.deck_has_static_land_drops)
+    {
+        const Permanent& e = state.battlefield[static_cast<std::size_t>(entered_index)];
+        const CardDefinition* ed = e.def_absent ? nullptr : CardDatabase::Instance().LookupCached(e.card);
+        if (ed != nullptr && ed->params.static_extra_land_drops > 0)
+        { state.players[static_cast<std::size_t>(e.controller_index)].bonus_land_drops_this_turn += ed->params.static_extra_land_drops; }
+    }
     // "This creature enters with N +1/+1 counters on it" (CardParams::enters_with_plus_counters,
     // Mossborn Hydra) -- an AS-ENTERS REPLACEMENT (CR 614.1c), so it sits HERE, right after the face
     // is settled and before anything below can observe the entrant (every enter watcher, the landfall
@@ -52777,6 +52807,215 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
 // Anything else -- a nonland, or a land not put -- goes to HAND through the EnterHand choke point
 // (HandEntryReason::Dig: it is put, not drawn -- no draw count, no draw triggers; the site-10
 // put-in-hand breakpoint sees it). An empty library: nothing to look at, nothing happens.
+// =====================================================================================================
+// MAZE'S END I3 -- THE CROSSING LAND PUTS (Manabond, Burgeoning). Every decision either card makes between
+// the end of our turn and the start of the next is one ORDINAL of GameState::scripted_crossing_lands, taken in
+// event order (each Manabond at our end step: yes/no, then -- if yes -- each dumped land's own as-enters choice;
+// then each Burgeoning trigger on the opponent's land play: which (land, as-enters choice), or none). The pin is
+// CONSUMED as it is read (the low kCrossingLandPinBits are the next ordinal's rank, then shifted out), so no
+// cursor is needed; -1 = unpinned (every ordinal at rank 0, the provider's front -- the permitted playout greedy
+// beyond the horizon, the d0 runner). A searched frame fans it at the turn crossing (TurnSolver BoundaryFan's
+// crossing-land digit), learning each ordinal's width through t_crossing_land_probe. Only an ordinal with a REAL
+// choice (width > 1) consumes a rank, so a width-1 decision never shifts the encoding.
+constexpr int kCrossingLandPinBits     = 5;
+constexpr int kCrossingLandPinMask     = (1 << kCrossingLandPinBits) - 1;
+constexpr int kCrossingLandMaxOrdinals = 12;   // 60 bits of the int64 pin; a 13th+ decision takes its front
+struct CrossingLandProbe { int n = 0; int size[kCrossingLandMaxOrdinals] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }; };
+inline thread_local CrossingLandProbe* t_crossing_land_probe = nullptr;
+
+// Take the next ordinal's rank for a decision of `width` options (width <= 1: no decision, nothing consumed).
+inline int TakeCrossingLandRank(GameState& state, int width)
+{
+    if (width <= 1) { return 0; }
+    width = std::min(width, kCrossingLandPinMask + 1);
+    if (CrossingLandProbe* pr = t_crossing_land_probe)
+    {
+        if (pr->n < kCrossingLandMaxOrdinals) { pr->size[pr->n] = width; }
+        ++pr->n;
+    }
+    if (state.scripted_crossing_lands < 0) { return 0; }
+    const int r = static_cast<int>(state.scripted_crossing_lands & kCrossingLandPinMask);
+    state.scripted_crossing_lands >>= kCrossingLandPinBits;
+    return std::min(r, width - 1);
+}
+
+// The admitted as-enters values of a land (the land-entry pin: a colour, Gateway Plaza's pay/sacrifice) for an
+// autonomous put; {-1} (the unpinned default) for a land with no such choice, and in human play (the viewer asks
+// at the entry). The provider RESTRICTS / ORDERS only (LandEntryPinCandidates).
+inline std::vector<int> CrossingLandEntryPins(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (!LandHasEntryPinChoice(def) || (g_play_dig_chooser != nullptr && !g_tap_speculating)) { return { -1 }; }
+    std::vector<int> pins = ResolveProvider(state).LandEntryPinCandidates(state, controller, def);
+    if (pins.empty()) { pins.push_back(-1); }
+    return pins;
+}
+
+// Does `controller` control a permanent carrying `pred`? (Deck-gated by the caller.)
+template <class Pred>
+inline int CountControlledWithParam(const GameState& state, int controller, Pred pred)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && pred(d->params)) { ++n; }
+    }
+    return n;
+}
+
+// BURGEONING -- "Whenever an opponent plays a land, you may put a land card from your hand onto the battlefield."
+// Called by ResolvePassiveOpponentLandTurn (both worlds) right after the opponent's land PLAY (a fetch's search is
+// not a play). One trigger per copy, snapshotted as the land is played (CR 603.2). Each trigger's menu: one option
+// per distinct (land NAME in hand, admitted as-enters value) -- copies of one name are the same object class, two
+// different-named Gates never fold -- then "none" LAST (rank 0 = the first land, the playout default). The put is
+// OURS on the opponent's turn: EnterLand under our control (enters-tapped, Gond Gate, Amulet of Vigor, Gateway
+// Plaza, Guild Summit's draw all read us), with no Amulet float (no main phase of ours).
+inline void ResolveBurgeoningTriggers(GameState& state)
+{
+    if (!state.deck_has_crossing_land_put) { return; }
+    const int me = 0;   // the passive opponent is seat 1 (ResolvePassiveOpponentLandTurn)
+    const int n = CountControlledWithParam(state, me, [](const CardParams& p)
+                                           { return p.opponent_land_play_put_land_from_hand; });
+    for (int t = 0; t < n; ++t)
+    {
+        struct Opt { int number; const CardDefinition* def; int pin; };
+        std::vector<Opt> opts;
+        std::vector<Card> human_cards;
+        std::vector<std::string> seen;
+        for (const Card& c : state.players[me].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand()) { continue; }
+            if (std::find(seen.begin(), seen.end(), c.m_name.str()) != seen.end()) { continue; }
+            seen.push_back(c.m_name.str());
+            human_cards.push_back(c);
+            for (int pin : CrossingLandEntryPins(state, me, *d)) { opts.push_back(Opt{ c.m_number, d, pin }); }
+        }
+        if (opts.empty()) { return; }   // no land in hand: nothing to put (a later trigger finds none either)
+        const int width = static_cast<int>(opts.size()) + 1;   // + "none"
+        int k = TakeCrossingLandRank(state, width);
+        int number = -1, pin = -1;
+        const CardDefinition* def = nullptr;
+        if (k < static_cast<int>(opts.size())) { number = opts[k].number; def = opts[k].def; pin = opts[k].pin; }
+        if (g_play_dig_chooser && !g_tap_speculating)
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < static_cast<int>(human_cards.size()); ++i) { legal.push_back(i); }
+            const int r = (*g_play_dig_chooser)(state, me, "Burgeoning (opponent played a land)",
+                                                human_cards, legal, 0);
+            number = -1; def = nullptr; pin = -1;
+            if (r >= 0 && r < static_cast<int>(human_cards.size()))
+            {
+                number = human_cards[static_cast<std::size_t>(r)].m_number;
+                def = CardDatabase::Instance().LookupCached(human_cards[static_cast<std::size_t>(r)]);
+            }
+        }
+        if (def == nullptr) { continue; }   // "you may": put nothing
+        Player& p = state.players[me];
+        auto it = std::find_if(p.hand.begin(), p.hand.end(), [number](const Card& c) { return c.m_number == number; });
+        if (it == p.hand.end()) { continue; }
+        p.hand.erase(it);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "land", "Burgeoning puts " + def->card.m_name.str()); }
+        LandEntryNoFloatScope no_float;
+        LandEntryPinScope pin_scope(pin);
+        EnterLand(state, *def, number, /*resolve_full_etb=*/true, /*fire_landfall=*/true, LandEntryTap::Natural, me);
+    }
+}
+
+// MANABOND -- "At the beginning of your end step, you may reveal your hand and put all land cards from it onto the
+// battlefield. If you do, discard your hand." One optional trigger per copy (snapshotted as the step begins). Both
+// worlds' end step call this (GameEngine::EndStep, TurnSolver::SimulateEndAndStartNextTurn), before Abiding Grace.
+// Yes/no per copy is a crossing-land ordinal (rank 0 = yes when the hand holds a land, else no); a yes adds one
+// ordinal per dumped land with an as-enters choice. The lands enter SIMULTANEOUSLY (CR 614.12): each one's
+// tapped-ness is judged against the board BEFORE the event (a Gond Gate in the batch untaps none of them, a
+// fastland does not count its batch-mates); then the rest of the hand is discarded (part of the resolution); then
+// the enter triggers -- Gateway Plaza's pay-or-sacrifice, the land's own extras, landfall / Guild Summit's draw
+// (kept: drawn after the discard). No Amulet float (an end step).
+inline void PerformEndStepManabond(GameState& state)
+{
+    if (!state.deck_has_crossing_land_put) { return; }
+    const int me = state.active_player_index;
+    const int n = CountControlledWithParam(state, me, [](const CardParams& p)
+                                           { return p.endstep_may_dump_hand_lands_discard_hand; });
+    for (int t = 0; t < n; ++t)
+    {
+        Player& p = state.players[static_cast<std::size_t>(me)];
+        if (p.hand.empty()) { return; }   // nothing to reveal: yes == no
+        int lands = 0;
+        for (const Card& c : p.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsLand()) { ++lands; }
+        }
+        // rank 0 = the default answer (yes with a land to put, else no); rank 1 = the other.
+        const bool default_yes = lands > 0;
+        bool yes = TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes;
+        if (g_play_dig_chooser && !g_tap_speculating)
+        {
+            std::vector<Card> ex;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+                if (d != nullptr && d->params.endstep_may_dump_hand_lands_discard_hand) { ex.push_back(q.card); break; }
+            }
+            const std::vector<int> legal{ 0 };
+            const std::string src = "Manabond (end step): put " + std::to_string(lands) + " land(s), discard "
+                                  + std::to_string(static_cast<int>(p.hand.size()) - lands) + " card(s)";
+            yes = (*g_play_dig_chooser)(state, me, src, ex, legal, yes ? 0 : -1) == 0;
+        }
+        if (!yes) { continue; }
+        // The batch, in hand order: each land's pre-event tapped-ness and its own as-enters value.
+        struct Put { Card card; const CardDefinition* def; bool tapped; int pin; };
+        std::vector<Put> puts;
+        for (const Card& c : p.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand()) { continue; }
+            const std::vector<int> pins = CrossingLandEntryPins(state, me, *d);
+            const int pin = pins[static_cast<std::size_t>(TakeCrossingLandRank(state, static_cast<int>(pins.size())))];
+            puts.push_back(Put{ c, d, false, pin });
+        }
+        for (Put& pt : puts) { pt.tapped = LandEntersTapped(state, *pt.def, true, me); }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger", "Manabond: reveal the hand, put "
+                          + std::to_string(puts.size()) + " land(s), discard the rest");
+        }
+        LandEntryNoFloatScope no_float;
+        for (const Put& pt : puts)
+        {
+            auto it = std::find_if(p.hand.begin(), p.hand.end(),
+                                   [&pt](const Card& c) { return c.m_number == pt.card.m_number; });
+            if (it == p.hand.end()) { continue; }
+            p.hand.erase(it);
+            LandEntryPinScope pin_scope(pt.pin);
+            EnterLand(state, *pt.def, pt.card.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/false,
+                      pt.tapped ? LandEntryTap::PreDecidedTapped : LandEntryTap::PreDecidedUntapped, me);
+        }
+        // "If you do, discard your hand" -- part of the resolution, before any enter trigger resolves.
+        while (!state.players[static_cast<std::size_t>(me)].hand.empty())
+        {
+            const int last = static_cast<int>(state.players[static_cast<std::size_t>(me)].hand.size()) - 1;
+            (void)DiscardCardFromHand(state, me, last, nullptr, "Manabond");
+        }
+        // The batch's enter triggers, in put order.
+        for (const Put& pt : puts)
+        {
+            int idx = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == pt.card.m_number) { idx = i; break; } }
+            if (idx < 0) { continue; }
+            ResolveLandEnterEtbExtras(state, *pt.def, idx);
+            if (pt.def->params.etb_sacrifice_unless_pay.has_value())
+            { (void)ResolveEtbSacUnlessPay(state, me, pt.card.m_number, pt.pin); }
+            OnLandEntered(state, me, pt.card.m_number);
+        }
+    }
+}
+
 inline void ResolveOneLookTop(GameState& state, int controller, const std::string& watcher)
 {
     Player& ap = state.players[static_cast<std::size_t>(controller)];

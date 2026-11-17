@@ -5195,6 +5195,19 @@ struct CardParams
     // Amulet of Vigor: "Whenever a permanent you control enters tapped, untap it." One trigger per copy,
     // resolved by ResolveEnteredTappedUntaps at every entry route (land drop, EnterLand, FireEtbWatchers).
     bool                     untap_own_permanent_entering_tapped = false;
+    // Maze's End I3 -- the land-drop engines.
+    // Exploration: "You may play an additional land on each of your turns." Static, one extra drop per copy
+    // (copies stack, CR 305.2). Folded into Player::bonus_land_drops_this_turn: both untap resets set it to the
+    // controlled-copy total (StaticExtraLandDrops), and a copy entering mid-turn adds its count that turn.
+    int                      static_extra_land_drops = 0;
+    // Burgeoning: "Whenever an opponent plays a land, you may put a land card from your hand onto the
+    // battlefield." One trigger per copy per opponent land PLAYED (ResolvePassiveOpponentLandTurn); which land
+    // (or none) is the searched crossing-land pin (GameState::scripted_crossing_lands).
+    bool                     opponent_land_play_put_land_from_hand = false;
+    // Manabond: "At the beginning of your end step, you may reveal your hand and put all land cards from it
+    // onto the battlefield. If you do, discard your hand." Yes/no per trigger ordinal is the searched
+    // crossing-land pin (PerformEndStepManabond, both worlds' end step).
+    bool                     endstep_may_dump_hand_lands_discard_hand = false;
     // Gateway Plaza: "When this land enters, sacrifice it unless you pay {1}." Pay vs sacrifice is a
     // land-entry pin (searched); unaffordable = forced sacrifice. ResolveEtbSacUnlessPay.
     std::optional<ManaCost>  etb_sacrifice_unless_pay;
