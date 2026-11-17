@@ -118,3 +118,20 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
 - DONE 2026-11-17 ~06:30 UTC: rebased onto a5c156a20; smoke+regression GT accepted for the 15 Boars/Morph/Spirits keys
   (parent-attributed; all other failing keys fail identically on the exact parent). Pushed to the shared branch.
   Remaining: USER decision on Treasure Hunt; open profiling items above. P18i is otherwise closed.
+
+## P18j checkpoint (Claude, 2026-11-17, USER: "We shouldn't leave any of these open. If there are cases where the mode loses to the heuristic ladder we should keep investigating.")
+- Treasure Hunt candidate sidecar `{"value_play":{"sampled_gate":3,"target_depth":5,"budget_ms":40,"enabled":true,"mull_gen_depth":3,"mull_gen_budget_ms":20}}`
+  is digest-identical to the screened m3 arm (TH1, 100 games). Its shipped sidecar's `leaf: none` attaches a constant
+  value model, which disables any sampled gate, so the switch is a play-shape change (USER decision, surfaced).
+- Mode 4 (`sampled_gate=4`, WIP f2b4df687 on wip/p18j-claude, scratch `build/scratch/p18g/P1..P14`): WIN-TRIGGERED lookahead.
+  Root rollout (FSLineWin depth 0, cut at the window edge, capped at 1% of the decision budget `_pzc`) -> if it wins in
+  the window, leafless passes 1..W-T+1, each admitted only if the ladder's start gate would admit the rollout pass it
+  replaces (priced l_k + n_k * q * max(0, W-T-k), n_k counts window-cut nodes). A miss REFUNDS its units
+  (SearchBudget::Refund) and the whole lookahead runs ISOLATED: own memo epoch, scratch TT for the root rollout, no
+  stores into the game-level caches (rgc / gamelc / inwin) or workctr-muted caches. Without isolation the root rollout
+  warmed pass 1 (Hinata 13220014 T1: 9125 -> 246 units) and the start gate left heur's K (gate drift, both directions).
+- Findings: mid-ladder walk (after each rollout pass) saves little (the in-window incumbent already prunes heur's later
+  passes) and adds drift -> `_pnm` (no mid walk) is the better arm. `_pfp` (full-path reach) and `_pwc` (per-pass cap)
+  kill the fast-deck savings. P13 (16 decks x 20, seeds 13,000,000+): m4_pnm 1.0097x heur CPU, 0 earlier / 0 later;
+  fast decks 0.43-0.89x, budget-bound decks 0.99-1.05x except Melira 1.115x (one 65k leafless pass-3 bet lost).
+- Running: P14 `_paw` (walk to depth when the root rollout shows no in-window win, mode 3's reach, still priced + refunded).
