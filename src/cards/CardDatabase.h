@@ -890,6 +890,12 @@ struct CardParams
     // gain life for the rest of the game." Sets GameState::cant_gain_life_rest_of_game_mask for each
     // player its reflection actually deals damage to (the bit outlives the creature, rulings).
     bool reflect_player_cant_gain_life = false;
+    // Guilty Conscience (an Aura, is_aura): "Whenever enchanted creature deals damage, this Aura deals that
+    // much damage to that creature." Raised by the shared pipeline's snapshot (dmgrx::ApplyOne: every GC
+    // attached to a creature that is a SOURCE in a damage event, for the total it dealt there) and by the
+    // combat hook (dmgrx::CombatDamageDealt, Combat.cpp, armed decks only). Resolves as GC (noncreature,
+    // LKI) -> the host. Carrying it ARMS the pipeline (GameState::reflect_armed) like a reflector does.
+    bool aura_host_damage_back = false;
     // Chain Reaction: "deals X damage to each creature, where X is the number of creatures on the
     // battlefield" -- the damage_all_creatures sweep with X counted AS IT RESOLVES (ruling), every
     // creature on both sides. See SweepDamageAmount (SpellEffects.h), read by both dispatch sites.

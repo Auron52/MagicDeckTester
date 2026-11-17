@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
+#include "ai/Combat.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -466,6 +467,14 @@ TEST_CASE("rfx step 4: a summoning-sick Doll offers no ping; a settled untapped 
         const auto plans = TurnSolver::EnumerateMainPlans(s, true);
         CHECK(std::any_of(plans.begin(), plans.end(), PlanPings));   // the activation is offered
         for (const auto& p : plans) { CHECK(p.reflect_targets.empty()); }   // never a reflection pin
+        // "Don't activate" must stay reachable. The main-1 walk skips the empty selection, so with the drop
+        // spent the enumeration's ONLY plan here is the ping; the hosts append the HOLD pass (keep the Doll
+        // untapped for later in the turn) -- step 5's root cause of the assertion step 4 dropped.
+        CHECK(std::all_of(plans.begin(), plans.end(), PlanPings));
+        CHECK(TurnSolver::HoldPassAppendedForTest(s, plans));
+        GameState tapped = s;
+        for (Permanent& p : tapped.battlefield) { if (p.card.m_number == 1201) { p.tapped = true; } }
+        CHECK_FALSE(TurnSolver::HoldPassAppendedForTest(tapped, plans));   // nothing to hold: no extra line
     }
 }
 
@@ -611,4 +620,147 @@ TEST_CASE("rfx step 4: human play is ASKED the chosen player, players only, oppo
     // Locked per object: a second call (no re-entry) does not ask again or change it.
     dmgrx::EtbChoosePlayer(s, 0, 0, DefRfx("Stuffy Doll"), 2);
     CHECK(s.battlefield[0].chosen_player == 0);
+}
+
+// ---- STEP 5: Guilty Conscience + loops (design 3, 4.4) --------------------------------------------------
+
+namespace
+{
+// Attach a Guilty Conscience (m_number `num`) to the permanent numbered `host`.
+Permanent& AttachGc(GameState& s, int num, int host)
+{
+    Permanent& g = PutRfx(s, "Guilty Conscience", num);
+    g.aura_attached_to = host;
+    return g;
+}
+}   // namespace
+
+TEST_CASE("rfx step 5: Guilty Conscience's card data (aura, param, arming route)")
+{
+    const CardDefinition& d = DefRfx("Guilty Conscience");
+    CHECK(d.card.HasType(CardType::Enchantment));
+    CHECK(d.params.is_aura);
+    CHECK(d.params.aura_host_damage_back);
+    CHECK(dmgrx::DefCanDamageCreatures(d));   // the fan's pre-check sees the GC route
+    CHECK_FALSE(dmgrx::DefReflectsWithChoice(d));
+}
+
+TEST_CASE("rfx step 5: Doll + GC + one ping kills from 20 (and from 30, the 2HG team pool) and stops at the kill")
+{
+    for (int life : { 20, 30 })
+    {
+        INFO("opponent life ", life);
+        GameState s = DollBoard(/*chosen=*/1, false, 0);
+        s.players[1].life = life;
+        AttachGc(s, 1260, 1201);
+        ApplyPermAbility(s, 0, 1201, PermAbilityMode::SelfPing);
+        CHECK(s.players[1].life == 0);                 // exactly to 0: the loop stops AT the kill
+        CHECK(s.players[0].life == 20);
+        REQUIRE(Find(s, 1201) != nullptr);             // indestructible
+        CHECK(Find(s, 1201)->damage == life);          // the ping's 1, then one GC point per reflected point
+        CHECK(dmgrx::t_last_drain.stop == dmgrx::DrainStop::GameOver);
+        // 2 resolutions per point after the ping (reflection, GC), far below the 65,536 cap.
+        CHECK(dmgrx::t_last_drain.resolutions <= 2 * life + 1);
+        CHECK(dmgrx::t_frame.stack.empty());
+    }
+    {   // a Doll that chose US: the same loop runs against our own life (legal; only a human can choose it)
+        GameState s = DollBoard(/*chosen=*/0, false, 0);
+        AttachGc(s, 1260, 1201);
+        ApplyPermAbility(s, 0, 1201, PermAbilityMode::SelfPing);
+        CHECK(s.players[1].life == 20);
+        CHECK(s.players[0].life <= 0);
+    }
+}
+
+TEST_CASE("rfx step 5: GC on a NON-indestructible reflector ends when the creature dies")
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Boros Reckoner", 1301);                 // 3/3, any target (front = the opponent's face)
+    AttachGc(s, 1302, 1301);
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 1);
+    // dealt 1 -> 1 to the face -> GC 1 back -> ... -> dealt 3 total: dies, GC to the graveyard with it,
+    // its LAST (LKI) reflection still deals 1, and with GC gone nothing triggers again.
+    CHECK(s.players[1].life == 20 - 3);
+    CHECK(Find(s, 1301) == nullptr);
+    CHECK(Find(s, 1302) == nullptr);
+    CHECK(GyCount(s, 0, "Guilty Conscience") == 1);
+    CHECK(GyCount(s, 0, "Boros Reckoner") == 1);
+    CHECK(dmgrx::t_last_drain.stop == dmgrx::DrainStop::Drained);
+}
+
+TEST_CASE("rfx step 5: combat damage by a GC-enchanted attacker triggers GC (armed only)")
+{
+    for (const char* name : { "Boros Reckoner", "Screaming Nemesis" })
+    {
+        INFO(name);
+        GameState s = ArmedState();
+        s.phase = Phase::Combat;
+        PutRfx(s, name, 1401);
+        AttachGc(s, 1402, 1401);
+        ResolveCombatDamage(s, { 0 }, 0, false);
+        // 3 combat damage; GC deals 3 back; the 3/3 dies (GC with it); its LKI reflection deals 3 to the face.
+        CHECK(s.players[1].life == 20 - 6);
+        CHECK(Find(s, 1401) == nullptr);
+        CHECK(GyCount(s, 0, "Guilty Conscience") == 1);
+    }
+    {   // unarmed (a deck with neither a reflector nor GC): combat is the legacy body, GC never fires
+        GameState s = ArmedState();
+        s.reflect_armed = false;
+        s.phase = Phase::Combat;
+        PutRfx(s, "Boros Reckoner", 1401);
+        AttachGc(s, 1402, 1401);
+        ResolveCombatDamage(s, { 0 }, 0, false);
+        CHECK(s.players[1].life == 17);
+        CHECK(Find(s, 1401) != nullptr);
+    }
+}
+
+TEST_CASE("rfx step 5: a loop that cannot progress stops by the NO-PROGRESS rule, not the cap")
+{
+    // An indestructible Boros Reckoner with GC, every reflection pinned at ITSELF: each resolution deals
+    // damage to the Reckoner only -- no life changes, nothing dies. Constructed (the search's pins could
+    // offer it; the face is always also offered).
+    GameState s = ArmedState();
+    Permanent& r = PutRfx(s, "Boros Reckoner", 1501);
+    r.temp_indestructible = true;
+    AttachGc(s, 1502, 1501);
+    const std::vector<int> pins(4096, 1501);
+    {
+        dmgrx::PinScope scope(pins);
+        PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 1);
+    }
+    CHECK(dmgrx::t_last_drain.stop == dmgrx::DrainStop::NoProgress);
+    CHECK(dmgrx::t_last_drain.resolutions == dmgrx::kNoProgressLimit);
+    CHECK(s.players[1].life == 20);
+    CHECK(s.players[0].life == 20);
+    CHECK(dmgrx::t_frame.stack.empty());
+    // ...while a PROGRESSING loop never trips it: the Doll test above ends by GameOver after 2L resolutions
+    // with every second one idle.
+}
+
+TEST_CASE("rfx step 5: the GC host is SEARCHED -- the plan 'GC on the Doll, then ping' kills, and replays in the executor")
+{
+    GameState initial = DollBoard(1, false, 0);
+    PutRfx(initial, "Plains", 1220);
+    PutRfx(initial, "Mogg Maniac", 1221);              // a second legal host
+    Card gc = DefRfx("Guilty Conscience").card; gc.m_number = 1260;
+    initial.players[0].hand.push_back(gc);
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    std::set<int> hosts;
+    int killing = 0;
+    for (const auto& p : plans)
+    {
+        for (const Action& a : p.actions) { if (a.card_name.str() == "Guilty Conscience") { hosts.insert(a.enchant_target); } }
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        if (roll.players[1].life > 0) { continue; }
+        ++killing;
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life <= 0);
+    }
+    CHECK(hosts.size() >= 2);    // one cast variant per legal host: the Doll AND the Maniac
+    CHECK(killing >= 1);         // the Doll host + ping ordering is enumerated
 }

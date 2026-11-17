@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Guilty Conscience on an attacker, design step 5: combat damage is 'deals damage', so the combat hook",
+    "(dmgrx::CombatDamageDealt, armed decks only) raises GC. Screaming Nemesis (3/3 haste) connects for 3;",
+    "GC deals 3 back; Nemesis dies (GC to the graveyard with it) and its last-known reflection deals 3 to",
+    "the face: 6 = the opponent's life. The host is SEARCHED: Mogg Maniac (first on the battlefield) is",
+    "the other legal host, and GC there gives 1 + 1 + Nemesis's 3 = 5. (Design 10 wrote '3 + 3 + 3' for",
+    "this case; the third 3 cannot happen -- GC leaves with its host, design 2.4.)"
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 6,
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Mogg Maniac" },
+    { "name": "Screaming Nemesis" }
+  ],
+  "hand": ["Guilty Conscience"],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

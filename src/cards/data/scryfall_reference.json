@@ -3253,6 +3253,17 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Guilty Conscience": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage, Guilty Conscience deals that much damage to that creature.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Guild Summit": {
     "cmc": 3.0,
     "keywords": [],

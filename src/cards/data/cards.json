@@ -17549,6 +17549,25 @@
    }
   },
   {
+   "name": "Guilty Conscience",
+   "mana_cost": "{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage, Guilty Conscience deals that much damage to that creature. [Enchant creature: is_aura -- WHICH creature is a SEARCHED plan variant (one cast variant per legal host, the shared LegalEnchantTargets; surfaced to a human as the enchant-target choice), and it falls off with its host (SweepOrphanedAuras, inline in the damage pipeline's SBA pass, so a GC whose host died is in the graveyard before the host's last trigger resolves and does not trigger again). aura_host_damage_back: every damage event in which the HOST is a source (a sweeper's reflection, the Doll's {T} self-ping, a reflection trigger the host resolves, combat damage) raises one GC trigger for the total the host dealt in that event; GC (noncreature, LKI) then deals that much to the host. Loops (Doll + GC + ping; GC on an indestructible reflector) iterate for real under the pipeline's 65,536-resolution cap and 64-step no-progress rule. PARTIAL: hosts are our creatures only (LegalEnchantTargets) -- GC on an opponent's creature is inert in the goldfish (the opponent's creatures never deal damage). PARTIAL: a reflection-target CHOICE raised inside combat (GC on an attacking Boros Reckoner / Screaming Nemesis) takes the opponent's face; the step-3 target fan probes the main-phase apply only.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "aura_host_damage_back": true
+   }
+  },
+  {
    "name": "Screaming Nemesis",
    "mana_cost": "{2}{R}",
    "types": [

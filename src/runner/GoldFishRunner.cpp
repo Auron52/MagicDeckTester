@@ -2025,7 +2025,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             for (const Card& c : zone)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d && d->params.reflect_dealt_damage != CardParams::ReflectTo::None) { return true; }
+                if (d && (d->params.reflect_dealt_damage != CardParams::ReflectTo::None
+                          || d->params.aura_host_damage_back)) { return true; }   // + Guilty Conscience
             }
             return false;
         };

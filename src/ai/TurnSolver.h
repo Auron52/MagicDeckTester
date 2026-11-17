@@ -3005,6 +3005,10 @@ public:
                                       SearchBudget* budget, bool second_main);
     // Test hook: every crossing the horn axis makes from `state`, as (recorded pin or -2, hand size after it).
     static std::vector<std::pair<int, int>> HornBoundaryForTest(const GameState& state);
+    // Test hook: whether the main-phase hosts (FSLineWin's idle node, SolveWithLookahead) append the HOLD pass
+    // to `plans` (the face-up flip hold, or the Stuffy Doll self-ping hold) -- the enumeration itself never
+    // offers an empty main-1 plan once the land drop is spent.
+    static bool HoldPassAppendedForTest(const GameState& state, const std::vector<Plan>& plans);
     // ...and the NEXT upkeep's legend-rule keep (Boars LK3): an upkeep legend rule whose copies differ that the
     // committed line left unpinned is searched at the end of the real turn; the winner goes to bits 2-3 of
     // state.scripted_legend_keep (-2 = nothing to decide).

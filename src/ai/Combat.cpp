@@ -307,6 +307,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         std::vector<int> step_num;    // ... keyed by m_number (filled only under deck_has_draw_ping)
         std::vector<int> step_id;     // MTG_COMBAT_STABLE_SOURCES: each connector's card number (re-found after Lackey)
         std::vector<int> prophets;
+        std::vector<int> rfx_num, rfx_pw;   // reflect_armed only: Guilty Conscience hosts (dmgrx::CombatDamageDealt)
         for (std::size_t k = 0; k < n; ++k)
         {
             const bool in_step = first_step ? (fs_of[k] || ds_of[k]) : (!fs_of[k] || ds_of[k]);
@@ -364,6 +365,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
                 state.opponent_lost_life_this_turn = true;
                 step_idx.push_back(idx);
                 step_pw.push_back(power);
+                if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }
                 if (stable) { step_id.push_back(p.card.m_number); }
                 if (state.deck_has_draw_ping)
                 {
@@ -418,6 +420,9 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         // exposes a decision that cannot affect the game.
         if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
         { ResolveProphetsCombatDamage(state, active, prophets); }
+        // Guilty Conscience on a connector (armed decks only; last, so no hook above reads a position its
+        // trigger's deaths could shift -- the inter-step re-find below re-reads `atk` by identity).
+        if (state.reflect_armed) { dmgrx::CombatDamageDealt(state, rfx_num, rfx_pw); }
     };
     deal_step(/*first_step=*/true);
     if (stable) { RefindCombatSources(state, active, atk, atk_id); }   // the first step's hooks can remove
@@ -466,6 +471,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     std::vector<int> damaging_events;
     std::vector<int> damaging_num;   // ...keyed by per-copy m_number, re-found at the hook (see there)
     std::vector<int> prophets;
+    std::vector<int> rfx_num, rfx_pw;   // reflect_armed only: Guilty Conscience hosts (dmgrx::CombatDamageDealt)
     // MTG_COMBAT_STABLE_SOURCES: each connector's card number, aligned with damaging_idx, so the hooks after the Lackey
     // put re-find their sources by identity (RefindCombatSources) -- a put's enter cascade can remove a permanent.
     const bool stable = CombatStableSourcesOn();
@@ -586,6 +592,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             state.opponent_lost_life_this_turn = true;
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
+            if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }
             if (stable) { damaging_id.push_back(p.card.m_number); }
             if (state.deck_has_draw_ping)
             {
@@ -674,6 +681,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     FireCombatDamageDrawGrants(state, damaging_idx, damaging_num, damaging_events);
     if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
     { ResolveProphetsCombatDamage(state, active, prophets); }
+    // Guilty Conscience on a connector (armed decks only; last, after every positional hook).
+    if (state.reflect_armed) { dmgrx::CombatDamageDealt(state, rfx_num, rfx_pw); }
     return out;
 }
 

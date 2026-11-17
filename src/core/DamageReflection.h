@@ -106,6 +106,8 @@ struct PendingTrig
     int       amount      = 0;  // "that much damage"
     bool      lock_life   = false;
     int       fixed_player = -1;  // ReflectTo::ChosenPlayer: the Doll's locked player index (LKI), else -1
+    int       aura_host    = 0;   // Guilty Conscience (aura_host_damage_back): the host's m_number ("that
+                                  // creature"); nonzero marks a GC trigger (kind None, src = the GC by LKI)
 };
 
 struct BatchResult
@@ -125,6 +127,11 @@ struct Frame
     std::vector<PendingTrig> stack;
 };
 inline thread_local Frame t_frame;
+
+// How the LAST top-level drain on this thread ended (diagnostic / tests; never read by play).
+enum class DrainStop : std::uint8_t { Drained = 0, GameOver, Cap, NoProgress };
+struct DrainStats { int resolutions = 0; DrainStop stop = DrainStop::Drained; };
+inline thread_local DrainStats t_last_drain;
 
 inline const CardDefinition* Def(const Permanent& p)
 { return p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card); }
@@ -224,6 +231,36 @@ inline Permanent* FindPerm(GameState& s, int number)
 // Resolve ONE pending trigger (design step 8). Trigger kinds arrive with the cards (design step 2).
 inline void ResolveTrig(GameState& s, const PendingTrig& t);
 
+// Is any Guilty Conscience (aura_host_damage_back) on the battlefield? One cheap scan; false on every
+// board without one, so the per-source bookkeeping below costs nothing elsewhere.
+inline bool AnyAuraHostDamageBack(const GameState& s)
+{
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.aura_attached_to == 0) { continue; }
+        const CardDefinition* d = Def(q);
+        if (d != nullptr && d->params.aura_host_damage_back) { return true; }
+    }
+    return false;
+}
+// "Whenever enchanted creature deals damage, Guilty Conscience deals that much damage to that creature":
+// one trigger per GC attached to `host` (battlefield order), for `amount`, appended to `out`.
+inline void RaiseAuraHostDamageBack(const GameState& s, int host, int amount, std::vector<PendingTrig>& out)
+{
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.aura_attached_to != host) { continue; }
+        const CardDefinition* d = Def(q);
+        if (d == nullptr || !d->params.aura_host_damage_back) { continue; }
+        PendingTrig t;
+        t.src       = SourceRef{ q.card, q.controller_index, false };
+        t.self_number = q.card.m_number;
+        t.amount    = amount;
+        t.aura_host = host;
+        out.push_back(std::move(t));
+    }
+}
+
 // Steps 1-7 for one batch. Pushes the triggers it raised onto t_frame.stack.
 inline BatchResult ApplyOne(GameState& s, const Batch& b)
 {
@@ -236,6 +273,13 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     struct PlayerTotal   { int src; int player; int amount; bool combat; bool lock_life; };
     std::vector<CreatureTotal> ct;
     std::vector<PlayerTotal>   pt;
+    // Guilty Conscience: the damage each SOURCE deals in this event ("deals damage", any recipient), counted
+    // only while a GC is on the battlefield and some source is a creature (empty otherwise: nothing to raise).
+    std::vector<int> src_dealt;
+    if (AnyAuraHostDamageBack(s))
+    {
+        for (const SourceRef& r0 : b.src) { if (r0.is_creature) { src_dealt.assign(b.src.size(), 0); break; } }
+    }
     for (const DmgAssign& a : b.hits)
     {
         if (a.amount <= 0) { continue; }
@@ -255,6 +299,7 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
         bool merged = false;
         for (CreatureTotal& c : ct) { if (c.number == a.to.id) { c.amount += a.amount; merged = true; break; } }
         if (!merged) { ct.push_back({ a.to.id, a.amount }); }
+        if (!src_dealt.empty()) { src_dealt[static_cast<std::size_t>(a.src)] += a.amount; }
     }
 
     // 3. Snapshot the triggers (LKI), before anything changes, in BATTLEFIELD order (the canonical
@@ -294,10 +339,24 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     {
         const int dealt = ApplyDamageToPlayer(s, b.src[static_cast<std::size_t>(p.src)], p.player, p.amount,
                                               p.combat);
+        if (!src_dealt.empty()) { src_dealt[static_cast<std::size_t>(p.src)] += dealt; }
         // Screaming Nemesis: "If a player is dealt damage this way, they can't gain life for the rest
         // of the game" -- only damage actually DEALT (a prevented hit sets nothing).
         if (p.lock_life && dealt > 0)
         { s.cant_gain_life_rest_of_game_mask = static_cast<std::uint8_t>(s.cant_gain_life_rest_of_game_mask | (1u << p.player)); }
+    }
+
+    // 3b. Guilty Conscience triggers, AFTER the reflection triggers (the canonical order, design 4.7). Read
+    //     here -- damage marked, SBA not yet run -- so every GC is still attached to the host that dealt the
+    //     damage (a host this event kills still triggers its GC; the GC trigger then finds "that creature"
+    //     gone and deals nothing).
+    if (!src_dealt.empty())
+    {
+        for (std::size_t i = 0; i < b.src.size(); ++i)
+        {
+            if (!b.src[i].is_creature || src_dealt[i] <= 0 || b.src[i].card.m_number == 0) { continue; }
+            RaiseAuraHostDamageBack(s, b.src[i].card.m_number, src_dealt[i], raised);
+        }
     }
 
     // 5. State-based actions.
@@ -319,13 +378,16 @@ inline void Drain(GameState& s, std::size_t base)
 {
     int resolutions = 0;
     int idle = 0;
+    DrainStop stop = DrainStop::Drained;
     while (t_frame.stack.size() > base)
     {
-        if (GameOver(s)) { t_frame.stack.resize(base); break; }
+        if (GameOver(s)) { t_frame.stack.resize(base); stop = DrainStop::GameOver; break; }
         if (++resolutions > kResolutionCap)
         {
             Log(s, "trigger", "rfx-cap: trigger resolution cap reached -- the remaining triggers are dropped");
             t_frame.stack.resize(base);
+            stop = DrainStop::Cap;
+            --resolutions;
             break;
         }
         const PendingTrig t = std::move(t_frame.stack.back());
@@ -340,9 +402,12 @@ inline void Drain(GameState& s, std::size_t base)
             Log(s, "trigger", "rfx-noprogress: no life changed and no creature died for "
                               + std::to_string(kNoProgressLimit) + " resolutions -- the loop stops");
             t_frame.stack.resize(base);
+            stop = DrainStop::NoProgress;
             break;
         }
     }
+    if (stop == DrainStop::Drained && GameOver(s)) { stop = DrainStop::GameOver; }
+    t_last_drain = DrainStats{ resolutions, stop };
 }
 
 // THE entry point: one damage event. See the header note for the steps.
@@ -519,12 +584,15 @@ struct PinScope
 // damage_all_creatures sweeps (Pyroclasm, Blasphemous Act), Chain Reaction's counted X, Rolling
 // Earthquake (x_damage_each_creature_and_player) and Pyrohemia's activation (ping_all_amount).
 // Step 4 adds Stuffy Doll's {T} self-ping (self_ping_damage, PermAbilityMode::SelfPing -> SelfPingAt).
-// (Design step 5 adds Guilty Conscience and combat: extend it there.)
+// Step 5 adds Guilty Conscience (aura_host_damage_back): a plan that casts one onto a creature makes that
+// creature's damage come back to it. Combat damage is the remaining route (CombatDamageDealt) and is NOT
+// probed by the main-phase fan at all -- see the step-5 note in design section 14.
 inline bool DefCanDamageCreatures(const CardDefinition& d)
 {
     return d.params.damage_all_creatures > 0 || d.params.damage_all_creatures_count_creatures
         || d.params.x_damage_each_creature_and_player || d.params.ping_all_amount > 0
-        || d.params.ping_all_cost.has_value() || d.params.self_ping_damage > 0;
+        || d.params.ping_all_cost.has_value() || d.params.self_ping_damage > 0
+        || d.params.aura_host_damage_back;
 }
 // Does `d` carry a reflection trigger whose target can be a CHOICE? Mogg Maniac's "target opponent"
 // is always the singleton {opponent} (one opponent pool, also in 2HG), so it never needs the fan.
@@ -539,6 +607,22 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
 {
     using RT = CardParams::ReflectTo;
+    if (t.aura_host != 0)   // Guilty Conscience: no target, no choice -- "that creature" (gone -> nothing)
+    {
+        if (FindPerm(s, t.aura_host) == nullptr) { return; }
+        Batch b;
+        b.src.push_back(t.src);
+        b.hits.push_back({ 0, { false, t.aura_host }, t.amount, false, false });
+        if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+        {
+            const Permanent* q = FindPerm(s, t.aura_host);
+            EmitPlayEvent(s.turn_number, "trigger",
+                          "\xE2\x9A\xA1 " + t.src.card.m_name.str() + " -- its creature dealt damage; it deals "
+                          + std::to_string(t.amount) + " to " + q->card.m_name.str());
+        }
+        DealDamageBatch(s, b);
+        return;
+    }
     if (t.kind != RT::TargetOpponent && t.kind != RT::AnyTarget && t.kind != RT::AnyOtherTarget
         && t.kind != RT::TargetPlayer && t.kind != RT::ChosenPlayer)
     {
@@ -621,6 +705,32 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
                       + " damage -- it deals " + std::to_string(t.amount) + " to " + to);
     }
     DealDamageBatch(s, b);
+}
+
+// ---- COMBAT (design step 5): Guilty Conscience on a creature that dealt combat damage ----------------
+// Called by both combat-damage paths (Combat.cpp; executor and rollout share them) AFTER a damage step's
+// damage to the player is applied, on reflect_armed decks only. `nums`/`amounts` are the step's connecting
+// sources (card m_number) and what each dealt. In the goldfish combat damage only ever reaches the
+// opponent (nothing blocks), so no creature is dealt combat damage and no reflection trigger arises from
+// the step itself; what remains is each host's GC trigger, raised at this snapshot in battlefield order and
+// drained as one top-level event (cap and no-progress rule included). A lethal step raises nothing.
+inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const std::vector<int>& amounts)
+{
+    if (!s.reflect_armed || nums.empty() || GameOver(s) || !AnyAuraHostDamageBack(s)) { return; }
+    std::vector<PendingTrig> raised;
+    for (std::size_t k = 0; k < nums.size() && k < amounts.size(); ++k)
+    {
+        if (nums[k] == 0 || amounts[k] <= 0) { continue; }
+        RaiseAuraHostDamageBack(s, nums[k], amounts[k], raised);
+    }
+    if (raised.empty()) { return; }
+    Frame saved;
+    std::swap(saved, t_frame);
+    t_frame.state = &s;
+    t_frame.depth = 1;
+    for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
+    Drain(s, 0);
+    std::swap(saved, t_frame);
 }
 
 // ---- STUFFY DOLL (design 4.6 / step 4) ----------------------------------------------------------------

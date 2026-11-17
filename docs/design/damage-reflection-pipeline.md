@@ -1301,3 +1301,54 @@ Where the code departs from the sections above, and why. Each entry names the sy
   in the list: the `taplife=` reason) through `LineSpec::self_pings` and every CheckLine site. The auditor
   maps `etb_choose_player -> target`, `self_ping_damage -> main_phase` (+ `verb:selfping`), and no longer
   expects a reflection prompt for `chosen_player`.
+
+### Step 5 (Guilty Conscience + loops)
+
+* **The step-4 dropped check, root-caused: there was no "don't ping" plan in main 1.** The main-1 subset
+  walk skips the empty selection (`if (sel.empty()) { continue; }`, TurnSolver.cpp, both walks), and the
+  hosts append the pass only when the enumeration is EMPTY (FSLineWin's idle node, SolveWithLookahead's
+  empty candidate set) or `FaceUpHoldPassMissing` holds. So with the drop spent and a settled Doll the only
+  main-1 line was the ping: "keep the Doll untapped through combat" was unreachable. That is an in-window
+  removal of the "don't activate" option with no stated fold, and ping-now does NOT dominate ping-later
+  once main 2 can change the board (a GC cast after combat makes the later ping a loop). Fix:
+  `SelfPingHoldPending` joins `FaceUpHoldPassMissing`'s predicate (reflect_armed, an untapped self_ping
+  permanent of ours that can tap now, not in a breakpoint enumeration / narrow rollout / human play), so
+  the hosts append the pass, exactly the face-up hold precedent. No other deck carries `self_ping_damage`.
+  Test hook `TurnSolver::HoldPassAppendedForTest`; the step-4 sickness test now asserts it.
+  **Engine-wide observation, NOT changed (surfaced to the USER):** every deck's main 1 with any plan offers
+  no "do nothing" line once the land drop is spent (main 2 always appends its pass). Where combat can give
+  main 2 something new (combat-damage draws/mana), "hold everything for main 2" is unreachable.
+* **The GC snapshot is taken after APPLY, before SBA** (`dmgrx::ApplyOne` step 3b), not with the
+  reflection snapshot before apply: the per-source totals need the player damage actually DEALT
+  (`ApplyDamageToPlayer`'s return), and before SBA every GC is still attached to the host that dealt the
+  damage. Equivalent to section 2.2 step 3 (nothing between apply and SBA moves an Aura). GC triggers are
+  pushed after the reflection triggers (section 4.7's canonical order). A GC trigger is a `PendingTrig`
+  with `aura_host != 0` (kind None, src = the GC by LKI); `ResolveTrig` deals that much to the host, or
+  nothing if it is gone.
+* **Combat** (`dmgrx::CombatDamageDealt`, Combat.cpp, both damage paths, `reflect_armed` only): the legacy
+  body still applies the step's damage to the player; the hook runs LAST in each step (after every
+  positional hook, so a host's death cannot shift an index another hook reads) and raises only the GC
+  triggers, since goldfish combat damage never reaches a creature. Disclosed: `CombatDamageResult::
+  total_damage` does not include the loop's life loss (projection only); under the non-default
+  `MTG_COMBAT_STABLE_SOURCES=0` a first-strike GC host that dies leaves a stale regular-step index.
+* **GC's host is SEARCHED, not ranked.** `LegalEnchantTargets` emits one variant per host, but two engine
+  shapes collapsed them: the AURA CAST HOST RANKING (USER 2026-10-06; the autonomous plan signature keys a
+  creature Aura by NAME and the dedup keeps the best-keyed host) and the late-bind / greedy host collapses
+  (`CreatureAuraHostInert`). GC is the Curiosity case: its host IS its effect. `CreatureAuraHostInert` now
+  excludes `aura_host_damage_back`, and both signature builders key `#A<host>` for it, so every host is its
+  own plan. The viewer already asks the host (the `is_aura` enchant sub); `DECISIONS.md` notes it.
+* **Termination diagnostics**: `dmgrx::t_last_drain` (resolutions, stop reason) records how the last
+  top-level drain ended. Doll + GC + ping from L ends by GameOver after <= 2L+1 resolutions; a constructed
+  zero-progress loop (indestructible Reckoner + GC, every reflection pinned at itself) ends by the
+  no-progress rule after exactly 64.
+* **Section 10's expected numbers, corrected.** "GC on an attacking Nemesis -> 3 + 3 + 3" is 3 + 3: GC's 3
+  kills the 3/3, GC goes to the graveyard with it (section 2.4), and only the LKI reflection follows.
+  "GC on a non-indestructible Reckoner hit by 3 -> 2x3" holds for a Reckoner that DEALS 3 (combat); one
+  that is dealt 3 dies at once and reflects 3 once.
+* **OPEN GAP (no-greedy), not fixed in step 5:** a reflection-target CHOICE raised INSIDE COMBAT (GC on an
+  attacking Boros Reckoner / Screaming Nemesis: GC hits the host, whose reflection may target the face or
+  any creature) is UNPINNED and takes the list's front (the opponent's face). The step-3 fan probes the
+  main-phase apply only; combat runs after it in both worlds, outside `PinScope`. With four GCs the face is
+  not always best (Reckoner+GC attacks, its reflection aimed at a GC'd Doll loops). Fix shape: carry the
+  plan's reflect pins (cursor included) through `SimulateCombat` / the executor's combat and extend the
+  probe to run combat, or a combat-crossing pin like the other combat axes. Disclosed in GC's oracle note.

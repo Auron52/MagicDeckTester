@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Stuffy Doll + Guilty Conscience, design step 5 (docs/design/damage-reflection-pipeline.md 3, 10).",
+    "Cast GC ({W}) on the Doll, then the Doll's {T} ping: the Doll deals 1 to itself, so its reflection",
+    "deals 1 to the opponent AND GC deals 1 back to the Doll -- every reflected point raises another GC",
+    "trigger, and the loop iterates for real until the opponent is dead (~40 resolutions from 20, far",
+    "below the 65,536 cap). The host is a SEARCHED variant: a Mogg Maniac is a second legal host, and GC",
+    "there does not kill. Without GC the ping deals 1."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Mogg Maniac" },
+    { "name": "Stuffy Doll", "chosen_player": "opponent" }
+  ],
+  "hand": ["Guilty Conscience"],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

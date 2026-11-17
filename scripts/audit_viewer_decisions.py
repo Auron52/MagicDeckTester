@@ -1609,6 +1609,7 @@ INERT_PARAMS = {
     # --- Auras (Bogles): effect/stat/trigger detail params -- no interactive player choice ---
     "aura_power_bonus": "aura stat grant (rides is_aura)", "aura_tough_bonus": "aura stat grant (rides is_aura)",
     "aura_grants_lifelink": "automatic lifelink grant, no choice",
+    "aura_host_damage_back": "Guilty Conscience's damage-back trigger: no choice ('that creature'); the host is is_aura's enchant-target variant",
     "aura_scale_kind": "aura scaling selector (rides is_aura)", "aura_scale_power": "aura scaling stat (rides is_aura)",
     "aura_scale_tough": "aura scaling stat (rides is_aura)",
     "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",

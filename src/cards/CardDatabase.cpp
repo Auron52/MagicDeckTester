@@ -1356,6 +1356,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     }
     p.reflect_player_cant_gain_life        = params.value("reflect_player_cant_gain_life", false);
     p.etb_choose_player = params.value("etb_choose_player", false);   // Stuffy Doll
+    p.aura_host_damage_back = params.value("aura_host_damage_back", false);   // Guilty Conscience
     p.self_ping_damage  = params.value("self_ping_damage", 0);         // Stuffy Doll's {T}
     if (p.self_ping_damage > 0) { p.self_ping_cost = ManaCostFromString(std::string{}); }   // {T} is the whole cost
     p.damage_all_creatures_count_creatures = params.value("damage_all_creatures_count_creatures", false);

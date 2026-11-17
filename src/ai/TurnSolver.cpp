@@ -60135,7 +60135,14 @@ static bool CreatureAuraHostInert(const CardDefinition* d)
         // Curiosity (NivMizzetCombo, upstream 2026-10-17): its draw rides the HOST's damage, so WHICH
         // creature carries it decides whether the Niv loop runs -- host-dependent, never inert
         // (scenario niv_curiosity_host_search_then_cantrip).
-        && !p.aura_damage_trigger_draw;
+        && !p.aura_damage_trigger_draw
+        // Guilty Conscience (Stuffy Doll, damage-reflection step 5): "whenever enchanted creature deals
+        // damage, GC deals that much damage to that creature" -- on the Doll a lethal loop, on a 3/3
+        // reflector one extra reflection, on a vanilla body a self-wound. WHICH creature carries it is the
+        // card's whole effect, a choice the standing decisions require to be SEARCHED: never inert, and its
+        // plans key the host in the plan signature (#A, PlanSignatureFast + the legacy key), so the AURA
+        // CAST HOST RANKING's name-only dedup never collapses its hosts to one.
+        && !p.aura_host_damage_back;
 }
 static int CollapseGreedyCreatureAuraHosts(const GameState& state, const std::vector<Action>& cands,
                                            std::vector<std::vector<int>>& groups)
@@ -81950,8 +81957,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && host_sig) { w.Put("#H"); w.Int(act.enchant_target); }
-                if (cre_host_sig && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
-                { w.Put("#A"); w.Int(act.enchant_target); }
+                if ((cre_host_sig || (d && d->params.aura_host_damage_back))
+                    && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
+                { w.Put("#A"); w.Int(act.enchant_target); }   // Guilty Conscience: always (see CreatureAuraHostInert)
                 if (d && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*d))
                 {
                     const ManaPool& rm = act.rock_mana;
@@ -87491,8 +87499,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // deck without land Auras moves; =0 restores the name-only fold.
                         if (cd && cd->params.is_land_aura && act.enchant_target > 0 && host_sig)
                         { k += "#H"; k += std::to_string(act.enchant_target); }
-                        if (cre_host_sig && cd && cd->params.is_aura && !cd->params.is_land_aura && act.enchant_target > 0)
-                        { k += "#A"; k += std::to_string(act.enchant_target); }
+                        if ((cre_host_sig || (cd && cd->params.aura_host_damage_back))
+                            && cd && cd->params.is_aura && !cd->params.is_land_aura && act.enchant_target > 0)
+                        { k += "#A"; k += std::to_string(act.enchant_target); }   // + Guilty Conscience: always
                         // LAND-PUT CREDIT (Search for Tomorrow): each credit class is a DIFFERENT
                         // pick of the searched basic -- distinct plans (the core invariant; the
                         // LAND-PUT CREDIT post-pass in CollectActions). Gated on the param + a
@@ -111208,9 +111217,26 @@ static bool UpkeepLegendUncoveredPending(const GameState& state)
 // (FaceUpUncoveredPending: a face-down permanent of ours, the window not yet pinned, a searched frame) and the
 // list holds no apply-empty plan, the host appends the pass. It ADDS a line and removes none; at every other
 // node (every deck without a face-down permanent) nothing changes.
+// THE SELF-PING HOLD (Stuffy Doll, damage-reflection design 14 step 5): the main-1 walk skips the empty
+// selection, so with the drop made and a settled untapped Doll the only main-1 plan was the {T} ping, and
+// "keep the Doll untapped through combat" (e.g. to ping AFTER a main-2 Guilty Conscience lands on it, which
+// loops) was never enumerated. That is an in-window removal of the "don't activate" option, not a sound fold
+// (ping-now does not dominate ping-later once main 2 can change the board). Same remedy as the face-up hold:
+// append the pass. Gated on reflect_armed + a self_ping_damage permanent, so no other deck moves.
+static bool SelfPingHoldPending(const GameState& state)
+{
+    if (!state.reflect_armed || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.self_ping_damage > 0 && CanTapNow(p, state.battlefield)) { return true; }
+    }
+    return false;
+}
 static bool FaceUpHoldPassMissing(const GameState& state, const std::vector<TurnSolver::Plan>& plans)
 {
-    if (plans.empty() || !FaceUpUncoveredPending(state)) { return false; }
+    if (plans.empty() || !(FaceUpUncoveredPending(state) || SelfPingHoldPending(state))) { return false; }
     for (const TurnSolver::Plan& p : plans) { if (IsApplyEmptyPlan(p)) { return false; } }
     return true;
 }
@@ -112380,6 +112406,10 @@ int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turn
     }
     if (chosen != -2) { state.scripted_upkeep_horn = static_cast<std::int16_t>(chosen); }
     return chosen;
+}
+bool TurnSolver::HoldPassAppendedForTest(const GameState& state, const std::vector<Plan>& plans)
+{
+    return FaceUpHoldPassMissing(state, plans);
 }
 std::vector<std::pair<int, int>> TurnSolver::HornBoundaryForTest(const GameState& state)
 {
