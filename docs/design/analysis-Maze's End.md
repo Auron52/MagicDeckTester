@@ -44,7 +44,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 |---|---|---|
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
 | I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | DONE `c71d96361` + `699e1137a` (wip/maze-end); unit suite 3411/3411; smoke byte-identical to I1 (all 219 cases' per-game digests) |
-| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | CODE DONE `4b416123c` + I3b (see I3 cards); unit suite 3418/3418 on `4b416123c`; in-window crossing census 0; smoke/units on the I3b tip: see I3b below |
+| I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | DONE `4b416123c` + `ac59aafae` (I3b) (wip/maze-end); unit suite 3418/3418; in-window crossing census 0 searched-frame / 0 overflow over 90 games; smoke byte-identical to I2 (0 of 219 case digests differ; the 44 stale-GT failures are the base's) |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
 
 ### I1 cards (2026-11-17)
