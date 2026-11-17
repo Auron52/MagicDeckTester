@@ -1417,3 +1417,52 @@ Where the code departs from the sections above, and why. Each entry names the sy
   **Disclosed gap:** a granted reflection on a Sliver TOKEN (no `CardDefinition`) is not prompted -- the
   resolver takes the front (the opponent). No card in the pool makes a Sliver token.
 * **Planeswalkers** stay unoffered (the step-2 PARTIAL, PROVISIONAL), stated in the card's oracle note.
+
+### Step 7 (Loran's Escape)
+
+* **The oracle has no "you control".** Verified against Scryfall: "Target artifact or creature gains hexproof and
+  indestructible until end of turn. Scry 1." The legal set is EVERY artifact or creature, either side
+  (`trick_targets_artifact_or_creature`, `SpellEffects.h ArtifactOrCreatureTrickTargetLegal`), not "a creature you
+  control" as earlier drafts said. New params `grants_temp_indestructible` (sets `Permanent::temp_indestructible`,
+  which `HasKeyword(Indestructible)` and dmgrx's SBA pass already honour) and `grants_temp_hexproof` (recorded,
+  inert: no hexproof state exists). **Hexproof proxy:** an opponent permanent with `temp_indestructible` is refused
+  as a target -- the Escape is the only grant source in the engine, so that bit means "hexproof from an earlier
+  Escape". Disclosed in the card's oracle note.
+* **The target is SEARCHED, with two folds** (CollectActions' `trick_targets_artifact_or_creature` branch): (1) an
+  IDENTITY fold over own battlefield targets (`CastTriggerTargetFoldKey ^ temp_indestructible`) and over opponent
+  targets (identical Spirit tokens = one); (2) a NO-EFFECT fold (`IndestructibleGrantTargetInert`): a target that
+  is already indestructible (the Doll; watcher / copy-magnet / Heroism guards) or a noncreature, non-animatable
+  artifact while no `cast_trigger_destroy_target_permanents` card is in hand/library -- all such targets give the
+  same scry-only line, so ONE representative is emitted (own battlefield > opponent > hand). Same-plan hand
+  creatures/artifacts are targets too (`trick_hand_target`, deduped by name). The provider's
+  `TrickTargetCandidates` is deliberately not consulted (the step-10 hook).
+* **Q-U3 default taken (pending the USER): the scry is the engine-wide provider pick** -- `ApplyTrickPayload`
+  routes `cast_scry` through `ScryTop` (the viewer's top chooser asks; autonomous play takes the provider pick),
+  i.e. an in-window single pick exactly like every other `cast_scry` card. Not searched until the USER rules.
+* **The relative ORDER of a sweeper and its setup cast is SEARCHED (design 4.8).** Generic `CastOrderRank` ties
+  Loran's / Guilty Conscience with Blasphemous Act / Chain Reaction (all noncreature), so the canonical route
+  cast them in HAND order and, with the Act first in hand, "Escape (or GC) before the Act" was unreachable at any
+  budget. The ordering expansion of the plan enumerator now expands -- following the `loam_order` precedent --
+  every plan that casts BOTH a `grants_temp_indestructible` / `aura_host_damage_back` spell AND a creature sweeper
+  (`damage_all_creatures`, `damage_all_creatures_count_creatures`, `x_damage_each_creature_and_player`): every
+  ordering branched (k! <= 120), deduped by end state, `searched_order` realised verbatim by both apply worlds;
+  every other plan passes through in place with the early return's treatment. Under the human saturated-order
+  collapse only these plans are still expanded (the order decides what survives, not entry order). An ordering
+  that casts a trick before the same-plan hand card it targets is skipped (`OrderingPlacesTrickBeforeHandTarget`:
+  the trick would have no target; sound). This is a WIDENING; no cast-order rank changed (ranks stay USER-OWNED).
+  For a battlefield target, Escape-before-sweep weakly dominates after, but it is not a pure dominance (the mana
+  each order leaves, other casts' positions), hence the searched expansion rather than a fold. Inert for every
+  deck without one of the two setup params. Tests: "the Escape before the Act is a reachable plan" and "Guilty
+  Conscience on the Doll BEFORE the Act is a reachable plan" (both orders present; GC-first loops to the kill,
+  GC-after = one 13; executor matches the rollout); scenario `stuffy_loran_gc_reckoner_act_loop.json` (Act FIRST in
+  hand) wins T4.
+* **R7 not reachable from this deck.** The two rollout-only kill paths (ApplyPlanDirect's human any-target
+  DirectDamage branch and the creature-burn branch) are reached only by DirectDamage-template spells; the Stuffy
+  list has none and Loran's adds no damage route. Not fixed.
+* **Pre-existing fold gap (reported, not fixed): the identical-target key ignores EOT indestructible.**
+  `LandfallTargetFoldKey` does not mix `temp_indestructible`, so two otherwise identical creatures, one of them
+  indestructible until end of turn, fold together. Reachable today only for a creature entering after a Boros Charm
+  (the Charm grants all own permanents at once). Loran's own branch mixes the bit itself.
+* **Unit-test notes.** `GameState::deck_has_spell_target_watch` defaults TRUE (unstamped-conservative), so a
+  hand-built test board must stamp it false or the no-effect fold correctly refuses to fold the Doll; an untapped
+  Mind Stone is a sac-draw DIG source whose dig twins the test executor does not realise.

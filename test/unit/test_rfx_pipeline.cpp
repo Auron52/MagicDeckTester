@@ -1058,11 +1058,16 @@ GameState LoranBoard(bool with_act, bool gc_on_reckoner)
     GameState s = ArmedState();
     s.phase = Phase::PreCombatMain;
     s.players[0].lands_played_this_turn = 1;
+    // GameState defaults this TRUE (the unstamped-conservative value); this board has no spell-target watcher, so
+    // stamp it as a deck build would (otherwise the no-effect fold correctly refuses to fold the Doll).
+    s.deck_has_spell_target_watch = false;
     PutRfx(s, "Plains", 1910);
     for (int i = 0; i < 6; ++i) { PutRfx(s, "Mountain", 1911 + i); }
     PutRfx(s, "Boros Reckoner", 1901).entered_this_turn = true;
     PutRfx(s, "Mogg Maniac", 1902).entered_this_turn = true;
-    PutRfx(s, "Mind Stone", 1903);
+    // Tapped: an untapped Mind Stone is a sac-draw DIG source, whose dig_choice twins the test executor
+    // (CommitPhasePlan + TakeTurn) does not realise -- not what these tests measure.
+    PutRfx(s, "Mind Stone", 1903).tapped = true;
     Permanent& d = PutRfx(s, "Stuffy Doll", 1904);
     d.chosen_player = 1;
     d.entered_this_turn = true;
@@ -1112,6 +1117,7 @@ TEST_CASE("rfx step 7: Loran's Escape's card data (artifact-or-creature target, 
 TEST_CASE("rfx step 7: an Escaped Boros Reckoner survives Blasphemous Act and reflects 13; the scry fires")
 {
     GameState s = LoranBoard(false, false);
+    s.players[1].life = 60;   // room for all 39: at 20 the drain correctly stops at GameOver (after 26)
     const CardDefinition& lor = DefRfx("Loran's Escape");
     // The scry goes through ScryTop: under a top chooser (the viewer's) it is ASKED, with this card as the source.
     int asked = 0;
@@ -1139,8 +1145,8 @@ TEST_CASE("rfx step 7: an Escaped Boros Reckoner survives Blasphemous Act and re
     CHECK(Find(s, 1902) == nullptr);                       // the Maniac died (LKI reflection still dealt)
     CHECK(Find(s, 1905) == nullptr);
     CHECK(Find(s, 1903) != nullptr);                       // Mind Stone is not a creature
-    // Reckoner 13 (front: the face) + Maniac 13 + the Doll 13 (chosen: the opponent) -> 20 - 39.
-    CHECK(s.players[1].life == 20 - 39);
+    // Reckoner 13 (front: the face) + Maniac 13 + the Doll 13 (chosen: the opponent) -> 60 - 39.
+    CHECK(s.players[1].life == 60 - 39);
     {   // the same Act WITHOUT the Escape: the Reckoner dies
         GameState t = LoranBoard(false, false);
         PerformDamageAllCreatures(t, 0, DefRfx("Blasphemous Act"), 13);
@@ -1227,8 +1233,8 @@ TEST_CASE("rfx step 7: the Escape before the Act is a reachable plan, and it kee
         GameState roll = initial;
         TurnSolver::ApplyPlan(roll, p, true);
         if (Find(roll, 1901) == nullptr) { continue; }
-        // (the Reckoner's own 13 is a searched target too: the face gives 20 - 39)
-        if (roll.players[1].life == 20 - 39) { ++found; }
+        // (the Reckoner's own 13 is a searched target too: the face line kills; the drain stops at GameOver)
+        if (roll.players[1].life <= 0) { ++found; }
         GameState exec = initial;
         AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
         MtgTestSeam::CommitPhasePlan(eng, p, true);
@@ -1237,4 +1243,52 @@ TEST_CASE("rfx step 7: the Escape before the Act is a reachable plan, and it kee
         CHECK(exec.players[1].life == roll.players[1].life);
     }
     CHECK(found >= 1);
+}
+
+TEST_CASE("rfx step 7: Guilty Conscience on the Doll BEFORE the Act is a reachable plan, and it loops to the kill")
+{
+    // The searched rfx order (design 4.8) covers GC too: GC on the (indestructible) Doll before the Act makes the
+    // Doll's 13 come back to it, and the loop kills from 20; after the Act it is one 13. The Act sits FIRST in hand
+    // and both are noncreature (CastOrderRank ties them), so before the order axis this line was unreachable.
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    s.deck_has_spell_target_watch = false;
+    PutRfx(s, "Plains", 1960);
+    for (int i = 0; i < 6; ++i) { PutRfx(s, "Mountain", 1961 + i); }
+    Permanent& d = PutRfx(s, "Stuffy Doll", 1970);
+    d.chosen_player = 1;
+    d.entered_this_turn = true;
+    d.tapped = true;   // no ping line
+    TokenRfx(s, 1971, 1, 1, 1, "Spirit");
+    TokenRfx(s, 1972, 1, 1, 1, "Spirit");
+    Card act = DefRfx("Blasphemous Act").card; act.m_number = 1980; s.players[0].hand.push_back(act);
+    Card gc = DefRfx("Guilty Conscience").card; gc.m_number = 1981; s.players[0].hand.push_back(gc);
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 1990 + i; s.players[0].library.push_back(m); }
+    const GameState initial = s;
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    int before = 0, after = 0;
+    for (const auto& p : plans)
+    {
+        int gc_at = -1, act_at = -1;
+        for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+        {
+            const std::string n = p.actions[i].card_name.str();
+            if (n == "Guilty Conscience" && p.actions[i].enchant_target == 1970) { gc_at = i; }
+            if (n == "Blasphemous Act") { act_at = i; }
+        }
+        if (gc_at < 0 || act_at < 0) { continue; }
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        if (gc_at < act_at) { ++before; CHECK(roll.players[1].life <= 0); }
+        else                { ++after;  CHECK(roll.players[1].life == 20 - 13); }
+    }
+    CHECK(before >= 1);
+    CHECK(after >= 1);
 }

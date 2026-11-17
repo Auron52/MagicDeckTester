@@ -22971,6 +22971,26 @@ static bool IndestructibleGrantTargetInert(const GameState& state, int controlle
 // -1 = not built (instruments armed), compute it here. When a body exists but cannot attack, the
 // resolver's FindBestOwnCreature floor makes the bodyless variant a duplicate of the explicit
 // target, so rejecting it there is dedup, not deletion.
+// A searched ordering (Plan::searched_order, vector order realised verbatim) that casts a trick whose target is a
+// SAME-PLAN HAND card (trick_hand_target, a name) before any cast of that name: the trick has no target when it is
+// cast. Used by the rfx order expansion (step 7) only.
+static bool OrderingPlacesTrickBeforeHandTarget(const std::vector<Action>& acts)
+{
+    for (std::size_t i = 0; i < acts.size(); ++i)
+    {
+        const Action& a = acts[i];
+        if (a.kind != Action::Kind::CastFromHand || a.trick_hand_target.empty()) { continue; }
+        bool before = false;
+        for (std::size_t k = 0; k < i; ++k)
+        {
+            if (acts[k].kind == Action::Kind::CastFromHand && acts[k].card_name == a.trick_hand_target)
+            { before = true; break; }
+        }
+        if (!before) { return true; }
+    }
+    return false;
+}
+
 static bool SubsetHasMissingTrickTarget(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel,
@@ -89035,7 +89055,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
         });
     });
-    if (!OrderingSearchEnabled(state) && !loam_order)
+    // STUFFY DOLL step 7 (damage-reflection design 4.8): the relative ORDER of a creature sweeper and the cast that
+    // sets a creature up for it -- an indestructible grant (Loran's Escape, grants_temp_indestructible: the
+    // Escaped Boros Reckoner survives Blasphemous Act and keeps reflecting) or a Guilty Conscience
+    // (aura_host_damage_back: on the host BEFORE the sweep, the host's reflection loops) -- decides the turn, yet
+    // the generic CastOrderRank ties them (all noncreature) and the canonical route casts them in HAND order, so
+    // "Escape, then Act" was unreachable at any budget whenever the Act sat first in hand. This SEARCHES the order
+    // (every ordering branched, deduped by end state, exactly as the loam_order precedent above) for the plans
+    // that cast BOTH -- a widening, not a rank: no cast-order rule changes, and every other plan passes through
+    // in its canonical order. Not a dominance fold: a battlefield-target Escape before the sweep weakly dominates
+    // after for its target, but the mana each order leaves (Forbidden Orchard tapped for the later spell) and the
+    // other casts' positions differ, so both orders are offered. Inert for every deck without one of the two
+    // setup params (one param test per hand cast of each deduped plan).
+    auto rfx_order_plan = [](const TurnSolver::Plan& p) -> bool
+    {
+        bool setup = false, sweep = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d == nullptr) { continue; }
+            if (d->params.grants_temp_indestructible || d->params.aura_host_damage_back) { setup = true; }
+            else if (d->params.damage_all_creatures > 0 || d->params.damage_all_creatures_count_creatures
+                     || d->params.x_damage_each_creature_and_player) { sweep = true; }
+        }
+        return setup && sweep;
+    };
+    const bool rfx_order = std::any_of(deduped.begin(), deduped.end(), rfx_order_plan);
+    const bool full_order = OrderingSearchEnabled(state) || loam_order;
+    if (!full_order && !rfx_order)
     { drop_attach_illegal(deduped); return deduped; }
     // SATURATED CAST-ORDER COLLAPSE (see HumanEnumSaturated). This expansion APPLIES every
     // candidate ordering on a GameState copy -- up to 5! = 120 ApplyPlanDirect calls per surviving
@@ -89046,12 +89094,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // permanents entered and the canonical one represents them all. viewer_protocol_check's
     // find_plan already re-anchors a recorded pick by (land, casts) precisely to "tolerate a dropped
     // order variant", so a reference recorded under the full fan still resolves.
-    if (sat_enum && HumanSatOrderOn()) { drop_attach_illegal(deduped); return deduped; }
+    // (The rfx order above is NOT an entry-order difference -- it decides what survives the sweep -- so its plans
+    // are still expanded under saturation; every other plan collapses as before.)
+    const bool sat_collapse = sat_enum && HumanSatOrderOn();
+    if (sat_collapse && !rfx_order) { drop_attach_illegal(deduped); return deduped; }
+    // Only the rfx plans are expanded: everything else takes the early return's treatment (attach-illegal
+    // dropped here, drop_partial_vamp below), in place, so the plan order is unchanged.
+    const bool rfx_only = !full_order || sat_collapse;
 
     std::vector<TurnSolver::Plan> ordered;
     ordered.reserve(deduped.size());
     for (TurnSolver::Plan& p : deduped)
     {
+        const bool rfx_plan = rfx_order && rfx_order_plan(p);
+        if (rfx_only && !rfx_plan)
+        {
+            if (attach_order_illegal(p)) { continue; }
+            ordered.push_back(std::move(p));
+            continue;
+        }
         // Reorderable = non-sacrifice hand casts (where enabler/payload interactions live);
         // everything else (sacrifice-land / retrace) keeps its canonical bucket. A Vial PUT is
         // neither: it is sequenced like a CAST of its card (USER 2026-10-06), so each ordering
@@ -89192,6 +89253,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // ...or a plan-body convoke arm before the creatures it convokes with (Vampires item B; the
             // explicit route plays this order verbatim, so its bodies would not exist). No-op without one.
             if (OrderingPlacesConvokeBeforeArrivals(cand.actions)) { continue; }
+            // ...or (an rfx plan) a trick before the same-plan hand creature it targets: the Escape would have no
+            // target yet (fizzle), the same line as the plan without it. Sound; rfx plans only.
+            if (rfx_plan && OrderingPlacesTrickBeforeHandTarget(cand.actions)) { continue; }
             // ...or a target-less Path BEFORE a Theft whose piece an Equip in this plan needs freed again
             // (only a Path after the Theft can; see attach_order_illegal above).
             const bool probe_attach = human_attach && PlanHasTheftAndOpenRemoval(cand.actions);
