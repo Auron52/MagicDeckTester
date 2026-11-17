@@ -168,6 +168,10 @@ deferrals provisional.
   Escape to ONE target (it is cast as a {W} scry 1: prefer the engine's no-effect/scry-only fold target, else a single
   reflector). Kept castable (default) rather than pruned outright, since the scry digs for combo pieces; "not
   castable" is the USER's alternative if the measurement shows the scry line wastes budget.
+  USER (~21:38, verbatim): "I guess you can argue that it could allow a creature to survive a sweeper... Not great,
+  but that is a use. In that case highest power (and not stuffy) I suppose." => the ONE no-GC target is our
+  highest-power creature other than Stuffy Doll (already indestructible); only if there is none, the scry-only
+  no-effect target.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
