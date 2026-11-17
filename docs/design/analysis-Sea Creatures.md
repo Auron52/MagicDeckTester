@@ -185,6 +185,36 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
     Gorgers resolved, with 12-16 library lands each. The =0 searched arm picked `exile_all` 4/4. It was digest-identical
     to the prune, with +7.8% units. The <6-lands decline never fired.
 
+## Stage 3 / 4 / 4-bis (2026-11-17)
+
+* Stage 3 coverage re-run CLEAN: 0 missing, every card `full`. `fetch_hold_review` is answered by the USER ruling
+  (no searched hold): Misty is `fetch_hold_human_only`; Heath / Strand ride the root default (no hold) because
+  SeaCreaturesProvider does not override ConsiderFetchHold.
+* Stage 4 profile `3a21f5afb` (analyze_deck.py --no-rebuild): cost diagnostic COST_NEUTRAL; discard analysis
+  STATUS_QUO_OK. `provider_audit` routes Sea -> SeaCreatures (cert NotAssessed), `--check` rc 0.
+* 4-bis `b96973a0a`: rows in ALL THREE tiers (Boars' entry shape + sea2hg), backstop blocks 30011 (regression) /
+  30051 (overnight) screened from 16 candidates. Suite cost gate PASS 6381.6 ms/game = 0.99x Hinata (same run).
+  GT accepted per tier with --deck=sea,sea2hg; only sea keys moved; check_gt_logs clean. Hinata regression
+  d5 s2002/s3003 digests differ from GT by one game each (same win turn) on EVERY binary from base 8cd0bbf23 on:
+  pre-existing, not accepted here.
+
+## Claude-play sweep
+- commit: `3a21f5afb` (play-identical to `b96973a0a`: only suite rows / GT changed since)
+- seeds: 8900000..8900015 (one game per seed; `--claude-play` varies by SEED, not game-index) games: 16
+- flags: 0 unresolved
+- Driver: Claude (Sonnet player agents). Every result was re-validated by replaying its choice CSV at its seed
+  (agents' shared `/tmp` helper scripts collided mid-run; all 16 replays reproduce the reported win turn).
+- Claude vs search (d5 b200): equal 8, Claude slower 6, Claude unwon 1 (s8900002: one blue source through T8),
+  Claude FASTER 1 (s8900009: T6 vs T7). Root cause of s8900009: the search MULLIGANS the 7 Claude kept (Heath,
+  Misty, Forest, Breeding Pool, Worn Powerstone, Kiora, Spawning Kraken) and wins T7 off six cards at b20, b200
+  and b2000 alike; a keep decision (USER-owned, the later mulligan stage), not a play defect. Three of the slower
+  games are the reverse (Claude kept what the search mulliganed).
+- Verified correct in play by the players: land-aura yields (Sprawl / Wild Growth / Overgrowth stacking), shock
+  and fetch life, Hedge Maze surveil after the shuffle, Worn Powerstone tapped, Koma's four Coils per connection,
+  Spawning Kraken per-connection 9/9s (Koma / Coils / Sin count), Kiora I / II / III + sacrifice, Sin stripping
+  Kiora's lore and Kiora re-firing chapter I, Summon: Leviathan's attack draws and its chapter-III sacrifice before
+  combat, Hullbreaker / Brinelin prompts (declined), the cleanup discard.
+
 ## Approved deferrals
 
 (none yet)
