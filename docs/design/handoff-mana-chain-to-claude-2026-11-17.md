@@ -2,18 +2,34 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 04:27 UTC
+## Current state, updated 04:39 UTC
 
-A six-deck due-issue PGO gate is active as the only simulation batch,
-exec session 60169:
+**Six due-issue decks now refreshed:** Boars, Dragons, Goblins, Hydras,
+Jumbo Cactuar, and Morph each ran 5,000 games at PGO source
+`fcb9352608ea`, indices respectively 10,000-14,999, 76,000-80,999,
+115,000-119,999, 5,000-9,999, 105,000-109,999, and 10,000-14,999.
+Oracle-on/off play was byte-identical. All six still have issues:
 
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run boars dragons goblins hydras jumbo_cactuar morph --games 5000 --name codex-due-six-20261117
-```
+| Deck | Issues | Leading classes |
+|---|---:|---|
+| Boars | 2,253 | 1,455 dominated creature, 233 apply drop, 206 capped decision, 166 dominated haste |
+| Dragons | 948 | 663 apply drop, 285 oracle gap |
+| Goblins | 1,131 | 1,047 oracle gap, 75 apply drop |
+| Hydras | 54,075 | 54,031 capped decision, 34 apply drop order |
+| Jumbo Cactuar | 942 | 422 enum gap, 239 apply drop order, 127 dominated creature |
+| Morph | 1,752 | 1,151 oracle gap, 416 dominated creature, 184 apply drop |
 
-Console: `build/scratch/dragonstorm_visible_lump_ab/due_six_gate.out`.
-Read `logs/mana_clean/codex-due-six-20261117/report.md` on completion,
-update this handoff, and commit `test/mana_clean.json`.
+Report: `logs/mana_clean/codex-due-six-20261117/report.md`.
+The record is in `test/mana_clean.json`. At this source, the status is
+56 decks: 18 clean, 36 issues, two never run, 21 still DUE (older issue
+records or never run); zero stale-clean. No simulation batch is active.
+Next inspect Goblins' seed 30116157 T3 Three Tree City payment (66
+apply-drop flags), Dragons' seed 30077853 T5 Lathliss then Urza's
+Incubator (32), and Boars' seed 30010755 T5 Ilharg then Horn then
+Flinthoof Boar (44). Those are distinct from Hydras' nearly entire
+block hitting the per-decision audit budget. Jumbo's leading enum gaps
+combine Overgrowth, Finale, Tooth and Nail, and mana creatures; seed
+30109313 T4 has 32 flags. See the report for exact repro commands.
 
 **Final stale-clean refresh complete:** Martyr Lifegain, Prevent
 Damage, and Spirits each ran a fresh 5,000-game PGO mana-clean block at
