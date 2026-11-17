@@ -6,7 +6,8 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 **Active batch:** refreshing four older issue records at source
 `fcb9352608ea`, 5,000 games each: Anti-Lifegain, Bruna, Midrange Burn,
-and Selesnya Lifegain. Command:
+and Selesnya Lifegain. Exec session `51923`; console
+`build/scratch/dragonstorm_visible_lump_ab/due_four_gate.out`. Command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run anti_lifegain bruna midrange_burn selesnya_lifegain --games 5000 --name codex-due-four-20261117`.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
