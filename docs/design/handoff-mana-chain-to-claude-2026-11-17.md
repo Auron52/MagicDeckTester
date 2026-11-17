@@ -46,16 +46,19 @@ CAPPED signature (below). Landfall Elementals (94,137) and Dragons (948) were le
 2. The wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras / Fungus /
    Shadowborn / Morph, Landfall Elementals, Dragons, and every stale-clean deck.
 
-**IN FLIGHT (13:00 UTC): painland float.** USER 2026-11-17: *"I certainly see no reason not to float mana. The bigger
-question is whether to float colourless or something else?"* Uncommitted in the primary checkout: a Karoo-returned
-painland with a separate painless `{C}` (Brushland, Llanowar Wastes, Caves of Koilos, Tarnished Citadel...) floats
-that `{C}` (`MTG_KAROO_FLOAT_PAINLAND_C`), or, with `MTG_KAROO_FLOAT_PAINLAND_OWED`, the colour the rest of the line
-owes (`FloatLineOwedColour`) paying its damage. Both default ON. Unit 3,392/3,392 (also fixed a test leak:
-`test_human_line_joint_pay.cpp` called `HumanLineJointPrepay` bare and left `{G}` in `g_line_unpaid_cost` for every
-later test). Three-arm A/B running: `build/scratch/claude_painland_ab/` (manifest 300 jobs = EDF + Melira Pod x
-games 520,000-524,999 x arms old / cee / owed; pid in `pid`; `batch.out`). Only those two decks hold both a Karoo and
-a {C}-mode painland. Then: compare (adapt `build/scratch/claude_karoo_line_ab/compare.py`), pick the arm by the bar,
-report both arms to the USER, write `docs/design/karoo-float-painland-2026-11-17.md`, commit.
+**DONE 13:17 UTC: painland float** `811f019c1` (unpushed). USER 2026-11-17: *"I certainly see no reason not to float
+mana. The bigger question is whether to float colourless or something else?"* A Karoo-returned painland floats the
+colour the rest of the line owes (paying its damage), otherwise its painless `{C}`
+(`MTG_KAROO_FLOAT_PAINLAND_C` + `_OWED`, both ON). Three-arm A/B, EDF + Melira Pod x 5,000: no slower game in either
+arm; the owed arm has 1 earlier (EDF gi 524423). `docs/design/karoo-float-painland-2026-11-17.md`.
+
+**IN FLIGHT (13:40 UTC): Dragonstorm s30075408 T4 fix, uncommitted** (`MTG_CONT_UNSEEN_PENDING`,
+`ContinuationOpensUnseen` in TurnSolver.cpp, both continuation bindings; unit test `test_cont_unseen_pending.cpp`;
+unit 3,393/3,393). Exact seed APPLY-DROP 7 -> 1 (lever off 7); the one left is the two-Apex plan, where the first
+Apex's continuation correctly stays unseen. All-deck A/B running: `build/scratch/claude_cont_unseen_ab/` (1,200
+jobs: Dragonstorm 5,000 pairs, every other suite deck 1,000, games 530,000+; pid in `pid`; `compare.py` ready).
+Then: adopt by the bar, design note, commit, smoke before the 16:21 push, then the next Dragonstorm signatures
+(s30073082 T5 Karrthus x10, s30072155, s30074224, s30074081, s30076435).
 
 **Queue reorder (13:05 UTC):** after the painland A/B, the Dragonstorm APPLY-DROP clusters go BEFORE the PD CAPPED
 fold. The Dragonstorm flags are real engine drops (gate `codex-dragonstorm-ruby-song-20261117`: 28 APPLY-DROP, 16
