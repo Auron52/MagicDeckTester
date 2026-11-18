@@ -4056,6 +4056,35 @@ inline void RemoveAllCounters(Permanent& p)
     RefreshCounterThresholdKeywords(p);
 }
 
+// LAST-KNOWN COUNTERS OF A DYING PERMANENT (Sin, Unending Cataclysm's death clause, 2026-11-18). OnCreatureDies only
+// receives the dead permanent's Card and two counter COUNTS (-1/-1 and total); "put its counters on target creature"
+// needs the count of EACH KIND it carried as it left (CR 608.2h last-known information; Scryfall ruling 2025-06-06:
+// "the same number of each kind of counter Sin had when it died"). Every death site already reads TotalCountersOn
+// on the permanent just before erasing it, so it reads DyingCountersTotal instead: the same number, and -- only for
+// a permanent whose card carries the clause -- a copy of the permanent is stashed here (Permanent is trivially
+// copyable), keyed on its per-copy number and token-ness. ResolveDiesCountersToOwnCreature consumes the NEWEST
+// matching entry, so a batch site (snapshot several, erase, then fire each) and a nested death inside a dies trigger
+// both find their own snapshot. thread_local: a capture and its consumer always run on one thread within one
+// death-site call. Bounded (oldest dropped) so an entry whose death a replacement swallowed cannot accumulate.
+// One cached-pointer lookup per death; nothing is stored for any other card, so every other deck is byte-identical.
+struct DiesCounterLki
+{
+    int       number = 0;
+    bool      token  = false;
+    Permanent perm{};
+};
+inline thread_local std::vector<DiesCounterLki> g_dies_counter_lki;
+inline int DyingCountersTotal(const Permanent& p)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d != nullptr && d->params.dies_put_counters_on_own_creature_shuffle_self)
+    {
+        if (g_dies_counter_lki.size() >= 16) { g_dies_counter_lki.erase(g_dies_counter_lki.begin()); }
+        g_dies_counter_lki.push_back(DiesCounterLki{ p.card.m_number, p.is_token, p });
+    }
+    return TotalCountersOn(p);
+}
+
 // ---- THE COUNTER-PUT CHOKEPOINT (Doubling Season's second half) ----------------------------
 //
 // "If an effect would put one or more counters on a permanent you control, it puts twice that many
@@ -15587,6 +15616,150 @@ inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, 
     }
 }
 
+// "When Sin dies, put its counters on target creature you control, then shuffle this card into its owner's
+// library." (CardParams::dies_put_counters_on_own_creature_shuffle_self; Sin, Unending Cataclysm, 2026-11-18.)
+// A TARGETED dies trigger (CR 603.6c / 700.4), resolved in the shared OnCreatureDies, so the executor and the rollout
+// run this ONE body. The death site already put the card in the graveyard.
+//   * TARGET: any creature `dead_controller` controls (the trigger's controller is the creature's controller as it
+//     died). None (CR 603.3d) -> the ability is removed from the stack and NOTHING happens: the counters are lost and
+//     the card stays in the graveyard (Scryfall ruling 2025-06-06: an illegal target -> "none of its effects will
+//     happen. Sin will remain in the zone it went to"). WHICH creature: DecisionProvider::DiesCountersTargetOrder
+//     orders the full legal set and the trigger takes its front; human play re-asks on the board (the shared
+//     `target` click, g_play_loyalty_chooser, every legal creature, the front preselected). NOT A SEARCHED AXIS: no
+//     list in the repo can kill Sin today (Sea Creatures has no sacrifice outlet, wipe, -1/-1 source or second Sin,
+//     and the goldfish opponent never blocks or removes), so the Ilharg dies_tuck shape (twin every cast that kills
+//     it) is OWED for the first list where Sin can die -- see the Sea ledger, Q9.
+//   * COUNTERS: the same number of EACH KIND the permanent carried as it left the battlefield (last-known
+//     information, DyingCountersTotal's stash; ruling 2025-06-06). It is a PUT, so a counter doubler applies to every
+//     kind (DoublerShift), +1/+1 through PutPlusCounters and -1/-1 through MinusCounterReplacement (Melira / Vizier),
+//     then CR 704.5r annihilation. A target left at 0 toughness dies at the next state-based check. With no snapshot
+//     (a death site that does not read DyingCountersTotal) the two counts the site passed stand in: the -1/-1 count
+//     and the rest as +1/+1 -- exact for every counter Sin itself can get (its as-enters +1/+1).
+//   * SHUFFLE: a card (not a token, CR 111.7) is pulled from the graveyard (newest copy by per-copy number, name as
+//     the fallback; absent -> it already left, CR 400.7, nothing moves) into its OWNER's library, and that library is
+//     shuffled on the engine's search-shuffle ordinal (ShuffleAfterSearch: deterministic per seed and ordinal, the
+//     Worldspine Wurm precedent).
+inline void ResolveDiesCountersToOwnCreature(GameState& state, int dead_controller, const Card& dead_card,
+                                             bool dead_was_token, int dead_minus_counters, int dead_total_counters)
+{
+    Permanent lki{};
+    bool have_lki = false;
+    for (std::size_t k = g_dies_counter_lki.size(); k-- > 0; )
+    {
+        const DiesCounterLki& e = g_dies_counter_lki[k];
+        if (e.number != dead_card.m_number || e.token != dead_was_token) { continue; }
+        lki = e.perm;
+        have_lki = true;
+        g_dies_counter_lki.erase(g_dies_counter_lki.begin() + static_cast<std::ptrdiff_t>(k));
+        break;
+    }
+    const int owner = have_lki ? lki.owner_index : dead_controller;
+    const std::string nm = dead_card.m_name.str();
+    const bool events = g_play_event_sink != nullptr && !g_tap_speculating;
+
+    std::vector<int> cands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == dead_controller && q.card.IsCreature()) { cands.push_back(i); }
+    }
+    if (cands.empty())
+    {
+        if (events)
+        { EmitPlayEvent(state.turn_number, "trigger", nm + " died -- no creature to target: the trigger does nothing"); }
+        return;
+    }
+    ResolveProvider(state).DiesCountersTargetOrder(state, dead_controller, cands);
+    int ti = cands.front();
+    if (g_play_loyalty_chooser != nullptr && !g_tap_speculating && cands.size() > 1)
+    {
+        const int chosen = (*g_play_loyalty_chooser)(state, dead_controller, nm + " (dies)",
+                                                     "given " + nm + "'s counters", cands, 0);
+        if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { ti = cands[static_cast<std::size_t>(chosen)]; }
+    }
+    Permanent& tgt = state.battlefield[static_cast<std::size_t>(ti)];
+    const int shift = DoublerShift(state, tgt.controller_index, /*for_tokens=*/false);
+    int put_total = 0;
+    auto put_minus = [&](int n)
+    {
+        const int m = MinusCounterReplacement(state, tgt.controller_index, n);
+        if (m > 0) { tgt.counters.Add(Counter::Type::MinusOneMinusOne, m << shift); put_total += m << shift; }
+    };
+    if (have_lki)
+    {
+        for (const Counter& c : lki.counters)
+        {
+            if (c.count <= 0) { continue; }
+            switch (c.type)
+            {
+            case Counter::Type::PlusOnePlusOne:
+                PutPlusCounters(state, tgt, c.count);
+                put_total += c.count << shift;
+                break;
+            case Counter::Type::MinusOneMinusOne:
+                put_minus(c.count);
+                break;
+            case Counter::Type::Loyalty:
+                tgt.counters.Add(Counter::Type::Loyalty, c.count << shift);
+                tgt.loyalty += c.count << shift;
+                put_total += c.count << shift;
+                break;
+            default:
+                tgt.counters.Add(c.type, c.count << shift);
+                put_total += c.count << shift;
+                break;
+            }
+        }
+        int vals[32] = {};
+        int nv = 0;
+        ForEachDedicatedCounterField(lki, [&](const char*, const int& v) { if (nv < 32) { vals[nv++] = v; } });
+        nv = 0;
+        ForEachDedicatedCounterField(tgt, [&](const char*, int& v)
+        {
+            const int n = nv < 32 ? vals[nv++] : 0;
+            if (n > 0) { v += n << shift; put_total += n << shift; }
+        });
+    }
+    else
+    {
+        const int plus = dead_total_counters - dead_minus_counters;
+        if (plus > 0) { PutPlusCounters(state, tgt, plus); put_total += plus << shift; }
+        if (dead_minus_counters > 0) { put_minus(dead_minus_counters); }
+    }
+    AnnihilateCounters(tgt);
+    RefreshCounterThresholdKeywords(tgt);
+    if (events)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      nm + " died -- " + std::to_string(put_total) + " counter(s) put on " + tgt.card.m_name.str());
+    }
+    if (dead_was_token) { return; }   // a token is not a card: nothing to shuffle (CR 111.7)
+    for (int side = 0; side < 2; ++side)
+    {
+        const int pl = side == 0 ? dead_controller : owner;
+        if (side == 1 && pl == dead_controller) { break; }
+        std::vector<Card>& gy = state.players[static_cast<std::size_t>(pl)].graveyard;
+        std::size_t hit = gy.size();
+        for (std::size_t g = gy.size(); g-- > 0; )
+        { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
+        if (hit == gy.size())
+        {
+            for (std::size_t g = gy.size(); g-- > 0; )
+            { if (gy[g].m_name == dead_card.m_name) { hit = g; break; } }
+        }
+        if (hit == gy.size()) { continue; }
+        Card back = gy[hit];
+        gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
+        state.players[static_cast<std::size_t>(owner)].library.push_back(std::move(back));
+        ShuffleAfterSearch(state, owner);
+        if (events)
+        {
+            EmitPlayEvent(state.turn_number, "trigger", nm + " shuffled into its owner's library");
+        }
+        return;
+    }
+}
+
 // `dead_owner`: the dead card's OWNER, whose graveyard the death site pushed it into (CR 400.3) and whose
 // graveyard / library / control the "put into a graveyard" and "return it ... under its owner's control"
 // clauses below read. < 0 = the controller (equal for everything but a stolen creature).
@@ -15673,6 +15846,18 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         if (dd && dd->params.dies_to_library_position > 0)
         { ResolveDiesToLibraryPosition(state, dead_controller, dead_card, dd->params.dies_to_library_position,
                                        gy_owner); }
+    }
+    // Sin, Unending Cataclysm's death clause: its counters onto target creature we control, then it shuffles itself
+    // into its owner's library (ResolveDiesCountersToOwnCreature). Only a CREATURE dies (CR 700.4); a token copy
+    // still puts its counters (it is not a card, so nothing shuffles).
+    if (dead_card.IsCreature())
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.dies_put_counters_on_own_creature_shuffle_self)
+        {
+            ResolveDiesCountersToOwnCreature(state, dead_controller, dead_card, dead_was_token,
+                                             dead_minus_counters, dead_total_counters);
+        }
     }
     // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
     // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
@@ -19006,7 +19191,7 @@ inline int SweepZeroToughnessSba(GameState& state)
     {
         const Permanent& p = state.battlefield[i];
         if (!p.card.IsCreature() || p.EffectiveToughness() > 0 || LethalToughness(p, state) > 0) { ++i; continue; }
-        died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), TotalCountersOn(p),
+        died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), DyingCountersTotal(p),
                              p.owner_index });
         state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));   // OWNER's (CR 400.3)
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
@@ -19154,7 +19339,7 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     const Card dead     = state.battlefield[idx].card;
     const bool was_tok  = state.battlefield[idx].is_token;
     const int  dead_m1  = MinusCountersOn(state.battlefield[idx]);
-    const int  dead_total = TotalCountersOn(state.battlefield[idx]);
+    const int  dead_total = DyingCountersTotal(state.battlefield[idx]);
     // Attachments fall off a sacrificed host (CR 301.5c), exactly as they do on every other death
     // path. This was MISSING here, and this is the SHARED sac chokepoint -- the combat-death SBA
     // (GameEngine.cpp) only walks creatures the SBA ITSELF destroyed, so a sacrificed host was
@@ -19479,7 +19664,7 @@ inline void DestroyAttackedAtEndStep(GameState& state)
             const Card dead      = q.card;
             const bool was_token = q.is_token;
             const int  m1        = MinusCountersOn(q);
-            const int  total     = TotalCountersOn(q);
+            const int  total     = DyingCountersTotal(q);
             if (g_play_event_sink && !g_tap_speculating)
             {
                 EmitPlayEvent(state.turn_number, "trigger",
@@ -19606,7 +19791,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
-                         MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
+                         MinusCountersOn(q), DyingCountersTotal(q), q.owner_index });
         state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
         state.battlefield.erase(state.battlefield.begin()
                                 + static_cast<std::ptrdiff_t>(i));
@@ -19802,7 +19987,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
-    const int  total_counters = TotalCountersOn(q);
+    const int  total_counters = DyingCountersTotal(q);
     PdStats::Count(p.etb_destroy_artifact_enchantment_land ? PdStats::SlimeOwn
                    : (dead_ctrl == controller ? PdStats::ShriekmawOwn : PdStats::ShriekmawOpp));
     if (g_play_event_sink && !g_tap_speculating)
@@ -20161,7 +20346,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         // A scheduled opponent spawn is a token too (its Permanent does not carry is_token).
         const bool was_token = q.is_token || q.card.m_number >= GameState::kFirstOppSpawnNumber;
         const int  m1 = MinusCountersOn(q);
-        const int  total_counters = TotalCountersOn(q);
+        const int  total_counters = DyingCountersTotal(q);
         if (destroy && q.HasKeyword(Keyword::Indestructible))
         {
             if (g_play_event_sink && !g_tap_speculating)
@@ -20326,7 +20511,7 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
-    const int  total_counters = TotalCountersOn(q);
+    const int  total_counters = DyingCountersTotal(q);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
@@ -20560,7 +20745,7 @@ inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controll
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
-    const int  total_counters = TotalCountersOn(q);
+    const int  total_counters = DyingCountersTotal(q);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "trigger",
@@ -20712,7 +20897,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
-                         MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
+                         MinusCountersOn(q), DyingCountersTotal(q), q.owner_index });
         if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
@@ -21217,7 +21402,7 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
         const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
         eaten.push_back(v.card.m_name.str());
         deferred.push_back(DevourDeath{ v.card, v.is_token,
-                                        MinusCountersOn(v), TotalCountersOn(v), v.owner_index });
+                                        MinusCountersOn(v), DyingCountersTotal(v), v.owner_index });
         state.players[v.owner_index].graveyard.push_back(RevealedCard(v.card));   // OWNER's (CR 400.3)
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
@@ -22228,7 +22413,7 @@ inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_d
     for (int i : dying_desc)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
+        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q), DyingCountersTotal(q), q.owner_index });
     }
     // ONE pass. `dying_desc` is descending, so walking it from the back yields ascending indices
     // and no membership set is needed. Survivors keep their relative order, so anything elsewhere
@@ -22311,7 +22496,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         const bool tok    = q.is_token;
         const int  owner  = q.owner_index;
         const int  minus  = MinusCountersOn(q);
-        const int  total  = TotalCountersOn(q);
+        const int  total  = DyingCountersTotal(q);
         if (!tok) { state.players[owner].graveyard.push_back(RevealedCard(dead)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         // Maintain the prefilters across the removal, then across whatever OnCreatureDies did.
@@ -22390,7 +22575,7 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         const int  ctrl  = q.controller_index;
         const int  owner = q.owner_index;
         const int  minus = MinusCountersOn(q);
-        const int  total = TotalCountersOn(q);
+        const int  total = DyingCountersTotal(q);
         if (!gathered)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -22647,7 +22832,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
     const int  dead_ctrl   = t.controller_index;
     const bool dead_token  = t.is_token;
     const int  dead_minus  = MinusCountersOn(t);
-    const int  dead_total  = TotalCountersOn(t);
+    const int  dead_total  = DyingCountersTotal(t);
     if (!dead_token) { state.players[dead_owner].graveyard.push_back(RevealedCard(dead_card)); }
     state.battlefield.erase(state.battlefield.begin() + ti);
     for (Permanent& e : state.battlefield)
@@ -22817,7 +23002,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim = state.battlefield[hidx].card; found = true;
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
-        victim_total_counters = TotalCountersOn(state.battlefield[hidx]);
+        victim_total_counters = DyingCountersTotal(state.battlefield[hidx]);
         victim_owner = state.battlefield[hidx].owner_index;
         state.players[victim_owner].graveyard.push_back(RevealedCard(victim));
         state.battlefield.erase(state.battlefield.begin() + hidx);
@@ -22855,7 +23040,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             if (pump_from_victim) { victim_lki_power = lki_power(q); }
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
-            victim_total_counters = TotalCountersOn(q);
+            victim_total_counters = DyingCountersTotal(q);
             victim_owner = q.owner_index;
             state.players[victim_owner].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + i);
@@ -30075,7 +30260,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
         const Permanent& dp = state.battlefield[idx];
         if (dp.card.IsCreature())
         { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token,
-                                       MinusCountersOn(dp), TotalCountersOn(dp), dp.owner_index }); }
+                                       MinusCountersOn(dp), DyingCountersTotal(dp), dp.owner_index }); }
         // History narration (sink-guarded -> search/rollout byte-identical): a legend-rule death
         // is otherwise INVISIBLE in the viewer -- the user's Protege copied their own Maelstrom
         // Wanderer and "just vanished" (2026-09-04). A doomed copy-entrant is named by its
@@ -36475,7 +36660,7 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
                       "\xE2\x98\xA0 " + q.card.m_name.str() + " dies (" + why + ")");
     }
     OnCreatureDies(state, q.controller_index, q.card, q.is_token,
-                   MinusCountersOn(q), nullptr, TotalCountersOn(q), q.owner_index);
+                   MinusCountersOn(q), nullptr, DyingCountersTotal(q), q.owner_index);
 }
 
 // The executor SBA's CREATURE-death pass (GameEngine::CheckStateBasedActions), for a rollout site that
@@ -36496,7 +36681,7 @@ inline int SbaKillDeadCreatures(GameState& state, const char* why)
         {
             const Permanent& q = state.battlefield[i];
             if (!CounterPingSbaDead(q, state)) { ++i; continue; }
-            died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), TotalCountersOn(q),
+            died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), DyingCountersTotal(q),
                              q.owner_index });
             state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
@@ -37263,7 +37448,7 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
-    const int  total_counters = TotalCountersOn(q);
+    const int  total_counters = DyingCountersTotal(q);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "ability",
@@ -54748,7 +54933,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     const Card dead    = state.battlefield[idx].card;
     const bool was_tok = state.battlefield[idx].is_token;
     const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
-    const int  dead_total = TotalCountersOn(state.battlefield[idx]);
+    const int  dead_total = DyingCountersTotal(state.battlefield[idx]);
     const int  dead_owner = state.battlefield[idx].owner_index;
     state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
@@ -55049,7 +55234,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
         const int  dead_owner = q.owner_index;
         const bool was_token = q.is_token;
         const int  m1        = MinusCountersOn(q);
-        const int  total_counters = TotalCountersOn(q);
+        const int  total_counters = DyingCountersTotal(q);
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "trigger",

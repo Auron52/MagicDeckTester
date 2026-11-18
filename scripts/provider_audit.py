@@ -94,12 +94,20 @@ def main():
     with open(man, "w") as fh:
         json.dump({"jobs": jobs}, fh, indent=1)
 
-    proc = subprocess.run([BIN, "--batch", man], capture_output=True, text=True, cwd=ROOT)
-    found = {}
+    # "A provider heuristic is REQUIRED" (docs/design/provider-heuristic-required.md): the engine refuses a deck that
+    # holds a registered card (Trench Gorger) under a provider that does not implement its policy -- and one refused
+    # job aborts the whole batch. So the audit runs under that gate's measurement bypass, which makes the engine print a
+    # `[provider-required] <job> BYPASSED` line per offending job instead, and reports each as a hard failure below.
+    env = dict(os.environ, MTG_UNPRUNE="heuristicrequired")
+    proc = subprocess.run([BIN, "--batch", man], capture_output=True, text=True, cwd=ROOT, env=env)
+    found, required_missing = {}, {}
     for line in (proc.stdout + proc.stderr).splitlines():
         m = re.match(r"\[play\] (\S+) .*provider=(\w+)", line)
         if m:
             found[m.group(1)] = m.group(2)
+        m = re.match(r"\[provider-required\] (\S+) BYPASSED", line)
+        if m:
+            required_missing[m.group(1)] = True
 
     # ---- certificate stance, parsed from the header ------------------------------------------
     # The compiler forces a NEW provider to answer Certificate() (DeckProvider's pure virtual), but
@@ -160,6 +168,10 @@ def main():
     if borrowed:
         hard.append("providers shared by more than one deck: "
                     + "; ".join(f"{p} <- {', '.join(d)}" for p, d in borrowed.items()))
+    if required_missing:
+        hard.append("decks holding a card whose decision REQUIRES a provider heuristic their provider does not "
+                    "implement (docs/design/provider-heuristic-required.md; the engine refuses to play them): "
+                    + ", ".join(sorted(required_missing)))
     if missing_cert:
         hard.append("provider classes that do not declare Certificate() in their OWN body "
                     "(they silently inherit another deck's answer): "

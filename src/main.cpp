@@ -10260,6 +10260,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     GameState state;
     state.game_seed            = j.value("seed", 1);
     state.m_provider            = &SelectDecisionProvider(deck);
+    EnforceRequiredHeuristics(deck, *state.m_provider, "scenario");   // ProviderHeuristicRequired.h
     // Deck traits + shuffle salts (uses_second_main, dependency pulls, ...). Without this every
     // deck-gated mechanism reads its default inside a fixture: the main-phase filter keys on
     // state.uses_second_main and so NEVER fired in a scenario, silently testing the unfiltered

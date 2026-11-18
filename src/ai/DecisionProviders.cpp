@@ -1287,6 +1287,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"escapetarget", UnprunedGate::EscapeTarget},
     {"stuffyscry", UnprunedGate::StuffyScry},
     {"extraturntarget", UnprunedGate::ExtraTurnTarget},
+    {"heuristicrequired", UnprunedGate::HeuristicRequired},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -3558,6 +3559,19 @@ bool DecisionProvider::DiesTuckDefault(const GameState& s, int controller, const
     for (const Permanent& q : s.battlefield)
     { if (q.controller_index == controller && q.card.m_name == dead.m_name) { return false; } }
     return true;
+}
+
+// See DecisionProvider.h. ORDER ONLY: the World War Hulk chapter-II key (SagaChapterTargetCandidates), so the two
+// "counters on target creature you control" triggers in the pool rank alike.
+void DecisionProvider::DiesCountersTargetOrder(const GameState& s, int controller, std::vector<int>& cands) const
+{
+    auto key = [&](int i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        const bool swings_now = !q.tapped && CanAttackFull(q, s.battlefield, controller);
+        return (swings_now ? 1000 : 0) + q.EffectivePower();
+    };
+    std::stable_sort(cands.begin(), cands.end(), [&](int a, int b) { return key(a) > key(b); });
 }
 
 int DecisionProvider::AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const

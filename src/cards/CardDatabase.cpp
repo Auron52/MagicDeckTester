@@ -2193,6 +2193,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.dies_to_library_position = params.value("dies_to_library_position", 0);   // Ilharg's death clause (I5b)
     if (p.dies_to_library_position < 0)
         throw std::runtime_error("dies_to_library_position must be >= 0");
+    p.dies_put_counters_on_own_creature_shuffle_self
+        = params.value("dies_put_counters_on_own_creature_shuffle_self", false);   // Sin's death clause
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

@@ -1713,7 +1713,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             {
                 if (is_creature)
                 { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token,
-                                               MinusCountersOn(p), TotalCountersOn(p), p.owner_index}); }
+                                               MinusCountersOn(p), DyingCountersTotal(p), p.owner_index}); }
                 // The OWNER's graveyard (CR 400.3): a stolen creature goes home. Every token and
                 // every permanent we did not steal has owner == controller.
                 state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));

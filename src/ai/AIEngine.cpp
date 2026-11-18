@@ -1834,7 +1834,7 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
         const int  owner = p.owner_index;   // its graveyard (CR 400.3)
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
-        const int  total_counters = TotalCountersOn(p);
+        const int  total_counters = DyingCountersTotal(p);
         state.players[owner].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters, owner);
