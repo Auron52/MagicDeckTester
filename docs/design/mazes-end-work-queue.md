@@ -63,3 +63,10 @@ Audit `logs/maze/tie/slower-games-audit.md`: all 11 searched slower rows (9 dist
 - Every game recovers at d8 b0, where new and old are byte-identical.
 
 The ties are the empty Tooth and Nail and Time Warp at the opponent, the scoring fixes already running. The 7 smoke GT moves are accepted at the next shared push, after integration, rebase and a smoke run. Diagnostic levers stay on `wip/maze-tie` c2fc9b328 (DO NOT MERGE).
+
+## V1 (Stage 5 non-sweep) DONE 2026-11-18, `1538f469a`
+- **Gate:** verify_deck fails ONLY on regression_tiers (overnight GT awaits the periodic run) and claude_sweep (4 flags owned by F1/F2). Every other gate passes.
+- **Added to the fix queue (after F2, with P5):** fd-diverge s121065 gi64 d5 b20. The executor paid Sylvan Scrying through Baldur's Gate's filter with Maze's End's {C}, so the bp-replayed Maze's End activation found it tapped. Repro in the ledger. Also re-check gi49/gi122 (the gi2 class) after F2's `5ea2d6be7`.
+- **Open for the USER:** keep or delete P2 (inert on top of P1); full 5g mining (100-150 core-h; recommend after P5/P7); `MTG_UNPRUNED` 100-game oracle on a quiet box or after lazy axis generation.
+- **Stage 6 TODO:** write the bucket discard policy (STATUS_QUO_OK) for the USER.
+- **Shared push:** the `audit_viewer_decisions.py` fix `9ffcb7820` also fixes a bug that is live on origin.
