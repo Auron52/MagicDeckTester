@@ -3046,20 +3046,62 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
             perm.entered_this_turn = false;
         }
     }
+    bool searched = false;
     const opponentdeck::LandPlayResult play = opponentdeck::PlayLeftmostLand(state);
-    if (!play.played) { return; }
-    if (g_play_event_sink && !g_tap_speculating)
-    { EmitPlayEvent(state.turn_number, "land", "opponent plays " + play.land_name); }
-    // Burgeoning (Maze's End I3): "whenever an opponent PLAYS a land" -- the play, not a fetch's search.
-    if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
-    if (!play.searched) { return; }
-    state.opponent_searched_library_this_turn = true;
-    ShuffleAfterSearch(state, 1);
-    if (g_play_event_sink && !g_tap_speculating)
+    if (play.played)
     {
-        EmitPlayEvent(state.turn_number, "fetch", "opponent cracks " + play.land_name
-            + (play.fetched_name.empty() ? " (no land found)" : " for " + play.fetched_name));
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "land", "opponent plays " + play.land_name); }
+        // Burgeoning (Maze's End I3): "whenever an opponent PLAYS a land" -- the play, not a fetch's search.
+        if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
+        if (play.searched)
+        {
+            searched = true;
+            state.opponent_searched_library_this_turn = true;
+            ShuffleAfterSearch(state, 1);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "fetch", "opponent cracks " + play.land_name
+                    + (play.fetched_name.empty() ? " (no land found)" : " for " + play.fetched_name));
+            }
+        }
     }
+    // 2HG's second head plays its own land the same way (its lands join the team's board under
+    // controller 1). Its fetch pays the TEAM's life and shuffles its own library on its own ordinal.
+    if (opponentdeck::HasSecondHead(state) && !state.opponent_decked)
+    {
+        const opponentdeck::LandPlayResult play2 = opponentdeck::PlayLeftmostLandFrom(
+            state, state.opponent2_hand, state.opponent2_library, nullptr);
+        if (play2.played)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "land", "opponent (second head) plays " + play2.land_name); }
+            // Burgeoning: the second head is an opponent too, and its land PLAY triggers it the same way.
+            if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
+            if (play2.searched)
+            {
+                searched = true;
+                state.opponent_searched_library_this_turn = true;
+                if (SearchShuffleEnabled())
+                {
+                    const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
+                    const uint64_t seed = SaltSeed(SaltSeed(
+                        SearchShuffleSeed(state.game_seed, state.opponent2_search_count), 0x2EAD3ull), salt);
+                    if (StableShuffleEnabled()) { state.opponent2_library.ShuffleByKey(seed); }
+                    else                        { state.opponent2_library.Shuffle(seed); }
+                    ++state.opponent2_search_count;
+                }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "fetch", "opponent (second head) cracks " + play2.land_name
+                        + (play2.fetched_name.empty() ? " (no land found)" : " for " + play2.fetched_name));
+                }
+            }
+        }
+    }
+    if (!searched) { return; }
+    // Archive Trap: "if an opponent searched their library this turn" -- either head; the trap's
+    // mill targets players[1], the targeted head.
     std::vector<int> traps;
     for (const Card& card : state.players[0].hand)
     { if (card.m_name == "Archive Trap") { traps.push_back(card.m_number); } }

@@ -841,7 +841,7 @@ TEST_CASE("Wanderwine Prophets token champion ceases to exist; decline sacrifice
     CHECK(state.battlefield[1].card.m_number == 513);
 }
 
-TEST_CASE("Merfolk land target abilities can identify every passive opponent land")
+TEST_CASE("Merfolk land target abilities can identify every passive opponent land (legacy placeholder board)")
 {
     LoadMerfolkCards();
     Decklist deck;
@@ -851,7 +851,9 @@ TEST_CASE("Merfolk land target abilities can identify every passive opponent lan
         REQUIRE(def != nullptr);
         deck.mainboard.push_back(def->card);
     }
-    GameState state = GoldFishRunner::SetupGame(deck, 987453, 2);
+    // The placeholder lands exist only on the legacy board; since 2026-11-17 every deck's opponent
+    // starts with no lands and plays them from a real pool deck (USER).
+    GameState state = GoldFishRunner::SetupGame(deck, 987453, 2, true);
     std::vector<int> ids;
     const CardDefinition* warrior = CardDatabase::Instance().Lookup("Tidal Warrior");
     const CardDefinition* dockhand = CardDatabase::Instance().Lookup("Rishadan Dockhand");

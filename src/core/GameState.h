@@ -367,6 +367,14 @@ struct GameState
     int noncombat_trigger_depth = 0;
 
     std::array<Player, 2>    players;
+    // 2HG's SECOND opponent head (USER 2026-11-17: "there should technically be two and they should
+    // both play"). players[1] is the head every opponent-zone effect addresses (mill, Surgical, forced
+    // draws: "mill should just target one opponent, probably the one that has cheaper cards in deck");
+    // this head only develops lands: one draw and one leftmost land per notional turn, cleanup to
+    // seven, its lands entering under controller 1 beside head 1's (the team's board). Empty unless
+    // opponent2_slot != kNoOpponentSlot (core/OpponentDeck.h). Nothing else reads these zones.
+    std::vector<Card>        opponent2_hand;
+    Library                  opponent2_library;
     PayRollbackLedger        pay_ledger;
     int                      active_player_index   = 0;
     int                      priority_player_index = 0;
@@ -447,6 +455,16 @@ struct GameState
     // recorded under). Future-determining for the opponent's library order: folded in
     // dominance::Build() and RouteSig, value-gated (nonzero only after an opponent shuffle).
     std::uint8_t             opponent_search_count        = 0;
+    // Pool slots (core/OpponentDeckPool.h) of the dealt opponent lists: players[1]'s, and 2HG's second
+    // head's (kNoOpponentSlot when there is none). Set only by opponentdeck::Deal.
+    std::uint8_t             opponent_slot                = 0;
+    std::uint8_t             opponent2_slot               = 0xFF;
+    std::uint8_t             opponent2_search_count       = 0;
+    // Does any card of this deck read the opponent's LIBRARY or HAND contents (mill, exile-from-top,
+    // forced draws, Surgical, Tasha)? Only then is players[1]'s library future-determining beyond its
+    // size and shuffle ordinal (nothing else can change it), so only then does dominance::Build fold it
+    // card by card. A deck constant (SetupGame / the scenario harness).
+    bool                     opponent_library_read        = false;
     // The opponent was asked to draw from an empty library (CR 104.3c). Set by the simulated
     // opponent draw at the END of our turn -- which is also WHY the win turn for a deck-out is OUR
     // turn number and not the next one: their simplified turn has no player-controlled main phase,

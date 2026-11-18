@@ -1901,9 +1901,9 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             { if (c.m_number >= opponentdeck::kNumberBase) { opp_exile.push_back(c.m_name.str()); } }
             std::sort(opp_exile.begin(), opp_exile.end());
             os << ", \"exile\": "; JsonNameArray(os, opp_exile);
-            const opponentdeck::DeckSpec& deck = opponentdeck::Selected(s.game_seed);
+            const opponentdeck::DeckSpec& deck = opponentdeck::Selected(s);
             os << ", \"starting_deck\": { \"name\": "; JsonStr(os, deck.name);
-            os << ", \"slot\": " << (s.game_seed % opponentdeck::Pool().size()) << ", \"cards\": [";
+            os << ", \"slot\": " << static_cast<int>(s.opponent_slot) << ", \"cards\": [";
             for (size_t i = 0; i < deck.cards.size(); ++i)
             {
                 if (i) { os << ", "; }
@@ -10380,8 +10380,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (!state.opponent_library_dealt)
     {
         // Every deck's passive opponent plays lands from a real pool list (SetupGame).
-        opponentdeck::Deal(state, true, state.game_seed, true);
+        opponentdeck::Deal(state, true, state.game_seed, true, gamesetup::OpponentHeads());
     }
+    state.opponent_library_read = GoldFishRunner::DeckTouchesOpponentZones(deck)
+        || GoldFishRunner::DeckUsesDiverseOpponentPool(deck);
 
     try
     {

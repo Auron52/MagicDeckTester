@@ -2246,9 +2246,12 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // "Ideally, I would like to do that for all decks."). A stolen or targeted opponent land is
     // then a real land with real mana. Only a reference recorded before that model replays the
     // historical three-placeholder board (--legacy-passive-opponent-lands).
+    // 2HG deals both heads a list (opponentdeck::Deal); a legacy replay keeps its single one.
     const bool play_opponent_lands = !legacy_passive_opponent_lands;
     opponentdeck::Deal(state, DeckTouchesOpponentZones(deck) || play_opponent_lands, seed,
-                       DeckUsesDiverseOpponentPool(deck) || play_opponent_lands);
+                       DeckUsesDiverseOpponentPool(deck) || play_opponent_lands,
+                       play_opponent_lands ? gamesetup::OpponentHeads() : 1);
+    state.opponent_library_read = DeckTouchesOpponentZones(deck) || DeckUsesDiverseOpponentPool(deck);
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
 
     DealWishPool(state, deck);

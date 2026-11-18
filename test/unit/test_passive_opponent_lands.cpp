@@ -1,7 +1,9 @@
 #include <doctest/doctest.h>
 
 #include "cards/CardDatabase.h"
+#include "core/GameSetup.h"
 #include "core/HeuristicDefaults.h"
+#include "core/OpponentDeck.h"
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
 #include "runner/GoldFishRunner.h"
@@ -193,4 +195,86 @@ TEST_CASE("an opponent fetch shuffles on its own ordinal and never moves our res
     ShuffleAfterSearch(legacy, 1);
     CHECK(legacy.search_count == before + 1);
     CHECK(legacy.opponent_search_count == 0);
+}
+
+TEST_CASE("2HG deals both opponent heads a pool list; the cheaper one is the targeted head (USER 2026-11-17)")
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+
+    Decklist plain;
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(forest != nullptr);
+    for (int i = 0; i < 40; ++i) { plain.mainboard.push_back(forest->card); }
+
+    struct HeadsScope
+    {
+        int saved = gamesetup::t_setup.opponent_heads;
+        explicit HeadsScope(int h) { gamesetup::t_setup.opponent_heads = h; }
+        ~HeadsScope() { gamesetup::t_setup.opponent_heads = saved; }
+    };
+
+    {
+        HeadsScope one(1);
+        const GameState s = GoldFishRunner::SetupGame(plain, 1234, 0);
+        CHECK_FALSE(opponentdeck::HasSecondHead(s));
+        CHECK(s.opponent_slot == 1234 % opponentdeck::Pool().size());
+        CHECK(s.opponent2_hand.empty());
+    }
+
+    HeadsScope two(2);
+    int swapped = 0;
+    for (uint64_t seed = 1; seed <= 60; ++seed)
+    {
+        const GameState s = GoldFishRunner::SetupGame(plain, seed, 0);
+        REQUIRE(opponentdeck::HasSecondHead(s));
+        CHECK(s.opponent_slot != s.opponent2_slot);
+        CHECK(opponentdeck::ListTotalManaValue(s.opponent_slot)
+              <= opponentdeck::ListTotalManaValue(s.opponent2_slot));
+        CHECK(s.players[1].hand.size() == 7u);
+        CHECK(s.opponent2_hand.size() == 7u);
+        CHECK(s.players[1].library.size() + 7u == 60u);
+        CHECK(s.opponent2_library.size() + 7u == 60u);
+        for (const Card& c : s.opponent2_hand) { CHECK(c.m_number >= opponentdeck::kNumberBase2); }
+        if (s.opponent_slot != seed % opponentdeck::Pool().size()) { ++swapped; }
+    }
+    CHECK(swapped > 0);   // the cheaper-list rule does pick the second slot sometimes
+
+    // Both heads play a land on the opponent's turn and draw at the end of ours.
+    GameState s = GoldFishRunner::SetupGame(plain, 7, 0);
+    s.players[1].hand.clear();
+    s.players[1].hand.push_back(CardDatabase::Instance().Lookup("Island")->card);
+    s.opponent2_hand.clear();
+    s.opponent2_hand.push_back(CardDatabase::Instance().Lookup("Mountain")->card);
+    ResolvePassiveOpponentLandTurn(s);
+    REQUIRE(s.battlefield.size() == 2u);
+    CHECK(s.battlefield[0].card.m_name == "Island");
+    CHECK(s.battlefield[1].card.m_name == "Mountain");
+    CHECK(s.battlefield[1].controller_index == 1);
+    const std::size_t lib2 = s.opponent2_library.size();
+    opponentdeck::EndOfTurnDraw(s);
+    CHECK(s.opponent2_hand.size() == 1u);
+    CHECK(s.opponent2_library.size() + 1 == lib2);
+
+    // The second head's fetch pays the team's life and shuffles only its own library.
+    GameState f = GoldFishRunner::SetupGame(plain, 7, 0);
+    f.players[1].hand.clear();
+    f.opponent2_hand.clear();
+    f.opponent2_hand.push_back(CardDatabase::Instance().Lookup("Windswept Heath")->card);
+    f.opponent2_library.push_back(forest->card);
+    const int life = f.players[1].life;
+    const uint64_t ours = f.search_count;
+    ResolvePassiveOpponentLandTurn(f);
+    CHECK(f.players[1].life == life - 1);
+    CHECK(f.opponent_searched_library_this_turn);
+    CHECK(f.opponent2_search_count == 1);
+    CHECK(f.opponent_search_count == 0);
+    CHECK(f.search_count == ours);
+
+    // A legacy replay never deals a second head.
+    const GameState legacy = GoldFishRunner::SetupGame(plain, 7, 0, true);
+    CHECK_FALSE(opponentdeck::HasSecondHead(legacy));
 }

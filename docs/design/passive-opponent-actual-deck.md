@@ -77,3 +77,35 @@ What did NOT change:
 Stale notes this makes: several `cards.json` bracket notes (Garth One-Eye's Stroke conjure, Unite
 the Coalition) say the opponent target is dropped "because FiveColour deals the passive opponent NO
 library". The opponent now always has a library; modelling those targets is a separate card change.
+
+## 2HG: two opponent heads (USER 2026-11-17)
+
+The USER: *"you are correct that there should technically be two and they should both play. Ideally we
+would adjust it that way, but mill should just target one opponent, probably the one that has cheaper
+cards in deck. (lower total MV)"*
+
+- `opponentdeck::Deal(..., heads)` deals 2HG a second, distinct pool list (`SecondSlot`: a salted slot
+  other than `seed % 50`). `players[1]` holds whichever list has the lower total printed mana value
+  (`ListTotalManaValue`, lands 0); that head is the one every library/hand effect addresses (mill,
+  exile-from-top, forced draws, Surgical Extraction, Tasha, Archive Trap's mill). The chosen slots are
+  `GameState::opponent_slot` / `opponent2_slot`, so the viewer and Surgical's printed-list read follow
+  the actual deal.
+- The second head (`GameState::opponent2_hand` / `opponent2_library`, numbers from 110000) draws at
+  the end of each of our turns, plays its leftmost land on the opponent's turn (cracking a fetch for
+  the team's life, shuffling its own library on its own ordinal), and discards to seven. Its lands
+  enter under controller 1 beside head 1's: no card in the pool counts lands per opponent (landwalk,
+  Price of Progress and Sunspine Lynx read the team or the per-player sum). Running its library out
+  is a team loss (CR 810.8a), on the same next-draw rule.
+- Either head's fetch opens Archive Trap.
+- Not modelled for the second head: draw caps, Howling Mine, hand-reading upkeep/end-step effects
+  (Asylum Visitor, Sire of Insanity), and its graveyard. Nothing in the suite's 2HG decks reaches them.
+- `heads == 1` is exactly the single-opponent deal; a legacy replay never deals a second head.
+
+## Search cost
+
+Every deck now copies an opponent library and hand with each search state (a `Card` is 136 bytes, so
+53 library cards is ~7 KB per copy; 2HG adds the second head). To keep the dominance key cheap, a deck
+with no card that reads the opponent library (`GameState::opponent_library_read`, a deck constant set
+from `DeckTouchesOpponentZones || DeckUsesDiverseOpponentPool`) folds only that library's size and
+shuffle ordinal: nothing else can change it. The copy cost is measured in the suite run that lands
+this change; a copy-on-write library is the follow-up if it shows.

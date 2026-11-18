@@ -26,6 +26,41 @@
 namespace opponentdeck {
 
 inline const DeckSpec& Selected(uint64_t seed) { return Pool()[seed % Pool().size()]; }
+// The list actually dealt to players[1] (2HG may pick the second slot; see Deal).
+inline const DeckSpec& Selected(const GameState& state) { return Pool()[state.opponent_slot % Pool().size()]; }
+
+inline constexpr std::uint8_t kNoOpponentSlot = 0xFF;
+
+// A pool list's total printed mana value (lands count 0). 2HG's targeted head is the list with the
+// LOWER total (USER 2026-11-17: "mill should just target one opponent, probably the one that has
+// cheaper cards in deck (lower total MV)"). Unknown names count 0. Computed once per slot.
+inline int ListTotalManaValue(std::size_t slot)
+{
+    static const std::vector<int> kTotals = [] {
+        std::vector<int> totals;
+        for (const DeckSpec& spec : Pool())
+        {
+            int total = 0;
+            for (const std::pair<const char*, int>& e : spec.cards)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(e.first);
+                if (d != nullptr && !d->card.IsLand()) { total += e.second * d->card.m_mana_cost.ManaValue(); }
+            }
+            totals.push_back(total);
+        }
+        return totals;
+    }();
+    return slot < kTotals.size() ? kTotals[slot] : 0;
+}
+
+// 2HG's second list: a distinct slot drawn off a salted seed (the first is seed % 50, as for a
+// single opponent).
+inline std::size_t SecondSlot(uint64_t seed)
+{
+    const std::size_t n = Pool().size();
+    const std::size_t a = seed % n;
+    return (a + 1 + SaltSeed(seed, 0x2EADull) % (n - 1)) % n;
+}
 inline const std::vector<std::pair<const char*, int>>& FixedList()
 {
     static const std::vector<std::pair<const char*, int>> kList = {
@@ -49,6 +84,8 @@ inline constexpr int kOpeningHandSize = 7;
 // opponent card can never be confused with ours in a log, a reveal, or a viewer click. Player 0's
 // numbering is per-deck and dense from 1; nothing in the engine numbers past a few hundred.
 inline constexpr int kNumberBase = 100000;
+// 2HG's second head: its own band, still >= kNumberBase so every "is an opponent card" test holds.
+inline constexpr int kNumberBase2 = 110000;
 
 // Deal the library and opening hand. No-op for decks that neither touch those
 // zones nor observe the opponent's land development.
@@ -58,13 +95,26 @@ inline constexpr int kNumberBase = 100000;
 // shared RNG stream, so dealing a second library cannot perturb player 0's permutation by a single
 // card. (Had it been a shared stream this change would have moved every deck's baseline and cost a
 // full three-tier GT rebaseline.)
-inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_pool = false)
+//
+// heads >= 2 (2HG, pool decks only): a second list goes to the land-only second head
+// (GameState::opponent2_*), and players[1] -- the head every library/hand effect addresses -- holds
+// whichever of the two has the lower total mana value (ListTotalManaValue). heads == 1 is exactly
+// the single-opponent deal.
+inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_pool = false,
+                 int heads = 1)
 {
     if (!needed) { return; }
 
     Player& opp = state.players[1];
     int number  = kNumberBase;
-    for (const std::pair<const char*, int>& entry : List(seed, use_diverse_pool))
+    std::size_t slot = seed % Pool().size();
+    const bool two_heads = use_diverse_pool && heads >= 2;
+    std::size_t slot2 = two_heads ? SecondSlot(seed) : slot;
+    if (two_heads && ListTotalManaValue(slot2) < ListTotalManaValue(slot)) { std::swap(slot, slot2); }
+    state.opponent_slot = static_cast<std::uint8_t>(slot);
+    const std::vector<std::pair<const char*, int>>& list
+        = use_diverse_pool ? Pool()[slot].cards : FixedList();
+    for (const std::pair<const char*, int>& entry : list)
     {
         for (int i = 0; i < entry.second; ++i)
         {
@@ -97,7 +147,33 @@ inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_
     // caller that builds a GameState by hand now simply gets the old, safe model.
     state.opponent_library_dealt = true;
     state.opponent_plays_lands = use_diverse_pool;
+
+    if (two_heads)
+    {
+        // The second head's own library, numbered in its own band, on its own salted shuffle.
+        int number2 = kNumberBase2;
+        for (const std::pair<const char*, int>& entry : Pool()[slot2].cards)
+        {
+            for (int i = 0; i < entry.second; ++i)
+            {
+                Card c;
+                c.m_name = entry.first;
+                c.RehashName();
+                c.m_number = number2++;
+                state.opponent2_library.push_back(c);
+            }
+        }
+        state.opponent2_library.Shuffle(SaltSeed(seed, 0x2EAD2ull));
+        for (int i = 0; i < kOpeningHandSize && !state.opponent2_library.empty(); ++i)
+        {
+            state.opponent2_hand.push_back(state.opponent2_library.front());
+            state.opponent2_library.erase(state.opponent2_library.begin());
+        }
+        state.opponent2_slot = static_cast<std::uint8_t>(slot2);
+    }
 }
+
+inline bool HasSecondHead(const GameState& state) { return state.opponent2_slot != kNoOpponentSlot; }
 
 struct LandPlayResult
 {
@@ -111,19 +187,22 @@ struct LandPlayResult
 // an immediately usable fetch. Choose the first eligible library land; this is
 // an opponent policy, not a search branch for our solver. The caller performs
 // the shuffle and offers the Archive Trap instant window after resolution.
-inline LandPlayResult PlayLeftmostLand(GameState& state)
+// One head's land play from the given hand and library (players[1]'s, or 2HG's second head's with
+// graveyard == nullptr: nothing reads that head's graveyard). Life is the opponent's (team) life.
+inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& hand, Library& library,
+                                           std::vector<Card>* graveyard)
 {
     LandPlayResult result;
     if (!state.opponent_plays_lands || state.opponent_decked) { return result; }
     Player& opp = state.players[1];
-    auto held = std::find_if(opp.hand.begin(), opp.hand.end(), [](const Card& c) {
+    auto held = std::find_if(hand.begin(), hand.end(), [](const Card& c) {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         return d != nullptr && d->card.IsLand();
     });
-    if (held == opp.hand.end()) { return result; }
+    if (held == hand.end()) { return result; }
     const Card card = *held;
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
-    opp.hand.erase(held);
+    hand.erase(held);
     result.played = true;
     result.land_name = card.m_name.str();
     auto enter = [&](const Card& entering, const CardDefinition& land_def, bool force_tapped) {
@@ -155,9 +234,9 @@ inline LandPlayResult PlayLeftmostLand(GameState& state)
     }
     // Fetch activation: tap and sacrifice this just-played land as costs.
     opp.life -= life_cost;
-    opp.graveyard.push_back(card);
+    if (graveyard != nullptr) { graveyard->push_back(card); }
     result.searched = true;
-    auto pick = std::find_if(opp.library.begin(), opp.library.end(), [&](const Card& candidate) {
+    auto pick = std::find_if(library.begin(), library.end(), [&](const Card& candidate) {
         const CardDefinition* land = CardDatabase::Instance().LookupCached(candidate);
         if (land == nullptr || !land->card.IsLand()) { return false; }
         if (basic_fetch) { return land->card.HasSupertype(Supertype::Basic); }
@@ -166,16 +245,22 @@ inline LandPlayResult PlayLeftmostLand(GameState& state)
         { if (type == subtype) { return true; } }
         return false;
     });
-    if (pick != opp.library.end())
+    if (pick != library.end())
     {
         const Card fetched = *pick;
         const CardDefinition* land = CardDatabase::Instance().LookupCached(fetched);
-        opp.library.erase(pick);
+        library.erase(pick);
         result.fetched_name = fetched.m_name.str();
         // A passive opponent never pays a shock land's optional two life.
         enter(fetched, *land, basic_fetch && def->params.land_search_tapped);
     }
     return result;
+}
+
+inline LandPlayResult PlayLeftmostLand(GameState& state)
+{
+    Player& opp = state.players[1];
+    return PlayLeftmostLandFrom(state, opp.hand, opp.library, &opp.graveyard);
 }
 
 // The opponent's DRAW, simulated at the end of each of OUR turns.
@@ -194,7 +279,25 @@ inline LandPlayResult PlayLeftmostLand(GameState& state)
 // Called from BOTH worlds -- the executor's end step and the rollout's turn boundary. A draw the
 // rollout does not simulate is a deck-out the search cannot SEE, which leaves an executor that
 // recognises a win it never steers toward: the Dragonstorm go-off failure exactly.
+// 2HG's second head draws for its notional turn too. Running ITS library out is a loss for the
+// team as well (CR 810.8a: a team loses when either player loses), on the same next-draw rule as
+// head 1. Draw caps and Howling Mine address players[1] only (a stated limit of the land-only head).
+inline void SecondHeadDraw(GameState& state)
+{
+    if (!HasSecondHead(state) || state.opponent_decked) { return; }
+    if (state.opponent2_library.empty()) { state.opponent_decked = true; return; }
+    state.opponent2_hand.push_back(state.opponent2_library.front());
+    state.opponent2_library.erase(state.opponent2_library.begin());
+}
+
+inline void EndOfTurnDrawHead1(GameState& state);
 inline void EndOfTurnDraw(GameState& state)
+{
+    EndOfTurnDrawHead1(state);
+    SecondHeadDraw(state);
+}
+
+inline void EndOfTurnDrawHead1(GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return; }
     // The per-turn draw cap (core/DrawCap.h): this is the first draw of THEIR turn (drawcap::TurnBoundary
@@ -231,6 +334,8 @@ inline void EndOfTurnCleanup(GameState& state)
         opp.graveyard.push_back(opp.hand.front());
         opp.hand.erase(opp.hand.begin());
     }
+    // The second head discards the same way (into no modelled zone: nothing reads it).
+    while (state.opponent2_hand.size() > 7) { state.opponent2_hand.erase(state.opponent2_hand.begin()); }
 }
 
 // THE mill / exile-from-library primitive: take `n` cards off the top of the opponent's library

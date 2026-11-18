@@ -896,7 +896,8 @@ TEST_CASE("Mill opponent plays its leftmost land and immediately cracks a fetch"
     CHECK(state.battlefield[0].controller_index == 1);
     CHECK(state.battlefield[0].tapped);
     CHECK(state.opponent_searched_library_this_turn);
-    CHECK(state.search_count == 1);
+    CHECK(state.search_count == 0);          // our reshuffle ordinal is untouched
+    CHECK(state.opponent_search_count == 1); // the opponent's fetch uses its own
     CHECK(state.players[0].hand.empty());
     REQUIRE(state.players[0].graveyard.size() == 1u);
     CHECK(state.players[0].graveyard[0].m_name == "Archive Trap");

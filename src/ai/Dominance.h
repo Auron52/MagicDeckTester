@@ -658,7 +658,10 @@ static_assert(sizeof(Player) == 216,
 // every deck without reflect_armed). Measured by the tripwire (1632 before Maze's End I3).
 // +8 bytes (2026-11-18 rebase): Maze's End's padding bools took the holes that held reflect_armed /
 // cant_gain_life_rest_of_game_mask, so those two now add a padded 8 bytes. Same classification and fold as above.
-static_assert(sizeof(GameState) == 1648,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding
+// +56 bytes (2026-11-17, every deck's opponent plays lands; integrated onto 1648 after Maze's End + Stuffy Doll): 2HG's second head
+// `opponent2_hand` + `opponent2_library` (folded in Build() when opponent2_slot is set: sizes, ordinal,
+// hand). The one-byte opponent slots / ordinals and `opponent_library_read` (a deck constant) fit padding.
+static_assert(sizeof(GameState) == 0,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; 2HG second head
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -982,6 +985,14 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(s.deck_feeds_combat ? 1u : 0u);
     fold(s.search_count);
     if (s.opponent_search_count != 0) { fold(0x0990ull ^ s.opponent_search_count); }
+    // 2HG's land-only second head: nothing we do reaches its zones, so its sizes, shuffle ordinal and
+    // hand (the next land it plays) determine its future.
+    if (s.opponent2_slot != 0xFF)
+    {
+        fold(0x2EAD0000ull ^ (static_cast<std::uint64_t>(s.opponent2_library.size()) << 8)
+             ^ s.opponent2_search_count);
+        for (const Card& c : s.opponent2_hand) { fold(static_cast<std::uint64_t>(c.m_number)); }
+    }
     // Turn-scoped counters that are legitimately nonzero at a clean boundary (see AtCleanBoundary):
     // storm from a Lotus Bloom arriving off suspend, and the per-turn pins. Exact-match rather than
     // asserted, so two siblings sharing the same value still compare.
@@ -1289,7 +1300,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // byte-identical BY CONSTRUCTION rather than by an argument about hash equality classes.
         // When the opponent DOES have a library its size and order are future-determining -- a mill
         // deck's whole clock lives there -- so it is folded in full, same rule as ours.
-        if (pi == 0 || s.opponent_library_dealt)
+        // Since 2026-11-17 every deck's opponent is dealt a library, but a deck with no card that
+        // READS it (opponent_library_read) cannot change it: its order is then a function of its size
+        // and shuffle ordinal (opponent_search_count, folded above), so those are folded instead of
+        // 53 card hashes on every key.
+        if (pi == 1 && s.opponent_library_dealt && !s.opponent_library_read)
+        {
+            fold(0x0991ull ^ static_cast<std::uint64_t>(p.library.size()));
+        }
+        else if (pi == 0 || s.opponent_library_dealt)
         {
             fold(static_cast<std::uint64_t>(p.library.size()));
             // INDEX-CARRY EXEMPTION (RawAt, not iteration -- see Library.h). This fold is an
