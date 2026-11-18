@@ -24642,57 +24642,66 @@ static std::array<bool, 6> FiveColourRule6Steps(const GameState& s, int controll
     // (2) The colour-exact half (Hall over the board's real colour sets); unusable -> the flat pool is exact.
     const ColorFeasibility fe = BuildColorFeasibility(s);
 
-    // grow / pip_open / haste_units apply only when early_cost (the permanents bringing new colours and the hasted
-    // dorks, paid before the domain sources tap) fits the supply that is not a domain source's.
-    struct Sub { int mv = 0; int grow = 0; int pip_open = 0; int haste_units = 0; int early_cost = 0; };
+    // The step credit of a subset, in two variants -- the permanents it needs paid BEFORE the domain sources tap
+    // (`early_cost`) must fit the supply that is not a domain source's, so the most generous variant whose
+    // early cost fits is the one that applies:
+    //   v[0] FULL: every permanent bringing a new colour (domain growth, (3)) and every hasted dork ((4)) early;
+    //   v[1] HASTE ONLY: just the hasted dorks early (their own colours still widen the domain).
+    // `grow` = the new colours, `pip_open` = those a card OTHER than their bringer asks for (DomainOpenFor's rule),
+    // `haste_units` = the hasted dorks' same-turn yield (Birds 1, a domain dork its domain after `grow`).
+    struct Var { int grow = 0; int pip_open = 0; int haste_units = 0; int early_cost = 0; };
+    struct Sub { int mv = 0; Var v[2]; };
     std::vector<Sub> subs(static_cast<std::size_t>(1) << n);
+    auto credit_of = [&](int m, bool full) -> Var
+    {
+        Var r;
+        auto hasted = [&](int j) { return haste && cards[static_cast<std::size_t>(j)].dork; };
+        for (int j = 0; j < n; ++j)
+        {
+            if (!(m & (1 << j))) { continue; }
+            if (full || hasted(j)) { r.grow |= cards[static_cast<std::size_t>(j)].colours & ~dom; }
+        }
+        std::vector<char> early(static_cast<std::size_t>(n), 0);
+        for (int j = 0; j < n; ++j)
+        {
+            if (!(m & (1 << j))) { continue; }
+            const R6Card& c = cards[static_cast<std::size_t>(j)];
+            if (hasted(j) || (full && (c.colours & r.grow) != 0)) { early[static_cast<std::size_t>(j)] = 1; r.early_cost += c.mv; }
+        }
+        for (int j = 0; j < n; ++j)
+        {
+            if (!(m & (1 << j))) { continue; }
+            const R6Card& c = cards[static_cast<std::size_t>(j)];
+            for (int x = 0; x < 5; ++x)
+            {
+                if (!(r.grow & (1 << x)) || !(c.want & (1 << x))) { continue; }
+                for (int k = 0; k < n; ++k)
+                {
+                    if (k != j && early[static_cast<std::size_t>(k)] && (cards[static_cast<std::size_t>(k)].colours & (1 << x)))
+                    { r.pip_open |= 1 << x; break; }
+                }
+            }
+            if (hasted(j)) { r.haste_units += c.domain ? std::popcount(static_cast<unsigned>(dom | r.grow)) : 1; }
+        }
+        return r;
+    };
     for (int m = 1; m < (1 << n); ++m)
     {
         Sub& u = subs[static_cast<std::size_t>(m)];
-        int grow = 0, early_cost = 0;
-        for (int j = 0; j < n; ++j)
-        {
-            if (!(m & (1 << j))) { continue; }
-            u.mv += cards[static_cast<std::size_t>(j)].mv;
-            grow |= cards[static_cast<std::size_t>(j)].colours & ~dom;
-        }
-        // (3) A colour X is new for the domain sources' GENERIC supply when any selected permanent has it, and
-        // for a PIP only of a card other than the one(s) bringing it (DomainOpenFor's rule). The permanents that
-        // bring new colours, and (4) the hasted dorks, must be paid before the domain sources tap.
-        for (int j = 0; j < n; ++j)
-        {
-            if (!(m & (1 << j))) { continue; }
-            const R6Card& r = cards[static_cast<std::size_t>(j)];
-            if ((r.colours & grow) != 0 || (haste && r.dork)) { early_cost += r.mv; }
-            for (int x = 0; x < 5; ++x)
-            {
-                if (!(grow & (1 << x)) || !(r.want & (1 << x))) { continue; }
-                for (int k = 0; k < n; ++k)
-                {
-                    if (k != j && (m & (1 << k)) && (cards[static_cast<std::size_t>(k)].colours & (1 << x)))
-                    { u.pip_open |= 1 << x; break; }
-                }
-            }
-        }
-        u.early_cost = early_cost;
-        u.grow = grow;
-        if (haste)
-        {
-            for (int j = 0; j < n; ++j)
-            {
-                if (!(m & (1 << j)) || !cards[static_cast<std::size_t>(j)].dork) { continue; }
-                u.haste_units += cards[static_cast<std::size_t>(j)].domain
-                               ? std::popcount(static_cast<unsigned>(dom | grow)) : 1;
-            }
-        }
+        for (int j = 0; j < n; ++j) { if (m & (1 << j)) { u.mv += cards[static_cast<std::size_t>(j)].mv; } }
+        u.v[0] = credit_of(m, true);
+        u.v[1] = credit_of(m, false);
     }
     // Is subset m payable with `extra` (a pool of at most one unit) on top?
     auto payable = [&](int m, const ManaPool& extra) -> bool
     {
         const Sub& u = subs[static_cast<std::size_t>(m)];
-        const bool order_ok = u.early_cost <= base_total + extra.Total() - dom_units;
-        const int grow = order_ok ? u.grow : 0;
-        const int haste_units = order_ok ? u.haste_units : 0;
+        const int free_supply = base_total + extra.Total() - dom_units;
+        const Var none_var;
+        const Var& v = u.v[0].early_cost <= free_supply ? u.v[0]
+                     : u.v[1].early_cost <= free_supply ? u.v[1] : none_var;
+        const int grow = v.grow;
+        const int haste_units = v.haste_units;
         const int gen_units = ndom * std::popcount(static_cast<unsigned>(grow));
         if (u.mv > base_total + extra.Total() + gen_units + haste_units) { return false; }
         ManaPool flat = pool;
@@ -24701,7 +24710,7 @@ static std::array<bool, 6> FiveColourRule6Steps(const GameState& s, int controll
         ManaPool cred = credit;
         cred.AddPool(extra);
         cred.wild += haste_units;
-        const ColorFeasibility fx = (fe.usable && fe.dom_src > 0) ? fe.WithDomainOpen(u.pip_open & grow, grow) : fe;
+        const ColorFeasibility fx = (fe.usable && fe.dom_src > 0) ? fe.WithDomainOpen(v.pip_open & grow, grow) : fe;
         // Each card's hybrid choice: an odometer over the selected cards' expansions.
         std::vector<int> sel;
         for (int j = 0; j < n; ++j) { if (m & (1 << j)) { sel.push_back(j); } }
