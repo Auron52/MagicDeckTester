@@ -4735,6 +4735,10 @@ public:
     // I4: the trailing-pass order -- Talon Gates' from-hand put runs FIRST (before Maze's End's activation,
     // the win check): a sound order, the put only adds resources (ledger decision 31).
     int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
+    // P1d (USER B1): Guild Summit's count menu pruned to {rest-of-line, 0, all}; the rest-of-line count is the
+    // unpinned cast, resolved by EtbTapSubtypeDrawDefault (also the beyond-horizon default). MTG_MAZE_SUMMIT_COUNT.
+    std::vector<int> EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const override;
+    int EtbTapSubtypeDrawDefault(const GameState& s, int controller, const CardDefinition& def, int avail) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
