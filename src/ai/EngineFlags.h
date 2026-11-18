@@ -504,6 +504,21 @@ inline bool LineReducerKeepOn()
     return heurarm::Flag(heurarm::LINE_REDUCER_KEEP, env_on);
 }
 
+// MTG_LINE_KEEP_ALL (DEFAULT OFF -- held-out A/B 2026-11-18: 64,500 pairs net -5, every slower game recovers at d8 b0, but
+// AccomplishedAlchemist nets +1 over 6,000 pairs; adoption is the USER's call, docs/design/line-keep-all-2026-11-18.md.
+// =0 -> the line-keep rung reaches reducer lines only, byte-identical) --
+// widens MTG_LINE_REDUCER_KEEP's rung (LineReducerKeepHold, ManaPayment.cpp) to EVERY applying line of two or more held
+// casts, reducer credit or not (g_line_keep_bound, LineReducerCreditScope). Mana-clean gate claude-regate-20261118:
+// Dragons s30086708 T4 {Atsushi + Mind Stone} with Urza's Incubator already in play -- Mind Stone's {2} took Mind Stone
+// + the Mountain and Atsushi's {R}{R} met Gruul Turf's {R}{G} alone; Treasure Hunt s30090713 T4 {Cascade Bluffs + Land's
+// Edge + Treasure Hunt} -- Land's Edge's {1} took Thundering Falls, the only {U}, and the two unfed Bluffs could not pay
+// Treasure Hunt's {U}. Read PER CALL (heurarm slot LINE_KEEP_ALL), seeded where the reducer credit is.
+inline bool LineKeepAllOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_ALL", false);
+    return heurarm::Flag(heurarm::LINE_KEEP_ALL, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

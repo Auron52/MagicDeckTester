@@ -11470,7 +11470,8 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
     const int _lrc_credit = LineReducerCredit(cp, acts);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(acts) : 0);
+    const bool _lrc_bound = LineKeepBound(acts);   // MTG_LINE_KEEP_ALL
+    LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(acts) : 0, _lrc_bound);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
@@ -11957,7 +11958,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     }
     LineUnpaidCostScope _luc(_walk_total);
     const int _lrc_credit = LineReducerCredit(cp, cands, ord);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(cands, ord) : 0);
+    const bool _lrc_bound = LineKeepBound(cands, ord);   // MTG_LINE_KEEP_ALL
+    LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(cands, ord) : 0,
+                                _lrc_bound);
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
     LineOpensUnseenScope _lou([&]
@@ -12925,7 +12928,8 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
     const int _lrc_credit = LineReducerCredit(cp, sub);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
-    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(sub) : 0);
+    const bool _lrc_bound = LineKeepBound(sub);   // MTG_LINE_KEEP_ALL
+    LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(sub) : 0, _lrc_bound);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
@@ -69219,9 +69223,25 @@ int LineReducerCredit(const GameState& state, const std::vector<Action>& acts)
     for (std::size_t i = 0; i < acts.size(); ++i) { sel[i] = static_cast<int>(i); }
     return LineReducerCredit(state, acts, sel);
 }
+// MTG_LINE_KEEP_ALL: the rung reaches the line without a reducer credit -- a line of two or more held casts (one cast
+// owes no rest; an activation-only rest is the hold's own business).
+bool LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (sel.size() < 2 || !LineKeepAllOn()) { return false; }
+    int held = 0;
+    for (int j : sel) { if (LineCastHeld(cands[j]) && ++held >= 2) { return true; } }
+    return false;
+}
+bool LineKeepBound(const std::vector<Action>& acts)
+{
+    if (acts.size() < 2 || !LineKeepAllOn()) { return false; }
+    int held = 0;
+    for (const Action& a : acts) { if (LineCastHeld(a) && ++held >= 2) { return true; } }
+    return false;
+}
 int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
-    if (!LineReducerKeepOn()) { return 0; }
+    if (!LineReducerKeepOn() && !LineKeepAllOn()) { return 0; }
     int mv = 0;
     for (int j : sel)
     {
@@ -70957,7 +70977,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and the generic the line's own same-turn reducers take off its later casts (MTG_LINE_REDUCER_KEEP; the
     // executor's twin in AIEngine::TakeTurn). 0 -> the line-keep rung is inert.
     const int _lrc_credit = LineReducerCredit(state, plan.actions);
-    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(plan.actions) : 0);
+    const bool _lrc_bound = LineKeepBound(plan.actions);   // MTG_LINE_KEEP_ALL
+    LineReducerCreditScope _lrc(_lrc_credit, (_lrc_credit > 0 || _lrc_bound) ? LineNoncreatureMv(plan.actions) : 0,
+                                _lrc_bound);
     // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
     // g_line_opens_unseen). Same scope, same nesting: a continuation's nested apply binds its own.
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));

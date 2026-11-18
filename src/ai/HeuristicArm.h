@@ -1008,6 +1008,7 @@ enum Slot : int
     STUFFY_MAIN_SPLIT,        // MTG_STUFFY_MAIN_SPLIT  Stuffy Doll step 11 (USER 2026-11-17 ~21:48: "...it would just be sweepers in main 2"): the deck plays a full searched second main (GoldFishRunner::DeckUsesSecondMain reads THIS slot too -- one half alone deletes casts) and main 1 refuses the creature-sweeper casts (damage_all_creatures family; StuffyDollProvider::CollectedActionAllowed). Also gates the USER's total cast order and the Mind Stone sac-draw placement (MTG_STUFFY_CAST_ORDER). Default ON (the USER's order); =0 is the MEASUREMENT arm, byte-identical to step 9e
     STUFFY_CAST_ORDER,        // MTG_STUFFY_CAST_ORDER  sub-flag of MTG_STUFFY_MAIN_SPLIT (inert while the split is off): the USER's total, tie-free order (USER 2026-11-18 00:55 "I want a full order with no ties."; StuffyDollProvider::CastOrderRank), the Escape-before-sweeper order fixed (no searched sweeper-before-Escape ordering), and Mind Stone's sac-draw only at the end of main 1 (USER 01:00). Default ON; =0 -> the split with the step-9e order (diagnosis arm)
     STUFFY_SPLIT_LETHAL_M1,   // MTG_STUFFY_SPLIT_LETHAL_M1  PROPOSED amendment to the Stuffy Doll main split (step 11; NOT the USER's rule, DEFAULT OFF until the USER rules): main 1 also admits a creature-sweeper cast whose reflection is projected to kill the opponent NOW (StuffyDollProvider::ExtraLethalDamage({sweeper}) >= opponent life, the board as it stands; a wider hand-optimistic bound measured worse). A sweep that ends the game this main wins on the same turn as any main-2 line, so it is an identity in the objective; it restores the greedy (depth-0 runner / beyond-horizon playout) kill the plain split loses because the greedy main 1 spends the mana the main-2 sweeper needed (scenario stuffy_d0_runner_finds_act_kill). Inert while the split is off
+    LINE_KEEP_ALL,            // MTG_LINE_KEEP_ALL  MTG_LINE_REDUCER_KEEP's line-keep rung on EVERY applying line of two or more held casts, not only a line with a same-turn reducer credit: a payment that strands the rest of the line while the board pays both together is re-made (fewest greedy sources held out, then the oracle table's first keeping option). Dragons s30086708 T4 {Atsushi + Mind Stone}: Mind Stone's {2} took the Mountain and Atsushi's {R}{R} met Gruul Turf's {R}{G} alone; Treasure Hunt s30090713 T4: Land's Edge's {1} took the only {U}. =0 -> the reducer lines only, byte-identical
     COUNT
 };
 
@@ -1960,6 +1961,7 @@ inline const char* Name(int slot)
         "MTG_STUFFY_MAIN_SPLIT",
         "MTG_STUFFY_CAST_ORDER",
         "MTG_STUFFY_SPLIT_LETHAL_M1",
+        "MTG_LINE_KEEP_ALL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
