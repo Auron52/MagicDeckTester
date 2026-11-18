@@ -5021,6 +5021,9 @@ public:
     // P6 (USER 2026-11-18, ruling 6): the off-main Maze's End activation in response to Manabond / Burgeoning is
     // always taken and redeployed (the premises are at the definition).
     bool OffMainMazeRedeployForced(const GameState& s, int controller) const override;
+    // P7 (performance): the CAST / LAND DOMINANCE FOLD's premises (MTG_MAZE_CAST_DOMINANCE, MTG_MAZE_LAND_DOMINANCE).
+    bool CastDominanceLive(const GameState& s) const override;
+    int  CastDominanceClass(const GameState& s, const CardDefinition& d) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
