@@ -5008,6 +5008,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                  f.red, f.green, f.colorless, f.wild, own.c_str());
                 }
             }
+            {   // MTG_HEAP_LEAK_TRACE (diagnostic only, Maze's End F5): a SEARCHED plan holding Heap Gate's Treasure
+                // although MTG_MAZE_HEAP_STRICT takes every Treasure plan off the menu. Does the plain menu at this
+                // state still hold one?
+                static const bool s_hl = EnvOn("MTG_HEAP_LEAK_TRACE");
+                if (s_hl && !m_in_rollout && g_real_resolution)
+                {
+                    auto has_t = [](const std::vector<Action>& v)
+                    {
+                        for (const Action& a : v)
+                        { if (a.kind == Action::Kind::ActivatePermAbility
+                              && a.ability_mode == Action::AbilityMode::TapTreasure) { return true; } }
+                        return false;
+                    };
+                    if (has_t(plan.actions))
+                    {
+                        const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+                        int with_t = 0;
+                        for (const TurnSolver::Plan& p : menu) { with_t += has_t(p.actions) ? 1 : 0; }
+                        std::string txt;
+                        for (const Action& a : plan.actions) { txt += " " + a.card_name.str(); }
+                        std::fprintf(stderr, "[heap-leak] T%d pre=%d committed=%d menu=%zu menu_with_t=%d land=%s plan:%s\n",
+                                     state.turn_number, is_pre_combat_main ? 1 : 0, fd_plan_committed ? 1 : 0,
+                                     menu.size(), with_t, plan.land_to_play.c_str(), txt.c_str());
+                    }
+                }
+            }
             PROF_ADD_NODES(budget.Used());
             PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
             if (s_decision_progress)
