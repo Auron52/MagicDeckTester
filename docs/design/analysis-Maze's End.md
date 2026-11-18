@@ -882,6 +882,49 @@ was reduced for MEMORY (coordinator rule: workers x peak RSS < ~18 GB), recorded
 suite admission: the regression tiers pool 32 workers; Maze's End rows there could hit the same wall. Also seen:
 `MemBudget`'s split assumes the affinity count (32) even under `--threads N`.
 
+## S4 (2026-11-18): Talon default, smoke, Stage 4
+
+### Coordinator defaults (each a default, USER sign-off pending)
+* **P3 amendment `MTG_MAZE_TALON_TARGET` -> DEFAULT ON** (`94fda7ec6`). Measured better on top of the shipped prunes
+  (P1d ab2: d3 -0.033 3/1, d5 -0.050 3/0, +6% cost). Unit "P3 amendment, MTG_MAZE_TALON_TARGET default ON" pins the
+  menu with the flag on/off, Talon in hand, Talon controlled, and no Maze's End held ({Maze's End} alone still wins).
+* **`MTG_MAZE_ACTIVATE_FIRST` stays OFF** (P1d: no gain, d3 0/2, d5 1/1).
+* **A1 weights stay v0** (2M per name, 0.5M Maze's End held, 0.1M per new-name Gate in hand, fetch eval 200); the
+  temporary `MTG_MAZE_WSEL_*` selector stays until the USER picks (v5, fetch eval 100, was slightly better held-out).
+* **B1's playout-default change accepted** (Guild Summit's beyond-horizon / unpinned count = the rest-of-line count,
+  was "all").
+* **No P4 candidate built** (the seven P1d item-8 candidates stay reported, each awaiting a USER ruling).
+* **The suite gets the standard ENTRY set** (below), with a d3 b10 sanity row and d5 play rows at b20.
+
+### Units and smoke (Talon ON)
+Units **3430/3430** (`build/scratch/maze/s4/units1.log`). Smoke (Release, MTG_PGO=0): **all 219 cases byte-identical
+to `smoke-p1b`** (every `.wins` file, per-game digests included; saved `build/scratch/maze/smoke-s4/wins`).
+168 pass / 51 fail = the 44 stale GT + the 7 known tie-fix moves (USER still deciding on those). GT NOT accepted.
+
+### Stage 4 -- baseline profile (`analyze_deck.py --no-rebuild --analyzer-seed 1`)
+Wrote `decks/Maze's End/Maze's End.profile.json` (14 min wall, peak RSS 5.2 GB; the cost-diagnostic batch would have
+used min(20, cpu_count) workers -- capped at 8 by the coordinator's memory rule via a cpu_count shim, but it did not
+run, see below). The seed was pinned (1) so the profile is reproducible; the skill's recipe leaves it unseeded.
+* **Mulligan baseline:** `hand_score_threshold` -1e18 (keep on score, as 49 other profiles); static
+  `mulligan` = {min_lands 1, **max_lands 5**, min_playable 0, stop_at 4, curve_check two_drop, bottom_order
+  count_first, no required pieces}; `mulligan_flags` empty. NOTE for the USER (mulligan policy is theirs): the list
+  runs 35 lands, so the generic `max_lands 5` sends roughly one 7-card hand in ten (6-7 lands) back. This is the
+  analyzer's generic default, not a Maze's End judgement; the exhaustive keep table (mulligan-profile stage) replaces it.
+* **card_scores:** noisy at this sample. Interchangeable Guildgates range from Boros -0.243 / Orzhov -0.207 to
+  Golgari +0.215 -- the spread is sampling noise, not a card difference. Gates Ablaze -0.420 (never cast), Guild
+  Summit +0.343 / -0.345 (first / second copy), Exploration's second copy -0.590. Scores are a keep-time prior only.
+* **cost_diagnostic:** `NO_COST_INTERACTIONS` (no same-turn cost-mechanic cards), so no games ran.
+* **discard_analysis:** `STATUS_QUO_OK` (400 evidence games, 67 cleanup-discard decisions, all multi-optimal: the
+  current ranking is at the searched optimum; no derived order).
+* **fetch_hold_review:** not required. **dependency_map:** no edges.
+
+### 4a -- provider routing
+`provider_audit.py "decks/Maze's End"`: **MazesEnd** (its own provider, routed first in `SelectDecisionProvider`),
+certificate `NotAssessed` with its stated proof obligation (no line reaches ten Gate names this turn: land drops,
+Exploration/Burgeoning extras, Maze's End bounce-replay loops with Amulet, Guild Summit/tutor digs, mana per {3}).
+`--check` over every deck: exit 0; only the standing name-mismatch notes (Eldrazi Displacer Flicker ->
+EldraziFlicker, Slivers -> Vial).
+
 ## Approved deferrals
 
 * **Decision 9, Archdruid's Charm mode 2** (target creature we control; the list has none) -- USER B3 2026-11-17: "I
