@@ -1098,6 +1098,16 @@ and Talon off), and the all-off arm at 10x budget:
   The one game where it is better is gi18 (ship 7, all-off 6): a candidate line the prunes make harder to find. The
   5c ladder checks whether ship recovers it at b2000.
 * These prunes are USER-directed. The numbers are reported here; nothing was removed.
+* **The `MTG_UNPRUNED` oracle (the skill's lever) is MEMORY-BLOCKED on this box; 6 games ran.**
+  * The lever also opens the provider's sound dominance prunes (Gates Ablaze `NeverCast`, Charm mode 3, the
+    spendable-colour premise) and the engine's narrowing gates.
+  * Three attempts at d5 b20 (8, 4 and 3 workers) each reached 6-14.6 GB RSS within 3-4 minutes and were killed (V1's
+    own runs). At 3 workers it was 14.6 GB, so a single unpruned game exceeds several GB. This is the P1d item-4
+    unbounded plan fan: every sub-decision axis variant is materialised as a Plan copy.
+  * On the 6 games that finished (gi0-5): unpruned 6,6,6,7,6,9; all-off 6,6,6,6,6,9; ship 6,6,5,6,5,6.
+    Unpruned is 0 better / 4 worse vs ship, the same direction as the all-off arm.
+  * The full 100-game oracle diff needs a quiet box (no concurrent builds) at 1-2 workers, or the lazy axis
+    generation proposed in P1d item 4.
 
 **5c, budget starvation (d5, the shipped tree, seeds 111001+gi; `leaf/` ladder jobs + `main/`).** Each slow game
 (T8 or a loss at b20), each game where d0 beat d5, the b200-worse gi16 and the all-off-better gi18 were re-run up the
@@ -1130,6 +1140,17 @@ Reading:
 * Raising b is a settings question for the USER (cost: b200 ship is 25.6 s/game against 3.2 s at b20, both at 8
   workers; the suite gate measured 6.9 s/game at b20 under 32 workers).
 * No game is lost to the prunes at large budget.
+
+**5g, earliest-win rule mining: UN-RUN (cost; USER call).**
+* The probe (`ewin/probe.err`): 2 games at d5 b20 with `MTG_DUMP_EWINS=1 MTG_SEARCH_ORDER=1`, single-threaded,
+  took 12.4 min for 12 decisions. That is about 6 core-min/game.
+* The skill's sizing (500 games x 2-3 seeds) is therefore about 100-150 core-hours: about 12-19 h at the 8-worker
+  memory cap.
+* A 24-game scout was queued and then dropped. Other agents' builds held the box at 0-3 GB available, and the
+  scout's sample is too small to mine ORDER rules.
+* This deck's provider heuristics are USER-directed (B1, P1-P3, Talon). 5e measured them directly against the
+  pruned-off and unpruned trees.
+* Scheduling a full mining run (an overnight-class job) is the USER's call.
 
 **5c2, the horizon-honest tie-break (`leaf_tiebreak_check.py` at PLAY settings, 6 blocks x 150, both arms pooled in
 ONE batch with the 5c ladder; MTG_PGO=0, 8 workers; `leaf/verdict.txt`).** For this deck the arm toggles
