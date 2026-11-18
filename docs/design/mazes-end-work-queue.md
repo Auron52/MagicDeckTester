@@ -144,3 +144,5 @@ USER (VERBATIM): "We should be pruning the fetches, not just ranking them."
 (Sent to P5d-2: provider prunes (a) idle mana -> fetch forced, target searched, replay if a drop is open; (b) lands short of full rate this/next turn -> no other use of the {3}; (c) no fetch that strands Maze's End in hand at end of turn unless an effect returns it or it wins (own arm, "usually"); (d) otherwise unpruned. Ranking kept for the greedy sites.)
 USER (VERBATIM, correcting my reading): "What I mean by pruning fetches is about the set of targets. Not whether to use it or not." / "Though, if there is idle mana we should use it."
 (Corrected brief to P5d-2: prune only (a) idle mana -> activate; (b)/(c) stay ranking. The target set is the USER's P3 menu, already shipped default ON in MazeRestrictLandTargets.)
+USER (VERBATIM): "And that is fine, because not fetching would be dominated, but this would be assuming we can replay it."
+(Sent to P5d-2: the idle-mana prune also requires Maze's End to come back before our next turn: an open drop to replay it, a Manabond/Burgeoning return, or the activation wins.)
