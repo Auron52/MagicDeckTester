@@ -6761,7 +6761,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // (Bruna s5005 gi759, the canon route of the same continuation replay_recorded carries).
         std::vector<Action> cont_unlock_fired;
         std::optional<CastSectionUnlock> cont_unlock;
-        cont_unlock.emplace(state, extra.actions, &cont_unlock_fired);
+        cont_unlock.emplace(state, extra.actions, &cont_unlock_fired, extra.cont_canon);
         // Continuation casts in the SAME canonical order the rollout's apply_plan_actions
         // realises (ordering-audit 2026-08-15, item 2: this loop ran in RAW plan order, so a
         // continuation holding more than one cast could execute a different sequence than the
@@ -7379,7 +7379,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
                     std::optional<CastSectionUnlock> pod_unlock;
-                    pod_unlock.emplace(state, extra.actions);
+                    pod_unlock.emplace(state, extra.actions, nullptr, extra.cont_canon);
                     std::vector<int> pod_cont_order;
                     for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
                     {
@@ -9370,7 +9370,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 // The continuation's cast section (CastSectionUnlock; see resolve_draw_breakpoint).
                 std::optional<CastSectionUnlock> pe_unlock;
-                pe_unlock.emplace(state, extra.actions);
+                pe_unlock.emplace(state, extra.actions, nullptr, extra.cont_canon);
                 std::vector<int> pe_cont_order;
                 for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
                 {

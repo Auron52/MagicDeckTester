@@ -1776,7 +1776,15 @@ bool LinePayAuditRolloutOn();
 // is a rollout-vs-executor payment divergence by construction (a DEFECT, no oracle needed). The top-level classes
 // above deliberately ignore those steps ("a breakpoint continuation's own drops are its own plan's"), which is how
 // the fd-diverge's Maze's End activation stayed invisible.
-enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_REC, LPA_N };
+// LPA_CANON_HOLD (Maze's End F4, verify_deck mismatch s7009 gi8): unbranched-canon cast sections (Plan::cont_canon)
+// whose FULL list would have held a {T} source for a board activation the canon never applies
+// (TurnSolver::PlanReserveSources). No step is short in either world, so every class above reads zero on such a
+// game: the divergence surfaces only LATER (an end-step activation found its {T} source tapped in one world and
+// free in the other). Counted with the hold already DROPPED (the fix); under MTG_CANON_CONT_TRAITS=0 the same count
+// is the live hazard. World = g_real_resolution (REAL) / anything else (ROLLOUT, printed only with
+// MTG_LINE_PAY_AUDIT_ROLLOUT=1). Level 2 prints LINE_PAY_CANON_HOLD per section.
+enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_REC,
+       LPA_CANON_HOLD, LPA_N };
 extern std::atomic<long> g_lpa[2][LPA_N];
 extern std::atomic<long> g_act_pay_calls;
 extern std::atomic<long> g_act_hold_mask;

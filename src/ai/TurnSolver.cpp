@@ -19285,14 +19285,46 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
 // The plan-scoped reserve both apply paths install: the mana-unlock pieces plus the colour-critical
 // sources. ONE function so the executor and the rollout cannot drift on which sources are held --
 // the divergence class this file has been bitten by before.
+static bool CanonContTraitsOn();   // MTG_CANON_CONT_TRAITS (defined with ComputeContinuationTraits)
+// LOCKSTEP #19, THE RESERVE HALF (Maze's End F4, verify_deck mismatch s7009 gi8 d5 b20: predicted T4, realised
+// T5). An UNBRANCHED-CANON continuation (Plan::cont_canon) applies its casts only -- its board activations are
+// neither applied nor recorded -- so ComputeContinuationTraits already builds its PlanTraits from the actions it
+// APPLIES. The cast section's source reserve is the other half of the same rule: ActivationTapReserve over the
+// canon's FULL list held the {T} source of an activation nothing ever fires. On s7009 gi8 the T4 canon after
+// Guild Summit's draw was [Amulet of Vigor, activate Maze's End#43]: the rollout's Amulet payment held Maze's
+// End#43 (paid with Gateway Plaza), so at the end step Manabond's dump left an untapped Maze's End plus {3} and
+// the off-main WINNING activation (TryOffMainAltWinActivation) scored a T4 win. The executor's committed-line
+// replay records the canon's casts only, so its Amulet payment held nothing, tapped Maze's End#43, and the win
+// slipped to T5. The rollout was optimistic -- the hold belonged to no action of the line -- so the canon's
+// reserve is now built from what it applies, in every world that opens a canon cast section (the rollout's
+// apply_plan_actions, the executor's re-derived continuation appliers; the record replay already held
+// nothing). The unlock half (ManaUnlockColorReserve) and the colour-critical half read casts and the unlock
+// Equips a canon section DOES fire, so they are unchanged. Reads no budget. Rides MTG_CANON_CONT_TRAITS
+// (default ON; =0 restores the full list for both halves of LOCKSTEP #19).
 std::vector<int> TurnSolver::PlanReserveSources(const GameState& state,
-                                                const std::vector<Action>& acts)
+                                                const std::vector<Action>& acts, bool canon)
 {
     std::vector<int> out = ManaUnlockColorReserve(state, acts);
     for (int n : ColorCriticalReserve(state, acts))
     { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
+    const bool drop_acts = canon && CanonContTraitsOn();   // a canon's activations never fire: they hold nothing
+    if (drop_acts && !LinePayAuditOn()) { return out; }
     for (int n : ActivationTapReserve(state, acts))
-    { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
+    {
+        if (std::find(out.begin(), out.end(), n) != out.end()) { continue; }
+        if (!drop_acts) { out.push_back(n); continue; }
+        // MTG_LINE_PAY_AUDIT (measurement only, GameLogger.h LPA_CANON_HOLD): the hold this rule dropped.
+        g_lpa[g_real_resolution ? 0 : 1][LPA_CANON_HOLD].fetch_add(1, std::memory_order_relaxed);
+        if (LinePayAuditLevel() >= 2 && (g_real_resolution || LinePayAuditRolloutOn()))
+        {
+            std::string nm = "#" + std::to_string(n);
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == n) { nm = p.card.m_name.str() + nm; break; } }
+            std::fprintf(stderr, "LINE_PAY_CANON_HOLD %s t%d dropped=[%s]\n",
+                         g_real_resolution ? "real" : "rollout", state.turn_number, nm.c_str());
+        }
+        break;   // one count per section
+    }
     return out;
 }
 
@@ -75755,7 +75787,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         cont_line_armed = false;
         auto unlock_sink = [&]() -> std::vector<Action>*
         { return (rec_unlock && out_breakpoint != nullptr && !sink_stack.empty()) ? sink_stack.back() : nullptr; };
-        CastSectionUnlock _unlock(state, acts, unlock_sink());
+        CastSectionUnlock _unlock(state, acts, unlock_sink(), /*canon=*/rec_unlock);
         auto fire_unlock = [&]() { _unlock.Fire(unlock_sink()); };
         // A graveyard cast sequenced at its rank (GyCastRidesCastSequence, the rank-ordered branches below):
         // dispatched exactly as the trailing graveyard pass does, plus the cast-section unlock a hand cast

@@ -189,10 +189,12 @@ struct LinePayDump
             if (w == 1 && !LinePayAuditRolloutOn()) { continue; }
             std::fprintf(stderr,
                 "LINE_PAY_AUDIT %s plans=%ld paying>=2=%ld short_plans=%ld short_steps=%ld | joint_yes=%ld (DEFECT) "
-                "joint_no=%ld unknown=%ld cont=%ld rec_short=%ld (DEFECT)\n", w ? "ROLLOUT" : "REAL",
+                "joint_no=%ld unknown=%ld cont=%ld rec_short=%ld (DEFECT) canon_hold=%ld (dropped)\n",
+                w ? "ROLLOUT" : "REAL",
                 g_lpa[w][LPA_PLANS].load(), g_lpa[w][LPA_PAYING].load(), g_lpa[w][LPA_SHORT_PLANS].load(),
                 g_lpa[w][LPA_SHORT_STEPS].load(), g_lpa[w][LPA_YES].load(), g_lpa[w][LPA_NO].load(),
-                g_lpa[w][LPA_UNKNOWN].load(), g_lpa[w][LPA_CONT].load(), g_lpa[w][LPA_REC].load());
+                g_lpa[w][LPA_UNKNOWN].load(), g_lpa[w][LPA_CONT].load(), g_lpa[w][LPA_REC].load(),
+                g_lpa[w][LPA_CANON_HOLD].load());
         }
     }
 } g_line_pay_dump;
