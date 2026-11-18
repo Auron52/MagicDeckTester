@@ -78,3 +78,10 @@ The ties are the empty Tooth and Nail and Time Warp at the opponent, the scoring
 - Integrated build NOT yet built (TurnSolver.cpp auto-merged with F2): build, units and smoke at the shared push.
 - **New C5 (queued with C1-C4):** `BpCandFingerprint` omits evoke / kicked / bestow / adventure / face_down, so an evoke plan and its hard-cast twin can share a breakpoint-cache entry (the same class as the devour_count hole). Fix + A/B.
 - **Open for the USER:** prune the opponent-aimed Time Warp in the Extra Turns provider? It stays searched for the decking line.
+
+## USER on P5's definitions (2026-11-18, VERBATIM)
+8. "Leftover means that we would go to the end of the turn and have extra mana up. Technically we might even be able to prune it unless that is the case. "Lacking extra land drops" means something like what you are saying, but the situation is a bit less clear. It is certainly the case that having none of those meets the bar. It is less clear whether 1 of them does. In some situations I suppose it might, particularly if Burgeoning is the one and it is not going off."
+
+Sent to P5-2:
+- **Treasure:** offered only when the turn would end with unspent mana. Strict arm vs leftover-or-binds; mana held for an off-main Maze's End activation is not leftover.
+- **Talon:** variants (a) none of the three sources, (b) at most one, (c) effective sources only (Burgeoning/Manabond count only with a land to put), each vs always-offered.
