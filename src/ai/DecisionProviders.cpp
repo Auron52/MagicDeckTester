@@ -66664,11 +66664,12 @@ bool MidrangeBurnProvider::PrunesPassiveBurnTargets() const
     return prune;
 }
 
-void MidrangeBurnProvider::FireblastMountainPairCandidates(
-    const GameState& s, std::vector<std::pair<int, int>>& pairs) const
+// SHARED by Midrange Burn and 1 Drop Burn: fold the Fireblast sacrifice pairs to the one keeping the most
+// untapped Mountains (SOUND DOMINANCE when every candidate is a basic Mountain -- identical lands differ only
+// in tappedness, and sacrificing a tapped one keeps a red source). Any non-basic Mountain -> no fold.
+static void FoldFireblastPairsToMostTapped(const GameState& s, std::vector<std::pair<int, int>>& pairs)
 {
-    static const bool narrow = EnvOn("MTG_MIDRANGE_FIREBLAST_PAIR", true);
-    if (!narrow || pairs.size() <= 1) { return; }
+    if (pairs.size() <= 1) { return; }
     // This list's Mountain-subtype lands are all basic Mountains. Identical lands differ only in
     // current tappedness: sacrificing a tapped one preserves an available red source. If a future
     // list gains a nonbasic Mountain, leave every pair to the search until its value is assessed.
@@ -66688,16 +66689,28 @@ void MidrangeBurnProvider::FireblastMountainPairCandidates(
     pairs.assign(1, pick);
 }
 
+void MidrangeBurnProvider::FireblastMountainPairCandidates(
+    const GameState& s, std::vector<std::pair<int, int>>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_MIDRANGE_FIREBLAST_PAIR", true);
+    if (narrow) { FoldFireblastPairsToMostTapped(s, pairs); }
+}
+
+// SHARED: Grim Lavamancer's two-card exile fuel folded to one stable name-based representative -- an
+// IDENTITY FOLD for a deck with no effect that retrieves or counts a specific graveyard card (every pair pays
+// the same two-card cost). Target selection remains searched and the viewer still offers every legal pair.
+static void FoldGraveyardFuelToOne(std::vector<std::string>& pairs)
+{
+    if (pairs.size() <= 1) { return; }
+    const auto pick = *std::min_element(pairs.begin(), pairs.end());
+    pairs.assign(1, pick);
+}
+
 void MidrangeBurnProvider::GraveyardDamageFuelCandidates(
     const GameState&, std::vector<std::string>& pairs) const
 {
     static const bool narrow = EnvOn("MTG_MIDRANGE_LAVAMANCER_FUEL", true);
-    if (!narrow || pairs.size() <= 1) { return; }
-    // Midrange Burn has no effect that retrieves or counts a specific graveyard card. Every pair
-    // pays the same two-card cost, so use a stable name-based representative. Target selection
-    // remains searched and the viewer still offers every legal pair.
-    const auto pick = *std::min_element(pairs.begin(), pairs.end());
-    pairs.assign(1, pick);
+    if (narrow) { FoldGraveyardFuelToOne(pairs); }   // Midrange Burn reads no specific graveyard card
 }
 
 bool MidrangeBurnProvider::OffersPaidFireblastCast(const GameState& s) const
@@ -67014,6 +67027,39 @@ int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition&
 
 bool OneDropBurnProvider::CastOrderTotalByName() const   { return OneDropBurnOrderEnabled(); }
 bool OneDropBurnProvider::OrderOpaqueCastsByRank() const { return OneDropBurnOrderEnabled(); }
+
+// SOUND FOLDS shared with Midrange Burn (found by the 2026-11-18 claude-play sweep: the menu fanned Grim
+// Lavamancer's exile over every graveyard pair, and Fireblast over every Mountain pair). This list's Mountain
+// lands are all basic Mountains (Sunbaked Canyon is not a Mountain), and no card in it retrieves or counts a
+// specific graveyard card, so both are identity / dominance folds. Human play and the unpruned audit gates
+// (fireblastpair, lavamancerfuel) keep every pair. DEFAULT ON; =0 restores the full fan.
+void OneDropBurnProvider::FireblastMountainPairCandidates(
+    const GameState& s, std::vector<std::pair<int, int>>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_ONEDROPBURN_FIREBLAST_PAIR", true);
+    if (narrow) { FoldFireblastPairsToMostTapped(s, pairs); }
+}
+
+void OneDropBurnProvider::GraveyardDamageFuelCandidates(
+    const GameState&, std::vector<std::string>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_ONEDROPBURN_LAVAMANCER_FUEL", true);
+    if (narrow) { FoldGraveyardFuelToOne(pairs); }
+}
+
+// The PAID Fireblast ({4}{R}{R}) is omitted when this turn provably cannot reach six mana. Sound upper
+// bound: the deck has no ritual, rock or mana creature, so the turn's mana is the available pool (float
+// included) plus at most ONE more land -- counted whenever a land drop is unused, hand land or not, since
+// Needle Drop / Sunbaked Canyon can draw one mid-turn. The exact payment stays the plan check's job.
+bool OneDropBurnProvider::OffersPaidFireblastCast(const GameState& s) const
+{
+    static const bool prune = EnvOn("MTG_ONEDROPBURN_FIREBLAST_PAID", true);
+    if (!prune) { return true; }
+    const Player& ap = s.players[s.active_player_index];
+    int possible = AvailableManaPool(s).Total();
+    if (ap.lands_played_this_turn < ap.LandDropsAvailable()) { ++possible; }
+    return possible >= 6;
+}
 
 const char* OneDropBurnProvider::CastOrderTierName(int rank) const
 {

@@ -1837,7 +1837,8 @@ public:
 // this list carries: Needle Drop's target_dealt_damage_this_turn and Vexing Devil's
 // etb_opp_may_take_damage_to_sac. Without them it carries Grim Lavamancer (midrange_burn) and Boltwave /
 // Sunbaked Canyon (modern_rw_burn) but neither conjunct's `burn` / `anti`, so it fell to Generic.
-// The one hook it owns is the Needle Drop cast-order tier (CastOrderRank below).
+// It owns the cast order (CastOrderRank below: the Needle Drop tier, and the USER-review full order) and
+// the sound Fireblast-pair / Lavamancer-fuel / paid-Fireblast folds shared with Midrange Burn.
 class OneDropBurnProvider : public DeckProvider
 {
 public:
@@ -1852,6 +1853,13 @@ public:
     bool CastOrderTotalByName() const override;
     bool OrderOpaqueCastsByRank() const override;
     const char* CastOrderTierName(int rank) const override;
+    // Sound folds shared with Midrange Burn (MTG_ONEDROPBURN_FIREBLAST_PAIR / _LAVAMANCER_FUEL /
+    // _FIREBLAST_PAID, default ON): see the definitions.
+    void FireblastMountainPairCandidates(
+        const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
+    void GraveyardDamageFuelCandidates(
+        const GameState& s, std::vector<std::string>& pairs) const override;
+    bool OffersPaidFireblastCast(const GameState& s) const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by
