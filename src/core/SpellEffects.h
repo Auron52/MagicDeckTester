@@ -53111,6 +53111,90 @@ inline void ResolveBurgeoningTriggers(GameState& state)
     }
 }
 
+// ---- MAZE'S END: THE OFF-MAIN WIN (sweep 61001 gi8; F1 defect 4) --------------------------------------------
+// "{3}, {T}, Return this land to its owner's hand: Search your library for a Gate card, put it onto the
+// battlefield, then shuffle. If you control ten or more Gates with different names, you win the game." The
+// ability has no timing restriction, so its controller may activate it whenever they hold priority (CR 602.2,
+// CR 117.1b) -- at OUR END STEP after Manabond's dump has put a hand of Gates onto the battlefield, and on the
+// OPPONENT'S TURN after a Burgeoning put. The engine offers activations in our main phases only, so a line that
+// reaches the tenth name off-main (gi8: eleven names at T6's end step) waited a full turn to win.
+// This window covers the one off-main activation whose value does not depend on anything after it: one whose
+// resolution WINS (a fetch of a new Gate name that takes the distinct count to N, or a count already >= N).
+// Winning ends the game, so taking it DOMINATES every alternative at that priority (nothing can be better than
+// "won now", at any depth or budget) -- a sound dominance fold, not a heuristic pick, and the reason no search
+// node is needed. WHICH winning Gate is fetched and WHICH Maze's End activates are irrelevant for the same
+// reason (every one wins), so the first that wins is taken. Each candidate is PROBED on a copy (quiet), so the
+// real board is touched only by an activation that is proven to win.
+// NOT modelled (logs/maze/F1-results.md, defect 4): a NON-winning off-main activation -- banking a Gate at the
+// end step with mana that would otherwise empty. That is a real decision with a real cost (the Maze's End goes
+// to hand and spends a later land drop), so it would need a SEARCHED end-step node.
+// Called at the same points in both worlds (GameEngine::EndStep after Manabond / TurnSolver's twin; the
+// opponent's turn after ResolvePassiveOpponentLandTurn in both opponent_turn lambdas), so lockstep. Deck-gated on
+// deck_has_crossing_land_put (Manabond / Burgeoning, the only off-main sources of new lands; without one the
+// end-step board is the main-2 board the search already saw): one bool test for every other deck.
+inline bool OffMainAltWinActivationProbe(GameState& s, int me, int source_id, const CardDefinition& md,
+                                         const std::string& target)
+{
+    const SacNamedPinScope pin(0, &target);
+    if (!PermAbilitySourceLive(s, me, source_id, PermAbilityMode::TapTutorPut, nullptr)) { return false; }
+    SetPermTapped(s, me, source_id, true);
+    if (!TapForCostDirect(s, *md.params.tap_tutor_put_cost, /*for_creature=*/false)) { return false; }
+    ApplyPermAbility(s, me, source_id, PermAbilityMode::TapTutorPut);
+    return s.won_by_effect;
+}
+
+inline bool TryOffMainAltWinActivation(GameState& state)
+{
+    if (!state.deck_has_crossing_land_put || state.won_by_effect) { return false; }
+    const int me = state.active_player_index;
+    if (me != 0) { return false; }
+    std::vector<std::pair<int, const CardDefinition*>> mazes;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.alt_win_distinct_named_count <= 0 || !d->params.tap_tutor_put_cost.has_value())
+        { continue; }
+        mazes.push_back({ p.card.m_number, d });
+    }
+    if (mazes.empty()) { return false; }
+    const CardParams& mp = mazes.front().second->params;
+    const int have = CountDistinctNamedLandsWithSubtype(state, me, mp.alt_win_distinct_named_subtype,
+                                                        mp.alt_win_distinct_named_count);
+    if (have + 1 < mp.alt_win_distinct_named_count) { return false; }   // one fetch cannot reach N
+    std::vector<std::string> targets;
+    for (const Card& lc : state.players[me].library)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+        const Card& card = ld ? ld->card : lc;
+        if (!TapTutorPutLibraryCandidate(mp, card)) { continue; }
+        if (std::find(targets.begin(), targets.end(), lc.m_name.str()) == targets.end())
+        { targets.push_back(lc.m_name.str()); }
+    }
+    if (have >= mp.alt_win_distinct_named_count) { targets.push_back(kTutorDeclineTarget); }
+    for (const auto& [id, md] : mazes)
+    {
+        for (const std::string& t : targets)
+        {
+            bool wins = false;
+            {
+                RevealLogPause quiet;   // a probe never asks a human or emits events
+                GameState probe = state;
+                wins = OffMainAltWinActivationProbe(probe, me, id, *md, t);
+            }
+            if (!wins) { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              md->card.m_name.str() + ": activated off the main phase (it has no timing restriction)"
+                              " -- the fetch wins the game");
+            }
+            return OffMainAltWinActivationProbe(state, me, id, *md, t);
+        }
+    }
+    return false;
+}
+
 // TALON GATES OF MADARA (Maze's End I4): "{4}: Put this card from your hand onto the battlefield." A from-HAND
 // activated ability riding Action::Kind::Channel (the Transmute precedent: the caller pays hand_put_self_cost
 // in both worlds, then calls this). The card leaves the hand and enters through EnterLand under `controller`
