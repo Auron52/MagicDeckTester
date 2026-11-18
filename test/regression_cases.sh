@@ -199,7 +199,10 @@ SMOKE_CASES=(
   "mazesend     0 1001 1000 0"
   "mazesend     3 1001   10 10"
   "mazesend     5 1001  132 20"
-  "mazesend2hg  3 1001   50 10"
+  # P5-2 (coordinator default, the same USER principle): the 2HG canary plays d5 b20 play-setting games instead of d3
+  # b10, at about equal cost (measured on the P5 tree, 50 games seed 1001: d3 b10 76.7K units/game, d5 b20 130.5K;
+  # 50 x 76.7K = 3.83M = 29 d5 games -> 30). GT NOT accepted (the coordinator's next shared accept).
+  "mazesend2hg  5 1001   30 20"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 1001 100 0"
   "mill 3 1001   5 10"

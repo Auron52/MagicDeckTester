@@ -53213,13 +53213,15 @@ inline bool TryOffMainAltWinActivation(GameState& state)
 // DOMINANCE PREMISE (goldfish): nothing happens between this point and our untap step; the permanents it taps (Heap
 // Gate, another Gate, the {1}'s source) all untap there, so tapping them now costs nothing, and a Treasure only adds
 // (one more mana of any colour later; nothing in this list counts untapped permanents, artifacts or life). One
-// option, no branch -- a sound dominance fold, not a pick, so it is legal at every depth.
+// option, no branch -- a sound dominance fold, not a pick, so it is legal at every depth. DEFAULT ON since the P5-2
+// pooled A/B (vs P5's leftover-or-binds rule: 6 better / 1 worse over 550 held-out games, net -5 turns, ~3% fewer
+// units at d5 b20; logs/maze/P5-results.md). Coordinator default, USER sign-off pending.
 // Both worlds call it at the same point (GameEngine::RunTurnFrom / TurnSolver::SimulateEndAndStartNextTurn, after
 // the opponent-turn block). Off in human play and under the unpruned gate (the menu keeps its Treasure plans there),
 // and with the lever off (byte-identical).
 inline bool MazeHeapStrictLever()
 {
-    static const bool s_on = EnvOn("MTG_MAZE_HEAP_STRICT", false);   // A/B variant until measured
+    static const bool s_on = EnvOn("MTG_MAZE_HEAP_STRICT", true);   // DEFAULT ON (P5-2 A/B: -5 turns / 550, cheaper); =0 -> P5's leftover-or-binds menu rule
     return heurarm::Flag(heurarm::MAZE_HEAP_STRICT, s_on);
 }
 inline int PerformLastChanceTreasure(GameState& state)
