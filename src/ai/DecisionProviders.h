@@ -2467,9 +2467,14 @@ public:
     // MTG_SHUFFLE_SALT_SEARCH decouple ensemble (salts 1-4, 2,400 games: uncap 5.0558 WORST in
     // every salt vs top-1 5.0317) -- the extra targets only "won" by pre-seeing the deterministic
     // post-fetch shuffle. See docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION.
+    // MTG_FIVECOLOUR_TRIOME_BESIDE (DEFAULT OFF, USER "give it a try" 2026-11-17): when an enters-tapped land (Zagoth
+    // Triome, Jetmir's Garden) wins the top slot, the best UNTAPPED pick is searched beside it (width 2) -- the
+    // "subsequent step" case RULE 6 cannot see (it reads the current hand only). Off: top-1, byte-identical.
     std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
-                                                   const std::vector<std::string>& ranked) const override
-    { return FetchTopPickOnly(ranked); }
+                                                   const std::vector<std::string>& ranked) const override;
+    // The land drop's width: a cap of 2 under MTG_FIVECOLOUR_TRIOME_BESIDE (the list already carries the pick
+    // width: 1, or 2 beside a tapped top pick); 1 (the base default) otherwise.
+    int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const override;
     // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
     // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
     // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the

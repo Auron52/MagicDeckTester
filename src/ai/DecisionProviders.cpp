@@ -548,29 +548,61 @@ static int SeaFetchRank(const std::string& name)
 // list spends mana on an activation that a fetched land would pay this turn); a never-cast card (Whelming Wave under
 // MTG_SEA_WAVE_NEVER) is not counted.
 namespace { int CastableCount(ManaPool p, const std::vector<const ManaCost*>& costs); }   // FiveColour's, below
-static bool SeaFetchManaNeeded(const GameState& s, int controller, const std::vector<Color>& colours)
+// THE SHARED "NEEDED THIS TURN" TEST (Sea's Hedge Maze and Cyclone's Xander's Lounge; FiveColour's RULE 6 is the
+// same union, computed per colour inside its ranking). True when one more mana of some colour in `colours` either
+// (a) SOLO: lets a hand card be paid that the current pool cannot pay, or (b) SEQUENCE: pays for one MORE hand card
+// in a cheapest-first sequence (CastableCount). Lands never count; `never_cast` (may be null) drops a card the deck
+// never casts. `cycling`: a hand card's mana cycling cost (EffectiveCyclingCost) is a second use of the mana -- in
+// (a) either cost unlocking counts, in (b) each card contributes its CHEAPER cost (one use per card, so a card is
+// never counted as both cast and cycled). Off, both lists are the cast costs alone (Sea's test, byte-identical).
+struct FetchNeedScan
 {
-    std::vector<const ManaCost*> costs;
-    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    bool (*never_cast)(const CardDefinition&) = nullptr;
+    bool cycling = false;
+};
+static bool FetchManaNeededThisTurn(const GameState& s, int controller, const std::vector<Color>& colours,
+                                    const FetchNeedScan& scan)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    std::vector<ManaCost> cyc;                 // the cycling costs (stable addresses: reserved up front)
+    cyc.reserve(pl.hand.size());
+    std::vector<const ManaCost*> solo, seq;
+    for (const Card& c : pl.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr || d->card.IsLand()) { continue; }
-        if (d->params.bounce_all_creatures && SeaWaveNeverOn()) { continue; }   // never cast (NeverCast)
-        costs.push_back(&d->card.m_mana_cost);
+        if (scan.never_cast != nullptr && scan.never_cast(*d)) { continue; }
+        const ManaCost* cast = &d->card.m_mana_cost;
+        solo.push_back(cast);
+        const ManaCost* cheap = cast;
+        if (scan.cycling && d->params.cycling_cost.has_value())
+        {
+            cyc.push_back(EffectiveCyclingCost(s, controller, d->params.cycling_cost.value()));
+            solo.push_back(&cyc.back());
+            if (cyc.back().ManaValue() < cast->ManaValue()) { cheap = &cyc.back(); }
+        }
+        seq.push_back(cheap);
     }
-    if (costs.empty()) { return false; }
-    std::stable_sort(costs.begin(), costs.end(),
+    if (solo.empty()) { return false; }
+    std::stable_sort(seq.begin(), seq.end(),
                      [](const ManaCost* a, const ManaCost* b) { return a->ManaValue() < b->ManaValue(); });
     const ManaPool pool_now = AvailableManaPool(s);
-    const int base = CastableCount(pool_now, costs);
+    const int base = CastableCount(pool_now, seq);
     for (Color col : colours)
     {
         ManaPool p = pool_now;
         p.Add(col);
-        for (const ManaCost* mc : costs) { if (!pool_now.CanPay(*mc) && p.CanPay(*mc)) { return true; } }   // (a)
-        if (CastableCount(p, costs) > base) { return true; }                                                 // (b)
+        for (const ManaCost* mc : solo) { if (!pool_now.CanPay(*mc) && p.CanPay(*mc)) { return true; } }   // (a)
+        if (CastableCount(p, seq) > base) { return true; }                                                 // (b)
     }
     return false;
+}
+static bool SeaNeverCast(const CardDefinition& d) { return d.params.bounce_all_creatures && SeaWaveNeverOn(); }
+static bool SeaFetchManaNeeded(const GameState& s, int controller, const std::vector<Color>& colours)
+{
+    FetchNeedScan scan;
+    scan.never_cast = &SeaNeverCast;   // Whelming Wave under MTG_SEA_WAVE_NEVER (NeverCast)
+    return FetchManaNeededThisTurn(s, controller, colours, scan);
 }
 // Admit Hedge Maze beside `top` (the rule's untapped pick)? Under the fetch prune only; never when Maze IS the top
 // pick (nothing else left) or the top pick itself enters tapped.
@@ -24453,6 +24485,40 @@ namespace
     }
 }
 
+// MTG_FIVECOLOUR_TRIOME_BESIDE (USER 2026-11-17, on offering the Triome BESIDE the untapped pick instead of as the
+// only target: "On Five Colour we could give it a try. I'm not sure what the implications are right now. Almost
+// always the Triome is the call if you don't use the mana, but maybe sometimes we will need it for a subsequent
+// step?"). RULE 6 ranks a tapped land first only when no untapped land's mana is spendable from the CURRENT hand;
+// a draw or cantrip this turn can change that. So when the top pick enters tapped, the best untapped pick (the
+// first one in the ranking) moves to second place and both are searched. DEFAULT OFF pending the USER.
+static bool FiveColourTriomeBesideOn()
+{
+    static const bool on = EnvOn("MTG_FIVECOLOUR_TRIOME_BESIDE", false);
+    return heurarm::Flag(heurarm::FIVECOLOUR_TRIOME_BESIDE, on);
+}
+static bool FiveColourEntersTapped(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    return d != nullptr && d->params.enters_tapped;
+}
+
+std::vector<std::string> FiveColourProvider::FetchSearchCandidates(const GameState& s, int controller,
+    const CardParams& fetch_pp, const std::vector<std::string>& ranked) const
+{
+    (void)s; (void)controller; (void)fetch_pp;
+    // `ranked` is FetchCandidates', which (flag on) already moved the best untapped pick to second place.
+    if (FiveColourTriomeBesideOn() && ranked.size() >= 2 && FiveColourEntersTapped(ranked[0])
+        && !FiveColourEntersTapped(ranked[1]))
+    { return { ranked[0], ranked[1] }; }
+    return FetchTopPickOnly(ranked);
+}
+
+int FiveColourProvider::OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
+{
+    (void)s; (void)fetch;
+    return FiveColourTriomeBesideOn() ? 2 : 1;
+}
+
 std::vector<std::string>
 FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                                     const CardParams& fetch_pp) const
@@ -24733,6 +24799,15 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     std::vector<std::string> out;
     out.reserve(keys.size());
     for (const Key& k : keys) { out.push_back(k.name); }
+    // MTG_FIVECOLOUR_TRIOME_BESIDE: a tapped top pick keeps the top slot; the best untapped pick moves right behind
+    // it, so the width-2 prune (FetchSearchCandidates, and the battlefield pick list ordered from this list) keeps
+    // both. The top pick is unchanged, so a rollout's one-option fetch is unchanged.
+    if (FiveColourTriomeBesideOn() && out.size() >= 2 && FiveColourEntersTapped(out[0]))
+    {
+        auto u = std::find_if(out.begin() + 1, out.end(),
+                              [](const std::string& nm) { return !FiveColourEntersTapped(nm); });
+        if (u != out.end() && u != out.begin() + 1) { std::rotate(out.begin() + 1, u, u + 1); }
+    }
     // TEMPORARY instrument (MTG_FETCHKEY): which key actually SETTLES the pick, i.e. the first
     // one on which the top two candidates differ. "name" means every ranking term tied and the
     // choice fell through to the alphabetical backstop -- i.e. the doctrine said nothing.
@@ -38518,6 +38593,16 @@ bool CycloneFetchRuleOn()
     static const bool on = EnvOn("MTG_CYCLONE_FETCH_RULE", true);   // DEFAULT ON (the USER's rule)
     return heurarm::Flag(heurarm::CYCLONE_FETCH_RULE, on);
 }
+// MTG_CYCLONE_LOUNGE_IDLE (USER 2026-11-17, on narrowing the always-searched Xander's Lounge to "only when the mana
+// is not needed": "The Xander's Lounge change sounds good."; the rule it applies: "Hedge maze is a maybe if we
+// absolutely do not need it for mana." / "(if we do not need it for mana this turn it is possible, otherwise not)" /
+// "Honestly, Triomes have a similar disposition where they appear."; for Cyclone, 2026-10-27: "Arguably the triome
+// should be fetched if we don't need the mana"). DEFAULT ON (USER-adopted); =0 -> the Lounge beside every pick.
+bool CycloneLoungeIdleOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_LOUNGE_IDLE", true);
+    return heurarm::Flag(heurarm::CYCLONE_LOUNGE_IDLE, on);
+}
 bool CycloneMyriadRuleOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_MYRIAD_RULE", true);   // DEFAULT ON (the USER's rule)
@@ -38699,8 +38784,22 @@ std::vector<std::string> CycloneProvider::FetchSearchCandidates(const GameState&
     if (!CycloneFetchRuleOn()) { (void)s; (void)controller; (void)fetch_pp; return FetchTopPickOnly(ranked); }
     if (ranked.size() <= 1) { return ranked; }
     // The rule's pick, plus the enters-tapped triome (Xander's Lounge) beside it: "arguably the triome should be
-    // fetched if we don't need the mana" -- the search decides whether the mana is needed.
+    // fetched if we don't need the mana". MTG_CYCLONE_LOUNGE_IDLE (default ON): only when the pick's mana is NOT
+    // needed this turn -- the shared solo + sequence test, counting a hand card's mana CYCLING cost as a use (the
+    // deck's main mana sink: Curator {U}, Cyclone {2}); Toxic Deluge (goldfish_inert) is never cast. Needed -> the
+    // pick alone. =0: the Lounge beside every pick (the search decided every time).
     std::vector<std::string> out{ ranked.front() };
+    if (CycloneLoungeIdleOn())
+    {
+        const CardDefinition* top = CardDatabase::Instance().Lookup(ranked.front());
+        if (top != nullptr && !top->params.enters_tapped)
+        {
+            FetchNeedScan scan;
+            scan.never_cast = [](const CardDefinition& d) { return d.params.goldfish_inert; };
+            scan.cycling    = true;
+            if (FetchManaNeededThisTurn(s, controller, top->params.produces, scan)) { return out; }
+        }
+    }
     for (std::size_t i = 1; i < ranked.size(); ++i)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(ranked[i]);

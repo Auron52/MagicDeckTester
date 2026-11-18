@@ -713,3 +713,88 @@ TEST_CASE("fetch ranking: Cyclone / Landfall land-search doctrine never reads it
         CHECK(off_c == on_c);
     }
 }
+
+// ---- MTG_FIVECOLOUR_TRIOME_BESIDE (USER 2026-11-17, "On Five Colour we could give it a try.") ------------------------
+// RULE 6 ranks a tapped land (Jetmir's Garden / Zagoth Triome) first when no untapped land's mana is spendable from
+// the current hand. Flag on: the best untapped pick rides beside it as a second searched target, on every route
+// (the legacy Scalding Tarn, the battlefield Wooded Foothills' activation and its land drop). Off: top-1.
+namespace
+{
+struct TriomeBesideArm
+{
+    std::int8_t prev;
+    explicit TriomeBesideArm(bool on) : prev(heurarm::t_arm[heurarm::FIVECOLOUR_TRIOME_BESIDE])
+    { heurarm::t_arm[heurarm::FIVECOLOUR_TRIOME_BESIDE] = on ? 1 : 0; }
+    ~TriomeBesideArm() { heurarm::t_arm[heurarm::FIVECOLOUR_TRIOME_BESIDE] = prev; }
+};
+bool TappedFr(const std::string& n) { return DefFr(n).params.enters_tapped; }
+std::vector<std::string> NarrowedFr(const GameState& s, const CardDefinition& fetch)
+{
+    std::vector<std::string> c = OnPlayFetchCandidates(s, 0, fetch);
+    NarrowOnPlayFetch(s, 0, fetch, c);
+    return c;
+}
+std::vector<std::string> ActivationFr(const GameState& s, const CardParams& pp)
+{
+    std::vector<std::string> out;
+    for (const std::vector<std::string>& pick : LandSearchPicks(s, 0, LandSearchSpecOf(pp)))
+    { if (!pick.empty()) { out.push_back(pick.front()); } }
+    return out;
+}
+}  // namespace
+
+TEST_CASE("Five Colour MTG_FIVECOLOUR_TRIOME_BESIDE: a tapped top pick searches the best untapped pick beside it")
+{
+    EnsureCardsFr();
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return; }   // process-static: every target
+    static const FiveColourProvider fc;
+    const CardDefinition& foothills = DefFr("Wooded Foothills");
+    const CardDefinition& tarn      = DefFr("Scalding Tarn");
+    const std::vector<std::string> lib{ "Mountain", "Stomping Ground", "Steam Vents", "Blood Crypt", "Jetmir's Garden",
+                                        "Zagoth Triome", "Island", "Forest" };
+    GameState idle = BaseFr(fc, 1);                        // T1, nothing out; Progenitus casts nothing -> idle mana
+    Hand(idle, { "Wooded Foothills", "Progenitus" });
+    SetLib(idle, lib);
+    GameState busy = BaseFr(fc, 1);                        // Birds of Paradise: one {G} casts it -> untapped wins
+    Hand(busy, { "Wooded Foothills", "Birds of Paradise" });
+    SetLib(busy, lib);
+    {
+        TriomeBesideArm off(false);
+        const std::vector<std::string> r = fc.FetchCandidates(idle, 0, foothills.params);
+        REQUIRE(r.size() >= 2);
+        CHECK(TappedFr(r.front()));                        // RULE 6: the triome wins when the mana is idle
+        CHECK(NarrowedFr(idle, foothills).size() == 1);
+        CHECK(NarrowedFr(idle, tarn).size() == 1);
+        CHECK(fc.OnPlayFetchWidth(idle, foothills) == 1);
+    }
+    TriomeBesideArm on(true);
+    const std::vector<std::string> r = fc.FetchCandidates(idle, 0, foothills.params);
+    REQUIRE(r.size() >= 2);
+    CHECK(TappedFr(r[0]));
+    CHECK_FALSE(TappedFr(r[1]));                           // the best untapped pick moved up behind the triome
+    const std::vector<std::string> pair{ r[0], r[1] };
+    CHECK(fc.FetchSearchCandidates(idle, 0, foothills.params, r) == pair);
+    CHECK(NarrowedFr(idle, foothills) == pair);            // battlefield model: the land drop
+    CHECK(ActivationFr(idle, foothills.params) == pair);   // ... and its activation read one list
+    const std::vector<std::string> t = NarrowedFr(idle, tarn);   // legacy model (Scalding Tarn)
+    REQUIRE(t.size() == 2);
+    CHECK(TappedFr(t[0]));
+    CHECK_FALSE(TappedFr(t[1]));
+    bool tapped = false, untapped = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(idle, true))
+    {
+        if (p.land_to_play != "Wooded Foothills") { continue; }
+        tapped   = tapped   || p.fetch_target == pair[0];
+        untapped = untapped || p.fetch_target == pair[1];
+    }
+    CHECK(tapped);
+    CHECK(untapped);
+    // The mana is needed (Birds): the untapped pick is first and alone, as before.
+    const std::vector<std::string> b = NarrowedFr(busy, foothills);
+    REQUIRE(b.size() == 1);
+    CHECK_FALSE(TappedFr(b.front()));
+    // Only tapped targets left: just the top one.
+    GameState only = idle;
+    SetLib(only, { "Jetmir's Garden", "Zagoth Triome" });
+    CHECK(NarrowedFr(only, foothills).size() == 1);
+}

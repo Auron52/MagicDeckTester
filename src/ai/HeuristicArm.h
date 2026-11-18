@@ -1064,6 +1064,8 @@ enum Slot : int
     DEV_SEQ_HEXIT_TAINT,      // MTG_DEV_SEQ_HEXIT_TAINT  MTG_BP_DEV_SEQ's first (one-deviation) pass marks a node DIRTY when it takes the FIRST-VERIFIED-WIN HORIZON EXIT past its own turn while the pass has met a latent occurrence before that win turn: the exit's "no earlier win" rests on the shallower ladder passes' ONE-DEVIATION refutations, so its answer (and the in-window cache / game-line cache entry made from it) is not a full-tree proof. Soundness fix (AA seed 12345681: the T2 no-win-by-T3 inwin proof the second pass read). Default ON; =0 -> the exit leaves the node clean (the hole)
     REQHEUR_OLD_DEFAULT,      // MTG_REQHEUR_OLD_DEFAULT  MEASUREMENT arm (2026-11-20, provider-heuristic-required.md): a registered decision with NO deck policy runs the pre-2026-11-20 engine default instead of the searched default (Acclaimed Contender: the dig axis capped at the 3 front matches in library order; Paragon and Genesis Wave have no searched default yet, so the lever does not touch them). Default OFF; never a play setting
     KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights policy for Acclaimed Contender's dig (2026-11-20): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default ON since 2026-11-20 (play-identical over 6000 A/B games, ~1.6-1.8% fewer units; the USER may overrule); =0 is the searched default + RED FLAG
+    CYCLONE_LOUNGE_IDLE,      // MTG_CYCLONE_LOUNGE_IDLE  Cyclone (USER 2026-11-17 "The Xander's Lounge change sounds good."): under MTG_CYCLONE_FETCH_RULE, Xander's Lounge is searched beside the Scalding Tarn pick only when one more mana of the pick's colours is NOT needed this turn (FetchManaNeededThisTurn: the FiveColour RULE 6 solo + sequence test, a hand card's mana cycling cost counted as a use, goldfish_inert cards never cast). Default ON (USER-adopted); =0 -> the Lounge beside every pick
+    FIVECOLOUR_TRIOME_BESIDE, // MTG_FIVECOLOUR_TRIOME_BESIDE  Five Colour (USER 2026-11-17 "On Five Colour we could give it a try."): when RULE 6 ranks an enters-tapped land (Zagoth Triome, Jetmir's Garden) first, the best untapped pick moves to second place and both are searched (width 2, every route: legacy, battlefield, land drop). Default OFF pending the USER; =1 enables
     COUNT
 };
 
@@ -2072,6 +2074,8 @@ inline const char* Name(int slot)
         "MTG_DEV_SEQ_HEXIT_TAINT",
         "MTG_REQHEUR_OLD_DEFAULT",
         "MTG_KN_ETBDIG_RANK",
+        "MTG_CYCLONE_LOUNGE_IDLE",
+        "MTG_FIVECOLOUR_TRIOME_BESIDE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
