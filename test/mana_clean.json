@@ -2686,6 +2686,47 @@
      "seed": 30081000,
      "src": "1be7404574549a33458f476c983e5fc98677791c",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 242,
+      "CONTINUATION-DIFFERS": 11,
+      "DOMINATED-LAND": 7708,
+      "DROP-COVERED": 163,
+      "ORACLE-GAP": 188,
+      "PHANTOM": 4945
+     },
+     "commit": "7d9ebadee348e2f129480b9460ac8ccb83e7a441",
+     "date": "2026-11-18T13:21:23Z",
+     "decisions": 50650,
+     "deck": "decks/Dragons/Dragons.cod",
+     "deck_sha": "bbd021b5a5942d387b78b3aea0aa1a9f9be1afb8",
+     "game_index": 86000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 430,
+     "life_breakpoints": [],
+     "ms_off": 260943,
+     "ms_on": 719098,
+     "report": "logs/mana_clean/claude-regate-20261118/report.md",
+     "run": "claude-regate-20261118",
+     "seed": 30086000,
+     "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
+     "verdict": "issues"
     }
    ]
   },
@@ -4891,6 +4932,48 @@
      "seed": 30120000,
      "src": "1be7404574549a33458f476c983e5fc98677791c",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 48,
+      "CONTINUATION-DIFFERS": 27865,
+      "DOMINATED-LAND": 108,
+      "DROP-COVERED": 1041,
+      "ENUM-GAP": 22,
+      "ORACLE-GAP": 833,
+      "PHANTOM": 1697
+     },
+     "commit": "7d9ebadee348e2f129480b9460ac8ccb83e7a441",
+     "date": "2026-11-18T13:21:23Z",
+     "decisions": 33044,
+     "deck": "decks/Goblins/Goblins.cod",
+     "deck_sha": "93d7505d6f7a9b4cdc0e56d682e625f2ceca594f",
+     "game_index": 125000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 903,
+     "life_breakpoints": [],
+     "ms_off": 714529,
+     "ms_on": 970165,
+     "report": "logs/mana_clean/claude-regate-20261118/report.md",
+     "run": "claude-regate-20261118",
+     "seed": 30125000,
+     "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
+     "verdict": "issues"
     }
    ]
   },
@@ -6148,6 +6231,51 @@
      "run": "claude-moderate-20261117",
      "seed": 30110000,
      "src": "1be7404574549a33458f476c983e5fc98677791c",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 17,
+      "APPLY-DROP-ORDER": 291,
+      "CONTINUATION-DIFFERS": 1280,
+      "DOMINATED-CREATURE": 147,
+      "DOMINATED-LAND": 140144,
+      "DROP-COVERED": 453,
+      "ENUM-GAP": 301,
+      "HIDDEN-INFO": 5,
+      "ORACLE-GAP": 91,
+      "PHANTOM": 11274
+     },
+     "commit": "7d9ebadee348e2f129480b9460ac8ccb83e7a441",
+     "date": "2026-11-18T13:21:23Z",
+     "decisions": 35808,
+     "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+     "deck_sha": "d4bb1e60e05f9036b3482f46e5ee6d4f230c0479",
+     "game_index": 115000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 847,
+     "life_breakpoints": [],
+     "ms_off": 875227,
+     "ms_on": 4913506,
+     "report": "logs/mana_clean/claude-regate-20261118/report.md",
+     "run": "claude-regate-20261118",
+     "seed": 30115000,
+     "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
      "verdict": "issues"
     }
    ]
@@ -13912,6 +14040,50 @@
      "run": "claude-moderate-20261117",
      "seed": 30085000,
      "src": "1be7404574549a33458f476c983e5fc98677791c",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 255,
+      "APPLY-DROP-ORDER": 40,
+      "CONTINUATION-DIFFERS": 85,
+      "DOMINATED-LAND": 16524,
+      "DOMINATED-LIFE": 424,
+      "DROP-COVERED": 33215,
+      "ENUM-GAP": 18,
+      "HIDDEN-INFO": 3,
+      "PHANTOM": 3166
+     },
+     "commit": "7d9ebadee348e2f129480b9460ac8ccb83e7a441",
+     "date": "2026-11-18T13:21:23Z",
+     "decisions": 35467,
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 90000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 313,
+     "life_breakpoints": [],
+     "ms_off": 720620,
+     "ms_on": 1291439,
+     "report": "logs/mana_clean/claude-regate-20261118/report.md",
+     "run": "claude-regate-20261118",
+     "seed": 30090000,
+     "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
      "verdict": "issues"
     }
    ]
