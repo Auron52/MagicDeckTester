@@ -70427,6 +70427,22 @@ static bool OwedOtherTapsAside(GameState& c, const std::vector<Action>& acts, co
     }
     return true;
 }
+namespace owedjointstats
+{   // MTG_OWED_ACTS_JOINT_STATS=1 (diagnostic only): where OwedActsJointPrepay's calls end, printed at exit.
+inline bool On() { static const bool s = EnvOn("MTG_OWED_ACTS_JOINT_STATS"); return s; }
+inline std::atomic<long long> g_owing{0}, g_bound{0}, g_count{0}, g_probe{0}, g_strand{0}, g_fired{0};
+struct Printer
+{
+    ~Printer()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[owed-joint-stats] owing=%lld bound=%lld count=%lld probe=%lld strand=%lld fired=%lld\n",
+                     g_owing.load(), g_bound.load(), g_count.load(), g_probe.load(), g_strand.load(), g_fired.load());
+    }
+};
+inline Printer g_printer;
+inline void Bump(std::atomic<long long>& c) { if (On()) { c.fetch_add(1, std::memory_order_relaxed); } }
+}   // namespace owedjointstats
 bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>& acts)
 {
     if (!OwedActsJointPayOn() || HumanPlayActive()) { return false; }
@@ -70442,6 +70458,7 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     ManaCost owed{};
     std::vector<int> owed_taps;
     if (TrailingOwedBill(state, 0, acts, owed, owed_taps) <= 0 || owed.ManaValue() == 0) { return why("nothing owed"); }
+    owedjointstats::Bump(owedjointstats::g_owing);
     LineJointBill jb;
     auto add = [&jb](const ManaCost& c) -> bool
     {
@@ -70502,6 +70519,7 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     //      could tap (else the casts could take the Gates and strand it).
     static const bool s_gate_verify = EnvOn("MTG_OWED_ACTS_JOINT_GATE_VERIFY");   // diagnostic only
     const char* gated = nullptr;
+    int gate_have = -1, gate_need = -1;   // the count gate's numbers (GATE-MISS detail only)
     {
         std::uint64_t mask = 0;   // an index >= 64 stays in the bound: a looser over-count, still a bound
         for (std::size_t i = 0; i < state.battlefield.size() && i < 64; ++i)
@@ -70549,8 +70567,12 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
         }
         const int need = casts_bill.ManaValue() + std::min(pips, n_acf) + waste_scaled + owed.ManaValue() + other_taps;
         if (gates_ok && have >= need) { gated = "count: the sources cover every payment order"; }
+        gate_have = have; gate_need = need;
     }
+    if (gated != nullptr)
+    { owedjointstats::Bump(gated[0] == 'b' ? owedjointstats::g_bound : owedjointstats::g_count); }
     if (gated != nullptr && !s_gate_verify) { return why(gated); }
+    owedjointstats::Bump(owedjointstats::g_probe);
     // The owed activations in the order the trailing pass pays them (OrderTrailingActivations, both worlds).
     std::vector<Action> owed_acts;
     for (const Action& a : acts)
@@ -70591,6 +70613,7 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
             if (oc.ManaValue() > 0 && !TapForCostDirect(c, oc, /*for_creature=*/false)) { stranded = true; }
         }
         if (!stranded) { return why("usual payment strands nothing"); }   // byte-identical
+        owedjointstats::Bump(owedjointstats::g_strand);
     }
     // 2. ...and does ONE joint solve pay the whole line? (Rejects the lines nothing can save.)
     {
@@ -70605,9 +70628,24 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     }
     if (gated != nullptr)   // MTG_OWED_ACTS_JOINT_GATE_VERIFY: a gate declined a rescuable strand -- a gate bug
     {
-        std::fprintf(stderr, "[owed-joint] GATE-MISS (%s) t%d\n", gated, state.turn_number);
+        std::string line, board;
+        for (const Action& a : acts)
+        {
+            line += " " + a.card_name.str();
+            if (a.kind == Action::Kind::ActivatePermAbility) { line += "(act" + std::to_string(static_cast<int>(a.ability_mode)) + ")"; }
+        }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != ctl) { continue; }
+            board += " " + p.card.m_name.str() + "#" + std::to_string(p.card.m_number) + (p.tapped ? "(T)" : "");
+        }
+        std::fprintf(stderr, "[owed-joint] GATE-MISS (%s) t%d have=%d need=%d casts=%s owed=%s float=%d\n"
+                     "[owed-joint]   line:%s\n[owed-joint]   board:%s\n", gated, state.turn_number, gate_have,
+                     gate_need, casts_bill.ToDisplayString().c_str(), owed.ToDisplayString().c_str(),
+                     static_cast<int>(state.floating_mana.Total()), line.c_str(), board.c_str());
         return false;
     }
+    owedjointstats::Bump(owedjointstats::g_fired);
     return LineJointPrepayCore(state, jb, s_trace);
 }
 
@@ -101259,6 +101297,34 @@ static void PreferMillFetchHold(const GameState& state, std::vector<TurnSolver::
     }), plans.end());
 }
 
+// A PROVIDER'S PLAN-LIST RESTRICTION (DecisionProvider::PlanListFilterLive / PlanListAdmit; Maze's End P5: Heap
+// Gate's Treasure only where its mana would otherwise go unused, and under MTG_MAZE_HEAP_STRICT never a searched
+// branch). The contract (DecisionProvider.h) is EVERY plan enumeration, root and continuation, main 1 and main 2:
+// both EnumeratePlansWithLandUncached and EnumerateM2PlansBody call this. (F5, 2026-11-18: the main-2 host never
+// applied it, so a searched main 2 could still branch on -- and commit -- a Treasure plan.) It only removes plans
+// (possibly every one). Not live for any other deck (one virtual call).
+static void ApplyProviderPlanListFilter(const GameState& state, bool is_pre_combat,
+                                        std::vector<TurnSolver::Plan>& all, PbLazyLayout* pb_lazy)
+{
+    if (all.empty() || HumanPlayActive() || DecisionUnpruned()) { return; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (!prov.PlanListFilterLive(state)) { return; }
+    if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+    std::vector<DecisionProvider::PlanView> views;
+    views.reserve(all.size());
+    for (const TurnSolver::Plan& p : all) { views.push_back({ &p.actions, &p.land_to_play }); }
+    std::vector<char> admit(all.size(), 1);
+    prov.PlanListAdmit(state, views, admit);
+    // It MAY empty the list: an empty list is the ordinary "no castable play" result of every enumeration (the
+    // main-2 host's caller appends the do-nothing plan; main 1 offers none once the drop is spent). (F5: the old
+    // "never empties" keep was the second leak -- a list whose only plans held Heap Gate's Treasure was kept whole,
+    // so the strict rule's Treasure was still a searched branch against the caller's pass.)
+    std::size_t w = 0;
+    for (std::size_t i = 0; i < all.size(); ++i)
+    { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+    all.resize(w);
+}
+
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state, PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
@@ -101274,23 +101340,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans, /*idle_pass=*/false, pb_lazy);   // during-cast axes only inside a derivation
     AppendSoulbondDeclineVariants(state, plans, pb_lazy);
     AppendMiraclePlanVariants(state, plans, pb_lazy);
-    {   // MTG_HEAP_LEAK_TRACE (diagnostic only, Maze's End F5): does the main-2 host offer a Heap Gate Treasure plan?
-        static const bool s_hl = EnvOn("MTG_HEAP_LEAK_TRACE");
-        if (s_hl && !HumanPlayActive() && ResolveProvider(state).PlanListFilterLive(state))
-        {
-            if (pb_lazy != nullptr) { PbLazyMaterialize(plans, *pb_lazy); }
-            int with_t = 0;
-            for (const TurnSolver::Plan& p : plans)
-            {
-                for (const Action& a : p.actions)
-                { if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure)
-                  { ++with_t; break; } }
-            }
-            static std::atomic<int> s_n{0};
-            if (with_t > 0 && s_n.fetch_add(1) < 40)
-            { std::fprintf(stderr, "[heap-leak-m2] t%d plans=%zu with_t=%d\n", state.turn_number, plans.size(), with_t); }
-        }
-    }
+    ApplyProviderPlanListFilter(state, /*is_pre_combat=*/false, plans, pb_lazy);
     return plans;
 }
 
@@ -101909,34 +101959,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         all.resize(w);
     }
-    // A PROVIDER'S PLAN-LIST RESTRICTION (DecisionProvider::PlanListFilterLive / PlanListAdmit; Maze's End P5: Heap
-    // Gate's Treasure only where its mana would otherwise go unused). Every enumeration, root and continuation; it
-    // only removes plans, and never all of them. Not live for any other deck (one virtual call).
-    if (!all.empty() && !HumanPlayActive() && !DecisionUnpruned() && sac_prov.PlanListFilterLive(state))
-    {
-        if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
-        std::vector<DecisionProvider::PlanView> views;
-        views.reserve(all.size());
-        for (const TurnSolver::Plan& p : all) { views.push_back({ &p.actions, &p.land_to_play }); }
-        std::vector<char> admit(all.size(), 1);
-        sac_prov.PlanListAdmit(state, views, admit);
-        std::size_t n_admit = 0;
-        for (char a : admit) { n_admit += a ? 1 : 0; }
-        {   // MTG_HEAP_LEAK_TRACE (diagnostic only, Maze's End F5): the "never empties" keep
-            static const bool s_hl = EnvOn("MTG_HEAP_LEAK_TRACE");
-            static std::atomic<int> s_n{0};
-            if (s_hl && n_admit == 0 && s_n.fetch_add(1) < 40)
-            { std::fprintf(stderr, "[heap-leak-m1keep] t%d pre=%d plans=%zu (every plan holds the Treasure)\n",
-                           state.turn_number, is_pre_combat ? 1 : 0, all.size()); }
-        }
-        if (n_admit > 0 && n_admit < all.size())
-        {
-            std::size_t w = 0;
-            for (std::size_t i = 0; i < all.size(); ++i)
-            { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
-            all.resize(w);
-        }
-    }
+    // A PROVIDER'S PLAN-LIST RESTRICTION (DecisionProvider::PlanListFilterLive / PlanListAdmit): see
+    // ApplyProviderPlanListFilter. The main-2 host (EnumerateM2PlansBody) applies the same helper.
+    ApplyProviderPlanListFilter(state, is_pre_combat, all, pb_lazy);
     // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
     // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
     // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)
@@ -113380,6 +113405,9 @@ int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turn
     if (chosen != -2) { state.scripted_upkeep_horn = static_cast<std::int16_t>(chosen); }
     return chosen;
 }
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateM2HostPlansForTest(const GameState& state)
+{ return EnumerateM2PlansBody(state, nullptr); }
+
 bool TurnSolver::HoldPassAppendedForTest(const GameState& state, const std::vector<Plan>& plans)
 {
     return FaceUpHoldPassMissing(state, plans);

@@ -3024,6 +3024,9 @@ public:
     // to `plans` (the face-up flip hold, or the Stuffy Doll self-ping hold) -- the enumeration itself never
     // offers an empty main-1 plan once the land drop is spent.
     static bool HoldPassAppendedForTest(const GameState& state, const std::vector<Plan>& plans);
+    // The main-2 HOST's plan list inside search (EnumerateM2PlansBody, unmemoized) -- Maze's End F5 pins that it
+    // applies the provider's plan-list restriction like every other enumeration.
+    static std::vector<Plan> EnumerateM2HostPlansForTest(const GameState& state);
     // ...and the NEXT upkeep's legend-rule keep (Boars LK3): an upkeep legend rule whose copies differ that the
     // committed line left unpinned is searched at the end of the real turn; the winner goes to bits 2-3 of
     // state.scripted_legend_keep (-2 = nothing to decide).

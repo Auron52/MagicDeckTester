@@ -424,3 +424,64 @@ TEST_CASE("Maze's End P5 (USER): the three readings of \"lacking extra land drop
     Put(x, "Exploration", 69);
     { const Arm a(heurarm::MAZE_TALON_EFFECTIVE, 1); CHECK_FALSE(has_talon(x)); }
 }
+
+TEST_CASE("Maze's End F5: the strict Treasure rule reaches every enumeration (Heap Gate from hand; the main-2 host)")
+{
+    // d5 s171015 gi14 T3 committed [Guild Summit, Heap Gate(act)] with Heap Gate PLAYED FROM HAND: the filter's
+    // liveness read only the battlefield, so a land-drop Heap Gate's Treasure plan stayed on the menu. And the
+    // main-2 host (EnumerateM2PlansBody) never applied the provider's plan-list restriction at all.
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    auto with_t = [](const std::vector<TurnSolver::Plan>& plans)
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure)
+                { ++n; break; }
+            }
+        }
+        return n;
+    };
+    // Main 1: Heap Gate in hand, the drop open, another untapped Gate and a Forest to pay {1} + the Gate tap.
+    GameState m1 = Base(prov);
+    m1.turn_number = 3;
+    Put(m1, "Simic Guildgate", 11);
+    Put(m1, "Forest", 12);
+    m1.players[0].hand.push_back(C("Heap Gate", 10));
+    m1.players[0].library.push_back(C("Forest", 40));
+    m1.players[0].library.push_back(C("Forest", 41));
+    {
+        const Arm off(heurarm::MAZE_HEAP_STRICT, 0);   // the P5 rule: nothing else to spend on -> offered
+        CHECK(prov.PlanListFilterLive(m1));
+        CHECK(with_t(TurnSolver::EnumerateMainPlans(m1, true)) > 0);
+    }
+    {
+        const Arm on(heurarm::MAZE_HEAP_STRICT, 1);
+        CHECK(prov.PlanListFilterLive(m1));
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(m1, true);
+        CHECK_FALSE(plans.empty());
+        CHECK(with_t(plans) == 0);
+    }
+    // Main 2 (the search's main-2 host): Heap Gate untapped on the battlefield with the same spare sources.
+    GameState m2 = Base(prov);
+    m2.phase = Phase::PostCombatMain;
+    Put(m2, "Heap Gate", 10);
+    Put(m2, "Simic Guildgate", 11);
+    Put(m2, "Forest", 12);
+    m2.players[0].lands_played_this_turn = 1;
+    m2.players[0].library.push_back(C("Forest", 40));
+    {
+        const Arm off(heurarm::MAZE_HEAP_STRICT, 0);
+        CHECK(with_t(TurnSolver::EnumerateM2HostPlansForTest(m2)) > 0);
+    }
+    {
+        const Arm on(heurarm::MAZE_HEAP_STRICT, 1);
+        // The host's only plans held the Treasure: the list EMPTIES (the caller appends the do-nothing plan). The
+        // old "never empties" keep returned it whole -- the Treasure was still a branch against the pass.
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateM2HostPlansForTest(m2);
+        CHECK(with_t(plans) == 0);
+    }
+}
