@@ -65,7 +65,23 @@ shape also pulls Ponder ahead of pass/cycle lines, which the USER's rule never a
 **A/B 2 IN FLIGHT 23:15 UTC** (`build/scratch/claude_ponderfirst_ab2/`, pid file, DONE, `compare.py`; base reused
 from A/B 1 plus a 500-game `ctl` byte-identity control): the DEMOTE shape, new lever `MTG_CYCLONE_PONDER_FIRST_DEMOTE`
 (uncommitted): a plan casting a put-back cantrip and no Ponder goes BEHIND every other plan on the early turns. Arms
-pf1d / pf12d / pf12hd. Built (commit ca2ae14a6): CycloneProvider::
+pf1d / pf12d / pf12hd. **DONE 23:41 UTC:** ctl 500/500 byte-identical; pf1d net -2 (147/145, digest-only 983,
+units +0.25%); pf12d +5 (233/238, units +3.3%); pf12hd +8 (234/242, +3.2%). Lever commit b3eda2bac.
+**IN FLIGHT 23:45 UTC: held-out confirm of pf1d**, `build/scratch/claude_ponderfirst_ab3/` (games 575000-579999,
+base + pf1d, pid/DONE/compare.py). Then: if still net <= 0, d8 b0 on the slower games (time ONE first; Cyclone d8 b0
+cost unknown). **Held-out DONE 23:56:** pf1d 149/135, net -14 (combined 10,000: 296/280, net -16).
+**d8 b0 of all 280 slower games** (`build/scratch/claude_ponderfirst_ab3/d8/`, pooled, pid/DONE): 00:34 UTC 279/279
+recovered; the last (gi 570487, b5 a6) still running (>0.5 h; gi 575776 took 35 min). If it recovers: ADOPT pf1d
+(T1 + DEMOTE default ON; USER: "whichever gets the best results"), accept Cyclone GT, then re-measure
+UNSEEN_KEEP_SCARCE on Cyclone over pf1d (USER: turn it on "if and when the issue is resolved").
+Waiter bajxv5qy0 (PID-keyed) prints the recovery count when the d8 batch ends. UNCOMMITTED, UNBUILT: a unit test
+appended to `test/unit/test_cyclone_cast_order.cpp` ("Cyclone Ponder first early: the front and demote shapes"); build
++ run it with the adoption. Adoption = `EnvOn("MTG_CYCLONE_PONDER_FIRST_T1", true)` and `..._DEMOTE", true)` in
+DecisionProviders.cpp (update the comments), update HeuristicArm.h's "Default OFF" text, units, smoke accept of the
+Cyclone rows, push in the window (>= 01:04 UTC; unpushed: 0e5d8f97c, ca2ae14a6, b3eda2bac + the handoff commits).
+Other open USER policy questions surfaced 11-17 23:0x: Vampires s30230089 (pain now for an unnamed later cast; agent
+leans no) and Dragonstorm banked-land spend (Bazaar counters when a named line is short a colour; agent leans yes,
+narrowly). Built (commit ca2ae14a6): CycloneProvider::
 PlanMoveOrderFront, levers MTG_CYCLONE_PONDER_FIRST_T1 / _T2 (heurarm slots); fronts a plan casting Ponder and NO
 put-back cantrip, so a both-cast plan is untouched. CAUTION: the default search is CLAIRVOYANT (knows library order; `cyclone-discard-buckets.md` lists
 T1 Brainstorm-vs-Ponder as a known (b) clairvoyance divergence, d5 34), so a pure ORDER may not move a fully searched
