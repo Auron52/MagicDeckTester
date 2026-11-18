@@ -15828,6 +15828,93 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
     return DMG;  // fallback for other spell types
 }
 
+// ---- CAST VARIANTS SCORED BY THE STATE THEY PRODUCE (tie-scoring, 2026-11-18) ----------------------------------
+// Several cast variants of one card copied the card's EvalCard value, so the greedy walk (Solve: the d0 runner and
+// the playout beyond the horizon) and the plan value sort scored DIFFERENT outcomes as exact ties, and the winner
+// was whichever subset the tie-break preferred. While the tie-break aliased past 32 candidates that was effectively
+// random; once Maze's End P1b made it canonical the d0 games moved (Extra Turns d0 33 better / 0 worse, Jumbo 5 /
+// 15, Melira 2 / 4), and every move traced to one of three such ties. USER 2026-11-18: "Those sound reasonable to
+// fix. For Reveillark evoking can be worse or better depending on the context." These are evaluations, not picks:
+// every variant is still emitted and searched; only the score the greedy points (and the ordering) read changes.
+//
+// A cast that buys nothing scores kNoGainCastEval: STRICTLY below the pass (Plan::value -1, "nothing castable"),
+// the Fury pitch-evoke precedent -- at -1 it ties the pass, and FSLineTail / FSLineWin keep the FIRST of equal
+// plans after MoveOrderPlans' stable value sort, so the no-op sorted ahead and won every no-gain tie.
+constexpr int kNoGainCastEval = -2;
+
+// TEMPORARY A/B gate (delete with the A/B): MTG_TIE_SCORING_OLD=1 restores the copied evals for all three.
+static bool TieScoringOld()
+{
+    static const bool v = EnvOn("MTG_TIE_SCORING_OLD");   // DEFAULT OFF; =1 = the pre-fix evals
+    return v;
+}
+
+// TOOTH AND NAIL (one variant per mode x library picks x hand puts). A card searched into the hand is the spell's
+// own unit `u` (EvalCard of Tooth and Nail -- the DrawSpell convention, one card to hand = 1 DMG); a creature put
+// onto the battlefield is a free cast, priced like one (EvalCard of the creature), floored at `u` because a
+// deployed creature is never worth less than the card in hand the tutor mode earns (a non-hasty creature late in
+// the horizon prices at 0, which would tie the empty put again). An entwined find that is then put is both. A
+// variant that moves no card at all ("up to two" chooses none) is a card and seven mana for nothing.
+static int ToothAndNailVariantEval(const CardDefinition& def, const GameState& state,
+                                   const std::vector<std::string>& library_picks,
+                                   const std::vector<std::string>& hand_puts)
+{
+    if (library_picks.empty() && hand_puts.empty()) { return kNoGainCastEval; }
+    const int u = EvalCard(def, state);
+    int v = u * static_cast<int>(library_picks.size());
+    for (const std::string& nm : hand_puts)
+    {
+        const CardDefinition* pd = CardDatabase::Instance().Lookup(nm);
+        v += std::max(u, pd != nullptr ? EvalCard(*pd, state) : 0);
+    }
+    return v;
+}
+
+// FINALE OF DEVASTATION ("N" = search the library and find nothing, "Z" = search only an empty graveyard,
+// "L0:<name>" / "G0:<name>" / "G1:<name>" = put that creature onto the battlefield). The find keeps the spell's
+// value; a whiff below X = 10 does nothing at all. At X >= 10 "creatures you control get +X/+X and gain haste"
+// resolves with or without a find, so the whiff there is still the spell (its value is unchanged).
+static int FinaleVariantEval(const CardDefinition& def, const GameState& state, int x, const std::string& pin)
+{
+    const bool whiff = pin.empty() || pin[0] == 'N' || pin[0] == 'Z';
+    if (whiff && x < 10) { return kNoGainCastEval; }
+    return EvalCard(def, state, x);
+}
+
+// REVEILLARK'S EVOKE (sacrificed as it enters, so its leave trigger -- "return up to two target creature
+// cards with power 2 or less from your graveyard to the battlefield" -- happens NOW). The hard cast keeps the body
+// (EvalCard of Reveillark); the evoke keeps no body and returns what the trigger would return on this graveyard:
+// the provider's resolution ranking (ReviveCandidates, the same list PerformReturnFromGraveyardToBattlefield
+// consumes), one copy per listed name, up to the trigger's count, each priced as the creature entering (EvalCard).
+// It also pays more mana ({5}{W} against {4}{W}): one point per extra mana, below any DMG unit, so it decides only
+// an otherwise exact tie. Neither mode is preferred as such: which scores higher depends on the graveyard and on
+// how many attacks are left (USER: "evoking can be worse or better depending on the context").
+static int LtbEvokeEval(const CardDefinition& def, const GameState& state)
+{
+    const int me = state.active_player_index;
+    const Player& ap = state.players[me];
+    const int max_returns = def.params.ltb_return_creatures;
+    const int max_power   = def.params.ltb_return_max_power;
+    int v = 0, done = 0;
+    for (const std::string& nm : ResolveProvider(state).ReviveCandidates(state, me, max_power, max_returns))
+    {
+        if (done >= max_returns) { break; }
+        for (const Card& gc : ap.graveyard)
+        {
+            if (gc.m_name.str() != nm) { continue; }
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+            const Card& card = gd ? gd->card : gc;
+            if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { break; }
+            if (gd != nullptr) { v += EvalCard(*gd, state); }
+            ++done;
+            break;
+        }
+    }
+    if (def.params.evoke_cost.has_value())
+    { v -= std::max(0, def.params.evoke_cost->ManaValue() - def.card.m_mana_cost.ManaValue()); }
+    return v;
+}
+
 // True if the active player controls no opponent creature to exile (used by the Swords gate).
 static bool HasOpponentCreature(const GameState& state, int active)
 {
@@ -41072,7 +41159,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.cost = cost;
                         a.chosen_x = x;
                         a.tutor_target = pin;
-                        a.eval = EvalCard(def, state, x);
+                        a.eval = TieScoringOld() ? EvalCard(def, state, x) : FinaleVariantEval(def, state, x, pin);
                         a.is_noncreature = true;
                         a.card_mv = def.card.m_mana_cost.ManaValue();
                         actions.push_back(std::move(a));
@@ -42557,7 +42644,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_name      = ap.hand[i].m_name;
                 a.hand_index     = i;
                 a.cost           = *def.params.evoke_cost;
-                a.eval           = EvalCard(def, state);
+                a.eval           = TieScoringOld() ? EvalCard(def, state) : LtbEvokeEval(def, state);   // the returns, not the body
                 a.is_noncreature = false;
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.evoke          = true;
@@ -43471,7 +43558,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.cost = cost;
                         a.chosen_x = mode;
                         a.tutor_target = EncodeToothChoices(lib, put);
-                        a.eval = EvalCard(def, state);
+                        a.eval = TieScoringOld() ? EvalCard(def, state) : ToothAndNailVariantEval(def, state, lib, put);
                         a.is_noncreature = true;
                         a.card_mv = def.card.m_mana_cost.ManaValue();
                         actions.push_back(std::move(a));
@@ -52760,6 +52847,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // Target-player extra turns: both legal recipients are searched. In particular, giving the
     // passive opponent a turn can deck them before ours, so self-target is not a sound prune.
     // Human play chooses the target at cast time through the ordinary board-click target picker.
+    // The opponent's copy is SCORED as what it is for us: nothing. It used to inherit the self cast's eval (the
+    // extra turn is OUR turn there), so the greedy walk read "give the opponent a turn" as an extra turn for us and
+    // tied it with Temporal Manipulation (tie-scoring, 2026-11-18). A decking line is the search's to find: the
+    // rollout plays the opponent's turn out; no static score of ours can see it.
     {
         const std::size_t pt_n = actions.size();
         for (std::size_t i = 0; i < pt_n && !HumanPlayActive(); ++i)
@@ -52770,6 +52861,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].player_target != 0) { continue; }
             Action v = actions[i];
             v.player_target = 1;
+            if (!TieScoringOld()) { v.eval = kNoGainCastEval; }
             actions.push_back(std::move(v));
         }
     }

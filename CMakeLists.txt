@@ -594,6 +594,7 @@ add_executable(mtg-test
     test/unit/test_mazes_end_i3.cpp
     test/unit/test_mazes_end_i4.cpp
     test/unit/test_mazes_end_p1d.cpp
+    test/unit/test_greedy_tie_scoring.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Precompiled header for the unit tests ONLY (the engine binaries are untouched, so codegen and determinism
