@@ -118,3 +118,12 @@ Sent to P5-2:
 10. "But we generally just pass on the treasure unless the mana is going to be wasted, so that is the way to look at this problem. We would much rather advance the win condition in any other way we can if that is available to us." -> sent to P5-2: the Treasure is the LAST RESORT, offered only when no other affordable use of the mana is available (Maze's End activation, Talon put, a castable spell, any other win-advancing activation); this replaces the Maze's-End-only framing of item 9.
 11. "Well, to be fair, there are cases where the search doesn't use the mana fully even if the option is available. In those cases it should still activate, since there is no drawback to doing so." -> FINAL Treasure rule sent to P5-2 (replaces 9 and 10). Per plan: the Treasure is never a competing branch. When the chosen plan ends our turn with untapped mana that pays it, the Treasure is ALWAYS made (no-drawback dominance), except for sources needed for an affordable off-main Maze's End activation.
 12. "We can actually create the treasure at the very end of processing even after Maze's End if that would help." -> sent to P5-2: one hook at the last opportunity before our untap (end of the opponent's turn, after Burgeoning / off-main Maze's End), both worlds. The Treasure is made if the untapped sources pay it, and the Maze's End reservation logic is removed.
+
+## USER on the owed decisions (2026-11-18 ~22:15 UTC, VERBATIM)
+"I suppose P7's prune premise is fine. "Your Exploration land-order merge" I'm not sure what this refers to exactly. For Guild Summit I would prioritize the cards over the treasure here. Unpayable plans I think we could try. I assume all of the plans die at some point anyway, so the only question is whether we can stop them early when they are causing issues. For simple decks with no rituals or equivalent  (cards that add more mana then they cost) like this one it makes sense to drop plans that cannot pay a subset. Let's rescreen the budget-0 situation once all other items finished."
+
+- P7 dominance-fold premise: SIGNED OFF.
+- P5b land-order fold (`MTG_FOLD_LAND_ORDER`): explained to the USER; decision still open (default OFF stands).
+- Guild Summit B1: no Heap Gate Treasure reservation; Summit's cards come first. Sent to F5-3.
+- Unpayable-plan prune: build it for decks with no net-mana-positive cards (drop a plan once a subset of it is unpayable); own A/B + d8 b0 recovery. Sent to F5-3, after the leak fix and joint-pay landing.
+- b0 backstop re-screen: after every other item finishes.
