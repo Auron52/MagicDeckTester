@@ -102,6 +102,9 @@ TEST_CASE("Maze's End P1d (USER B1): Guild Summit's count menu is {rest-of-line,
         CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 1, 2, 3, 4 });
         CHECK(prov.EtbTapSubtypeDrawDefault(s, 0, summit, 3) == 3);   // the old unpinned default: all
     }
+    // A plan-free context: an empty line hold that carries no activations (another test may leave the thread's
+    // g_line_hold_has_acts set; every real apply binds its own scope).
+    const LineUnpaidCostScope clean(ManaCost{});
     // The rest-of-line count. Nothing owed, no Maze's End: all three.
     CHECK(prov.EtbTapSubtypeDrawDefault(s, 0, summit, 3) == 3);
     // The line still owes {1}{G} (two mana) and nothing else pays it: tap one, keep two.
