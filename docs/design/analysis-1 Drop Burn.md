@@ -371,3 +371,43 @@ Resolved / non-play findings:
 - ~13:10 UTC: attribution PROVEN -- the 7 keys replayed on build/PGO/mtg (pre-b93 src) give the identical got digests
   (logs/1dropburn/perf/attr7_pre.out), so b93e3e803 is byte-identical with the order OFF on the whole suite.
   Activation rules + Midrange Fireblast lever built; unit suite 3399/3399 PASS (logs/1dropburn/unit_all2.log); committed.
+- ~14:50 UTC MULLGEN PROBES (no artifact written; scratch deck copy build/scratch/1db/deck/):
+  * settings screen (mullgen_finalize.py, dry): PICK d2 b3 (fidelity 0.9921 >= 0.99, 2402 units/roll = 0.26x of
+    play d5 b20 9258); d1 b1 1747 units at 0.9883 (just under the floor). K = 11 (buckets: Boltwave+Chain+Lava
+    Spike+Bolt merged x16, rest singletons). logs/1dropburn/perf/mullgen_screen.log
+  * recommend scout at d2 b3 (Release, MTG_PGO=0): 55,982 cells (size7 16,559 x pd + subs), floor 2435 s @ 22
+    rollouts/s on 12 threads. PROJECTION fast ~13.5 h (PGO ~10.4 h), complete ~27.1 h -- both over the 8 h window.
+    No generation rollout over 30 s. logs/1dropburn/perf/mullgen_recommend.log
+  * discovery (d5 b20, 5,600 rollouts, ~11 min) has ONE degenerate probe: #163, every candidate 72-128 s
+    contended (25 s solo, MTG_EQUIV_ONLY="163:Goblin Guide"): an unwinnable hand (win turn 9 = none) playing to
+    the horizon at d5 b20; 606k EnumeratePlans calls, Rift Bolt / Lavamancer groups dominate. Its post-combat
+    mains re-solve on a fresh fallback budget because main 1 found no verified win (`dprog` units=0 there is an
+    accounting artefact of the separate fallback budget, not an unbudgeted search). ~23 core-min of ~70 total.
+  * gen-like d2 b3 real play: ~436 units/decision, main 2 free (committed line) -- nothing anomalous.
+- ~15:05 UTC VALUE-LEAF PHASE A PROBE (36 games seed 900000+, MTG_EVAL_ROWS_K=3, play settings, no keep table):
+  17.7 core-s/game, 249k units/game; LABEL 90% / bottoming 8% / real play 1.5% of work; 3.8 rows/game -> 2,500
+  games ~12 core-h (~1-2 h on 12 threads), ~9.6k rows (under the ~11k knee: short games). Not a bottleneck.
+  logs/1dropburn/perf/rows36.{out,err}
+- NEXT: scoped smoke+regression (4 burn decks, both levers OFF) on bb820b141, then ARMSET=burnorders A/B.
+- ~14:50 UTC: scoped smoke+regression on bb820b141 (4 burn decks, levers OFF) PASS except the known upstream
+  midrangeburn2hg drift (logs/1dropburn/scoped_bb82.log). LAUNCHED `ARMSET=burnorders CASES=overnight
+  DECKS=onedropburn,midrangeburn bash test/mana_tap_order_ab.sh` -> logs/1dropburn/burnorders_ab.log (68 jobs,
+  51,392 games, Release; DONE marker at the end). Then: root-cause slower games, flip both defaults ON, accept
+  smoke+regression for the 4 decks.
+- ~16:10 UTC burnorders A/B DONE (logs/1dropburn/burnorders_ab.log; 25,696 pairs, ON vs OFF): ALL -0.0514 t at
+  0.83x units; per deck 1DB -0.0754 (883 better / 191 worse), 1DB 2HG -0.040, Midrange -0.0349, Midrange 2HG
+  -0.013; no row worse. 23 searched games slower (logs/1dropburn/burnorders_slower.txt). ROOT CAUSE (temporary
+  diagnostic MTG_1DB_DIAG_OFF sub-rule mask, uncommitted; slow games seed 4004 gi 259 / 6006 gi 149 both revert
+  to T3 with ONLY the main-2 rule off):
+  * gi 149 = ENGINE MODELLING GAP: the spectacle plan credit (BuildSpectacleCreditCtx) counted only direct_damage
+    casts, so Vexing Devil never turned spectacle on for a same-plan Skewer -- {Devil, Skewer, Fireblast} in
+    main 1 was priced at Skewer's {3}{R} and cut ("PROVEN NO-WIN", the engine then did NOTHING in main 1). OFF
+    reached the kill only via main-2 Skewer, which the USER's rule bars after noncombat damage. Holds at d8 b0.
+    FIX: MTG_SPECTACLE_CREDIT_ETB_OPP (default ON, heurarm slot) counts a Devil cast when
+    VexingDevilOpponentTakesDamage takes the damage. Scenario test/scenarios/onedropburn_devil_enables_skewer_main1.json.
+  * gi 259 = the USER's "only the card drawn by Needle Drop" clause: T2 OFF line Needle Drop (main 2, combat-only
+    damage) draws a Mountain, plays it, casts the HELD Vexing Devil off it; the rule bars the held Devil (it
+    "could" have been cast in main 1, but only instead of Needle Drop). The bottoming playouts then keep a
+    different 6 and the game is T4. SURFACE TO USER (candidate amendment: also admit a held card that only the
+    Needle-drawn land makes payable).
+  NEXT: build -> scenario + unit -> `ARMSET=burnorders2` A/B (base / fix / on) -> flip.

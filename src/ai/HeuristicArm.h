@@ -1023,6 +1023,9 @@ enum Slot : int
     STUFFY_ESCAPE_SCRY_LAST,  // MTG_STUFFY_ESCAPE_SCRY_LAST  Stuffy Doll arm W (2026-11-19): the same scry-only Loran's Escape plans stay on the menu but are MOVE-ORDERED LAST among their wins tier (StuffyDollProvider::PlanMoveOrderBack, MoveOrderLess's provider tier = -1). ORDER only: nothing refused at any budget; a budget reaches real lines first; a scry line wins only when strictly better. Inert at d0 (the runner never move-orders). DEFAULT OFF, A/B arm
     ONEDROPBURN_ORDER,        // MTG_ONEDROPBURN_ORDER  1 Drop Burn: the DRAFT cast order for USER review (2026-11-17; OneDropBurnProvider::CastOrderRank -- haste 10, Vexing Devil 12, Lavamancer 13, Needle Drop-after-damage 19, burn 22, Rift Bolt 26, Skewer 30, Needle Drop 35, Fireblast 40, plus name tie-break and opaque-set ranking). Default OFF until the USER approves; =1 -> the draft order
     MIDRANGE_FIREBLAST_ORDER, // MTG_MIDRANGE_FIREBLAST_ORDER  Midrange Burn (USER 2026-11-18, "Let's addres this when we can"): Fireblast ranks 25 -- after the other burn (20), before the spectacle spells (30) and Chandra's Incinerator (1000) -- so its alternative cost sacrifices Mountains that have already tapped (MidrangeBurnProvider::CastOrderRank). Was 20 with the burn, where plan order could cast it first and strand the rest. Default OFF until the A/B; =1 -> rank 25
+    ONEDROPBURN_ORDER,        // MTG_ONEDROPBURN_ORDER  1 Drop Burn: the USER's cast order (approved 2026-11-18; one card per rank, OneDropBurnProvider::CastOrderRank) + the USER's main-2 rule (Needle Drop / Skewer after combat-only damage, then only the card Needle Drop drew) + Lavamancer / Canyon main-1 rules. The default lives at the reader (OneDropBurnOrderEnabled, DecisionProviders.cpp); =0 / =1 force it
+    MIDRANGE_FIREBLAST_ORDER, // MTG_MIDRANGE_FIREBLAST_ORDER  Midrange Burn (USER 2026-11-18, "Let's addres this when we can"): Fireblast ranks 25 -- after the other burn (20), before the spectacle spells (30) and Chandra's Incinerator (1000) -- so its alternative cost sacrifices Mountains that have already tapped (MidrangeBurnProvider::CastOrderRank). Was 20 with the burn, where plan order could cast it first and strand the rest. The default lives at the reader; =0 / =1 force it
+    SPECTACLE_CREDIT_ETB_OPP, // MTG_SPECTACLE_CREDIT_ETB_OPP  the spectacle plan credit counts a Vexing Devil cast (ETB damage the opponent chooses) as turning spectacle on when the one opponent policy (VexingDevilOpponentTakesDamage) takes it; before, {Devil, Skewer, Fireblast} in one main priced Skewer at {3}{R} and was cut (1 Drop Burn A/B 2026-11-18, seed 6006 gi 149). Default ON (modelling fix); =0 -> old credit
     COUNT
 };
 
@@ -1990,6 +1993,7 @@ inline const char* Name(int slot)
         "MTG_STUFFY_ESCAPE_SCRY_LAST",
         "MTG_ONEDROPBURN_ORDER",
         "MTG_MIDRANGE_FIREBLAST_ORDER",
+        "MTG_SPECTACLE_CREDIT_ETB_OPP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
