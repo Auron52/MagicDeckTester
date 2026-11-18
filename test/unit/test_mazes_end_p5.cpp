@@ -225,6 +225,7 @@ TEST_CASE("Maze's End P5 (USER): Heap Gate's Treasure plan only where its mana h
 {
     LoadP5Cards();
     const MazesEndProvider prov;
+    const Arm strict_off(heurarm::MAZE_HEAP_STRICT, 0);   // P5's leftover-or-binds rule (the strict rule ships ON)
     GameState s = Base(prov);
     Put(s, "Heap Gate", 10);
     Put(s, "Simic Guildgate", 11);
@@ -325,6 +326,7 @@ TEST_CASE("Maze's End P5 (USER): the strict Treasure rule -- never a branch, mad
     Put(s, "Forest", 12);
     // Lever off: nothing happens (byte-identical).
     {
+        const Arm off(heurarm::MAZE_HEAP_STRICT, 0);
         GameState g = s;
         CHECK(PerformLastChanceTreasure(g) == 0);
         CHECK(treasures(g) == 0);
