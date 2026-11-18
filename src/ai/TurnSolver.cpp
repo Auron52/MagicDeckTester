@@ -71530,49 +71530,93 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     jb.act_hold = owed;
     jb.tap_src  = owed_taps;
     const int ctl = state.active_player_index;
+    auto is_owed_tap = [&owed_taps](int id) { return std::find(owed_taps.begin(), owed_taps.end(), id) != owed_taps.end(); };
+    // THE TWO GATES (no copy, no solve). The probe below costs a board copy and up to three payment solves, and
+    // it runs on every plan apply that owes an activation mana -- most Maze's End turns. Each gate is a NECESSARY
+    // condition for the probe to find a strand the joint solve can rescue, so a declined call is exactly the
+    // call the probe would have declined (MTG_OWED_ACTS_JOINT_GATE_VERIFY=1 runs the probe anyway and reports a
+    // miss; diagnostic only).
+    //  0a. BOUND: the joint solve pays the whole bill from the float plus the board minus the owed {T} sources.
+    //      UntappedManaUpperBound is the payer's own over-count (PaymentManaCovers reads a short bound as a proof
+    //      of unpayability), so float + bound < bill proves the joint solve fails: there is nothing to rescue.
+    //  0b. COUNT: when the owed bill is generic and every untapped mana source (lands and non-creature rocks, the
+    //      owed {T} sources excluded) yields at least one mana, the usual payment can leave an owed activation
+    //      short only by WASTING a source: an any-colour filter (Heap Gate, Capital City: two sources for one
+    //      mana) paying a cast's coloured pip, at most one per pip and per filter, or a scaled land fed for fewer
+    //      than the three sources it takes. When the sources cover the casts' mana value plus that worst-case
+    //      waste plus the owed mana plus one Gate per other-tap cost, every order the payer can take leaves the
+    //      owed bill paid: nothing strands. With an other-tap cost, every counted source must be a Gate the cost
+    //      could tap (else the casts could take the Gates and strand it).
+    static const bool s_gate_verify = EnvOn("MTG_OWED_ACTS_JOINT_GATE_VERIFY");   // diagnostic only
+    const char* gated = nullptr;
+    {
+        std::uint64_t mask = 0;   // an index >= 64 stays in the bound: a looser over-count, still a bound
+        for (std::size_t i = 0; i < state.battlefield.size() && i < 64; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index == ctl && is_owed_tap(p.card.m_number)) { mask |= 1ull << i; }
+        }
+        const int fl   = static_cast<int>(state.floating_mana.Total());
+        const int bill = jb.bill.ManaValue();
+        if (fl + UntappedManaUpperBound(state, /*for_creature=*/false, mask, bill - fl) < bill)
+        { gated = "bound: the board cannot pay the line jointly"; }
+    }
+    if (gated == nullptr
+        && owed.white + owed.blue + owed.black + owed.red + owed.green + owed.hybrid_count + owed.colorless == 0)
+    {
+        int other_taps = 0;
+        bool gates_ok = true;
+        std::vector<int> elig;   // battlefield indices an other-tap cost may tap (one subtype in practice)
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::ActivatePermAbility || a.def == nullptr || !is_owed_tap(a.sac_source_id))
+            { continue; }
+            const std::string& sub = ActivationOtherTapSubtype(*a.def, a.ability_mode);
+            if (sub.empty()) { continue; }
+            if (other_taps++ == 0) { elig = ActivationOtherTapEligible(state, ctl, sub, a.sac_source_id); }
+            else { gates_ok = false; }   // two other-tap costs: not modelled here, take the probe
+        }
+        const int pips = casts_bill.white + casts_bill.blue + casts_bill.black + casts_bill.red + casts_bill.green
+                       + casts_bill.hybrid_count + casts_bill.colorless;
+        int have = 0, n_acf = 0, waste_scaled = 0;
+        for (std::size_t i = 0; i < state.battlefield.size() && gates_ok; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != ctl || p.tapped || p.def_absent || is_owed_tap(p.card.m_number)) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->params.produces.empty()) { continue; }
+            if (!p.card.IsLand() && !(d->params.mana_rock && !p.card.IsCreature())) { continue; }
+            if (d->params.ramp_filter || d->params.filter_no_free_colorless) { continue; }   // no mana unfed
+            if (other_taps > 0 && std::find(elig.begin(), elig.end(), static_cast<int>(i)) == elig.end())
+            { gates_ok = false; break; }
+            ++have;
+            if (d->params.any_color_filter) { ++n_acf; }
+            if (IsScaledManaLand(*d))
+            { waste_scaled += std::max(0, 3 - ScaledManaCreatureCount(state, &p)); }
+        }
+        const int need = casts_bill.ManaValue() + std::min(pips, n_acf) + waste_scaled + owed.ManaValue() + other_taps;
+        if (gates_ok && have >= need) { gated = "count: the sources cover every payment order"; }
+    }
+    if (gated != nullptr && !s_gate_verify) { return why(gated); }
     // The owed activations in the order the trailing pass pays them (OrderTrailingActivations, both worlds).
     std::vector<Action> owed_acts;
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::ActivatePermAbility) { continue; }
-        if (std::find(owed_taps.begin(), owed_taps.end(), a.sac_source_id) == owed_taps.end()
-            && OutletOwnCost(a).ManaValue() == 0) { continue; }
+        if (!is_owed_tap(a.sac_source_id) && OutletOwnCost(a).ManaValue() == 0) { continue; }
         if (!PermAbilitySourceLive(state, ctl, a.sac_source_id, a.ability_mode, &a.discard_name.str())) { continue; }
         owed_acts.push_back(a);
     }
     TurnSolver::OrderTrailingActivations(state, owed_acts);
-    // 0. FAST PATH (no copy, no solve): when the owed bill wants no coloured pip and the untapped mana sources --
-    //    lands and rocks, the owed {T} sources excluded -- outnumber what the casts can possibly take (two sources
-    //    per coloured pip: a filter's feed and tap; one per generic) plus one per owed mana plus one per other-tap
-    //    cost, every payment order leaves each owed activation a source per mana: nothing can strand.
-    {
-        const bool owed_coloured = owed.white + owed.blue + owed.black + owed.red + owed.green + owed.hybrid_count > 0;
-        if (!owed_coloured)
-        {
-            int other_taps = 0;
-            for (const Action& a : owed_acts)
-            { if (a.def != nullptr && !ActivationOtherTapSubtype(*a.def, a.ability_mode).empty()) { ++other_taps; } }
-            const int casts_col = casts_bill.white + casts_bill.blue + casts_bill.black + casts_bill.red
-                                + casts_bill.green + casts_bill.hybrid_count;
-            const int need = (casts_bill.ManaValue() - casts_col) + 2 * casts_col + owed.ManaValue() + other_taps;
-            int have = 0;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != ctl || p.tapped || p.def_absent) { continue; }
-                if (std::find(owed_taps.begin(), owed_taps.end(), p.card.m_number) != owed_taps.end()) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (d == nullptr || d->params.produces.empty()) { continue; }
-                if (!p.card.IsLand() && !(d->params.mana_rock && !p.card.IsCreature())) { continue; }
-                if (++have >= need) { return why("fast path: sources to spare"); }
-            }
-        }
-    }
     RevealLogPause quiet;            // scratch probes: no log line, no chooser, no play event
     // 1. Does the usual payment strand an owed activation? Pay the casts as the apply does (the whole-turn prepay,
     //    then each cast from what floats), then each owed activation in trailing order, one at a time -- its {T}
     //    and its other-tap first, then its own cost -- exactly as the trailing pass pays them.
     {
-        GameState c = state;
+        // A per-thread scratch board, ASSIGNED rather than constructed: the copy reuses its buffers.
+        static thread_local GameState t_probe;
+        GameState& c = t_probe;
+        c = state;
         TapSpeculationScope speculating;
         bool stranded = false;
         TurnSolver::BatchPrepayMainCasts(c, acts, /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true);
@@ -71605,6 +71649,11 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
         TapSpeculationScope speculating;
         if (!TapForCostDirect(j, jb.bill, /*for_creature=*/false)) { return why("no joint payment"); }
         for (const int id : other) { jb.tap_src.push_back(id); }   // the joint solve leaves them up too
+    }
+    if (gated != nullptr)   // MTG_OWED_ACTS_JOINT_GATE_VERIFY: a gate declined a rescuable strand -- a gate bug
+    {
+        std::fprintf(stderr, "[owed-joint] GATE-MISS (%s) t%d\n", gated, state.turn_number);
+        return false;
     }
     return LineJointPrepayCore(state, jb, s_trace);
 }
@@ -102563,6 +102612,23 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans, /*idle_pass=*/false, pb_lazy);   // during-cast axes only inside a derivation
     AppendSoulbondDeclineVariants(state, plans, pb_lazy);
     AppendMiraclePlanVariants(state, plans, pb_lazy);
+    {   // MTG_HEAP_LEAK_TRACE (diagnostic only, Maze's End F5): does the main-2 host offer a Heap Gate Treasure plan?
+        static const bool s_hl = EnvOn("MTG_HEAP_LEAK_TRACE");
+        if (s_hl && !HumanPlayActive() && ResolveProvider(state).PlanListFilterLive(state))
+        {
+            if (pb_lazy != nullptr) { PbLazyMaterialize(plans, *pb_lazy); }
+            int with_t = 0;
+            for (const TurnSolver::Plan& p : plans)
+            {
+                for (const Action& a : p.actions)
+                { if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure)
+                  { ++with_t; break; } }
+            }
+            static std::atomic<int> s_n{0};
+            if (with_t > 0 && s_n.fetch_add(1) < 40)
+            { std::fprintf(stderr, "[heap-leak-m2] t%d plans=%zu with_t=%d\n", state.turn_number, plans.size(), with_t); }
+        }
+    }
     return plans;
 }
 
@@ -103352,6 +103418,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         sac_prov.PlanListAdmit(state, views, admit);
         std::size_t n_admit = 0;
         for (char a : admit) { n_admit += a ? 1 : 0; }
+        {   // MTG_HEAP_LEAK_TRACE (diagnostic only, Maze's End F5): the "never empties" keep
+            static const bool s_hl = EnvOn("MTG_HEAP_LEAK_TRACE");
+            static std::atomic<int> s_n{0};
+            if (s_hl && n_admit == 0 && s_n.fetch_add(1) < 40)
+            { std::fprintf(stderr, "[heap-leak-m1keep] t%d pre=%d plans=%zu (every plan holds the Treasure)\n",
+                           state.turn_number, is_pre_combat ? 1 : 0, all.size()); }
+        }
         if (n_admit > 0 && n_admit < all.size())
         {
             std::size_t w = 0;
