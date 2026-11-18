@@ -243,6 +243,11 @@ deferrals provisional.
      FIX it as a bug.
   + "Yes, let's check that White Knights' result change." => investigate 451a4c571's WK digest move
      (logs/stuffy/gt-attribution.md: LookupCached side-effect hypothesis; caches must not change units).
+- USER (~08:50 11-18, verbatim, on the WK digest move traced to 451a4c571's DuplicateCastHasUpside sitting above the
+  d0 gate of OfferDuplicateLegendCast): "Yes, we should restore the gate most likely. It's too tricky to get depth-0 to
+  be smart about this for now." => OWED (queued after the E-fixes): move the DuplicateCastHasUpside check BELOW the
+  `!HumanPlayActive() && !g_searched_play` d0 gate (restores the 2026-08-29 ruling "turn it on all of the time, but
+  have d0 ignore that option"); expect WK d0 and likely Merfolk Turns d0 GT to move back -> accept with this provenance.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
