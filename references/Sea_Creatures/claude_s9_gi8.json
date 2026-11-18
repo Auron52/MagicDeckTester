@@ -1,0 +1,758 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 8, "won": true,
+  "mulligan": { "count": 3, "bottom": [45, 35, 58] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 15, "name": "Hullbreaker Horror" }, { "num": 37, "name": "Spawning Kraken" }, { "num": 28, "name": "Overgrowth" }, { "num": 41, "name": "Summon: Leviathan" }, { "num": 38, "name": "Spawning Kraken" }, { "num": 32, "name": "Serpent of Yawning Depths" }, { "num": 1, "name": "Breeding Pool" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 22, "name": "Koma, World-Eater" }, { "num": 31, "name": "Overgrowth" }, { "num": 46, "name": "Utopia Sprawl" }, { "num": 42, "name": "Summon: Leviathan" }, { "num": 44, "name": "Summon: Leviathan" }, { "num": 30, "name": "Overgrowth" }, { "num": 2, "name": "Breeding Pool" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 6, "name": "Brinelin, the Moon Kraken" }, { "num": 52, "name": "Wild Growth" }, { "num": 10, "name": "Forest" }, { "num": 20, "name": "Kiora Bests the Sea God" }, { "num": 45, "name": "Trench Gorger" }, { "num": 37, "name": "Spawning Kraken" }, { "num": 59, "name": "Worn Powerstone" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": false,
+  "to_bottom": 3,
+  "hand": [{ "num": 35, "name": "Sin, Unending Cataclysm" }, { "num": 58, "name": "Worn Powerstone" }, { "num": 4, "name": "Breeding Pool" }, { "num": 15, "name": "Hullbreaker Horror" }, { "num": 45, "name": "Trench Gorger" }, { "num": 29, "name": "Overgrowth" }, { "num": 13, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 35, "name": "Sin, Unending Cataclysm", "win_optimal": true }, { "num": 58, "name": "Worn Powerstone", "win_optimal": true }, { "num": 4, "name": "Breeding Pool", "win_optimal": true }, { "num": 15, "name": "Hullbreaker Horror", "win_optimal": true }, { "num": 45, "name": "Trench Gorger", "win_optimal": true }, { "num": 29, "name": "Overgrowth", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 45, "name": "Trench Gorger" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 35, "name": "Sin, Unending Cataclysm", "win_optimal": true }, { "num": 58, "name": "Worn Powerstone", "win_optimal": true }, { "num": 4, "name": "Breeding Pool", "win_optimal": true }, { "num": 15, "name": "Hullbreaker Horror", "win_optimal": true }, { "num": 29, "name": "Overgrowth", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 35, "name": "Sin, Unending Cataclysm" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 58, "name": "Worn Powerstone", "win_optimal": true }, { "num": 4, "name": "Breeding Pool", "win_optimal": true }, { "num": 15, "name": "Hullbreaker Horror", "win_optimal": true }, { "num": 29, "name": "Overgrowth", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 15, "name": "Hullbreaker Horror" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Breeding Pool" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Breeding Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 0,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Whelming Wave" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Breeding Pool; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Breeding Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 0,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Overgrowth@4"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Overgrowth" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 30, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 1, "summary": "land=Forest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 2, "summary": "land=Forest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 71, "cast_order": ["**", "land=Misty Rainforest", "cast=Overgrowth@3"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Misty Rainforest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 1, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 2, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → Forest, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }, { "card": "Whelming Wave" }] },
+    { "index": 3, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave, Overgrowth → Forest", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 4, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }, { "card": "Whelming Wave" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave, Overgrowth → #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }] },
+    { "index": 12, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #17, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }, { "card": "Whelming Wave" }] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave, Overgrowth → #17", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }] },
+    { "index": 18, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #10, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }, { "card": "Whelming Wave" }] },
+    { "index": 19, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave, Overgrowth → #10", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }] },
+    { "index": 20, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 21, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Breeding Pool", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 22, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }, { "card": "Whelming Wave" }] },
+    { "index": 23, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Forest", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Breeding Pool", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 24, "summary": "land=Misty Rainforest; cast: Overgrowth → #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }, { "card": "Whelming Wave" }] },
+    { "index": 25, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Breeding Pool", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }] },
+    { "index": 26, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 27, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Hedge Maze", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 28, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 29, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Island", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 30, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }, { "card": "Whelming Wave" }] },
+    { "index": 31, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Forest", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Island", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 32, "summary": "land=Misty Rainforest; cast: Overgrowth → #17, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }, { "card": "Whelming Wave" }] },
+    { "index": 33, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → #17", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Island", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }] },
+    { "index": 34, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 35, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Forest", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 36, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }, { "card": "Whelming Wave" }] },
+    { "index": 37, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Forest", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Forest", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 38, "summary": "land=Misty Rainforest; cast: Overgrowth → #10, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }, { "card": "Whelming Wave" }] },
+    { "index": 39, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → #10", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "Forest", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }] },
+    { "index": 40, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 41, "summary": "land=Misty Rainforest; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": "Misty Rainforest", "drops": ["Overgrowth"], "fetch_target": "(hold: crack later)", "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 42, "summary": "land=none; cast: Overgrowth → Breeding Pool #2, Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Overgrowth", "Whelming Wave"], "cast_order_canonical": ["Overgrowth", "Whelming Wave"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Whelming Wave" }] },
+    { "index": 43, "summary": "land=none; cast: Whelming Wave, Overgrowth → Breeding Pool #2", "declared_order_payability": "known_drops", "land": null, "drops": ["Overgrowth"], "casts": ["Whelming Wave", "Overgrowth"], "cast_order_canonical": ["Whelming Wave", "Overgrowth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 44, "summary": "land=Misty Rainforest; cast: Whelming Wave, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Whelming Wave", "Misty Rainforest"], "actions": [{ "card": "Whelming Wave" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 45, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth", "Misty Rainforest"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 46, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth", "Misty Rainforest"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 47, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth", "Misty Rainforest"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 48, "summary": "land=Misty Rainforest; cast: Overgrowth → Misty Rainforest, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth", "Misty Rainforest"], "actions": [{ "card": "Overgrowth", "enchant_target": 26, "enchant_target_name": "Misty Rainforest" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 49, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Whelming Wave"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }] },
+    { "index": 50, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 51, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 52, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 53, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }] },
+    { "index": 58, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #14", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 14, "enchant_target_name": "#14" }] },
+    { "index": 63, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #17", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }] },
+    { "index": 68, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Overgrowth → #10", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Overgrowth"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }] },
+    { "index": 69, "summary": "land=Misty Rainforest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 70, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 71, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 72, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 73, "summary": "land=Misty Rainforest; cast: Overgrowth → #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 2, "enchant_target_name": "#2" }] },
+    { "index": 74, "summary": "land=Misty Rainforest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 75, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 76, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 77, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 78, "summary": "land=Misty Rainforest; cast: Overgrowth → #14", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 14, "enchant_target_name": "#14" }] },
+    { "index": 79, "summary": "land=Misty Rainforest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 80, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 81, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 82, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 83, "summary": "land=Misty Rainforest; cast: Overgrowth → #17", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 17, "enchant_target_name": "#17" }] },
+    { "index": 84, "summary": "land=Misty Rainforest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 85, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 86, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 87, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 88, "summary": "land=Misty Rainforest; cast: Overgrowth → #10", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 10, "enchant_target_name": "#10" }] },
+    { "index": 89, "summary": "land=Misty Rainforest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 90, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 91, "summary": "land=Misty Rainforest; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 92, "summary": "land=Misty Rainforest; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 93, "summary": "land=Misty Rainforest; cast: Overgrowth → Misty Rainforest", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 26, "enchant_target_name": "Misty Rainforest" }] },
+    { "index": 94, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 95, "summary": "land=none; cast: Overgrowth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 96, "summary": "land=none; cast: Overgrowth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 97, "summary": "land=none; cast: Overgrowth → Forest", "declared_order_payability": "not_verified", "land": null, "casts": ["Overgrowth"], "actions": [{ "card": "Overgrowth", "enchant_target": 13, "enchant_target_name": "Forest" }] },
+    { "index": 98, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 99, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 100, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 101, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 102, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 103, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 104, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 22,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 19,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Overgrowth", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Hullbreaker Horror"], "decision": {
+  "decision_index": 22,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Forest" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 10, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 1, "summary": "land=none; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": null, "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 2, "summary": "land=Forest; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 3, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 4, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "sick": true, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 24,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "tapped": true, "is_land": true, "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "sick": true, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 25,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Windswept Heath" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }, { "num": 56, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Misty Rainforest"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Whelming Wave, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Whelming Wave", "Windswept Heath"], "actions": [{ "card": "Whelming Wave" }, { "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Whelming Wave", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Whelming Wave"], "actions": [{ "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Whelming Wave" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Breeding Pool", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Hedge Maze", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 8, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 56,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 26,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 6,
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 28,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Hullbreaker Horror (7) — 7 to opponent (20→13)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "tapped": true, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 29,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 7, "card": "Wild Growth" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }, { "num": 52, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 1, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 2, "summary": "land=none; cast: Whelming Wave, Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 13, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 3, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #3", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 2, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #3" }] },
+    { "index": 4, "summary": "land=none; cast: Whelming Wave, Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 10, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 5, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #4", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #4" }] },
+    { "index": 6, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 7, "summary": "land=none; cast: Wild Growth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 8, "summary": "land=none; cast: Wild Growth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 9, "summary": "land=none; cast: Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 13, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 10, "summary": "land=none; cast: Wild Growth → Breeding Pool #3", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 2, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #3" }] },
+    { "index": 11, "summary": "land=none; cast: Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 10, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 12, "summary": "land=none; cast: Wild Growth → Breeding Pool #4", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #4" }] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 78,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 30,
+  "type": "target",
+  "source": "Hullbreaker Horror",
+  "turn": 7,
+  "remove": "returned to its owner's hand (a token ceases to exist; counters and Auras are lost) -- pick the (no target) option to decline",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "6/6 Creature (6/6) (opponent)" }, { "kind": "permanent", "index": 6, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 8, "label": "Overgrowth (yours)" }, { "kind": "permanent", "index": 10, "label": "Overgrowth (yours)" }, { "kind": "permanent", "index": 12, "label": "Hullbreaker Horror (7/8) (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "6/6 Creature (6/6) (opponent)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 2, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 3, "label": "Overgrowth (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 4, "label": "Overgrowth (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 5, "label": "Hullbreaker Horror (7/8) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index. The chosen creature is returned to its owner's hand (a token ceases to exist; counters and Auras are lost) -- pick the (no target) option to decline. Only legal targets are listed. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 31,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 7, "kind": "trigger", "text": "Hullbreaker Horror (cast trigger): choose a target, or none" }, { "turn": 7, "kind": "trigger", "text": "Hullbreaker Horror: no target chosen -- nothing is returned" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 14, "num": 52, "is_aura": true, "attached_to": 2, "attached_to_idx": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 32,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 7, "kind": "combat", "text": "⚔ attacked: Hullbreaker Horror (7) — 7 to opponent (13→6)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "tapped": true, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 14, "num": 52, "is_aura": true, "attached_to": 2, "attached_to_idx": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 12, "decision": {
+  "decision_index": 33,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 8,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 8, "card": "Wild Growth" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 14, "num": 52, "is_aura": true, "attached_to": 2, "attached_to_idx": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }, { "num": 54, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 1, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 2, "summary": "land=none; cast: Whelming Wave, Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 13, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 3, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #3", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 2, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #3" }] },
+    { "index": 4, "summary": "land=none; cast: Whelming Wave, Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 10, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 5, "summary": "land=none; cast: Whelming Wave, Wild Growth → Breeding Pool #4", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave", "Wild Growth"], "cast_order_canonical": ["Whelming Wave", "Wild Growth"], "actions": [{ "card": "Whelming Wave" }, { "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #4" }] },
+    { "index": 6, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 7, "summary": "land=none; cast: Wild Growth → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 8, "summary": "land=none; cast: Wild Growth → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 3, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 9, "summary": "land=none; cast: Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 13, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 10, "summary": "land=none; cast: Wild Growth → Breeding Pool #3", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 2, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #3" }] },
+    { "index": 11, "summary": "land=none; cast: Wild Growth → Forest #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 10, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 12, "summary": "land=none; cast: Wild Growth → Breeding Pool #4", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #4" }] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 78,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 34,
+  "type": "target",
+  "source": "Hullbreaker Horror",
+  "turn": 8,
+  "remove": "returned to its owner's hand (a token ceases to exist; counters and Auras are lost) -- pick the (no target) option to decline",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 14, "num": 52, "is_aura": true, "attached_to": 2, "attached_to_idx": 9, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "6/6 Creature (6/6) (opponent)" }, { "kind": "permanent", "index": 6, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 8, "label": "Overgrowth (yours)" }, { "kind": "permanent", "index": 10, "label": "Overgrowth (yours)" }, { "kind": "permanent", "index": 12, "label": "Hullbreaker Horror (7/8) (yours)" }, { "kind": "permanent", "index": 14, "label": "Wild Growth (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "6/6 Creature (6/6) (opponent)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 2, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 3, "label": "Overgrowth (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 4, "label": "Overgrowth (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 5, "label": "Hullbreaker Horror (7/8) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }, { "index": 6, "label": "Wild Growth (yours)", "targets": [{ "kind": "permanent", "index": 14 }] }],
+  "note": "reply an option index. The chosen creature is returned to its owner's hand (a token ceases to exist; counters and Auras are lost) -- pick the (no target) option to decline. Only legal targets are listed. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 35,
+  "main_ordinal": 14,
+  "type": "main_phase",
+  "turn": 8,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 8, "kind": "trigger", "text": "Hullbreaker Horror (cast trigger): choose a target, or none" }, { "turn": 8, "kind": "trigger", "text": "Hullbreaker Horror: no target chosen -- nothing is returned" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 3, "num": 4, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 4, "num": 3, "is_land": true, "taps": "GU", "yield": 3 }, { "name": "Breeding Pool", "idx": 9, "num": 2, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 13, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Forest", "idx": 7, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 11, "num": 10, "is_land": true, "taps": "G" }, { "name": "Hullbreaker Horror", "idx": 12, "num": 15, "is_land": false, "power": 7, "toughness": 8 }, { "name": "Overgrowth", "idx": 8, "num": 29, "is_aura": true, "attached_to": 4, "attached_to_idx": 3, "is_land": false }, { "name": "Overgrowth", "idx": 10, "num": 30, "is_aura": true, "attached_to": 3, "attached_to_idx": 4, "is_land": false }, { "name": "Wild Growth", "idx": 14, "num": 52, "is_aura": true, "attached_to": 2, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 15, "num": 54, "is_aura": true, "attached_to": 1, "attached_to_idx": 13, "is_land": false }], "vial_counters": [], "hand": [{ "num": 50, "name": "Whelming Wave", "cost": "{2}{U}{U}", "mv": 4, "kind": "nonpermanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Whelming Wave", "declared_order_payability": "not_verified", "land": null, "casts": ["Whelming Wave"], "actions": [{ "card": "Whelming Wave" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 8, "kind": "combat", "text": "⚔ attacked: Hullbreaker Horror (7) — 7 to opponent (6→-1)" }
+  ]
+}
