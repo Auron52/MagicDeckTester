@@ -5577,9 +5577,10 @@ static void PoLandAuraSubtractHeld(ManaPool& pool, const PoLandAuraHold& la)
 // ---- MTG_SAC_FODDER_MENU (ManaPayment.h; docs/design/sac-fodder-menu-2026-11-18.md) ----------------------------
 bool SacFodderMenuOn()
 {
-    // DEFAULT ON pending its held-out A/B (see the design doc for the measurement); =0 restores the board-only
-    // fodder credit on the plan menu and in the payable-order walk.
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU", true);
+    // DEFAULT OFF: its held-out A/B (seeds 620000+, x5000) failed the adoption bar -- Goblins net +4 (2 / 6), Fungus
+    // net +5 (0 / 5; gi 630182 and 630865 do not recover at d8 b0, 4 -> 5). It clears most ENUM-GAPs (Goblins
+    // 705 -> 57, Fungus 129 -> 10) at units x1.07 / x1.03. =1 turns it on; docs/design/sac-fodder-menu-2026-11-18.md.
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
     return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
 }
 
