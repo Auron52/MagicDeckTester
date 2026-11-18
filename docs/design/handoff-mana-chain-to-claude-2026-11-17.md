@@ -4,6 +4,29 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Live status (Claude), updated 16:50 UTC
 
+**GT RECONCILIATION IN FLIGHT (02:10 UTC 11-18) -- TOP PRIORITY.** USER 11-18 ~02:00, verbatim: *"Can you double check
+that you are running the regression tests and updating ground truth as you go? I had agents telling me that mana payment
+issues went in without a ground truth update."* and *"As-in what is in the shared branch did not match the ground truth
+from changes related to mana work."* CONFIRMED: smoke at the pushed tree failed 39 rows (Codex, 05:09-07:01 11-17), then
+43 (10:30, after the PD fixes), 44 (12:01, Minotaur), 46 (14:53 onward, painland/Dragonstorm fixes): each mana fix was
+A/B'd held-out and PUSHED, but its smoke/regression GT was never accepted ("same failset" was carried forward, and the
+original 39 were labelled "pre-existing drift, audit separately" and never audited). Remedy running: clean build of
+pushed HEAD d90931741 (src clean; the Cyclone pf1d adoption is in `git stash` "cyclone pf1d adoption (defaults ON),
+pending gi 570487"), then `MTG_RSS_CAP_GB=40 bash test/regression.sh --both`, console
+`build/scratch/claude_gtfix/both.out`. Then: read the audit, classify_turn_later + both-arm b0 on searched slower games,
+accept both tiers with a provenance note, check_gt_logs, commit, and PUSH AT ONCE. USER 11-18 ~02:20, verbatim: *"If we
+need to break the 4 hour push rule to address this I give the okay to do so. It causes issues for all of the other
+agents if there is drift like this."* (This exception covers the GT reconciliation push only.) RULE from now on:
+a default-ON play change is not pushed without its smoke+regression GT accepted in the same push.
+**03:2x UTC: RECONCILED.** Smoke+regression at d90931741 (Release, clean src): smoke 49 fail, regression 73 fail vs the
+old GT. Net loss-penalized turn-games: smoke d0 -163 / searched -10; regression d0 -121 / searched -94 (Spirits -71, from
+the upstream keep table, which also arrived without GT). 75 searched slower games classified (classify_turn_later,
+`build/scratch/claude_gtfix/classify_*.out`): churn incl. both win-to-loss games; PERSISTS = Spirits keep-table hands + 11
+same-draw line changes in decks net <= 0. Accepted BOTH tiers with a provenance note; the 24 earlier smoke/regression notes
+the accept dropped were restored; check_gt_logs 1,278 consistent. Confirm smoke then push at once (USER exception).
+The d8 b0 replay of Cyclone gi 570487 was STOPPED by the agent (own experiment, 2.5 h on one game) to free the box;
+rerun it alone after the GT work (`build/scratch/claude_ponderfirst_ab3/d8/`, manifest row for g570487 only).
+
 **LATEST PUSH 21:04 UTC** (`af685ee3e`, rebased onto origin's Sea Creatures Hedge Maze commits, HeuristicArm.h
 appends kept on both sides; units 3,465/3,465, smoke same 46-row failset; next push not before 01:04 UTC 11-18).
 Trace gi 560506 DONE: UNSEEN_KEEP_SCARCE=1 reorders 46 payments, all in SIMULATED T4-T6 of the T1 search (none T1-3),
