@@ -3385,13 +3385,18 @@ void AIEngine::DecideAttackLand(GameState& state, const std::vector<int>& attack
 // cast, a ritual, a land played or fetched, an untapper, a Lotus) is NOT counted as supply and creature-only
 // mana is refused, so a YES is a joint payment that really exists; a "no" may still be payable. -1 = a cost the
 // sum cannot carry (X, twobrid, convoke, more than six hybrid pips).
+// Maze's End F5: `set_aside` = permanents the line itself taps NOT for mana (Guild Summit's ETB count --
+// LinePayAuditFrame::nonmana_tap_nums), set aside like a {T} source; and an activation whose cost also taps
+// ANOTHER permanent (Heap Gate's "tap an untapped Gate", ActivationOtherTapSubtype) sets aside one eligible
+// permanent too -- every choice tried, so a YES still names a joint payment that exists.
 static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& acts, int* steps_out,
-                              bool price_repeats = true)
+                              bool price_repeats = true, const std::vector<int>* set_aside = nullptr)
 {
     int steps = 0;
     if (steps_out) { *steps_out = 0; }
     ManaCost bill{};
     std::vector<int> tap_src;
+    std::vector<std::pair<int, const std::string*>> other_tap;   // (source number, subtype) per activation
     auto add = [&](const ManaCost& c) -> bool
     {
         if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0) { return false; }
@@ -3420,6 +3425,11 @@ static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& ac
             {
                 if (a.kind == Action::Kind::UntapCreature || PermAbilityTaps(a.ability_mode))
                 { tap_src.push_back(a.sac_source_id); }
+                if (a.kind == Action::Kind::ActivatePermAbility && a.def != nullptr)
+                {
+                    const std::string& sub = ActivationOtherTapSubtype(*a.def, a.ability_mode);
+                    if (!sub.empty()) { other_tap.emplace_back(a.sac_source_id, &sub); }
+                }
                 ++steps;
                 if (!add(a.cost)) { return -1; }
                 // price_repeats (default): a {T}-less sink asked for K activations (chosen_x) is paid K times at
@@ -3444,16 +3454,47 @@ static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& ac
         for (Permanent& p : c.battlefield)
         { if (p.card.m_number == id && p.controller_index == c.active_player_index) { if (p.tapped) { return 0; } p.tapped = true; } }
     }
-    if (bill.ManaValue() == 0) { return 1; }
-    return TapForCostDirect(c, bill, /*for_creature=*/false) ? 1 : 0;
+    if (set_aside != nullptr)
+    {
+        for (const int id : *set_aside)
+        { for (Permanent& p : c.battlefield) { if (p.card.m_number == id && p.controller_index == c.active_player_index) { p.tapped = true; } } }
+    }
+    // Each activation's other-permanent tap: every eligible choice (a handful of Gates), depth-first.
+    std::function<bool(const GameState&, std::size_t)> pays = [&](const GameState& b, std::size_t k) -> bool
+    {
+        if (k == other_tap.size())
+        {
+            if (bill.ManaValue() == 0) { return true; }
+            GameState t = b;
+            return TapForCostDirect(t, bill, /*for_creature=*/false);
+        }
+        const std::vector<int> elig = ActivationOtherTapEligible(b, b.active_player_index, *other_tap[k].second,
+                                                                 other_tap[k].first);
+        for (const int i : elig)
+        {
+            GameState t = b;
+            t.battlefield[static_cast<std::size_t>(i)].tapped = true;
+            if (pays(t, k + 1)) { return true; }
+        }
+        return false;
+    };
+    return pays(c, 0) ? 1 : 0;
+}
+int LineJointPayOracleForTest(const GameState& s0, const std::vector<Action>& acts, const std::vector<int>* set_aside)
+{
+    return LineJointPayOracle(s0, acts, nullptr, true, set_aside);
 }
 thread_local const std::vector<Action>* t_lpa_acts = nullptr;   // the audited plan (cast-drop classification)
+// The board at the audited plan's FIRST recorded-continuation replay (replay_recorded's entry), for pricing the
+// recorded steps jointly (LPA_REC vs LPA_REC_NO; Maze's End F5). Set only while a REAL audited frame is armed.
+thread_local std::optional<GameState> t_lpa_rec_s0;
 struct LinePayAuditGuard
 {
     bool armed = false;
     LinePayAuditFrame frame;
     LinePayAuditFrame* prev = nullptr;
     const std::vector<Action>* prev_acts = nullptr;
+    std::optional<GameState> prev_rec_s0;
     GameState s0;
     const std::vector<Action>* acts = nullptr;
     // The plan's RECORDED breakpoint continuation (Plan::breakpoint_actions), or null. See LPA_REC.
@@ -3468,11 +3509,14 @@ struct LinePayAuditGuard
         recs = (recorded != nullptr && !recorded->empty()) ? recorded : nullptr;
         prev = g_line_pay_frame; g_line_pay_frame = &frame;
         prev_acts = t_lpa_acts; t_lpa_acts = &a;
+        prev_rec_s0 = std::move(t_lpa_rec_s0); t_lpa_rec_s0.reset();
     }
     ~LinePayAuditGuard()
     {
         if (!armed) { return; }
         g_line_pay_frame = prev; t_lpa_acts = prev_acts;
+        std::optional<GameState> rec_s0 = std::move(t_lpa_rec_s0);
+        t_lpa_rec_s0 = std::move(prev_rec_s0);
         const int w = frame.rollout ? 1 : 0;
         g_lpa[w][LPA_PLANS].fetch_add(1, std::memory_order_relaxed);
         // Only steps the TOP-LEVEL plan names (a breakpoint continuation's own drops are its own plan's).
@@ -3506,15 +3550,22 @@ struct LinePayAuditGuard
             }
             if (!rec_short.empty())
             {
-                g_lpa[w][LPA_REC].fetch_add(1, std::memory_order_relaxed);
+                // Maze's End F5: a recorded step the rollout ALSO could not pay is recorded all the same (the record
+                // is the continuation's planned list, not its paid steps), so "the rollout paid it" is not true by
+                // construction. Price the recorded list jointly on the board at its replay's entry: YES = a payment
+                // existed (LPA_REC, the DEFECT), no = rules-correct (LPA_REC_NO). Same conservative oracle as the
+                // top-level classes (mana the continuation makes mid-line is not supply).
+                const int vr = rec_s0.has_value()
+                    ? LineJointPayOracle(*rec_s0, *recs, nullptr, true, &frame.nonmana_tap_nums) : 1;
+                g_lpa[w][vr == 0 ? LPA_REC_NO : LPA_REC].fetch_add(1, std::memory_order_relaxed);
                 if (LinePayAuditLevel() >= 2)
                 {
                     std::string line, rl;
                     for (const std::string& st : rec_short) { line += (line.empty() ? "" : "; ") + st; }
                     for (const Action& x : *recs) { rl += (rl.empty() ? "" : ", ") + x.card_name.str(); }
-                    std::fprintf(stderr, "LINE_PAY_REC_SHORT %s job=%s gi=%d t%d short=[%s] recorded=[%s]\n",
+                    std::fprintf(stderr, "LINE_PAY_REC_SHORT %s job=%s gi=%d t%d joint=%s short=[%s] recorded=[%s]\n",
                                  frame.rollout ? "rollout" : "real", escstats::t_job ? escstats::t_job : "-",
-                                 escstats::t_gi, turn, line.c_str(), rl.c_str());
+                                 escstats::t_gi, turn, vr > 0 ? "YES" : vr == 0 ? "no" : "?", line.c_str(), rl.c_str());
                 }
             }
         }
@@ -3524,12 +3575,24 @@ struct LinePayAuditGuard
                          escstats::t_job ? escstats::t_job : "-", escstats::t_gi, turn, steps, mine.size());
         }
         if (mine.empty()) { return; }
-        const int v = LineJointPayOracle(s0, *acts, nullptr);
+        const int v = LineJointPayOracle(s0, *acts, nullptr, true, &frame.nonmana_tap_nums);
+        // SELFTAP: every short step is an activation whose source the line itself tapped other than for mana.
+        bool selftap = true;
+        for (const std::string& st : mine)
+        {
+            const std::size_t sp = st.find(' ');
+            const std::string kind = sp == std::string::npos ? st : st.substr(0, sp);
+            const std::string card = sp == std::string::npos ? st : st.substr(sp + 1);
+            if (kind != "act-tapped"
+                || std::find(frame.nonmana_tap_names.begin(), frame.nonmana_tap_names.end(), card)
+                   == frame.nonmana_tap_names.end()) { selftap = false; break; }
+        }
         g_lpa[w][LPA_SHORT_PLANS].fetch_add(1, std::memory_order_relaxed);
         g_lpa[w][LPA_SHORT_STEPS].fetch_add(static_cast<long>(mine.size()), std::memory_order_relaxed);
         // A continuation that applied anything changed the line mid-apply: its spend is a re-plan the oracle
         // (which prices the top-level plan) cannot judge, so the plan is classified CONT, not YES/NO.
-        const int cls = frame.cont_spent ? LPA_CONT : v > 0 ? LPA_YES : v == 0 ? LPA_NO : LPA_UNKNOWN;
+        const int cls = frame.cont_spent ? LPA_CONT : selftap ? LPA_SELFTAP
+                      : v > 0 ? LPA_YES : v == 0 ? LPA_NO : LPA_UNKNOWN;
         g_lpa[w][cls].fetch_add(1, std::memory_order_relaxed);
         if (LinePayAuditLevel() >= 2 && (!frame.rollout || v > 0))
         {
@@ -3543,11 +3606,12 @@ struct LinePayAuditGuard
             }
             for (const std::string& c : frame.cont_acts) { cont += (cont.empty() ? "" : " | ") + c; }
             // joint1: the same oracle billing a K-repeat sink ONCE (the pre-2026-11-13 verdict; classification only).
-            const int v1 = LineJointPayOracle(s0, *acts, nullptr, /*price_repeats=*/false);
+            const int v1 = LineJointPayOracle(s0, *acts, nullptr, /*price_repeats=*/false, &frame.nonmana_tap_nums);
             std::fprintf(stderr, "LINE_PAY_SHORT %s job=%s gi=%d t%d class=%s joint=%s joint1=%s short=[%s] plan=[%s] cont=[%s]\n",
                          frame.rollout ? "rollout" : "real", escstats::t_job ? escstats::t_job : "-",
                          escstats::t_gi, turn,
-                         cls == LPA_CONT ? "CONT" : cls == LPA_YES ? "DEFECT" : cls == LPA_NO ? "unpayable" : "unknown",
+                         cls == LPA_CONT ? "CONT" : cls == LPA_SELFTAP ? "SELFTAP" : cls == LPA_YES ? "DEFECT"
+                         : cls == LPA_NO ? "unpayable" : "unknown",
                          v > 0 ? "YES" : v == 0 ? "no" : "?",
                          v1 > 0 ? "YES" : v1 == 0 ? "no" : "?", line.c_str(), plan.c_str(), cont.c_str());
         }
@@ -6068,6 +6132,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         [&](const std::vector<Action>& recs)
     {
         exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
+        // MTG_LINE_PAY_AUDIT (measurement only; Maze's End F5): the RECORDED continuation is a mid-line re-plan
+        // exactly like resolve_draw_breakpoint's (which notes "carried:" / "resolve:"), so a top-level step it
+        // left short is classified CONT, not priced against the top-level bill it changed.
+        if (g_line_pay_frame != nullptr && !g_line_pay_frame->rollout)
+        {
+            if (!t_lpa_rec_s0.has_value()) { t_lpa_rec_s0 = state; }   // the recorded steps' pricing board
+            std::string d = "recorded:";
+            bool first = true;
+            for (const Action& ca : recs)
+            {
+                d += (first ? "" : ",") + ca.card_name.str();
+                if (ca.kind != Action::Kind::CastFromHand) { d += "(act)"; }
+                first = false;
+            }
+            g_line_pay_frame->cont_acts.push_back(d);
+            if (!recs.empty()) { g_line_pay_frame->cont_spent = true; }
+        }
         if (EnvOn("MTG_FD_TRACE"))
         {
             std::fprintf(stderr, "[replay-bp] turn=%d recs=%d:", state.turn_number, (int)recs.size());
@@ -8674,8 +8755,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     { if (TurnSolver::IsPreTrickPut(plan.actions, a)) { exec_trailing_activations({a}); } }
     if (!loam_target_plan)
-    { TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
-                                      /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true); }
+    {
+        // MTG_OWED_ACTS_JOINT_PAY (Maze's End F5; lockstep twin of ApplyPlanDirect's): when the usual payment
+        // would strand the trailing activations' mana and one joint solve pays the whole line, pay it jointly.
+        // Never with a doubler armed for combat (its mana must not float in main).
+        const std::vector<Action>& pre_acts = TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch);
+        if (!(&pre_acts == &plan.actions && TurnSolver::OwedActsJointPrepay(state, plan.actions)))
+        { TurnSolver::BatchPrepayMainCasts(state, pre_acts, /*mint_prefix=*/false, /*hand_demand=*/false,
+                                          /*allow_partial=*/true); }
+    }
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
     // enabler is hoisted below.

@@ -23,6 +23,11 @@
 void MergeStagedIntoHand(GameState& state);
 void ReturnStagedFromHand(GameState& state);
 
+// MTG_LINE_PAY_AUDIT's joint-payment oracle (AIEngine.cpp LineJointPayOracle), for unit tests only: 1 = the whole
+// bill of `acts` is jointly payable on `s0` (their {T} sources, `set_aside`, and each other-tap activation's Gate set
+// aside), 0 = not, -1 = a cost the sum cannot carry.
+int LineJointPayOracleForTest(const GameState& s0, const std::vector<Action>& acts, const std::vector<int>* set_aside);
+
 class AIEngine
 {
 public:

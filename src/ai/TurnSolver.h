@@ -3429,6 +3429,11 @@ public:
     // order the steps come in. false with `state` untouched when the bill cannot be summed exactly (X, snow,
     // twobrid, a dynamic activation cost, a mana-making step) or the board cannot pay it jointly.
     static bool HumanLineJointPrepay(GameState& state, const Plan& plan);
+    // OWED-ACTIVATIONS JOINT PAY (MTG_OWED_ACTS_JOINT_PAY, Maze's End F5; see the definition): when the usual payment of
+    // `acts`' casts would leave its trailing activations' mana unpayable and one joint solve pays the whole line,
+    // pay it jointly (LineJointPrepayCore). Both apply worlds call it just before BatchPrepayMainCasts; true = paid
+    // (skip the casts-only prepay), false = `state` untouched.
+    static bool OwedActsJointPrepay(GameState& state, const std::vector<Action>& acts);
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
