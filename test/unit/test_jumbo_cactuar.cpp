@@ -946,3 +946,99 @@ TEST_CASE("Jumbo Cactuar enumerates a Greaves-hasted fresh Satyr re-tapping a ne
         CHECK_FALSE(HasPlanWith(plans, line, true));
     }
 }
+
+// MTG_PO_UNLOCK_ORDER (mana-clean gate claude-regate-20261118, APPLY-DROP-ORDER s30115214 T3 m1): Forest + Wild Growth
+// and Lightning Greaves on the board, the plan {Green Sun's Zenith -> Arbor Elf, Wild Growth -> the Forest, equip
+// Greaves -> the fetched Elf}. The rank order casts Wild Growth first and GSZ ({1}{G}) is left one short. GSZ first
+// pays off the Forest's {G}{G}; the Elf enters, Greaves (equip {0}) hastes it, and its re-tap of the Forest pays Wild
+// Growth. The payable-order decider's walk knows no unlock, so only the unlock-order domain finds that order.
+TEST_CASE("Jumbo Cactuar realises GSZ -> Arbor Elf before Wild Growth when the Greaves-hasted Elf pays it")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Lightning Greaves", 37);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+
+    Action tutor = JumboCast(s, "Green Sun's Zenith", 90, 0, "Arbor Elf");
+    tutor.chosen_x = 1;
+    tutor.cost.generic += 1;
+    tutor.hand_index = 0;
+    Action aura = JumboCast(s, "Wild Growth", 58, 10);
+    aura.hand_index = 1;
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = "Lightning Greaves";
+    equip.def = CardDatabase::Instance().Lookup("Lightning Greaves");
+    REQUIRE(equip.def != nullptr);
+    equip.sac_source_id = 37;
+    equip.sac_victim_id = 1;   // the library copy GSZ puts
+    const std::vector<Action> acts{tutor, aura, equip};
+    {
+        JumboArm on; on.Set(heurarm::PO_UNLOCK_ORDER, 1);
+        std::vector<int> order{1, 0};
+        ApplyPayableCastOrder(s, acts, order);
+        CHECK(order == std::vector<int>{0, 1});
+    }
+    {
+        JumboArm off; off.Set(heurarm::PO_UNLOCK_ORDER, 0);
+        std::vector<int> order{1, 0};
+        ApplyPayableCastOrder(s, acts, order);
+        CHECK(order == std::vector<int>{1, 0});
+    }
+}
+
+// MTG_SEQ_TRAILING_EQUIP (mana-clean gate claude-regate-20261118, ENUM-GAP s30119376 T5 m1 x19, gate ef-walk-fail): 8 mana
+// from Forest#18 (Wild Growth x2 + Overgrowth) and Forest#14 (Overgrowth), Chariot of Victory on the board. Surrak
+// first (6), both Satyrs enter hasted by its trigger and re-tap Forest#18 for 5 each, Tooth and Nail (7), and the {1}
+// left pays Chariot's equip in the trailing pass. The walk refused any subset holding a paid equip that unlocks no
+// mana, so the line with the equip was off the menu while the same line without it was offered.
+TEST_CASE("Jumbo Cactuar enumerates Surrak-hasted Satyrs funding Tooth and Nail with a trailing Chariot equip")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 5;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 18);
+    PutOnBoard(s, "Wild Growth", 59);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Forest", 14);
+    PutOnBoard(s, "Overgrowth", 42);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Overgrowth", 41);
+    s.battlefield.back().aura_attached_to = 14;
+    PutOnBoard(s, "Chariot of Victory", 8);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 18;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Surrak and Goreclaw", 30));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 54));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 56));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+    s.players[0].library.push_back(CopyOf("Forest", 15));
+
+    const std::vector<std::string> line = {"Tooth and Nail", "Surrak and Goreclaw", "Voyaging Satyr"};
+    {
+        JumboArm on; on.Set(heurarm::SEQ_TRAILING_EQUIP, 1);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(HasPlanWith(plans, line, true));
+    }
+    {
+        JumboArm off; off.Set(heurarm::SEQ_TRAILING_EQUIP, 0);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK_FALSE(HasPlanWith(plans, line, true));
+    }
+}

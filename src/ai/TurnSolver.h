@@ -3440,6 +3440,12 @@ public:
     //                             this question (see OrderPaysSequentially's definition); else -1.
     static bool OrderPaysSequentially(const GameState& state, const std::vector<Action>& acts,
                                       const std::vector<int>& order, int* fail_pos = nullptr);
+    // MTG_PO_UNLOCK_ORDER -- the payable-order fallback for a line whose mana creature a same-line HASTE unlocks
+    // (a haste-Equipment unlock equip, or an enters-haste watcher such as Surrak and Goreclaw beside a mana-dork
+    // cast). The given cast order `order` of plan `acts` is kept when OrderPaysSequentially's walk (with the plan's
+    // unlock equips fired as the apply fires them) pays it; else the nearest permutation that walk pays replaces
+    // it. True iff `order` moved. Called by PayableCastOrderCore (ManaPayment.cpp) at the apply site only.
+    static bool UnlockPayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
     // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
     // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
     // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"
