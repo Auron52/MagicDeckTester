@@ -361,3 +361,32 @@ TEST_CASE("Maze's End F2 (gi1): no hold when the usual payment already leaves th
     CHECK(hold.empty());
 }
 
+// ---- F2 (sweep 61003 gi2): the extra land drop after a same-plan Exploration is a continuation ----------------------
+// T2 of the sweep game: Selesnya Guildgate (Amulet untaps it) pays Exploration, and the second drop then plays a Gate
+// from the OLD hand. MTG_BP_NEW_ONLY dropped every old-hand land from the site-10 continuation list (each base plan
+// plays at most one land, so no sibling carries a second one), leaving it EMPTY at any depth or budget.
+TEST_CASE("Maze's End F2 (gi2): a land drop the plan itself opened survives the new-only continuation filter")
+{
+    LoadF1Cards();
+    GameState s = FBase();
+    s.turn_number = 2;
+    s.deck_has_static_land_drops = true;
+    FPut(s, "Amulet of Vigor", 1);
+    FPut(s, "Gond Gate", 28, /*tapped=*/true);
+    FPut(s, "Selesnya Guildgate", 52, /*tapped=*/true);
+    FPut(s, "Exploration", 19);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].bonus_land_drops_this_turn = 1;
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(FCard("Gruul Guildgate", 900 + k)); }
+    s.players[0].hand.push_back(FCard("Dimir Guildgate", 18));
+    s.players[0].hand.push_back(FCard("Izzet Guildgate", 38));
+    s.players[0].hand.push_back(FCard("Talon Gates of Madara", 58));
+    // The hand as the section opened: every card above, plus the two the plan spent.
+    const std::vector<int> before = { 18, 19, 38, 52, 58 };
+    const TurnSolver::CantripOrderScope bound(nullptr, &before, nullptr, false, false, -1, false, 2, /*new_only=*/true);
+    const std::vector<TurnSolver::Plan> conts = TurnSolver::EnumerateBreakpointPlans(s, /*is_pre_combat=*/true);
+    int land_plays = 0;
+    for (const TurnSolver::Plan& p : conts) { if (p.land_decided && !p.land_to_play.empty()) { ++land_plays; } }
+    INFO("continuations=" << conts.size());
+    CHECK(land_plays > 0);
+}
