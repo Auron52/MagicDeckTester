@@ -45,3 +45,14 @@ One narrow change set per agent; at most two concurrent worktree builds.
 
   Each gets its own A/B.
 - **Then:** re-check the sweep flags, `verify_deck.py` green, Stage 6 report, then the mulligan profile (`mullgen.sh run`). The value leaf comes after P7's b0 work.
+
+## USER on the B disclosures (2026-11-18, VERBATIM)
+7. "4-10 1 We might want to prune further then that with an A/B. It would be nice if there was no extra branching given how easy the mana is in this list. 3. Yes, these should be heuristically pruned. 13. Yes, this should be pruned heuristically in the search. 16-21. That's fine. 25. I'm not sure what this means. 28. Yes, manabond yes with no land should be pruned. Similarily "no" with only lands should be pruned heuristically. 31-32 Okay, sounds good."
+
+Added to P5 (same pooled A/B):
+- **Disclosure 1:** chosen colours (Thran Portal, CLB Gates) pruned to ONE colour per entry (no branching), e.g. the P1 rule's next colour (G, then U, then G); A/B against the current 1-2-wide menu.
+- **Disclosure 3:** Basilisk Gate's pump pruned in autonomous play (check whether it is ever offered with no creature; the Charm mode 3 half is already withheld).
+- **Disclosure 13:** confirmed as built (Charm mode 3 withheld in the search).
+- **Disclosure 28 extension:** Manabond "no" pruned when the hand is ALL lands ("yes" puts them all and discards nothing). Premise to check and state: an all-land hand where every land enters without a loss. Gateway Plaza entering at the end step without {1} available would be sacrificed; keep "no" offered in that case, or verify it cannot happen.
+- **Disclosures 16-21 and 31-32:** approved.
+- **Disclosure 25:** explained to the USER. The census over 90 games shows 0 overflow; no action unless the USER asks.
