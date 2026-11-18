@@ -903,9 +903,11 @@ private:
 class CastSectionUnlock
 {
 public:
+    // `canon`: the section applies an UNBRANCHED-CANON continuation (Plan::cont_canon), whose board activations
+    // never fire -- its reserve holds no {T} source for them (TurnSolver::PlanReserveSources, LOCKSTEP #19).
     CastSectionUnlock(GameState& state, const std::vector<Action>& acts,
-                      std::vector<Action>* record = nullptr)
-        : m_state(state), m_acts(acts), m_reserve(TurnSolver::PlanReserveSources(state, acts))
+                      std::vector<Action>* record = nullptr, bool canon = false)
+        : m_state(state), m_acts(acts), m_reserve(TurnSolver::PlanReserveSources(state, acts, canon))
     { Fire(record); }
     // Fire every unlock / release whose pieces are on the battlefield now. Returns how many fired.
     int Fire(std::vector<Action>* record = nullptr)

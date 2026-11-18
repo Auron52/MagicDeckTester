@@ -3785,8 +3785,10 @@ public:
 
     // The union both apply paths install (unlock pieces + colour-critical + activation taps). One
     // function so the executor and the rollout cannot drift on which sources are held.
+    // `canon` = the list is an UNBRANCHED-CANON continuation (Plan::cont_canon): its board activations are
+    // never applied, so they hold no {T} source (LOCKSTEP #19's reserve half; see the definition).
     static std::vector<int> PlanReserveSources(const GameState& state,
-                                               const std::vector<Action>& acts);
+                                               const std::vector<Action>& acts, bool canon = false);
 
     // --- Human-play line reconciliation (tools/play GUI) ------------------------
     // A human assembles a free-form main-phase line by hand (play a land, cast some
