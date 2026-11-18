@@ -246,6 +246,28 @@ TEST_CASE("Maze's End I2: Amulet of Vigor untaps a tapped entrant; N Amulets flo
     CHECK(g.floating_mana.Total() == 0);
 }
 
+TEST_CASE("Maze's End P1c (USER B2): Gond Gate does not untap ITSELF as it enters; an earlier Gond untaps a forced-tapped Gate")
+{
+    LoadI2Cards();
+    // Archdruid's Charm mode 1 (ForcedTapped) fetching Gond Gate with no other Gond out: tapped.
+    GameState a = Base();
+    EnterLand(a, D("Gond Gate"), 70, false, true, LandEntryTap::ForcedTapped);
+    CHECK(Find(a, 70)->tapped);
+    // ...with an Amulet of Vigor, which untaps it as usual.
+    GameState b = Base();
+    Put(b, "Amulet of Vigor", 71);
+    EnterLand(b, D("Gond Gate"), 72, true, true, LandEntryTap::ForcedTapped);
+    CHECK_FALSE(Find(b, 72)->tapped);
+    // ...with ANOTHER Gond Gate already out: untapped.
+    GameState c = Base();
+    Put(c, "Gond Gate", 73);
+    EnterLand(c, D("Gond Gate"), 74, false, true, LandEntryTap::ForcedTapped);
+    CHECK_FALSE(Find(c, 74)->tapped);
+    // Charm fetching another Gate with a Gond out: untapped.
+    EnterLand(c, D("Simic Guildgate"), 75, false, true, LandEntryTap::ForcedTapped);
+    CHECK_FALSE(Find(c, 75)->tapped);
+}
+
 TEST_CASE("Maze's End I2: Gateway Plaza pays {1} or is sacrificed; Amulet lets it pay with itself")
 {
     LoadI2Cards();

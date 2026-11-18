@@ -380,6 +380,63 @@ PROVISIONAL). No defect found.
 
 ## Decisions and provisional deferrals (USER sign-off pending)
 
+**USER rulings on decisions 1-33 and the viewer (2026-11-17, relayed by the coordinator, VERBATIM):**
+"D1. That is fine. These are the kind of things we could have as an option, but there is not much point in having
+it on. B1. I would probably heuristically prune this. A common answer from play is tap none, but tap all unused is
+also reasonable. Possibly the best is to just use whatever mana we don't spend in the line? B2. Apparently it
+depends on whether it is the gate being put into play tapped. If it is, it enters tapped. Otherwise untapped. B3. I
+guess it can be deferred. The only mode we care about heuristically is the first. B4. Okay, I guess we can wait on
+that. B5. Yes, we should use the simulated-opponent model which will enable burgeoning."
+Mapping (coordinator): D1 = `draw_on_other_subtype_enter` INERT in the viewer -- RULED, confirmed, no change.
+B1 = decisions 2/8/10 (Guild Summit's count) -- RULED: a provider prune to at most {0, all untapped, all untapped
+minus what the rest of the plan still needs} (work item B1, A/B on held-out seeds). B2 = decision 5 (Gond Gate) --
+see the CORRECTED B2 ruling below (the first reading, "an effect's tapped put wins", was a misreading and was reverted
+unbuilt). B3 = decision 9 -- RULED, APPROVED deferral (moved to
+"Approved deferrals"). B4 = decision 33 -- RULED, APPROVED deferral (moved). B5 = decision 6 (Burgeoning on the
+passive-opponent land model) -- RULED, confirmed, no change.
+
+**USER pruning directives + the corrected B2 (2026-11-17, relayed by the coordinator, VERBATIM):**
+"We should prune a bunch of things including land search targets, colours for lands that get to choose. Typically
+those choosing lands only should target Green and Blue. Once we have one green we can get blue and once we have one
+blue the rest can go to green. Gates ablaze can get heurstically skipped, so we don't need Red. B2. No it should
+enter untapped if Gond Gate is already active. I'm saying that Gond Gate's effect does not kick in until it enters
+which means Archdruid's Charm for Gond Gate will enter tapped unless there is another Gond Gate, but with a Gond Gate
+out it would enter untapped."
+Decision 5 is therefore RULED AS BUILT: a Gond Gate already on the battlefield untaps every Gate we put, including a
+forced-tapped put (Archdruid's Charm mode 1); Gond Gate does not untap itself (no other Gond -> tapped; Amulet still
+untaps it). Verified by unit "Maze's End P1c (USER B2)". Work item P (coordinator's mapping): P1 chosen colours
+collapse to ONE (no green source -> G; else no blue source -> U; else G; neither offered -> first offered); P2 Gates
+Ablaze never autonomous, spendable premise G/U only; P3 land-search target classes (proposal, measured); P4 list
+further wide axes for a USER ruling (not built). All provider-only, flag default ON, one pooled held-out A/B with B1.
+
+**USER rule for P3, land search targets (2026-11-17/18, relayed by the coordinator, VERBATIM; REPLACES the class
+proposal):** "Maze's end should remain a candidate if you don't have 2 or 1 and Amulet of Vigor. Sometimes you want
+multiples to keep things running. Baldur's gate is a good call as it generates a lot of mana and so is Gond Gate if
+you are missing it. Otherwise we should pick one singleton we don't have yet to increase variety. We should definitely
+prune this decision down to 1-4, but preferably closer to 1-2 which should be possible. Maze's End when we have none
+is usually the right call so we might be able to prune that case."
+Coordinator's reading (Sylvan Scrying, Archdruid's Charm mode 1, any other land tutor in MazesEndProvider): no Maze's
+End -> {Maze's End}; otherwise, in order: Maze's End unless we have 2+ (or 1 + an Amulet of Vigor), Baldur's Gate if we
+control none, Gond Gate if we control none, ONE new-name Gate (best by enters-untapped given Amulet/Gond, then
+ManaSourceRank; the P1 colour rule may pick it). Maze's End's own fetch: {Baldur's if missing, Gond if missing, one
+new-name Gate}. 1-4 options, usually 1-2; fail-to-find stays where it is offered. Burgeoning / Manabond only if
+clearly the same decision, else P4. "Have" = battlefield + hand (to be stated in the report). Measured inside the B1 +
+P1-P3 pooled held-out A/B; if "Maze's End when we have none" loses vs a second option, report those games.
+USER amendment to P3 case 2 and the Maze's End fetch (VERBATIM): "For 2 there I would probably skip the "one gate
+name" option until Baldur's gate is gone and we have Gond Gate. That would mean we can keep it at 1 or 2 choices
+almost the whole time." Rule: the one-new-name option only when Baldur's Gate is no longer available (controlled, or
+not in the library) AND we have Gond Gate (controlled, or none left in the library -- so the menu never empties).
+Before that: Maze's End (when its condition holds) + Baldur's if missing + Gond if missing. Same for Maze's End's own
+fetch. Fail-to-find unchanged.
+USER clarification (VERBATIM): "Have for Gond Gate here includes in hand. We shouldn't search it if we have it
+anywhere." So Gond Gate is offered only with none on the battlefield AND none in hand, and "we have Gond Gate" in the
+new-name gate means battlefield or hand. Baldur's Gate: the same "anywhere" reading is the COORDINATOR's default, not
+the user's.
+USER ruling on Maze's End's count (VERBATIM): "Same with Maze's end, actually. Having 2 in hand means we don't need
+anymore." So "have" for Maze's End = battlefield + hand (USER): 2+ anywhere -> not offered; 1 anywhere + an Amulet of
+Vigor -> not offered.
+
+
 Defaults taken so the work can proceed (raised to the user; none blocks anything):
 
 1. **Chosen colours (Thran Portal, five CLB Gates) are SEARCHED**, on a land-entry colour axis.
@@ -401,7 +458,7 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
    default width 6 over shuffle order is a random prune), ordered by the provider.
 8. **Guild Summit's UNPINNED count** (a rollout leaf beyond the horizon, or a put rather than a cast) is
    ALL untapped Gates (`EtbTapSubtypeDrawDefault`). Inside the search window the count is searched.
-9. **Archdruid's Charm mode 2 is NOT modelled** (PROVISIONAL deferral, USER sign-off pending): it needs a
+9. **Archdruid's Charm mode 2 is NOT modelled** (RULED B3 2026-11-17: APPROVED deferral, see Approved deferrals): it needs a
    target creature we control, the list has none and makes none, so it can never be chosen (CR 601.2c).
    The card's bracket note says so.
 10. **Guild Summit's which-Gates order is ManaSourceRank ascending** (decision 2). BUILT in I4 (decision 30). Protecting Gates with
@@ -508,7 +565,7 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
    goldfish the opponent's turn offers no mana or information a main-phase put lacks -- an end-step put with the same
    untapped mana leaves the same board at our next untap, a Burgeoning put of another land commutes with it, and a
    main-phase put sees Guild Summit's draw earlier. So no opponent-turn put route (and no no-float scope) exists.
-33. **Talon Gates' ETB "up to one target creature phases out" is NOT modelled** (inert collapse, disclosed in the
+33. **Talon Gates' ETB "up to one target creature phases out" is NOT modelled** (RULED B4 2026-11-17: APPROVED deferral) (inert collapse, disclosed in the
    bracket note; the engine has no phasing). Every choice reaches the same game in a goldfish: the list has no creature
    of ours and makes none, and the passive opponent's creatures never attack or block. Not offered as a viewer choice.
    PROVISIONAL (USER sign-off pending) -- re-check if the list gains a creature.
@@ -596,6 +653,53 @@ expensive searched shape (USER 3x rule). Census set: d3 b10 60 games (seed 91001
    **Status vs the 3x rule: d5 b10 12.8 s/game is under 15,510; d3 b10 30.5 s/game is ~5.9x Hinata -- over.** (ms
    here are under 10-worker contention, not the suite's pooled measurement; `suite_gate.py --cost` not yet run.)
 
+### USER rulings on the P1b questions (2026-11-17, relayed by the coordinator, VERBATIM)
+"A1: Okay I guess. We may want the tuning sweep, because I have no idea how to pick these numbers. A2. Okay, let's
+see how it does. A3. Okay, I suppose 1 seems okay, but we can play with it more as needed. A4. The equivalent
+guildgate thing might be good. The other change sounds dicey for the reason you mentioned. If we have no land drop,
+though, (and hence Maze's end let's us use the drop it might make sense to use. A5, It's weird to me that d3 is so
+expensive. We might want to look at that in isolation. I'm okay with skimping on d3, though, in favour of play
+settings."
+(A1 = progress-eval weights; A2 = canonical tie-break / tutor fold; A3 = playout charge weight; A4 = equivalent
+Guildgates / "always activate Maze's End"; A5 = d3 b10 cost vs the 3x rule.) Coordinator's reading: adopt W = 1
+(lever kept); study d3 cost in isolation (start with seed 91021 gi20), d3 quality loss is not a veto, d3 stays in
+the rows / gate; BUILD the exact Guildgate-equivalence fold (sound, default ON, runtime premise check) and any
+inexact equivalence default-OFF with an A/B; "always activate" rejected as a prune -- at most an ORDER (activation
+first when no land is left to play) inside the window, playout policy beyond it, default-OFF lever, measured at d5
+b10 and d3 b10 on held-out seeds; weight tuning sweep (heuristic-optimization skill) after those; the W=1 cost
+measurement also carries mulligan-GENERATION shapes d1 b1 and d1 b3 (~30 games each).
+
+### P1c (2026-11-17/18)
+* **Unit regression found and fixed.** With P1b's fetch eval ON, unit "Maze's End I3: the search finds THREE land drops
+  in one main phase" failed (turn 6 vs 5 at d3, budget 0; `MTG_MAZE_FETCH_EVAL=0` passed). Mechanism: the breakpoint
+  continuation list is value-ranked and wave 0 reaches ranks 0..W-1 (W = 2); after Maze's End is played (two drops
+  left, Rakdos + Selesnya in hand) the two "Gate + fetch now" plans (v = 200) took ranks 0-1 and the plain land play
+  the win needs fell to rank 3. Fix `2e3fb25c3`: `MTG_MAZE_FETCH_DEFER` (default ON) -- the fetch eval is 0 while a
+  land drop is open AND a new-name Gate is in hand, read on the state the activation is enumerated in (after the
+  plan's own land play). Units 3425/3425 (3426 with the B2 test). A/B vs P1b (census set + 60 d0; one pooled batch, 8
+  workers -- MEMORY exception -- `build/scratch/maze/p1c/ab1`, peak RSS 11.1 GB, 17.0 min):
+
+  | shape | P1b | defer | defer vs P1b (better/worse) |
+  |---|---|---|---|
+  | d0 | 7.1167 / 46 wins | 7.1167 / 46 (60/60 digests identical) | 0/0 |
+  | d3 b10 | 6.4167 / 59 / 27,967 ms / 1.26M units | 6.5167 / 58 / 33,492 ms / 1.41M units | 7/11 |
+  | d5 b10 | 6.6333 / 28 / 11,700 ms / 551K units | **6.5667** / 28 / 14,411 ms / 591K units | 4/2 |
+
+  KEPT ON (it restores a search-completeness unit; d5 = play settings is better, d3 worse -- USER A5 accepts d3
+  skimping). USER-facing; surfaced.
+* **Smoke (P1/P1b/P1c tree) vs smoke-i4: 212/219 byte-identical, 7 cases moved** (saved `build/scratch/maze/smoke-p1b/
+  wins`; GT NOT accepted; 168 pass / 51 fail = the 44 stale + these 7). Bisected with temporary env gates in one
+  pooled 7-case batch: reverting BOTH the canonical tie-break and the mana-cache `<= 32` gate reproduces all 7 i4 files
+  byte-for-byte; reverting the tie-break alone reproduces 6 (alchemist d0 also needs the cache gate). So every move is
+  the `1 << j` (j >= 32) aliasing fix: exact (wins, rank, value) ties in greedy walks with >= 33 candidates, plus, for
+  alchemist d0, the mana-verdict cache returning an ALIASED subset's verdict (a stale-verdict bug). Direction (win
+  turn, loss = 99): extraturns d0 33 better / 0 worse; jumbo d0 5/15 (sum +197); melira d0 2/4; alchemist d0,
+  extraturns d3 (1 game), extraturns d5 (1 game), vampires d0 (1 game) digest-only, same win turns. Only d0 win
+  turns move. USER-facing (UB fix; other decks are not byte-identical).
+* **B2 verified as built** (USER's corrected ruling): unit "Maze's End P1c (USER B2)" -- Charm (ForcedTapped) ->
+  Gond Gate with no other Gond: tapped; with an Amulet: untapped; with another Gond out: untapped; Charm -> Simic
+  with a Gond out: untapped. No code change.
+
 ### Memory (new finding, P1b)
 A heavy Maze's End d3 game holds ~1.5-2+ GB of transient RSS beyond the bounded pools (the pools read fsl 0 /
 plan 512M / t2 256M at the cap), so a census batch at 32, 20, 12 and 8 workers with the heaviest seeds first
@@ -607,7 +711,9 @@ suite admission: the regression tiers pool 32 workers; Maze's End rows there cou
 
 ## Approved deferrals
 
-(none)
+* **Decision 9, Archdruid's Charm mode 2** (target creature we control; the list has none) -- USER B3 2026-11-17: "I
+guess it can be deferred. The only mode we care about heuristically is the first."
+* **Decision 33, Talon Gates' ETB phase-out** -- USER B4 2026-11-17: "Okay, I guess we can wait on that."
 
 ## Verification
 
