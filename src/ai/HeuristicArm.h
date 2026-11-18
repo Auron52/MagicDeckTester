@@ -1010,6 +1010,8 @@ enum Slot : int
     ET_OPP_TURN_PRUNE,        // MTG_ET_OPP_TURN_PRUNE     Extra Turns (USER 2026-11-18: "It's silly to give your opponent an extra turn."): Time Warp's / Walk the Aeons' opponent target is not searched (ExtraTurnsProvider::OffersExtraTurnOpponentTarget). Human play unchanged. Default ON; =0 -> both recipients searched
     MAZE_OFFMAIN_RESPOND,     // MTG_MAZE_OFFMAIN_RESPOND  Maze's End P6 (USER 2026-11-18 ruling 6): an untapped Maze's End is activated IN RESPONSE to a Manabond trigger (on a yes) or a Burgeoning trigger, then redeployed by that trigger (MazesEndProvider::OffMainMazeRedeployForced prunes the activate/decline choice to activate; the Gate fetched stays a searched crossing ordinal). Default ON; =0 -> no off-main response (with MAZE_OFFMAIN_BANK=0: the pre-P6 engine)
     MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
+    MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
+    MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
     COUNT
 };
 
@@ -1964,6 +1966,8 @@ inline const char* Name(int slot)
         "MTG_ET_OPP_TURN_PRUNE",
         "MTG_MAZE_OFFMAIN_RESPOND",
         "MTG_MAZE_OFFMAIN_BANK",
+        "MTG_MAZE_CAST_DOMINANCE",
+        "MTG_MAZE_LAND_DOMINANCE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
