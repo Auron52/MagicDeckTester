@@ -1494,3 +1494,96 @@ TEST_CASE("prepay: declines when the batch grows a scaled dork it needs")
     line2[1].hand_index = 1;
     CHECK(TurnSolver::BatchPrepayMainCasts(t, line2));
 }
+
+// ---- §2b SAC-FOR-MANA FODDER (Goblins mana-clean gate claude-regate-20261118, 833 ORACLE-GAPs) -----------------------
+// The engine's payer eats Goblins through Skirk Prospector ("Sacrifice a Goblin: Add {R}") when the board cannot pay
+// otherwise (LiveSacPayOutlet, the fodder-last block). Siege-Gang Commander's "{1}{R}, Sacrifice a Goblin" with every
+// land tapped is the gate's top signature: the engine eats two more Goblins for the {1}{R}; the oracle's table had no
+// such source ("pay1[(no payment exists)]"). docs/design/goblins-sac-mana-oracle-2026-11-18.md.
+namespace
+{
+GameState SkirkBoard()
+{
+    GameState s = Board({ "Mountain", "Skirk Prospector", "Siege-Gang Commander", "Goblin Lackey", "Goblin Piledriver" });
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;   // both default true, and a death that pays keeps the payer OFF
+    s.deck_has_upkeep_reanimate  = false;   // (SacOutletEatHasValue)
+    s.battlefield[0].tapped = true;   // no land up: only bodies can pay
+    s.battlefield[3].tapped = true;   // an attacker: a tapped body is still fodder
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    return s;
+}
+Action SiegeGangShot(const GameState& s, int victim)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup("Siege-Gang Commander");
+    Action a;
+    a.kind           = Action::Kind::SacCreatureOutlet;
+    a.card_name      = d->card.m_name;
+    a.def            = d;
+    a.hand_index     = -1;
+    a.sac_source_id  = s.battlefield[2].card.m_number;
+    a.sac_victim_id  = victim;
+    a.is_noncreature = true;
+    a.cost           = d->params.sac_creature_cost.value_or(ManaCost{});
+    a.direct_damage  = d->params.sac_outlet_damage;
+    return a;
+}
+} // namespace
+
+TEST_CASE("mana oracle: Skirk Prospector's eaten Goblins pay Siege-Gang's {1}{R} (fodder in the audit's table)")
+{
+    EnsureOracleCards();
+    GameState s = SkirkBoard();
+    const int sgc = s.battlefield[2].card.m_number, pile = s.battlefield[4].card.m_number;
+    // The activation's own source and baked victim are spent (g_pay_sac_spare, as the engine publishes it).
+    PaySacSpareScope spare(sgc, pile);
+    const ManaCost bill = Cost(1, 0, 0, 0, 1);
+    // The payer's own refine / line keep tables (sac_fodder off): no body, so nothing pays.
+    CHECK(manaoracle::MinimalPayments(s, bill, false, nullptr).empty());
+    const auto opts = manaoracle::MinimalPayments(s, bill, false, nullptr, false, false, nullptr, nullptr, 0,
+                                                  static_cast<std::size_t>(-1), 0, /*sac_fodder=*/true);
+    // The only bodies left are the tapped Lackey and Skirk itself -- eaten LAST, or its own sacrifice ends the outlet.
+    REQUIRE(opts.size() == 1);
+    CHECK(HasOption(opts, { "Goblin Lackey:R", "Skirk Prospector:R" }));
+    REQUIRE(opts[0].taps.size() == 2);
+    CHECK(opts[0].taps[0].sac_fodder);
+    CHECK(opts[0].taps[1].name == "Skirk Prospector");
+    // Performing it really sacrifices both and floats {R}{R}.
+    GameState t = s;
+    REQUIRE(manaoracle::PerformPayTaps(t, opts[0]));
+    CHECK(t.battlefield.size() == s.battlefield.size() - 2);
+    CHECK(t.floating_mana.red == 2);
+    CHECK(t.players[0].graveyard.size() == 2);
+}
+
+TEST_CASE("mana oracle: a manual pre-tap never eats a body (the fodder face is the oracle's alone)")
+{
+    EnsureOracleCards();
+    GameState s = SkirkBoard();
+    TurnSolver::PreTap t;
+    t.name = "Goblin Lackey";
+    t.num = s.battlefield[3].card.m_number;
+    t.color = 3;
+    t.sac_fodder = true;
+    CHECK_FALSE(ApplyHumanPreTap(s, t).empty());
+    CHECK(s.battlefield.size() == 5);
+    CHECK(ApplyEnginePreTap(s, t).empty());
+    CHECK(s.battlefield.size() == 4);
+    CHECK(s.floating_mana.red == 1);
+}
+
+TEST_CASE("mana oracle: Siege-Gang's shot paid by eating Goblins is among the oracle's outcomes (Goblins s30125026 T2)")
+{
+    EnsureOracleCards();
+    GameState s = SkirkBoard();
+    // A second spare body, so the eaten pair is a CHOICE (Lackey, Lackey #2, Skirk).
+    Permanent extra = s.battlefield[3];
+    extra.card.m_number = 9;
+    extra.tapped = false;
+    extra.entered_this_turn = true;
+    s.battlefield.push_back(extra);
+    const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[4].card.m_number) });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/false, plan));
+}

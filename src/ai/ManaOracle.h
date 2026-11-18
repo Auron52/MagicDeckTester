@@ -305,12 +305,16 @@ namespace manaoracle
     // `ability_src` (optional, with creature_ability): the activated ability's source permanent's card, set as the
     // paying-ability source (CreatureAbilityPayScope(src)) -- a mana_only_subtype_abilities source (Smokebraider)
     // pays an ability only of a source with its subtype.
+    // `sac_fodder`: the table also holds every legal body a live §2b sac-for-mana outlet (Skirk Prospector) can eat,
+    // as the engine's payer can (BuildSources, OracleSacFodderOn) -- and, as the payer, only when the fodder-free table
+    // is empty. The AUDIT's table only: the payer's own refine and
+    // line keep, which call this in play, leave it false.
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,
                                            const Card* ability_src = nullptr, int sac_victim = 0,
                                            std::size_t max_opts = static_cast<std::size_t>(-1),
-                                           int line_surplus_taps = 0);
+                                           int line_surplus_taps = 0, bool sac_fodder = false);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead

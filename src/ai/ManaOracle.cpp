@@ -610,6 +610,7 @@ std::string TapsText(const PayOption& o)
         if (!t.combo.empty()) { for (int c : t.combo) { s.push_back(kLetters[c]); } }
         else if (t.color >= 0 && t.color < 6) { s.push_back(kLetters[t.color]); }
         if (t.sac_crack) { s += "(crack)"; }
+        if (t.sac_fodder) { s += "(eat)"; }
         for (int ac : t.aura_colors) { s += "+"; s.push_back(kLetters[ac]); }
         if (i < o.creature_route.size() && o.creature_route[i])
         {
@@ -1398,8 +1399,50 @@ bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
     return n == 2 && amt[0] == amt[1];
 }
 
+// §2b SAC-FOR-MANA FODDER IN THE TABLE (MTG_ORACLE_SAC_FODDER, DEFAULT ON; =0 the table holds no body). The engine's
+// payer pays with BODIES as well as taps: with a live outlet (Skirk Prospector's "Sacrifice a Goblin: Add {R}",
+// Utopia Mycon's any-colour one; LiveSacPayOutlet) each piece of legal fodder is a one-shot source of the outlet's
+// yield, ranked behind every real source and spent only when the board cannot pay without it (the fodder-last block
+// in TapForCostSharedImpl). The table had no such source, so every payment the engine made by eating Goblins had
+// "(no payment exists)" in the oracle -- Goblins gate claude-regate-20261118, 833 ORACLE-GAPs, nearly all Siege-Gang
+// Commander's "{1}{R}, Sacrifice a Goblin" paid by eating two more (docs/design/goblins-sac-mana-oracle-2026-11-18.md).
+// WHICH body is eaten is a real choice (a token, an attacker, the outlet itself are different boards), so each body
+// is its own class except where two are the same resource in every respect the oracle compares (FodderKey); the
+// class's copies are interchangeable exactly as twin lands are. A body is fodder where the payer's fodder_ok says
+// so: IsSacPayFodder, not the cast's sacrifice victim nor an activation's source or baked victim (g_pay_sac_spare),
+// creature-only mana only for a creature spell, and NOT an untapped source the payer would TAP instead (it eats
+// only a permanent `usable()` rejects -- a disclosed narrowing: eating a dork for the outlet's colour is never
+// offered, by the payer or here). Only the CHECKS' table holds fodder (MinimalPayments' `sac_fodder`, set by
+// Realize unless the executor's payment script runs it): the payer's own refine and line keep (MTG_PAY_REFINE,
+// MTG_LINE_*_KEEP) read the same tables in play and must not move.
+// Set by PlanPaymentScript (real play's payment script): Realize's table then holds no body.
+thread_local bool t_no_fodder = false;
+struct NoFodderScope
+{
+    bool saved;
+    NoFodderScope() : saved(t_no_fodder) { t_no_fodder = true; }
+    ~NoFodderScope() { t_no_fodder = saved; }
+    NoFodderScope(const NoFodderScope&)            = delete;
+    NoFodderScope& operator=(const NoFodderScope&) = delete;
+};
+bool OracleSacFodderOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_SAC_FODDER", true);   // DEFAULT ON; =0 -> no fodder in the oracle's table
+    return v;
+}
+std::string FodderKey(const GameState& s, const Permanent& p)
+{
+    std::string k = "fodder|" + ClassKey(p) + AttachedKey(s, p);
+    k += p.tapped ? "|T" : "|U";
+    k += "|" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus) + ","
+       + std::to_string(p.damage) + "," + std::to_string(p.AttacksThisTurn());
+    k += p.temp_haste ? "|h" : "|-";
+    if (KeyedApart(s, p)) { k += "|plan#" + std::to_string(p.card.m_number); }
+    return k;
+}
+
 std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, std::vector<std::string>* unmodeled,
-                                   int useful)
+                                   int useful, bool sac_fodder = false, int sac_victim = 0)
 {
     std::vector<SrcClass> out;
     std::map<std::string, std::size_t> by_key;
@@ -1597,6 +1640,58 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         if (sc.faces.empty()) { continue; }
         by_key[key] = out.size();
         out.push_back(sc);
+    }
+    // The fodder classes (see OracleSacFodderOn), after every real source: a payment's taps come first in Build.
+    const SacPayOutlet so = sac_fodder && OracleSacFodderOn() ? LiveSacPayOutlet(state, a) : SacPayOutlet{};
+    if (so.valid())
+    {
+        const std::vector<Color>& prod = SacPayOutletColors(so.def->params);
+        std::map<std::string, std::size_t> fodder_at;
+        std::vector<SrcClass> fod;
+        std::vector<bool>     fod_outlet;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != a) { continue; }
+            const int num = p.card.m_number;
+            if ((sac_victim != 0 && num == sac_victim) || (num != 0 && (num == g_pay_sac_spare[0] || num == g_pay_sac_spare[1])))
+            { continue; }
+            const CardDefinition* real_def = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+            if (!IsSacPayFodder(p, real_def, so)) { continue; }
+            if (real_def != nullptr && real_def->params.creature_mana_only && !for_creature) { continue; }
+            if (!p.tapped)
+            {
+                const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
+                if (!o.free_faces.empty() || !o.fed_faces.empty()) { continue; }   // the payer taps it instead
+            }
+            const std::string key = FodderKey(state, p);
+            auto it = fodder_at.find(key);
+            if (it != fodder_at.end()) { fod[it->second].nums.push_back(num); continue; }
+            SrcClass sc;
+            sc.name = p.card.m_name.str();
+            sc.nums.push_back(num);
+            bool rep = false;
+            for (Color c : prod)
+            {
+                const int ci = static_cast<int>(c);
+                if (!(ci == 5 || ((useful >> ci) & 1))) { if (rep) { continue; } rep = true; }
+                Face f;
+                f.pt.name = sc.name;
+                f.pt.num = num;
+                f.pt.color = ci;
+                f.pt.sac_fodder = true;
+                if (MeasureFace(state, f)) { sc.max_net = std::max(sc.max_net, f.net); sc.faces.push_back(f); }
+            }
+            if (sc.faces.empty()) { continue; }
+            fodder_at[key] = fod.size();
+            fod.push_back(sc);
+            fod_outlet.push_back(real_def != nullptr && IsSacManaOutlet(real_def->params));
+        }
+        // An OUTLET eaten through itself ("Sacrifice a Goblin" names Skirk too) ends the outlet: its class goes last,
+        // so Build eats every other body of a set first -- the payer's own order (SacExpendabilityRank: the outlet
+        // itself dead last), and the only order in which such a set pays at all.
+        for (int pass = 0; pass < 2; ++pass)
+            for (std::size_t i = 0; i < fod.size(); ++i)
+            { if (fod_outlet[i] == (pass == 1)) { out.push_back(fod[i]); } }
     }
     return out;
 }
@@ -2240,10 +2335,46 @@ std::vector<Pick> ScaledAheadClasses(const GameState& state, const std::vector<S
     return out;
 }
 
+static std::vector<PayOption> MinimalPaymentsImpl(const GameState& state, const ManaCost& cost, bool for_creature,
+                                                  std::vector<std::string>* unmodeled, bool creature_ability,
+                                                  bool whole_float, const Card* spell, const Card* ability_src,
+                                                  int sac_victim, std::size_t max_opts, int line_surplus_taps,
+                                                  bool sac_fodder);
+
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
                                        const Card* spell, const Card* ability_src, int sac_victim,
-                                       std::size_t max_opts, int line_surplus_taps)
+                                       std::size_t max_opts, int line_surplus_taps, bool sac_fodder)
+{
+    // FODDER ONLY WHERE THE PAYER EATS (the fodder-last block in TapForCostSharedImpl). The payer pays fodder-free
+    // whenever the board can, and eats only when it cannot. A table offering a body beside a land that could pay is
+    // a payment the engine never makes -- and on a wide Goblin board (T7, a dozen distinct bodies) every subset of
+    // them, with every float the batch prepay can keep, is a combinatorial table (Goblins s30126235 T7: >470 MB of
+    // level-3 trace before it was stopped). So: the fodder-free table first, and the table with fodder only when that
+    // one is EMPTY. Every minimal option of the fodder table is kept, not only the fewest-bodies ones: the payer's
+    // k-ladder means to eat the fewest, and an engine payment that eats more than it needed must be COVERED here so
+    // the comparison grades it (DOMINATED-*) instead of reporting an uncovered outcome (ORACLE-GAP). The flip side,
+    // disclosed: an engine payment that eats where a fodder-free one existed is not covered (ORACLE-GAP) -- the
+    // payer's own contract says that never happens.
+    if (sac_fodder && OracleSacFodderOn() && LiveSacPayOutlet(state, state.active_player_index).valid())
+    {
+        std::vector<PayOption> nf = MinimalPaymentsImpl(state, cost, for_creature, unmodeled, creature_ability,
+                                                        whole_float, spell, ability_src, sac_victim, max_opts,
+                                                        line_surplus_taps, false);
+        if (!nf.empty()) { return nf; }
+        // `unmodeled` already holds the real sources' notes; the fodder classes add none.
+        return MinimalPaymentsImpl(state, cost, for_creature, nullptr, creature_ability, whole_float, spell,
+                                   ability_src, sac_victim, max_opts, line_surplus_taps, true);
+    }
+    return MinimalPaymentsImpl(state, cost, for_creature, unmodeled, creature_ability, whole_float, spell, ability_src,
+                               sac_victim, max_opts, line_surplus_taps, false);
+}
+
+static std::vector<PayOption> MinimalPaymentsImpl(const GameState& state, const ManaCost& cost, bool for_creature,
+                                                  std::vector<std::string>* unmodeled, bool creature_ability,
+                                                  bool whole_float, const Card* spell, const Card* ability_src,
+                                                  int sac_victim, std::size_t max_opts, int line_surplus_taps,
+                                                  bool sac_fodder)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
@@ -2261,7 +2392,8 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
     const bool memo = s_tap_memo && !whole_float;
     const bool fe_saved = t_face_effect;
     t_face_effect = memo;
-    const std::vector<SrcClass> srcs = BuildSources(state, for_creature, unmodeled, UsefulColorMask(state, cost));
+    const std::vector<SrcClass> srcs = BuildSources(state, for_creature, unmodeled, UsefulColorMask(state, cost),
+                                                    sac_fodder, sac_victim);
     t_face_effect = fe_saved;
     if (Level() >= 4)
     {
@@ -3391,7 +3523,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
                                   /*whole_float=*/f.batch,
                                   f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
-                                  f.sac_victim, want, f.batch ? 0 : line_surplus);
+                                  f.sac_victim, want, f.batch ? 0 : line_surplus,
+                                  /*sac_fodder=*/!t_no_fodder);   // the checks' table (OracleSacFodderOn)
             if (f.batch)
             {
                 PayOption skip;
@@ -5374,6 +5507,9 @@ bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, boo
         }
     } clock;
     RevealLogPause quiet;
+    // No eaten body in a script real play runs (the default-OFF MTG_REAL_PAY_SCRIPT stays exactly as it was: the
+    // fodder faces are the audit's, OracleSacFodderOn).
+    const NoFodderScope no_fodder;
     const int a = state.active_player_index;
     const EngineReal er = EngineApply(state, pre, plan);
     // A line that draws, reveals or casts what the plan did not name continues on cards nobody knew when it

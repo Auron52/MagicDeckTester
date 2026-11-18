@@ -2295,3 +2295,9 @@ seed 30173535, game index 173535. Three focused replays matched the
 oracle-off result, leaving the original identity mismatch unexplained. The
 exact digests and replay scope are in
 `logs/mana_clean/clean-extension-20261109/report.md`.
+
+## §2b sac-for-mana fodder in the table (2026-11-18)
+
+The table now holds the bodies a live sac-for-mana outlet (Skirk Prospector, Utopia Mycon) can eat, as the payer
+does, when no fodder-free payment exists (`MTG_ORACLE_SAC_FODDER`, default ON, oracle-only). Goblins ORACLE-GAP
+367 -> 5 on gi 125000-126999; see `goblins-sac-mana-oracle-2026-11-18.md`.

@@ -12893,6 +12893,37 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
     }
     else { face.assign(1, letter); }
     const int  active = state.active_player_index;
+    if (t.sac_fodder)
+    {
+        // THE MANA ORACLE'S §2b FODDER FACE (MTG_ORACLE_SAC_FODDER; docs/design/goblins-sac-mana-oracle-2026-11-18.md).
+        // The payer's kind-5 source, verbatim (TapForCostSharedOnceImpl, `best_kind == 5`): mark the body eaten,
+        // float the outlet's yield, and CommitPaySacSacrifices -- the payer's only eraser -- sacrifices it for
+        // real (graveyard, death triggers). The body may be TAPPED (an attacker eaten in main 2 is the Skirk
+        // line). Legality is the payer's own: the live outlet (LiveSacPayOutlet: none in human play, none when a
+        // death pays), IsSacPayFodder, and the bodies an activation or a sacrifice cost has already claimed
+        // (g_pay_sac_spare, g_pay_sac_victim). Oracle-only: a human taps no body (the viewer offers the outlet's
+        // own `sacout=` step), and nothing in play builds a PreTap with this set.
+        if (trace) { return reject("eating a body through a sac-for-mana outlet is not a manual tap face"); }
+        const SacPayOutlet so = LiveSacPayOutlet(state, active);
+        if (!so.valid()) { return reject("no live sacrifice-for-mana outlet"); }
+        Permanent* body = nullptr;
+        for (Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.m_number == t.num) { body = &p; break; } }
+        if (body == nullptr) { return reject("you control no '" + t.name + "' with that id"); }
+        const int num = body->card.m_number;
+        if ((g_pay_sac_victim != 0 && num == g_pay_sac_victim)
+            || num == g_pay_sac_spare[0] || num == g_pay_sac_spare[1])
+        { return reject("'" + t.name + "' is already spent by the cost being paid"); }
+        const CardDefinition* real_def = body->def_absent ? nullptr : CardDatabase::Instance().LookupCached(body->card);
+        if (!IsSacPayFodder(*body, real_def, so)) { return reject("'" + t.name + "' is not fodder for the outlet"); }
+        const std::vector<Color>& prod = SacPayOutletColors(so.def->params);
+        if (combo || std::find(prod.begin(), prod.end(), static_cast<Color>(t.color)) == prod.end())
+        { return reject("the outlet cannot make that colour"); }
+        body->pay_sac_eaten = true;
+        state.floating_mana.Add(static_cast<Color>(t.color), std::max(1, so.def->params.sac_outlet_add_mana_amount));
+        CommitPaySacSacrifices(state, active);
+        return std::string();
+    }
     Permanent* found = nullptr;
     bool name_seen = false, id_seen = false, tapped_seen = false;
     for (Permanent& p : state.battlefield)
