@@ -1203,6 +1203,10 @@ extended 5a run above found one fd-diverge (s121065 gi64), an open defect propos
 
 **P1c's d3 b0 game** (PID 73606, seed 91005 gi4, `build/scratch/maze/p1c/b0_gi4/`) was still running at 6 h 42 min
 when V1 finished. There is no result yet. It matches the S4 finding that budget-0 play is degenerate on this deck.
+**Final (P1d, 12:40 UTC):** the game was ended by SIGTERM (exit 143; not by P1d) at **12 h 28 min** wall, 43,640 s
+CPU, **peak RSS 1.83 GB**, with NO result: no win line and no game log written
+(`logs/maze/P1c-b0-result.md`). Binary `mtg.defer` = the P1c tree (W = 0, none of the P1d prunes). It confirms the S4
+finding: unbudgeted d3 play on this deck is degenerate; it was not re-run on the pruned tree.
 
 **Open items and USER sign-off pending (V1; added to the S4 list, nothing settled):**
 * The play budget b20 starves this deck: b200 is 0.225 turns/game faster on 40 seeds, and 7 of 13 slow games
