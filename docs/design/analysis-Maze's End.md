@@ -4170,3 +4170,23 @@ base's T6 at b0 but plays T7 at b2000 (attributed to the find-nothing prune).
 
 **Cost:** 0.81x Hinata at d5 b20 in the same pooled smoke run; the 2HG row is 1.52x Hinata's largest. Both are well
 under the 3x gate. Measured on a contended box.
+
+## P6 (2026-11-18): the off-main Maze's End activation (USER ruling 6)
+
+Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (code + 5 units; suite 3543/3543).
+- **Respond** (`MazeOffMainRespond`, core/SpellEffects.h): an untapped Maze's End is activated in response to Manabond
+  (on its yes) or Burgeoning and put back by that trigger. `MazesEndProvider::OffMainMazeRedeployForced` forces the
+  activation (premises at the definition; caveat: a Guild Summit draw before Manabond's yes is discarded if a
+  nonland). The fetch target is a searched crossing-land ordinal over the P3 menu.
+- **Bank** (`MazeOffMainBank`): a SEARCHED crossing-land ordinal {decline, target...}, offered only after an off-main
+  PUT (Manabond's dump, a Burgeoning put); every other off-main point shows main 2's board, where the activation is
+  already a searched plan action. This answers gi8's disclosure (the non-winning off-main activation is now modelled).
+- Levers `MTG_MAZE_OFFMAIN_RESPOND` / `MTG_MAZE_OFFMAIN_BANK`, DEFAULT ON (coordinator default, USER sign-off pending);
+  both off == the shared head, 120/120 digests.
+- Held-out A/B (1300 games/arm, d5 b20 x800 151001+, d3 b10 x500 152001+): shipped vs base **70 better / 56 worse,
+  net -15** (d5 -14, d3 -1); response alone net 0 (57/58), the bank adds 16/1. Units -5%/-6%, wall +9%/+4%
+  (contended; P6 code < 0.5% self time).
+- Slower games: 45/56 recover at d8 b0; 11 hit the b0 ceiling on both arms and all equal at d8 b2000.
+- Smoke: only the four `mazesend*` rows move (all faster). Smoke slower d5 g45/g60 and d0 g92 abandon at b0 on both
+  arms (b2000 replay owed); the rest recover.
+- OWED: the executor/rollout mismatch check (verify_deck `mismatch` gate + `MTG_LINE_PAY_AUDIT`) on the P6 binary.
