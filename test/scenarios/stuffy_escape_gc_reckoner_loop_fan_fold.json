@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Damage reflection, design step 9c (docs/design/damage-reflection-pipeline.md 14): the KILL FOLD of the main-phase",
+    "and combat reflection-target fans. The turn-4 position of the d3/b10 game seed 27 / game-index 26 (Stuffy Doll):",
+    "a settled Boros Reckoner, Loran's Escape + Guilty Conscience + Chain Reaction + Spiteful Sliver in hand. Escape",
+    "makes the Reckoner indestructible and GC loops it: every one of its reflections is a target choice (the face, itself,",
+    "the Sliver, the opponent's creature), and the loop is unbounded until someone dies. Before the folds the fans",
+    "cloned the plan once per option at every choice of the loop, i.e. every interleaving: the step-9b binary spent",
+    "minutes in AppendSubdecisionAxes (combat fan: SimulateCombat -> CombatDamageDealt -> Drain; main fan: Chain",
+    "Reaction -> dmgrx::Sweep -> Drain) with RSS growing without bound, at a 10 ms budget, since enumeration is not",
+    "charged. With the folds a line that kills this turn is pinned instead of fanned; the game wins on turn 4 in ~1 s."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Boros Garrison" },
+    { "name": "Inspiring Vantage" },
+    { "name": "Boros Reckoner" }
+  ],
+  "hand": [ "Spiteful Sliver", "Sacred Foundry", "Loran's Escape", "Guilty Conscience", "Chain Reaction",
+            "Arid Mesa", "Mountain" ],
+  "library_filler": "Plains", "library_size": 36,
+  "depth": 3, "budget_ms": 10, "max_turns": 6,
+  "expect_win_turn": 4,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0
+}

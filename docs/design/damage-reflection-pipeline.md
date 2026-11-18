@@ -1753,7 +1753,8 @@ Where the code departs from the sections above, and why. Each entry names the sy
   variant (2^k - 1 clones after the natural attack). The target fan then runs on every variant (its ordinal counts only
   the non-hold pins). Beyond the horizon and in the d0 runner nothing clones, so the playout keeps the provider's
   attack (the standing exemption). Other decks: `reflect_armed` is false -> byte-identical.
-* **NEW SOUND FOLD in the step-5b combat fan (found by the step-9c tests): a combat line that KILLS is not fanned.**
+* **NEW SOUND FOLD in the step-5b combat fan AND the step-3 main-phase fan (found by the step-9c tests and the d3/b10
+  game seed 27 / gi 26): a line that KILLS is not fanned.**
   Nothing beats a kill this turn (the goldfish objective is the win turn), so once one combat line through the
   remaining choices kills, the plan is pinned to it and its other options are not branched; it carries every pin, so
   both worlds replay it. Two cheap policies are tried: every list FRONT (the probe the fan already runs), then the
@@ -1765,6 +1766,43 @@ Where the code departs from the sections above, and why. Each entry names the sy
   makes no progress, so the front line stops at the no-progress rule without a kill. With the fold: scenario 0.20 s,
   the four step-9c cases 0.14 s. Not budget-sensitive (it applies at every budget), and complete: a kill found is
   optimal, and where neither policy kills the fan is exactly the step-5b fan.
+* **The main-phase fan carries the same fold (commit 69b81f256).** Probe the plan's main-phase apply with every
+  unpinned choice at its front; if the opponent loses, pin the fronts; else pin the opponent's face wherever legal (else
+  the front) one choice at a time; if that kills, pin it; otherwise fan as before. Same soundness argument: a plan whose
+  main phase kills wins this turn, nothing after the game ends is scored, so its other pin assignments cannot score
+  better; the fold applies at every budget (no budget read), so nothing becomes unfindable at a large one; it is not a
+  pick among non-winning options (where neither policy kills, the fan branches every admitted option exactly as step 3).
+  The face policy costs one probe per remaining choice, and a killing loop has <= 2 x life choices.
+* **ROOT CAUSE of the degenerate d3/b10 game (seed 27, game-index 26; PRE-EXISTING: reproduced on the step-9b binary).** Turn 4: a settled
+  Boros Reckoner, hand Loran's Escape + Guilty Conscience + Chain Reaction + Spiteful Sliver. Escape + GC make an
+  indestructible GC'd reflector, so every reflection in the loop is a target choice (face / itself / the Sliver / the
+  opponent's creature) and the loop runs until someone dies. The probe-and-fans (step-5b combat: the GC'd Reckoner
+  attacks; step-3 main: Chain Reaction sweeps it) cloned the plan once per option at EVERY choice of that loop, i.e.
+  every interleaving of its targets: exponential in the loop length. perf on the step-9b binary: 99.5% under
+  `AppendSubdecisionAxes` -> `SimulateCombat` -> `dmgrx::CombatDamageDealt` -> `Drain` -> `ResolveTrig` (the
+  combat fan); on a767c1ec0 (combat fold only) the residue was the main fan (`ApplyPlanDirect` -> `dmgrx::Sweep` ->
+  `Drain`). Why a 10 ms budget did not bound it: plan ENUMERATION (AppendSubdecisionAxes and its probes) is not
+  charged to the budget anywhere in the engine -- the budget prices search over the enumerated plans, and the fan is
+  enumeration. Why RSS grew without bound: every fully pinned leaf of the fan is kept in the `expanded` list
+  (one Plan per interleaving). Neither is a separate defect once the fan stops being exponential: no memo or cache
+  grows here, and the drain itself was bounded (cap + no-progress rule worked). Fix = the two kill folds; with both
+  the game wins on turn 4 in ~1 s at 6-8 MB RSS (step-9b binary: still running after 100-120 s, RSS 0.7-0.8 GB
+  and climbing, killed). Pinned by scenario `stuffy_escape_gc_reckoner_loop_fan_fold` (that turn-4 position, d3/b10;
+  1.0 s on the fix, > 100 s and growing on step 9b). **Residual risk (surfaced, not fixed):** a reflection fan whose
+  lines do NOT kill is still exponential in the number of choices; today every such line is short (the no-progress
+  rule ends a zero-progress loop after 64 resolutions, and a progressing loop kills), so none is known to blow up.
+* **Verification at 69b81f256 (+ the scenario):** unit 3464/3464, scenarios 579/579, smoke 219/219 job digests
+  identical to step 9b (`impl9c2/smoke-step9c-batch.log`; the 44 smoke FAILs are the stale origin GT). d0 sanity: 44
+  won, avg win turn 5.386, digest 55be46e7fc8282d0 = a767c1ec0's (the d0 runner never reaches the fans).
+* **d3/b10 A/B (50 games, seed 1, one batch per binary, back to back).** The step-9b arm itself still explodes on gi 26,
+  so the control is step 9b + ONLY the two kill folds (local branch `stuffy-9b-folds-ctl`); the comparison isolates
+  step 9c's searched hold and cast order. Control: 50/50 won, avg win turn 4.52, 33.9 core-s (1.135M units), peak RSS
+  0.19 GB. Step 9c: 50/50, avg 4.46, 37.6 core-s (+11%; 1.292M units, +14%), peak RSS 0.24 GB. Per game: 1 faster, 0
+  slower, 49 same win turn, 7 play digests changed. The faster game is gi 46 (7 -> 4), exactly the USER's case: the
+  control plays Mogg Maniac and swings for 1 a turn, deferring Guilty Conscience to turn 7 (a GC'd Maniac that attacks
+  dies to its own loop before the Escape is castable); step 9c casts GC on turn 3, HOLDS the Maniac, casts Loran's
+  Escape on turn 4 and attacks into the indestructible GC loop for the kill. No slower game, so no slower mechanism to
+  report; the +11% CPU is the hold variants' extra plans (every GC'd attacker subset is scored).
 * **Viewer: NOT surfaced (PROVISIONAL gap, surfaced to the USER).** The brief assumed human play declares attackers;
   it does not -- the viewer has no attacker declaration for any deck (combat is declared by `AttackWith`;
   tools/play/README.md lists "route combat (attackers/blockers) through the chooser" as an open item), so a human
