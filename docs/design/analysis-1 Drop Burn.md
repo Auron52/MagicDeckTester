@@ -56,21 +56,56 @@ Started 2026-11-17 on `phase-1-2-deck-analyzer` @ 17262a61f.
 
 ### Modelling decisions
 
-* **Vexing Devil opponent policy — PROVISIONAL (awaiting USER).** The goldfish opponent is passive, so
-  the "any opponent may" choice needs a model. Chosen: **the opponent takes the 4 damage unless that
-  would be lethal to them (life <= 4, team life in 2HG); otherwise the Devil stays as a 4/3.** Rationale:
-  against a goldfish that never blocks or removes, a surviving 4/3 deals >= 4 the next turn, so taking 4
-  now is the opponent's better choice except when it is immediately lethal. Alternatives surfaced to the
-  user: adversarial (the search evaluates both branches and assumes the worse one for us), always-take,
-  never-take (a fully passive opponent never opts in).
+* **Vexing Devil opponent policy — USER RULING 2026-11-17** (replaces the provisional "take unless
+  lethal"). Verbatim: *"For devil it should probably always take the damage except if it is played late.
+  Given that your opponent doesn't know your hand let's make a rule that they will take the damage unless
+  they are at 4 or less when you have no cards in hand or 7 or less if you are holding cards. Essentially,
+  an attempt at determining whether you are likely to kill this turn without clarirvoyantly looking at your
+  hand. Generally this will mean we can just stack devils early to avoid needing to wait which is exactly
+  what a good player does anyway."* Implemented in `VexingDevilOpponentTakesDamage` (decline at life <= N
+  with our hand empty, <= N + 3 while we hold any card; N = 4; hand SIZE only, counted at resolution).
 * **Needle Drop "dealt damage this turn"** is DAMAGE, not life loss: needs a per-turn damage tracker for
   the opponent player (and marked damage for creature targets). It is an instant, so it is castable after
   combat damage; the deck already enables the second main via Skewer the Critics' spectacle, but Needle
   Drop's own param must also be detected by `DeckUsesSecondMain` (2c-bis).
 
+## Cast order — DRAFT for USER review (2026-11-17)
+
+USER: *"Can you make a full cast order for me to review? Note that Needle Drop should have the option to be
+cast in the second main."* Drafted as `MTG_ONEDROPBURN_ORDER` (default OFF until the USER approves;
+`OneDropBurnProvider::CastOrderRank`). Within ONE main phase; which main each cast goes in stays SEARCHED
+(the provider applies no main-1 filter, the deck plays a second main), so Needle Drop can go post-combat.
+
+**Amended 2026-11-17 (USER):** *"Needle drop should only be split into main 1 and main 2 casts. You can cast
+it at the end of main 1 or the beginning of main 2 if we are reliant on combat damage. The tricky part is that
+we need to allow casting any cards drawn in main 2 if that happens."* / *"Skewer the critics has similar
+behaviour except it doesn't draw."* / *"if we cast it in main 1 that opens a breakpoint in which the new spells
+can be cast."*
+
+| rank | card | why |
+|---|---|---|
+| land | land drop | searched at depth > 0 (unchanged) |
+| 5 | Needle Drop -- *main 2, opponent already damaged (combat)* | the main's first cast; its draw is a breakpoint, main 2 re-decides with the card |
+| 6 | Skewer the Critics -- *main 2, opponent already damaged* | spectacle {R}, right after Needle Drop |
+| 10 | Goblin Guide, Monastery Swiftspear | haste; prowess sees every later spell |
+| 12 | Vexing Devil | before the burn: the opponent decides at its highest life of the main; its 4 turns on spectacle / Needle Drop |
+| 13 | Grim Lavamancer | no haste; a body this turn |
+| 22 | Boltwave, Chain Lightning, Lava Spike, Lightning Bolt | name order |
+| 26 | Rift Bolt (hardcast) | MV 3 |
+| 29 | Needle Drop -- *end of main 1 (or main 2 before any damage)* | after the burn that makes it legal; draws before Skewer |
+| 30 | Skewer the Critics -- *end of the main* | after the burn and Needle Drop |
+| 40 | Fireblast | last: its alt cost sacrifices two Mountains after they have tapped |
+
+Agent choices inside the ruling (surfaced): Needle Drop before Skewer in both windows (draw first); main 2 keeps
+the damage test for Skewer (first in an undamaged main 2 it would be hardcast for 3 when a same-main Devil /
+burn could make it {R}); an undamaged main 2 leaves both at the end rather than pruning that window.
+
 ## Open questions for the USER
 
-1. Vexing Devil opponent policy (above).
+1. ~~Vexing Devil opponent policy~~ -- RULED 2026-11-17 (above).
+2. Cast order draft (above): approve / amend.
+3. Deferrals: Needle Drop cannot target planeswalkers; painland self-damage does not set the "dealt damage this
+   turn" flag (inert here). USER 2026-11-17: *"the viewer does display your life which is good enough for this case."*
 
 ## CHECKPOINT 2026-11-17 (orchestrator; resume here)
 
@@ -78,12 +113,28 @@ Started 2026-11-17 on `phase-1-2-deck-analyzer` @ 17262a61f.
   `logs/1dropburn/impl-handoff.md`). Cost audit rc 0 (658/658). Field audit: snapshot refreshed
   (`src/cards/data/scryfall_reference.json`, UNCOMMITTED) and offline audit rc 0; the Vexing Devil oracle
   advisory is only its bracket note.
-* **UNCOMMITTED, NOT YET BUILT:** `OneDropBurnProvider` (empty DeckProvider derivation, DecisionProviders.h
-  beside MidrangeBurn; routed by `one_drop_burn` flag = target_dealt_damage_this_turn ||
-  etb_opp_may_take_damage_to_sac, returned right after `lfe`); the Needle Drop cast-order tier 29 MOVED
-  from GenericProvider::CastOrderRank into `OneDropBurnProvider::CastOrderRank`; tests updated
-  (test_needle_drop_vexing_devil.cpp sets the provider; test_pirates_provider.cpp table row
-  `{"1 Drop Burn","OneDropBurn"}`). Before this the deck routed to `Generic`.
+* **Committed c1ed42e00 (local):** `OneDropBurnProvider` (empty DeckProvider derivation; Needle Drop tier 29
+  moved into it), tests, Scryfall snapshot, decklist. Unit tests pass; smoke `logs/1dropburn/smoke2.log`
+  identical to smoke1 (same 39 drift keys, same got digests, 180 pass). Stage 3 coverage: 14/14 full.
+* **Stage 4 done:** baseline profile written (`decks/1 Drop Burn/1 Drop Burn.profile.json`, UNCOMMITTED);
+  cost diag NO_COST_INTERACTIONS; discard stage DISCARD_UNLABELLED (0 real sheds in play; rollout sheds 2221x
+  -- bound with MTG_SHED_WORST A/B per the stage's advice, 5i). 4a provider_audit --check rc 0 (OneDropBurn,
+  cert NotAssessed). Cost gate PASS 0.84x hinata (`logs/1dropburn/costgate2.log`).
+* **4-bis rows ADDED (UNCOMMITTED, test/regression_cases.sh):** key `onedropburn`/`onedropburn2hg`; smoke
+  d0 1000/d3 50 b10/d5 100 b20/2hg d5 25; regression d0 1000/d3 75/d5 150 x2/2hg 75; overnight ENTRY set
+  (d0 4x2000, d3 4x400 b10, d5 4x300 b20, 2hg 2x100); backstops 30261 (regression) / 30161 (overnight), screen
+  `logs/1dropburn/backstop_screen.*` (s30281 abandoned a d5 game; heavy unbudgeted tail).
+  **Regression GT ACCEPTED** (7 keys, check_gt_logs clean; uncommitted).
+* **RUNNING (started ~19:40 UTC):** `bash test/regression.sh --smoke --overnight --deck=onedropburn,onedropburn2hg`
+  -> `logs/1dropburn/smoke_overnight.log` (DONE marker at end). It first builds PGO (harness). Then accept
+  `--smoke --accept --deck=onedropburn,onedropburn2hg` and `--overnight --accept` with the same filter,
+  `python3 test/check_gt_logs.py`, commit rows+GT+profile+suite_cost/job_cost.
+* **5b done:** monotone; 75 shared seeds d0 4.44 / d3 3.653 / d5 3.653 (d3==d5 per game, none slower than d0);
+  d5 ~49% T3, ~40% T4; d0 11/1000 no-win.
+* **Next:** verify_deck.py (5a nonconv/fd-diverge etc.), 5c2 leaf_tiebreak_check.py, 5d claude-play sweep
+  (~16 games, Sonnet player agents via Agent tool, seeds disjoint e.g. base 50001), 5h viewer, 5i discard
+  (shed-worst A/B), Stage 6 report. Push once (4h rule; no push yet this session) + background CI watch.
+  2-hourly status cron 01e1d807 is session-only.
 * **RESOLVED -- the 39 smoke mismatches are PRE-EXISTING upstream drift, not 15a6a5c86.** An exact
   parent build (17262a61f, scratch worktree, since removed) replayed all 39 failing smoke jobs plus two
   passing canaries (midrangeburn d0/d3) from the primary checkout: all 41 per-game `.wins` files are
@@ -93,6 +144,35 @@ Started 2026-11-17 on `phase-1-2-deck-analyzer` @ 17262a61f.
   coverage re-run -> Stage 4 profile (`analyze_deck.py --no-rebuild`) -> 4a provider_audit -> 4-bis suite
   rows in all 3 tiers (template: midrangeburn rows) + accept -> Stage 5 (verify_deck.py, 5a-5i, claude-play
   sweep on Opus/Sonnet) -> Stage 6 report.
-* **Open USER questions:** (1) Vexing Devil opponent policy (PROVISIONAL: take 4 unless lethal);
-  (2) Needle Drop cast-order tier 29 (after creatures + other spells) -- user-owned; (3) deferrals:
-  Needle Drop cannot target planeswalkers; painland self-damage not marked (both inert for this deck).
+* **2026-11-17 ~20:00 UTC: USER ruled the Devil policy (hand-size rule) and asked for a full cast order.**
+  The smoke+overnight run was stopped while still building PGO (its GT would have been the old policy).
+  Devil rule implemented + unit test; full order drafted behind `MTG_ONEDROPBURN_ORDER` (default OFF).
+  Next: build, unit tests, smoke (only onedropburn may move), re-run + re-accept the deck's regression GT,
+  A/B the draft order (held-out seeds), then smoke+overnight accept, then Stage 5.
+* **~22:20 UTC: BUILD RACE caught.** The order edit landed mid-compile, so DecisionProviders.cpp.o was
+  stale-but-newer (old class layout vs new header). Touched all edited files; clean rebuild RUNNING ->
+  `logs/1dropburn/build_order2.log` (">>> done" at end). After it: `./build/Release/mtg-test` (all),
+  `MTG_ONEDROPBURN_ORDER=1 ./build/Release/mtg "decks/1 Drop Burn/1 Drop Burn.cod" --cast-order-report`
+  must show ranks 10/12/13/22/26/30/35/40, smoke (only onedropburn keys + the 39 known drift may differ),
+  re-run regression `--deck=onedropburn,onedropburn2hg` and re-accept, A/B the order (held-out seeds,
+  `MTG_ONEDROPBURN_ORDER=1` vs off), commit, then smoke+overnight for the deck, then Stage 5.
+* **Open USER questions:** see "Open questions for the USER" above.
+* **~22:50 UTC: clean rebuild OK; the draft report shows ranks 10/12/13/22/26/30/35/40.** Registered
+  `MTG_ONEDROPBURN_ORDER` as a heurarm lever (`ONEDROPBURN_ORDER`, per-job manifest flag) and added ARMSET
+  `onedropburn` (base/draft) + `OUT_DIR` override to `test/mana_tap_order_ab.sh`. Rebuild RUNNING ->
+  `logs/1dropburn/build_lever.log`. Then: mtg-test, smoke, regression re-accept, and the A/B:
+  `ARMSET=onedropburn CASES=overnight DECKS=onedropburn,onedropburn2hg OUT_DIR=build/scratch/1dropburn/order_ab bash test/mana_tap_order_ab.sh`
+  (~3000 core-s, paired; result in `$OUT_DIR/paired.txt`).
+* **2026-11-18 ~00:30 UTC.** USER amended the order: Needle Drop / Skewer split by MAIN (end of main 1, or
+  first in main 2 after combat damage; see the amended table). Built; mtg-test 3393/3393 pass. Traced probe
+  (`build/scratch/1dropburn/m2trace`, 300 games, draft ON): main-2 Needle Drop first in 12/12 first-copy
+  casts; the drawn card IS cast in the same main 2 (gi28 Skewer, gi35 Bolt). Full smoke `logs/1dropburn/smoke3.log`:
+  180 pass, the SAME 39 drift keys with the SAME got digests as smoke2, 4 NEW onedropburn keys -> ACCEPTED
+  (filtered). Modern RW Burn's 2 Vexing Devil are SIDEBOARD only, so the Devil ruling moves no other deck.
+  RUNNING: regression `--deck=onedropburn,onedropburn2hg` -> `logs/1dropburn/regression2.log` (DONE marker).
+  Next: accept it (same filter) + check_gt_logs, then the order A/B (command above), commit, smoke+overnight
+  rows... (overnight: run `--overnight --deck=onedropburn,onedropburn2hg` once, accept), Stage 5.
+* **~00:50 UTC: regression GT re-ACCEPTED under the Devil ruling** (7 keys, only onedropburn; d0 4.436->4.441,
+  d3 3.653->3.640, the rest same avg / new digest); check_gt_logs 1263 consistent, 0 stale.
+  RUNNING: the order A/B -> `logs/1dropburn/order_ab.log` (DONE marker), results
+  `build/scratch/1dropburn/order_ab/paired.txt`. Next: report it to the USER, commit, overnight rows, Stage 5.

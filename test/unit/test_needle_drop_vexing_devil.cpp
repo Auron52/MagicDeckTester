@@ -2,8 +2,9 @@
 //   * Needle Drop -- "deals 1 damage to any target that was dealt damage this turn. Draw a card."
 //     (CardParams::target_dealt_damage_this_turn + cast_draw; GameState::player_dealt_damage_this_turn).
 //   * Vexing Devil -- "When this creature enters, any opponent may have it deal 4 damage to them. If a
-//     player does, sacrifice this creature." (CardParams::etb_opp_may_take_damage_to_sac; the PROVISIONAL
-//     passive-opponent policy VexingDevilOpponentTakesDamage: take it unless it would be lethal).
+//     player does, sacrifice this creature." (CardParams::etb_opp_may_take_damage_to_sac; the USER's
+//     2026-11-17 passive-opponent policy VexingDevilOpponentTakesDamage: decline at life <= 4 with our
+//     hand empty, or <= 7 while we hold any card; take it otherwise).
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
@@ -270,7 +271,7 @@ TEST_CASE("Vexing Devil: the opponent at high life TAKES 4 and the Devil is sacr
     CHECK(InGraveyard(exec, "Vexing Devil"));
 }
 
-TEST_CASE("Vexing Devil: the opponent at <= 4 DECLINES (it would be lethal) and the Devil stays a 4/3 (both worlds)")
+TEST_CASE("Vexing Devil: with our hand EMPTY the opponent at <= 4 DECLINES (it would be lethal) and the Devil stays a 4/3 (both worlds)")
 {
     for (const int life : {4, 1})
     {
@@ -293,6 +294,38 @@ TEST_CASE("Vexing Devil: the opponent at <= 4 DECLINES (it would be lethal) and 
     TurnSolver::ApplyPlan(five, NPlan({ NCast("Vexing Devil") }), /*is_pre_combat=*/true);
     CHECK(five.players[1].life == 1);
     CHECK_FALSE(OnBattlefield(five, "Vexing Devil"));
+}
+
+TEST_CASE("Vexing Devil: while we HOLD a card the opponent declines at <= 7 and takes at 8 (both worlds)")
+{
+    // USER 2026-11-17: "unless they are at 4 or less when you have no cards in hand or 7 or less if you
+    // are holding cards". One Mountain, so only the Devil is cast and the Lava Spike stays in hand.
+    for (const int life : {7, 5})
+    {
+        CAPTURE(life);
+        const GameState board = NBoard(1, {"Vexing Devil", "Lava Spike"}, life);
+        GameState roll = board;
+        TurnSolver::ApplyPlan(roll, NPlan({ NCast("Vexing Devil") }), /*is_pre_combat=*/true);
+        CHECK(roll.players[1].life == life);
+        CHECK(OnBattlefield(roll, "Vexing Devil"));
+
+        GameState exec = board;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        NExecCast(eng, exec, "Vexing Devil");
+        CHECK(exec.players[1].life == life);
+        CHECK(OnBattlefield(exec, "Vexing Devil"));
+    }
+    const GameState board8 = NBoard(1, {"Vexing Devil", "Lava Spike"}, 8);
+    GameState roll = board8;
+    TurnSolver::ApplyPlan(roll, NPlan({ NCast("Vexing Devil") }), /*is_pre_combat=*/true);
+    CHECK(roll.players[1].life == 4);
+    CHECK_FALSE(OnBattlefield(roll, "Vexing Devil"));
+
+    GameState exec = board8;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    NExecCast(eng, exec, "Vexing Devil");
+    CHECK(exec.players[1].life == 4);
+    CHECK_FALSE(OnBattlefield(exec, "Vexing Devil"));
 }
 
 TEST_CASE("Vexing Devil's taken damage makes Needle Drop castable in the same main (it is cast after the Devil)")

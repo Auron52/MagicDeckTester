@@ -1116,6 +1116,17 @@ niv_regression_d5_s3003	23853
 niv_smoke_d0_s1001	1
 niv_smoke_d3_s1001	14606
 niv_smoke_d5_s1001	50105
+onedropburn2hg_regression_d5_s2002	167583
+onedropburn2hg_smoke_d5_s1001	142690
+onedropburn_regression_d0_s2002	1
+onedropburn_regression_d3_s2002	32061
+onedropburn_regression_d3_s30261	6247
+onedropburn_regression_d5_s2002	49776
+onedropburn_regression_d5_s3003	41166
+onedropburn_regression_d5_s30261	4572
+onedropburn_smoke_d0_s1001	1
+onedropburn_smoke_d3_s1001	21552
+onedropburn_smoke_d5_s1001	39737
 pd2hg_overnight_d5_s4004	39326
 pd2hg_overnight_d5_s5005	33322
 pd2hg_overnight_d5_s6006	39447

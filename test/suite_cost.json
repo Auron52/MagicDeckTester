@@ -391,6 +391,15 @@
    "total_core_ms": 277856,
    "worst_case": "niv2hg_regression_d5_b20"
   },
+  "onedropburn": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 23278.56,
+   "jobs": 7,
+   "key": "onedropburn",
+   "tier": "regression",
+   "total_core_ms": 4067541,
+   "worst_case": "onedropburn2hg_regression_d5_b20"
+  },
   "pd": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 903.16,

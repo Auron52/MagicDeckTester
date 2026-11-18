@@ -1847,6 +1847,11 @@ public:
         "activations, Rift Bolt's suspend and haste/prowess combat before claiming a winless turn" }; }
     const char* Name() const override { return "OneDropBurn"; }
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    // THE PROPOSED FULL ORDER (MTG_ONEDROPBURN_ORDER, default OFF -- a USER review item, 2026-11-17; see
+    // the definition and docs/design/analysis-1 Drop Burn.md). Off -> the tier-29 Needle Drop order only.
+    bool CastOrderTotalByName() const override;
+    bool OrderOpaqueCastsByRank() const override;
+    const char* CastOrderTierName(int rank) const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by

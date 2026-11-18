@@ -18,6 +18,7 @@
 #   levers   (default) base / needs / attack / both          -- the two tap-order levers
 #   rollback           base / rollback / all3                -- the payment rollback alone and on top
 #   all                base / needs / attack / both / rollback / all3   (930 jobs on the regression tier)
+#   onedropburn        base / draft                  -- 1 Drop Burn's draft cast order (MTG_ONEDROPBURN_ORDER)
 #
 # Usage:
 #   bash test/mana_tap_order_ab.sh                 # regression-tier cells, the `levers` arms
@@ -43,7 +44,7 @@ case "$TIER" in
   *) echo "CASES must be smoke|regression|overnight" >&2; exit 2 ;;
 esac
 RUN=${RUN:-$(date +%Y%m%d_%H%M%S)_$TIER}
-OUT=logs/mana_tap_ab/$RUN
+OUT=${OUT_DIR:-logs/mana_tap_ab/$RUN}   # OUT_DIR=build/scratch/... keeps per-game logs off the 9p mount
 mkdir -p "$OUT/wins"
 ONLY=${DECKS:-}
 
@@ -84,6 +85,11 @@ ARMSETS = {
         "rollback": {"MTG_NEEDS_TAP_ORDER": False, "MTG_ATTACK_BODY_TAP_ORDER": False, "MTG_PAY_ROLLBACK": True},
         "all3":     {"MTG_NEEDS_TAP_ORDER": True,  "MTG_ATTACK_BODY_TAP_ORDER": True,  "MTG_PAY_ROLLBACK": True},
     },
+}
+# 1 Drop Burn's DRAFT cast order (USER review 2026-11-17): generic-ish shipped order vs the draft
+ARMSETS["onedropburn"] = {
+    "base":  {"MTG_ONEDROPBURN_ORDER": False},
+    "draft": {"MTG_ONEDROPBURN_ORDER": True},
 }
 ARMS = ARMSETS[os.environ.get("ARMSET", "levers")]
 jobs = []
