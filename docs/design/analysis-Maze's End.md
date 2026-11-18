@@ -794,6 +794,21 @@ d5 97001+gi, 60 games; d1 b1 98001+gi and d1 b3 98101+gi, 30 games; 8 workers, 5
 (ms in this second batch are CONTENDED: another agent's 8-worker batch started at ~01:59 UTC and overlapped it.
 Quality and units stand; the cost verdict is re-timed below.)
 
+**Cost re-timed UNCONTENDED** (`p1d/retime`, 02:46 UTC, only P1c's single b0 game alongside; Release binary =
+MTG_PGO=0; ship arm, the ab2 seeds; 8 workers, 58 s, peak RSS 1.34 GB; all 180 digests and units identical to ab2):
+
+| shape | ms/game | units/game | avg win turn | vs 15,510 ms (3x Hinata 5,170) |
+|---|---|---|---|---|
+| d3 b10 | 1,789 | 150,254 | 6.2000 | 0.12x -- passes |
+| d5 b10 (play) | 1,086 | 95,891 | 6.3000 | 0.07x -- passes |
+| d1 b1 (mulligan gen) | 712 | 63,767 | 6.3000 | |
+| d1 b3 (mulligan gen) | 2,839 | 229,750 | 6.3333 | |
+
+(Not `suite_gate.py --cost`, which needs suite cases; a pooled batch at the suite shapes, 8 workers for memory.)
+Units on this tree: **3429/3429** (`p1d/units2.log`). Smoke NOT run (the changes are `MazesEndProvider`-only plus
+heurarm slots appended at the end; other decks expected byte-identical). The P1c d3 b0 game (seed 91005 gi4) was
+still running at ~2 h 45 min when P1d stopped -- see `logs/maze/P1d-handoff.md`.
+
 **Item 3 -- "d3 is weirdly expensive" (USER A5): it is not; the census sets were different games.** On the SAME
 seeds, d3 b10 and d5 b10 play byte-identical games: 60/60 digests on seeds 96001+gi with the shipped tree
 (`p1d/pair1`: both 150K units/game, 6.200) and 16/16 on seeds 92001+gi with every prune off and W = 0 (`p1d/pair2`:
@@ -833,6 +848,30 @@ v3 best (d1 b1 6.267 vs 6.400, 7/0; d5 6.41 vs 6.43, 5/5), v5 next (d5 6.41, 6/4
 **v5 (fetch eval 100) is slightly better** (d5 6.337 vs 6.350, 13/10; d1 b1 6.26 vs 6.33, 9/2). On the pruned tree
 the weights barely move play. Default unchanged (v0) pending the USER; the selector is to be deleted once the USER
 picks (ms contended; units comparable).
+
+**Item 8 / P4 -- further prune candidates (REPORTED, NOT BUILT; each needs a USER ruling).** From the shipped-tree
+census of 91021 gi20 (`p1d/diag/c91021_d5`: 837K odometer positions, 435K plans; option groups of width 1-3 only)
+and the menus as built:
+1. **Maze's End's fail-to-find twin** (+1 option on every activation): with any legal Gate target, "find nothing"
+   looks DOMINATED in this list -- the find only adds a land (and a Guild Summit draw); nothing here rewards a
+   smaller board or a bigger library. Deck-scoped dominance, sound by the same argument as decision 28.
+2. **Interchangeable hand copies** (engine-wide, priced by the census, not applied): each duplicate hand copy is
+   its own x2 group; folding them (C(s+k,k) for (1+s)^k) prices **1.79x** fewer odometer positions over this game
+   (Exploration, Burgeoning, Amulet, Manabond, Sea/Manor/Cliffgate, Gond Gate copies). An identity fold, but an
+   ENGINE change for every deck.
+3. **Burgeoning's land menu** (decision 23: every distinct land name in hand x its entry pins, + none): the P1 colour
+   rule already narrows the pins; the land itself could follow P3's logic (a new-name Gate first, a duplicate name
+   last) -- width = distinct lands in hand + 1 (typically 2-4).
+4. **Archdruid's Charm mode 1: to hand vs onto the battlefield tapped** for a land (x2 per Charm find): with no land
+   drop left, "battlefield" dominates "hand"; with a drop open and the land entering tapped anyway, "hand" keeps the
+   option -- a conditional prune.
+5. **Gateway Plaza pay-or-sacrifice** (x2): sacrificing loses a land and a Gate name; dominated unless the {1} buys
+   a cast this turn -- a conditional prune.
+6. **Heap Gate's Treasure** (x2 per activation, searched): converts a Gate tap into a Treasure; worth it only when
+   the Treasure's colour or the next turn's mana is the binding constraint.
+7. **Exploration multi-drop land ORDER**: two enters-tapped Gates in either order reach the same board (an identity
+   fold the census could price with a land-order counter; not measured).
+B1/P1-P3's menus are already 1-3 wide, so the remaining width is in plan SUBSETS rather than per-decision menus.
 
 ### Memory (new finding, P1b)
 A heavy Maze's End d3 game holds ~1.5-2+ GB of transient RSS beyond the bounded pools (the pools read fsl 0 /
