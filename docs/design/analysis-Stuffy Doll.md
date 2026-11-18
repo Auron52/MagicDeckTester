@@ -237,6 +237,10 @@ deferrals provisional.
      reduction, Chain X, Nemesis rider); aura_host_damage_back is now a dig prompt (9e).
   8. "I'm not sure what prompts for pull, but once per loop might make sense." => viewer Shaman-pull prompt: ask
      once per loop (investigate what prompts it first).
+  4b. (~07:35, verbatim, refines 4) "With the clairvoyance case, it would be a different story if it slipped through
+     to non-clairvoyant search. In that case it is a real bug to fix." => OWED: check whether the land-ETB scry
+     sizing (EnumeratePlansWithLand Plan::scry_choice) reads the unseen top in NON-clairvoyant search; if it does,
+     FIX it as a bug.
   + "Yes, let's check that White Knights' result change." => investigate 451a4c571's WK digest move
      (logs/stuffy/gt-attribution.md: LookupCached side-effect hypothesis; caches must not change units).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
