@@ -38324,31 +38324,12 @@ struct ThresholdLootTargetScope
     ~ThresholdLootTargetScope() { g_threshold_loot_target = old; }
 };
 // Return battlefield permanent `idx` to its OWNER's hand (Oboro's SelfBounce; Maze's End's return-self
-// cost). Shared so both read one LTB bookkeeping: revolt's "a permanent left", the hand-entry reason
-// (Bounce = new material, which arms the hand-entry breakpoint so the replay is searchable), the
-// devotion / reconfigure refresh, and every Equipment / Aura attached to it falling off.
-inline void ReturnPermanentToOwnersHand(GameState& state, int idx, const std::string& src_name)
-{
-    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
-    const Permanent self = state.battlefield[static_cast<std::size_t>(idx)];
-    const int source_id = self.card.m_number;
-    if (self.controller_index == state.active_player_index)
-    { state.permanent_left_under_control_this_turn = true; }
-    EnterHand(state, self.owner_index, RevealedCard(self.card), HandEntryReason::Bounce);
-    state.battlefield.erase(state.battlefield.begin() + idx);
-    RefreshDevotionCreatures(state);
-    for (Permanent& q : state.battlefield)
-    {
-        if (q.equipped_to == source_id) { q.equipped_to = 0; }
-        if (q.aura_attached_to == source_id) { q.aura_attached_to = 0; }
-    }
-    RefreshReconfigureCreatures(state);
-    if (g_play_event_sink)
-    {
-        EmitPlayEvent(state.turn_number, "zone",
-                      "\xF0\x9F\x94\x99 " + src_name + ": returned to owner's hand");
-    }
-}
+// cost). THE shared body is ReturnPermanentToOwnersHand (Sea Creatures I2), defined far below: revolt's "a
+// permanent left", the hand-entry reason (Bounce = new material, which arms the hand-entry breakpoint so the
+// replay is searchable), the devotion / reconfigure refresh, every Equipment / Aura attached to it falling off,
+// a token ceasing to exist, and the leaves-the-battlefield triggers (none for Oboro or Maze's End).
+// (Rebase 2026-11-18: Maze's End I1 had added its own void twin here; the two were merged into the one body.)
+inline bool ReturnPermanentToOwnersHand(GameState& state, int bf_index, const std::string& src_name);
 
 // "If you control <N> or more <subtype>s with different names, you win the game" (Maze's End;
 // CR 104.2b). Sets GameState::won_by_effect, which every win reader sees through OpponentHasLost.
