@@ -1012,6 +1012,8 @@ enum Slot : int
     MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
     MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
+    MAZE_CASTDOM_WINDOWS,     // MTG_MAZE_CASTDOM_WINDOWS  Maze's End P7c (a): the fold's off-main Maze's End keep (MazesEndProvider::CastDominanceKeep) needs a P6 WINDOW -- a Manabond, or a Burgeoning while the opponent plays lands, controlled or cast by the plan (held, when the plan opens a breakpoint) -- and a fetchable Gate in the library; every other off-main point shows the last main's board, where the activation is already a searched plan action. Default ON (sound); =0 -> the P7b guard (mana alone)
+    MAZE_CASTDOM_PERPLAN,     // MTG_MAZE_CASTDOM_PERPLAN  Maze's End P7c (b): Heap Gate's last-chance Treasure and Gateway Plaza's off-main {1} are PER-PLAN keeps of the fold (MazesEndProvider::CastDominanceKeep) instead of switching the fold off whenever a Heap Gate is untapped / in hand or a Plaza is in hand (CastDominanceLive). Default ON (sound); =0 -> the blanket switch-off
     COUNT
 };
 
@@ -1968,6 +1970,8 @@ inline const char* Name(int slot)
         "MTG_MAZE_OFFMAIN_BANK",
         "MTG_MAZE_CAST_DOMINANCE",
         "MTG_MAZE_LAND_DOMINANCE",
+        "MTG_MAZE_CASTDOM_WINDOWS",
+        "MTG_MAZE_CASTDOM_PERPLAN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
