@@ -4081,3 +4081,43 @@ Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
   WINNING off-main activation (our end step after Manabond, the opponent's turn after Burgeoning) is now taken
   (dominance). DISCLOSURE (USER sign-off pending): a NON-winning off-main activation is not modelled; it needs a
   searched end-step frame (design in F1-results).
+
+## P5 (2026-11-18): the USER-directed provider prunes, measured
+
+Full write-up, tables and every definition: `logs/maze/P5-results.md`. Branch `wip/maze-p5`: `589cf5847` (P5's levers),
+`84bdd4a56` (units green, the strict Treasure hook, the Talon readings), `42a4b7a38` (defaults). Units 3446/3446.
+Smoke vs F2: only `mazesend*` move (d0 -51 / 1000, d5 -2 / 100 common). All levers off == F2's engine, 160/160 games.
+
+**Shipped shape (each a coordinator default, USER sign-off pending):**
+- Maze's End fail-to-find withheld while a Gate target is offered (`MTG_MAZE_FIND_NOTHING`). Leave-one-out: +7 turns
+  without it.
+- Gateway Plaza: pay or don't play (`MTG_MAZE_PLAZA_PAY`): +6 without it. Payability is optimistic (an Amulet, a Gond
+  Gate, or a probe payment of owed + {1}). Caveat: with Guild Summit out, a sacrificed Plaza still draws.
+- **Heap Gate's Treasure (`MTG_MAZE_HEAP_STRICT`, USER's rule):** never a searched branch. `PerformLastChanceTreasure`
+  makes it after the opponent's turn, once every off-main activation has had its chance, whenever {1} + {T} Heap Gate
+  + another untapped Gate are still payable. Both worlds, same position. **A dominance; its premise: a goldfish, and
+  the tapped permanents untap at our untap step.** Measured vs P5's leftover-or-binds rule: 6 better / 1 worse, net
+  -5, cheaper.
+- Manabond "no" withheld with an all-land hand (`MTG_MAZE_MANABOND_ALL_LANDS`): neutral, slightly cheaper.
+- New-name fetch eval v5 = 100 (`MTG_MAZE_FETCH_EVAL_V5`; MTG_MAZE_WSEL_* deleted): 13/9 against the old 200, noise
+  level; kept as USER-adopted.
+- `max_lands` stays **5**: 6 lost in every shape, net +16 / 550.
+- Talon Gates stays always offered (P1d amendment). None / at most one / "effective" readings of "lacking extra
+  land drops" all measured worse (+17 / +6 / +10).
+- One colour per entry: P1 (alternation variant identical).
+- Items 2 (Burgeoning menu), 3 (Charm to battlefield) and 8 (Basilisk pump) need no code.
+- Item 6 (Exploration land-order fold) and the Charm c==0 duplicate go to P5b.
+- Suite: most d3 rows moved to d5 b20 play rows at equal cost. The `mazesend2hg` smoke canary is now d5 b20 x30. GT
+  not accepted.
+
+**Held-out A/B (one pooled batch; 550 games/arm over d5 b20, d3 b10, d1 b3, d1 b1):** the shipped shape vs the pre-P5
+engine is **35 better / 14 worse, net -22 turns**. Every shape is better, with **18% fewer units at d5 b20**.
+
+**d8 b0 recovery:** 10 of the shipped shape's 14 slower games recover at d8 b0. 3 cannot finish at d8 b0 on either arm
+(the P7 degeneracy) and recover at d8 b2000. d5 gi13 recovers at b2000; base cannot finish it at b0. d1b1 gi43 reaches
+base's T6 at b0 but plays T7 at b2000 (attributed to the find-nothing prune).
+
+**Starved games:** V1's seven play the same turns with 30% fewer units. Sweep gi13 goes T7 -> T6.
+
+**Cost:** 0.81x Hinata at d5 b20 in the same pooled smoke run; the 2HG row is 1.52x Hinata's largest. Both are well
+under the 3x gate. Measured on a contended box.
