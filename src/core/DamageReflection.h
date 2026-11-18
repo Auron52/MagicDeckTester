@@ -741,6 +741,50 @@ inline std::vector<int> CombatPinsOf(const std::vector<int>& v)
     return at < v.size() ? std::vector<int>(v.begin() + static_cast<std::ptrdiff_t>(at) + 1, v.end())
                          : std::vector<int>{};
 }
+// THE ATTACK HOLD (step 9c; USER 2026-11-17 ~20:45: "One slightly messy case is if we need to Guilty
+// Conscience and Loren's Escape next turn. We need to not always attack in the meantime."). A creature of ours
+// carrying Guilty Conscience that is not indestructible kills itself by attacking (its combat damage comes back
+// through GC; a reflector keeps the loop going until it dies), which destroys the "GC now, Escape + loop next
+// turn" line. Attack-vs-hold for each such creature is therefore SEARCHED: the combat fan (TurnSolver.cpp,
+// AppendSubdecisionAxes) clones a pre-combat plan once per hold subset and records each held creature as a
+// HOLD CODE at the FRONT of the plan's combat suffix: [kCombatPinMark] [hold codes] [combat target pins].
+// The suffix rides GameState::scripted_combat_reflect onto the state (WritePostApplyStatePins), and
+// DecisionProvider::AttackWith -- the one declaration gate of the rollout's SimulateCombat, GameEngine's real
+// combat and every attack projection -- refuses a held creature, so executor and rollout are in lockstep by
+// construction. CombatDamageDealt skips the leading hold codes (they are not reflection choices) and keeps them,
+// so a later declaration this turn reads the same holds; the turn-start clear drops them.
+// Codes: kAttackHoldPinBase - number, number in [1, 2^27): below every pull code (> -0x30000000), above
+// kCombatPinMark, never a player or card id.
+inline constexpr int kAttackHoldPinBase = -0x30000000;
+inline int AttackHoldCode(int number)
+{
+    if (number <= 0 || number >= (1 << 27))
+    {
+        std::fprintf(stderr, "[rfx] FATAL: attack-hold creature %d cannot be encoded\n", number);
+        std::abort();
+    }
+    return kAttackHoldPinBase - number;
+}
+inline bool IsAttackHoldCode(int v) { return v < kAttackHoldPinBase && v > kAttackHoldPinBase - (1 << 27); }
+inline std::size_t LeadingAttackHolds(const std::vector<int>& combat)
+{
+    std::size_t n = 0;
+    while (n < combat.size() && IsAttackHoldCode(combat[n])) { ++n; }
+    return n;
+}
+// Is this creature held out of this turn's combat by the committed / scored plan? Cheap: false on every
+// unarmed state and on every state whose plan carries no combat suffix.
+inline bool AttackHeld(const GameState& s, int number)
+{
+    if (!s.reflect_armed || s.scripted_combat_reflect.empty() || number <= 0 || number >= (1 << 27)) { return false; }
+    const int code = kAttackHoldPinBase - number;
+    for (int v : s.scripted_combat_reflect)
+    {
+        if (!IsAttackHoldCode(v)) { break; }
+        if (v == code) { return true; }
+    }
+    return false;
+}
 using TargetProbe = std::function<void(const std::vector<int>&)>;
 inline thread_local TargetProbe* t_probe = nullptr;
 inline thread_local const std::vector<int>* t_probe_owner = nullptr;
@@ -994,7 +1038,10 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
     {
         // The combat suffix of the plan that led here (empty: every choice takes the front). The PinScope
         // also detaches any main-phase probe, so a main fan's probe never counts a combat choice.
-        const std::vector<int> pins = s.scripted_combat_reflect;
+        // Step 9c: the leading attack-hold codes were consumed at the declaration; they stay on the state.
+        const std::vector<int> pins(s.scripted_combat_reflect.begin()
+                                        + static_cast<std::ptrdiff_t>(LeadingAttackHolds(s.scripted_combat_reflect)),
+                                    s.scripted_combat_reflect.end());
         PinScope pin_scope(pins);
         std::optional<TargetProbeScope> probing;
         if (t_combat_probe.probe != nullptr && t_combat_probe.state == &s)
@@ -1002,10 +1049,12 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
         Drain(s, 0);
         used = t_pin_cursor;
     }
-    if (used > 0 && !s.scripted_combat_reflect.empty())
+    const std::size_t holds = LeadingAttackHolds(s.scripted_combat_reflect);
+    if (used > 0 && s.scripted_combat_reflect.size() > holds)
     {
-        s.scripted_combat_reflect.erase(s.scripted_combat_reflect.begin(),
-            s.scripted_combat_reflect.begin() + static_cast<std::ptrdiff_t>(std::min(used, s.scripted_combat_reflect.size())));
+        const auto from = s.scripted_combat_reflect.begin() + static_cast<std::ptrdiff_t>(holds);
+        s.scripted_combat_reflect.erase(from,
+            from + static_cast<std::ptrdiff_t>(std::min(used, s.scripted_combat_reflect.size() - holds)));
     }
     std::swap(saved, t_frame);
 }

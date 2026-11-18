@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Damage reflection, design step 9c (docs/design/damage-reflection-pipeline.md 14): the searched ATTACK HOLD.",
+    "USER 2026-11-17 ~20:45: 'One slightly messy case is if we need to Guilty Conscience and Loren's Escape next",
+    "turn. We need to not always attack in the meantime.' A settled Boros Reckoner carries Guilty Conscience on",
+    "turn 3; only Mountains are out, so Loran's Escape ({W}) is not castable this turn. ATTACKING deals 3, GC deals",
+    "3 back, the Reckoner reflects 3 and dies: the opponent is at 14 with nothing left that can deal damage (the",
+    "library is all Plains), so there is no win by turn 6. HOLDING keeps it: turn 4 draws a Plains, the Escape makes",
+    "the GC'd Reckoner indestructible, it attacks, and GC + its reflection loop to the kill on turn 4. The",
+    "generic attack policy always swings, so before step 9c this board did not win."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 3, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Boros Reckoner" },
+    { "name": "Guilty Conscience", "equips": "Boros Reckoner" }
+  ],
+  "hand": [ "Loran's Escape" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1
+}

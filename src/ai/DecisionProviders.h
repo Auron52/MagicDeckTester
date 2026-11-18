@@ -4203,6 +4203,8 @@ public:
     void DamageBackAuraHostCandidates(const GameState& s, const CardDefinition& aura, std::vector<int>& io) const override;
     void IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& def, int inert_rep,
                                              std::vector<int>& io) const override;
+    // Step 9c: the USER's order -- Guilty Conscience before Loran's Escape (definition note).
+    int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool HasExtraLethalModel() const override { return true; }
     int  ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
     CertStance Certificate() const override

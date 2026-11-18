@@ -2793,6 +2793,23 @@ void StuffyDollProvider::IndestructibleGrantTargetCandidates(const GameState& s,
 // `casting` lists the defs of every selected action, including activations: a def counts as a CAST only
 // while an unconsumed copy of it is in hand; a Doll def beyond that is the plan's self-ping activation
 // (TurnSolver's ActivatePermAbility carries the source's def), credited up to the settled untapped Dolls.
+// CAST ORDER (step 9c; USER-authored order for this deck). USER 2026-11-17 ~20:50: "...Loren's Escape should
+// target a critter with Guilty Conscience on it if such exists. The order should make this easy. (Guilty
+// Conscience first?)" -- Guilty Conscience is cast BEFORE Loran's Escape. Every other card keeps the generic rank
+// (GC, the Escape and the sweepers tie at the noncreature tier 20 there, so the canonical route cast them in HAND
+// order). GC moves one step EARLIER (19: after the generic ritual tiers, which this list does not hold, before
+// every other noncreature spell), so it precedes the Escape; the Escape keeps its rank and its hand-order tie with
+// the sweepers (moving the Escape later instead would put it behind Blasphemous Act / Chain Reaction in every
+// canonical / playout line, where it must come first to save its target). The step-7 searched order expansion is
+// untouched: a plan that casts a setup spell (GC / the Escape) AND a creature sweeper still branches every ordering
+// of them (it does not read this rank).
+int StuffyDollProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    const int r = DeckProvider::CastOrderRank(s, def);
+    if (def.params.aura_host_damage_back) { return r - 1; }
+    return r;
+}
+
 int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const
 {
     constexpr int kHuge = 1 << 20;
@@ -7941,6 +7958,9 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(attacker.card);
         if (ad && ad->params.must_attack) { return true; }
     }
+    // Step 9c: a SEARCHED attack hold of a Guilty-Conscience-enchanted creature (dmgrx::AttackHeld; the plan's
+    // combat suffix on the state). Read by every declaration and projection, so both worlds hold it alike.
+    if (dmgrx::AttackHeld(s, attacker.card.m_number)) { return false; }
     // Kind 4's HOLD (the searched branch and its pins only; never ambient): Soulstoke stays home for the window.
     if (g_dork_atk_override == 4 && EotTapHoldSource(s, attacker)) { return false; }
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }

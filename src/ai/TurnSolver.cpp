@@ -99732,6 +99732,88 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // ---- ATTACK vs HOLD for a Guilty-Conscience-enchanted creature (step 9c; design section 14) -----------
+    // USER 2026-11-17 ~20:45: "One slightly messy case is if we need to Guilty Conscience and Loren's Escape next
+    // turn. We need to not always attack in the meantime." The attack itself stays the provider's AttackWith (the
+    // standing attack exemption); what is SEARCHED here is withholding each creature of ours that, on the plan's
+    // post-apply board, carries a GC, is not indestructible, and would attack: every subset of those (at most
+    // four; the rest attack as the provider says) is a plan variant, the natural attack first. The hold rides the
+    // front of the plan's combat suffix (dmgrx::AttackHoldCode, DamageReflection.h) onto the state, where
+    // AttackWith refuses it in the rollout's SimulateCombat and in the executor's real combat alike. Same scope as
+    // the combat-target fan below (pre-combat top-level lists, never human play -- the viewer declares attackers
+    // itself); beyond the horizon nothing clones, so the playout keeps the provider's attack. Inert unless the
+    // deck is armed and a GC is on the battlefield or cast by the plan.
+    if (state.reflect_armed && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive()
+        && dmgrx::t_combat_probe.probe == nullptr)
+    {
+        const bool gc_on_board = dmgrx::AnyAuraHostDamageBack(state);
+        auto plan_may_hold = [&](const TurnSolver::Plan& p) {
+            if (dmgrx::HasCombatPins(p.reflect_targets)) { return false; }   // its combat is already decided
+            // A plan projected to win this turn needs no hold (withholding damage never brings a kill earlier;
+            // the Soulstoke twin's rule, AppendEotHoldTwins).
+            if (p.wins_this_turn) { return false; }
+            if (gc_on_board) { return true; }
+            auto casts_gc = [](const Action& a) {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                return d != nullptr && d->params.aura_host_damage_back;
+            };
+            for (const Action& a : p.actions)
+            {
+                if (casts_gc(a)) { return true; }
+                for (const Action& c : a.breakpoint_casts) { if (casts_gc(c)) { return true; } }
+            }
+            for (const Action& a : p.breakpoint_actions) { if (casts_gc(a)) { return true; } }
+            return false;
+        };
+        bool any = false;
+        for (const TurnSolver::Plan& p : all) { if (plan_may_hold(p)) { any = true; break; } }
+        if (!any && pb_lazy && pb_lazy->active)
+        { for (const TurnSolver::Plan& p : pb_lazy->protos) { if (plan_may_hold(p)) { any = true; break; } } }
+        if (any)
+        {
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> expanded;
+            expanded.reserve(all.size());
+            const int me = state.active_player_index;
+            for (TurnSolver::Plan& p : all)
+            {
+                if (!plan_may_hold(p)) { expanded.push_back(std::move(p)); continue; }
+                std::vector<int> holdable;
+                {
+                    GameState copy = state;
+                    RevealLogPause quiet;
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                    if (!OpponentHasLost(copy))
+                    {
+                        const EotHoldCombatScope _eh(p);
+                        const DecisionProvider& prov = ResolveProvider(copy);
+                        for (const Permanent& q : copy.battlefield)
+                        {
+                            if (holdable.size() >= 4) { break; }
+                            if (q.controller_index != me || q.HasKeyword(Keyword::Indestructible)) { continue; }
+                            if (dmgrx::AuraHostDamageBackOn(copy, q.card.m_number) == 0) { continue; }
+                            if (!CanAttackFull(q, copy.battlefield, me) || !prov.AttackWith(copy, q)) { continue; }
+                            holdable.push_back(q.card.m_number);
+                        }
+                    }
+                }
+                const std::size_t k = holdable.size();
+                expanded.push_back(std::move(p));
+                if (k == 0) { continue; }
+                const TurnSolver::Plan base = expanded.back();
+                for (unsigned mask = 1; mask < (1u << k); ++mask)
+                {
+                    TurnSolver::Plan v = base;
+                    v.reflect_targets.push_back(dmgrx::kCombatPinMark);
+                    for (std::size_t i = 0; i < k; ++i)
+                    { if (mask & (1u << i)) { v.reflect_targets.push_back(dmgrx::AttackHoldCode(holdable[i])); } }
+                    expanded.push_back(std::move(v));
+                }
+            }
+            all = std::move(expanded);
+        }
+    }
+
     // ---- DAMAGE-REFLECTION TARGETS IN COMBAT (step 5b; design section 14) ---------------------------------
     // A Guilty Conscience on an attacking reflector (Boros Reckoner, Screaming Nemesis) raises its trigger in
     // this turn's combat (dmgrx::CombatDamageDealt), and the reflection it causes can be a target CHOICE (the
@@ -99793,24 +99875,68 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 TurnSolver::Plan p = std::move(work.back()); work.pop_back();
                 if (!plan_may_choose_in_combat(p)) { expanded.push_back(std::move(p)); continue; }
-                const std::size_t n_combat = dmgrx::CombatPinsOf(p.reflect_targets).size();
-                std::vector<int> next;
-                std::size_t ordinal = 0;
-                dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
-                    if (ordinal++ == n_combat) { next = legal; }
-                };
-                GameState copy = state;
-                {
+                const std::vector<int> combat_pins = dmgrx::CombatPinsOf(p.reflect_targets);
+                // The step-9c hold codes lead the suffix and take no choice ordinal.
+                const std::size_t n_combat = combat_pins.size() - dmgrx::LeadingAttackHolds(combat_pins);
+                // One probe: the plan's apply + this turn's combat; `nx` = the legal list at the first unpinned
+                // combat ordinal (empty: none), `fr` = the list front at that ordinal and every later one (what the
+                // unpinned choices took). Returns whether the opponent lost in that combat.
+                auto run_probe = [&](const TurnSolver::Plan& q, std::size_t pinned, std::vector<int>& nx,
+                                     std::vector<int>* fr) {
+                    nx.clear();
+                    if (fr) { fr->clear(); }
+                    std::size_t ordinal = 0;
+                    dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
+                        if (ordinal == pinned) { nx = legal; }
+                        if (fr && ordinal >= pinned && !legal.empty()) { fr->push_back(legal.front()); }
+                        ++ordinal;
+                    };
+                    GameState copy = state;
                     RevealLogPause quiet;
-                    ApplyPlanDirect(copy, p, is_pre_combat);
-                    if (!OpponentHasLost(copy))
+                    ApplyPlanDirect(copy, q, is_pre_combat);
+                    if (OpponentHasLost(copy)) { return false; }
+                    dmgrx::CombatProbeScope probing(probe, copy, g_apd_depth);
+                    const EotHoldCombatScope _eh(q);
+                    SimulateCombat(copy);
+                    return OpponentHasLost(copy);
+                };
+                std::vector<int> next, fronts;
+                const bool front_kills = run_probe(p, n_combat, next, &fronts);
+                // SOUND DOMINANCE FOLD (step 9c, design section 14): a combat line that KILLS this turn cannot be
+                // improved (the goldfish objective is the win turn), so once one is found the remaining combat choices
+                // are pinned to it and not fanned; the plan carries every pin, so both worlds replay it. Two cheap
+                // policies are tried for the remaining choices: every list FRONT (one probe, the one just run), then the
+                // opponent's FACE wherever it is legal (else the front), pinned one choice at a time (one probe per
+                // choice). Without it a GC'd INDESTRUCTIBLE reflector attacking (an Escaped Reckoner, the line the hold
+                // exists for) fanned every interleaving of face / self / other targets of an unbounded loop that kills
+                // on most branches: exponential in the loop length (the step-9c tests ran for minutes before it).
+                std::optional<TurnSolver::Plan> killer;
+                if (!next.empty() && front_kills)
+                {
+                    TurnSolver::Plan v = p;
+                    if (!dmgrx::HasCombatPins(v.reflect_targets)) { v.reflect_targets.push_back(dmgrx::kCombatPinMark); }
+                    v.reflect_targets.insert(v.reflect_targets.end(), fronts.begin(), fronts.end());
+                    killer = std::move(v);
+                }
+                else if (!next.empty())
+                {
+                    const int face = dmgrx::PlayerId(1 - state.active_player_index);
+                    TurnSolver::Plan v = p;
+                    if (!dmgrx::HasCombatPins(v.reflect_targets)) { v.reflect_targets.push_back(dmgrx::kCombatPinMark); }
+                    std::vector<int> nx = next;
+                    std::size_t pinned = n_combat;
+                    bool kills = false;
+                    for (int guard = 0; guard < 4096 && !nx.empty(); ++guard)
                     {
-                        dmgrx::CombatProbeScope probing(probe, copy, g_apd_depth);
-                        const EotHoldCombatScope _eh(p);
-                        SimulateCombat(copy);
+                        const bool has_face = std::find(nx.begin(), nx.end(), face) != nx.end();
+                        v.reflect_targets.push_back(has_face ? face : nx.front());
+                        ++pinned;
+                        kills = run_probe(v, pinned, nx, nullptr);
                     }
+                    if (kills && nx.empty()) { killer = std::move(v); }
                 }
                 if (next.empty()) { expanded.push_back(std::move(p)); }
+                else if (killer) { expanded.push_back(std::move(*killer)); }
                 else
                 {
                     for (auto it = next.rbegin(); it != next.rend(); ++it)

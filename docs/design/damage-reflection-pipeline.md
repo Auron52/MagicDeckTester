@@ -1725,3 +1725,68 @@ Where the code departs from the sections above, and why. Each entry names the sy
   turns moved, net 0: game 15 T6 -> T7 (the Escape prune: lifting `escapetarget` alone restores T6), game 35 T7 -> T6 (the
   GC-host prune: lifting `gchost` alone gives T7). A d0 sanity run, not a measurement: the held-out A/B of the three
   prunes is owed (USER-approved heuristics, so measured and reported, not gated on).
+
+### Step 9c (the searched attack hold; the USER's GC-before-Escape cast order)
+
+* **The rulings (verbatim, the spec; ledger USER RULING ~20:45 / ~20:50).** *"One slightly messy case is if we need to
+  Guilty Conscience and Loren's Escape next turn. We need to not always attack in the meantime."* and *"...Loren's
+  Escape should target a critter with Guilty Conscience on it if such exists. The order should make this easy. (Guilty
+  Conscience first?)"*
+* **Shape: hold codes at the FRONT of the step-5b combat suffix** (no new Plan field, no new GameState field).
+  `Plan::reflect_targets` is now `[main pins] [kCombatPinMark] [hold codes] [combat target pins]`; a hold code is
+  `dmgrx::AttackHoldCode(n) = -0x30000000 - n` (n in [1, 2^27): below every pull code, above the mark).
+  `WritePostApplyStatePins` already copies the suffix onto `GameState::scripted_combat_reflect`; the one declaration
+  gate, `DecisionProvider::AttackWith`, refuses a creature `dmgrx::AttackHeld` names (after `must_attack`, before every
+  other hold), so the rollout's `SimulateCombat`, GameEngine's real combat (`AIEngine::DeclareAttackers` ->
+  `DeclareAttackerIndices`) and every attack projection read the same hold: lockstep by construction, and every
+  existing fold of the vector / the state field (plan hash, SamePlan, dominance, sim / plan-cache keys, the executor's
+  realisation check) covers it. `CombatDamageDealt` skips the leading hold codes (not reflection choices) and keeps
+  them on the state, so a later declaration this turn reads the same holds; the turn-start clear drops them. Chosen
+  over the dork attack/hold (`Plan::atk_dork_release` + `g_dork_atk_override`): that is one global combat variant per
+  plan, not a per-creature subset, and it would need its own executor pin.
+* **The axis** (AppendSubdecisionAxes, just before the step-5b target fan, same scope: armed deck, pre-combat
+  top-level lists, never human play, not inside a combat probe). For each plan that has no combat suffix yet, does not
+  win this turn (`wins_this_turn`: withholding damage never brings a kill earlier -- the Soulstoke twin's rule) and
+  sees a GC on the battlefield or casts one: apply it on a copy and collect our creatures that carry a GC, are NOT
+  indestructible (printed or `temp_indestructible`) and would attack (`CanAttackFull && AttackWith`), at most 4 in
+  battlefield order (the deck has 4 GCs; any further creature attacks as the provider says). Every subset is a
+  variant (2^k - 1 clones after the natural attack). The target fan then runs on every variant (its ordinal counts only
+  the non-hold pins). Beyond the horizon and in the d0 runner nothing clones, so the playout keeps the provider's
+  attack (the standing exemption). Other decks: `reflect_armed` is false -> byte-identical.
+* **NEW SOUND FOLD in the step-5b combat fan (found by the step-9c tests): a combat line that KILLS is not fanned.**
+  Nothing beats a kill this turn (the goldfish objective is the win turn), so once one combat line through the
+  remaining choices kills, the plan is pinned to it and its other options are not branched; it carries every pin, so
+  both worlds replay it. Two cheap policies are tried: every list FRONT (the probe the fan already runs), then the
+  opponent's FACE wherever legal (else the front), pinned one choice at a time (one probe per choice). Without it a GC'd
+  INDESTRUCTIBLE reflector attacking (an Escaped Reckoner -- the line the hold exists for) fanned every interleaving of
+  face / self / other targets of an unbounded loop: the fan has no budget charge, and the new scenario and two of the
+  new unit cases each ran for minutes (killed; perf: `dmgrx::ApplyOne` + allocation, i.e. probe after probe) before
+  it. The front alone was not enough: the step-10 ORDER fronts an indestructible GC host (itself), and a self-target
+  makes no progress, so the front line stops at the no-progress rule without a kill. With the fold: scenario 0.20 s,
+  the four step-9c cases 0.14 s. Not budget-sensitive (it applies at every budget), and complete: a kill found is
+  optimal, and where neither policy kills the fan is exactly the step-5b fan.
+* **Viewer: NOT surfaced (PROVISIONAL gap, surfaced to the USER).** The brief assumed human play declares attackers;
+  it does not -- the viewer has no attacker declaration for any deck (combat is declared by `AttackWith`;
+  tools/play/README.md lists "route combat (attackers/blockers) through the chooser" as an open item), so a human
+  cannot keep a GC'd creature home. DECISIONS.md notes it beside Guilty Conscience. A prompt would also have to be
+  reconciled with `--force-attackers` reference replay; left for the USER's call.
+* **Cast order (USER-authored): Guilty Conscience before Loran's Escape.** `StuffyDollProvider::CastOrderRank` = the
+  generic rank, except GC one step earlier (19, before every other noncreature spell). The Escape keeps its generic
+  rank and its hand-order tie with the sweepers (moving the Escape later would put it behind the Act in every
+  canonical / playout line). The step-7 searched setup-vs-sweeper order expansion does not read the rank and is
+  unchanged. Caveat (disclosed): within ONE plan the Escape's target is chosen at enumeration, before the same-plan
+  GC resolves, so the step-9b Escape prune's "the GC'd creature" clause applies only to a GC already on the
+  battlefield; for a same-plan GC + Escape the prune's other clause (highest-power non-Doll reflector) picks the
+  target, which is the GC host whenever the GC-host prune chose the same creature.
+* **Verification.** 4 new unit cases (hold-code encoding / `AttackHeld` / the drain skipping a leading hold; the search
+  BRANCHES attack vs hold for a GC'd Reckoner under the generic and the Stuffy provider and both branches replay in the
+  executor -- same life, same board; no hold for an indestructible host, an Escaped Reckoner, a sick one, no GC, an
+  unarmed deck, and every subset for two GC'd attackers; the cast order). The step-5b and step-6 combat-fan cases now
+  also see the Reckoner's hold variant (expected sets extended, the hold line skipped there). New scenario
+  `stuffy_gc_reckoner_hold_for_escape` (GC'd settled Reckoner on T3, Escape not castable until T4's Plains): wins T4 in
+  0.20 s; the step-9b binary attacks and does not win (opponent 14, no win by T6). Unit 3464/3464, scenarios 578/578,
+  rfx cases also under `MTG_UNPRUNE=redirectwindow,gchost,escapetarget` (17/17). Smoke 219/219 job digests identical
+  to step 9b. `provider_audit.py --check` rc 0, static viewer audit rc 0.
+* **d0 sanity (50 games, seed 1, as steps 10 / 9b):** 44 won, avg win turn 5.386 (metric avg 5.82): the same win turns
+  game by game; 4 of 50 games changed play (digest 55be46e7fc8282d0 vs ff108cd1992a1493) -- the d0 runner takes no
+  hold (beyond the horizon), so this is the cast order. No abort / tripwire.

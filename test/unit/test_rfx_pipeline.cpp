@@ -824,11 +824,14 @@ TEST_CASE("rfx step 5b: the search BRANCHES the combat-time reflection target, a
         combat_pins.insert(dmgrx::CombatPinsOf(p.reflect_targets));
     }
     // Both admitted targets are branched: the opponent's face and the GC'd Doll. (Our own face is F1-folded.)
-    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1603 } });
+    // Step 9c adds the HOLD of the GC'd, non-indestructible Reckoner (no combat damage, so no target choice);
+    // its branch is checked by the step-9c cases.
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1603 }, { dmgrx::AttackHoldCode(1601) } });
     int doll_lines = 0, face_lines = 0;
     for (const auto& p : plans)
     {
         const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
+        if (dmgrx::IsAttackHoldCode(pins.front())) { continue; }
         INFO("combat pin ", pins.front());
         // The rollout: the plan's apply, then the combat the scorer runs.
         GameState roll = s;
@@ -1017,10 +1020,13 @@ TEST_CASE("rfx step 6: the search BRANCHES the Reckoner's target over the Sliver
     }
     // Every admitted target is its own line: the face and each Spiteful Sliver. The Slivers' own granted
     // "target player" triggers are singletons after F1 and take no pin.
-    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1803 }, { 1804 } });
+    // Step 9c adds the HOLD of the GC'd, non-indestructible Reckoner (checked by the step-9c cases).
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1803 }, { 1804 },
+                                                     { dmgrx::AttackHoldCode(1801) } });
     for (const auto& p : plans)
     {
         const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
+        if (dmgrx::IsAttackHoldCode(pins.front())) { continue; }
         INFO("combat pin ", pins.front());
         GameState roll = s;
         TurnSolver::ApplyPlan(roll, p, true);
@@ -2070,4 +2076,198 @@ TEST_CASE("rfx step 9b: Loran's Escape prune reaches the search -- one target pe
     for (const auto& p : TurnSolver::EnumerateMainPlans(n, true)) { const int t = LoranTargetOf(p); if (t != 0) { targets.insert(t); } }
     if (DecisionUnpruned(UnprunedGate::EscapeTarget)) { CHECK(targets.size() >= 4); }
     else { CHECK(targets == std::set<int>{ 1901 }); }   // the Reckoner (3) over the Maniac (1)
+}
+
+// ---- STEP 9c: the searched ATTACK HOLD of a GC-enchanted creature; the USER's GC-before-Escape order ----------
+// USER 2026-11-17 ~20:45: "One slightly messy case is if we need to Guilty Conscience and Loren's Escape next turn.
+// We need to not always attack in the meantime." ~20:50: "...(Guilty Conscience first?)"
+
+TEST_CASE("rfx step 9c: hold codes -- encoding, AttackHeld reads only the leading codes, the drain skips them")
+{
+    const int h = dmgrx::AttackHoldCode(1601);
+    CHECK(dmgrx::IsAttackHoldCode(h));
+    CHECK(h > dmgrx::kCombatPinMark);
+    CHECK(h < dmgrx::PullCode(0));                     // below every pull code
+    CHECK(h < dmgrx::PullCode((1 << 28) - 1));
+    CHECK_FALSE(dmgrx::IsAttackHoldCode(dmgrx::PlayerId(1)));
+    CHECK_FALSE(dmgrx::IsAttackHoldCode(dmgrx::kCombatPinMark));
+    CHECK_FALSE(dmgrx::IsAttackHoldCode(dmgrx::PullCode((1 << 28) - 1)));
+    CHECK(dmgrx::LeadingAttackHolds({ h, dmgrx::AttackHoldCode(7), dmgrx::PlayerId(1) }) == 2);
+    GameState s = ArmedState();
+    s.scripted_combat_reflect = { h, dmgrx::PlayerId(1) };
+    CHECK(dmgrx::AttackHeld(s, 1601));
+    CHECK_FALSE(dmgrx::AttackHeld(s, 1602));
+    s.scripted_combat_reflect = { dmgrx::PlayerId(1), h };   // not leading: a reflection pin, never a hold
+    CHECK_FALSE(dmgrx::AttackHeld(s, 1601));
+    s.reflect_armed = false;
+    s.scripted_combat_reflect = { h };
+    CHECK_FALSE(dmgrx::AttackHeld(s, 1601));                 // unarmed: inert
+    // The drain: a GC'd Reckoner (not held) deals 3 in combat with a hold code for ANOTHER creature leading the
+    // stream; its reflection (a choice: the face or the Doll -- the Reckoner itself has died to GC's 3 by then) takes
+    // the pin after the hold, and the hold stays on the state.
+    GameState d = ArmedState();
+    PutRfx(d, "Boros Reckoner", 1601);
+    AttachGc(d, 1602, 1601);
+    PutRfx(d, "Stuffy Doll", 1603).chosen_player = 1;
+    d.scripted_combat_reflect = { dmgrx::AttackHoldCode(1999), dmgrx::PlayerId(1) };
+    d.players[1].life -= 3;
+    dmgrx::CombatDamageDealt(d, { 1601 }, { 3 });
+    CHECK(d.players[1].life == 14);                          // 3 combat + 3 reflected at the pinned face
+    CHECK(d.scripted_combat_reflect == std::vector<int>{ dmgrx::AttackHoldCode(1999) });   // pin consumed, hold kept
+}
+
+namespace
+{
+// A settled GC'd Boros Reckoner that would attack; nothing in hand, two Mountains.
+GameState HoldBoard()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    PutRfx(s, "Mountain", 3601);
+    PutRfx(s, "Mountain", 3602);
+    PutRfx(s, "Boros Reckoner", 3603);
+    AttachGc(s, 3604, 3603);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Plains").card; m.m_number = 3620 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9c: the search BRANCHES attack vs hold for a GC'd Reckoner, and both branches replay in the executor")
+{
+    for (int arm = 0; arm < 2; ++arm)
+    {
+        INFO("arm ", arm == 0 ? "generic provider" : "Stuffy provider");
+        GameState s = HoldBoard();
+        if (arm == 1) { s.m_provider = &StuffyP(); }
+        TurnSolver::Plan pass;
+        pass.land_decided = true;
+        const auto plans = TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { pass });
+        int hold_lines = 0, attack_lines = 0;
+        for (const auto& p : plans)
+        {
+            const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
+            const bool hold = !pins.empty() && pins.front() == dmgrx::AttackHoldCode(3603);
+            INFO("hold ", hold, " pins ", pins.size());
+            if (hold) { CHECK(pins.size() == 1); }   // a held Reckoner deals no damage: no reflection choice follows
+            GameState roll = s;
+            TurnSolver::ApplyPlan(roll, p, true);
+            RolloutSimulateCombat(roll);
+            GameState exec = s;
+            AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+            MtgTestSeam::CommitPhasePlan(eng, p, true);
+            eng.TakeTurn(exec, true, ResolveStackRfx);
+            exec.phase = Phase::Combat;
+            GameEngine ge(eng);
+            ge.PlayOutFrom(exec, exec.turn_number, GameEngine::ResumeAt::Combat);
+            if (hold)
+            {
+                ++hold_lines;
+                CHECK(roll.players[1].life == 20);
+                REQUIRE(Find(roll, 3603) != nullptr);
+                CHECK_FALSE(Find(roll, 3603)->tapped);
+            }
+            else
+            {
+                ++attack_lines;
+                CHECK(roll.players[1].life < 20);
+                CHECK(Find(roll, 3603) == nullptr);   // 3 combat, GC's 3 back: the 3/3 dies
+            }
+            // Lockstep: the executor's real combat made the same declaration and reached the same board.
+            CHECK(exec.players[1].life == roll.players[1].life);
+            CHECK((Find(exec, 3603) != nullptr) == (Find(roll, 3603) != nullptr));
+        }
+        CHECK(hold_lines == 1);
+        CHECK(attack_lines >= 1);
+    }
+}
+
+TEST_CASE("rfx step 9c: no hold axis for an indestructible GC host, a sick one, or without GC; unarmed decks untouched")
+{
+    TurnSolver::Plan pass;
+    pass.land_decided = true;
+    auto holds = [&](const GameState& s) {
+        int n = 0;
+        for (const auto& p : TurnSolver::SubdecisionAxesForTest(s, true, { pass }))
+        {
+            const std::vector<int> c = dmgrx::CombatPinsOf(p.reflect_targets);
+            if (!c.empty() && dmgrx::IsAttackHoldCode(c.front())) { ++n; }
+        }
+        return n;
+    };
+    {   // the Doll is indestructible: attacking costs it nothing
+        GameState s = HoldBoard();
+        s.battlefield.erase(s.battlefield.begin() + 2, s.battlefield.end());
+        PutRfx(s, "Stuffy Doll", 3605).chosen_player = 1;
+        AttachGc(s, 3606, 3605);
+        CHECK(holds(s) == 0);
+    }
+    {   // an Escaped (indestructible this turn) Reckoner: no hold
+        GameState s = HoldBoard();
+        for (Permanent& q : s.battlefield) { if (q.card.m_number == 3603) { q.temp_indestructible = true; } }
+        CHECK(holds(s) == 0);
+    }
+    {   // summoning sick: it cannot attack, nothing to hold
+        GameState s = HoldBoard();
+        for (Permanent& q : s.battlefield) { if (q.card.m_number == 3603) { q.entered_this_turn = true; } }
+        CHECK(holds(s) == 0);
+    }
+    {   // no GC
+        GameState s = HoldBoard();
+        s.battlefield.pop_back();
+        CHECK(holds(s) == 0);
+    }
+    {   // unarmed
+        GameState s = HoldBoard();
+        s.reflect_armed = false;
+        CHECK(holds(s) == 0);
+    }
+    {   // two GC'd attackers: every subset (3 holds beside the natural attack)
+        GameState s = HoldBoard();
+        PutRfx(s, "Mogg Maniac", 3607);
+        AttachGc(s, 3608, 3607);
+        std::set<std::vector<int>> subsets;
+        for (const auto& p : TurnSolver::SubdecisionAxesForTest(s, true, { pass }))
+        {
+            std::vector<int> c = dmgrx::CombatPinsOf(p.reflect_targets);
+            c.resize(dmgrx::LeadingAttackHolds(c));
+            subsets.insert(c);
+        }
+        CHECK(subsets == std::set<std::vector<int>>{ {}, { dmgrx::AttackHoldCode(3603) }, { dmgrx::AttackHoldCode(3607) },
+                                                     { dmgrx::AttackHoldCode(3603), dmgrx::AttackHoldCode(3607) } });
+    }
+}
+
+TEST_CASE("rfx step 9c: CAST ORDER -- Guilty Conscience before Loran's Escape (USER); a plan casting both casts GC first")
+{
+    const StuffyDollProvider p;
+    const GenericProvider g;
+    GameState s = ArmedState();
+    const int gc = p.CastOrderRank(s, DefRfx("Guilty Conscience"));
+    const int esc = p.CastOrderRank(s, DefRfx("Loran's Escape"));
+    CHECK(gc < esc);
+    CHECK(esc == g.CastOrderRank(s, DefRfx("Loran's Escape")));
+    CHECK(gc < p.CastOrderRank(s, DefRfx("Blasphemous Act")));
+    for (const char* n : { "Blasphemous Act", "Chain Reaction", "Boros Reckoner", "Stuffy Doll", "Mind Stone", "Nomads en-Kor" })
+    { INFO(n); CHECK(p.CastOrderRank(s, DefRfx(n)) == g.CastOrderRank(s, DefRfx(n))); }
+    // A plan that casts both, with the Escape FIRST in hand.
+    GameState b = HostBoard();
+    b.m_provider = &StuffyP();
+    PutRfx(b, "Plains", 3701);
+    PutRfx(b, "Plains", 3702);
+    PutRfx(b, "Boros Reckoner", 3703);
+    Card e = DefRfx("Loran's Escape").card;    e.m_number = 3710; b.players[0].hand.push_back(e);
+    Card c = DefRfx("Guilty Conscience").card; c.m_number = 3711; b.players[0].hand.push_back(c);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Plains").card; m.m_number = 3720 + i; b.players[0].library.push_back(m); }
+    int both = 0;
+    for (const auto& plan : TurnSolver::EnumerateMainPlans(b, true))
+    {
+        const std::vector<std::string> order = TurnSolver::RealisedNonSacCastOrder(b, plan);
+        const auto ig = std::find(order.begin(), order.end(), "Guilty Conscience");
+        const auto ie = std::find(order.begin(), order.end(), "Loran's Escape");
+        if (ig == order.end() || ie == order.end()) { continue; }
+        ++both;
+        CHECK(ig < ie);
+    }
+    CHECK(both >= 1);
 }
