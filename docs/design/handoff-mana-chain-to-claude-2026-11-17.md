@@ -24,6 +24,14 @@ the upstream keep table, which also arrived without GT). 75 searched slower game
 `build/scratch/claude_gtfix/classify_*.out`): churn incl. both win-to-loss games; PERSISTS = Spirits keep-table hands + 11
 same-draw line changes in decks net <= 0. Accepted BOTH tiers with a provenance note; the 24 earlier smoke/regression notes
 the accept dropped were restored; check_gt_logs 1,278 consistent. Confirm smoke then push at once (USER exception).
+**PUSHED 03:11 UTC 11-18** (`f71a7e0ce`, USER exception to the 4 h rule for this fix): confirm smoke 223/223 rows, 561
+scenarios, 0 fail. Next ordinary shared-branch push >= 07:11 UTC.
+**IN FLIGHT 03:13 UTC:** one pooled batch `build/scratch/claude_uks_over_pf1d/` (pid file = run.sh; mtg pid 2261544; waiter
+bg1423xys): row 1 = gi 570487 d8 b0 rerun with pf1d; then MTG_UNSEEN_KEEP_SCARCE 0 vs 1 on Cyclone games 560000-564999
+with pf1d DEFAULT ON (binary = stash@{0} build). compare.py prints net + gi 560506. Then: if 570487 recovers (<= T5) pop
+the stash, commit the pf1d adoption, smoke-accept the Cyclone rows (only those may move), push >= 07:11; if UKS over pf1d
+is net <= 0 with 560506 no longer later, flip MTG_UNSEEN_KEEP_SCARCE default ON (held-out was byte-identical elsewhere)
+with its own smoke+regression accept.
 The d8 b0 replay of Cyclone gi 570487 was STOPPED by the agent (own experiment, 2.5 h on one game) to free the box;
 rerun it alone after the GT work (`build/scratch/claude_ponderfirst_ab3/d8/`, manifest row for g570487 only).
 
