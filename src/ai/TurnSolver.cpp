@@ -15846,7 +15846,7 @@ constexpr int kNoGainCastEval = -2;
 static bool TieScoringOld()
 {
     static const bool v = EnvOn("MTG_TIE_SCORING_OLD");   // DEFAULT OFF; =1 = the pre-fix evals
-    return v;
+    return heurarm::Flag(heurarm::TIE_SCORING_OLD, v);    // per-job manifest arm
 }
 
 // TOOTH AND NAIL (one variant per mode x library picks x hand puts). A card searched into the hand is the spell's
