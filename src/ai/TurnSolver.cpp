@@ -506,6 +506,8 @@ static std::atomic<long long> g_axis_madness_vars{0};
 // Axis variants (bp_choice < 0) skipped by the post-apply state dedup -- proves PlanIsAxisVariant's
 // widening of the skip fires (a byte-identical A/B is not evidence on its own).
 static std::atomic<long long> g_axis_dup_skips{0};
+// P5b fold 2 (MTG_FOLD_LAND_ORDER): land-first plans dropped by the extra-drop land-order fold, and the lists it touched.
+static std::atomic<long long> g_fold_land_order_dropped{0}, g_fold_land_order_lists{0};
 static std::atomic<long long> g_m2_variant_dup_skips{0};   // main-2 post-apply variant dedup (see m2_seen_states)
 static std::atomic<long long> g_m2_stillborn_skips{0};    // main-2 pre-apply overrun-rank skip (see m2_known_n)
 static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
@@ -2359,6 +2361,12 @@ namespace
                 std::cerr << "[rollout-stats] w0_nobp skipped=" << g_w0_nobp_skipped.load()
                           << "  (variants whose base plan's apply reached NO breakpoint, so they"
                              " ARE that base plan)\n";
+            }
+            if (g_fold_land_order_dropped.load() > 0)
+            {
+                std::cerr << "[rollout-stats] fold_land_order dropped=" << g_fold_land_order_dropped.load()
+                          << " lists=" << g_fold_land_order_lists.load()
+                          << "  (P5b: extra-drop land-first plans whose sorted twin reaches the same board)\n";
             }
             if (g_w0_unif_collapsed.load() > 0)
             {
@@ -91519,6 +91527,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // outcomes are the MULTISETS of size 0..k, i.e. C(s+k, k) -- against today's (1+s)^k.
         // hand_index is excluded from the signature (that IS symmetry (b)); sac_victim_id is
         // deliberately KEPT, so this never claims the Saproling-victim symmetry it has not checked.
+        // AN UPPER BOUND, AND READ IT AS ONE (Maze's End P5b, 2026-11-18). (1) It prices the product
+        // the walk would visit with NO fold, so classes the canonical-prefix fold (FinalizeFoldTags)
+        // already collapses count again here. (2) The signature omits tutor_target, rad_mode and the
+        // execution ORDER, so N battlefield copies of one activated land (Maze's End: one variant per
+        // fetch target) price as N identical bits. They are not an identity: which copy fetches which
+        // target fixes the fetch order (Gond Gate fetched first makes the second Gate enter untapped;
+        // Guild Summit's queued draw after the first shuffle can take the other target). On seed 91021
+        // gi20 d5 b10 (engine at 7093daceb) ~96% of the log-price was those copies, not hand copies.
         double sodo_copyfold = 1.0;
         {
             std::map<std::string, std::pair<int, int>> fcls;   // sig -> (k groups, s classes)
@@ -106345,6 +106361,103 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (p.land_to_play == forced_land) { keep.push_back(p); }
         }
         if (!keep.empty()) { all.swap(keep); }
+    }
+
+    // P5b FOLD 2 -- THE EXTRA-DROP LAND ORDER (MTG_FOLD_LAND_ORDER, default ON; Maze's End's Exploration). USER
+    // 2026-11-18: "True, the order doesn't matter much here unless the second land is played after other things or
+    // we are paying for a cost like Gateway Plaza." After a turn of NOTHING BUT land drops, the site-10 continuation
+    // that re-opens the extra drop offers "land Y first, then casts S"; when Y and every land already played COMMUTE
+    // (DecisionProvider::LandEntryOrderClass, one class), playing Y before a land X > Y reaches the same board. So a
+    // land-first plan for Y is dropped when a land already played this turn (and held since main 1) sorts above it.
+    //
+    // WHY NOTHING IS LOST (the twin exists at every budget): sort the held lands among the held positions of the
+    // turn's land sequence, leaving any land DRAWN this turn (Guild Summit) where it was. Every entry in one class
+    // draws the same number of cards, so every draw lands at the same point and each drawn land is in hand when its
+    // position comes; each prefix of that sequence passes this filter (held lands ascend; a drawn land is never
+    // dropped; equal signatures are never dropped); the last held position takes the largest held land with the same
+    // S (the hand there differs only in which held land is left in it); the first position is the root, which this
+    // never touches (no land played yet). The lands commute, nothing else happened between them, and S follows the
+    // last of them in both lines -- the same board. A land played AFTER casts (land_slot != 0) is never dropped
+    // ("unless the second land is played after other things").
+    //
+    // KEY-NEUTRAL: it reads only what BuildBreakpointKey / the enumeration memo key already fold -- the battlefield
+    // in order with entered_this_turn and tapped, the hand's card numbers, the main-1 hand mask (live this turn),
+    // spells_cast_this_turn, lands_played_this_turn and the pool -- so two states sharing a key fold alike. Pre-combat
+    // only; autonomous only; byte-identical for every deck without static extra land drops or with landfall.
+    {
+        static const bool s_flo = EnvOn("MTG_FOLD_LAND_ORDER", true);
+        const bool flo = heurarm::Flag(heurarm::FOLD_LAND_ORDER, s_flo);
+        if (flo && is_pre_combat && state.deck_has_static_land_drops && !state.deck_has_landfall
+            && !s_human_play_lands && !DecisionUnpruned() && ap.lands_played_this_turn >= 1
+            && state.spells_cast_this_turn == 0 && state.floating_mana.Total() == 0
+            && state.m1start_hand_turn == state.TurnSeq() && all.size() > 1)
+        {
+            const int me = state.active_player_index;
+            const DecisionProvider& lo_prov = ResolveProvider(state);
+            bool ok = true;
+            int  cls = -2;
+            int  entered = 0;
+            std::string max_sig;
+            for (const Permanent& pm : state.battlefield)
+            {
+                if (pm.controller_index != me) { continue; }
+                if (!pm.entered_this_turn)
+                {
+                    if (pm.tapped) { ok = false; break; }   // something was tapped for a cost: not land-only
+                    continue;
+                }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+                if (d == nullptr || !d->card.IsLand()) { ok = false; break; }   // a non-land entered
+                const int c = lo_prov.LandEntryOrderClass(state, me, *d);
+                if (c < 0 || (cls != -2 && c != cls)) { ok = false; break; }
+                cls = c;
+                ++entered;
+                if (state.HeldSinceMain1(pm.card))
+                {
+                    const std::string sg = land_sig_named(d);
+                    if (sg > max_sig) { max_sig = sg; }
+                }
+            }
+            // Every land that entered was PLAYED (a put -- Maze's End's fetch, a tutor -- is not land-only).
+            if (ok && entered == ap.lands_played_this_turn && !max_sig.empty())
+            {
+                std::unordered_map<std::string, bool> drop_land;   // name -> drop its land-first plans
+                auto droppable = [&](const std::string& name) -> bool
+                {
+                    auto it = drop_land.find(name);
+                    if (it != drop_land.end()) { return it->second; }
+                    bool drop = false;
+                    const CardDefinition* yd = CardDatabase::Instance().Lookup(name);
+                    if (yd != nullptr && yd->card.IsLand() && lo_prov.LandEntryOrderClass(state, me, *yd) == cls
+                        && land_sig_named(yd) < max_sig)
+                    {
+                        drop = true;
+                        for (const Card& hc : ap.hand)   // every copy held since main 1 (none drawn this turn)
+                        { if (hc.m_name == name && !state.HeldSinceMain1(hc)) { drop = false; break; } }
+                    }
+                    drop_land.emplace(name, drop);
+                    return drop;
+                };
+                std::vector<char> drop(all.size(), 0);
+                std::size_t n_drop = 0;
+                for (std::size_t i = 0; i < all.size(); ++i)
+                {
+                    const TurnSolver::Plan& p = all[i];
+                    const bool land_first = !p.land_to_play.empty() && p.land_slot == 0 && !p.land_from_top
+                                         && p.fetch_target.empty() && p.land_face.empty();
+                    if (land_first && droppable(std::string(p.land_to_play))) { drop[i] = 1; ++n_drop; }
+                }
+                if (n_drop > 0 && n_drop < all.size())
+                {
+                    std::vector<TurnSolver::Plan> keep;
+                    keep.reserve(all.size() - n_drop);
+                    for (std::size_t i = 0; i < all.size(); ++i) { if (!drop[i]) { keep.push_back(std::move(all[i])); } }
+                    all.swap(keep);
+                    g_fold_land_order_dropped.fetch_add(static_cast<long long>(n_drop), std::memory_order_relaxed);
+                    g_fold_land_order_lists.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        }
     }
 
     // Extra Turns needs to reach seven mana to cast nearly all of its turn spells.

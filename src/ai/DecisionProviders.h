@@ -5074,6 +5074,8 @@ public:
     // empty hand, and the cleanup discard is ours to choose, so a superset hand is never worse. PREMISE: re-check
     // if the list gains a madness / threshold / delirium / hellbent / "cards in hand" card.
     bool CrossingDumpWithoutLandDominated(const GameState&, int) const override { return true; }
+    // P5b fold 2 (MTG_FOLD_LAND_ORDER): which of this list's lands commute on entry (see the definition).
+    int LandEntryOrderClass(const GameState& s, int controller, const CardDefinition& def) const override;
     // I3b: Maze's End's win needs the activation; the projection must not label a plan that does not activate.
     bool AlternateWinNeedsAction() const override { return true; }
     // P1: ProjectsAlternateWin reads the board only (`casting` is ignored -- see its body), so the walks ask it
