@@ -3151,6 +3151,9 @@ def main():
     # seed-search that already exists for the UNVERIFIED tail, and only a card the search ALSO
     # fails to surface is reported as unreachable.
     escalated = []
+    # Bound before the branch: a sweep with NO hard miss skips it, and the never-cast tail below still
+    # extends `unverified` with it (Maze's End 2026-11-18: UnboundLocalError after a clean sweep, rc=1).
+    unreached = []
     if hard_miss and prof:
         by_card = {}
         for name, m, _ in hard_miss:

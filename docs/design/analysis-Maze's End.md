@@ -974,6 +974,30 @@ the GT diff is exactly the 12 new keys plus the header line; `check_gt_logs.py` 
 this branch: their new digests equal the GT already on `origin/phase-1-2-deck-analyzer` (f71a7e0ce reconciled
 them); this branch's base GT predates that. Not accepted here.
 
+## Claude-play sweep
+
+Recorded by V1 from the coordinator's report (2026-11-18). The sweep (analyze-deck 5d) was run by the coordinator.
+
+- commit: `dab956a9d`
+- seeds: base 61001
+- games: 16 (gi 0-15)
+- driver: Claude (Opus) agents, one per game. A second agent adversarially verified each flag.
+- flags: 4 unresolved. Each is an OPEN DEFECT owned by agent F1 (branch `wip/maze-fix`, worktree
+  `.claude/worktrees/maze-fix`). None is a deferral.
+  1. gi6, engine: Guild Summit's Gate-enter draw resolves before Maze's End's "then shuffle", against CR 603.3. The
+     player draws the known pre-shuffle top card.
+  2. gi1, search completeness: the Talon Gates {4} put + Maze's End activation combination is never enumerated
+     (`legal_not_enumerated` at d8 b0).
+  3. gi2, search completeness: the extra land drop after a same-plan Exploration cast is unreachable at T2 at d8 b0.
+  4. gi8, rules gap: there is no instant-speed window for the Maze's End activation (end step after Manabond, the
+     opponent's turn after Burgeoning). It cost a T6 win.
+- 3 budget-bound search issues (gi0, gi7, gi13): the d5 b20 line is one turn slower, and b100-b500 finds the turn
+  earlier. This is starvation evidence for 5c (see Verification).
+- 6 flags dismissed as false positives, with reasons in the summary.
+- Per-game ai/claude win turns: gi0 7/6, gi1 7/8, gi2 6/5, gi3 6/6, gi4 5/5, gi5 7/5 (the mulligan of a T5 hand,
+  `max_lands`), gi6 5/5, gi7 6/5, gi8 7/7, gi9 8/8, gi10 5/5, gi11 5/6, gi12 5/8, gi13 7/6, gi14 5/5, gi15 7/6.
+- Full data: `/workspaces/MagicDeckTester/logs/maze/sweep/sweep-61001-summary.txt` and `sweep-61001-full.json`.
+
 ## Approved deferrals
 
 * **Decision 9, Archdruid's Charm mode 2** (target creature we control; the list has none) -- USER B3 2026-11-17: "I
