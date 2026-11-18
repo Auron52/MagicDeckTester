@@ -74,9 +74,11 @@ cost unknown). **Held-out DONE 23:56:** pf1d 149/135, net -14 (combined 10,000: 
 recovered; the last (gi 570487, b5 a6) still running (>0.5 h; gi 575776 took 35 min). If it recovers: ADOPT pf1d
 (T1 + DEMOTE default ON; USER: "whichever gets the best results"), accept Cyclone GT, then re-measure
 UNSEEN_KEEP_SCARCE on Cyclone over pf1d (USER: turn it on "if and when the issue is resolved").
-Waiter bajxv5qy0 (PID-keyed) prints the recovery count when the d8 batch ends. UNCOMMITTED, UNBUILT: a unit test
-appended to `test/unit/test_cyclone_cast_order.cpp` ("Cyclone Ponder first early: the front and demote shapes"); build
-+ run it with the adoption. Adoption = `EnvOn("MTG_CYCLONE_PONDER_FIRST_T1", true)` and `..._DEMOTE", true)` in
+Waiter bajxv5qy0 (PID-keyed) prints the recovery count when the d8 batch ends. **01:35 UTC: gi 570487 still running
+(1.5 h, 1/32 workers, rss 1.2G).** The unit test ("Cyclone Ponder first early: the front and demote shapes") is
+COMMITTED (units 3,466/3,466). **PUSHED ~01:45 UTC 11-18** (the default-OFF levers + test + docs, rebased onto origin's
+Mill/Spirits keep tables, no src/GT upstream; no smoke: levers default OFF, control 0/500 digest mismatches); next
+shared-branch push not before ~05:45 UTC, so the adoption commit waits for that window. Adoption = `EnvOn("MTG_CYCLONE_PONDER_FIRST_T1", true)` and `..._DEMOTE", true)` in
 DecisionProviders.cpp (update the comments), update HeuristicArm.h's "Default OFF" text, units, smoke accept of the
 Cyclone rows, push in the window (>= 01:04 UTC; unpushed: 0e5d8f97c, ca2ae14a6, b3eda2bac + the handoff commits).
 Other open USER policy questions surfaced 11-17 23:0x: Vampires s30230089 (pain now for an unnamed later cast; agent
