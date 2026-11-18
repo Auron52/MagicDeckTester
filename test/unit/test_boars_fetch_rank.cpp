@@ -873,6 +873,16 @@ TEST_CASE("Five Colour MTG_FIVECOLOUR_RULE6_SEES_STEPS: RULE 6 sees the steps th
         const GameState no_greaves = board({ "Cosmic Spider-Man", "Forest", "Plains", "Mountain" }, hand);
         CHECK(top_tapped(no_greaves, true));
     }
+    SUBCASE("(4b) Greaves, std gi 72: a permanent bringing a new colour need not be paid before a hasted dork")
+    {
+        // Breeding Pool + Birds + Blood Crypt + Greaves; Faeburrow Elder and Mana Cannons in hand. One more mana pays
+        // Faeburrow, which (hasted) taps for {G}{W} and pays Mana Cannons. Cannons is red (a new colour), but no
+        // domain source is waiting on it, so it is not "early" -- the haste-only credit variant applies.
+        const GameState s = board({ "Breeding Pool", "Birds of Paradise", "Blood Crypt", "Lightning Greaves" },
+                                  { "Wooded Foothills", "Faeburrow Elder", "Mana Cannons" });
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+    }
     SUBCASE("(5) best total mana value: Mana Cannons replaces Lightning Greaves")
     {
         // Four lands: Greaves + Bloom Tender (4). One more: Tender + Mana Cannons (5) -- two cards either way, so the
