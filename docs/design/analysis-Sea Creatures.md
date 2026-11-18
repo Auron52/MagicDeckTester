@@ -172,7 +172,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 14. **I1 (agent defaults taken, surfaced):** (a) PROVISIONAL deferral D-1: a FETCHED / searched-out look-land's surveil is the provider's top-disposition rule, not a searched axis (after F1 it is the post-shuffle card; under the prune a fetched Maze is practically unreachable); human play asks. (b) F1 was applied to Crop Rotation's PerformLandTutorToBattlefield and Nissa -8 as well (same rules defect; inert for every current list). (c) The Sea fetch prune keeps the Boars low-life copy (<= 3 life: full held list) and Heath / Strand keep the root <= 3-life autonomous hold -- both unreachable in goldfish Sea (floor 5 life) and both inside the deferred `docs/design/fetch-hold-searched-scope.md` audit. (d) Misty Rainforest: `fetch_hold_human_only` is a new name-free param (the Tarn/Delta shim generalised per card); its `produces` W/U/B/R/G hand proxy is kept (Tarn shape) so no hand reader moves. (e) ~~Creature Giving moves on ANY CardParams layout change~~ -- **WITHDRAWN (I3, 2026-11-17):** it was an A/B artifact (the base binary run on the NEW cards.json), not engine nondeterminism; with each arm on its own cards.json, I3 (which adds CardParams fields AND a GameState field) is byte-identical on Creature Giving. See docs/design/creature-giving-jobmix-nondeterminism.md (commit 6db0c4477, branch cg-jobmix-fix; the coordinator brings it onto this branch). Every byte-identity A/B must pin each arm's OWN commit's cards.json.
 15. **I2 (agent defaults taken, surfaced):** (a) Whelming Wave and the cleanup discard: the provider never casts it,
     so it is a dead card in hand -- whether the discard ladder should shed it first is USER-owned (discard buckets);
-    nothing changed. (b) Cast order: none needed for Wave while it is never cast. (c) A scheduled opponent spawn
+    nothing changed. **ANSWERED (USER 2026-11-18):** the USER's discard buckets (MANA vs THREATS) are built and
+    shed the Wave first -- see "Cleanup-discard buckets" below and `sea-creatures-discard-policy-proposal.md`. (b) Cast order: none needed for Wave while it is never cast. (c) A scheduled opponent spawn
     bounced by ReturnPermanentToOwnersHand now CEASES (the engine models spawns as tokens) instead of entering the
     opponent's hand -- this also applies to Sink into Stupor (Merfolk); byte-identical on Merfolk d3 b10 40 g.
 16. **I3 (agent defaults taken, surfaced):** (a) Q12 main-2 shape default = the CONDITIONAL provider-restricted main 2, opened (full menu) on every turn a Leviathan II/III instance is live -- even when no sea creature attacked (rare); DeckUsesSecondMain NOT flipped; every-turn arm = MTG_FORCE_USES_M2=1. (b) Kiora II's don't-untap rider: PROVISIONAL deferral (Q13), skip_next_untap is not set. (c) Kiora III steal folds live in the ROOT provider (sound identity + dominance on vanilla bodies), default ON, MTG_UNPRUNE=sagasteal; not Sea-specific. (d) The three pre-existing open-coded control-change sites (Bolas -2, Expropriate, Captivating Vampire) are NOT migrated to GainControlOfPermanent; only Kiora uses it. (e) Disclosed latent gap: a NONcreature Saga's sacrifice reaches no sacrifice/LTB watcher (none exists for this list). (f) Viewer INERT classification of saga_chapters, saga_ch1_token_*, saga_ch2_tap_opp_nonland, saga_ch1_bounce_creatures_except_subtypes, saga_eot_attack_draw_{chapters,subtypes} needs the USER's OK. (g) 2HG: Kiora II taps EVERY opposing nonland permanent (the engine has one opposing controller), not one target head's. (h) Kiora III may steal an opposing LAND (it is 'target permanent'); the search picks among the restricted list, and the trace shows lands taken often when the opponent has no creature.
@@ -381,6 +382,40 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
 * **Combined suite with all three rules ON** (Sea-scoped smoke + regression): searched 9 faster / 1 slower
   (sea2hg reg s2002 gi18 6->7, draws diverge at T5, persists at 4x and 16x = fetch-shuffle variance); d0 20 faster.
   Accepted `d489cbd6c` (11 Sea rows).
+
+## Cleanup-discard buckets: USER rule `MTG_SEA_BUCKET_DISCARD` (2026-11-18, default ON)
+
+* **USER (verbatim, in order; all ten messages are in `sea-creatures-discard-policy-proposal.md`):** *"We need a
+  proper bucketing with two main buckets of mana and threats ..."*, then the refinements on the 5/2 -> 4/3 split,
+  the 7-mana threshold for a 3rd threat slot, the 6 + 7 opening pair, Sin's conditional value and the Leviathan ->
+  Sin finisher *"(at 20 life anyway)"*, the early mana mix (cheap acceleration + one 3-mana accelerant) and *"a land
+  drop for each turn"* *"(which probably means 1 or 2."*; then *"I guess on 20-life it is possible that sin + Summon
+  Leviathan is actually better than Summon Leviathan + Koma. If we have Kraken, on the other hand, the game should
+  end fast enough with any 7-drop."* and *"It's more like we should keep Koma or the biggest 7-drop if we have
+  Spawning Kraken."*
+* **Built** `SeaCreaturesProvider::CleanupDiscardCandidates` (heurarm `SEA_BUCKET_DISCARD`; `=0` -> generic max-MV),
+  unit tests `test/unit/test_sea_discard.cpp`. Agent readings (early-game test = battlefield < 6 mana; "nearing 8"
+  = kept reach >= 7; precedence Kraken + (Koma | biggest MV-7) > [Summon +] Sin finisher on a creature-Saga line > Koma >
+  other Sin finisher > 6/7 pair > merit; rule 9's promotion read for the creature-Saga (Summon) line only) are listed
+  in the design doc for the USER. The Sin finisher projection now counts the damage through the turn Sin attacks
+  (Summon -> Sin = 21 at 20 life), which the first build undercounted (15). The Stage 5i bound (~0 turns) already said the discard choice barely moves this deck; this is the USER's
+  correctness rule for the rare case.
+* **Measurements (2026-11-18, build d3b93f4f6 = rules 1-10, d5 b20):**
+  * Units: 16 Sea discard cases pass; full suite 3489/3489.
+  * Scoped suite (`regression.sh --both --deck=sea,sea2hg`, NOT accepted): only Sea rows move. Every aggregate is
+    unchanged except sea2hg regression d5 s2002 6.3867 -> 6.3733 (gi61 T8 -> T7). Smoke searched slower 0 / faster 0
+    / play-changed 2; regression searched slower 0 / faster 1 / play-changed 12; d0 slower 0. No slower game, so no
+    root-cause owed. GT still to accept (parent).
+  * Held-out paired A/B, ONE pooled batch (ON vs `MTG_SEA_BUCKET_DISCARD=0`; std 1000 seeds 9600001, 2HG 300 seeds
+    9700001; 24/24 workers): **std 5.9090 vs 5.9090, delta +0.0000, se 0, faster 0 / slower 0, units 0.999; 2HG 6.3100
+    vs 6.3100, delta +0.0000, faster 0 / slower 0, units 0.998.** Outcome-identical in all 1300 games.
+  * Census (`MTG_TRACE=discard`, real cleanups only): **21 decisions per arm in 1300 games** (the same 21 (seed, turn)
+    cleanups in both arms), 16 of them with a different first shed. State: early 5/2 = 12, later 4/3 = 9; the
+    early-game mana order (board < 6) applied in all 21. The unclamped land count would be 3+ in 15 of 21 (1: 2, 2: 4,
+    3: 9, 4: 5, 5: 1), but 18 of the 21 hands held NO land (kept lands 0) and 3 held one, so the [1, 2] clamp never
+    bound. ON first sheds: Whelming Wave 7, Brinelin 4, a dead 2nd Koma 3, hostless Utopia Sprawl 2, Serpent 2, Sin 1,
+    Kiora 1, Hullbreaker 1. `=0` first sheds: Brinelin 8, Gorger 2, Sin 2, Serpent 2, Lorthos 2, Koma 2, Summon: Leviathan 2, Hullbreaker 1. These cleanups come from mana-screwed hands (18 of 21 with no land in hand), which is why the choice never moves a win turn: the rule is correctness for the rare case, as
+    the Stage 5i bound (~0 turns) predicted. Files: `logs/sea-discard/census-result.txt`, `logs/sea-discard/reg.log`.
 
 ## Approved deferrals
 

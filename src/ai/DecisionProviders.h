@@ -754,6 +754,12 @@ public:
                            const std::string& land_to_play) const override;
     // Kiora III steals a creature with 8+ mana (lands stay searched below 8, or beside 1/1s); MTG_SEA_STEAL_CREATURE.
     void RestrictSagaStealCandidates(const GameState& s, int controller, std::vector<int>& cands) const override;
+    // The USER's cleanup-discard buckets (2026-11-18; docs/design/sea-creatures-discard-policy-proposal.md): MANA vs
+    // THREATS, 5 + 2 until the kept threats are castable off board + 4 mana cards, then 4 + 3. MTG_SEA_BUCKET_DISCARD
+    // (default ON); =0 restores the generic max-MV ranking. Not prefix-stable while on (re-ranked per shed).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "

@@ -41091,6 +41091,525 @@ std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingCounted(s, required_pieces, shed);
 }
 
+// ---- SeaCreaturesProvider::CleanupDiscardCandidates -- the USER's cleanup-discard buckets ----------------------
+//
+// THE USER'S RULE (2026-11-18, verbatim, in order; docs/design/sea-creatures-discard-policy-proposal.md):
+//   1. "We need a proper bucketing with two main buckets of mana and threats and beyond that want some level of
+//      different mana costs or acceleration and lands. I think that Spawning Kraken 1-of should be an auto-keep in
+//      threats and same with Koma since those snowball. The others should be kept based on P/T and castability. We
+//      should keep a mix of mana costs. For mana you are looking for 6-8 mana in hand or on board, (mostly
+//      acceleration and 1 or 2 lands) but need to keep at least 2, but preferably 3 threats."
+//   2. "I guess at the very beginning 5 mana and 2 threats would be correct, but that can shift to 4 and 3 when we
+//      have more mana out."
+//   3. "Depending on what the threats are, we may need to keep 7 mana before we start making more than 2 spots for
+//      theats. Not being able to play them is a real headache."
+//   4. "And usually we should aim for a 6 and a 7 drop to start, but this isn't required if we have more space or
+//      are already nearing 8 mana."
+//   5. "I don't think Sin is as bad as you made it out to be. If you play it with Kiora bests the sea god or even
+//      Summon: Leviathan in particular it is high value, but it is conditional."
+//   6. "If we have a curve and Sin fits well into that curve it might be a keep. Summon: Leviathan -> Sin is not
+//      crazily powerful, but it will finish the opponent on the turn Sin attacks." / "(at 20 life anyway)"
+//   7. "In terms of mana, you typically want a mix of cheap acceleration and 1 3 mana acceleration spell if it is
+//      early in the game to ensure an early 6-drop."
+//   8. "And beyond that a land drop for each turn." / "(which probably means 1 or 2."
+//   9. "I guess on 20-life it is possible that sin + Summon Leviathan is actually better than Summon Leviathan + Koma.
+//      If we have Kraken, on the other hand, the game should end fast enough with any 7-drop."
+//  10. "It's more like we should keep Koma or the biggest 7-drop if we have Spawning Kraken."
+// MTG_SEA_BUCKET_DISCARD (heurarm SEA_BUCKET_DISCARD), DEFAULT ON; =0 restores the generic max-MV ranking.
+//
+// THE BUCKETS (classification by params / types, never names):
+//   BLANK    Whelming Wave (bounce_all_creatures; never cast, MTG_SEA_WAVE_NEVER) -- shed first.
+//   DEAD     a legendary card with a copy on our battlefield or an earlier copy in hand (a 2nd Koma).
+//   HOSTLESS a land Aura with no legal host: no land (of land_aura_host_subtype, e.g. Utopia Sprawl's Forest) on our
+//            battlefield or in hand, and no held / fielded fetch that can find one in the library.
+//   MANA     lands (1), rocks (produces_amount: Sol Ring 2, Worn Powerstone 2), hosted land Auras
+//            (land_aura_extra_mana: Overgrowth 2, Utopia Sprawl 1, Wild Growth 1). Counted with the board's production
+//            (lands, rocks, land Auras on the battlefield).
+//   THREAT   creatures and token-making Sagas (Kiora Bests the Sea God). Value = P + T (Kiora: its 8/8 token; Trench
+//            Gorger: L/L for L >= 6 library lands -- the USER's take-all rule -- else 6/6; Sin below) x castability,
+//            the Giants / Minotaur table {1, .70, .35, .10, .03, .02} by mana short of the KEPT reach (board + the
+//            mana cards kept). Agent reading: the simple table, not the discard_dist model (the parent's reading).
+//   REST     anything else (inert on this list).
+//
+// THE THREAT RANKING (precedence, highest first):
+//   (a) AUTO-KEEPS: the first Spawning Kraken (combat-damage tokens watching sea subtypes) and the first live Koma
+//       (self-watching combat-damage tokens). Extra copies rank as ordinary threats.
+//       (a1) WITH A KRAKEN (refinements 9 + 10): T1 Kraken, T2 Koma when held, else the BIGGEST MV-7 threat by the
+//            conditional value below (Sin's harvest included); castability is not consulted (all MV 7), and no
+//            Sin/Summon promotion applies to that slot. No MV-7 threat in hand: (c) fills T2.
+//       (a2) NO KRAKEN (refinement 9): a CREATURE-Saga line (Summon: Leviathan held or on the battlefield; agent
+//            reading: Kiora's non-creature line keeps the (b) precedence) whose Sin finisher projection reaches the
+//            opponent's actual life goes AHEAD of Koma -- [held Saga,] Sin, then Koma, so with two slots Summon + Sin
+//            beats Summon + Koma and Koma keeps the 3rd slot whenever there is one. Otherwise Koma is T1.
+//   (b) SIN AS THE FINISHER (refinement 6 + qualifier): a Sin (as_enters_harvest_counters) whose Saga line's projected
+//       damage through the turn Sin attacks reaches the opponent's CURRENT life, with Sin castable off the kept reach
+//       (projection: see sin_read; Summon -> Sin = 6 + 15 = 21 at 20 life, short of 2HG's 30). The held Saga of that
+//       line is promoted with it.
+//   (c) THE OPENING PAIR (refinement 4): while fewer than two threats are fixed, a 6-drop and a 7-drop (bands MV <= 6
+//       and MV 7) when the hand offers both, best pair by summed castability-weighted value; relaxed to the best pair
+//       on merit once the kept reach is >= 7 ("nearing 8", agent threshold). Mix of costs (rule 1): a pair or a pick
+//       whose MV is not yet covered wins over a covered one within 20% of it.
+//   (d) the rest on merit (value x castability, same mix tie-break), greedy one at a time.
+//   Sin's value (refinements 5, 6): 5/5 base; + for each Saga of ours that is still on the battlefield at our next
+//   main 2 (lore + 1 < chapters; Sin is a main-2 cast under the Kraken-only main-1 rule, and a Saga that reaches its
+//   last chapter is sacrificed first) 2 x mult x (lore + 1) as P/T (the strip-every-Saga harvest,
+//   MTG_SEA_SIN_STRIP_SAGAS) PLUS the re-fired chapter I (Kiora: another 8/8; Summon: Leviathan: its 6/6 body is not
+//   sacrificed); with no such Saga, a Saga KEPT in hand (cast next turn, Sin the turn after at lore 2) adds the same
+//   at lore 2 weighted by the Saga's own castability. No Saga line: a plain 5/5.
+//
+// THE 5/2 -> 4/3 SPLIT (refinements 2, 3): need = max(6, the highest MV among the two fixed threats). EARLY while
+// board + the first 4 mana cards of the keep order < need: keep 5 mana cards + 2 threats, so the 3rd threat sheds
+// before the 5th mana card. LATER: keep mana up to `need` (at most 4 cards), then the 3rd threat, then mana to 8.
+//
+// THE MANA ORDER (refinements 1, 7, 8): while the battlefield alone makes < 6 mana (the "early in the game" test --
+// agent reading, board-only so it cannot loop through the split): land, cheap accelerant (MV <= 2), cheap accelerant,
+// ONE MV-3 accelerant (production, then enters-untapped: Overgrowth before Worn Powerstone), [2nd land], the other
+// cheap accelerants, the other MV-3 accelerants, surplus lands. From 6 board mana on: land, accelerants by production,
+// [2nd land after the first three], ..., surplus lands. The land count = the land drops needed for board + the planned
+// accelerants (the ones before the 2nd-land slot) to reach `need`, clamped to [1, 2] (USER: "(which probably means 1
+// or 2."); lands past it are surplus and shed before every accelerant. The opening pair's castability reads a
+// provisional order built for need = 6 (the pair decides `need`, which then fixes the land count).
+//
+// SHED ORDER (most expendable first; every non-staged hand card named once, through CleanupDiscardRankingWithOrder):
+//   Wave > dead legend copy > hostless land Aura > mana past 8 (the order's tail first) > the 4th+ threats (worst
+//   first) > REST > mana between the floor and 8 > the 3rd threat > the floor mana (backwards) > T2 > T1.
+static bool SeaBucketDiscardOn()
+{
+    static const bool e = EnvOn("MTG_SEA_BUCKET_DISCARD", true);       // DEFAULT ON (USER rule 2026-11-18); =0 -> generic max-MV
+    return heurarm::Flag(heurarm::SEA_BUCKET_DISCARD, e);
+}
+bool SeaCreaturesProvider::CleanupDiscardShedStable() const { return !SeaBucketDiscardOn(); }
+
+std::vector<int> SeaCreaturesProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!SeaBucketDiscardOn())
+    {
+        std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        // MTG_TRACE=discard (diagnostic only): tag the =0 arm's REAL cleanups so a pooled ON / =0 census can pair them.
+        if (TRACE_ON("discard") && g_real_resolution && !g_le_pitch_ranking && !gen.empty())
+        {
+            const Player& ap0 = s.players[static_cast<std::size_t>(s.active_player_index)];
+            TRACE("discard", "sea-off g%llu T%d hand=%zu shed=%s", static_cast<unsigned long long>(s.game_seed),
+                  s.turn_number, ap0.hand.size(), ap0.hand[static_cast<std::size_t>(gen.front())].m_name.str().c_str());
+        }
+        return gen;
+    }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const std::size_t un = static_cast<std::size_t>(n);
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto hd     = [&](int i) { return def_of(ap.hand[static_cast<std::size_t>(i)]); };
+    auto mv_of  = [&](int i) { const CardDefinition* d = hd(i); return d ? d->card.m_mana_cost.ManaValue() : 0; };
+
+    // ---- 1. the board -------------------------------------------------------------------------------------------
+    int board_mana = 0, board_power = 0;
+    std::vector<const Permanent*> own_lands, own_sagas;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand())
+        { board_mana += d ? std::max(1, d->params.produces_amount) : 1; own_lands.push_back(&p); }
+        else if (d != nullptr && (d->params.mana_rock || d->tmpl == CardTemplate::ManaDork))
+        { board_mana += std::max(1, d->params.produces_amount); }
+        else if (d != nullptr && d->params.is_land_aura) { board_mana += std::max(0, d->params.land_aura_extra_mana); }
+        if (d != nullptr && d->params.saga_chapters > 0) { own_sagas.push_back(&p); }
+        if (p.card.IsCreature() || p.is_animated) { board_power += std::max(0, p.EffectivePower()); }
+    }
+    int lib_lands = -1;   // lazily
+    auto library_lands = [&]
+    {
+        if (lib_lands < 0) { lib_lands = 0; for (const Card& c : ap.library) { if (CleanupDiscardIsLand(c)) { ++lib_lands; } } }
+        return lib_lands;
+    };
+
+    // ---- 2. classify the hand -----------------------------------------------------------------------------------
+    enum Cls : signed char { C_SKIP, C_WAVE, C_DEAD, C_LAND, C_ACCEL, C_HOSTLESS, C_THREAT, C_REST };
+    std::vector<signed char> cls(un, C_SKIP);
+    std::vector<int> prod(un, 0);
+    auto legend_dead = [&](int i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        for (int j = 0; j < i; ++j)
+        {
+            const Card& o = ap.hand[static_cast<std::size_t>(j)];
+            if (!o.m_is_staged && o.m_name == hc.m_name) { return true; }
+        }
+        return false;
+    };
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = hd(i);
+        signed char& c = cls[static_cast<std::size_t>(i)];
+        if (d != nullptr && d->params.bounce_all_creatures)                               { c = C_WAVE; continue; }
+        if (d != nullptr && d->card.HasSupertype(Supertype::Legendary) && legend_dead(i)) { c = C_DEAD; continue; }
+        if (CleanupDiscardIsLand(hc)) { c = C_LAND; prod[static_cast<std::size_t>(i)] = d ? std::max(1, d->params.produces_amount) : 1; continue; }
+        if (d == nullptr) { c = C_REST; continue; }
+        const CardParams& p = d->params;
+        if (p.mana_rock)                                    { c = C_ACCEL; prod[static_cast<std::size_t>(i)] = std::max(1, p.produces_amount); }
+        else if (p.is_land_aura && p.land_aura_extra_mana > 0) { c = C_ACCEL; prod[static_cast<std::size_t>(i)] = p.land_aura_extra_mana; }
+        else if (d->card.IsCreature() || p.saga_ch1_token_power > 0) { c = C_THREAT; }
+        else                                                { c = C_REST; }
+    }
+    auto is_cls = [&](int i, Cls k) { return cls[static_cast<std::size_t>(i)] == k; };
+    // A land Aura's host: a land of its host subtype (any land when none) on our battlefield or in hand, or a fetch
+    // (on the battlefield or held) whose search can find such a land in the library.
+    auto fetch_finds = [&](const CardDefinition& f, const std::string& hs)
+    {
+        for (const Card& c : ap.library)
+        {
+            if (!CleanupDiscardIsLand(c)) { continue; }
+            const CardDefinition* ld = def_of(c);
+            if (ld == nullptr || !CardHasSubtype(ld->card, hs)) { continue; }
+            for (const std::string& t : f.params.fetch_land_types) { if (CardHasSubtype(ld->card, t)) { return true; } }
+        }
+        return false;
+    };
+    auto hosts = [&](const Card& land, const CardDefinition* ld, const std::string& hs)
+    {
+        if (hs.empty() || CardHasSubtype(ld ? ld->card : land, hs)) { return true; }
+        return ld != nullptr && !ld->params.fetch_land_types.empty() && fetch_finds(*ld, hs);
+    };
+    for (int i = 0; i < n; ++i)
+    {
+        if (!is_cls(i, C_ACCEL)) { continue; }
+        const CardDefinition* d = hd(i);
+        if (!d->params.is_land_aura) { continue; }
+        const std::string& hs = d->params.land_aura_host_subtype;
+        bool ok = false;
+        for (const Permanent* lp : own_lands) { if (hosts(lp->card, def_of(lp->card), hs)) { ok = true; break; } }
+        for (int j = 0; !ok && j < n; ++j)
+        { if (is_cls(j, C_LAND) && hosts(ap.hand[static_cast<std::size_t>(j)], hd(j), hs)) { ok = true; } }
+        if (!ok) { cls[static_cast<std::size_t>(i)] = C_HOSTLESS; prod[static_cast<std::size_t>(i)] = 0; }
+    }
+
+    // ---- 3. mana: the keep order --------------------------------------------------------------------------------
+    std::vector<int> lands, accels;
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_LAND)) { lands.push_back(i); } else if (is_cls(i, C_ACCEL)) { accels.push_back(i); } }
+    auto tapped_of = [&](int i) { const CardDefinition* d = hd(i); return d != nullptr && d->params.enters_tapped; };
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b) { return !tapped_of(a) && tapped_of(b); });
+    auto blue_of = [&](int i)
+    {
+        const CardParams& p = hd(i)->params;
+        return std::find(p.land_aura_produces.begin(), p.land_aura_produces.end(), Color::Blue) != p.land_aura_produces.end();
+    };
+    std::stable_sort(accels.begin(), accels.end(), [&](int a, int b)
+    {
+        const int pa = prod[static_cast<std::size_t>(a)], pb = prod[static_cast<std::size_t>(b)];
+        if (pa != pb) { return pa > pb; }
+        if (tapped_of(a) != tapped_of(b)) { return !tapped_of(a); }
+        if (mv_of(a) != mv_of(b)) { return mv_of(a) < mv_of(b); }
+        return blue_of(a) && !blue_of(b);
+    });
+    // EARLY GAME for the mana mix (refinement 7, agent test): the battlefield alone cannot yet cast a 6-drop. Read off
+    // the board only, so it cannot loop through the 5/2 split it feeds.
+    const bool mix = board_mana < 6;
+    std::vector<int> core, tail_accel;   // the planned accelerants (before the 2nd-land slot), and the others
+    if (mix)
+    {
+        std::vector<int> cheap, dear;
+        for (int i : accels) { (mv_of(i) <= 2 ? cheap : dear).push_back(i); }
+        for (std::size_t k = 0; k < cheap.size() && k < 2; ++k) { core.push_back(cheap[k]); }
+        if (!dear.empty()) { core.push_back(dear[0]); }
+        for (std::size_t k = 2; k < cheap.size(); ++k) { tail_accel.push_back(cheap[k]); }
+        for (std::size_t k = 1; k < dear.size(); ++k)  { tail_accel.push_back(dear[k]); }
+    }
+    else
+    {
+        for (std::size_t k = 0; k < accels.size(); ++k) { (k < 3 ? core : tail_accel).push_back(accels[k]); }
+    }
+    int core_mana = 0;
+    for (int i : core) { core_mana += prod[static_cast<std::size_t>(i)]; }
+    // Lands: one land drop per turn until board + the planned accelerants reach `target`, clamped to [1, 2].
+    auto lands_for = [&](int target) { return std::min(static_cast<int>(lands.size()), std::clamp(target - board_mana - core_mana, 1, 2)); };
+    auto build_order = [&](int lands_keep)
+    {
+        std::vector<int> o;
+        if (!lands.empty()) { o.push_back(lands[0]); }
+        o.insert(o.end(), core.begin(), core.end());
+        if (lands_keep >= 2) { o.push_back(lands[1]); }
+        o.insert(o.end(), tail_accel.begin(), tail_accel.end());
+        for (std::size_t k = static_cast<std::size_t>(std::max(1, lands_keep)); k < lands.size(); ++k) { o.push_back(lands[k]); }
+        return o;
+    };
+    auto cum = [&](const std::vector<int>& o)
+    {
+        std::vector<int> t(o.size() + 1, board_mana);
+        for (std::size_t k = 0; k < o.size(); ++k) { t[k + 1] = t[k] + prod[static_cast<std::size_t>(o[k])]; }
+        return t;
+    };
+    const int m = static_cast<int>(lands.size() + accels.size());
+    // Provisional order (the 6-mana floor) for the opening pair's castability; re-built below once `need` is known.
+    const std::vector<int> t0 = cum(build_order(lands_for(6)));
+    const int reach5 = t0[static_cast<std::size_t>(std::min(m, 5))];
+
+    // ---- 4. the threats -----------------------------------------------------------------------------------------
+    std::vector<int> thr;
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_THREAT)) { thr.push_back(i); } }
+    auto cast_factor = [](int deficit)
+    {
+        static const double kHard[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };
+        return deficit <= 0 ? 1.0 : (deficit < 5 ? kHard[deficit] : 0.02);
+    };
+    auto pt_of = [](const CardDefinition& d) { return d.card.m_power.value_or(0) + d.card.m_toughness.value_or(0); };
+    auto refire_of = [&](const CardDefinition& sd)   // chapter I again: Kiora's token, or a creature Saga's body kept
+    {
+        if (sd.params.saga_ch1_token_power > 0) { return sd.params.saga_ch1_token_power + sd.params.saga_ch1_token_toughness; }
+        return sd.card.IsCreature() ? pt_of(sd) : 0;
+    };
+    auto first_body_power = [&](const CardDefinition& sd)
+    { return sd.params.saga_ch1_token_power > 0 ? sd.params.saga_ch1_token_power : (sd.card.IsCreature() ? sd.card.m_power.value_or(0) : 0); };
+    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    // Sin: value given the threats kept so far; `line_held` = the held Saga of its best line (-1: board / none);
+    // `finisher` = that line's projected attack reaches the opponent's life with Sin castable.
+    // `creature_line` = the line's Saga is a creature Saga (Summon: Leviathan's class: its body attacks and is kept);
+    // `creature_only` restricts the held-Saga search to such Sagas (refinement 9 reads that line specifically).
+    // THE FINISHER PROJECTION (refinement 6 "it will finish the opponent on the turn Sin attacks (at 20 life
+    // anyway)"), cumulative damage through the turn Sin attacks. Board Saga at lore L: next turn it reaches L + 1, our
+    // creatures attack, Sin is cast in main 2 harvesting L + 1; the turn after Sin attacks beside them:
+    //   2 x board power + Sin's power + mult x (L + 1).      (Summon at lore 1: 2 x 6 + 5 + 4 = 21 >= 20.)
+    // Held Saga: cast next turn (its body / token is summoning-sick), Sin the turn after at lore 2, Sin attacks the turn
+    // after that:   3 x board power + 2 x the Saga's first body + Sin's power + mult x 2.   (Summon: 12 + 5 + 4 = 21.)
+    struct SinRead { double value = 0; int line_held = -1; bool finisher = false; bool creature_line = false; };
+    auto sin_read = [&](int i, const std::vector<int>& sel, int reach, bool any_held, bool creature_only = false) -> SinRead
+    {
+        const CardDefinition& d = *hd(i);
+        const int mult = d.params.as_enters_harvest_counters;
+        const int pw = d.card.m_power.value_or(0);
+        SinRead r;
+        r.value = pt_of(d);
+        int harvest = 0, refire = 0;
+        bool creature_saga = false;
+        for (const Permanent* sp : own_sagas)
+        {
+            const CardDefinition* sd = def_of(sp->card);
+            const int lore = sp->lore_counters;
+            if (sd == nullptr || lore <= 0 || lore + 1 >= sd->params.saga_chapters) { continue; }
+            harvest += lore + 1;
+            refire  += refire_of(*sd);
+            if (sd->card.IsCreature()) { creature_saga = true; }
+        }
+        const bool sin_castable = d.card.m_mana_cost.ManaValue() <= reach;
+        if (harvest > 0)
+        {
+            r.value += 2.0 * mult * harvest + refire;
+            r.finisher = sin_castable && 2 * board_power + pw + mult * harvest >= opp_life;
+            r.creature_line = creature_saga;
+            return r;
+        }
+        double best = 0;
+        auto consider = [&](int j)
+        {
+            const CardDefinition* sd = hd(j);
+            if (sd == nullptr || sd->params.saga_chapters < 3) { return; }
+            if (creature_only && !sd->card.IsCreature()) { return; }
+            const int smv = sd->card.m_mana_cost.ManaValue();
+            const double bonus = cast_factor(smv - reach) * (2.0 * mult * 2 + refire_of(*sd));
+            if (bonus <= best) { return; }
+            best = bonus; r.line_held = j;
+            r.creature_line = sd->card.IsCreature();
+            r.finisher = sin_castable && smv <= reach
+                      && 3 * board_power + 2 * first_body_power(*sd) + pw + mult * 2 >= opp_life;
+        };
+        for (int j : sel) { if (j != i) { consider(j); } }
+        if (any_held) { for (int j : thr) { if (j != i && std::find(sel.begin(), sel.end(), j) == sel.end()) { consider(j); } } }
+        r.value += best;
+        return r;
+    };
+    auto is_sin = [&](int i) { return hd(i)->params.as_enters_harvest_counters > 0; };
+    auto value_of = [&](int i, const std::vector<int>& sel, int reach)
+    {
+        const CardDefinition& d = *hd(i);
+        if (is_sin(i)) { return sin_read(i, sel, reach, false).value; }
+        if (d.params.etb_exile_library_lands_set_base_pt)
+        { const int L = library_lands(); return L >= 6 ? 2.0 * L : static_cast<double>(pt_of(d)); }
+        if (!d.card.IsCreature() && d.params.saga_ch1_token_power > 0)
+        { return static_cast<double>(d.params.saga_ch1_token_power + d.params.saga_ch1_token_toughness); }
+        return static_cast<double>(pt_of(d));
+    };
+    auto ev_of = [&](int i, const std::vector<int>& sel, int reach)
+    { return value_of(i, sel, reach) * cast_factor(mv_of(i) - reach); };
+    auto band_of = [&](int i) { const int v = mv_of(i); return v <= 6 ? 6 : (v == 7 ? 7 : 8); };
+
+    std::vector<int> rank;   // T1, T2, T3, ...
+    auto taken = [&](int i) { return std::find(rank.begin(), rank.end(), i) != rank.end(); };
+    // (a) auto-keeps
+    int kraken = -1, koma = -1;
+    for (int i : thr)
+    {
+        const CardParams& p = hd(i)->params;
+        if (kraken < 0 && SeaIsSpawningKraken(*hd(i))) { kraken = i; }
+        if (koma < 0 && p.combat_damage_watch_self && p.combat_damage_tokens_per_trigger > 0) { koma = i; }
+    }
+    if (kraken >= 0)
+    {
+        // (a1) refinement 10 (USER: "It's more like we should keep Koma or the biggest 7-drop if we have Spawning
+        // Kraken."): Kraken, then Koma when held, else the biggest MV-7 threat by the same conditional value (Sin's
+        // harvest included). Castability is not consulted (all MV 7). No MV-7 threat: the opening-pair step below.
+        rank.push_back(kraken);
+        int seven = koma;
+        if (seven < 0)
+        {
+            double bv = -1;
+            for (int i : thr)
+            {
+                if (i == kraken || mv_of(i) != 7) { continue; }
+                const double v = value_of(i, rank, reach5);
+                if (v > bv) { bv = v; seven = i; }
+            }
+        }
+        if (seven >= 0) { rank.push_back(seven); }
+    }
+    else
+    {
+        // (a2) refinement 9 (USER: "I guess on 20-life it is possible that sin + Summon Leviathan is actually better than
+        // Summon Leviathan + Koma."): a creature-Saga line (Summon: Leviathan held, or on the battlefield) whose Sin
+        // finisher projection reaches the opponent's actual life takes the slots AHEAD of Koma: [held Saga,] Sin, then
+        // Koma (so Koma keeps the 3rd slot whenever there is one). Otherwise Koma stays the auto-keep (30-life 2HG).
+        for (int i : thr)
+        {
+            if (!is_sin(i)) { continue; }
+            const SinRead r = sin_read(i, rank, reach5, true, true);
+            if (!r.finisher || !r.creature_line) { continue; }
+            if (r.line_held >= 0) { rank.push_back(r.line_held); }
+            rank.push_back(i);
+            break;
+        }
+        if (koma >= 0) { rank.push_back(koma); }
+    }
+    // (b) Sin as the finisher, with its held Saga
+    for (int i : thr)
+    {
+        if (taken(i) || !is_sin(i)) { continue; }
+        const SinRead r = sin_read(i, rank, reach5, true);
+        if (!r.finisher) { continue; }
+        if (r.line_held >= 0 && !taken(r.line_held)) { rank.push_back(r.line_held); }
+        rank.push_back(i);
+        break;
+    }
+    // (c) the opening pair
+    const bool relaxed = reach5 >= 7;
+    std::vector<int> pool;
+    for (int i : thr) { if (!taken(i)) { pool.push_back(i); } }
+    auto covered = [&](int mv) { for (int j : rank) { if (mv_of(j) == mv) { return true; } } return false; };
+    // One greedy pick on merit with the mix-of-costs tie-break; `want` (0 = any) restricts to a band when present.
+    auto pick_one = [&](int reach, int want)
+    {
+        int best = -1; double bev = -1;
+        bool band_present = false;
+        if (want != 0) { for (int i : pool) { if (!taken(i) && band_of(i) == want) { band_present = true; } } }
+        std::vector<double> ev(un, 0.0);
+        for (int i : pool)
+        {
+            if (taken(i) || (band_present && band_of(i) != want)) { continue; }
+            ev[static_cast<std::size_t>(i)] = ev_of(i, rank, reach);
+            if (ev[static_cast<std::size_t>(i)] > bev) { bev = ev[static_cast<std::size_t>(i)]; best = i; }
+        }
+        if (best >= 0 && covered(mv_of(best)))
+        {
+            int alt = -1; double aev = -1;
+            for (int i : pool)
+            {
+                if (taken(i) || (band_present && band_of(i) != want) || covered(mv_of(i))) { continue; }
+                const double e = ev[static_cast<std::size_t>(i)];
+                if (e * 5.0 >= bev * 4.0 && e > aev) { aev = e; alt = i; }
+            }
+            if (alt >= 0) { best = alt; }
+        }
+        if (best >= 0) { rank.push_back(best); }
+        return best >= 0;
+    };
+    if (rank.size() == 1)
+    {
+        const int b0 = band_of(rank[0]);
+        pick_one(reach5, relaxed ? 0 : (b0 == 6 ? 7 : (b0 == 7 ? 6 : 0)));
+    }
+    else if (rank.empty() && !pool.empty())
+    {
+        // Every pair, scored as value(a | b) + value(b | a) (Sin's held-Saga line needs its partner kept).
+        int ba = -1, bb = -1, da = -1, db = -1; double bs = -1, ds = -1;
+        bool band_pair = false;
+        if (!relaxed)
+        {
+            for (int a : pool) for (int b : pool)
+            { if (a != b && band_of(a) == 6 && band_of(b) == 7) { band_pair = true; } }
+        }
+        for (std::size_t x = 0; x < pool.size(); ++x)
+        {
+            for (std::size_t y = x + 1; y < pool.size(); ++y)
+            {
+                const int a = pool[x], b = pool[y];
+                if (band_pair && !((band_of(a) == 6 && band_of(b) == 7) || (band_of(a) == 7 && band_of(b) == 6))) { continue; }
+                const double sc = ev_of(a, { b }, reach5) + ev_of(b, { a }, reach5);
+                if (sc > bs) { bs = sc; ba = a; bb = b; }
+                if (mv_of(a) != mv_of(b) && sc > ds) { ds = sc; da = a; db = b; }
+            }
+        }
+        if (ba >= 0 && mv_of(ba) == mv_of(bb) && da >= 0 && ds * 5.0 >= bs * 4.0) { ba = da; bb = db; }
+        if (ba < 0) { rank.push_back(pool[0]); }   // a single threat
+        else
+        {
+            if (ev_of(bb, { ba }, reach5) > ev_of(ba, { bb }, reach5)) { std::swap(ba, bb); }
+            rank.push_back(ba); rank.push_back(bb);
+        }
+    }
+    // ---- 5. the split and the final mana order ------------------------------------------------------------------
+    int need = 6;
+    for (std::size_t k = 0; k < rank.size() && k < 2; ++k) { need = std::max(need, mv_of(rank[k])); }
+    const int lands_raw  = std::max(0, need - board_mana - core_mana);     // land drops to reach `need`, unclamped
+    const int lands_keep = lands_for(need);
+    const std::vector<int> order = build_order(lands_keep);
+    const std::vector<int> t = cum(order);
+    const int reach4 = t[static_cast<std::size_t>(std::min(m, 4))];
+    const bool later = reach4 >= need;                                     // 4 mana + 3 threats
+    // (d) the rest on merit, at the reach the kept mana gives
+    const int reach_rest = later ? reach4 : t[static_cast<std::size_t>(std::min(m, 5))];
+    while (pick_one(reach_rest, 0)) {}
+    int kneed = m, k8 = m;
+    for (int k = m; k >= 0; --k) { if (t[static_cast<std::size_t>(k)] >= need) { kneed = k; } if (t[static_cast<std::size_t>(k)] >= 8) { k8 = k; } }
+    const int fm = later ? std::min(kneed, 4) : std::min(m, 5);
+    const int mid_end = std::max(fm, k8);
+
+    // ---- 7. the shed order --------------------------------------------------------------------------------------
+    std::vector<int> shed;
+    std::vector<char> listed(un, 0);
+    shed.reserve(un);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)] || ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_WAVE)) { put(i); } }
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_DEAD)) { put(i); } }
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_HOSTLESS)) { put(i); } }
+    for (int k = m - 1; k >= mid_end; --k) { put(order[static_cast<std::size_t>(k)]); }           // mana past 8
+    for (int k = static_cast<int>(rank.size()) - 1; k >= 3; --k) { put(rank[static_cast<std::size_t>(k)]); }  // 4th+ threats
+    for (int i = 0; i < n; ++i) { if (is_cls(i, C_REST)) { put(i); } }
+    for (int k = mid_end - 1; k >= fm; --k) { put(order[static_cast<std::size_t>(k)]); }          // floor .. 8
+    if (rank.size() >= 3) { put(rank[2]); }                                                         // the 3rd threat
+    for (int k = fm - 1; k >= 0; --k) { put(order[static_cast<std::size_t>(k)]); }                // floor mana
+    for (int k = std::min<int>(2, static_cast<int>(rank.size())) - 1; k >= 0; --k) { put(rank[static_cast<std::size_t>(k)]); }
+    for (int i = 0; i < n; ++i) { put(i); }   // defensive: nothing unnamed
+
+    // MTG_TRACE=discard (diagnostic only): the state each REAL cleanup was decided in, for the shed census.
+    if (TRACE_ON("discard") && g_real_resolution && !g_le_pitch_ranking && !shed.empty())
+    {
+        std::string names;
+        for (int i : shed) { if (!names.empty()) { names += '|'; } names += ap.hand[static_cast<std::size_t>(i)].m_name.str(); }
+        TRACE("discard", "sea g%llu T%d hand=%d state=%s mix=%d need=%d reach4=%d reach5=%d board=%d lands_raw=%d "
+              "lands_keep=%d threats=%zu order=%s",
+              static_cast<unsigned long long>(s.game_seed), s.turn_number, n, later ? "later43" : "early52", mix ? 1 : 0,
+              need, reach4, reach5, board_mana, lands_raw, lands_keep, rank.size(), names.c_str());
+    }
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}
+
 // ---- SnowProvider::CleanupDiscardCandidates ---------------------------------
 // The USER's bucket policy, verbatim in the header. Land 2 (3 with an empty board), accelerants
 // 1-2, threats 2, draw fills whatever is left.
