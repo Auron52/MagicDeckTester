@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Control for stuffy_split_attack_then_act.json: MTG_STUFFY_MAIN_SPLIT=0 (the step-9e single main). The Act",
+    "in main 1 would kill the Maniac before combat, so the best line holds the Act: attack for 1 on turn 4 (13), then",
+    "turn 5's Act reflects 13: win turn 5, a turn later than the split's attack-then-sweep.",
+    "UNLIMITED BUDGET (budget_ms 0): at budget_ms 50 and 500 the step-9e single-main search does NOT find the hold line (it casts the Act in main 1 on turn 4, opponent left at 1, no win), and finds it unbudgeted. A 9e search-budget finding recorded in the design doc section 14 (step 11); this control states what the single main CAN reach."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 14,
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mogg Maniac"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    }
+  ],
+  "hand": [
+    "Blasphemous Act"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "show_log": false,
+  "expect_win_turn": 5,
+  "env": {
+    "MTG_STUFFY_MAIN_SPLIT": "0"
+  }
+}

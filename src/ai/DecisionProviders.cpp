@@ -2968,12 +2968,7 @@ bool StuffyDollProvider::ScryKeepOnTop(const GameState& s, const Card& top_card)
 // canonical / playout line, where it must come first to save its target). The step-7 searched order expansion is
 // untouched: a plan that casts a setup spell (GC / the Escape) AND a creature sweeper still branches every ordering
 // of them (it does not read this rank).
-int StuffyDollProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
-{
-    const int r = DeckProvider::CastOrderRank(s, def);
-    if (def.params.aura_host_damage_back) { return r - 1; }
-    return r;
-}
+// (Step 9c's CastOrderRank moved below, with step 11's order.)
 
 // Step 9e (USER 2026-11-18 ~00:37: "I think we can make it an exception to the always attack-rule. Perhaps have a
 // deck heuristic that can be consulted to reject attacking?"). The step-9c predicate, moved here from the engine's
@@ -2987,6 +2982,166 @@ bool StuffyDollProvider::MayDeclineAttack(const GameState& s, const Permanent& a
 {
     if (attacker.HasKeyword(Keyword::Indestructible)) { return false; }
     return dmgrx::AuraHostDamageBackOn(s, attacker.card.m_number) != 0;
+}
+
+// ---- Step 11: the main split, the USER's total cast order, Mind Stone's sac-draw at the end of main 1 ----------------
+//
+// THE RULINGS (verbatim). USER 2026-11-17 ~21:45: "Probably sweepers should be cast main 2. Arguably everything but the
+// combo should be." -- superseded ~21:48: "Actually maybe it is easier to allow critters to be cast main 1 as well
+// because we might cast the combo on them. So in that case it would just be sweepers in main 2." 2026-11-18 00:45: "Let's
+// see a full cast order. Loran's escape should be before sweepers which are cast in the second main." 00:55: "Let's split
+// up any buckets there. I want a full order with no ties." 01:00: "Otherwise it seems reasonable." / "Though we should
+// also add mind stone's ability. Perhaps at the end of main 1."
+//
+// (1) THE SPLIT (MTG_STUFFY_MAIN_SPLIT, heurarm STUFFY_MAIN_SPLIT, DEFAULT ON -- the USER's rule; =0 is the measurement
+//     arm, byte-identical to step 9e). GoldFishRunner::DeckUsesSecondMain opens a full searched second main through
+//     the SAME reader, and main 1 refuses every creature-sweeper cast (StuffyIsCreatureSweeper: by param, never by
+//     name). Every other card -- creatures, Mind Stone, Guilty Conscience, Loran's Escape -- stays castable in main 1
+//     AND in main 2. Applied at CollectActions' tail, so the search, the rollout, the d0 runner and the executor lose
+//     the same main-1 options (lockstep); human play keeps the full set (CollectActions skips the hook there), as the
+//     Martyr split does. Not a dominance claim (the design's 7 says sweep-in-main-2 weakly dominates for the sweeper
+//     itself in a goldfish); it is the USER's rule, measured and reported.
+// (2) THE ORDER (MTG_STUFFY_CAST_ORDER, sub-flag, DEFAULT ON within the split; inert while the split is off). A TOTAL
+//     order, every listed card on its own rank: land (searched) > Mind Stone > Nomads en-Kor > Shaman en-Kor > Mogg
+//     Maniac > Screaming Nemesis > Spiteful Sliver > Boros Reckoner > Stuffy Doll > Guilty Conscience > Loran's Escape
+//     > [main 2 only] Chain Reaction > Blasphemous Act. Keyed by NAME inside this provider (the USER named the cards);
+//     rank = tier * 64 + slot, the tier being the generic one each listed card has (rock 5, creature 10, other
+//     noncreature 20), so a card a future list adds keeps its GENERIC tier and lands AFTER the listed cards of that
+//     tier (tier * 64 + 32 + a 5-bit name hash: deterministic). OrderOpaqueCastsByRank makes the ranks the realised
+//     order of an opaque set too (Loran's Escape is a cantrip): without it that set runs in PLAN order. The step-7
+//     searched setup-vs-sweeper ordering keeps its Guilty Conscience branch but no longer branches the Escape after a
+//     sweeper (FixesTrickBeforeSweeperOrder): the USER fixed that order.
+// (3) MIND STONE'S SAC-DRAW AT THE END OF MAIN 1 (same sub-flag). The dig is structurally the LAST thing of its window
+//     (after every cast, Loran's Escape and its scry included), so in main 1 it already sits where the USER put it:
+//     after the Escape, before combat. With a second main it would ALSO be offered at the end of main 2; the USER's
+//     order lists it in main 1 only, so HasAnyDigSource reports no dig source in the post-combat main (autonomous
+//     play; human play keeps it). Whether to dig stays SEARCHED (the dig twin of every main-1 plan). Main 2 loses
+//     nothing a main-1 dig could not do: the same {1} and the same Stone pay for it either way (combat taps no land),
+//     and the card arrives earlier -- a sweeper it draws is cast in main 2, a creature in main 1's re-solve or main 2.
+bool StuffyMainSplitOn()
+{
+    static const bool on = EnvOn("MTG_STUFFY_MAIN_SPLIT", true);   // DEFAULT ON (the USER's rule); =0 measurement arm
+    return heurarm::Flag(heurarm::STUFFY_MAIN_SPLIT, on);
+}
+
+bool StuffyCastOrderOn()
+{
+    static const bool on = EnvOn("MTG_STUFFY_CAST_ORDER", true);   // DEFAULT ON (the USER's order); =0 diagnosis arm
+    return StuffyMainSplitOn() && heurarm::Flag(heurarm::STUFFY_CAST_ORDER, on);
+}
+
+// PROPOSED AMENDMENT (step 11 root cause, NOT the USER's rule; DEFAULT OFF until the USER rules). Under the plain
+// split the GREEDY policy (the depth-0 runner, the beyond-horizon playout) plans main 1 without knowing main 2 will
+// want mana for a sweeper: scenario stuffy_d0_runner_finds_act_kill (Doll + four opponent Spirits, opponent at 13,
+// hand Act + Nemesis, five lands) casts Nemesis in main 1 and then cannot pay the main-2 Act (opponent left at 9),
+// where step 9e's greedy cast the lethal Act. The amendment admits, in main 1, a sweeper whose OWN reflection is
+// projected to kill the opponent now: a cast that ends the game in main 1 wins on the same turn as any main-2 line,
+// so it cannot cost a turn (an identity in the objective), and the USER's reason for main 2 -- attackers deal their
+// damage before the sweep -- is moot once the sweep alone is lethal. Searched play only gains an option; the greedy
+// regains the 9e kill. Inert while the split is off.
+bool StuffySplitLethalM1On()
+{
+    static const bool on = EnvOn("MTG_STUFFY_SPLIT_LETHAL_M1");   // DEFAULT OFF (proposal); =1 arms it
+    return StuffyMainSplitOn() && heurarm::Flag(heurarm::STUFFY_SPLIT_LETHAL_M1, on);
+}
+
+bool StuffyIsCreatureSweeper(const CardDefinition& def)
+{
+    return def.params.damage_all_creatures > 0 || def.params.damage_all_creatures_count_creatures;
+}
+
+bool StuffyDollProvider::RestrictsCollectedActions() const { return StuffyMainSplitOn(); }
+
+bool StuffyDollProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    if (!is_pre_combat || !StuffyMainSplitOn()) { return true; }
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return true; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+    if (d == nullptr || !StuffyIsCreatureSweeper(*d)) { return true; }
+    if (!StuffySplitLethalM1On() || a.kind != Action::Kind::CastFromHand) { return false; }
+    // The proposed amendment (above): the sweeper's OWN projection, the board as it stands. A WIDER, optimistic bound
+    // (the sweeper plus every nonland hand card, mana ignored) was measured and REJECTED: it admitted non-lethal
+    // main-1 sweeps the greedy then cast (seed 10 gi 9 d0: Act on T4 with the opponent at 18, no win by turn 8) --
+    // d0 5.62 vs this bound's 5.46 (step 9e 5.82), three games lost outright.
+    return ExtraLethalDamage(s, { d }) >= s.players[static_cast<std::size_t>(1 - s.active_player_index)].life;
+}
+
+// The --cast-order-report's "main" column, and nothing in play: this deck opts into neither the classifier filter
+// (ClassifiesMainPhases) nor condemnation, so no play site reads it. Without it the generic template classifier
+// reports three creatures (Mogg Maniac, Boros Reckoner, Spiteful Sliver) as m2 once the deck has a second main, which
+// is not the USER's rule ("allow critters to be cast main 1 as well"): only the sweepers are barred from main 1.
+std::optional<DecisionProvider::MainPhase> StuffyDollProvider::MainPhaseOverride(const GameState& s,
+                                                                                 const CardDefinition& def) const
+{
+    (void)s;
+    if (!StuffyMainSplitOn()) { return std::nullopt; }
+    return StuffyIsCreatureSweeper(def) ? MainPhase::Main2 : MainPhase::Both;
+}
+
+namespace
+{
+// The USER's slot (1..12), or 0 for a card the order does not name.
+int StuffyOrderSlot(const CardDefinition& def)
+{
+    static const struct { const char* name; int slot; } kOrder[] = {
+        { "Mind Stone", 1 },        { "Nomads en-Kor", 2 },      { "Shaman en-Kor", 3 },   { "Mogg Maniac", 4 },
+        { "Screaming Nemesis", 5 }, { "Spiteful Sliver", 6 },    { "Boros Reckoner", 7 },  { "Stuffy Doll", 8 },
+        { "Guilty Conscience", 9 }, { "Loran's Escape", 10 },    { "Chain Reaction", 11 }, { "Blasphemous Act", 12 },
+    };
+    const std::string& n = def.card.m_name.str();
+    for (const auto& e : kOrder) { if (n == e.name) { return e.slot; } }
+    return 0;
+}
+// The generic tier each listed card has (fixed here, so the listed order can never be re-tied by a board fact).
+int StuffySlotTier(int slot) { return slot == 1 ? 5 : (slot <= 8 ? 10 : 20); }
+}   // namespace
+
+// CAST ORDER. Step 11 (MTG_STUFFY_CAST_ORDER, with the split): the USER's total order above. Otherwise, step 9c
+// (USER-authored for this deck; USER 2026-11-17 ~20:50: "...Loren's Escape should target a critter with Guilty
+// Conscience on it if such exists. The order should make this easy. (Guilty Conscience first?)") -- the generic rank,
+// except Guilty Conscience one step earlier (19), before Loran's Escape; the Escape then tied the sweepers at 20 and
+// HAND order decided between them.
+int StuffyDollProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (StuffyCastOrderOn())
+    {
+        if (const int slot = StuffyOrderSlot(def)) { return StuffySlotTier(slot) * 64 + slot; }
+        return DeckProvider::CastOrderRank(s, def) * 64 + 32 + static_cast<int>(def.card.m_name_hash & 0x1F);
+    }
+    const int r = DeckProvider::CastOrderRank(s, def);
+    if (def.params.aura_host_damage_back) { return r - 1; }
+    return r;
+}
+
+const char* StuffyDollProvider::CastOrderTierName(int rank) const
+{
+    if (!StuffyCastOrderOn()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case 5 * 64 + 1:   return "1  Mind Stone (main 1; its sac-draw is the dig, at the END of main 1)";
+        case 10 * 64 + 2:  return "2  Nomads en-Kor";
+        case 10 * 64 + 3:  return "3  Shaman en-Kor";
+        case 10 * 64 + 4:  return "4  Mogg Maniac";
+        case 10 * 64 + 5:  return "5  Screaming Nemesis";
+        case 10 * 64 + 6:  return "6  Spiteful Sliver";
+        case 10 * 64 + 7:  return "7  Boros Reckoner";
+        case 10 * 64 + 8:  return "8  Stuffy Doll";
+        case 20 * 64 + 9:  return "9  Guilty Conscience";
+        case 20 * 64 + 10: return "10 Loran's Escape";
+        case 20 * 64 + 11: return "11 Chain Reaction (MAIN 2 ONLY)";
+        case 20 * 64 + 12: return "12 Blasphemous Act (MAIN 2 ONLY)";
+        default:           return "UNLISTED: its generic tier (rank / 64), after the USER's listed cards of that tier";
+    }
+}
+
+bool StuffyDollProvider::OrderOpaqueCastsByRank() const { return StuffyCastOrderOn(); }
+
+bool StuffyDollProvider::FixesTrickBeforeSweeperOrder() const { return StuffyCastOrderOn(); }
+
+bool StuffyDollProvider::HasAnyDigSource(const GameState& s) const
+{
+    if (s.phase == Phase::PostCombatMain && StuffyCastOrderOn() && !HumanPlayActive()) { return false; }
+    return DeckProvider::HasAnyDigSource(s);
 }
 
 int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const

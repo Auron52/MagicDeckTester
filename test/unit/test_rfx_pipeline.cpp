@@ -22,6 +22,7 @@
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
 #include "mtg_test_seam.h"
+#include "runner/GoldFishRunner.h"
 
 #include <algorithm>
 #include <set>
@@ -2242,8 +2243,23 @@ TEST_CASE("rfx step 9c: no hold axis for an indestructible GC host, a sick one, 
     }
 }
 
+namespace
+{
+// Pin step 11's two heurarm slots for one test (-1 = the env default), restored on exit.
+struct StuffyArm
+{
+    StuffyArm(int split, int order = -1)
+    {
+        heurarm::t_arm[heurarm::STUFFY_MAIN_SPLIT] = static_cast<std::int8_t>(split);
+        heurarm::t_arm[heurarm::STUFFY_CAST_ORDER] = static_cast<std::int8_t>(order);
+    }
+    ~StuffyArm() { heurarm::t_arm[heurarm::STUFFY_MAIN_SPLIT] = -1; heurarm::t_arm[heurarm::STUFFY_CAST_ORDER] = -1; }
+};
+}   // namespace
+
 TEST_CASE("rfx step 9c: CAST ORDER -- Guilty Conscience before Loran's Escape (USER); a plan casting both casts GC first")
 {
+    const StuffyArm arm(0);   // the step-9c order (step 11's order replaces it by default; its own case below)
     const StuffyDollProvider p;
     const GenericProvider g;
     GameState s = ArmedState();
@@ -2641,4 +2657,191 @@ TEST_CASE("rfx step 9e: a --force-attackers replay -- the prompt's default is th
         CHECK(Declared(s, 3607));
     }
     g_play_attackers_chooser = prior;
+}
+
+// ---- STEP 11: the main split (sweepers in main 2 only), the USER's total cast order, Mind Stone's dig at the end of
+// main 1. USER 2026-11-17 ~21:48: "...So in that case it would just be sweepers in main 2."; 2026-11-18 00:55: "I want a
+// full order with no ties."; 01:00: "Though we should also add mind stone's ability. Perhaps at the end of main 1."
+
+TEST_CASE("rfx step 11: DeckUsesSecondMain -- Stuffy Doll plays a second main by default; =0 restores one main; one reader")
+{
+    EnsureCardsRfx();
+    const Decklist d = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Stuffy Doll/Stuffy Doll.cod"));
+    {
+        const StuffyArm arm(-1);
+        CHECK(StuffyMainSplitOn());
+        CHECK(StuffyCastOrderOn());
+        CHECK(GoldFishRunner::DeckUsesSecondMain(d));
+    }
+    {
+        const StuffyArm arm(0);
+        CHECK_FALSE(StuffyMainSplitOn());
+        CHECK_FALSE(StuffyCastOrderOn());   // the sub-flag is inert while the split is off
+        CHECK_FALSE(GoldFishRunner::DeckUsesSecondMain(d));
+    }
+    {
+        const StuffyArm arm(1, 0);
+        CHECK(StuffyMainSplitOn());
+        CHECK_FALSE(StuffyCastOrderOn());
+        CHECK(GoldFishRunner::DeckUsesSecondMain(d));
+    }
+    // Sweepers by PARAM.
+    CHECK(StuffyIsCreatureSweeper(DefRfx("Blasphemous Act")));
+    CHECK(StuffyIsCreatureSweeper(DefRfx("Chain Reaction")));
+    for (const char* n : { "Loran's Escape", "Guilty Conscience", "Mogg Maniac", "Stuffy Doll", "Mind Stone" })
+    { INFO(n); CHECK_FALSE(StuffyIsCreatureSweeper(DefRfx(n))); }
+}
+
+namespace
+{
+// Four Mountains, a settled Mogg Maniac, four opponent Spirits (Act costs {3}{R}); hand Act, Chain, Boros Reckoner.
+GameState SplitBoard()
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.uses_second_main = true;
+    for (int i = 0; i < 4; ++i) { PutRfx(s, "Mountain", 4101 + i); }
+    PutRfx(s, "Mogg Maniac", 4110);
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 4120 + i, 1, 1, 1, "Spirit"); }
+    HandRfx(s, "Blasphemous Act", 4130);
+    HandRfx(s, "Chain Reaction", 4131);
+    HandRfx(s, "Boros Reckoner", 4132);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 4140 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+std::set<std::string> CastNames(const std::vector<TurnSolver::Plan>& plans)
+{
+    std::set<std::string> out;
+    for (const auto& p : plans)
+    { for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { out.insert(a.card_name.str()); } } }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("rfx step 11: main 1 never offers a sweeper; main 2 does; creatures in BOTH; =0 offers the sweeper in main 1")
+{
+    {
+        const StuffyArm arm(-1);
+        GameState s = SplitBoard();
+        const std::set<std::string> m1 = CastNames(TurnSolver::EnumerateMainPlans(s, true));
+        CHECK(m1.count("Blasphemous Act") == 0);
+        CHECK(m1.count("Chain Reaction") == 0);
+        CHECK(m1.count("Boros Reckoner") == 1);
+        s.phase = Phase::PostCombatMain;
+        const std::set<std::string> m2 = CastNames(TurnSolver::EnumerateMainPlans(s, false));
+        CHECK(m2.count("Blasphemous Act") == 1);
+        CHECK(m2.count("Chain Reaction") == 1);
+        CHECK(m2.count("Boros Reckoner") == 1);
+        // The provider hook itself: main 1 refuses exactly the sweeper casts.
+        Action act; act.kind = Action::Kind::CastFromHand; act.def = &DefRfx("Blasphemous Act");
+        act.card_name = act.def->card.m_name;
+        CHECK_FALSE(StuffyP().CollectedActionAllowed(s, act, true));
+        CHECK(StuffyP().CollectedActionAllowed(s, act, false));
+        Action cr = act; cr.def = &DefRfx("Boros Reckoner"); cr.card_name = cr.def->card.m_name;
+        CHECK(StuffyP().CollectedActionAllowed(s, cr, true));
+    }
+    {
+        const StuffyArm arm(0);
+        GameState s = SplitBoard();
+        s.uses_second_main = false;
+        const std::set<std::string> m1 = CastNames(TurnSolver::EnumerateMainPlans(s, true));
+        CHECK(m1.count("Blasphemous Act") == 1);
+        CHECK(m1.count("Chain Reaction") == 1);
+    }
+}
+
+TEST_CASE("rfx step 11: the USER's TOTAL cast order -- every listed card on its own rank, in the USER's sequence")
+{
+    const StuffyArm arm(-1);
+    const StuffyDollProvider p;
+    GameState s = ArmedState();
+    const char* order[] = { "Mind Stone", "Nomads en-Kor", "Shaman en-Kor", "Mogg Maniac", "Screaming Nemesis",
+                            "Spiteful Sliver", "Boros Reckoner", "Stuffy Doll", "Guilty Conscience", "Loran's Escape",
+                            "Chain Reaction", "Blasphemous Act" };
+    int prev = -1;
+    for (const char* n : order)
+    {
+        INFO(n);
+        const int r = p.CastOrderRank(s, DefRfx(n));
+        CHECK(r > prev);   // strictly increasing: no ties anywhere
+        prev = r;
+        // The report's "main" column: only the sweepers are main 2.
+        const auto mp = p.MainPhaseOverride(s, DefRfx(n));
+        REQUIRE(mp.has_value());
+        CHECK((*mp == DecisionProvider::MainPhase::Main2) == StuffyIsCreatureSweeper(DefRfx(n)));
+        if (!StuffyIsCreatureSweeper(DefRfx(n))) { CHECK(*mp == DecisionProvider::MainPhase::Both); }
+    }
+    // An unlisted card keeps its generic tier, after the listed cards of that tier.
+    const GenericProvider g;
+    const CardDefinition& extra_creature = DefRfx("Venerable Knight");
+    CHECK(g.CastOrderRank(s, extra_creature) == 10);
+    CHECK(p.CastOrderRank(s, extra_creature) > p.CastOrderRank(s, DefRfx("Stuffy Doll")));
+    CHECK(p.CastOrderRank(s, extra_creature) < p.CastOrderRank(s, DefRfx("Guilty Conscience")));
+    CHECK(p.OrderOpaqueCastsByRank());
+    CHECK(p.FixesTrickBeforeSweeperOrder());
+    {
+        const StuffyArm off(0);
+        CHECK_FALSE(p.OrderOpaqueCastsByRank());
+        CHECK_FALSE(p.FixesTrickBeforeSweeperOrder());
+        CHECK_FALSE(p.MainPhaseOverride(s, DefRfx("Blasphemous Act")).has_value());
+        CHECK(p.CastOrderRank(s, DefRfx("Loran's Escape")) == g.CastOrderRank(s, DefRfx("Loran's Escape")));
+    }
+}
+
+TEST_CASE("rfx step 11: a main-2 plan casting Loran's Escape AND a sweeper casts the Escape FIRST (no searched reverse)")
+{
+    GameState b = HostBoard();
+    b.m_provider = &StuffyP();
+    b.uses_second_main = true;
+    b.phase = Phase::PostCombatMain;
+    for (int i = 0; i < 3; ++i) { PutRfx(b, "Plains", 4201 + i); }
+    for (int i = 0; i < 3; ++i) { PutRfx(b, "Mountain", 4204 + i); }
+    PutRfx(b, "Boros Reckoner", 4210);
+    PutRfx(b, "Mogg Maniac", 4211);
+    for (int i = 0; i < 4; ++i) { TokenRfx(b, 4220 + i, 1, 1, 1, "Spirit"); }
+    HandRfx(b, "Blasphemous Act", 4230);   // FIRST in hand
+    HandRfx(b, "Loran's Escape", 4231);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Plains").card; m.m_number = 4240 + i; b.players[0].library.push_back(m); }
+    for (int arm_order : { -1, 0 })
+    {
+        INFO("cast-order arm " << arm_order);
+        const StuffyArm arm(1, arm_order);
+        int both = 0, escape_first = 0, act_first = 0;
+        for (const auto& plan : TurnSolver::EnumerateMainPlans(b, false))
+        {
+            const std::vector<std::string> order = TurnSolver::RealisedNonSacCastOrder(b, plan);
+            const auto ia = std::find(order.begin(), order.end(), "Blasphemous Act");
+            const auto ie = std::find(order.begin(), order.end(), "Loran's Escape");
+            if (ia == order.end() || ie == order.end()) { continue; }
+            ++both;
+            (ie < ia ? escape_first : act_first) += 1;
+        }
+        CHECK(both >= 1);
+        CHECK(escape_first >= 1);
+        if (arm_order < 0) { CHECK(act_first == 0); }   // the USER's order: never the Act first
+        else { CHECK(act_first >= 1); }                 // step 7's searched order: both offered
+    }
+}
+
+TEST_CASE("rfx step 11: Mind Stone's sac-draw -- a dig source in main 1, none in main 2 (autonomous); =0 keeps both")
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.uses_second_main = true;
+    PutRfx(s, "Mountain", 4301);
+    PutRfx(s, "Mountain", 4302);
+    PutRfx(s, "Mind Stone", 4303);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 4310 + i; s.players[0].library.push_back(m); }
+    {
+        const StuffyArm arm(-1);
+        s.phase = Phase::PreCombatMain;
+        CHECK(StuffyP().HasAnyDigSource(s));
+        s.phase = Phase::PostCombatMain;
+        CHECK_FALSE(StuffyP().HasAnyDigSource(s));
+    }
+    {
+        const StuffyArm arm(0);
+        s.phase = Phase::PostCombatMain;
+        CHECK(StuffyP().HasAnyDigSource(s));
+    }
 }

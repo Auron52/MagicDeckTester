@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Damage reflection, design step 11 (docs/design/damage-reflection-pipeline.md 7 / 14): the USER's MAIN SPLIT.",
+    "USER 2026-11-17 ~21:48: 'Actually maybe it is easier to allow critters to be cast main 1 as well because we might",
+    "cast the combo on them. So in that case it would just be sweepers in main 2.' A settled Mogg Maniac and four",
+    "opponent Spirits (Blasphemous Act costs {3}{R}); the opponent is at 14. ATTACK FIRST, THEN SWEEP: the Maniac",
+    "deals 1 in combat (13), then the main-2 Act deals 13 to it and it reflects 13 to the opponent: the kill on",
+    "turn 4. An Act in main 1 kills the Maniac before combat (opponent 1, nothing left to finish). The library is all",
+    "Mountains. Control: stuffy_split_attack_then_act_off.json (MTG_STUFFY_MAIN_SPLIT=0, one main) wins turn 5."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 14,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mogg Maniac" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Mountain", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "show_log": true,
+  "expect_log_sequence": [
+    "T4 MAIN_2 CAST_SPELL Blasphemous Act"
+  ],
+  "expect_win_turn": 4
+}

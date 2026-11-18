@@ -4213,6 +4213,19 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     // Step 9e: a Guilty-Conscience-enchanted, non-indestructible creature may stay home (definition note).
     bool MayDeclineAttack(const GameState& s, const Permanent& attacker) const override;
+    // Step 11 (USER 2026-11-17 ~21:48 / 2026-11-18 00:45-01:00; DecisionProviders.cpp has the rulings verbatim).
+    //   MTG_STUFFY_MAIN_SPLIT (heurarm STUFFY_MAIN_SPLIT, DEFAULT ON): main 1 refuses the creature-sweeper casts
+    //     (damage_all_creatures family); they are cast in the full searched second main DeckUsesSecondMain opens
+    //     through the SAME reader. Every other card stays castable in both mains.
+    //   MTG_STUFFY_CAST_ORDER (sub-flag, DEFAULT ON within the split): the USER's total order (no ties), the
+    //     Escape-before-sweeper order fixed, and Mind Stone's sac-draw only at the end of main 1.
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState& s, const CardDefinition& def) const override;
+    const char* CastOrderTierName(int rank) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    bool FixesTrickBeforeSweeperOrder() const override;
+    bool HasAnyDigSource(const GameState& s) const override;
     bool HasExtraLethalModel() const override { return true; }
     int  ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
     CertStance Certificate() const override
@@ -4224,6 +4237,19 @@ public:
                "section 8 gives a one-sided bound; it is a separate, measured step (12)." }; }
     const char* Name() const override { return "StuffyDoll"; }
 };
+
+// MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1
+// restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one half
+// would refuse the sweepers in main 1 with no second main to catch them -- DELETING the casts, not moving them.
+bool StuffyMainSplitOn();
+// MTG_STUFFY_CAST_ORDER (heurarm STUFFY_CAST_ORDER, DEFAULT ON) AND the split: the step-11 cast order is live.
+bool StuffyCastOrderOn();
+// MTG_STUFFY_SPLIT_LETHAL_M1 (heurarm STUFFY_SPLIT_LETHAL_M1, DEFAULT OFF -- a PROPOSED amendment awaiting the USER)
+// AND the split: main 1 admits a sweeper whose own reflection is projected lethal now.
+bool StuffySplitLethalM1On();
+// A creature sweeper by PARAM (never by name): "deals N damage to each creature" (Blasphemous Act) or "deals X
+// damage to each creature, X = creatures at resolution" (Chain Reaction).
+bool StuffyIsCreatureSweeper(const CardDefinition& def);
 
 // UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). The deck rode
 // AntiLifegainProvider BY ACCIDENT: Scalding Tarn's fetch_land_types sets `anti` alone (pinned from a

@@ -1005,6 +1005,9 @@ enum Slot : int
     MAZE_TALON_ATMOST1,       // MTG_MAZE_TALON_ATMOST1    Maze's End P5 Talon VARIANT (b) (USER: "It is less clear whether 1 of them does"): Talon Gates is offered while AT MOST ONE copy of Exploration / Burgeoning / Manabond is controlled or held. Default OFF (an A/B arm)
     MAZE_TALON_EFFECTIVE,     // MTG_MAZE_TALON_EFFECTIVE  Maze's End P5 Talon VARIANT (c) (USER: "particularly if Burgeoning is the one and it is not going off"): Talon Gates is offered while no EFFECTIVE extra land drop is held or controlled -- Exploration always counts; Burgeoning and Manabond count only with a spare land in hand (more land cards than the open land drops). Default OFF (an A/B arm)
     LINE_REDUCER_KEEP,        // MTG_LINE_REDUCER_KEEP  a payment of an applying line whose own same-turn reducer (Urza's Incubator, Dragonspeaker Shaman cast this turn, Goblin Warchief, Ruby Medallion) makes the rest of the line cheaper than its hold reads: when the greedy payment strands the rest of the line (hold net of this payment and of the reducer credit) while the board pays both together, the payment is re-made with the fewest of the greedy's sources held out that keeps the rest payable (LineReducerKeepHold, ManaPayment.cpp). Dragons mana-clean gate claude-moderate-20261117 s30081761 T5: Incubator's {3} took Mind Stone + both Mountains, Gruul Turf's {R}{G} was left for Inferno's {R}{R} and the Dragon was dropped. DEFAULT ON; =0 -> the greedy payment, byte-identical
+    STUFFY_MAIN_SPLIT,        // MTG_STUFFY_MAIN_SPLIT  Stuffy Doll step 11 (USER 2026-11-17 ~21:48: "...it would just be sweepers in main 2"): the deck plays a full searched second main (GoldFishRunner::DeckUsesSecondMain reads THIS slot too -- one half alone deletes casts) and main 1 refuses the creature-sweeper casts (damage_all_creatures family; StuffyDollProvider::CollectedActionAllowed). Also gates the USER's total cast order and the Mind Stone sac-draw placement (MTG_STUFFY_CAST_ORDER). Default ON (the USER's order); =0 is the MEASUREMENT arm, byte-identical to step 9e
+    STUFFY_CAST_ORDER,        // MTG_STUFFY_CAST_ORDER  sub-flag of MTG_STUFFY_MAIN_SPLIT (inert while the split is off): the USER's total, tie-free order (USER 2026-11-18 00:55 "I want a full order with no ties."; StuffyDollProvider::CastOrderRank), the Escape-before-sweeper order fixed (no searched sweeper-before-Escape ordering), and Mind Stone's sac-draw only at the end of main 1 (USER 01:00). Default ON; =0 -> the split with the step-9e order (diagnosis arm)
+    STUFFY_SPLIT_LETHAL_M1,   // MTG_STUFFY_SPLIT_LETHAL_M1  PROPOSED amendment to the Stuffy Doll main split (step 11; NOT the USER's rule, DEFAULT OFF until the USER rules): main 1 also admits a creature-sweeper cast whose reflection is projected to kill the opponent NOW (StuffyDollProvider::ExtraLethalDamage({sweeper}) >= opponent life, the board as it stands; a wider hand-optimistic bound measured worse). A sweep that ends the game this main wins on the same turn as any main-2 line, so it is an identity in the objective; it restores the greedy (depth-0 runner / beyond-horizon playout) kill the plain split loses because the greedy main 1 spends the mana the main-2 sweeper needed (scenario stuffy_d0_runner_finds_act_kill). Inert while the split is off
     COUNT
 };
 
@@ -1954,6 +1957,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_TALON_ATMOST1",
         "MTG_MAZE_TALON_EFFECTIVE",
         "MTG_LINE_REDUCER_KEEP",
+        "MTG_STUFFY_MAIN_SPLIT",
+        "MTG_STUFFY_CAST_ORDER",
+        "MTG_STUFFY_SPLIT_LETHAL_M1",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

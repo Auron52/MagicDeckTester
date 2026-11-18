@@ -8,7 +8,11 @@
     "Nemesis subset higher (control: MTG_PROVIDER_DECK pinned to the old ModernRwBurn routing -> no win by",
     "turn 4). With it the Act subset is projected lethal and the runner casts it on turn 4. Also guards the",
     "step-10 AffinityFeedCount fix: the Doll's ping activation must not price 'Nemesis + ping + Act' as",
-    "payable off five lands (it did, and the runner cast Nemesis and then could not pay the Act)."
+    "payable off five lands (it did, and the runner cast Nemesis and then could not pay the Act).",
+    "STEP 11: pinned to MTG_STUFFY_MAIN_SPLIT=0 (the single main this step-10 guard was written for). Under the USER's",
+    "split the Act is barred from main 1 and the greedy main 1 casts Nemesis, leaving two lands for the main-2 Act",
+    "({2}{R} with six creatures): no win (opponent at 9). The proposed amendment MTG_STUFFY_SPLIT_LETHAL_M1 restores",
+    "the kill: stuffy_d0_split_lethal_m1.json."
   ],
   "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
   "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 13,
@@ -26,5 +30,6 @@
   "hand": [ "Blasphemous Act", "Screaming Nemesis" ],
   "library_filler": "Plains", "library_size": 40,
   "depth": 0, "budget_ms": 50, "max_turns": 4,
-  "expect_win_turn": 4
+  "expect_win_turn": 4,
+  "env": { "MTG_STUFFY_MAIN_SPLIT": "0" }
 }

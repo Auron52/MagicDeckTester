@@ -168,6 +168,16 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         if (!def->params.sac_outlet_lifegain_per_revealed_color.empty() && MartyrMainSplitOn()
             && dynamic_cast<const MartyrLifegainProvider*>(&SelectDecisionProvider(deck)) != nullptr)
         { return true; }
+        // STUFFY DOLL'S MAIN SPLIT (MTG_STUFFY_MAIN_SPLIT, DEFAULT ON -- the USER's rule, 2026-11-17 ~21:48: "Actually
+        // maybe it is easier to allow critters to be cast main 1 as well because we might cast the combo on them. So in
+        // that case it would just be sweepers in main 2."). Keyed on a creature sweeper (damage_all_creatures family,
+        // StuffyIsCreatureSweeper) and the deck's provider, read through StuffyMainSplitOn() -- the SAME reader (env +
+        // heurarm slot) as StuffyDollProvider::CollectedActionAllowed, which refuses the sweeper casts in main 1: the
+        // Fungus / Martyr rule above, one half alone deletes the casts instead of moving them. Provider-scoped so no
+        // other deck holding a sweeper (Hinata, Prevent Damage, Minotaur) gains a main 2. =0 is the measurement arm.
+        if (StuffyIsCreatureSweeper(*def) && StuffyMainSplitOn()
+            && dynamic_cast<const StuffyDollProvider*>(&SelectDecisionProvider(deck)) != nullptr)
+        { return true; }
         // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
         // terrible as long as it doesn't cause anything to regress") -- drop the lifegain_to_loss
         // trigger so the deck plays a single main, the A/B arm against the enforced m1/m2 split

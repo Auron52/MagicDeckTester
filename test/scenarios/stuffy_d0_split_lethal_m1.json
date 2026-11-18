@@ -1,0 +1,80 @@
+{
+  "_comment": [
+    "Stuffy Doll step 11, the PROPOSED amendment MTG_STUFFY_SPLIT_LETHAL_M1 (DEFAULT OFF, awaiting the USER): the board of",
+    "stuffy_d0_runner_finds_act_kill.json under the USER's main split. Main 1 admits Blasphemous Act because its own",
+    "reflection off the indestructible Doll (13) is projected lethal against the opponent's 13, so the depth-0 runner casts",
+    "it and wins turn 4 -- the step-9e result. Without the amendment the plain split's greedy main 1 casts Screaming",
+    "Nemesis and the main-2 Act is unaffordable (no win; opponent at 9)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 13,
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Stuffy Doll"
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    }
+  ],
+  "hand": [
+    "Blasphemous Act",
+    "Screaming Nemesis"
+  ],
+  "library_filler": "Plains",
+  "library_size": 40,
+  "depth": 0,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "expect_win_turn": 4,
+  "env": {
+    "MTG_STUFFY_SPLIT_LETHAL_M1": "1"
+  }
+}

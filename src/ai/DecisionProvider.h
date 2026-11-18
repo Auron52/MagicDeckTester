@@ -2091,6 +2091,14 @@ public:
     // rule leaves equal. Default false -> every deck that does not override it is byte-identical.
     virtual bool CastOrderTiesByName() const { return false; }
 
+    // FixesTrickBeforeSweeperOrder -- the deck's cast order FIXES an indestructible grant (Loran's Escape,
+    // grants_temp_indestructible) BEFORE a same-plan creature sweeper, so the plan enumerator's searched
+    // setup-vs-sweeper ordering expansion (TurnSolver, the step-7 `rfx_order`) neither expands a plan for the
+    // grant alone nor offers an ordering that casts a sweeper before a same-plan grant. Guilty Conscience
+    // (aura_host_damage_back) keeps its searched branch. Default false -> byte-identical. StuffyDollProvider:
+    // the USER's order (2026-11-18 00:45: "Loran's escape should be before sweepers").
+    virtual bool FixesTrickBeforeSweeperOrder() const { return false; }
+
     // CastOrderTraceNote -- DIAGNOSTIC ONLY: a short note TraceUserCastOrder (MTG_USER_ORDER_TRACE, the
     // executor's realised order per main) appends as `note=<...>`, so a deck can report how its
     // set-level arrangement classified a realised cast list (CritterLifegain: Heliod's placement

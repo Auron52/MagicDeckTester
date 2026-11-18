@@ -23001,6 +23001,27 @@ static bool OrderingPlacesTrickBeforeHandTarget(const std::vector<Action>& acts)
     return false;
 }
 
+// STUFFY DOLL step 11 (DecisionProvider::FixesTrickBeforeSweeperOrder): a searched ordering that casts a creature
+// sweeper BEFORE a same-plan indestructible grant (Loran's Escape). The deck's USER order fixes the grant first
+// (2026-11-18 00:45: "Loran's escape should be before sweepers which are cast in the second main"), so the rfx
+// order expansion does not offer the reverse. A restriction of the searched orderings the USER authored, never a
+// pick: every other ordering (the Guilty Conscience branch) is still offered.
+static bool OrderingPlacesSweeperBeforeGrant(const std::vector<Action>& acts)
+{
+    bool swept = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.grants_temp_indestructible) { if (swept) { return true; } continue; }
+        if (d->params.damage_all_creatures > 0 || d->params.damage_all_creatures_count_creatures
+            || d->params.x_damage_each_creature_and_player)
+        { swept = true; }
+    }
+    return false;
+}
+
 static bool SubsetHasMissingTrickTarget(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel,
@@ -89162,7 +89183,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // after for its target, but the mana each order leaves (Forbidden Orchard tapped for the later spell) and the
     // other casts' positions differ, so both orders are offered. Inert for every deck without one of the two
     // setup params (one param test per hand cast of each deduped plan).
-    auto rfx_order_plan = [](const TurnSolver::Plan& p) -> bool
+    // STUFFY DOLL step 11 (FixesTrickBeforeSweeperOrder): where the deck's USER order fixes the grant before the
+    // sweeper, the grant alone no longer opens the expansion, and an expanded (Guilty Conscience) plan does not
+    // offer a sweeper-before-grant ordering (below). Default false -> byte-identical.
+    const bool fix_grant = ResolveProvider(state).FixesTrickBeforeSweeperOrder();
+    auto rfx_order_plan = [fix_grant](const TurnSolver::Plan& p) -> bool
     {
         bool setup = false, sweep = false;
         for (const Action& a : p.actions)
@@ -89170,6 +89195,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
+            if (d->params.grants_temp_indestructible && fix_grant) { continue; }
             if (d->params.grants_temp_indestructible || d->params.aura_host_damage_back) { setup = true; }
             else if (d->params.damage_all_creatures > 0 || d->params.damage_all_creatures_count_creatures
                      || d->params.x_damage_each_creature_and_player) { sweep = true; }
@@ -89351,6 +89377,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // ...or (an rfx plan) a trick before the same-plan hand creature it targets: the Escape would have no
             // target yet (fizzle), the same line as the plan without it. Sound; rfx plans only.
             if (rfx_plan && OrderingPlacesTrickBeforeHandTarget(cand.actions)) { continue; }
+            // ...or (STUFFY DOLL step 11, the USER's fixed order) a sweeper before a same-plan Loran's Escape.
+            if (rfx_plan && fix_grant && OrderingPlacesSweeperBeforeGrant(cand.actions)) { continue; }
             // ...or a target-less Path BEFORE a Theft whose piece an Equip in this plan needs freed again
             // (only a Path after the Theft can; see attach_order_illegal above).
             const bool probe_attach = human_attach && PlanHasTheftAndOpenRemoval(cand.actions);
