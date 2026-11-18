@@ -1952,3 +1952,87 @@ Where the code departs from the sections above, and why. Each entry names the sy
   (#11) alive and untapped, and the next frame is the post-combat main. Answering 0 attacks: opponent 17, and
   the next frame is the Reckoner's reflection `target`. A second Reckoner (#12) was summoning sick and not asked
   about. Scripts: `build/scratch/stuffy/impl9e/tools/holdprobe.py`, `holdcheck.py`; results `impl9e/holdprobe.jsonl`.
+
+### Step 11 (the main split: sweepers in main 2 only; the USER's total cast order; Mind Stone's dig at the end of main 1)
+
+* **The rulings (verbatim).** USER 2026-11-17 ~21:45: *"Probably sweepers should be cast main 2. Arguably everything
+  but the combo should be."* Superseded at ~21:48: *"Actually maybe it is easier to allow critters to be cast main 1 as
+  well because we might cast the combo on them. So in that case it would just be sweepers in main 2."* 2026-11-18 00:45:
+  *"Let's see a full cast order. Loran's escape should be before sweepers which are cast in the second main."* 00:55:
+  *"Let's split up any buckets there. I want a full order with no ties."* 01:00: *"Otherwise it seems reasonable."* /
+  *"Though we should also add mind stone's ability. Perhaps at the end of main 1."*
+* **The split (`MTG_STUFFY_MAIN_SPLIT`, heurarm `STUFFY_MAIN_SPLIT`, DEFAULT ON).** One reader, `StuffyMainSplitOn()`,
+  feeds both halves: `GoldFishRunner::DeckUsesSecondMain` (a creature sweeper in the list + `StuffyDollProvider`)
+  opens the full searched second main, and `StuffyDollProvider::CollectedActionAllowed` refuses a creature-sweeper
+  cast (`StuffyIsCreatureSweeper`: `damage_all_creatures > 0 || damage_all_creatures_count_creatures`, by param) in
+  main 1. Everything else is castable in both mains. It is applied at the tail of `CollectActions`, so the search,
+  the rollout, the depth-0 runner and the executor lose the same main-1 options. Human play keeps every option
+  (`CollectActions` skips the hook there), the Martyr precedent. `MainPhaseOverride` (sweepers m2, everything else
+  both) is report-only: Stuffy opts into neither `ClassifiesMainPhases` nor condemnation.
+* **The order (`MTG_STUFFY_CAST_ORDER`, a sub-flag: inert while the split is off).** `CastOrderRank` = tier * 64 +
+  slot over the USER's 12 named cards (Mind Stone 1, Nomads 2, Shaman 3, Maniac 4, Nemesis 5, Sliver 6, Reckoner 7,
+  Doll 8, GC 9, Loran's Escape 10, Chain Reaction 11, Blasphemous Act 12). An unlisted card keeps its generic tier and
+  sits after the listed cards of that tier (tier * 64 + 32 + 5-bit name hash). `OrderOpaqueCastsByRank` is on, and the
+  step-7 searched order expansion no longer branches a sweeper before a same-plan Loran's Escape
+  (`FixesTrickBeforeSweeperOrder`, `OrderingPlacesSweeperBeforeGrant`). The GC branch is untouched.
+* **Mind Stone's sac-draw.** The dig is structurally the last thing of its window, so in main 1 it already sits after
+  Loran's Escape (and its step-9d scry) and before combat. `HasAnyDigSource` reports no dig source in the post-combat
+  main (autonomous play only). Whether to dig stays searched.
+* **`--cast-order-report`** (step 11 binary): land (searched), then ranks 321, 642..648, 1289..1292, one card per
+  rank, no tie; Chain Reaction and Blasphemous Act `m2`, every other card `both`. The DIG line still prints `m1/m2`:
+  it is the generic deck scan and does not read the provider's main-2 bar (report cosmetics only).
+* **Main 2 in every world (verified).** The executor plays the post-combat main when `SetSearchPostCombat(
+  DeckUsesSecondMain)`; the rollout plays it when `second_main` is set (TurnSolver `SimulateToEndImpl`, searched at
+  depth > 0, the HorizonLeaf greedy at depth <= 0); `state.uses_second_main` is stamped from the same predicate. A
+  depth-0 run shows the sweepers cast in `MAIN_2` (seed 13 --game-index 12 --depth 0: T5 `MAIN_2 CAST_SPELL Chain
+  Reaction`; seed 3 --game-index 2: T5 `MAIN_2 CAST_SPELL Blasphemous Act`), and scenario
+  `stuffy_split_attack_then_act` (d3) attacks with the Maniac and then casts the Act in `MAIN_2` for the turn-4 kill.
+  No sweeper cast is deleted.
+* **Steps 9d / 9e under the split (checked in code).** The step-9c/9e hold fan runs only in a pre-combat top-level
+  list (`is_pre_combat && g_bp_enum_depth == 0`, TurnSolver ~98872), and the human "(may attack)" prompt is in the one
+  real `AIEngine::DeclareAttackers`, so both still fire once per combat; main 2 neither fans nor asks. The Mind Stone
+  dig is applied after every cast of main 1, so a Loran's Escape scry (9d) resolves before the draw. A card the dig
+  draws is offered by main 2's own collect (a sweeper only there); not verified by a run whether main 1 re-solves
+  after the dig.
+* **Measurement (one pooled batch, MTG_PGO=0, seed 1, 50 games per cell, paired by game index).** The `=0` arm
+  reproduces step 9e exactly: d0 `54b7c0312d42fd02` (5.82), d3/b10 `e5df6a1d0cf45c02` (4.44, 1,341,508 units).
+  d3/b10: every arm wins all 50 games at avg 4.44 with IDENTICAL win turns in every game (0 faster, 0 slower); CPU
+  vs `=0`: split-only 1.01x, full 0.96x (units 0.92x). d0: the split is WORSE -- full (and split-only, same win
+  turns) 6.02 vs 5.82, 47 vs 44 wins, 6 faster / 20 slower.
+* **Root cause of the d0 loss (every slower d0 game read: gi 2, 12, 30 in detail).** The GREEDY main 1 (the depth-0
+  runner; also the beyond-horizon playout) picks its subset without knowing main 2 will want mana for the sweeper.
+  It spends the mana on a creature and the lethal sweep becomes unaffordable or is delayed. gi 12 (repro `--seed 13
+  --game-index 12 --depth 0`): 9e casts Maniac + Act on T3 (two Maniacs reflect 13 each); the split casts Spiteful
+  Sliver and wins T5 with a main-2 Chain Reaction. gi 2: 9e T4 GC + Act; the split casts Sliver, T5. gi 30: 9e T4 Act
+  ({3}{R}); the split casts Reckoner + GC, T6. The searched window does not have this blind spot (main-1 plans are
+  scored with their searched main 2), which is why d3 is unchanged.
+* **PROPOSED AMENDMENT (not the USER's rule; `MTG_STUFFY_SPLIT_LETHAL_M1`, heurarm `STUFFY_SPLIT_LETHAL_M1`, DEFAULT
+  OFF until the USER rules).** Main 1 also admits a sweeper whose OWN reflection, on the board as it stands, is
+  projected to kill the opponent now (`ExtraLethalDamage({sweeper}) >= opponent life`). A sweep that ends the game in
+  main 1 wins on the same turn as any main-2 line, and the reason for main 2 (attack first) is moot when the sweep
+  alone is lethal. It only adds an option. Measured in the same pooled batch: d0 **5.46** (9e 5.82, plain split
+  6.02), 49 wins (9e 44), vs 9e 8 faster / 1 slower; d3/b10 4.44 with identical win turns in all 50 games, CPU 0.92x
+  of `=0`. The one slower d0 game, gi 12 (`--seed 13 --game-index 12 --depth 0`, 3 -> 4): 9e's T3 kill is Maniac +
+  Act together (two Maniacs reflect 13 each); the Act alone reflects 13 < 20, so the amendment does not admit it and
+  the greedy casts Sliver; T4 the Act alone is lethal and is admitted. A WIDER optimistic bound (the sweeper plus
+  every nonland hand card, mana ignored) was measured and rejected: d0 5.62, 0 slower vs 9e but 3 games lost vs the
+  narrow bound (no win), because it admits non-lethal main-1 sweeps the greedy then casts (seed 10 gi 9: Act on T4
+  with the opponent at 18, no win by turn 8). The exact fix for gi 12 would be a per-SUBSET lethal test in the greedy
+  (`TurnSolver::Solve` already projects each subset); not built.
+* **Scenarios.** New: `stuffy_split_attack_then_act` (split, d3 b50: attack, then `T4 MAIN_2 CAST_SPELL Blasphemous
+  Act`, win T4 -- labels verified), `stuffy_split_attack_then_act_off` (`MTG_STUFFY_MAIN_SPLIT=0`, win T5) and
+  `stuffy_d0_split_lethal_m1` (the amendment, d0, win T4). `stuffy_d0_runner_finds_act_kill` (step 10's d0 guard) is
+  pinned to `MTG_STUFFY_MAIN_SPLIT=0`: under the plain split its greedy main 1 casts Nemesis and the main-2 Act is
+  unaffordable (no win, opponent at 9) -- the d0 blind spot above.
+* **Finding (step 9e, single main, not ours to fix here).** The `_off` control fails at budget_ms 50 and 500: the
+  search casts the Act in main 1 on T4 (opponent left at 1, no win) and only finds the hold-and-attack line
+  unbudgeted. The control therefore runs at budget_ms 0. The split removes the trap (the main-2 Act is the T4 kill).
+* **Deviations (disclosed).** (1) Two flags, not one: the order is a sub-flag of the split so `MAIN_SPLIT=0` is the
+  exact 9e arm while the order's effect can be separated. (2) The order is keyed by NAME (the brief allowed it); the
+  restriction by PARAM. (3) GC moves from 9e's 19 to tier 20 slot 9 (still first noncreature); an unlisted tier-19
+  card would now precede it. (4) `OrderOpaqueCastsByRank` on (the Escape is a cantrip, which makes a set opaque).
+  (5) Mind Stone's dig barred in main 2 (autonomous only), our reading of "at the end of main 1"; same mana either
+  way and the card arrives earlier. (6) In a GC-expanded step-7 plan, orderings with a sweeper before a same-plan
+  Escape are skipped.
+* **Verification.** Unit 3476/3476 (5 new step-11 cases). Scenarios 583/583. Smoke: 219/219 job digests identical to
+  step 9e (`build/scratch/stuffy/impl11/smoke-step11-batch.log`); the 44 FAILs are the stale origin GT.
