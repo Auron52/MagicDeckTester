@@ -217,6 +217,28 @@ deferrals provisional.
 - USER (~00:55 11-18, verbatim): "Let's split up any buckets there. I want a full order with no ties." => PROPOSED total order (authored, presented; implemented in step 11 as the default until the USER amends it): main 1: land (searched) > 1 Mind Stone > 2 Nomads en-Kor {W} > 3 Shaman en-Kor {1}{W} > 4 Mogg Maniac {1}{R} > 5 Screaming Nemesis {2}{R} > 6 Spiteful Sliver {2}{R} > 7 Boros Reckoner {R/W}x3 > 8 Stuffy Doll {5} > 9 Guilty Conscience > 10 Loran's Escape; main 2 only: 11 Chain Reaction > 12 Blasphemous Act. Creature principle: strict coloured pips first, hybrid next, generic-only last (cheaper first; Nemesis before Sliver as the stronger reflector), so the payer never spends a land a later coloured pip needed.
 - USER (~01:00 11-18, verbatim): "Otherwise it seems reasonable." and "Though we should also add mind stone's ability. Perhaps at the end of main 1." => order adopted as above, plus 11 = Mind Stone's {1},{T},sacrifice: draw at the END of main 1 (after Loran's Escape, before combat; whether to activate stays searched); Chain Reaction / Blasphemous Act renumber to 12 / 13 (main 2 only; Chain first accepted).
 - USER (~01:20 11-18, verbatim): "That full order looks fine." => the 13-slot total order (Mind Stone draw at 11, Chain 12, Act 13) is the USER's ADOPTED cast order for this deck (Q-U5 closed).
+- USER (~07:30 11-18, verbatim, answers the batched open questions):
+  1. "If the redirect target has already left the battlefield before it can happen then yes, there is no opportunity
+     for it to happen. I'm not sure how this can occur goldfishing with this list, though." => en-Kor shield to a
+     departed target: not consumed, doesn't apply (default CONFIRMED).
+  2. "The simultaneous triggers using one order is fine, except we need to make sure that it is the best order when
+     the order matters. Overall, these seem fine." => Q-U1 deferrals ACCEPTED; OWED: show the canonical trigger order
+     is the best order wherever order matters (else search the order there).
+  3. "We should probably work through this, perhaps after other work on Stuffy dries up." => Q-U6 (engine-wide
+     main-1 pass) scheduled AFTER the Stuffy work.
+  4. "I don't quite get this, but clairvoyance is expected of a clairvoyant engine to a degree. That isn't to say we
+     don't want a non-clairvoyant heuristic prune for the performance of the scry, though. I think could make sense."
+     => land-ETB scry sizing is not a defect per se; OWED (low priority): a non-clairvoyant provider prune for scry
+     performance.
+  5. "If there is a bug built-in we should fix it." => R7 rollout kill paths (indestructible / death triggers): FIX.
+  6. "Makes sense to fix. It isn't a rush, but I would rather not be bitten in the future." => SBA / CounterPingKillAt
+     controller-vs-owner graveyard: FIX (not urgent).
+  7. "Right, there are no choices there." => the 3 no-choice viewer-audit classifications CONFIRMED (Act cost
+     reduction, Chain X, Nemesis rider); aura_host_damage_back is now a dig prompt (9e).
+  8. "I'm not sure what prompts for pull, but once per loop might make sense." => viewer Shaman-pull prompt: ask
+     once per loop (investigate what prompts it first).
+  + "Yes, let's check that White Knights' result change." => investigate 451a4c571's WK digest move
+     (logs/stuffy/gt-attribution.md: LookupCached side-effect hypothesis; caches must not change units).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
