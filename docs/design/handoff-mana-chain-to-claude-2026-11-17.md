@@ -32,6 +32,12 @@ with pf1d DEFAULT ON (binary = stash@{0} build). compare.py prints net + gi 5605
 the stash, commit the pf1d adoption, smoke-accept the Cyclone rows (only those may move), push >= 07:11; if UKS over pf1d
 is net <= 0 with 560506 no longer later, flip MTG_UNSEEN_KEEP_SCARCE default ON (held-out was byte-identical elsewhere)
 with its own smoke+regression accept.
+**04:45 UTC:** UKS over pf1d DONE: Cyclone 560000-564999 earlier 1 (gi 560147 T6->T5) later 0, net -1; gi 560506
+identical (T4). -> USER condition met: UKS default ON. WORKING TREE (uncommitted, built, units 3,466/3,466): pf1d
+defaults ON (DecisionProviders.cpp, HeuristicArm.h) + UKS default ON (EngineFlags.h, HeuristicArm.h) +
+docs/design/unseen-keep-scarce-2026-11-17.md header. Only gi 570487 (d8 b0) still running in that batch (mtg pid
+2261544). When it ends: if <= T5, commit both adoptions, run `regression.sh --both`, audit, accept, push >= 07:11.
+If not, investigate 570487 first; UKS alone could still ship over the committed order? NO: its +1 needs pf1d.
 The d8 b0 replay of Cyclone gi 570487 was STOPPED by the agent (own experiment, 2.5 h on one game) to free the box;
 rerun it alone after the GT work (`build/scratch/claude_ponderfirst_ab3/d8/`, manifest row for g570487 only).
 
