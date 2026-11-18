@@ -2400,7 +2400,11 @@ function auraAttThumb(o, z, top) {
                : eqDrag ? ` title="${esc(o.name)} — ${what}; drag onto another of your creatures to move it"`
                         : ` title="${esc(o.name)} — ${what}"`;
   const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}" data-equipnum="${o.num||0}"` : '';
-  return `<span class="thumb spell aura-att${actCap?' act-src':''}${eqDrag?' equip-src':''}${(actN||eqN)?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}${eqAttr}>`+
+  // data-idx makes an attached Aura/Equipment a clickable TARGET like any other permanent (a "target nonland
+  // permanent" bounce -- Brinelin / Hullbreaker -- can return Utopia Sprawl off its land); the target wiring
+  // only arms tiles whose index is in the decision's legal set, so nothing else changes.
+  const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
+  return `<span class="thumb spell aura-att${actCap?' act-src':''}${eqDrag?' equip-src':''}${(actN||eqN)?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${idxAttr}${attrs}${eqAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
     (sacTag.split?`<span class="sacactbadge${sacTagN?' on':''}" data-sacact="${esc(o.name)}" title="${esc((sacTag.sac[0]||{}).actLabel || 'sacrifice a creature')} — a SEPARATE ability from clicking the card${sacTagN?' (click again to remove one)':''}">🩸${sacTagN?` ×${sacTagN}`:''}</span>`:'')+
@@ -5893,9 +5897,23 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns">${buttons}<span class="spacer"></span><button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }
   if (d.remove){
-    return `<h3>Which creature to exile — ${esc(d.source||'')}</h3>`+
-      `<div class="sub">The chosen creature is ${esc(d.remove)} · pick 1. Click one of the listed creatures on the board (labelled with its power/toughness) — these are the legal targets. The AI's pick is preselected.</div>`+
+    // A BOUNCE ("returned to its owner's hand": Hullbreaker Horror / Brinelin's "you may return target
+    // nonland permanent", Into the Roil-style spells) is not an exile and its legal set is every nonland
+    // PERMANENT (Auras, mana rocks, Sagas, tokens, either side), so the Swords wording ("which creature
+    // to exile") was wrong for it (USER 2026-11-18, Sea Creatures s2). An option with NO targets is the
+    // engine's "(no target)" = decline ("you may"); it used to be unreachable here because Confirm needs
+    // a board pick, so it gets its own button (reply = that option's index).
+    const bounce=/^returned to its owner's hand/.test(d.remove||'');
+    const what=bounce?'permanent':'creature';
+    const desc=(d.remove||'').replace(/\s*--\s*pick the \(no target\) option to decline\s*$/,'');
+    const declineOpt=(d.options||[]).find(o=>!(o.targets||[]).length);
+    const aiDeclines=declineOpt && d.heuristic_default===declineOpt.index;
+    return `<h3>${bounce?'Which permanent to return':'Which creature to exile'} — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen ${what} is ${esc(desc)} · pick 1${declineOpt?' or decline':''}. Click one of the highlighted ${what}s on the board${bounce?' (either side of the table)':' (labelled with its power/toughness)'} — these are the legal targets.`+
+      (declineOpt?` This is optional (<b>you may</b>): Decline returns nothing.`:'')+
+      ` ${aiDeclines?'The AI declines here.':"The AI's pick is preselected."}</div>`+
       `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      (declineOpt?`<button id="remdecline" class="ghost" data-opt="${declineOpt.index}">Decline — no target</button>`:'')+
       `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }
   // "TARGET PLAYER gains N life" (Heroes' Reunion / Rest for the Weary): d.lifegain = "gains 7 life".
@@ -6082,6 +6100,10 @@ function wireDecisionPanel(d, dec){
     // such button. Same -1 shape as #decnoattach below.
     const sd=panel.querySelector('#sacdecline');
     if (sd) sd.onclick=()=>pushChoice(d, -1, `${d.source||'Sacrifice'}: declined — sacrificed nothing`);
+    // Optional removal/bounce target ("you may return target nonland permanent"): reply the engine's
+    // "(no target)" option index, which the d.remove prompt names in data-opt.
+    const rd=panel.querySelector('#remdecline');
+    if (rd) rd.onclick=()=>pushChoice(d, +rd.dataset.opt, `${d.source}: no target (declined)`);
     // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');

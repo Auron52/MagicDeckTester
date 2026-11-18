@@ -4353,7 +4353,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     else if (source == "Sink into Stupor")
     { d.Note("reply an option index -- return the chosen spell on the stack or opponent nonland permanent to its owner's hand. Every legal target is offered."); }
     else if (!remove_desc.empty())
-    { d.Note("reply an option index. The chosen creature is " + remove_desc
+    { d.Note(std::string("reply an option index. The chosen ")
+             + (remove_desc.rfind("returned to its owner's hand", 0) == 0 ? "permanent" : "creature")
+             + " is " + remove_desc
              + ". Only legal targets are listed. Default = the AI's pick."); }
     else if (random_damage)
     // The reply is NOT an option index: soulfire_chooser reads ONE 0/1 flag per legal_targets entry
