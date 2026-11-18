@@ -67182,6 +67182,9 @@ MAZE_P5_LEVER(MazeColourAltOn,        MAZE_COLOUR_ALT,         "MTG_MAZE_COLOUR_
 MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
+bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
+MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
+MAZE_P5_LEVER(MazeTalonEffectiveOn,   MAZE_TALON_EFFECTIVE,    "MTG_MAZE_TALON_EFFECTIVE",    false)   // A/B variant
 #undef MAZE_P5_LEVER
 bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
 
@@ -67227,19 +67230,38 @@ void MazeDropUnpayablePlaza(const GameState& s, int ctrl, std::vector<std::strin
     }
     if (!out.empty() || allow_empty) { names.swap(out); }
 }
-// P5 Talon variant: "lacking in extra land drops" = no Exploration, Burgeoning or Manabond controlled or in hand.
-bool MazeLacksExtraDrops(const GameState& s, int ctrl)
+// P5 Talon variants: "lacking in extra land drops" (USER 2026-11-18: "It is certainly the case that having none of
+// those meets the bar. It is less clear whether 1 of them does. In some situations I suppose it might, particularly
+// if Burgeoning is the one and it is not going off."). Three A/B readings, each over the copies of Exploration /
+// Burgeoning / Manabond controlled or held:
+//   (a) MTG_MAZE_TALON_LACKDROPS: none at all;
+//   (b) MTG_MAZE_TALON_ATMOST1:   at most one copy;
+//   (c) MTG_MAZE_TALON_EFFECTIVE: no EFFECTIVE one -- Exploration always counts; Burgeoning and Manabond count only
+//       with a spare land in hand to put (more land cards in hand than this turn's open land drops).
+// None on: Talon is always offered (the P1d amendment). The first variant set wins (the arms set one at most).
+bool MazeTalonOffered(const GameState& s, int ctrl)
 {
-    auto extra = [](const CardDefinition* d)
+    const bool a = MazeTalonLackDropsOn(), b = MazeTalonAtMost1On(), c = MazeTalonEffectiveOn();
+    if (!a && !b && !c) { return true; }
+    const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
+    int lands_in_hand = 0;
+    for (const Card& h : pl.hand) { if (h.IsLand()) { ++lands_in_hand; } }
+    const int open_drops = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn);
+    const bool spare_land = lands_in_hand > (s.active_player_index == ctrl ? open_drops : 0);
+    int n = 0;
+    auto count = [&](const CardDefinition* d)
     {
-        return d != nullptr && (d->params.static_extra_land_drops > 0 || d->params.opponent_land_play_put_land_from_hand
-                                || d->params.endstep_may_dump_hand_lands_discard_hand);
+        if (d == nullptr) { return; }
+        if (d->params.static_extra_land_drops > 0) { ++n; return; }
+        if (d->params.opponent_land_play_put_land_from_hand || d->params.endstep_may_dump_hand_lands_discard_hand)
+        { if (!c || spare_land) { ++n; } }
     };
     for (const Permanent& p : s.battlefield)
-    { if (p.controller_index == ctrl && extra(CardDatabase::Instance().LookupCached(p.card))) { return false; } }
-    for (const Card& c : s.players[static_cast<std::size_t>(ctrl)].hand)
-    { if (extra(CardDatabase::Instance().LookupCached(c))) { return false; } }
-    return true;
+    { if (p.controller_index == ctrl) { count(CardDatabase::Instance().LookupCached(p.card)); } }
+    for (const Card& h : pl.hand) { count(CardDatabase::Instance().LookupCached(h)); }
+    if (a) { return n == 0; }
+    if (b) { return n <= 1; }
+    return n == 0;
 }
 bool MazeIsBaldurDef(const CardDefinition* d)
 { return d != nullptr && d->card.IsLand() && !d->params.mana_per_other_controlled_subtype.empty(); }
@@ -67346,10 +67368,11 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // which the P3 menu's "one new name only after Baldur's and Gond" deferral cannot see (held-out d3 seed 94035
     // gi34: the unpruned search fetched it on T5 and won T6; P3 alone fetched Gond Gate and won T8).
     static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET", true);   // DEFAULT ON; =0 -> the USER's P3 menu alone
-    // P5 VARIANT (MTG_MAZE_TALON_LACKDROPS, default OFF -- an A/B arm): offer Talon Gates only while we lack extra
-    // land drops (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra land drops").
+    // P5 VARIANTS (MTG_MAZE_TALON_LACKDROPS / _ATMOST1 / _EFFECTIVE, default OFF -- A/B arms): offer Talon Gates only
+    // while we lack extra land drops (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra
+    // land drops"); MazeTalonOffered holds the three readings.
     if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon)
-        && !(MazeTalonLackDropsOn() && !MazeLacksExtraDrops(s, ctrl)))
+        && MazeTalonOffered(s, ctrl))
     {
         for (const std::string& nm : names)
         {
@@ -67986,7 +68009,21 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
         if (t) { with_t.push_back(i); }
         else   { plain.insert(pkey(*plans[i].land, std::move(keys))); }
     }
-    if (with_t.empty() || spend_keys.empty()) { return; }
+    if (with_t.empty()) { return; }
+    // MTG_MAZE_HEAP_STRICT (USER 2026-11-18, VERBATIM: "But we generally just pass on the treasure unless the mana is
+    // going to be wasted, so that is the way to look at this problem."; "there are cases where the search doesn't use
+    // the mana fully even if the option is available. In those cases it should still activate, since there is no
+    // drawback to doing so."; "We can actually create the treasure at the very end of processing even after Maze's
+    // End if that would help."): the Treasure is never a searched branch. Every Treasure plan leaves the menu, and
+    // the Treasure is made instead by PerformLastChanceTreasure (SpellEffects.h) at the LAST opportunity before our
+    // next untap -- after the opponent's turn, once every off-main activation has had its chance -- whenever the
+    // untapped sources still pay it. The menu never empties (the caller keeps it whole if this would).
+    if (MazeHeapStrictOn())
+    {
+        for (std::size_t i : with_t) { admit[i] = 0; }
+        return;
+    }
+    if (spend_keys.empty()) { return; }
     if (MazeTreasureBinds(s, s.active_player_index, *this)) { return; }
     for (std::size_t i : with_t)
     {

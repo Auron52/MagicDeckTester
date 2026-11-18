@@ -1001,6 +1001,9 @@ enum Slot : int
     MAZE_MANABOND_ALL_LANDS,  // MTG_MAZE_MANABOND_ALL_LANDS Maze's End P5 (USER: "\"no\" with only lands should be pruned heuristically"): Manabond's "no" is withheld when the hand is all lands, unless a Gateway Plaza in hand could not pay its {1} at the end step. Default ON; =0 -> yes and no searched
     MAZE_FETCH_EVAL_V5,       // MTG_MAZE_FETCH_EVAL_V5    Maze's End P5 (A1 weights, the USER's "rest of the table"): the new-name fetch eval is 100 (v5) instead of 200 (v0); the other progress weights are unchanged. Replaces the temporary MTG_MAZE_WSEL_* selector. Default ON; =0 -> 200
     MAZE_TALON_LACKDROPS,     // MTG_MAZE_TALON_LACKDROPS  Maze's End P5 VARIANT of the Talon amendment (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra land drops"): Talon Gates is offered only when no extra-land source (Exploration, Burgeoning, Manabond) is controlled or held. Default OFF (an A/B arm against the always-offered amendment)
+    MAZE_HEAP_STRICT,         // MTG_MAZE_HEAP_STRICT      Maze's End P5 (USER 2026-11-18: "Leftover means that we would go to the end of the turn and have extra mana up. Technically we might even be able to prune it unless that is the case."): Heap Gate's Treasure is kept ONLY when its mana is leftover -- the MAZE_HEAP_TREASURE rule WITHOUT the next-turn / colour binds exception. Default OFF until the A/B; =1 -> leftover only
+    MAZE_TALON_ATMOST1,       // MTG_MAZE_TALON_ATMOST1    Maze's End P5 Talon VARIANT (b) (USER: "It is less clear whether 1 of them does"): Talon Gates is offered while AT MOST ONE copy of Exploration / Burgeoning / Manabond is controlled or held. Default OFF (an A/B arm)
+    MAZE_TALON_EFFECTIVE,     // MTG_MAZE_TALON_EFFECTIVE  Maze's End P5 Talon VARIANT (c) (USER: "particularly if Burgeoning is the one and it is not going off"): Talon Gates is offered while no EFFECTIVE extra land drop is held or controlled -- Exploration always counts; Burgeoning and Manabond count only with a spare land in hand (more land cards than the open land drops). Default OFF (an A/B arm)
     COUNT
 };
 
@@ -1946,6 +1949,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_MANABOND_ALL_LANDS",
         "MTG_MAZE_FETCH_EVAL_V5",
         "MTG_MAZE_TALON_LACKDROPS",
+        "MTG_MAZE_HEAP_STRICT",
+        "MTG_MAZE_TALON_ATMOST1",
+        "MTG_MAZE_TALON_EFFECTIVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

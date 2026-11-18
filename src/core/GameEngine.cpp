@@ -377,6 +377,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponent_turn();
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
+    // Heap Gate's last-chance Treasure (Maze's End P5, MTG_MAZE_HEAP_STRICT; a no-op unless the lever is on): the
+    // last point before our untap step, after every off-main activation. Rollout twin, same position.
+    PerformLastChanceTreasure(state);
     state.scripted_eot_face_up = -1;   // a pin no opponent end step consumed (an extra turn of ours) expires here
     state.scripted_crossing_lands = -1;   // Manabond / Burgeoning pin (I3): consumed by this crossing, expires here
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
