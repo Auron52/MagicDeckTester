@@ -615,6 +615,15 @@ launch unless the user requests a restart.
     needed (e.g. to protect work before a risky step).
   * **References are NOT throttled:** a new user reference still goes to `origin/references-autosave` at
     once (see the play-server hard rules above); this rule never delays protecting one.
+  * **A fix for an issue that is CAUSING TROUBLE FOR OTHER AGENTS is NOT throttled (USER 2026-11-18):**
+    *"Any issue that is causing trouble for other agents is an exception and CI failures are an obvious
+    one. For the rest it will need my coordination."* (Earlier the same day, on CI fixes: *"They are rare
+    enough that it shouldn't cause too much trouble."*) Examples: red CI on the shared branch, a broken
+    build or failing tier that other sessions inherit on rebase. Push the fix as soon as it is verified
+    (green on a `wip/*` branch, or the local equivalent), without waiting for your 4-hour window. Push
+    ONLY the fix: hold your other unpushed commits for the window (rebase so the fix goes first), and do
+    not reset the window clock on account of a fix-only push. **Any other early push needs the USER's
+    coordination**: surface it and wait for the window meanwhile.
 
 - **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
   `.github/workflows/build.yml` builds on **windows-latest** on every push
