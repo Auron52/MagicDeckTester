@@ -19,13 +19,16 @@
 #include <chrono>
 #include <bit>          // std::popcount (the ramp-filter feed charge; MSVC has no __builtin_popcount)
 #include <atomic>
+#include <cstdint>   // std::uint16_t -- the payable-order decider's candidate positions
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
 #include <initializer_list>   // ManaCostDigest packs byte fields
+#include <map>       // the payable-order decider's per-shape candidate order (PoSortedCandidates)
 #include <optional>    // TapForCostShared's MTG_RAMP_FEED_ROUTE scope
 #include <type_traits> // derive the hybrid-assignment array size from ManaCost's pip capacity
+#include <unordered_set>   // PoAnyOrderPays' searched (set, walk state) pairs
 #include <vector>
 
 // ---- NEEDS-BASED TAP ORDER (MTG_NEEDS_TAP_ORDER; NeedsTapOrderOn in EngineFlags.h) -------------
@@ -5571,9 +5574,6 @@ static void PoLandAuraSubtractHeld(ManaPool& pool, const PoLandAuraHold& la)
     }
 }
 
-// The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
-// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking). With `la` the
-// pool starts WITHOUT the held host (the caller's pool is the held one).
 // ---- MTG_SAC_FODDER_MENU (ManaPayment.h; docs/design/sac-fodder-menu-2026-11-18.md) ----------------------------
 bool SacFodderMenuOn()
 {
@@ -5774,56 +5774,111 @@ struct PoSacFodderWalk
 };
 } // namespace
 
+// The state of the walk behind FirstUnpayablePos between two casts: everything a later cast's step reads
+// besides the call's fixed inputs (state, acts, the hold) and the simulated hand.
+struct PoWalkState
+{
+    ManaPool       pool;
+    PoLandAuraLive live;          // allocates only with a hold
+    bool           ripple_live = true;
+    FilterFeedHold feed;          // MTG_RAMP_FILTER_FEED_ORDER
+    PoSacFodderWalk sfw;          // MTG_SAC_FODDER_MENU: inert unless PayableCastOrderCore's fodder pass set t_po_sacfod
+};
+
+// The pieces of one cast of the walk, shared by PoWalkStep and the any-order search (PoAnyOrderPays) so both
+// take exactly the same steps.
+// (a) The cost acts[idx] pays here; the card leaves the simulated hand. false = an alt-cost cast: as before,
+// neither paid nor credited (only its body arrives: PoWalkAltCost).
+static bool PoWalkCost(const Action& a, std::vector<PoHandCard>* hand, ManaCost& cost)
+{
+    cost = a.cost;
+    if (hand != nullptr)
+    {
+        // Reveal-aware (MTG_PAYABLE_ORDER): price at this position, then the card leaves hand
+        // whether it paid mana or not (an alt-cost cast still leaves the hand).
+        const bool rop = PoIsRevealCostCast(a);
+        if (rop) { cost = PoRevealAwareCost(a, *hand); }
+        PoRemoveFromHand(*hand, a.card_name);
+    }
+    return !a.alt_cost;
+}
+
+// (b) Held host k taps: its yield and every bonus resolved on it join the pool.
+static void PoWalkRelease(PoWalkState& w, const PoLandAuraHold& la, int k)
+{
+    w.pool.AddPool(la.host_yield[static_cast<std::size_t>(k)]);
+    w.pool.AddPool(w.live.resolved[static_cast<std::size_t>(k)]);
+    w.feed.Release(w.pool);   // the host's yield can feed a held ramp filter
+    w.live.held[static_cast<std::size_t>(k)] = 0;
+}
+
+// (a') An alt-cost cast is neither paid nor credited, but its body still arrives (sac-for-mana fodder).
+static void PoWalkAltCost(PoWalkState& w, const Action& a) { w.sfw.After(a); }
+
+// (c) Pay `cost` for acts[idx] and credit what it produces; false = the pool cannot pay it, even eating
+// sac-for-mana fodder (the last resort: the fewest bodies that make it payable).
+static bool PoWalkPay(const GameState& state, const std::vector<Action>& acts, int idx, PoWalkState& w,
+                      const ManaCost& cost, const PoLandAuraHold* la)
+{
+    const Action& a = acts[idx];
+    if (!w.pool.CanPay(cost) && !w.sfw.TryEat(w.pool, cost)) { return false; }
+    PayFromPool(w.pool, cost);
+    CreditCastOutput(state, acts, a, w.pool, w.ripple_live, w.feed.Take(a));
+    w.sfw.GrantDebit(w.pool, a);
+    w.sfw.After(a);
+    if (IsRippleGranterCast(a)) { w.ripple_live = true; }
+    w.feed.Release(w.pool);
+    if (la != nullptr)
+    {
+        for (std::size_t k = 0; k < la->auras.size(); ++k)
+        {
+            const std::size_t h = static_cast<std::size_t>(la->aura_host[k]);
+            if (la->auras[k] == idx && w.live.held[h]) { w.live.resolved[h].AddPool(la->bonus[k]); }
+        }
+    }
+    return true;
+}
+
+// One cast of the walk (acts[idx]); false = it cannot be paid at this point.
+static bool PoWalkStep(const GameState& state, const std::vector<Action>& acts, int idx, PoWalkState& w,
+                       std::vector<PoHandCard>* hand, const PoLandAuraHold* la)
+{
+    ManaCost cost;
+    if (!PoWalkCost(acts[idx], hand, cost)) { PoWalkAltCost(w, acts[idx]); return true; }
+    // Each held host taps now, in `prio` order, only while this cast cannot be paid without it.
+    if (la != nullptr)
+    {
+        for (int k : la->prio)
+        {
+            if (!w.live.held[static_cast<std::size_t>(k)] || w.pool.CanPay(cost)) { continue; }
+            PoWalkRelease(w, *la, k);
+        }
+    }
+    return PoWalkPay(state, acts, idx, w, cost, la);
+}
+
+// The walk's starting state over pool `pool`.
+static void PoWalkStart(const GameState& state, PoWalkState& w, const ManaPool& pool, const PoLandAuraHold* la)
+{
+    w.pool = pool;
+    if (la != nullptr) { w.live.Start(*la); }
+    w.ripple_live = RippleGranterOnBattlefield(state);
+    w.feed = FilterFeedHold{};
+    w.sfw.Start();
+}
+
+// The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
+// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking). With `la` the
+// pool starts WITHOUT the held host (the caller's pool is the held one).
 static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Action>& acts,
                                  const std::vector<int>& order, ManaPool pool,
                                  std::vector<PoHandCard>* hand, const PoLandAuraHold* la = nullptr)
 {
-    PoLandAuraLive live;   // allocates only with a hold
-    if (la != nullptr) { live.Start(*la); }
-    bool ripple_live = RippleGranterOnBattlefield(state);
-    PoSacFodderWalk sfw;   // MTG_SAC_FODDER_MENU: inert unless PayableCastOrderCore's fodder pass set t_po_sacfod
-    sfw.Start();
-    FilterFeedHold feed;   // MTG_RAMP_FILTER_FEED_ORDER
+    PoWalkState w;
+    PoWalkStart(state, w, pool, la);
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
-        const Action& a = acts[order[pos]];
-        ManaCost cost = a.cost;
-        if (hand != nullptr)
-        {
-            // Reveal-aware (MTG_PAYABLE_ORDER): price at this position, then the card leaves hand
-            // whether it paid mana or not (an alt-cost cast still leaves the hand).
-            const bool rop = PoIsRevealCostCast(a);
-            if (rop) { cost = PoRevealAwareCost(a, *hand); }
-            PoRemoveFromHand(*hand, a.card_name);
-        }
-        if (a.alt_cost) { sfw.After(a); continue; }   // as before: an alt-cost cast is neither paid nor credited (its body still arrives)
-        // Each held host taps now, in `prio` order, only while this cast cannot be paid without it.
-        if (la != nullptr)
-        {
-            for (int k : la->prio)
-            {
-                if (!live.held[static_cast<std::size_t>(k)] || pool.CanPay(cost)) { continue; }
-                pool.AddPool(la->host_yield[static_cast<std::size_t>(k)]);
-                pool.AddPool(live.resolved[static_cast<std::size_t>(k)]);
-                feed.Release(pool);   // the host's yield can feed a held ramp filter
-                live.held[static_cast<std::size_t>(k)] = 0;
-            }
-        }
-        if (!pool.CanPay(cost) && !sfw.TryEat(pool, cost)) { return pos; }
-        PayFromPool(pool, cost);
-        CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
-        sfw.GrantDebit(pool, a);
-        sfw.After(a);
-        if (IsRippleGranterCast(a)) { ripple_live = true; }
-        feed.Release(pool);
-        if (la != nullptr)
-        {
-            for (std::size_t k = 0; k < la->auras.size(); ++k)
-            {
-                const std::size_t h = static_cast<std::size_t>(la->aura_host[k]);
-                if (la->auras[k] == order[pos] && live.held[h]) { live.resolved[h].AddPool(la->bonus[k]); }
-            }
-        }
+        if (!PoWalkStep(state, acts, order[pos], w, hand, la)) { return pos; }
     }
     return -1;
 }
@@ -5839,6 +5894,213 @@ static bool PoLandAuraWalkAnyRelease(PoLandAuraHold* la, Walk&& walk)
     std::sort(la->prio.begin(), la->prio.end());
     do { if (walk()) { return true; } } while (std::next_permutation(la->prio.begin(), la->prio.end()));
     return false;   // next_permutation left `prio` sorted again (identity)
+}
+
+// DOES ANY ORDER PAY? The payable-order decider's "no permutation pays" verdict, decided without walking every
+// permutation. Sea Creatures s7780009 gi8 (MTG_PO_LAND_AURA_DOMAIN ON): 886,160 enumeration-site calls reached
+// the permutation loop and found nothing, each walking every one of n! orders x h! host-release orders (n = 7,
+// h = 4: 120,960 walks per call): 4.31e9 walks, ~99% of the game's ~1,370 s.
+//
+// The walk is a left-to-right fold (PoWalkStep), so the orders form a tree of prefixes; this searches that tree
+// depth-first and stops at the first order that pays all n casts. Two exact collapses:
+//   * RELEASE ORDERS ARE CHOSEN WHERE THEY ACT. Under a release order `prio` a step taps the held hosts in prio
+//     order while its cast cannot be paid, so over a whole walk the hosts tap in prio order, each at the first
+//     cast that needs it. The search therefore branches over WHICH held host taps next only at a cast that
+//     cannot be paid without one: every such branch sequence is the walk under the release order that lists
+//     those hosts first, and every release order's walk is one such sequence -- the same set of walks as
+//     h! separate searches, sharing each prefix before the first tap.
+//   * (SET, STATE) IS VISITED ONCE. Two prefixes over the same set of casts that reach the same walk state have
+//     the same future: a later step reads only the state, the cast and the simulated hand, and the hand is a
+//     function of the set (PoRemoveFromHand drops the first card of each name, so the hand left after a set of
+//     exits does not depend on their order). The state compared is everything a later step reads: the pool
+//     (every ManaPool field), ripple liveness, the held ramp filters in stack order, each host's held flag
+//     plus, while held, its resolved bonus (a tapped host's bonus is never read again), and under a
+//     MTG_SAC_FODDER_MENU fodder pass every count of the fodder walk (PoSacFodderWalk). A repeat is never an
+//     ancestor (the set grows strictly down a path), so it was searched to the end and did not pay.
+// Exact: true iff some order of the casts pays under some release order, i.e. iff the candidate loop over every
+// permutation (with PoLandAuraWalkAnyRelease) would find one.
+namespace {
+struct PoAnyOrderSearch
+{
+    const GameState* state = nullptr;
+    const std::vector<Action>* acts = nullptr;
+    const std::vector<int>* order = nullptr;
+    const PoLandAuraHold* la = nullptr;
+    bool with_hand = false;
+    int n = 0;
+    int h = 0;
+    std::vector<PoWalkState> st;                  // [depth * (h + 1) + releases so far at this cast]
+    std::vector<std::vector<PoHandCard>> hands;   // [depth]
+    std::vector<std::uint32_t> arena;             // keys: [len, words...]
+    std::vector<std::uint32_t> slots;             // open addressing: arena offset + 1, 0 = empty
+    std::size_t used = 0;
+    bool busy = false;
+
+    PoWalkState& At(int d, int r) { return st[static_cast<std::size_t>(d * (h + 1) + r)]; }
+
+    static_assert(sizeof(ManaPool) == 11 * sizeof(int), "ManaPool changed: extend PoAnyOrderSearch::Pool");
+    void Pool(const ManaPool& p)
+    {
+        for (int v : { p.white, p.blue, p.black, p.red, p.green, p.colorless, p.wild, p.wild_c, p.wild_phantom,
+                       p.wild_conv, p.snow_units })
+        { arena.push_back(static_cast<std::uint32_t>(v)); }
+    }
+    std::uint64_t Hash(std::size_t at) const
+    {
+        const std::uint32_t len = arena[at];
+        std::uint64_t x = 0x9e3779b97f4a7c15ULL ^ len;
+        for (std::size_t j = 1; j <= len; ++j)
+        {
+            x ^= arena[at + j];
+            x *= 0xff51afd7ed558ccdULL;
+            x ^= x >> 32;
+        }
+        return x;
+    }
+    bool Same(std::size_t a, std::size_t b) const
+    {
+        const std::uint32_t len = arena[a];
+        if (arena[b] != len) { return false; }
+        return std::equal(arena.begin() + static_cast<std::ptrdiff_t>(a + 1),
+                          arena.begin() + static_cast<std::ptrdiff_t>(a + 1 + len),
+                          arena.begin() + static_cast<std::ptrdiff_t>(b + 1));
+    }
+    void Grow()
+    {
+        std::vector<std::uint32_t> old;
+        old.swap(slots);
+        slots.assign(old.empty() ? 256 : old.size() * 2, 0u);
+        const std::size_t mask = slots.size() - 1;
+        for (std::uint32_t v : old)
+        {
+            if (v == 0) { continue; }
+            std::size_t i = static_cast<std::size_t>(Hash(v - 1)) & mask;
+            while (slots[i] != 0) { i = (i + 1) & mask; }
+            slots[i] = v;
+        }
+    }
+    // Records (mask, w); false when that pair was already searched.
+    bool Insert(std::uint32_t mask, const PoWalkState& w)
+    {
+        const std::size_t at = arena.size();
+        arena.push_back(0);   // len, below
+        arena.push_back(mask);
+        Pool(w.pool);
+        arena.push_back(w.ripple_live ? 1u : 0u);
+        arena.push_back(static_cast<std::uint32_t>(w.feed.n));
+        for (int i = 0; i < w.feed.n; ++i)
+        {
+            const std::uint64_t v = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(w.feed.held[i]));
+            arena.push_back(static_cast<std::uint32_t>(v));
+            arena.push_back(static_cast<std::uint32_t>(v >> 32));
+        }
+        for (std::size_t k = 0; k < w.live.held.size(); ++k)
+        {
+            const bool held = w.live.held[k] != 0;
+            arena.push_back(held ? 1u : 0u);
+            if (held) { Pool(w.live.resolved[k]); }
+        }
+        if (w.sfw.sf != nullptr)   // MTG_SAC_FODDER_MENU: the fodder walk's counts (sf is fixed for one search)
+        {
+            for (int v : { w.sfw.outlets, w.sfw.fodder_outlets, w.sfw.bodies, w.sfw.pending, w.sfw.ever ? 1 : 0,
+                           w.sfw.old_b, w.sfw.old_p, w.sfw.old_eaten })
+            { arena.push_back(static_cast<std::uint32_t>(v)); }
+        }
+        arena[at] = static_cast<std::uint32_t>(arena.size() - at - 1);
+        if ((used + 1) * 2 > slots.size()) { Grow(); }
+        const std::size_t smask = slots.size() - 1;
+        std::size_t i = static_cast<std::size_t>(Hash(at)) & smask;
+        while (slots[i] != 0)
+        {
+            if (Same(slots[i] - 1, at)) { arena.resize(at); return false; }
+            i = (i + 1) & smask;
+        }
+        slots[i] = static_cast<std::uint32_t>(at + 1);
+        ++used;
+        return true;
+    }
+    // The search below a node whose state is `cur` at depth d over the cast set `mask`.
+    bool Rec(int d, std::uint32_t mask, const PoWalkState& cur)
+    {
+        for (int p = 0; p < n; ++p)
+        {
+            const std::uint32_t bit = 1u << p;
+            if (mask & bit) { continue; }
+            PoWalkState& w = At(d + 1, 0);
+            w = cur;
+            std::vector<PoHandCard>* hp = nullptr;
+            if (with_hand)
+            {
+                hands[static_cast<std::size_t>(d + 1)] = hands[static_cast<std::size_t>(d)];
+                hp = &hands[static_cast<std::size_t>(d + 1)];
+            }
+            ManaCost cost;
+            const int idx = (*order)[static_cast<std::size_t>(p)];
+            const bool pays_mana = PoWalkCost((*acts)[static_cast<std::size_t>(idx)], hp, cost);
+            if (!pays_mana) { PoWalkAltCost(w, (*acts)[static_cast<std::size_t>(idx)]); }
+            if (!pays_mana ? Child(d, mask | bit, w) : Cast(d, mask | bit, idx, 0, cost)) { return true; }
+        }
+        return false;
+    }
+    // Cast acts[idx] from At(d + 1, r), tapping held hosts (each choice a branch) while it cannot be paid.
+    bool Cast(int d, std::uint32_t m2, int idx, int r, const ManaCost& cost)
+    {
+        PoWalkState& w = At(d + 1, r);
+        if (la != nullptr && !w.pool.CanPay(cost))
+        {
+            bool any_held = false;
+            for (int k = 0; k < h; ++k)
+            {
+                if (!w.live.held[static_cast<std::size_t>(k)]) { continue; }
+                any_held = true;
+                PoWalkState& w2 = At(d + 1, r + 1);
+                w2 = w;
+                PoWalkRelease(w2, *la, k);
+                if (Cast(d, m2, idx, r + 1, cost)) { return true; }
+            }
+            if (any_held) { return false; }
+            // No held host left: the walk's last resort, sac-for-mana fodder (PoWalkPay's TryEat; it eats
+            // only once every held host has tapped, exactly as PoWalkStep).
+        }
+        return PoWalkPay(*state, *acts, idx, w, cost, la) && Child(d, m2, w);
+    }
+    bool Child(int d, std::uint32_t m2, const PoWalkState& w)
+    {
+        if (m2 == (1u << n) - 1u) { return true; }
+        if (!Insert(m2, w)) { return false; }
+        return Rec(d + 1, m2, w);
+    }
+};
+}   // namespace
+
+// `hand0` null -> the walk without a simulated hand (FirstUnpayablePosImpl's hand == nullptr). n <= 31 (the set
+// is a bit mask; the decider calls it for n <= 7).
+static bool PoAnyOrderPays(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order,
+                           const ManaPool& pool0, const std::vector<PoHandCard>* hand0, const PoLandAuraHold* la)
+{
+    thread_local PoAnyOrderSearch tl;   // reused scratch; a nested call (never expected) gets its own
+    PoAnyOrderSearch local;
+    PoAnyOrderSearch& s = tl.busy ? local : tl;
+    struct Busy { bool& b; explicit Busy(bool& v) : b(v) { b = true; } ~Busy() { b = false; } } busy(s.busy);
+    s.state = &state;
+    s.acts = &acts;
+    s.order = &order;
+    s.la = la;
+    s.with_hand = hand0 != nullptr;
+    s.n = static_cast<int>(order.size());
+    s.h = la != nullptr ? static_cast<int>(la->hosts.size()) : 0;
+    const std::size_t need = static_cast<std::size_t>((s.n + 1) * (s.h + 1));
+    if (s.st.size() < need) { s.st.resize(need); }
+    if (s.with_hand && s.hands.size() < static_cast<std::size_t>(s.n + 1)) { s.hands.resize(static_cast<std::size_t>(s.n + 1)); }
+    s.arena.clear();
+    if (s.slots.size() > 4096) { s.slots.clear(); s.slots.shrink_to_fit(); }
+    std::fill(s.slots.begin(), s.slots.end(), 0u);
+    s.used = 0;
+    PoWalkState& root = s.At(0, 0);
+    PoWalkStart(state, root, pool0, la);
+    if (la == nullptr) { root.live.held.clear(); root.live.resolved.clear(); }
+    if (s.with_hand) { s.hands[0] = *hand0; }
+    return s.Rec(0, 0u, root);
 }
 
 static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
@@ -6771,7 +7033,7 @@ namespace
 struct PayableOrderStats
 {
     std::atomic<long long> domain[2]{}, default_pays[2]{}, bound_fail[2]{}, hoist[2]{}, perm[2]{},
-                           none[2]{};
+                           none[2]{}, anyorder_mismatch[2]{};
     ~PayableOrderStats()
     {
         if (!EnvOn("MTG_PAYABLE_ORDER_STATS")) { return; }
@@ -6780,9 +7042,9 @@ struct PayableOrderStats
         {
             std::fprintf(stderr,
                          "[payable-order] site=%s in_domain=%lld default_pays=%lld bound_fail=%lld "
-                         "hoist_rescue=%lld perm_rescue=%lld none_pays=%lld\n",
+                         "hoist_rescue=%lld perm_rescue=%lld none_pays=%lld anyorder_verify_mismatch=%lld\n",
                          kSite[k], domain[k].load(), default_pays[k].load(), bound_fail[k].load(),
-                         hoist[k].load(), perm[k].load(), none[k].load());
+                         hoist[k].load(), perm[k].load(), none[k].load(), anyorder_mismatch[k].load());
         }
     }
 };
@@ -6795,6 +7057,105 @@ int Inversions(const std::vector<int>& perm, const std::vector<int>& rank_of)
     { for (std::size_t j = i + 1; j < perm.size(); ++j) { if (rank_of[perm[i]] > rank_of[perm[j]]) { ++inv; } } }
     return inv;
 }
+
+// THE DECIDER'S CANDIDATE ORDER, built once per shape. The nearest-payable search below walks every
+// permutation of the given order (n <= 7; single insertion moves above that) sorted by inversions against
+// the anchor, then against the given order, then lexicographically. That sequence is a pure function of
+// (n, anc_rank) -- def_rank is the identity -- so it is computed once per thread and shape and replayed:
+// the same candidates in the same order, without rebuilding and re-sorting up to 5040 vectors per call.
+// Flattened: candidate c occupies perms[c * n .. c * n + n).
+struct PoCandOrder { int n = 0; std::vector<std::uint16_t> perms; };
+const PoCandOrder& PoSortedCandidates(int n, const std::vector<int>& anc_rank)
+{
+    thread_local std::map<std::vector<int>, PoCandOrder> cache;   // key: anc_rank (its size is n)
+    auto it = cache.find(anc_rank);
+    if (it != cache.end()) { return it->second; }
+    std::vector<int> def_rank(n);
+    for (int p = 0; p < n; ++p) { def_rank[p] = p; }
+    struct Cand { int k1, k2; std::vector<int> perm; };
+    std::vector<Cand> cands;
+    auto add = [&](const std::vector<int>& perm)
+    { cands.push_back({ Inversions(perm, anc_rank), Inversions(perm, def_rank), perm }); };
+    std::vector<int> perm(n);
+    for (int p = 0; p < n; ++p) { perm[p] = p; }
+    if (n <= 7)
+    {
+        // next_permutation from the identity walks every permutation in lexicographic order.
+        while (std::next_permutation(perm.begin(), perm.end())) { add(perm); }
+    }
+    else
+    {
+        for (int from = 0; from < n; ++from)
+        {
+            for (int to = 0; to < n; ++to)
+            {
+                if (to == from) { continue; }
+                std::vector<int> m(perm);
+                const int x = m[from];
+                m.erase(m.begin() + from);
+                m.insert(m.begin() + to, x);
+                add(m);
+            }
+        }
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+    {
+        if (a.k1 != b.k1) { return a.k1 < b.k1; }
+        if (a.k2 != b.k2) { return a.k2 < b.k2; }
+        return a.perm < b.perm;
+    });
+    PoCandOrder& out = cache[anc_rank];
+    out.n = n;
+    out.perms.reserve(cands.size() * static_cast<std::size_t>(n));
+    for (const Cand& c : cands) { for (int v : c.perm) { out.perms.push_back(static_cast<std::uint16_t>(v)); } }
+    return out;
+}
+
+// FAILED PREFIXES of one decider call, per release order. The plain order walk (FirstUnpayablePosImpl) is a
+// left-to-right fold: its state on reaching position p -- pool, held hosts and their resolved bonus, the
+// held ramp filters, ripple liveness, the simulated hand -- is a function of the casts at positions 0..p-1
+// alone (plus the call's fixed inputs: state, acts, starting pool, hand, the hold), and nothing in it reads
+// a later position. So a walk that FAILS at position f fails at f for every order sharing positions 0..f,
+// and walking such an order again can only repeat that answer. Keyed by the given order's POSITIONS (one
+// call fixes the map from position to cast), one trie per release order of the held land-Aura hosts.
+struct PoFailTrie
+{
+    int n = 0;
+    std::vector<int>  child;   // node * n + position -> child node, -1 = none; node 0 is the root
+    std::vector<char> fail;    // a walk failed at this node's last position
+    void Reset(int n_) { n = n_; child.assign(static_cast<std::size_t>(n_), -1); fail.assign(1, 0); }
+    // True when a recorded failed prefix is a prefix of `pp`.
+    bool Fails(const std::uint16_t* pp) const
+    {
+        int node = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            node = child[static_cast<std::size_t>(node * n + pp[i])];
+            if (node < 0) { return false; }
+            if (fail[static_cast<std::size_t>(node)]) { return true; }
+        }
+        return false;
+    }
+    // Record that every order starting with pp[0..len) fails.
+    void Insert(const std::uint16_t* pp, int len)
+    {
+        int node = 0;
+        for (int i = 0; i < len; ++i)
+        {
+            const std::size_t slot = static_cast<std::size_t>(node * n + pp[i]);
+            int next = child[slot];
+            if (next < 0)
+            {
+                next = static_cast<int>(fail.size());
+                fail.push_back(0);
+                child.resize(child.size() + static_cast<std::size_t>(n), -1);
+                child[slot] = next;
+            }
+            node = next;
+        }
+        fail[static_cast<std::size_t>(node)] = 1;
+    }
+};
 }   // namespace
 
 // MTG_DOMAIN_WIDEN_ORDER (DEFAULT ON; =0 -> wideners are not producers). A coloured permanent cast
@@ -7050,7 +7411,40 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
         return PoLandAuraWalkAnyRelease(la_p, [&]
         { hand = hand0; return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p) < 0; });
     };
-    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return true; }
+    // pays(ord) where ord[p] == order[pp[p]], skipping every walk a recorded failed prefix already answers
+    // (PoFailTrie): the same verdict, release order for release order, as pays() -- which it calls outright
+    // for the vial / widen / exact walks. Release orders run in PoLandAuraWalkAnyRelease's sequence and leave
+    // `prio` exactly as it does (sorted again after a full miss).
+    std::vector<PoFailTrie> fail_tries;   // one per release order; allocated on first use
+    auto pays_at = [&](const std::vector<int>& ord, const std::uint16_t* pp) -> bool
+    {
+        if ((vial_treasure_maker && !in_vial_order_walk) || widen_only || exact) { return pays(ord); }
+        auto walk_fp = [&]() -> int
+        {
+            if (producer_only) { return FirstUnpayablePosImpl(state, acts, ord, la_pool0, nullptr, la_p); }
+            hand = hand0;
+            return FirstUnpayablePosImpl(state, acts, ord, la_pool0, &hand, la_p);
+        };
+        auto try_release = [&](std::size_t ri) -> bool
+        {
+            if (fail_tries.size() <= ri) { fail_tries.resize(ri + 1); }
+            PoFailTrie& t = fail_tries[ri];
+            if (t.n == 0) { t.Reset(static_cast<int>(ord.size())); }
+            if (t.Fails(pp)) { return false; }
+            const int fp = walk_fp();
+            if (fp < 0) { return true; }
+            t.Insert(pp, fp + 1);
+            return false;
+        };
+        if (la_p == nullptr || la_p->prio.size() < 2) { return try_release(0); }
+        std::sort(la_p->prio.begin(), la_p->prio.end());
+        std::size_t ri = 0;
+        do { if (try_release(ri++)) { return true; } } while (std::next_permutation(la_p->prio.begin(), la_p->prio.end()));
+        return false;
+    };
+    std::vector<std::uint16_t> ident_pp(order.size());
+    for (std::size_t p = 0; p < ident_pp.size(); ++p) { ident_pp[p] = static_cast<std::uint16_t>(p); }
+    if (pays_at(order, ident_pp.data())) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return true; }
 
     // Order-free necessary condition: every cast at its cheapest (reveal granted) against the pool
     // plus EVERY producer's output. A sequential payment implies this aggregate one, so failing it
@@ -7151,10 +7545,17 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
 
     // (1) The maker hoist (ApplyEtbTreasureFundingOrder's order), judged reveal-aware.
     std::vector<int> hoisted, rest;
-    for (int i : order) { (IsFundingProducerCast(acts[i]) ? hoisted : rest).push_back(i); }
+    std::vector<std::uint16_t> hoisted_pp, rest_pp;
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        const bool mk = IsFundingProducerCast(acts[order[p]]);
+        (mk ? hoisted : rest).push_back(order[p]);
+        (mk ? hoisted_pp : rest_pp).push_back(static_cast<std::uint16_t>(p));
+    }
     const bool has_maker = !hoisted.empty() && !rest.empty();
     hoisted.insert(hoisted.end(), rest.begin(), rest.end());
-    if (has_maker && hoisted != order && pays(hoisted))
+    hoisted_pp.insert(hoisted_pp.end(), rest_pp.begin(), rest_pp.end());
+    if (has_maker && hoisted != order && pays_at(hoisted, hoisted_pp.data()))
     {
         order.swap(hoisted);
         g_po_stats.hoist[site].fetch_add(1, std::memory_order_relaxed);
@@ -7163,8 +7564,24 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
 
     // (2) Nearest payable permutation. Work in POSITIONS of the given order (0..n-1).
     const int n = static_cast<int>(order.size());
-    std::vector<int> def_rank(n), anc_rank(n);
-    for (int p = 0; p < n; ++p) { def_rank[p] = p; }
+    // Every permutation is a candidate (n <= 7), so when no order of these casts pays at all -- the common
+    // case at the enumeration site -- the loop below walks all of them to return nothing. PoAnyOrderPays
+    // decides that exactly (same walk, same release orders) without enumerating them; when some order does
+    // pay, the loop runs as before and finds the nearest one. The identity and the hoist are not candidates
+    // there and are known not to pay here, so "some order pays" means some candidate does.
+    // MTG_PO_ANYORDER_VERIFY=1 (diagnostic, default off): run the loop anyway and count every call where it
+    // disagrees with PoAnyOrderPays (printed with MTG_PAYABLE_ORDER_STATS; must stay 0).
+    static const bool s_any_verify = EnvOn("MTG_PO_ANYORDER_VERIFY");
+    const bool any_checked = n >= 3 && n <= 7 && !(vial_treasure_maker && !in_vial_order_walk) && !widen_only
+                          && !exact;
+    const bool any_none = any_checked
+                       && !PoAnyOrderPays(state, acts, order, la_pool0, producer_only ? nullptr : &hand0, la_p);
+    if (any_none && !s_any_verify)
+    {
+        g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    std::vector<int> anc_rank(n);
     {
         // anchor = the hoisted order when a maker is present, else the given order
         std::vector<int> anc_pos;
@@ -7176,50 +7593,24 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
         else { for (int p = 0; p < n; ++p) { anc_pos.push_back(p); } }
         for (int r = 0; r < n; ++r) { anc_rank[anc_pos[r]] = r; }
     }
-    struct Cand { int k1, k2; std::vector<int> perm; };
-    std::vector<Cand> cands;
-    auto add = [&](const std::vector<int>& perm)
-    { cands.push_back({ Inversions(perm, anc_rank), Inversions(perm, def_rank), perm }); };
-    std::vector<int> perm(n);
-    for (int p = 0; p < n; ++p) { perm[p] = p; }
-    if (n <= 7)
-    {
-        // next_permutation from the identity walks every permutation in lexicographic order.
-        while (std::next_permutation(perm.begin(), perm.end())) { add(perm); }
-    }
-    else
-    {
-        for (int from = 0; from < n; ++from)
-        {
-            for (int to = 0; to < n; ++to)
-            {
-                if (to == from) { continue; }
-                std::vector<int> m(perm);
-                const int x = m[from];
-                m.erase(m.begin() + from);
-                m.insert(m.begin() + to, x);
-                add(m);
-            }
-        }
-    }
-    std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
-    {
-        if (a.k1 != b.k1) { return a.k1 < b.k1; }
-        if (a.k2 != b.k2) { return a.k2 < b.k2; }
-        return a.perm < b.perm;
-    });
+    // Every permutation (n <= 7) or single insertion move, nearest first (PoSortedCandidates).
+    const PoCandOrder& cands = PoSortedCandidates(n, anc_rank);
+    const std::size_t n_cands = cands.perms.size() / static_cast<std::size_t>(n);
     std::vector<int> trial(n);
-    for (const Cand& c : cands)
+    for (std::size_t c = 0; c < n_cands; ++c)
     {
-        for (int p = 0; p < n; ++p) { trial[p] = order[c.perm[p]]; }
+        const std::uint16_t* perm = cands.perms.data() + c * static_cast<std::size_t>(n);
+        for (int p = 0; p < n; ++p) { trial[p] = order[perm[p]]; }
         if (trial == hoisted && has_maker) { continue; }   // already judged above
-        if (pays(trial))
+        if (pays_at(trial, perm))
         {
+            if (any_none) { g_po_stats.anyorder_mismatch[site].fetch_add(1, std::memory_order_relaxed); }
             order = trial;
             g_po_stats.perm[site].fetch_add(1, std::memory_order_relaxed);
             return true;
         }
     }
+    if (any_checked && !any_none) { g_po_stats.anyorder_mismatch[site].fetch_add(1, std::memory_order_relaxed); }
     g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
     return false;
 }
