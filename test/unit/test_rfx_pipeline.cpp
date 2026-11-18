@@ -2461,9 +2461,24 @@ TEST_CASE("rfx step 9d: Loran's scry is SEARCHED (pinned twin, both worlds) and 
     }
     CHECK(pins == std::set<int>{ -1, 1 });
     CHECK(checked >= 2);
-    // A firm card -- Blasphemous Act while we hold no sweeper: KEEP -- leaves one candidate: no twin (unless lifted).
+    // A firm card -- Blasphemous Act while we hold no sweeper: KEEP. The fan is sized off the look COUNT, never off the
+    // hidden top (no clairvoyance about the look), so the twin still exists; the verdict applies at RESOLUTION, where it
+    // leaves one candidate: the twin's pin clamps to it and the Act stays on top in both variants (unless lifted).
+    const GameState firm_board = ScryBoard("Blasphemous Act");
+    const int act_num = firm_board.players[0].library[0].m_number;
     std::set<int> firm;
-    for (const auto& p : TurnSolver::EnumerateMainPlans(ScryBoard("Blasphemous Act"), true))
-    { for (const Action& a : p.actions) { if (a.card_name.str() == "Loran's Escape") { firm.insert(a.scry_pin); } } }
-    CHECK(firm == (DecisionUnpruned(UnprunedGate::StuffyScry) ? std::set<int>{ -1, 1 } : std::set<int>{ -1 }));
+    for (const auto& p : TurnSolver::EnumerateMainPlans(firm_board, true))
+    {
+        const Action* esc = nullptr;
+        for (const Action& a : p.actions) { if (a.card_name.str() == "Loran's Escape") { esc = &a; } }
+        if (esc == nullptr) { continue; }
+        firm.insert(esc->scry_pin);
+        GameState roll = firm_board;
+        TurnSolver::ApplyPlan(roll, p, true);
+        const auto& lib = roll.players[0].library;
+        REQUIRE(!lib.empty());
+        const bool bottomed = lib[lib.size() - 1].m_number == act_num;
+        CHECK(bottomed == (esc->scry_pin == 1 && DecisionUnpruned(UnprunedGate::StuffyScry)));
+    }
+    CHECK(firm == std::set<int>{ -1, 1 });
 }

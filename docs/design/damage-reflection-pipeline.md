@@ -1828,3 +1828,64 @@ Where the code departs from the sections above, and why. Each entry names the sy
 * **d0 sanity (50 games, seed 1, as steps 10 / 9b):** 44 won, avg win turn 5.386 (metric avg 5.82): the same win turns
   game by game; 4 of 50 games changed play (digest 55be46e7fc8282d0 vs ff108cd1992a1493) -- the d0 runner takes no
   hold (beyond the horizon), so this is the cast order. No abort / tripwire.
+
+
+### Step 9d (Loran's Escape same-plan targets; the searched Loran's scry)
+
+* **How the Escape's target is bound (finding).** At ENUMERATION: CollectActions emits one cast variant per target
+  (`enchant_target` = a battlefield id, or `trick_hand_target` = a same-plan hand card's name), and both apply worlds
+  replay that pin. Guilty Conscience is different: its hosts are `LegalEnchantTargets` (battlefield only), so a GC on
+  a creature cast this turn is reached only through a breakpoint continuation after that creature enters. So the
+  step-9b prune, which read the battlefield only, both (1) missed a GC cast earlier in the same plan and (2) dropped
+  every same-plan hand target. Shape chosen: **(b)** -- the enumeration admits the same-plan targets; late binding
+  (a) would have been a resolution-time single pick inside the window.
+* **The rule (`StuffyDollProvider::IndestructibleGrantTargetCandidates`, restrict-only, `MTG_UNPRUNE=escapetarget`):**
+  (1) a GC'd creature of ours on the battlefield -> it (unchanged); else the UNION of (2a) with a Guilty Conscience in
+  hand, the creatures it would enchant -- the battlefield hosts the GC-host prune admits (indestructible ones mapped to
+  the no-effect representative) plus the best same-plan hand reflector -- and (2b) the highest-power non-Doll
+  reflector over battlefield AND hand (ties: battlefield first); (3) when nothing kept is on the battlefield, the
+  castable-alone line is added (best battlefield reflector, else the scry-only representative); (4) nothing kept ->
+  the engine's list. Executor, rollout and d0 runner all read CollectActions, so one prune governs them; the viewer
+  offers every legal target (unchanged).
+* **Deviation (disclosed):** no per-plan consistency filter -- a plan may cast GC on X and the Escape on Y (both
+  admitted). The restriction is per cast and read at enumeration; it widens by at most one or two targets.
+* **The scry is SEARCHED (engine).** New `Action::scry_pin` (int8; -1 unpinned = the provider's disposition, k >= 1 =
+  the k-th alternative of `TopDispositionCandidates(Scry)`), carried by `CastRiders` into both worlds' resolution (a
+  `ScriptedTopChoice` over `ResolveSoloTargetTrick`: apply_one, and EffectHandler via `StackEntry::scry_pin`), recorded
+  on breakpoint-continuation records, folded set-gated into plan_signature, ActionFoldSig, the effect signature, the
+  BP fingerprint, the action-equality test and the plan-diff tool. CollectActions twins each Escape target variant
+  once per alternative disposition of the look, **sized off the look COUNT only** (ordered subsets of `cast_scry`
+  cards, capped by `MTG_SCRY_WIDTH`; scry 1 -> one twin), never off the cards on top: the player has not seen them
+  when choosing the line. The disposition and the verdict are read only at RESOLUTION (`ChooseTopDisposition` ->
+  `TopDispositionCandidates` on the card the scry sees); a firm verdict leaves one candidate, the twin's pin clamps to
+  it and the twin duplicates its base (the base is enumerated first and wins the tie). Same shape as the Ponder ORDER
+  axis. A rollout leaf emits only the base (the madness precedent: beyond the horizon the playout policy is the
+  provider's default). Only `solo_target_trick` cards with `cast_scry` reach it -- Loran's Escape alone, only in Stuffy
+  Doll. Never under human play.
+* **Clairvoyance review (parent, 2026-11-18).** The WIP sized the fan with `TopDispositionCandidates` over the CURRENT
+  library top at enumeration, so whether the twin existed depended on the hidden card (and a same-plan draw could
+  drop a needed twin). Fixed as above. Note the precedent it copied, the land-ETB `Plan::scry_choice` axis
+  (`EnumeratePlansWithLand`), still sizes off `TopDispositionCandidates` over the current top (and so reads
+  `ScryVerdict` on the unseen card at enumeration); the shipped search is clairvoyant about the base draw order by
+  doctrine (TurnSolver.cpp "Clairvoyance is what makes the rule exact"), so that read adds no information the rollouts
+  lack, but it is not the honest shape. Left for the engine-wide scry inventory.
+* **What the prune buys now.** It is a resolution-time DECISION prune (the firm card is never bottomed by a twin), not
+  an enumeration saving: every Escape target variant carries its twin in the searched collect. An honest
+  enumeration-time saving would need a verdict that does not depend on the unseen card.
+* **The prune (`StuffyDollProvider::ScryVerdict`, `MTG_UNPRUNE=stuffyscry`):** KEEP a missing combo piece (a reflector
+  when we control and hold none; a sweeper when we hold none) or a land when short (lands in play + hand < 5, the
+  Doll's cost); BOTTOM a land when flooded (>= 7); otherwise no verdict (both searched). `ScryKeepOnTop` returns the
+  verdict when firm (else the generic rule), so a firm card leaves exactly one candidate (the playout / d0 default
+  follows the same rule).
+* **Other `ChooseTopDisposition` sites seen (the engine-wide inventory is NOT this step):** `ScryTop` (land ETB scry
+  -- `Plan::scry_choice`; spell `cast_scry` in `EffectHandler.cpp` ~990/~1110 and `SpellEffects.h` / TurnSolver
+  apply_one's cantrip branch -- Magma Jet, Preordain; Curator's discard scry `ResolveDiscardScryTriggers`; the
+  Galadriel chain), `SurveilTop`, `ReorderTopOrShuffle` (Ponder: `ponder_choice` / `ponder_keep`).
+* **Verification.** Unit 3468/3468 (4 new 9d cases); under `MTG_UNPRUNE=redirectwindow,gchost,escapetarget,stuffyscry`
+  the rfx cases pass except two step-10 fold tests that `redirectwindow` alone lifts (they assert the pruned list;
+  not 9d). Scenarios 580/580, incl. the new `stuffy_hand_reckoner_gc_escape_act` (T4; the step-9c binary won T5).
+  `provider_audit.py --check` clean; static viewer audit lists `scry` among Stuffy's expected decisions, rc 0.
+  Smoke: 219/219 jobs digest-identical to step 9c (the 44 FAILs are the stale origin GT, pre-existing).
+* **d0 sanity (50 games, seed 1):** 44 won, avg win turn 5.386 (metric avg 5.82), the same win turns game by game; 9 of
+  50 games changed play (digest 55be46e7fc8282d0 -> 54b7c0312d42fd02): the Stuffy `ScryKeepOnTop` default is now the
+  verdict rule.

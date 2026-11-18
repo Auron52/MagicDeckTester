@@ -43650,17 +43650,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 // THE SCRY IS SEARCHED (step 9d; USER 2026-11-17 ~23:25: "It should be searched and typically overridden
                 // by a provider ... This is the kind of thing worth a prune."). Each target variant is twinned per
-                // ALTERNATIVE disposition of the look this cast can predict -- the library top now (k >= 1, pinned by
-                // Action::scry_pin; the untwinned variant is the provider's disposition, candidate 0). The provider's
-                // ScryVerdict prunes the alternatives inside TopDispositionCandidates, so a firm verdict emits no twin.
-                // Resolution re-reads the real top and clamps the index (a same-plan draw before the Escape costs a
-                // duplicate line, never a lost one). Never under human play (the viewer's scry prompt asks).
+                // ALTERNATIVE disposition of the look (k >= 1, pinned by Action::scry_pin; the untwinned variant is
+                // candidate 0, the provider's disposition).
+                // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is SIZED OFF THE LOOK COUNT ONLY (every ordered subset of
+                // `look` cards, capped by MTG_SCRY_WIDTH, as the land-ETB axis caps it), never off the cards now on top
+                // -- the player has not seen them when choosing the line. The Ponder ORDER axis is the precedent (sized
+                // off the library size, pin clamped at resolution). The disposition, and the provider's ScryVerdict
+                // prune, are read only at RESOLUTION (ChooseTopDisposition -> TopDispositionCandidates on the card the
+                // scry actually sees): a firm verdict leaves one candidate, so a twin's pin clamps to candidate 0 and the
+                // twin is a duplicate of its base (scores identically, the base is enumerated first and wins the tie).
+                // A same-plan draw before the Escape therefore costs nothing extra and never loses a line.
+                // A ROLLOUT LEAF emits only the base (the madness precedent: beyond the horizon the permitted playout
+                // policy is the provider's default, so a twin there would only re-estimate the same line). Never under
+                // human play (the viewer's scry prompt asks).
                 int scry_alts = 0;
-                if (def.params.cast_scry > 0 && !HumanPlayActive() && !ap.library.empty())
+                if (def.params.cast_scry > 0 && !HumanPlayActive() && !ap.library.empty()
+                    && (g_search_candidate_enum || g_condemn_root_turn < 0))
                 {
                     const int look = std::min(def.params.cast_scry, static_cast<int>(ap.library.size()));
-                    const std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
-                    scry_alts = std::min(126, static_cast<int>(TopDispositionCandidates(state, looked, LookKind::Scry).size()) - 1);
+                    std::size_t disp = 0;   // ordered subsets kept on top: sum_j look!/(look-j)!
+                    for (int j = 0; j <= look; ++j)
+                    {
+                        std::size_t perm = 1;
+                        for (int f = look - j + 1; f <= look; ++f) { perm *= static_cast<std::size_t>(f); }
+                        disp += perm;
+                    }
+                    scry_alts = std::min(126, static_cast<int>(std::min(disp, ScrySearchWidth())) - 1);
                 }
                 for (const auto& t : esc)
                 {
