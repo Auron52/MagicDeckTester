@@ -19242,8 +19242,13 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
         // Kessig Wolf Run (TapTargetPump) gets the Voldaren Estate hold for the same reason: it is a MANA
         // land ({C}) whose ability owes its {T}, so a cast's greedy payment could tap it and strand the
         // pump the plan was scored on. New-mode-gated: no other deck holds one.
+        // ...and Maze's End's return-self fetch (F1, sweep 61001 gi1): a {C} land whose activation owes its {T}, so a
+        // plan "put Talon Gates, then activate Maze's End" had Talon's {4} paid WITH Maze's End and the activation
+        // stranded. Gated on tap_tutor_put_return_self: Seahunter (a creature, no mana) keeps the lever's behaviour.
+        const bool maze_hold = a.ability_mode == Action::AbilityMode::TapTutorPut && a.def != nullptr
+                            && a.def->params.tap_tutor_put_return_self;
         if (!lever && a.ability_mode != Action::AbilityMode::TapBlood
-            && a.ability_mode != Action::AbilityMode::TapTargetPump) { continue; }
+            && a.ability_mode != Action::AbilityMode::TapTargetPump && !maze_hold) { continue; }
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
@@ -51254,6 +51259,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.direct_damage  = 0;
                 a.eval           = 1;
                 a.is_noncreature = true;
+                // Its OWN mana, the same-turn producer credit every put/rock carries (F1, sweep 61001 gi1): Talon
+                // enters UNTAPPED and taps for {C} at once, so a plan "put Talon, then activate Maze's End" is
+                // funded partly by Talon. Without the credit the subset gates priced the pair against the board
+                // alone and never offered it, at any budget (T5: {4} + {3} against 6 + Talon's 1). Credited only
+                // once the board can pay the put itself (the rock branch's guard), so it never funds its own {4}.
+                a.rock_mana.colorless = 1;
                 actions.push_back(std::move(a));
             }
         }
@@ -79309,6 +79320,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Manabond's optional end-step dump (Maze's End I3; the searched crossing-land pin). Lockstep twin in the
     // other world, same position. Deck-gated -> a no-op for every other deck.
     PerformEndStepManabond(state);
+    TryOffMainAltWinActivation(state);   // Maze's End's off-main WIN (F1 defect 4; executor twin, same position)
     PerformEndStepAbidingGrace(state, grace_snapshot);
     // Reaper's morbid destroy + Sire's discard (lockstep twin of GameEngine::EndStep, same position/order).
     PerformEndStepMorbidDestroy(state, morbid_triggers);
@@ -79483,6 +79495,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
+        TryOffMainAltWinActivation(state);   // ...after a Burgeoning put (F1 defect 4; executor twin)
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
         if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }   // Soulstoke (twin)
@@ -79515,7 +79528,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // realises earlier. Twelve call sites read this function's turn counter; fixing it here fixes
     // all of them, and SimulateToEndImpl's loop-head check turns the frozen counter into an
     // immediate return rather than a replayed turn.
-    if (state.opponent_decked) { return true; }
+    // ...and the same for Maze's End's off-main WIN (our end step / their turn, TryOffMainAltWinActivation): the
+    // executor credits it to OUR turn (CheckWinCondition before the increment), so the rollout must too.
+    if (state.opponent_decked || state.won_by_effect) { return true; }
 
     // Start of next turn: ++turn_number, or a pending EXTRA turn (the round stays; GameState::
     // AdvanceTurnCounter, shared with GameEngine::RunTurnFrom). ++turn_number for every other deck.
