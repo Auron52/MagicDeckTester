@@ -257,3 +257,9 @@ Resolved / non-play findings:
   `scripts/safe_worktree_remove.sh` after check_references_safe. Next: overnight tier once
   (`--overnight --deck=onedropburn,onedropburn2hg`, accept same filter), verify_deck, tie-break, viewer audit,
   discard A/B, report, push (none yet this session), CronDelete 01e1d807.
+* **~05:45 UTC: ATTRIBUTED -- midrangeburn2hg_regression_d5_s2002 drift is UPSTREAM.** The pre-session tip
+  17262a61f (worktree build, since removed via safe_worktree_remove) gives the SAME got=5.9467/bf75dda8b8606139
+  (audit: 1 faster, 0 slower). Not ours; left UNACCEPTED for the deck's owner (surfaced to the USER).
+  RUNNING: `bash test/regression.sh --overnight --deck=onedropburn,onedropburn2hg` -> logs/1dropburn/overnight.log
+  (`rc=` line on completion). Then accept with the same filter + check_gt_logs, then verify_deck, tie-break,
+  viewer audit, discard A/B, report, push (none yet this session), CronDelete 01e1d807.
