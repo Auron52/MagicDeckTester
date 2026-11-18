@@ -4099,3 +4099,11 @@ Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
   `rec_short` (a recorded-continuation step short in the executor = DEFECT). Adoption bar for F1+F2 (F3 task 1): all
   9 held-out slower rows recover at d8 b0. V1's gi49 / gi122 now win at the d0 turn at b20. Full write-up:
   `logs/maze/F3-results.md`.
+- **OPEN (found by F3's verify_deck, 2026-11-18): fd-diverge s7009 gi8 d5 b20 (the mismatch gate's default seeds),
+  predicted T4, realised T5.** Pre-existing on F2's tree (5ea2d6be7), absent on dab956a9d. The T4 prediction is fix
+  4's end-step winning activation (Manabond's dump window).
+  - The executor ends T4's main phase with both Maze's Ends tapped: the second one paid the recorded continuation's
+    Amulet of Vigor.
+  - The rollout's matching end-step board has Maze's End #2 untapped and The Black Gate still in hand.
+  - Leave-one-out: without fix 1 or without fix 2a, the realised game wins T4.
+  - The mismatch gate FAILS on it. Repro and evidence: `logs/maze/F3-results.md` ("The new fd-diverge").
