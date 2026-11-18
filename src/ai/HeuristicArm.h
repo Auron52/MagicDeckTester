@@ -1039,6 +1039,8 @@ enum Slot : int
     LEAF_GAME_OVER,           // MTG_LEAF_GAME_OVER        a depth-0 frame whose game is ALREADY WON (a turn-boundary win: Maze's End's off-main win at our end step / their turn, a deck-out at their draw -- SimulateEndAndStartNextTurn returns without advancing the counter) answers that win at state.turn_number instead of scoring the state as a horizon leaf. The no-leaf constant answered "no win" and the value model an estimate, so a leafless node at turn T with depth 1 missed T's end-step win that the same node at depth 2 finds: the menu depended on the remaining depth, and the depth-free in-window cache (MTG_INWIN_CACHE) served that "no win by T" to deeper nodes (Maze's End s3076 gi73: T5 at d5 b0, T6 at d6-d8 b0). The rollout leaf already plays the won state out to T. A soundness fix; default ON; =0 -> the old leaf (A/B hatch only)
     SOLVE_MEMO_BIND_GUARD,    // MTG_SOLVE_MEMO_BIND_GUARD  RC-1 soundness fix, DEFAULT ON: the greedy Solve memo does not store a walk a budget test CUT (budgetbind::t_binds moved; the charged walk, MTG_SOLVE_CHARGE). =0 restores the old store rule (A/B control only). See solvememo::BindGuardOn in TurnSolver.cpp
     LEAF_WIN_BIND_GUARD,      // MTG_LEAF_WIN_BIND_GUARD    RC-1 soundness fix, DEFAULT ON: the leaf table stores a rollout's WIN only when no truncation or budget bind happened beneath it (the no-win store's and the rollout game cache's watermark). =0 restores the old store rule (A/B control only). See the win store in SimulateToEnd
+    MAZE_CASTDOM_WINDOWS,     // MTG_MAZE_CASTDOM_WINDOWS  Maze's End P7c (a): the fold's off-main Maze's End keep (MazesEndProvider::CastDominanceKeep) needs a P6 WINDOW -- a Manabond, or a Burgeoning while the opponent plays lands, controlled or cast by the plan (held, when the plan opens a breakpoint) -- and a fetchable Gate in the library; every other off-main point shows the last main's board, where the activation is already a searched plan action. Default ON (sound); =0 -> the P7b guard (mana alone)
+    MAZE_CASTDOM_PERPLAN,     // MTG_MAZE_CASTDOM_PERPLAN  Maze's End P7c (b): Heap Gate's last-chance Treasure and Gateway Plaza's off-main {1} are PER-PLAN keeps of the fold (MazesEndProvider::CastDominanceKeep) instead of switching the fold off whenever a Heap Gate is untapped / in hand or a Plaza is in hand (CastDominanceLive). Default ON (sound); =0 -> the blanket switch-off
     COUNT
 };
 
@@ -2022,6 +2024,8 @@ inline const char* Name(int slot)
         "MTG_LEAF_GAME_OVER",
         "MTG_SOLVE_MEMO_BIND_GUARD",
         "MTG_LEAF_WIN_BIND_GUARD",
+        "MTG_MAZE_CASTDOM_WINDOWS",
+        "MTG_MAZE_CASTDOM_PERPLAN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
