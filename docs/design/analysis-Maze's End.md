@@ -4207,3 +4207,39 @@ Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (cod
     unlimited search does not reproduce. The 9 d0-slower games recover too (d0 g64 is FASTER on P6 at d8).
   - **Accepted** smoke + regression GT scoped `--deck=mazesend,mazesend2hg`: 4 smoke + 6 regression keys moved,
     nothing else; `check_gt_logs` 0 stale.
+
+## P5c (2026-11-18): the fetch-defer root cause, the engine fix and the fetch amendment
+
+Write-ups: `logs/maze/P5c-results.md` (root cause, engine fix, smoke, first A/B) and `logs/maze/P5c2-results.md`
+(attribution, amendment, Snow, d8). Branch `wip/maze-p5c`: `8a5ae0c0f` (engine fix, MTG_MAZE_FETCH_DEFER deleted),
+`007a7da6e` (fetch amendment). Units 3538/3538. **GT NOT accepted: Snow fails the per-deck bar (below).**
+
+**Root cause of P1c's unit loss ("THREE land drops"):** the rank cap was not the cause. The line needs one deviation at
+the site-9 occurrence and the FULL front {Gate, activate Maze's End} at site 10. An untargeted occurrence plays the
+canon front with its activations withheld (`MTG_CANON_CONT_NOACTS`), so that line was two deviations and unfindable
+at every budget. Engine fix: canon-drop occurrences become DEV_SEQ latents with compound slots in a later wave
+(`g_bp_canon_drop_mask`, `BpWaveWalker::DevSeqCanonDrop`). This is general: Cyclone, Snow and Hydras moved too.
+
+**Attribution of the held-out Maze loss (+11, all d5 b20):** a three-arm A/B on the same seeds put it entirely on
+deleting the defer. New engine + defer was identical to the old engine on 1,098 of 1,100 games; the engine change
+alone is net -1 on Maze. The worse games diverge at T1-T3, before any fetch (a skipped T1 land drop; Maze's End T1
+read as no-win). `TapTutorPutEval` orders the beyond-horizon greedy and the continuations. At 100 in every state the
+b20 tails stop reaching the play-the-Gate-first lines.
+
+**Fetch amendment, shipped `007a7da6e`, no lever (USER ruling 2-5: "there is value to banking extra lands even if you
+have a new-name gate in hand"):** the new-name fetch scores 0 only while the distinct playable new-name Gates in hand
+fill EVERY open land drop. With a spare drop it keeps its 100. Net turns vs the old defer, two held-out samples
+(2,900 searched pairs): **VB -3 (each sample <= 0; d5 b20 -1 over 1,000)**; plain deletion -2 (d5 b20 +11);
+"fetch = 1" +3; defer + Plaza playability identical to the defer. VB vs the deletion: -1.
+
+**d8 recovery:** every slower VB game recovers. 20 recover at d8 b0; 18 that hit the 2M b0 ceiling (14 on both arms,
+4 on VB only) all recover at d8 b2000. Cyclone and Snow slower games recover at d8 b0 (Snow g393 and g782 with
+digests identical to base). Cost outlier for P7: d5 g476 @181001 needs ~20.7M units at d8 b2000 on both arms.
+
+**Open (blocks the GT accept): Snow +2.** Cyclone (-1) and Hydras (0) pass. Snow is 0 better / 2 worse over 1,900
+held-out games (ab2 d5 g393, fresh d5 g782), with units/game 10% lower. Both games are b20 near-ties (every root tail
+no-win) that recover at d8 b0. Suspected mechanism: Snow's Frost Augur / Scrying Sheets activations are canon-
+withheld trailing activations, so the canon-drop record sets `g_devseq_latent_hit`, and the DEV_SEQ second pass and
+dirty-node erasure re-spend the b20 budget. Next: count canon-drop records per Snow decision, find what the 10%
+fewer units cut, and price or scope the record (a budget-staged shape, never a gate). Then smoke + regression +
+accept (`--deck=` for mazesend, cyclone, snow, hydras), `check_gt_logs.py`.
