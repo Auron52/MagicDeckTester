@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "The opponent_target fixture's position under the SHIPPED provider prune",
+    "(USER 2026-11-18: \"Yes, we should prune that for sure. It's silly to give your",
+    "opponent an extra turn.\"): Time Warp is offered aimed at us only, so the",
+    "one-card-library deck-out a round early is not searched; we take the extra",
+    "turn and the opponent decks on its next draw, a round later."
+  ],
+  "deck": "decks/Extra Turns/Extra Turns.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 1,
+  "battlefield": [
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Time Warp"
+  ],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}
