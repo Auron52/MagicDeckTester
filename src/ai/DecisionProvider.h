@@ -4997,6 +4997,13 @@ public:
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
     virtual void PlanListAdmit(const GameState&, const std::vector<PlanView>& /*plans*/,
                                std::vector<char>& /*admit*/) const {}
+
+    // OffMainMazeRedeployForced -- Maze's End P6 (core/SpellEffects.h MazeOffMainRespond): an untapped Maze's End can
+    // be activated IN RESPONSE to a Manabond (on a yes) or Burgeoning trigger and then put back onto the battlefield
+    // by that trigger. True RESTRICTS the activate / decline choice to {activate} (the fetch target stays searched)
+    // and Burgeoning's which-land menu to the returned Maze's End. Default false: activate-or-decline searched and
+    // every land offered. Never consulted in human play (the person is asked).
+    virtual bool OffMainMazeRedeployForced(const GameState&, int /*controller*/) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

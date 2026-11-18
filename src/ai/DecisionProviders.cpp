@@ -67893,6 +67893,31 @@ bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int c
     return true;
 }
 
+// P6 (USER 2026-11-18, ruling 6, VERBATIM: "It's especially easy if we can respond to a trigger from Manabond or
+// Burgeoning and activate in response. I cannot think of a reason why that would not be good, so that could be
+// heuristically pruned to always search and deploy."): an untapped Maze's End whose {3} is payable is ALWAYS activated
+// in response to Manabond (once its yes is taken) or to a Burgeoning trigger, and that trigger puts it back.
+// PREMISES (deck-scoped; re-check if the list changes):
+//  * Manabond: the activation's cost returns Maze's End to hand BEFORE Manabond resolves, so the yes puts it back
+//    with the hand's other lands. The board afterwards is the no-response board plus the fetched Gate, less {3} of
+//    end-step mana. Maze's End re-enters tapped (Amulet untaps it), which costs nothing at an end step.
+//  * Burgeoning: the trigger puts the returned Maze's End INSTEAD of the land it would otherwise have put (or of
+//    nothing). The battlefield holds Maze's End plus the fetched Gate where it would have held Maze's End plus that
+//    land, and the land stays in hand for a later drop or put.
+//  * The {3}: between our end step and our next untap step nothing in this list spends mana except Heap Gate's
+//    last-chance Treasure (one mana later, against a land and possibly a new Gate name now) and another off-main
+//    Maze's End activation.
+//  * CAVEAT (stated, not modelled away): with Guild Summit out the fetched Gate draws a card BEFORE Manabond resolves,
+//    so a yes discards that card when it is not a land (the alternative never drew it). The fetch target stays
+//    searched (the P3 menu); the fail-to-find is never offered off-main (declining dominates it).
+// Human play and the unpruned gate keep activate / decline searched. Lever: MTG_MAZE_OFFMAIN_RESPOND (the engine
+// capability itself, core/SpellEffects.h).
+bool MazesEndProvider::OffMainMazeRedeployForced(const GameState& s, int controller) const
+{
+    (void)s; (void)controller;
+    return MazeAutonomous();
+}
+
 // Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use
 // the mana for. In fact, this is the main use-case."). Live while we control an untapped Treasure-making Gate.
 bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
