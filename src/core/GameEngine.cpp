@@ -353,6 +353,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
+        // ...and Maze's End's off-main WIN after a Burgeoning put on their turn (F1 defect 4; rollout twin).
+        TryOffMainAltWinActivation(state);
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
@@ -1469,6 +1471,9 @@ void GameEngine::EndStep(GameState& state)
     // Manabond's optional end-step dump (Maze's End I3; the searched crossing-land pin). Lockstep twin in the
     // other world, same position. Deck-gated -> a no-op for every other deck.
     PerformEndStepManabond(state);
+    // Maze's End's off-main WIN (F1 defect 4: a winning activation dominates; TryOffMainAltWinActivation). After
+    // Manabond's dump, the one end-step event that shows a board main 2 did not. Rollout twin, same position.
+    TryOffMainAltWinActivation(state);
     PerformEndStepAbidingGrace(state, grace_snapshot);
     // Shadowborn INT-2: Reaper from the Abyss's morbid destroy (the searched Plan::demon_trigger_choice
     // target, consumed here) and Sire of Insanity's hand discard. They COMMUTE (a destroy does not touch a

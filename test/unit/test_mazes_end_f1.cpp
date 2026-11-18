@@ -157,3 +157,91 @@ TEST_CASE("Maze's End F1 (gi6): nested search-put scopes on one state defer to t
     CHECK(s.players[0].hand.size() == 1);           // the outer scope flushed
     CHECK(s.players[0].cards_drawn_this_turn == 1);
 }
+
+TEST_CASE("Maze's End F1 (gi8): an off-main Maze's End activation that WINS is taken; one that cannot win is not")
+{
+    LoadF1Cards();
+    const char* gates[] = { "Azorius Guildgate", "Boros Guildgate", "Dimir Guildgate", "Golgari Guildgate",
+                            "Gruul Guildgate", "Izzet Guildgate", "Orzhov Guildgate", "Rakdos Guildgate",
+                            "Selesnya Guildgate" };
+    auto board = [&](bool tenth_in_library) {
+        GameState s = FBase();
+        s.step = Step::End;
+        int num = 700;
+        for (const char* g : gates) { FPut(s, g, num++); }               // nine distinct names, untapped
+        const int maze = FPut(s, "Maze's End", 720);
+        for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(FCard("Forest", 900 + k)); }
+        s.players[0].library.push_back(FCard(tenth_in_library ? "Simic Guildgate" : "Azorius Guildgate", 730));
+        return std::make_pair(s, maze);
+    };
+    {
+        auto [s, maze] = board(true);
+        CHECK(TryOffMainAltWinActivation(s));
+        CHECK(s.won_by_effect);
+        CHECK(FFind(s, 730) != nullptr);            // the tenth name was fetched
+        CHECK(FInHand(s, maze));                    // Maze's End returned as the cost
+    }
+    {
+        auto [s, maze] = board(false);              // only a duplicate name left: no win, no activation
+        const std::size_t lib = s.players[0].library.size();
+        CHECK_FALSE(TryOffMainAltWinActivation(s));
+        CHECK_FALSE(s.won_by_effect);
+        REQUIRE(FFind(s, maze) != nullptr);
+        CHECK_FALSE(FFind(s, maze)->tapped);
+        CHECK(s.players[0].library.size() == lib);
+    }
+    {
+        auto [s, maze] = board(true);               // the {3} cannot be paid: every Gate but one is tapped
+        int left = 0;
+        for (Permanent& p : s.battlefield) { if (p.card.m_number != maze && left++ > 0) { p.tapped = true; } }
+        CHECK_FALSE(TryOffMainAltWinActivation(s));
+        CHECK_FALSE(s.won_by_effect);
+    }
+}
+
+TEST_CASE("Maze's End F1 (gi1): Talon's put credits its own {C}, and a plan holds Maze's End for its activation")
+{
+    LoadF1Cards();
+    GameState s = FBase();
+    s.players[0].lands_played_this_turn = 1;
+    FPut(s, "Azorius Guildgate", 700);
+    FPut(s, "Boros Guildgate", 701);
+    FPut(s, "Dimir Guildgate", 702);
+    FPut(s, "Golgari Guildgate", 703);
+    const int maze = FPut(s, "Maze's End", 704);
+    for (int k = 0; k < 4; ++k) { s.players[0].library.push_back(FCard("Gruul Guildgate", 900 + k)); }
+    s.players[0].hand.push_back(FCard("Talon Gates of Madara", 710));
+    const std::vector<Action> acts = TurnSolver::CollectActionsForTest(s, true);
+    const Action* talon = nullptr;
+    const Action* act = nullptr;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::Channel && a.card_name.str() == "Talon Gates of Madara") { talon = &a; }
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && a.sac_source_id == maze) { act = &a; }
+    }
+    REQUIRE(talon != nullptr);
+    CHECK(talon->rock_mana.colorless == 1);          // the put Gate taps for {C} this turn
+    REQUIRE(act != nullptr);
+    const std::vector<int> hold = TurnSolver::ActivationTapReserve(s, { *talon, *act });
+    CHECK(std::find(hold.begin(), hold.end(), maze) != hold.end());   // not spent on Talon's {4}
+}
+
+TEST_CASE("Maze's End F1 (gi8): the rollout credits an end-step Maze's End win to OUR turn")
+{
+    LoadF1Cards();
+    GameState s = FBase();
+    s.phase = Phase::PostCombatMain;
+    const char* gates[] = { "Azorius Guildgate", "Boros Guildgate", "Dimir Guildgate", "Golgari Guildgate",
+                            "Gruul Guildgate", "Izzet Guildgate", "Orzhov Guildgate", "Rakdos Guildgate",
+                            "Selesnya Guildgate" };
+    int num = 700;
+    for (const char* g : gates) { FPut(s, g, num++); }
+    FPut(s, "Maze's End", 720);
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(FCard("Forest", 900 + k)); }
+    s.players[0].library.push_back(FCard("Simic Guildgate", 730));
+    const int turn = s.turn_number;
+    TurnSolver::SimulateEndAndStartNextTurnForTest(s);
+    CHECK(s.won_by_effect);
+    CHECK(s.turn_number == turn);
+}
