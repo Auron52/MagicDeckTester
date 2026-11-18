@@ -3422,6 +3422,15 @@ public:
     virtual bool RestrictsMain2Casts() const { return false; }
     virtual bool Main2CastAllowed(const GameState& s, const Action& a) const
     { (void)s; (void)a; return true; }
+    // ...two extensions for a main-2 rule keyed on a DRAW instead of a stage (1 Drop Burn's Needle Drop):
+    // Main2StagerSnapshotsHand -- the main-2 stager stamp (NoteMain2StagerCast) also fires for a
+    // damaged-target (Needle Drop) or spectacle (Skewer the Critics) cast, and m2_prestaged_mask records the
+    // whole HAND at that cast (not the staged cards), so "a card that cast drew" reads as "not in the mask".
+    // Only consulted while RestrictsMain2Casts is true. Main2RuleReadsNoncombatDamage -- the rule reads
+    // GameState::kDealtNoncombatDamage, so StampDeckTraits arms its write (deck_m2_tracks_noncombat). Both
+    // default false -> byte-identical.
+    virtual bool Main2StagerSnapshotsHand() const { return false; }
+    virtual bool Main2RuleReadsNoncombatDamage() const { return false; }
 
     // RestrictsCollectedActions / CollectedActionAllowed -- a provider RESTRICTION of EITHER main's
     // collected options, casts AND activations (the main-2 hook above, widened): applied at the tail of

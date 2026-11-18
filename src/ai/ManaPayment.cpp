@@ -5126,8 +5126,13 @@ ManaCost SpectacleLiveCost(const CardDefinition& def, const GameState& state)
 
 void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
 {
-    if (!def.params.stages_cards) { return; }
-    if (!ResolveProvider(state).RestrictsMain2Casts()) { return; }
+    const bool stages = def.params.stages_cards;
+    if (!stages && !def.params.target_dealt_damage_this_turn && !def.params.spectacle_cost.has_value()) { return; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (!prov.RestrictsMain2Casts()) { return; }
+    // A Needle Drop / Skewer cast stamps only for a provider whose rule snapshots the HAND (1 Drop Burn).
+    const bool hand_snap = prov.Main2StagerSnapshotsHand();
+    if (!stages && !hand_snap) { return; }
     // The FIRST main-2 stager owns the snapshot: a second Light Up later in the same main is itself
     // "played off" the first, and what it exiles is new either way.
     if (state.m2_stage_turn == state.TurnSeq()) { return; }
@@ -5140,6 +5145,14 @@ void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
         state.m2_prestaged_mask[c.m_number >> 6] |= (uint64_t{1} << (c.m_number & 63));
     };
     const Player& ap = state.ActivePlayer();
+    // HAND snapshot: every card held at the first main-2 Needle Drop / Skewer, so what a later draw brings is
+    // exactly the cards NOT in the mask (1 Drop Burn's "only the card drawn by Needle Drop" in main 2).
+    if (hand_snap)
+    {
+        for (const Card& c : ap.hand) { mark(c); }
+        for (const StagedCard& sc : ap.staged_cards) { mark(sc.card); }
+        return;
+    }
     // The rollout stages straight into the hand; the executor parks resolved exile in staged_cards
     // until its next merge -- both count as "already staged".
     for (const Card& c : ap.hand) { if (c.m_is_staged) { mark(c); } }
@@ -11027,7 +11040,7 @@ struct PayRefineSnap
     ManaPool                 av;
     int                      life = 0, opp_life = 0, energy = 0;
     bool                     oll = false;
-    std::array<bool, 2>      pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
+    decltype(GameState::player_dealt_damage_this_turn) pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
     std::size_t              gy = 0;
     PayRollbackLedger        ledger;
 
@@ -13038,7 +13051,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
-        const std::array<bool, 2> pdd = state.player_dealt_damage_this_turn;   // Needle Drop's bits ride with oll
+        const decltype(GameState::player_dealt_damage_this_turn) pdd = state.player_dealt_damage_this_turn;   // Needle Drop's bits ride with oll
         auto restore = [&]()
         {
             RestorePayFields(state.battlefield, bf_snap);

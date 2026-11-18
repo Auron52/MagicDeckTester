@@ -1860,6 +1860,13 @@ public:
     void GraveyardDamageFuelCandidates(
         const GameState& s, std::vector<std::string>& pairs) const override;
     bool OffersPaidFireblastCast(const GameState& s) const override;
+    // THE USER'S MAIN-2 RULE (2026-11-18), part of MTG_ONEDROPBURN_ORDER: main 2 casts only Needle Drop /
+    // Skewer the Critics when COMBAT is the opponent's only damage source this turn, plus the card(s) a
+    // main-2 Needle Drop draws. A restriction of the post-combat options; main 1 stays fully searched.
+    bool RestrictsMain2Casts() const override;
+    bool Main2CastAllowed(const GameState& s, const Action& a) const override;
+    bool Main2StagerSnapshotsHand() const override { return true; }
+    bool Main2RuleReadsNoncombatDamage() const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by

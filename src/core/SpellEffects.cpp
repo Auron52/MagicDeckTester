@@ -4778,7 +4778,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         const std::uint8_t mark_snap = state.battlefield[i].mana_tap_mark;   // Prevent Damage (armed only)
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
-        const std::array<bool, 2> pdd_snap = state.player_dealt_damage_this_turn;   // rides with oll_snap
+        const decltype(GameState::player_dealt_damage_this_turn) pdd_snap = state.player_dealt_damage_this_turn;   // rides with oll_snap
 
         // Physically tap source i, recurse with `next` floating, undo on failure. `drip_ok` is
         // false for a Grove-style drip land's painless "{T}: Add {C}" branch (a generic pip absent

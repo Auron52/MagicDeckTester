@@ -66971,28 +66971,26 @@ bool MidrangeBurnProvider::CleanupDiscardShedStable() const
 //    Generic order. Cast order is USER-owned: this tier was surfaced to the user at onboarding (2026-11-17).
 //
 // MTG_ONEDROPBURN_ORDER (default OFF): the FULL ORDER drafted for the USER's review (2026-11-17, "Can you
-// make a full cast order for me to review?"). Param tiers, NAME tie-break (CastOrderTotalByName), binding
-// inside draw plans too (OrderOpaqueCastsByRank: Needle Drop is a cantrip, so every set holding it is
-// order-opaque). Within ONE main phase -- which main a cast goes in stays SEARCHED (this provider does not
-// filter main 1), so Needle Drop / the burn may wait for the post-combat main:
+// make a full cast order for me to review?"), AMENDED by the USER 2026-11-18: "needle drop and skewer the
+// critics should always default to later than other spells if possible. In particular, they need to be cast
+// before the attack phase if this is possible for prowess. We want to only cast them second main if there is
+// no other damage source than combat. Beyond the two spells, only the card drawn by Needle Drop should be
+// considered to cast Main 2 and only when they couldn't be cast earlier." Param tiers, NAME tie-break
+// (CastOrderTotalByName), binding inside draw plans too (OrderOpaqueCastsByRank: Needle Drop is a cantrip,
+// so every set holding it is order-opaque):
 //   10 HASTE creatures (Goblin Guide, Monastery Swiftspear): first, prowess sees every later spell.
 //   12 Vexing Devil: right after them and before every burn spell, so the opponent decides at its HIGHEST
 //      life of the main (it takes 4 unless <= 4 with our hand empty / <= 7 while we hold cards); its 4
 //      also turns on spectacle and makes Needle Drop legal.
 //   13 other creatures (Grim Lavamancer: no haste, its ping needs a tap -- a body this turn).
-//   5/6 MAIN 2 WITH THE OPPONENT ALREADY DAMAGED (combat damage, usually): Needle Drop (5) then Skewer the
-//      Critics (6) are the main's FIRST casts. USER 2026-11-17: "Needle drop should only be split into main 1
-//      and main 2 casts. You can cast it at the end of main 1 or the beginning of main 2 if we are reliant on
-//      combat damage. The tricky part is that we need to allow casting any cards drawn in main 2 if that
-//      happens." / "Skewer the critics has similar behaviour except it doesn't draw." Needle Drop's draw is a
-//      breakpoint, so main 2's continuation re-decides with the drawn card.
 //   22 the {R} burn by name (Boltwave, Chain Lightning, Lava Spike, Lightning Bolt); 26 Rift Bolt hardcast.
-//   29/30 OTHERWISE (main 1; main 2 with no damage yet) at the END of the main, after the burn that makes
-//      them live: Needle Drop (29, draw first so the rest of the mana sees the card) then Skewer (30,
-//      spectacle {R}). The damage test stays for main 2 because Skewer FIRST in an undamaged main 2 would be
-//      hardcast for 3 when a same-main Devil / burn could have made it {R}.
+//   29/30 Needle Drop then Skewer the Critics at the END of the main, in EITHER main: after the burn that
+//      makes them live (Needle Drop draws first so the rest of the mana sees the card; Skewer's spectacle
+//      {R}). In main 2 they are the only hand cards admitted before Needle Drop's draw, so "end of the main"
+//      there still puts Needle Drop first and the drawn card after it.
 //   40 Fireblast: LAST -- its alternative cost sacrifices two Mountains, so they tap for every other spell
 //      first.
+// Which main a cast goes in: main 1 is fully searched; MAIN 2 is the USER's rule (Main2CastAllowed below).
 static bool OneDropBurnOrderEnabled()
 {
     static const bool on = EnvOn("MTG_ONEDROPBURN_ORDER");   // default OFF (USER review); =1 -> full order
@@ -67007,22 +67005,74 @@ int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition&
         if (p.target_dealt_damage_this_turn) { return 29; }
         return DeckProvider::CastOrderRank(s, def);
     }
-    const bool needle  = p.target_dealt_damage_this_turn;
-    const bool skewer  = p.spectacle_cost.has_value();
-    if (needle || skewer)
-    {
-        const int  opp     = 1 - s.active_player_index;
-        const bool damaged = opp >= 0 && opp < 2 && s.player_dealt_damage_this_turn[static_cast<std::size_t>(opp)];
-        if (s.phase == Phase::PostCombatMain && damaged) { return needle ? 5 : 6; }   // beginning of main 2
-        return needle ? 29 : 30;                                                        // end of the main
-    }
-    if (p.sacrifice_mountains_alternative)                             { return 40; }
-    if (def.card.IsCreature() && def.card.HasKeyword(Keyword::Haste))  { return 10; }
-    if (p.etb_opp_may_take_damage_to_sac > 0)                          { return 12; }
-    if (def.card.IsCreature())                                         { return 13; }
+    // ONE CARD PER RANK (USER 2026-11-18: "we need one item per row. We want every item to have a distinct
+    // position rather than relying on hand position"). The list's twelve spells by name, in the order the
+    // tiers + name tie-break realised before (so the measured A/B carries over); a card outside the list
+    // falls back to its param tier + 100.
+    const std::string& nm = def.card.m_name;
+    if (nm == "Goblin Guide")         { return 10; }
+    if (nm == "Monastery Swiftspear") { return 11; }
+    if (nm == "Vexing Devil")         { return 12; }
+    if (nm == "Grim Lavamancer")      { return 13; }
+    if (nm == "Boltwave")             { return 20; }
+    if (nm == "Chain Lightning")      { return 21; }
+    if (nm == "Lava Spike")           { return 22; }
+    if (nm == "Lightning Bolt")       { return 23; }
+    if (nm == "Rift Bolt")            { return 26; }
+    if (nm == "Needle Drop")          { return 29; }
+    if (nm == "Skewer the Critics")   { return 30; }
+    if (nm == "Fireblast")            { return 40; }
+    if (p.target_dealt_damage_this_turn)                               { return 129; }
+    if (p.spectacle_cost.has_value())                                  { return 130; }
+    if (p.sacrifice_mountains_alternative)                             { return 140; }
+    if (def.card.IsCreature() && def.card.HasKeyword(Keyword::Haste))  { return 110; }
+    if (p.etb_opp_may_take_damage_to_sac > 0)                          { return 112; }
+    if (def.card.IsCreature())                                         { return 113; }
     if (def.tmpl == CardTemplate::DirectDamage)
-    { return 20 + 2 * std::min(3, static_cast<int>(def.card.m_mana_cost.ManaValue())); }
-    return 100 + DeckProvider::CastOrderRank(s, def);
+    { return 120 + 2 * std::min(3, static_cast<int>(def.card.m_mana_cost.ManaValue())); }
+    return 200 + DeckProvider::CastOrderRank(s, def);
+}
+
+// THE USER'S MAIN-2 RULE (2026-11-18, quoted above), live with MTG_ONEDROPBURN_ORDER. Admitted in the
+// post-combat main:
+//   * Needle Drop / Skewer the Critics while COMBAT is the only damage source: the opponent was dealt damage
+//     this turn and none of it NONCOMBAT (GameState::kDealtNoncombatDamage -- a burn spell, Vexing Devil's 4,
+//     an upkeep Rift Bolt, a Lavamancer ping). With an earlier noncombat source they were castable before the
+//     attack (where prowess sees them), so main 2 does not offer them; with no damage at all Needle Drop has
+//     no target and a hardcast Skewer belongs before combat too. Once one of them HAS been cast in this main
+//     (the stager stamp, m2_stage_turn), the other stays admitted: Needle Drop's own 1 damage is noncombat
+//     and must not shut out the Skewer it enabled the main for.
+//   * the card(s) a main-2 Needle Drop drew: cards NOT in the hand snapshot taken at the main's first Needle
+//     Drop / Skewer cast (Main2StagerSnapshotsHand) -- "only when they couldn't be cast earlier", which a card
+//     drawn after combat never could.
+// Every other hand cast is a main-1 cast. Activations (Lavamancer, Sunbaked Canyon) and the land drop are not
+// casts and are untouched; human play is never narrowed (the CollectActions call site).
+bool OneDropBurnProvider::RestrictsMain2Casts() const           { return OneDropBurnOrderEnabled(); }
+bool OneDropBurnProvider::Main2RuleReadsNoncombatDamage() const { return OneDropBurnOrderEnabled(); }
+
+bool OneDropBurnProvider::Main2CastAllowed(const GameState& s, const Action& a) const
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return true; }
+    const bool stamped = s.m2_stage_turn == s.TurnSeq();
+    if (d->params.target_dealt_damage_this_turn || d->params.spectacle_cost.has_value())
+    {
+        if (stamped) { return true; }
+        const int opp = 1 - s.active_player_index;
+        return s.player_dealt_damage_this_turn[opp == 0 ? 0 : 1] != 0 && !s.PlayerDealtNoncombatDamage(opp);
+    }
+    if (!stamped) { return false; }
+    // Same-name copies are interchangeable and the collect may name either copy's hand index, so the cast is
+    // admitted when ANY held copy of that name was drawn after the snapshot.
+    const Player& ap = s.ActivePlayer();
+    const std::string& nm = d->card.m_name;
+    for (const Card& hc : ap.hand)
+    {
+        if (hc.m_name != nm) { continue; }
+        if (hc.m_number < 0 || hc.m_number >= 128) { return true; }
+        if ((s.m2_prestaged_mask[hc.m_number >> 6] & (uint64_t{1} << (hc.m_number & 63))) == 0) { return true; }
+    }
+    return false;
 }
 
 bool OneDropBurnProvider::CastOrderTotalByName() const   { return OneDropBurnOrderEnabled(); }
@@ -67069,19 +67119,21 @@ const char* OneDropBurnProvider::CastOrderTierName(int rank) const
     }
     switch (rank)
     {
-        case 5:  return "NEEDLE DROP, MAIN 2 after combat damage: the main's first cast (its draw is a breakpoint)";
-        case 6:  return "SKEWER THE CRITICS, MAIN 2 after combat damage: spectacle {R}, right after Needle Drop";
-        case 10: return "HASTE CREATURE (name order): first -- prowess sees every later spell";
+        case 10: return "GOBLIN GUIDE: haste, first";
+        case 11: return "MONASTERY SWIFTSPEAR: haste; prowess sees every later spell";
         case 12: return "VEXING DEVIL: before the burn -- the opponent decides at its highest life of the main";
-        case 13: return "OTHER CREATURE (Lavamancer): a body this turn";
-        case 22: return "{R} BURN (name order)";
+        case 13: return "GRIM LAVAMANCER: a body this turn";
+        case 20: return "BOLTWAVE ({R}, sorcery)";
+        case 21: return "CHAIN LIGHTNING ({R}, sorcery)";
+        case 22: return "LAVA SPIKE ({R}, sorcery, players only)";
+        case 23: return "LIGHTNING BOLT ({R}, the instant: last of the burn)";
         case 26: return "RIFT BOLT hardcast (MV 3)";
-        case 29: return "NEEDLE DROP, end of the main (main 1, or main 2 before any damage): after the burn";
-        case 30: return "SKEWER THE CRITICS, end of the main: after the burn and Needle Drop (spectacle {R})";
+        case 29: return "NEEDLE DROP, end of the main (main 2 only when combat is the only damage): after the burn";
+        case 30: return "SKEWER THE CRITICS, end of the main, after Needle Drop (main 2 only when combat is the only damage)";
         case 40: return "FIREBLAST: last -- its alt cost sacrifices two Mountains after they have tapped";
         default: break;
     }
-    return rank >= 100 ? "UNNAMED CARD: generic rank + 100" : nullptr;
+    return rank >= 100 ? "CARD OUTSIDE THE LIST: its param tier + 100 (generic + 200)" : nullptr;
 }
 
 int MidrangeBurnProvider::CastOrderRank(const GameState& state, const CardDefinition& def) const

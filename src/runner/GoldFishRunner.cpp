@@ -1943,6 +1943,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no card reads player_dealt_damage_this_turn, so
         // its key folds are dead for that deck.
         state.deck_reads_damage_dealt      = garth || reads_damage_dealt;
+        // A provider main-2 rule reading the NONCOMBAT damage bit (GameState::deck_m2_tracks_noncombat). The
+        // scenario harness attaches the provider before this stamp; SetupGame attaches it after and re-stamps.
+        state.deck_m2_tracks_noncombat     = state.deck_reads_damage_dealt && state.m_provider != nullptr
+                                          && state.m_provider->Main2RuleReadsNoncombatDamage();
         state.deck_has_count_anthem        = garth || count_anthem;
         state.deck_has_demon_triggers      = garth || demon_triggers;
         state.deck_has_sac_named           = garth || sac_named;
@@ -2283,6 +2287,8 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // registered card under a provider that does not implement its policy. Human play and the unpruned measurement
     // route are the only bypasses. Reads nothing into the state.
     EnforceRequiredHeuristics(deck, *state.m_provider, "");
+    // The one deck trait that needs the provider (StampDeckTraits ran above, before it was attached).
+    state.deck_m2_tracks_noncombat = state.deck_reads_damage_dealt && state.m_provider->Main2RuleReadsNoncombatDamage();
 
     // LEGACY BOARD (--legacy-passive-opponent-lands only): the passive opponent starts with three
     // inert lands. Across ten game indices, two have
