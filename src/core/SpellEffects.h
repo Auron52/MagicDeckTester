@@ -2913,6 +2913,88 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// ---- TRIGGERED DRAWS WAIT FOR THE WHOLE ABILITY, "THEN SHUFFLE" INCLUDED (CR 603.3) --------------------
+// A permanent put onto the battlefield by a "search your library ..., put it onto the battlefield, then
+// shuffle" effect (Maze's End's fetch, a fetchland, Sylvan-style land tutors, Natural Order, Seahunter,
+// Chord, ...) can trigger a "draw a card" watcher: Guild Summit / Kili ("whenever another <subtype> enters"),
+// Puresteel Paladin, Vaultborn Tyrant / Enduring Innocence, or the entrant's own ETB draw (Silvergill Adept,
+// Ice-Fang Coatl). Those triggers go on the stack the next time a player would receive priority, i.e.
+// AFTER the ability -- shuffle included -- has finished resolving, so the card drawn is a random card of
+// the SHUFFLED library. The engine resolves its triggers inline, so before this scope those draws took
+// the known PRE-shuffle top card (Maze's End sweep 61001 gi6: Guild Summit drew the old top card).
+// SearchPutTriggerScope wraps every search-put-shuffle route; while it is open for a state, TriggeredDraw
+// queues instead of drawing, and the scope's end (after the shuffle) resolves the queue in trigger order.
+// Nested scopes on the SAME state are pass-through (the outer ability is still resolving); a scope only
+// queues for the state it was opened on, so a provider's search on a clone draws as before. A trigger's
+// "once each turn" latch is still set when it TRIGGERS (the caller's job), only the draw waits. Shared by
+// the executor and the rollout (the routes are), so lockstep by construction. A correctness fix: no lever.
+struct PendingTriggeredDraw { int player; int n; bool sink_skips_speculation; };
+struct TriggeredDrawDeferral
+{
+    const GameState* state = nullptr;
+    std::vector<PendingTriggeredDraw> pending;
+};
+inline thread_local TriggeredDrawDeferral* g_triggered_draw_deferral = nullptr;
+
+inline void DrawTriggeredNow(GameState& state, int who, int n, bool sink_skips_speculation)
+{
+    Player& pl = state.players[who];
+    for (int k = 0; k < n && !pl.library.empty(); ++k)
+    {
+        const std::size_t before = pl.hand.size();
+        // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+        // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+        pl.cards_drawn_this_turn += DrawIntoHand(state, who, 1, HandEntryReason::Draw);
+        if (g_play_draw_sink && !(sink_skips_speculation && g_tap_speculating))
+        {
+            for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+            { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+        }
+    }
+}
+
+// A triggered ability's "draw N" (an empty library skips, the existing 6a disclosure). Deferred while a
+// SearchPutTriggerScope is open on `state`.
+inline void TriggeredDraw(GameState& state, int who, int n, bool sink_skips_speculation)
+{
+    if (n <= 0) { return; }
+    if (g_triggered_draw_deferral != nullptr && g_triggered_draw_deferral->state == &state)
+    {
+        g_triggered_draw_deferral->pending.push_back({ who, n, sink_skips_speculation });
+        return;
+    }
+    DrawTriggeredNow(state, who, n, sink_skips_speculation);
+}
+
+class SearchPutTriggerScope
+{
+public:
+    explicit SearchPutTriggerScope(GameState& state) : state_(state)
+    {
+        owner_ = !(g_triggered_draw_deferral != nullptr && g_triggered_draw_deferral->state == &state);
+        if (owner_)
+        {
+            d_.state = &state;
+            prev_ = g_triggered_draw_deferral;
+            g_triggered_draw_deferral = &d_;
+        }
+    }
+    ~SearchPutTriggerScope()
+    {
+        if (!owner_) { return; }
+        g_triggered_draw_deferral = prev_;
+        for (const PendingTriggeredDraw& p : d_.pending)
+        { DrawTriggeredNow(state_, p.player, p.n, p.sink_skips_speculation); }
+    }
+    SearchPutTriggerScope(const SearchPutTriggerScope&) = delete;
+    SearchPutTriggerScope& operator=(const SearchPutTriggerScope&) = delete;
+private:
+    GameState& state_;
+    TriggeredDrawDeferral d_;
+    TriggeredDrawDeferral* prev_ = nullptr;
+    bool owner_ = false;
+};
+
 // EXPLORATION (Maze's End I3): the extra land drops `player` gets from static "you may play an additional land on
 // each of your turns" permanents it controls (CardParams::static_extra_land_drops, copies stack). Both untap resets
 // (GameEngine::UntapStep, the rollout's twin) seed Player::bonus_land_drops_this_turn with it; a copy entering
@@ -4760,6 +4842,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         if (pp.tutor_shuffle_after) { WhiffShuffle(state, controller, "tutor to battlefield"); }
         return;
     }
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     struct ResolveScope
     {
         bool prev;
@@ -8927,22 +9011,9 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     };
     // Vaultborn Tyrant's draw rider ("... and draw a card"), shared by the another-creature loop
     // and the self-include tail below.
+    // Deferred past a search-put's "then shuffle" (TriggeredDraw, CR 603.3).
     auto watcher_draw = [&](int who, int n_draw)
-    {
-        Player& wp_player = state.players[who];
-        for (int k = 0; k < n_draw && !wp_player.library.empty(); ++k)
-        {
-            [[maybe_unused]] const std::size_t before = wp_player.hand.size();
-            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
-            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
-            wp_player.cards_drawn_this_turn += DrawIntoHand(state, who, 1, HandEntryReason::Draw);
-            if (g_play_draw_sink && !g_tap_speculating)
-            {
-                for (std::size_t hi = before; hi < wp_player.hand.size(); ++hi)
-                { g_play_draw_sink->push_back({ state.turn_number, wp_player.hand[hi].m_name.str() }); }
-            }
-        }
-    };
+    { TriggeredDraw(state, who, n_draw, /*sink_skips_speculation=*/true); };
 
     // PRESENCE GATE (GameState::deck_has_creature_enter_watcher) -- the per-GAME answer to the
     // question every iteration below asks per permanent. The loop is already as tight as a
@@ -11706,17 +11777,8 @@ inline void FireOtherSubtypeEnterDraws(GameState& state, int entered_index)
         if (wd == nullptr) { continue; }
         if (wd->params.draw_on_other_subtype_enter_once_each_turn)
         { w.storied_draw_used_this_turn = true; }
-        Player& kp = state.players[nctrl2];
-        if (kp.library.empty()) { continue; }
-        [[maybe_unused]] const std::size_t before = kp.hand.size();
-        // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
-        // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
-        kp.cards_drawn_this_turn += DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
-        if (g_play_draw_sink)
-        {
-            for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
-            { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
-        }
+        // The draw itself waits for a search-put's "then shuffle" (TriggeredDraw, CR 603.3).
+        TriggeredDraw(state, nctrl2, 1, /*sink_skips_speculation=*/false);
     }
 }
 
@@ -12482,22 +12544,8 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
                 if (wd && wd->params.draw_on_equipment_etb) { ++draws; }
             }
-            if (draws > 0)
-            {
-                Player& kp = state.players[ectrl];
-                for (int k = 0; k < draws && !kp.library.empty(); ++k)
-                {
-                    [[maybe_unused]] const std::size_t before = kp.hand.size();
-                    // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
-                    // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
-                    kp.cards_drawn_this_turn += DrawIntoHand(state, ectrl, 1, HandEntryReason::Draw);
-                    if (g_play_draw_sink)
-                    {
-                        for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
-                        { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
-                    }
-                }
-            }
+            // Deferred past a search-put's "then shuffle" (TriggeredDraw, CR 603.3).
+            if (draws > 0) { TriggeredDraw(state, ectrl, draws, /*sink_skips_speculation=*/false); }
 
             // Sigarda's Aid: "whenever an Equipment you control enters, you MAY attach it to
             // target creature you control." Deliberately placed AFTER the Puresteel draw loop
@@ -13831,22 +13879,9 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     // Ice-Fang Coatl / Arcum's Astrolabe: "When this enters, draw a card." The entering
     // permanent's OWN forced draw -- a real draw (counts cards_drawn_this_turn, fires the draw
     // sink), unlike the reveal-and-put family. Same idiom as the enter-watcher draw.
+    // Deferred past a search-put's "then shuffle" (TriggeredDraw, CR 603.3: Seahunter -> Silvergill Adept).
     if (p.etb_self_draw > 0)
-    {
-        Player& dp = state.players[controller];
-        for (int k = 0; k < p.etb_self_draw && !dp.library.empty(); ++k)
-        {
-            [[maybe_unused]] const std::size_t before = dp.hand.size();
-            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
-            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
-            dp.cards_drawn_this_turn += DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-            if (g_play_draw_sink && !g_tap_speculating)
-            {
-                for (std::size_t hi = before; hi < dp.hand.size(); ++hi)
-                { g_play_draw_sink->push_back({ state.turn_number, dp.hand[hi].m_name.str() }); }
-            }
-        }
-    }
+    { TriggeredDraw(state, controller, p.etb_self_draw, /*sink_skips_speculation=*/true); }
 
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield."
@@ -28296,6 +28331,8 @@ using DothSearchNote = void (*)(const GameState&, int ordinal, int pin);
 inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note = nullptr,
                                   bool real_searched = false)
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     const int active = state.active_player_index;
     // The searched pin (Plan::doth_put_choice) is CONSUMED by this upkeep whatever it finds, in both worlds,
     // so a pin whose trigger did not fire (the intervening if failed) cannot leak into the turn it opens.
@@ -34831,6 +34868,8 @@ inline std::string EncodeToothChoices(const std::vector<std::string>& library,
 inline void ResolveToothAndNail(GameState& state, int controller, int mode,
                                 const std::string& encoded)
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     if (mode < 0 || mode > 2) { return; }
     Player& ap = state.players[controller];
     std::vector<std::string> parts;
@@ -34942,6 +34981,8 @@ inline void ResolveFinaleOfDevastation(GameState& state, int controller,
                                        const CardParams& pp, int x,
                                        const std::string& pin)
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     Player& ap = state.players[controller];
     auto eligible = [&](const Card& c) {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -53369,6 +53410,8 @@ inline void FireScryWatchers(GameState& state)
 inline void PerformFetch(GameState& state, int controller_index,
                          const CardParams& fetch_pp, const std::string& target_name = "")
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     Player& ap = state.players[controller_index];
     ap.life -= 1;   // pay 1 life (irrelevant vs a passive opponent, but faithful)
     // "Sacrifice this land" is the OTHER half of the activation cost, and it is a real sacrifice
@@ -54588,6 +54631,8 @@ inline bool ModalExileArtEnchLegal(const Permanent& q)
 inline void PerformLandTutorToBattlefield(GameState& state, int controller_index,
                                           const CardParams& pp, const std::string& target_name = "")
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     Player& ap = state.players[controller_index];
     // Archdruid's Charm mode 3: "Exile target artifact or enchantment." The mode and its target were
     // chosen at the cast (the AX<n> variant). Target gone or no longer legal on resolution -> the spell
@@ -56379,6 +56424,8 @@ inline void ResolveUntapLandAnimate(GameState& s, int controller, int target_num
 // library is shuffled even when nothing (or zero by choice) is put (CR 701.19b). Returns the number put.
 inline int ResolveFetchForestsTapped(GameState& s, int controller, int count)
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(s);
     Player& pl = s.players[static_cast<std::size_t>(controller)];
     std::vector<Card> taken;
     for (int i = 0; i < static_cast<int>(pl.library.size()); )
