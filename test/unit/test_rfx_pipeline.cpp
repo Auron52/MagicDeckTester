@@ -25,6 +25,7 @@
 #include "runner/GoldFishRunner.h"
 
 #include <algorithm>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -2843,5 +2844,280 @@ TEST_CASE("rfx step 11: Mind Stone's sac-draw -- a dig source in main 1, none in
         const StuffyArm arm(0);
         s.phase = Phase::PostCombatMain;
         CHECK(StuffyP().HasAnyDigSource(s));
+    }
+}
+
+// ---- Step 9f: the BEST order of simultaneous triggers; the Shaman pull asked once per chain ----------------------
+// USER 2026-11-18 ~07:30, item 2: "The simultaneous triggers using one order is fine, except we need to make sure that
+// it is the best order when the order matters." Item 8: "I'm not sure what prompts for pull, but once per loop might
+// make sense." Design 4.7 / section 14 step 9f; dmgrx::OrderSimultaneousTriggers, dmgrx::PullChainScope.
+
+namespace
+{
+// Every pin sequence a damage event can take, depth first (the fan's own probe-and-clone, by hand): the lowest
+// opponent life any line reaches. `canonical_order` keeps every ORDER ordinal at its front (the canonical order)
+// while every target choice is still enumerated.
+int BestOppLife9f(const GameState& base, const std::function<void(GameState&)>& fire, bool canonical_order,
+                  int* lines = nullptr, int* order_choices = nullptr)
+{
+    int best = 1 << 20;
+    std::function<void(const std::vector<int>&)> rec = [&](const std::vector<int>& pins) {
+        GameState s = base;
+        std::vector<std::vector<int>> seen;
+        {
+            dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { seen.push_back(legal); };
+            dmgrx::TargetProbeScope probing(probe, pins, 0);
+            dmgrx::PinScope scope(pins);
+            fire(s);
+        }
+        if (seen.size() <= pins.size())
+        {
+            best = std::min(best, s.players[1].life);
+            if (lines) { ++*lines; }
+            return;
+        }
+        const std::vector<int>& nx = seen[pins.size()];
+        const bool order = dmgrx::IsOrderCode(nx.front());
+        if (order && order_choices) { ++*order_choices; }
+        for (int o : nx)
+        {
+            if (canonical_order && order && o != nx.front()) { continue; }
+            std::vector<int> p = pins;
+            p.push_back(o);
+            rec(p);
+        }
+    };
+    rec({});
+    return best;
+}
+
+// The contrived ORDER-MATTERS board: two Spiteful Slivers (#2903, #2904 -- every Sliver reflects TWICE while both
+// live) and two Boros Reckoners, B (#2902, first on the battlefield) and A (#2901). One event deals B 3 (lethal) and
+// A 1 (A survives). B's trigger (3) is canonically first. Best line: A's 1 into a Sliver first (it survives: 2 to the
+// face), THEN B's 3 into a Sliver (lethal, still x2 by LKI: 6) = 8. B first can reach only 7: its lethal 3 kills an
+// amplifier, so A's 1 is reflected once.
+GameState OrderMattersBoard()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    PutRfx(s, "Boros Reckoner", 2902).entered_this_turn = true;
+    PutRfx(s, "Boros Reckoner", 2901).entered_this_turn = true;
+    PutRfx(s, "Spiteful Sliver", 2903).entered_this_turn = true;
+    PutRfx(s, "Spiteful Sliver", 2904).entered_this_turn = true;
+    return s;
+}
+void FireOrderMattersEvent(GameState& s)
+{
+    dmgrx::Batch b;
+    b.src.push_back(dmgrx::SourceRef{ DefRfx("Chain Reaction").card, 0, false });
+    b.hits.push_back({ 0, { false, 2902 }, 3, false, false });
+    b.hits.push_back({ 0, { false, 2901 }, 1, false, false });
+    dmgrx::DealDamageBatch(s, b);
+}
+// Chain Reaction X = 2 on a Guilty-Conscience-enchanted Boros Reckoner (#2911) and a Screaming Nemesis (#2913): both
+// survive with 2 marked, and both "any (other) target" triggers can hit the other creature -- a REAL line where the
+// order is not provably inert (the GC breaks every F2 fold), so it is searched.
+GameState ChainOnReckonerAndNemesis()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 4; ++i) { PutRfx(s, "Mountain", 2920 + i); }
+    PutRfx(s, "Boros Reckoner", 2911).entered_this_turn = true;
+    AttachGc(s, 2912, 2911);
+    PutRfx(s, "Screaming Nemesis", 2913).entered_this_turn = true;
+    Card chain = DefRfx("Chain Reaction").card;
+    chain.m_number = 2930;
+    s.players[0].hand.push_back(chain);
+    for (int i = 0; i < 10; ++i)
+    { Card m = DefRfx("Mountain").card; m.m_number = 2940 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9f: order codes -- encoding, disjoint from every other pin code")
+{
+    CHECK(dmgrx::IsOrderCode(dmgrx::OrderCode(0)));
+    CHECK(dmgrx::IsOrderCode(dmgrx::OrderCode((1u << 24) - 1)));
+    CHECK(dmgrx::OrderDecode(dmgrx::OrderCode(7)) == 7);
+    CHECK_FALSE(dmgrx::IsOrderCode(dmgrx::kCombatPinMark));
+    CHECK_FALSE(dmgrx::IsOrderCode(dmgrx::AttackHoldCode((1 << 27) - 1)));
+    CHECK_FALSE(dmgrx::IsAttackHoldCode(dmgrx::OrderCode(0)));
+    CHECK_FALSE(dmgrx::IsOrderCode(dmgrx::PullCode((1 << 28) - 1)));
+    CHECK_FALSE(dmgrx::IsOrderCode(dmgrx::PlayerId(1)));
+}
+
+TEST_CASE("rfx step 9f: where the order CAN matter it is a searched choice, and the searched order is the BEST one")
+{
+    const GameState s = OrderMattersBoard();
+    int lines = 0, order_choices = 0;
+    const int searched = BestOppLife9f(s, FireOrderMattersEvent, false, &lines, &order_choices);
+    const int canonical = BestOppLife9f(s, FireOrderMattersEvent, true);
+    CHECK(order_choices >= 1);
+    CHECK(searched == 20 - 8);     // A's 1 first (x2, the Sliver lives), then B's 3 (x2 by LKI)
+    CHECK(canonical == 20 - 7);    // the canonical order (B first) cannot reach it
+    // The pinned order is honoured: A's trigger (raised index 1) first, then both into Sliver #2903.
+    GameState t = s;
+    const std::vector<int> pins{ dmgrx::OrderCode(1), 2903, 2903 };
+    {
+        dmgrx::PinScope scope(pins);
+        FireOrderMattersEvent(t);
+    }
+    CHECK(t.players[1].life == 20 - 8);
+    // No pin: the front -- the canonical order, and the face (the legacy outcome).
+    GameState u = s;
+    FireOrderMattersEvent(u);
+    CHECK(u.players[1].life == 20 - 4);
+}
+
+TEST_CASE("rfx step 9f: the sound folds -- no order choice where the order provably cannot matter")
+{
+    auto order_ordinals = [](GameState s, const std::function<void(GameState&)>& fire) {
+        int n = 0;
+        const std::vector<int> pins;
+        dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { if (dmgrx::IsOrderCode(legal.front())) { ++n; } };
+        dmgrx::TargetProbeScope probing(probe, pins, 0);
+        dmgrx::PinScope scope(pins);
+        fire(s);
+        return n;
+    };
+    {   // O1: two Spiteful Slivers under the Act -- every trigger is a players-only "target player" (F1: the face)
+        GameState s = ArmedState();
+        PutRfx(s, "Spiteful Sliver", 2951);
+        PutRfx(s, "Spiteful Sliver", 2952);
+        PutRfx(s, "Mogg Maniac", 2953);
+        CHECK(order_ordinals(s, [](GameState& g) { PerformDamageAllCreatures(g, 0, DefRfx("Blasphemous Act"), 13); }) == 0);
+        GameState g = s;
+        PerformDamageAllCreatures(g, 0, DefRfx("Blasphemous Act"), 13);
+        CHECK(g.players[1].life <= 0);   // 13 x 2 per Sliver + the Maniac's 13
+    }
+    {   // O3: the Act on two Reckoners beside a GC'd Doll that chose the opponent -- either trigger can start the
+        // proven loop, so the canonical order already reaches the kill
+        GameState s = ArmedState();
+        PutRfx(s, "Boros Reckoner", 2961);
+        PutRfx(s, "Screaming Nemesis", 2962);
+        PutRfx(s, "Stuffy Doll", 2963).chosen_player = 1;
+        AttachGc(s, 2964, 2963);
+        CHECK(order_ordinals(s, [](GameState& g) { PerformDamageAllCreatures(g, 0, DefRfx("Blasphemous Act"), 13); }) == 0);
+    }
+    {   // O3: the Doll's own ping with a GC (its reflection + the GC trigger: the loop itself)
+        GameState s = ArmedState();
+        PutRfx(s, "Stuffy Doll", 2971).chosen_player = 1;
+        AttachGc(s, 2972, 2971);
+        CHECK(order_ordinals(s, [](GameState& g) { ApplyPermAbility(g, 0, 2971, PermAbilityMode::SelfPing); }) == 0);
+        GameState g = s;
+        ApplyPermAbility(g, 0, 2971, PermAbilityMode::SelfPing);
+        CHECK(g.players[1].life == 0);
+    }
+    {   // O2: two GC'd Mogg Maniacs attack -- two FIXED chains on different creatures (no choice anywhere)
+        GameState s = ArmedState();
+        PutRfx(s, "Mogg Maniac", 2981);
+        AttachGc(s, 2982, 2981);
+        PutRfx(s, "Mogg Maniac", 2983);
+        AttachGc(s, 2984, 2983);
+        CHECK(order_ordinals(s, [](GameState& g) { dmgrx::CombatDamageDealt(g, { 2981, 2983 }, { 1, 1 }); }) == 0);
+    }
+}
+
+TEST_CASE("rfx step 9f: the search BRANCHES the order on a real line (Chain Reaction X=2, GC'd Reckoner + Nemesis), "
+          "and every branch replays identically in the executor")
+{
+    const GameState initial = ChainOnReckonerAndNemesis();
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    std::set<int> first_order;
+    int checked = 0;
+    for (const auto& p : plans)
+    {
+        const bool casts_chain = std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+            { return a.card_name.str() == "Chain Reaction"; });
+        if (!casts_chain) { continue; }
+        REQUIRE_FALSE(p.reflect_targets.empty());
+        const int first = p.reflect_targets.front();
+        if (dmgrx::IsOrderCode(first)) { first_order.insert(first); }
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        CHECK((Find(exec, 2911) != nullptr) == (Find(roll, 2911) != nullptr));
+        CHECK((Find(exec, 2913) != nullptr) == (Find(roll, 2913) != nullptr));
+        ++checked;
+    }
+    // Both orders are branched (the Reckoner's trigger first = raised index 0, the Nemesis's = 1); none is picked.
+    CHECK(first_order == std::set<int>{ dmgrx::OrderCode(0), dmgrx::OrderCode(1) });
+    CHECK(checked >= 2);
+}
+
+TEST_CASE("rfx step 9f: human play is asked the order through the dig chooser '(reflection order)'; -1 = the AI's order")
+{
+    const GameState s = OrderMattersBoard();
+    int asked = 0;
+    std::vector<std::string> names;
+    DigChooser chooser = [&](const GameState&, int, const std::string& source, const std::vector<Card>& examined,
+                             const std::vector<int>& legal, int dflt) -> int
+    {
+        ++asked;
+        CHECK(source.find("(reflection order)") != std::string::npos);
+        CHECK(legal.size() == examined.size());
+        CHECK(dflt == 0);   // the canonical next (nothing pinned)
+        names.clear();
+        for (const Card& c : examined) { names.push_back(c.m_name.str()); }
+        return 1;           // A's trigger (the second tile) resolves first
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &chooser;
+    GameState t = s;
+    FireOrderMattersEvent(t);
+    g_play_dig_chooser = saved;
+    CHECK(asked == 1);      // two classes: one answer places both
+    CHECK(names == std::vector<std::string>{ "Boros Reckoner", "Boros Reckoner" });
+    CHECK(t.players[1].life == 20 - 4);   // targets unpinned: both at the face, in the human's order
+}
+
+TEST_CASE("rfx step 9f: the Shaman pull is asked ONCE per damage chain (a Doll + GC loop); 'ask again' re-asks")
+{
+    auto run = [](bool ask_again, int& asked) {
+        GameState s = ShamanBoard(20, 2, 2);
+        AttachGc(s, 2050, 2010);
+        asked = 0;
+        TargetChooser chooser = [&](const GameState&, const CardDefinition& def, int, int, int,
+                                    const std::vector<ChosenTarget>& dflt) -> std::vector<ChosenTarget>
+        {
+            if (dmgrx::t_viewer_pull == nullptr) { return dflt; }
+            CHECK(def.params.redirect_pull_cost.has_value());
+            ++asked;
+            if (ask_again) { return { ChosenTarget{ dmgrx::kPullAskAgainKind, -1, 0 } }; }
+            return {};   // decline: for the rest of this chain
+        };
+        TargetChooser* saved = g_play_target_chooser;
+        g_play_target_chooser = &chooser;
+        ApplyPermAbility(s, 0, 2010, PermAbilityMode::SelfPing);
+        g_play_target_chooser = saved;
+        CHECK(s.players[1].life == 0);       // no pull: the loop runs to the kill
+        CHECK(UntappedLands(s) == 4);        // and no mana was spent
+        return s;
+    };
+    int once = 0, again = 0;
+    run(false, once);
+    run(true, again);
+    CHECK(once == 1);        // the ping's event asks; every Guilty Conscience event after it is the same chain
+    CHECK(again == 20);      // "ask again": the ping + one per Guilty Conscience hit on the Doll (19: the 20th
+                             // reflection kills before its GC trigger resolves)
+    {   // a NEW chain asks again: two separate top-level events, each asked once
+        GameState s = ShamanBoard(20, 2, 2);   // no GC: each ping is one short chain (ping -> reflection)
+        int asked = 0;
+        TargetChooser chooser = [&](const GameState&, const CardDefinition&, int, int, int,
+                                    const std::vector<ChosenTarget>&) -> std::vector<ChosenTarget>
+        { if (dmgrx::t_viewer_pull != nullptr) { ++asked; } return {}; };
+        TargetChooser* saved = g_play_target_chooser;
+        g_play_target_chooser = &chooser;
+        ApplyPermAbility(s, 0, 2010, PermAbilityMode::SelfPing);
+        s.battlefield[1].tapped = false;   // untap the Doll by hand for a second, separate event
+        ApplyPermAbility(s, 0, 2010, PermAbilityMode::SelfPing);
+        g_play_target_chooser = saved;
+        CHECK(asked == 2);
+        CHECK(s.players[1].life == 18);
     }
 }

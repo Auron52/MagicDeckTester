@@ -308,9 +308,16 @@ inline Permanent* FindPerm(GameState& s, int number)
     for (Permanent& p : s.battlefield) { if (p.card.m_number == number) { return &p; } }
     return nullptr;
 }
+inline const Permanent* FindPerm(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == number) { return &p; } }
+    return nullptr;
+}
 
 // Resolve ONE pending trigger (design step 8). Trigger kinds arrive with the cards (design step 2).
 inline void ResolveTrig(GameState& s, const PendingTrig& t);
+// Step 9f: search the order of one event's simultaneous triggers where it can matter (defined at the end).
+inline void OrderSimultaneousTriggers(GameState& s, std::vector<PendingTrig>& raised);
 
 // Is any Guilty Conscience (aura_host_damage_back) on the battlefield? One cheap scan; false on every
 // board without one, so the per-source bookkeeping below costs nothing elsewhere.
@@ -534,7 +541,9 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     if (GameOver(s)) { t_frame.stack.clear(); return r; }
 
     // 7. Push in reverse, so the FIRST raised trigger is on top and resolves first (the canonical
-    //    order: battlefield order of the reflectors -- design section 4.7).
+    //    order: battlefield order of the reflectors -- design section 4.7). Where the order of two or more
+    //    of them can matter, it is SEARCHED first (step 9f, OrderSimultaneousTriggers).
+    OrderSimultaneousTriggers(s, raised);
     for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
     return r;
 }
@@ -577,6 +586,42 @@ inline void Drain(GameState& s, std::size_t base)
     t_last_drain = DrainStats{ resolutions, stop };
 }
 
+// ONCE PER CHAIN (step 9f; USER 2026-11-18 ~07:30: "I'm not sure what prompts for pull, but once per loop might make
+// sense."). The prompt rides EVERY damage event that would damage a creature (step 9b), so a Stuffy Doll + Guilty
+// Conscience loop -- each Guilty Conscience trigger is a new event dealing damage to the Doll -- asked it once per loop
+// step. Now a CHAIN is one top-level damage event and every event its triggers cause (one DealDamageBatch drain; one
+// combat damage step's Guilty Conscience drain), and the human's answer stands for the chain:
+//   * a plain DECLINE (no creature) = no pull by this Shaman for the rest of the chain: it is not asked again;
+//   * "no pull now, ask again" (the extra option, ChosenTarget kind kPullAskAgainKind) = no pull at this event, and
+//     the prompt comes back at the chain's next event that damages a creature;
+//   * a PULL (any creatures) = those pulls now; the prompt comes back at the next event (the board has changed).
+// Every line the engine can reach stays reachable: the engine's choice is per EVENT ({stop} + the target classes; the
+// autonomous provider admits our own sweeper's event only, MTG_UNPRUNE=redirectwindow every event), and "pull at the
+// k-th event of the chain" is reached by answering "ask again" k-1 times, then pulling.
+inline constexpr int kPullAskAgainKind = 7;   // a ChosenTarget kind no other chooser uses (0 player, 1 permanent, 2 spell)
+struct PullChain
+{
+    const GameState* state = nullptr;
+    std::vector<int> quiet;   // pullers (m_number) whose human declined for the rest of this chain
+};
+inline thread_local PullChain t_pull_chain;
+// Opens a new chain on `s` unless an event on `s` is already open (a nested event belongs to the open chain).
+struct PullChainScope
+{
+    PullChain saved;
+    bool opened = false;
+    PullChainScope(const GameState& s, bool nested)
+    {
+        if (nested) { return; }
+        saved = std::move(t_pull_chain);
+        t_pull_chain = PullChain{ &s, {} };
+        opened = true;
+    }
+    ~PullChainScope() { if (opened) { t_pull_chain = std::move(saved); } }
+    PullChainScope(const PullChainScope&) = delete;
+    PullChainScope& operator=(const PullChainScope&) = delete;
+};
+
 // The en-Kor redirection rider (step 9b: on every damage event; defined below, after the pin machinery it uses).
 // Returns true when it added a pull or a shield to `b`.
 inline bool AnyRedirector(const GameState& s);
@@ -589,6 +634,8 @@ inline BatchResult DealDamageBatch(GameState& s, const Batch& b)
     // Step 1's replacement choices (Shaman en-Kor pulls, en-Kor {0} shields) are made HERE, for whatever event
     // this is, before anything is applied -- in both worlds, since both call this. A batch that already carries
     // its riders (a hand-built one) or names no window is applied as given.
+    // A top-level event opens a new pull CHAIN (step 9f: the human's pull answer stands for it); a nested one joins it.
+    const PullChainScope chain(s, t_frame.depth > 0 && t_frame.state == &s);
     if (b.window != RiderWindow::None && b.pulls.empty() && b.shields.empty() && AnyRedirector(s))
     {
         Batch rb = b;
@@ -665,9 +712,11 @@ inline int PlayerId(int p) { return -1 - p; }
 // break the proof and keep the option: Purity (our noncombat damage becomes lifegain) and Tamanoa for
 // a NONCREATURE source (every reflector is a creature, so that clause is future-proofing). Off under
 // human play and MTG_UNPRUNE=reflecttarget, which see every legal target.
-inline bool OwnFaceDominated(const GameState& s, const PendingTrig& t)
+// `search_view` (step 9f, the trigger-order relevance test only): judge as the autonomous search would, also under
+// human play -- see OrderSimultaneousTriggers.
+inline bool OwnFaceDominated(const GameState& s, const PendingTrig& t, bool search_view = false)
 {
-    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::ReflectTarget)) { return false; }
+    if ((HumanPlayActive() && !search_view) || DecisionUnpruned(UnprunedGate::ReflectTarget)) { return false; }
     const int ctrl = t.src.controller;
     if (dmgev::PurityProtects(s, ctrl)) { return false; }
     if (!t.src.is_creature && dmgev::CountTamanoa(s, ctrl) > 0) { return false; }
@@ -677,14 +726,14 @@ inline bool OwnFaceDominated(const GameState& s, const PendingTrig& t)
 // The trigger's legal targets at resolution, opponent's face FIRST (the rollout's permitted greedy
 // takes the front). Planeswalkers are not offered (disclosed PARTIAL on the cards: the goldfish
 // opponent never controls one, and damage to our own only removes loyalty).
-inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTrig& t)
+inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTrig& t, bool search_view = false)
 {
     using RT = CardParams::ReflectTo;
     const int ctrl = t.src.controller, opp = 1 - ctrl;
     if (t.kind == RT::ChosenPlayer) { return { PlayerId(t.fixed_player) }; }   // a fixed recipient, not a target
     std::vector<int> legal{ PlayerId(opp) };
     if (t.kind == RT::TargetOpponent) { return legal; }
-    if (!OwnFaceDominated(s, t)) { legal.push_back(PlayerId(ctrl)); }
+    if (!OwnFaceDominated(s, t, search_view)) { legal.push_back(PlayerId(ctrl)); }
     if (t.kind == RT::AnyTarget || t.kind == RT::AnyOtherTarget)
     {
         for (const Permanent& q : s.battlefield)
@@ -693,6 +742,26 @@ inline std::vector<int> LegalReflectTargets(const GameState& s, const PendingTri
             if (t.kind == RT::AnyOtherTarget && q.card.m_number == t.self_number) { continue; }
             legal.push_back(q.card.m_number);
         }
+    }
+    return legal;
+}
+
+// The trigger's target list as the resolver offers it: the engine's legal set (F1 applied) and, outside human
+// play, the provider's restrict/order (ReflectTargetCandidates; anything it adds is dropped, an emptied list
+// falls back to the engine's -- CR 603.3d). Stuffy Doll's fixed recipient never consults the hook.
+// `search_view` = what the AUTONOMOUS search would offer, also under human play (step 9f's order relevance test).
+inline std::vector<int> EffectiveReflectTargets(const GameState& s, const PendingTrig& t, bool search_view = false)
+{
+    const std::vector<int> engine_legal = LegalReflectTargets(s, t, search_view);
+    std::vector<int> legal = engine_legal;
+    if ((search_view || !HumanPlayActive()) && t.kind != CardParams::ReflectTo::ChosenPlayer)
+    {
+        ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
+                                                   static_cast<int>(t.kind), legal);
+        legal.erase(std::remove_if(legal.begin(), legal.end(), [&](int id)
+                    { return std::find(engine_legal.begin(), engine_legal.end(), id) == engine_legal.end(); }),
+                    legal.end());
+        if (legal.empty()) { legal = engine_legal; }
     }
     return legal;
 }
@@ -912,20 +981,9 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
                      static_cast<int>(t.kind), t.src.card.m_name.str().c_str());
         std::abort();
     }
-    const std::vector<int> engine_legal = LegalReflectTargets(s, t);
-    std::vector<int> legal = engine_legal;
-    // Stuffy Doll: "it deals that much damage to the chosen player" -- no target, no hook, no prompt.
-    if (!HumanPlayActive() && t.kind != RT::ChosenPlayer)   // human play sees every legal target (the provider may not prune it)
-    {
-        ResolveProvider(s).ReflectTargetCandidates(s, t.self_number, t.src.controller, t.amount,
-                                                   static_cast<int>(t.kind), legal);
-        // The hook may only RESTRICT or ORDER: drop anything it added, and a mandatory trigger with a
-        // legal target cannot be emptied (CR 603.3d) -- an emptied list falls back to the engine's.
-        legal.erase(std::remove_if(legal.begin(), legal.end(), [&](int id)
-                    { return std::find(engine_legal.begin(), engine_legal.end(), id) == engine_legal.end(); }),
-                    legal.end());
-        if (legal.empty()) { legal = engine_legal; }
-    }
+    // Stuffy Doll: "it deals that much damage to the chosen player" -- no target, no hook, no prompt. Human play sees
+    // every legal target (the provider may not prune it); the hook may only RESTRICT or ORDER.
+    const std::vector<int> legal = EffectiveReflectTargets(s, t);
     if (legal.empty()) { return; }   // no legal target: the trigger is removed (CR 603.3d)
     int pick = legal.front();
     if (legal.size() > 1)   // a CHOICE: searched (the pin), probed (the fan), or asked (the viewer)
@@ -1030,11 +1088,11 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
         RaiseAuraHostDamageBack(s, nums[k], amounts[k], raised);
     }
     if (raised.empty()) { return; }
+    const PullChainScope chain(s, false);   // one combat damage step's GC drain is one pull chain (step 9f)
     Frame saved;
     std::swap(saved, t_frame);
     t_frame.state = &s;
     t_frame.depth = 1;
-    for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
     std::size_t used = 0;
     {
         // The combat suffix of the plan that led here (empty: every choice takes the front). The PinScope
@@ -1047,6 +1105,10 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
         std::optional<TargetProbeScope> probing;
         if (t_combat_probe.probe != nullptr && t_combat_probe.state == &s)
         { probing.emplace(*t_combat_probe.probe, pins, t_combat_probe.depth); }
+        // Several GC'd attackers raise their GC triggers together: their order is searched where it can matter
+        // (step 9f), on the combat pin stream, before any of them resolves.
+        OrderSimultaneousTriggers(s, raised);
+        for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
         Drain(s, 0);
         used = t_pin_cursor;
     }
@@ -1385,6 +1447,7 @@ struct PullPrompt
 };
 inline thread_local const PullPrompt* t_viewer_pull = nullptr;
 
+
 // Can `s` pay `bill` now? (On a COPY: the probe never taps the real state.)
 inline bool PullAffordable(const GameState& s, const ManaCost& bill)
 {
@@ -1489,7 +1552,10 @@ inline void AddPullRider(GameState& s, int controller, Batch& b, std::vector<std
             picks.push_back(from);
             run = next;
         }
-        if (ask)   // human play: any set of creatures (either side, not P, not taken) up to what the mana affords
+        const bool chain_quiet = ask && t_pull_chain.state == &s
+            && std::find(t_pull_chain.quiet.begin(), t_pull_chain.quiet.end(), P.card.m_number) != t_pull_chain.quiet.end();
+        if (chain_quiet) { picks.clear(); }   // the human declined earlier in this chain: it stands (step 9f)
+        if (ask && !chain_quiet)   // human play: any set of creatures (either side, not P, not taken) up to what the mana affords
         {
             PullPrompt pr;
             pr.puller = pi;
@@ -1516,10 +1582,13 @@ inline void AddPullRider(GameState& s, int controller, Batch& b, std::vector<std
                 for (int i : pr.defaults) { dflt.push_back({ 1, i, 0 }); }
                 const PullPrompt* saved = t_viewer_pull;
                 t_viewer_pull = &pr;
-                const auto got = (*g_play_target_chooser)(s, *pd, controller, pr.max, 0, dflt);
+                auto got = (*g_play_target_chooser)(s, *pd, controller, pr.max, 0, dflt);
                 t_viewer_pull = saved;
                 std::vector<int> human;
                 bool ok = static_cast<int>(got.size()) <= pr.max;
+                const bool again = got.size() == 1 && got[0].kind == kPullAskAgainKind;
+                if (again) { got.clear(); }
+                else if (got.empty() && t_pull_chain.state == &s) { t_pull_chain.quiet.push_back(P.card.m_number); }
                 for (const ChosenTarget& c : got)
                 {
                     if (!ok) { break; }
@@ -1730,6 +1799,272 @@ inline void AddRedirectRider(GameState& s, Batch& b)
         if (!mine || !RiderWindowAdmitted(s, p, b.window, src_ctrl)) { continue; }
         AddShieldRider(s, p, b);
     }
+}
+
+// ---- THE ORDER OF ONE EVENT'S SIMULTANEOUS TRIGGERS (design 4.7; step 9f) ------------------------------------
+// USER 2026-11-18 ~07:30: "The simultaneous triggers using one order is fine, except we need to make sure that it is
+// the best order when the order matters." The CANONICAL order (battlefield order of the damaged reflectors, each
+// creature's own reflection before its granted instances, then the Guilty Conscience triggers) stands wherever the
+// order provably cannot change any outcome; wherever it can, the order is a SEARCHED choice on the shared pin stream,
+// so the search -- not a convention -- finds the best one.
+//
+// THE ORDER-RELEVANCE TEST, per raised trigger t, on the "search view" of its target list (EffectiveReflectTargets
+// with F1 and the provider's restrict applied -- the list the autonomous search would branch over; lists only SHRINK
+// during a cascade, since no permanent enters and no GC / Spiteful grant / en-Kor can arrive, so what t can reach
+// later is a subset of what it can reach now):
+//   COMMUTES  its whole resolution is damage to a player and nothing else: a reflection whose list holds players only
+//             (a lazy list holding OUR face too counts, while nothing rewards damage to us -- dmg_events_armed false:
+//             the F1 argument, our life matters only through dying, so the best line aims it at the opponent), whose
+//             source carries no Guilty Conscience (else the source dealing damage re-triggers it), and that cannot hit
+//             ONLY us; or a GC trigger whose host is already gone (it does nothing). Damage to the opponent's face is
+//             additive, read by nothing in the cascade, and a lethal one ends the game in our favour wherever it sits.
+//   FIXED     its cascade can touch exactly one creature H (a GC trigger on H; a players-only reflection whose GC'd
+//             source is H) and offers no choice anywhere: every reflection instance H carries has a players-only list
+//             (Stuffy Doll's chosen opponent, Mogg Maniac, a Spiteful grant under F1) and no en-Kor can act at H's GC
+//             event. Such a cascade is a fixed chain on H: H is dealt N, reflects to the opponent, its GC hits it
+//             again, until H dies (each hit, the lethal one included, reflects -- LKI).
+//   FREE      anything else: a creature in the list, a choice in H's cascade, an en-Kor rider at H's event, a forced
+//             hit on US (a Doll that chose us: the race with a lethal hit on the opponent is decided by the order).
+// THE SOUND FOLDS (no choice; the canonical order is kept):
+//   O1  fewer than two siblings are not COMMUTES -- a commuting trigger can sit anywhere.
+//   O2  no sibling is FREE: FIXED chains on DIFFERENT creatures touch disjoint creatures and only add damage to the
+//       opponent; two FIXED chains on the SAME creature H (H's own fixed reflection and H's GC trigger, the Doll's
+//       self-ping) each run until H dies, every hit reflecting, so the total reaching the opponent is the same in
+//       either order (and an indestructible H is fold O3).
+//   O3  some sibling can reach a PROVEN LOOP: an own INDESTRUCTIBLE creature carrying a Guilty Conscience whose own
+//       reflection (or self-granted Spiteful instance) can always hit the opponent's face -- the Doll that chose the
+//       opponent, a Loran's-Escaped Reckoner / Nemesis / Maniac / Spiteful Sliver. Hitting it wins this event (>= 1
+//       life per <= 2 resolutions, every iteration's face option is legal), and no earlier sibling's cascade can take
+//       it away: it cannot die, its Aura cannot leave, its own reflection cannot be removed, and no autonomous line
+//       damages us (F1 / the chosen-player fold). So the canonical order reaches the win.
+//   O4  identical siblings (same source, kind, amount, fixed recipient, lock, GC host) are one class: their
+//       permutations are the same line.
+// Otherwise THE CHOICE: which of the relevant (non-COMMUTES) siblings resolves next, one PinnedChoice per slot until
+// one class is left (front = the canonical next, so an unpinned ordinal -- beyond the horizon, the depth-0 runner, a
+// speculative apply -- keeps the canonical order: the sanctioned one-shot policy). Codes OrderCode(i), i = the
+// sibling's index in this event's raised list (deterministic: the same state raises the same list). The commuting
+// siblings keep their canonical slots; the chosen order fills the relevant siblings' slots. Human play is asked
+// through the `dig` chooser "(reflection order)" at the same points (same test, same folds), "which resolves
+// next", repeatedly; -1 = the AI's order for the rest.
+// THE FAN'S PRE-CHECKS stay sound: a FREE sibling needs a creature in a list (a choice reflector: Reckoner / Nemesis),
+// a choice or an en-Kor in H's cascade (a chooser the pre-checks already count), or a Doll that chose us -- which
+// the autonomous engine makes only when the chosen-player fold does not hold, and the pre-checks count exactly that.
+// Codes: kOrderPinBase - i, i in [0, 2^24): below every attack-hold code (> -0x38000000), above kCombatPinMark.
+inline constexpr int kOrderPinBase = -0x3C000000;
+inline int OrderCode(std::size_t i)
+{
+    if (i >= (std::size_t{ 1 } << 24))
+    {
+        std::fprintf(stderr, "[rfx] FATAL: trigger-order index %zu cannot be encoded\n", i);
+        std::abort();
+    }
+    return kOrderPinBase - static_cast<int>(i);
+}
+inline std::size_t OrderDecode(int code) { return static_cast<std::size_t>(kOrderPinBase - code); }
+inline bool IsOrderCode(int v) { return v <= kOrderPinBase && v > kOrderPinBase - (1 << 24); }
+
+// O3's proven loop (see above). The opponent's face is always in such a creature's list (LegalReflectTargets puts it
+// first and the provider never removes it).
+inline bool ProvenLoopHost(const GameState& s, const Permanent& q)
+{
+    using RT = CardParams::ReflectTo;
+    if (!q.card.IsCreature() || !q.HasKeyword(Keyword::Indestructible)) { return false; }
+    if (AuraHostDamageBackOn(s, q.card.m_number) <= 0) { return false; }
+    const CardDefinition* d = Def(q);
+    if (d == nullptr) { return false; }
+    const int opp = 1 - q.controller_index;
+    const RT k = d->params.reflect_dealt_damage;
+    if (k == RT::ChosenPlayer) { return (q.chosen_player >= 0 ? q.chosen_player : opp) == opp; }
+    if (k != RT::None) { return true; }   // target opponent / any target / any other target / target player
+    return d->params.grants_reflect_to_subtype != RT::None && GrantCovers(q, q);   // a Spiteful Sliver's own grant
+}
+
+// Can an en-Kor (either player's) act at an event of kind `w` from `src_controller`? (The rider's own test.)
+inline bool RiderCouldAct(const GameState& s, RiderWindow w, int src_controller)
+{
+    for (int p = 0; p < static_cast<int>(s.players.size()); ++p)
+    {
+        bool mine = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature() || q.controller_index != p) { continue; }
+            const CardDefinition* d = Def(q);
+            if (d != nullptr && DefOffersShieldChoice(*d)) { mine = true; break; }
+        }
+        if (mine && RiderWindowAdmitted(s, p, w, src_controller)) { return true; }
+    }
+    return false;
+}
+
+enum class OrderRole : std::uint8_t { Commutes = 0, Fixed, Free };
+
+// A players-only list: COMMUTES unless it can hit only us, or holds our face while something rewards damage to us.
+inline OrderRole PlayersOnlyRole(const GameState& s, const std::vector<int>& legal, int ctrl)
+{
+    const int opp_face = PlayerId(1 - ctrl);
+    const bool has_opp = std::find(legal.begin(), legal.end(), opp_face) != legal.end();
+    if (!has_opp) { return OrderRole::Free; }                                       // forced onto us
+    if (legal.size() > 1 && s.dmg_events_armed) { return OrderRole::Free; }          // our face may be rewarded
+    return OrderRole::Commutes;
+}
+
+// Is every damage event in a cascade on creature H choice-free (FIXED)? H's reflection instances (its own, then one
+// per granter covering it) must each have a players-only COMMUTES list, and no en-Kor may act at the GC's hit on H.
+inline bool FixedCascadeOn(const GameState& s, const Permanent& h, int gc_controller)
+{
+    using RT = CardParams::ReflectTo;
+    const CardDefinition* d = Def(h);
+    auto check = [&](RT kind, bool lock, int fixed) {
+        PendingTrig probe;
+        probe.kind = kind;
+        probe.src = SourceRef{ h.card, h.controller_index, true };
+        probe.self_number = h.card.m_number;
+        probe.amount = 1;
+        probe.lock_life = lock;
+        probe.fixed_player = fixed;
+        const std::vector<int> legal = EffectiveReflectTargets(s, probe, true);
+        for (int id : legal) { if (id > 0) { return false; } }
+        return legal.empty() || PlayersOnlyRole(s, legal, h.controller_index) == OrderRole::Commutes;
+    };
+    if (d != nullptr && d->params.reflect_dealt_damage != RT::None)
+    {
+        const int fixed = d->params.reflect_dealt_damage != RT::ChosenPlayer ? -1
+                        : h.chosen_player >= 0 ? h.chosen_player : 1 - h.controller_index;
+        if (!check(d->params.reflect_dealt_damage, d->params.reflect_player_cant_gain_life, fixed)) { return false; }
+    }
+    for (const Permanent* g : Granters(s))
+    {
+        if (!GrantCovers(*g, h)) { continue; }
+        if (!check(Def(*g)->params.grants_reflect_to_subtype, false, -1)) { return false; }
+    }
+    return !RiderCouldAct(s, RiderWindow::AuraHost, gc_controller);
+}
+
+struct OrderClass { OrderRole role = OrderRole::Commutes; bool proven_loop = false; };
+
+inline OrderClass ClassifyForOrder(const GameState& s, const PendingTrig& t)
+{
+    OrderClass c;
+    if (t.aura_host != 0)   // Guilty Conscience: a fixed hit on its host
+    {
+        const Permanent* h = FindPerm(s, t.aura_host);
+        if (h == nullptr || !h->card.IsCreature()) { return c; }   // the host is gone: it does nothing
+        if (ProvenLoopHost(s, *h)) { c.role = OrderRole::Free; c.proven_loop = true; return c; }
+        c.role = FixedCascadeOn(s, *h, t.src.controller) ? OrderRole::Fixed : OrderRole::Free;
+        return c;
+    }
+    const std::vector<int> legal = EffectiveReflectTargets(s, t, true);
+    if (legal.empty()) { return c; }   // removed (CR 603.3d)
+    bool creature = false;
+    for (int id : legal)
+    {
+        if (id <= 0) { continue; }
+        creature = true;
+        const Permanent* q = FindPerm(s, id);
+        if (q != nullptr && q->controller_index == t.src.controller && ProvenLoopHost(s, *q)) { c.proven_loop = true; }
+    }
+    if (creature) { c.role = OrderRole::Free; return c; }
+    c.role = PlayersOnlyRole(s, legal, t.src.controller);
+    // The source dealing this damage re-triggers its own Guilty Conscience (a GC trigger on the source, if it is still
+    // on the battlefield -- a dead source's GC is already in the graveyard).
+    const Permanent* src = FindPerm(s, t.self_number);
+    if (src != nullptr && src->card.IsCreature() && AuraHostDamageBackOn(s, t.self_number) > 0)
+    {
+        const int opp_face = PlayerId(1 - t.src.controller);
+        if (ProvenLoopHost(s, *src) && std::find(legal.begin(), legal.end(), opp_face) != legal.end())
+        { c.proven_loop = true; c.role = OrderRole::Free; return c; }
+        if (c.role == OrderRole::Commutes)
+        { c.role = FixedCascadeOn(s, *src, t.src.controller) ? OrderRole::Fixed : OrderRole::Free; }
+    }
+    return c;
+}
+
+// O4: interchangeable siblings.
+inline bool SameTrigger(const PendingTrig& a, const PendingTrig& b)
+{
+    if (a.aura_host != 0 || b.aura_host != 0) { return a.aura_host == b.aura_host && a.amount == b.amount; }
+    return a.kind == b.kind && a.self_number == b.self_number && a.src.card.m_number == b.src.card.m_number
+        && a.amount == b.amount && a.lock_life == b.lock_life && a.fixed_player == b.fixed_player;
+}
+
+// The human-play order prompt's tag (main.cpp's dig note, the viewer's dig panel).
+inline constexpr const char* kOrderPromptTag = " (reflection order)";
+
+inline void OrderSimultaneousTriggers(GameState& s, std::vector<PendingTrig>& raised)
+{
+    if (raised.size() < 2) { return; }
+    std::vector<std::size_t> rel;   // relevant siblings, canonical order
+    bool any_free = false;
+    for (std::size_t i = 0; i < raised.size(); ++i)
+    {
+        const OrderClass c = ClassifyForOrder(s, raised[i]);
+        if (c.proven_loop) { return; }                        // O3
+        if (c.role == OrderRole::Commutes) { continue; }
+        rel.push_back(i);
+        if (c.role == OrderRole::Free) { any_free = true; }
+    }
+    if (rel.size() < 2 || !any_free) { return; }             // O1 / O2
+    // O4 classes: members in canonical order.
+    std::vector<std::vector<std::size_t>> classes;
+    for (std::size_t i : rel)
+    {
+        bool placed = false;
+        for (auto& cl : classes) { if (SameTrigger(raised[cl.front()], raised[i])) { cl.push_back(i); placed = true; break; } }
+        if (!placed) { classes.push_back({ i }); }
+    }
+    if (classes.size() < 2) { return; }
+    std::vector<std::size_t> took(classes.size(), 0);
+    std::vector<std::size_t> order;   // the relevant siblings, chosen order
+    order.reserve(rel.size());
+    bool ask = g_play_dig_chooser != nullptr && !TapSpeculatingNow();   // the viewer (ResolveLookTopGroup's test)
+    while (order.size() < rel.size())
+    {
+        std::vector<int> legal;
+        std::vector<std::size_t> cls_of;
+        for (std::size_t c = 0; c < classes.size(); ++c)
+        {
+            if (took[c] < classes[c].size()) { legal.push_back(OrderCode(classes[c][took[c]])); cls_of.push_back(c); }
+        }
+        std::size_t pick_c = cls_of.front();
+        if (legal.size() > 1)
+        {
+            const int pick = PinnedChoice(legal);
+            for (std::size_t k = 0; k < legal.size(); ++k) { if (legal[k] == pick) { pick_c = cls_of[k]; break; } }
+            if (ask)
+            {
+                std::vector<Card> examined;
+                std::vector<int> idx;
+                int dflt = 0;
+                for (std::size_t k = 0; k < cls_of.size(); ++k)
+                {
+                    const PendingTrig& t = raised[classes[cls_of[k]][took[cls_of[k]]]];
+                    examined.push_back(t.src.card);
+                    idx.push_back(static_cast<int>(k));
+                    if (cls_of[k] == pick_c) { dflt = static_cast<int>(k); }
+                }
+                const PendingTrig& first = raised[classes[cls_of.front()][took[cls_of.front()]]];
+                const int got = (*g_play_dig_chooser)(s, first.src.controller,
+                                                      std::string("Damage triggers") + kOrderPromptTag, examined, idx, dflt);
+                if (got >= 0 && got < static_cast<int>(cls_of.size())) { pick_c = cls_of[static_cast<std::size_t>(got)]; }
+                else { ask = false; }   // -1: the AI's order for the rest
+            }
+        }
+        order.push_back(classes[pick_c][took[pick_c]++]);
+    }
+    std::vector<PendingTrig> out = raised;
+    for (std::size_t k = 0; k < rel.size(); ++k) { out[rel[k]] = raised[order[k]]; }
+    if (g_play_event_sink != nullptr && !TapSpeculatingNow()
+        && !std::equal(order.begin(), order.end(), rel.begin()))
+    {
+        std::string text = "\xE2\x9A\xA1 trigger order:";
+        for (std::size_t k = 0; k < order.size(); ++k)
+        {
+            const PendingTrig& t = raised[order[k]];
+            text += (k ? ", " : " ") + t.src.card.m_name.str() + " (" + std::to_string(t.amount) + ")";
+        }
+        EmitPlayEvent(s.turn_number, "trigger", text);
+    }
+    raised.swap(out);
 }
 
 // "{T}: This creature deals N damage to itself" (PermAbilityMode::SelfPing; the {T} is already paid by

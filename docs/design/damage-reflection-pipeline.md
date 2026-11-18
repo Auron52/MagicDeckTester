@@ -687,13 +687,81 @@ singleton → no probe. The pre-check is a sound shortcut, not a fold.
 
 ### 4.7 Order of simultaneous triggers
 
-* The lazy-target equivalence (§4.1) makes order irrelevant to the outcome under the folds. Kept
-  targets are the face, which commutes, or an ∞ amplifier, which wins.
-* The pipeline uses one canonical order: battlefield order of the reflectors, then the GC triggers.
-  This is NOT surfaced.
-* This is the one ordering we deliberately fix. Disclose it in 6a with the proof. Under
-  `MTG_UNPRUNE`, where non-face creature targets reappear, order could matter in contrived
-  Chain Reaction lines; record that as a PARTIAL.
+*Rewritten in step 9f (2026-11-18). USER, item 2: "The simultaneous triggers using one order is fine, except we need
+to make sure that it is the best order when the order matters. Overall, these seem fine."*
+
+The canonical order is: the damaged reflectors in battlefield order (each creature's own reflection, then one granted
+instance per Spiteful Sliver in the granters' battlefield order), then the Guilty Conscience triggers
+(`dmgrx::ApplyOne` steps 3 / 3b / 7). It was NOT always the best order. Contrived counter-example (unit test "rfx step
+9f: where the order CAN matter ..."): two Spiteful Slivers out (every Sliver reflects twice), Boros Reckoner B dealt 3
+(lethal) listed before Reckoner A dealt 1. B first reaches at most 7 damage: its lethal 3 into a Sliver kills one
+amplifier, so A's 1 is reflected once. A first reaches 8: A's 1 into a Sliver (it lives, 2 to the face), then B's 3
+into a Sliver (lethal, still x2 by LKI). So the order is now SEARCHED wherever it can matter, and kept canonical only
+where a proof says it cannot (`dmgrx::OrderSimultaneousTriggers`).
+
+**Inventory: every point where two or more of our triggers go on the stack at once (from the code).**
+
+| Point | Code path | Siblings |
+|---|---|---|
+| Our sweeper (Act, Chain Reaction) | `Sweep` -> `DealDamageBatch` -> `ApplyOne` | every damaged reflector's reflections and granted instances (the sweeper is not a creature, so no GC trigger) |
+| A reflection resolving onto a creature | `ResolveTrig` -> `ApplyOne` | the target's reflections + the GC triggers on the SOURCE (the source dealt damage) |
+| A reflection resolving onto a player | same | only the source's GC triggers (one per GC on it) |
+| A Guilty Conscience trigger resolving | `ResolveTrig` (aura_host) -> `ApplyOne` | the host's reflections (the GC is not a creature: no GC re-trigger from this event) |
+| Stuffy Doll's {T} | `SelfPingAt` -> `ApplyOne` | the Doll's reflection + the GC triggers on the Doll |
+| Combat damage | `CombatDamageDealt` (both worlds) | the GC triggers of every connecting GC'd attacker (nothing blocks, so no creature is dealt combat damage; first strike is not offered, 4.9) |
+| en-Kor {0} shields / Shaman pulls | `ApplyOne` step 1 | NOT triggers: replacement effects (CR 614.9 / 616.1), applied before aggregation. Pulls first (step 9), then the shields to a fixpoint; each shield moves one point off a creature that has one, so the final per-recipient totals do not depend on the order the shields are listed in |
+| Deaths in a sweep | `SbaPass` -> `OnCreatureDies` | no card in this pool (ours or the opponent's Spirits) has a death trigger; `OnCreatureDies` / `FireOppCreatureDies` are inline watchers, not stacked |
+
+**The relevance test**, per raised trigger, on its *search view* target list (`EffectiveReflectTargets(..., true)`: F1
+and the provider's restriction applied, exactly what the autonomous search branches over). Lists only shrink during a
+cascade: no permanent enters, no Guilty Conscience, Spiteful grant or en-Kor can arrive, and the provider's folds only
+drop more as GCs and granters leave. So what a trigger can reach later is a subset of what it can reach now.
+* **COMMUTES:** a reflection whose list holds players only and that cannot be forced onto us, from a source that
+  carries no GC (or whose source is gone); or a GC trigger whose host is gone. Its whole effect is damage to the
+  opponent's face (a lazy list holding our face too counts while `dmg_events_armed` is false: by the F1 argument the
+  best line aims it at the opponent). That is additive and read by nothing in the cascade, and a lethal hit ends the
+  game in our favour wherever it sits.
+* **FIXED:** the cascade can touch exactly one creature H (a GC trigger on H; a players-only reflection whose GC'd
+  source is H), and no choice can arise in it. Every reflection instance H carries has a players-only commuting list,
+  and no en-Kor may act at the GC's hit on H (`FixedCascadeOn`).
+* **FREE:** everything else. A creature in the list; a choice or an en-Kor rider in H's cascade; a hit forced onto us (a
+  Doll that chose us, which races a lethal hit on the opponent).
+
+**The sound folds, one line per case (the canonical order is kept, no ordinal is taken):**
+* **O1 (face-only triggers commute).** Fewer than two siblings are FIXED or FREE. Mogg Maniac, a Doll that chose the
+  opponent without GC, and a Spiteful grant under F1 are all COMMUTES: their only effect is the opponent's life total.
+  Code: `PlayersOnlyRole`, `ClassifyForOrder`.
+* **O2 (choice-free chains commute).** No sibling is FREE. FIXED chains on different creatures touch disjoint
+  creatures and only add damage to the opponent. Two FIXED chains on the same H (H's fixed reflection and H's GC
+  trigger) each run until H dies, and every hit reflects, the lethal one included by LKI. So the opponent takes the
+  same total in either order; an indestructible H is O3. Example: two GC'd Mogg Maniacs connecting in combat.
+* **O3 (a proven loop is reachable).** Some sibling can start a proven loop: an own INDESTRUCTIBLE creature carrying a
+  GC whose own reflection (or self-granted Spiteful instance) can always hit the opponent's face (`ProvenLoopHost`).
+  That covers the Doll that chose the opponent and a Loran's-Escaped Reckoner, Nemesis, Maniac or Spiteful Sliver.
+  Hitting it wins in this event (>= 1 life per <= 2 resolutions; the face option is legal at every step). No earlier
+  sibling can take that away: the host cannot die, its Aura cannot leave, its own reflection cannot be removed, and no
+  autonomous line damages us (F1, the chosen-player fold). So the canonical order reaches the win.
+* **O4 (identity).** Identical siblings (same source, kind, amount, fixed recipient, lock, GC host) are one class: their
+  permutations are the same line.
+
+**Otherwise the order is SEARCHED.** It is a sequence of `PinnedChoice`s on the shared pin stream: which relevant
+sibling resolves next, until one class is left. Option ids are `OrderCode(i) = -0x3C000000 - i`, where i is the
+sibling's index in this event's raised list. They sit below every attack-hold code and above `kCombatPinMark`, and are
+taken after the event's rider choices and before any sibling's target. COMMUTES siblings keep their canonical slots.
+The front is the canonical next, so an unpinned ordinal (beyond the horizon, the depth-0 runner, a speculative apply)
+keeps today's order: the sanctioned one-shot policy. Inside the window the fan branches every option. The fan
+pre-checks stay sound: a FREE sibling needs a choice reflector or an en-Kor (already counted), or a Doll that may choose
+us, which the pre-checks now count when `ChosenPlayerFoldHolds` is false. The main-phase and combat streams both carry
+it (`CombatDamageDealt` orders inside its pin scope).
+
+**Under `MTG_UNPRUNE` and human play.** `MTG_UNPRUNE=reflecttarget` lifts F1 and the provider restriction, so more
+siblings are FREE and the search branches more orders (a diagnostic mode). Human play is asked the same points as the
+search (same test, search view), through the `dig` chooser "(reflection order)". The question is "which resolves
+next", asked repeatedly; -1 means the AI's order for the rest. Disclosed PARTIAL (human play only): with an en-Kor of
+ours out, the provider's F2 folds read the provider's own window prune (sweeper only), while a human is asked shields
+at every event. So a contrived line where a human-placed shield on a reflection's event would make the order matter
+gets no order prompt. Real example of a searched order: Chain Reaction X=2 on a GC'd Boros Reckoner beside a
+Screaming Nemesis (unit test "rfx step 9f: the search BRANCHES the order on a real line").
 
 ### 4.8 Sweeper timing (Blasphemous Act / Chain Reaction)
 
@@ -2036,3 +2104,55 @@ Where the code departs from the sections above, and why. Each entry names the sy
   Escape are skipped.
 * **Verification.** Unit 3476/3476 (5 new step-11 cases). Scenarios 583/583. Smoke: 219/219 job digests identical to
   step 9e (`build/scratch/stuffy/impl11/smoke-step11-batch.log`); the 44 FAILs are the stale origin GT.
+
+### Step 9f (the best order for simultaneous damage triggers; the Shaman pull asked once per damage chain)
+
+* **The rulings (verbatim, ~07:30 11-18).** Item 2: *"The simultaneous triggers using one order is fine, except we need
+  to make sure that it is the best order when the order matters. Overall, these seem fine."* Item 8: *"I'm not sure
+  what prompts for pull, but once per loop might make sense."*
+* **Part A (order).** The inventory, the relevance test (COMMUTES / FIXED / FREE), the folds O1-O4 and the
+  counter-example are in §4.7. Canonical was NOT always best, so the order is now a searched pin
+  (`dmgrx::OrderSimultaneousTriggers`, `OrderCode(i) = -0x3C000000 - i`), called in `ApplyOne` step 7 and inside
+  `CombatDamageDealt`'s pin scope. The front is the canonical next, so an unpinned ordinal keeps the old order
+  (horizon / d0 / speculative applies only). `EffectiveReflectTargets(s, t, search_view)` was factored out of
+  `ResolveTrig`, so the order test and the resolution read one target list. The TurnSolver main and combat fan
+  pre-checks now count a Stuffy Doll as a chooser when `!ChosenPlayerFoldHolds`. Human play is asked through the dig
+  chooser "(reflection order)" (DECISIONS.md `dig` row; `-1` = the AI's order for the rest).
+* **Part B (pull), what prompted it.** `AddPullRider` rides every damage event that would damage a creature
+  (step 9b), and human play is never window-pruned. In a Stuffy Doll + Guilty Conscience loop each GC trigger is a new
+  damage event to the Doll, so with a Shaman out and {1}{W} open the prompt came at the ping and again at every GC
+  hit. The autonomous engine never asks there: the provider admits only our own sweeper's event, and P2 drops the Doll
+  as a pull target. **Change:** a CHAIN (`PullChain` / `PullChainScope`) is one top-level `DealDamageBatch` and every
+  event its triggers cause (and one combat damage step's GC drain). A plain decline stands for the chain. The extra
+  option "no pull now, ask again" (`kPullAskAgainKind = 7`, JSON `pull_ask_again`) re-asks at the chain's next event,
+  so "pull at the k-th event" stays reachable (answer "ask again" k-1 times), which matches the engine's per-event
+  option set. A pull re-asks at the next event (the board changed).
+* **Deviations (disclosed).**
+  1. **The viewer pull panel bug fix.** The old panel reused the loyalty panel, which forced exactly one pick. A pull
+     is 0..max creatures. The new panel allows 0..max picks and adds the "ask again" button.
+  2. **Human-only pointless order prompt.** A Doll that chose US with a GC is FREE (its hit on us races a lethal hit
+     on the opponent), so human play is asked an order there that cannot help. The autonomous search never
+     reaches it: `ChosenPlayerFoldHolds` keeps the Doll's choice on the opponent.
+  3. **PARTIAL (human play only).** The relevance test uses the SEARCH view. With an en-Kor of ours out, the F2 folds
+     read the provider's window prune (sweeper only), while a human is asked shields at every event. So a contrived
+     line where a human-placed shield on a reflection's event makes the order matter gets no order prompt.
+  4. A const `FindPerm` overload was added (needed by the order classifier).
+* **Tests.** Six new unit cases (test_rfx_pipeline.cpp, "rfx step 9f"):
+  - the order codes;
+  - the order-matters board: the searched best is 8 and canonical 7 (opponent at 12 vs 13); the pinned order
+    reproduces 8;
+  - the folds O1/O3/O3-ping/O2 (no order ordinal);
+  - the real line, Chain Reaction X=2 on a GC'd Reckoner + Nemesis: both orders branched, and every branch replays
+    identically in the executor;
+  - the human order prompt;
+  - the pull asked once per chain: 1 prompt for the whole Doll + GC loop; 20 with "ask again" (the ping + 19 GC hits);
+    2 for two separate pings.
+  The unit cases cover the order-matters case, so no separate scenario was added.
+* **Verification.** Unit 3568/3568. Scenarios 583/583. Smoke: 223/223 job digests identical to the engine-fix step
+  (`build/scratch/stuffy/impl9f/smoke-step9f-batch.log` vs `fixes/smoke-fixes-batch.log`), and the audit shows 0
+  play-changed. Stuffy A/B (HEAD-before binary vs 9f, 50 games, seed 1, MTG_PGO=0 on both arms): byte-identical at both
+  settings, per-game too. d0: digest 790451aee2af6f69, 47/50 won, avg win turn 5.830. d3/b10: digest 41f0a2666ac9cb75,
+  50/50, 4.440. No faster or slower game. Units 1,233,221 -> 1,233,682 (+0.04%, the order probes); CPU 52.6 s -> 50.5 s
+  (0.96x, noise). Reference replay `viewer_protocol_check.py --strict`: 878 refs, 336 ok / 541 repaired / 1 beaten,
+  0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail, rc 0 (no Stuffy or Shaman
+  refs exist yet). Static viewer audit (`audit_viewer_decisions.py --no-sweep`): rc 0, Stuffy expects `dig`.

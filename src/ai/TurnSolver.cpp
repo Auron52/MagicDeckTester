@@ -99799,11 +99799,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         && (!dmgrx::t_probe || g_apd_depth > dmgrx::t_probe_fan_depth))
     {
         bool chooser_on_board = false;
+        // Step 9f: a Stuffy Doll that may choose US (the chosen-player fold does not hold) raises a forced hit on us,
+        // which makes the ORDER of its event's triggers a choice (dmgrx::OrderSimultaneousTriggers) -- a chooser too.
+        const bool doll_chooser = !dmgrx::ChosenPlayerFoldHolds(state);
+        auto order_chooser = [&](const CardDefinition& d) {
+            return doll_chooser && d.params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer;
+        };
         for (const Permanent& q : state.battlefield)
         {
             const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
             // + an en-Kor of ours: our sweeper's shield allocation is a choice on the same pin stream (step 8)
-            if (d && (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d))) { chooser_on_board = true; break; }
+            if (d && (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d) || order_chooser(*d)))
+            { chooser_on_board = true; break; }
         }
         auto plan_may_choose = [&](const TurnSolver::Plan& p) {
             bool damages = false, chooser = chooser_on_board;
@@ -99811,7 +99818,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
                 if (!d) { return; }
                 if (dmgrx::DefCanDamageCreatures(*d)) { damages = true; }
-                if (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d)) { chooser = true; }
+                if (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d) || order_chooser(*d)) { chooser = true; }
             };
             for (const Action& a : p.actions)
             {
@@ -100017,12 +100024,17 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // nothing and no probe runs that did not run before).
         const bool rider_in_combat = dmgrx::RiderWindowAdmitted(state, state.active_player_index,
                                                                 dmgrx::RiderWindow::AuraHost, state.active_player_index);
+        // Step 9f: a Stuffy Doll that may choose US makes the order of its event's triggers a choice (see the main fan).
+        const bool doll_chooser = !dmgrx::ChosenPlayerFoldHolds(state);
+        auto order_chooser = [&](const CardDefinition& d) {
+            return doll_chooser && d.params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer;
+        };
         for (const Permanent& q : state.battlefield)
         {
             const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
             if (!d) { continue; }
             if (d->params.aura_host_damage_back) { gc_on_board = true; }
-            if (dmgrx::DefReflectsWithChoice(*d)) { chooser_on_board = true; }
+            if (dmgrx::DefReflectsWithChoice(*d) || order_chooser(*d)) { chooser_on_board = true; }
             if (rider_in_combat && dmgrx::DefOffersShieldChoice(*d)) { chooser_on_board = true; }
         }
         auto plan_may_choose_in_combat = [&](const TurnSolver::Plan& p) {
@@ -100031,7 +100043,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
                 if (!d) { return; }
                 if (d->params.aura_host_damage_back) { gc = true; }
-                if (dmgrx::DefReflectsWithChoice(*d)) { chooser = true; }
+                if (dmgrx::DefReflectsWithChoice(*d) || order_chooser(*d)) { chooser = true; }
                 if (rider_in_combat && dmgrx::DefOffersShieldChoice(*d)) { chooser = true; }
             };
             for (const Action& a : p.actions)

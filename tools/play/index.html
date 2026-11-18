@@ -5103,6 +5103,23 @@ function digPanelHtml(d){
   // library search (Flamekin Harbinger) and the look-top triggers (Risen Reef) it raised go on the
   // stack together. Two tiles -- the search's source and the look-top watcher -- pick which resolves
   // NEXT; asked again until the search is placed. Nothing has resolved yet. Mandatory.
+  // The ORDER of one damage event's simultaneous triggers ("(reflection order)" in the source; Stuffy Doll step 9f):
+  // asked only where the order can change the outcome. One tile per still-unplaced trigger (its source: a reflector,
+  // or a Guilty Conscience) -- pick which resolves NEXT; asked again until one is left. Nothing has resolved yet.
+  if (/\(reflection order\)/.test(d.source||'')) {
+    let h=`<h3>Order the damage triggers</h3>`;
+    h+=`<div class="sub">One damage event triggered these together, and their order can change the result. Choose which resolves <b>next</b> (its whole chain resolves first; you choose its target when it resolves). You are asked again until one is left. Nothing has resolved yet.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — resolves next">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Use the AI's order</button></div>`;
+    return h;
+  }
   if (/\(trigger order\)/.test(d.source||'')) {
     const src=(d.source||'').replace(/\s*\(trigger order\)\s*$/,'');
     const ex=d.examined||[];
@@ -5835,6 +5852,17 @@ function promptPanelHtml(d, dec){
   // contain lands, artifacts and the opponent's permanents -- never worded as damage, and the
   // opponent's FACE is not in it. This is the board click the player asked for ("use targeting on
   // the board if a targeted ability (like Oko's +1) is chosen", 2026-09-02).
+  // Shaman en-Kor's {1}{W} source pull (d.pull_ask_again present; Stuffy Doll steps 9 / 9f): pick ANY number of
+  // creatures (0..max) whose damage from this event's source is dealt to the Shaman instead, one {1}{W} each.
+  // Confirming with NONE declines for the rest of this damage chain (a Guilty Conscience loop is one chain); the
+  // second button declines only now and asks again at the chain's next damage event.
+  if (d.pull_ask_again!=null){
+    return `<h3>Pull damage — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen creatures are <b>${esc(d.loyalty||'pulled')}</b> · pick 0–${max}. Click creatures on the board (either side). Confirming with none = no pull, and you are <b>not asked again in this damage chain</b>. The AI's pick is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / ${max} selected</span><span class="spacer"></span>`+
+      `<button id="pullagain" class="ghost">No pull now — ask again next event</button>`+
+      `<button id="decconfirm" class="primary" ${n<=max?'':'disabled'}>${n?`Pull from ${n}`:'No pull (rest of chain)'}</button></div>`;
+  }
   if (d.loyalty){
     // "Either side of the table" is true of a loyalty ability (Bolas's +3 hits any noncreature
     // permanent) but FALSE of the other abilities that share this chooser -- a Saga chapter reads
@@ -5921,6 +5949,10 @@ function wireDecisionPanel(d, dec){
   const panel=$('decpanel');
   if (dec==='target' && d.source==='Sink into Stupor')
     panel.querySelectorAll('button[data-spell]').forEach(b=>b.onclick=()=>toggleSel(d, 's:'+b.dataset.spell, 1));
+  if (dec==='target' && d.pull_ask_again!=null){
+    const ag=panel.querySelector('#pullagain');
+    if (ag) ag.onclick=()=>pushChoice(d, d.pull_ask_again, `${d.source}: no pull now (ask again)`);
+  }
   if (dec==='scry'||dec==='surveil'||dec==='reorder')
     panel.querySelectorAll('button[data-opt]').forEach(b=>b.onclick=()=>commitLook(d, +b.dataset.opt));
   else if (dec==='vial_charge')

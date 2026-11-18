@@ -114,6 +114,10 @@ MANIFEST = {
     # is_aura's enchant-target variant), but a creature it enchants may stay home -- the `dig` yes/no
     # "(may attack)" at the attack declaration (Combat.cpp AskHumanAttackHolds), asked for the creatures the deck's
     # provider names under DecisionProvider::MayDeclineAttack (Stuffy: GC'd and not indestructible).
+    # Step 9f (2026-11-18): the ORDER of one damage event's simultaneous triggers is the same `dig` chooser,
+    # "(reflection order)" (dmgrx::OrderSimultaneousTriggers), asked only where the order can change the outcome --
+    # in practice a GC-enchanted reflector in the event (no GC: the F2 folds make every trigger face-only or the
+    # canonical order provably inert; see design 4.7). Mapped here, on the card whose presence makes it reachable.
     "aura_host_damage_back": ("dig",                truthy),
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
@@ -243,6 +247,8 @@ MANIFEST = {
     "redirect_shield_cost": ("divide",     truthy),
     # Shaman en-Kor's {1}{W} source pull (dmgrx::AddPullRider): which creatures (either side) our sweeper's damage is
     # pulled from onto the Shaman, up to what the mana affords -- a `target` prompt at the sweep (dmgrx::t_viewer_pull).
+    # Step 9f: asked ONCE per damage chain (a decline stands for the chain; the extra `pull_ask_again` option re-asks
+    # at the chain's next event), so a Doll + Guilty Conscience loop no longer asks at every loop step.
     "redirect_pull_cost":   ("target",     truthy),
     "expressive_iteration":  ("expressive_iteration", truthy),
     # "pay a cost, or the land enters tapped" -- shock lands (pay life) + reveal lands (Frostboil
@@ -2254,6 +2260,10 @@ STATE_GATED_TYPES = {
     ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
 
     ("aura_host_damage_back", "dig"):
+        "Guilty Conscience's `dig` prompts are both state-gated. The trigger-order prompt '(reflection order)' (step 9f) "
+        "needs one damage event to raise two or more triggers whose order can change the outcome (e.g. Chain Reaction "
+        "X=2 on a GC'd Boros Reckoner beside a Screaming Nemesis); pinned by test/unit/test_rfx_pipeline.cpp 'rfx step "
+        "9f: human play is asked the order ...'. "
         "Guilty Conscience's attack-hold prompt '(may attack)' exists only when a GC enchants a creature of ours "
         "that is NOT indestructible and can attack (a settled Boros Reckoner / Screaming Nemesis / Mogg Maniac / "
         "Spiteful Sliver / Nomads en-Kor), and only under a provider that names it (StuffyDollProvider::"

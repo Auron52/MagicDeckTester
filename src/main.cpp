@@ -4259,10 +4259,14 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::string& copy_desc = "",
                                     const std::string& lifegain_desc = "",
                                     bool mills_target_player = false,
-                                    const std::string& choose_player_desc = "")
+                                    const std::string& choose_player_desc = "",
+                                    int pull_ask_again = -1)
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s);
+    // Shaman en-Kor's pull (step 9f): the option index of "no pull now -- ask again at this chain's next damage
+    // event"; the plain no-creature option declines for the rest of the chain. The viewer shows it as a button.
+    if (pull_ask_again >= 0) { d.Int("pull_ask_again", pull_ask_again); }
     // A non-empty lifegain_desc (e.g. "gains 7 life") flags this as a "TARGET PLAYER gains N life"
     // spell (Heroes' Reunion / Rest for the Weary): the legal set is the two PLAYERS, nothing is
     // damaged, and the viewer must word it as life gained, not "N damage".
@@ -4313,7 +4317,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
         os << "{ \"index\": " << oi << ", \"label\": "; JsonStr(os, options[oi].label);
         os << ", \"targets\": [";
         for (size_t ti = 0; ti < options[oi].targets.size(); ++ti)
-        { if (ti) os << ", "; os << "{ \"kind\": \"" << (options[oi].targets[ti].kind == 0 ? "player" : options[oi].targets[ti].kind == 2 ? "spell" : "permanent")
+        { if (ti) os << ", "; os << "{ \"kind\": \"" << (options[oi].targets[ti].kind == 0 ? "player" : options[oi].targets[ti].kind == 2 ? "spell"
+                                                          : options[oi].targets[ti].kind == dmgrx::kPullAskAgainKind ? "ask_again" : "permanent")
                                   << "\", \"index\": " << options[oi].targets[ti].index << " }"; }
         os << "] }";
     });
@@ -4324,7 +4329,13 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // ("Each chosen target takes 7 damage ... (face)") -- the GUI words it from `lifegain`, but the
     // claude-play note misled sweep agents (SelesnyaLifegain v2 sweep, 8 of 16 agents, 2026-10-22).
     // `per_target_damage` still carries the amount for the historic layout; nothing is damaged.
-    if (!choose_player_desc.empty())
+    if (pull_ask_again >= 0)
+    { d.Note("reply an option index -- the creatures whose damage from this event's source is dealt to " + source
+             + " instead, one pull (and its mana) per creature. The (no target) option declines for the REST OF THIS "
+             "DAMAGE CHAIN (this event and every event its triggers cause -- a Guilty Conscience loop is one chain); "
+             "option " + std::to_string(pull_ask_again) + " declines only now and asks again at the chain's next "
+             "event that damages a creature. Default = the AI's pick."); }
+    else if (!choose_player_desc.empty())
     { d.Note("reply an option index -- the PLAYER " + choose_player_desc + " (a choice, not a target; "
              "no damage is dealt now). Default = the AI's pick (heuristic_default)."); }
     else if (!lifegain_desc.empty())
@@ -4739,6 +4750,16 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "whose before you pick; its controller may then search for a basic land, which enters "
                "tapped -- you are asked separately if it is yours), or -1 to destroy nothing. Default = "
                "the AI's pick (an opponent's, else nothing).");
+    }
+    else if (source.find("(reflection order)") != std::string::npos)
+    {
+        // Step 9f (dmgrx::OrderSimultaneousTriggers): one damage event raised several triggers whose ORDER can change
+        // the outcome. examined = the source of each still-unplaced trigger (a reflector by last-known information,
+        // or a Guilty Conscience); asked repeatedly UP FRONT, before any of them resolves. Mandatory.
+        d.Note("order the simultaneous damage triggers: reply the examined index of the trigger that resolves NEXT "
+               "(its whole chain resolves before the next one starts; each one's target is chosen as it resolves). "
+               "You are asked again until one is left. Nothing has resolved yet. -1 = the AI's order for the rest. "
+               "Default = the AI's order.");
     }
     else if (source.find("(trigger order)") != std::string::npos)
     {
@@ -8062,6 +8083,17 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 { opts.push_back(TargetOption{{legal[i]}, legal_labels[i]}); }
             }
             else { opts = EnumerateTargetSets(legal, legal_labels, max_targets, min_targets); }
+            // Shaman en-Kor's pull (step 9f): the decline stands for the rest of the damage chain; one extra option
+            // declines only now and asks again at the chain's next event (dmgrx::kPullAskAgainKind).
+            int pull_ask_again = -1;
+            if (pull_viewer && !opts.empty())
+            {
+                for (TargetOption& o : opts)
+                { if (o.targets.empty()) { o.label = "(no target) -- no pull, and not again in this damage chain"; } }
+                pull_ask_again = static_cast<int>(opts.size());
+                opts.push_back(TargetOption{ { ChosenTarget{ dmgrx::kPullAskAgainKind, -1, 0 } },
+                                             "No pull now -- ask again at this chain's next damage event" });
+            }
             // No legal target at all: nothing to ask (min 0 would otherwise offer a lone,
             // pointless "(no target)" confirm for an empty-board up-to-one trick).
             if (opts.empty() || legal.empty()) { return heuristic; }
@@ -8087,14 +8119,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc, pull_ask_again);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player, choose_player_desc, pull_ask_again);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_8; }
