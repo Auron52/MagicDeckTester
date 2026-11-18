@@ -3768,6 +3768,21 @@ public:
     static int RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
                                       const std::vector<Action>& trailing);
 
+    // OWED-AWARE TRAILING PAYMENT (Maze's End F2, sweep 61002 gi1): when paying trailing step `a` (an element
+    // of `trailing`) the usual way -- `step` pays and applies it on a board -- leaves the LATER owed activations
+    // unpayable, the smallest set of the sources that payment tapped whose HOLD lets the step pay and the owed
+    // bill still pay. Empty when the usual payment strands nothing (no hold, byte-identical), when nothing is
+    // owed, or when no hold helps. Callers install the result (with g_plan_reserved_sources) as a
+    // PlanSourceReserveScope around the step's real payment. Shared by both trailing passes (lockstep).
+    static std::vector<int> TrailingStepOwedHold(const GameState& state, const Action& a,
+                                                 const std::vector<Action>& trailing,
+                                                 const std::function<bool(GameState&)>& step);
+    // The Channel-kind trailing step (Talon's hand put / Transmute / Channel), paid by TapForCostDirect and
+    // applied; returns whether it was paid. The rollout's step and both worlds' TrailingStepOwedHold probe.
+    static bool ApplyChannelStepDirect(GameState& state, const Action& a);
+    // g_plan_reserved_sources plus `extra` (outer list first): the hold both the probe and the payment install.
+    static std::vector<int> WithPlanReserve(const std::vector<int>& extra);
+
     // The union both apply paths install (unlock pieces + colour-critical + activation taps). One
     // function so the executor and the rollout cannot drift on which sources are held.
     static std::vector<int> PlanReserveSources(const GameState& state,
