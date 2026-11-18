@@ -102207,16 +102207,23 @@ static std::string VampDumpAction(const Action& a)
 // (DecisionProvider::CastDominanceLive / CastDominanceClass) gets two plan-list folds, both restrict-only:
 // A class < 0 VETOES the fold for every plan holding that cast (its resolution reads the rest of the line, e.g.
 // Guild Summit's rest-of-line Gate count, so P' = P + X may resolve it differently).
-//  (A) CAST: a plan P is removed when the same list holds P' = P plus ONE more cast of a card the provider
-//      classes as cast-dominant (class >= 1: a permanent whose presence never costs the line anything, e.g.
-//      Exploration), with the same land, the same other actions in the same order, and every other plan field
-//      (pins, breakpoint coordinates, axis choices) equal. P' affords everything P does plus the cast, and the
-//      mana P leaves unspent has no other use (the provider's premise), so P' reaches a state at least as good.
-//  (B) LAND: a plan P that plays NO land, whose actions are all class-1 casts (cast-dominant AND not order-
-//      sensitive against the land, so not Amulet of Vigor), is removed when the list holds the same plan plus a
-//      land (same actions, same order, every non-land field equal). With no tutor, draw or activation in P, the
-//      land P holds can only be played later by a breakpoint continuation (an Exploration drop) -- which P' can
-//      do too with its own open drop -- or not at all.
+// Class bits (DecisionProvider::CastDominanceClass): kCastDomAdd = cast-dominant (a permanent whose presence never
+// costs the line anything); kCastDomLandOk = not order-sensitive against the land (not Amulet of Vigor);
+// kCastDomOpensBp = its cast opens a breakpoint (Exploration's extra drop).
+//  (A) CAST: a plan P is removed when the same list holds P' = P plus ONE more kCastDomAdd cast, with the same
+//      land, the same other actions in the same order, and every other plan field equal (pins, breakpoint
+//      coordinates, axis choices) -- and ONLY when P itself opens no breakpoint: every action of P is a
+//      kCastDomAdd cast without kCastDomOpensBp (the provider's live premise excludes a land-entry draw). Then P's
+//      apply is the whole of its line, P' affords everything P does plus the cast, and the mana P leaves unspent
+//      has no other use (the provider's premise), so P' -- whose family keeps the "stop after the cast"
+//      continuation when the cast opens one -- reaches a state at least as good. A P WITH a breakpoint is never
+//      dropped: its continuation may spend that mana (d3b10 seed 152062 gi61, the first cut: P = land + Exploration
+//      + Sylvan Scrying, whose continuation plays the fetched Maze's End and activates it with the {3} that
+//      "P + Manabond" had spent; d8 b0 found no win by T8 instead of base's T8).
+//  (B) LAND: a plan P that plays NO land, whose actions are all kCastDomAdd | kCastDomLandOk casts, is removed when
+//      the list holds the same plan plus a land (same actions, same order, every non-land field equal). With no
+//      tutor, draw or activation in P, the land P holds can only be played later by a breakpoint continuation (an
+//      Exploration drop) -- which P' reproduces by playing that land first -- or not at all.
 // Sound dominance under the provider's premise, so it ships ON; the error is always toward KEEPING a plan (a
 // mismatch in any field keeps P). Dominance is a strict-superset order, so the maximal plans are always kept and
 // the list never empties. MTG_CAST_DOM_STATS=1 prints the fold's counters at exit (diagnostic only).
@@ -102241,32 +102248,40 @@ static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Pl
     const std::size_t n = all.size();
     // Per plan: the class of each action (0 = not a cast-dominant cast) and whether P is a (B) candidate.
     std::vector<std::vector<int>> cls(n);
-    std::vector<char> b_cand(n, 0), veto(n, 0);
+    // a_cand: P may be dropped by fold A -- every action is a cast-dominant cast that opens no breakpoint, so the
+    // plan's apply reaches none and nothing after it (no continuation) could have spent the mana P leaves unspent.
+    // b_cand: P may be dropped by fold B -- no land, every action a cast-dominant cast with the land-ok bit.
+    constexpr int kAdd = DecisionProvider::kCastDomAdd, kLandOk = DecisionProvider::kCastDomLandOk,
+                  kOpensBp = DecisionProvider::kCastDomOpensBp;
+    std::vector<char> a_cand(n, 0), b_cand(n, 0), veto(n, 0);
     bool any_dom = false;
     for (std::size_t i = 0; i < n; ++i)
     {
         const TurnSolver::Plan& p = all[i];
         cls[i].resize(p.actions.size(), 0);
-        bool all_c1 = true;
+        bool all_a = true, all_b = true;
         for (std::size_t k = 0; k < p.actions.size(); ++k)
         {
             const Action& a = p.actions[k];
             if (a.kind == Action::Kind::CastFromHand && a.def != nullptr)
             { cls[i][k] = prov.CastDominanceClass(state, *a.def); }
-            if (cls[i][k] < 0) { veto[i] = 1; }   // an action whose resolution reads the rest of the line
-            if (cls[i][k] > 0) { any_dom = true; }
-            if (cls[i][k] != 1) { all_c1 = false; }
+            const int c = cls[i][k];
+            if (c < 0) { veto[i] = 1; continue; }   // an action whose resolution reads the rest of the line
+            if (c & kAdd) { any_dom = true; }
+            if (!(c & kAdd) || (c & kOpensBp)) { all_a = false; }
+            if (!(c & kAdd) || !(c & kLandOk)) { all_b = false; }
         }
-        b_cand[i] = (!veto[i] && p.land_to_play.empty() && all_c1) ? 1 : 0;
+        a_cand[i] = (!veto[i] && all_a) ? 1 : 0;
+        b_cand[i] = (!veto[i] && p.land_to_play.empty() && all_b) ? 1 : 0;
     }
-    bool any_b = false;
-    for (std::size_t i = 0; i < n; ++i) { if (b_cand[i]) { any_b = true; break; } }
+    bool any_b = false, any_a = false;
+    for (std::size_t i = 0; i < n; ++i) { if (b_cand[i]) { any_b = true; } if (a_cand[i]) { any_a = true; } }
     if (castdom::StatsOn())
     {
         castdom::g_lists.fetch_add(1, std::memory_order_relaxed);
         castdom::g_seen.fetch_add(static_cast<long long>(n), std::memory_order_relaxed);
     }
-    if (!any_dom && !any_b) { return; }
+    if (!(any_dom && any_a) && !any_b) { return; }
     // Every field but the ones the fold compares on its own terms (actions, land) and the evaluation-only ones.
     auto norm = [](TurnSolver::Plan q, bool clear_land)
     {
@@ -102298,11 +102313,11 @@ static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Pl
             if (j == i || veto[j]) { continue; }
             const TurnSolver::Plan& q = all[j];
             // (A) q = p + one cast-dominant cast, same land.
-            if (any_dom && q.actions.size() == p.actions.size() + 1 && q.land_to_play == p.land_to_play)
+            if (a_cand[i] && any_dom && q.actions.size() == p.actions.size() + 1 && q.land_to_play == p.land_to_play)
             {
                 for (std::size_t k = 0; k < q.actions.size(); ++k)
                 {
-                    if (cls[j][k] == 0) { continue; }
+                    if (cls[j][k] <= 0 || !(cls[j][k] & kAdd)) { continue; }
                     bool same = true;
                     for (std::size_t m = 0, t = 0; m < q.actions.size() && same; ++m)
                     {
