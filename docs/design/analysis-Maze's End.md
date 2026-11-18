@@ -1007,3 +1007,158 @@ guess it can be deferred. The only mode we care about heuristically is the first
 ## Verification
 
 (Stage 5 verdicts)
+
+### Stage 5 (V1, 2026-11-18): everything except the claude-play sweep
+
+Tree `dab956a9d` (src) = the binary `build/scratch/maze/v1/mtg.v1` (Release, MTG_PGO=0). Scratch:
+`/workspaces/MagicDeckTester/build/scratch/maze/v1/`. Every batch ran with 8 workers, `MTG_RSS_CAP_GB=16` and
+`MTG_MEM_BUDGET_MB=8000`. The worker count is a MEMORY exception (the coordinator's rule, with the claude-play sweep
+and F1's 12-job builds sharing the box). A guard (`tools/memguard.sh`) paused a batch with SIGSTOP while available
+memory was under 4 GB and resumed it at 7 GB. The budget is in units, so a pause does not change any game.
+
+**verify_deck.py.** The static pre-check (`--no-sweep`) and the full run (25.8 min, `taskset -c 0-7`) give:
+coverage, card_costs, card_fields, viewer_wiring (choose_color, dig, land_entry, target, x_value), mismatch,
+play_invariants (8 games, 458 decisions) and suite all PASS. Two gates FAIL:
+* `regression_tiers`: the overnight tier has no GT. This is NOT a deferral and is never signed off. The periodic
+  overnight run accepts the 13 `mazesend` overnight keys.
+* `viewer`: a TOOL bug, now fixed (`9ffcb7820`). `audit_viewer_decisions.py` bound `unreached` only inside the
+  hard-miss branch, so a sweep with NO hard miss crashed with UnboundLocalError (rc=1). The sweep itself was clean:
+  observed {choose_color, dig, discard, land_entry, target, tutor_etb, x_value}, which includes all 5 expected types.
+  The same bug is on `origin/phase-1-2-deck-analyzer`.
+The 709 `oracle_text advisory` lines cover the whole DB, not just this deck. They come from bracket notes appended to
+the oracle text, and they are advisory only.
+
+**5a, mismatch harnesses.** The verify_deck default seeds (7001/8001 x 60, d3 b20 nonconv / d5 b20 fd) found 0
+lines, but 7007-7060 overlaps the overnight `s7007` row. So I re-ran both harnesses on seeds disjoint from the suite:
+120001 and 121001 (100 games each, at d3 b10 and d5 b20) and 111001 (150 games, at d3 b20 and d5 b20). That is 700
+games per arm (`mm_nonconv/`, `mm_fd/`).
+* `[nonconv]`: **0**.
+* `[fd-diverge]`: **1**, seed 121065 gi64 d5 b20, `realized_win=7 predicted_win=6 proven_at_turn=6 leaf_est=none`.
+  ROOT-CAUSED as a rollout-vs-executor mismatch: the line is verified by simulation and the leaf is not involved.
+  * The committed T6 line (`MTG_FD_TRACE`) is: Gruul Guildgate + Sylvan Scrying (finds Talon Gates of Madara) + Amulet
+    of Vigor, with the breakpoint continuation `[Orzhov Guildgate, Exploration, Maze's End activation, Talon Gates
+    {4} put]`.
+  * In the executor, Sylvan Scrying's {1}{G} was paid through Baldur's Gate's `{2},{T}: X` filter (float g6). The
+    `{2}` came from Maze's End's own `{C}`. `MTG_EXEC_TAP_TRACE` "before Sylvan Scrying" lists neither Baldur's Gate
+    nor Maze's End as untapped.
+  * So when the replayed continuation reached the activation, Maze's End was already tapped:
+    `MTG_ACT_DROP_AUDIT=2`: `noTap`. Talon was put and the T6 win slipped to T7.
+  * `MTG_LINE_PAY_AUDIT` reports REAL `short_plans=0`. The first segment's payment holds nothing for an activation
+    that lives in the recorded breakpoint continuation, so the audit cannot see this loss.
+  * Same seam as the sweep's gi1 flag (Talon put + Maze's End activation): **OPEN DEFECT, proposed owner F1**
+    (`wip/maze-fix`). V1 did not edit those sites.
+  * Repro: `tools/one.sh <bin> <out> 121065 64 5 20 MTG_FD_ORACLE=1 MTG_FD_TRACE=1 MTG_EXEC_TAP_TRACE=1`.
+
+**5b, multi-depth sanity (play budget b20, seeds 111001+gi, 150 games each, per-game jobs; `main/`).**
+
+| depth | avg win turn (loss = 9) | wins <= T8 | ms/game | units/game |
+|---|---|---|---|---|
+| d0 | 7.2933 | 111/150 | 2 | - |
+| d3 b20 | 6.1933 | 147/150 | 3,916 | 227K |
+| d5 b20 (play) | 6.1933 | 147/150 | 4,127 | 232K |
+
+* **d3 = d5: 149/149 paired games have identical digests**, the P1d item-3 finding at b20. The budget is spent before
+  any line reaches a fourth turn, so `--depth 5` never binds at the play budget. Monotone, trivially.
+* **d0 vs d5:** d0 is slower in 97 games, equal in 48 and FASTER in 4 (gi33 7 vs 8, gi49 6 vs 7, gi122 5 vs 6,
+  gi124 7 vs 8). Read gi49: at T2 the search plays Thran Portal + casts Exploration but NOT the extra drop (d0 plays
+  Sea Gate too), and at T3 it plays one land with two drops open. This is the sweep's gi2 class (an extra drop after
+  a same-plan Exploration cast, F1's defect) or budget. The 5c ladder classifies all four.
+* **Plausibility:** T6.2 at play settings, with 2% losses (3/150: gi28, gi43, gi104). For a ten-name alternate win in
+  a 35-land list that is plausible: the sweep's Claude games land T5-T8. The suite GT agrees (d5 s2002 6.23, s3003
+  6.37).
+* **Budget b20 -> b200 (40 games, d5):** 5.9250 vs 6.1500 on the same 40 seeds. 8 better, 1 worse (gi16 6 -> 7).
+  Read gi16: the two budgets diverge at T3. b20 makes a Heap Gate Treasure and holds Burgeoning/Exploration; b200
+  casts both. The b200 line then shuffles (Archdruid's Charm T5, Maze's End T6), so its later draws are not the ones
+  its simulation saw. A shuffle-variance outlier, not a defect.
+
+**5e / 5f, the provider heuristics against the oracle (d5 b20, the same 100 games, arms innermost; `main/`).**
+Leave-one-out from the shipped tree (each USER-directed prune switched off alone), the all-off arm (B1, P1, P2, P3
+and Talon off), and the all-off arm at 10x budget:
+
+| arm | avg | wins <= T8 | ms/game | units/game | vs ship: better / worse / same digest | net turns |
+|---|---|---|---|---|---|---|
+| ship | 6.1500 | 98 | 3,242 | 197K | | |
+| no B1 (Summit count + its playout default) | 6.6700 | 94 | 3,529 | 217K | 0 / 39 / 36 | +52 |
+| no P1 (one colour) | 6.1500 | 98 | 3,490 | 209K | 5 / 4 / 61 | 0 |
+| no P2 (Gates Ablaze not spendable) | 6.1500 | 98 | 3,232 | 197K | 0 / 0 / **100** | 0 |
+| no P3 (land-target menu) | 6.1600 | 97 | 19,891 | 899K | 13 / 14 / 10 | +1 |
+| no Talon amendment | 6.2100 | 98 | 7,139 | 192K | 1 / 7 / 77 | +6 |
+| all off | 6.8100 | 91 | 48,417 | 1,333K | 5 / 49 / 3 | +66 |
+| ship, b200 (40 games) | 5.9250 | 39/40 | 25,611 | 1,382K | | |
+| all off, b200 (40 games) | 6.5500 | 38/40 | 223,809 | 7,329K | 1 / 18 / 3 | +25 |
+
+* **B1 is the large quality term.** Removing it costs +0.52 turns/game and never helps. The arm also reverts the
+  playout default (rest-of-line count -> "all"), so the gain is not the in-window prune alone.
+* **P1 is quality-neutral (5/4) and about 6% cheaper.**
+* **P2 is INERT on top of P1:** 100/100 digests are identical, because P1 already picks G or U. It can matter only
+  with P1 off.
+* **P3 is quality-neutral (13/14, +1) and its value is cost: 6.1x fewer ms and 4.6x fewer units.**
+* **The Talon amendment is better (1/7, +0.06), and without it one game takes 415 s.**
+* **Completeness at a larger budget:** even at 10x budget the all-off tree is worse than ship (1 better / 18 worse).
+  The one game where it is better is gi18 (ship 7, all-off 6): a candidate line the prunes make harder to find. The
+  5c ladder checks whether ship recovers it at b2000.
+* These prunes are USER-directed. The numbers are reported here; nothing was removed.
+
+**5c, budget starvation (d5, the shipped tree, seeds 111001+gi; `leaf/` ladder jobs + `main/`).** Each slow game
+(T8 or a loss at b20), each game where d0 beat d5, the b200-worse gi16 and the all-off-better gi18 were re-run up the
+budget ladder. Win turns (9 = no win by T8):
+
+| gi | d0 | b20 | b100 | b200 | b500 | b2000 | reading |
+|---|---|---|---|---|---|---|---|
+| 32 | 9 | 8 | 8 | 8 | 7 | 7 | starvation, recovers at b500 |
+| 33 | 7 | 8 | 6 | 7 | 7 | 6 | starvation (non-monotone between budgets) |
+| 100 | 8 | 8 | 6 | - | 6 | 6 | starvation, recovers at b100 |
+| 124 | 7 | 8 | 6 | - | 6 | 6 | starvation |
+| 142 | 8 | 8 | 7 | - | 7 | 7 | starvation |
+| 145 | 8 | 8 | 8 | - | 7 | 7 | starvation, recovers at b500 |
+| 147 | 9 | 8 | 7 | - | 7 | 6 | starvation |
+| 18 | 9 | 7 | 7 | 7 | 6 | 6 | ship recovers all-off's T6 at b500, so the prunes do not make it unfindable |
+| 16 | 9 | 6 | 7 | 7 | 7 | 6 | the shuffle-variance outlier above; back to T6 at b2000 |
+| 49 | 6 | 7 | 7 | - | 7 | 6 | recovers only at b2000. The T2/T3 missed extra drop (F1's gi2 class) |
+| 122 | 5 | 6 | 6 | - | 6 | 6 | **NOT recovered at 100x.** d0 wins T5 by playing a second land after a same-plan cast (T3 Gateway Plaza + Exploration + Manor Gate; T4 Sea Gate + Golgari with Exploration out). The search never plays the land after the cast, at any budget. It is F1's gi2 completeness defect (a structural hole), not a budget issue. |
+| 28 | 9 | 9 | 9 | 9 | 9 | 9 | draw-bound: no Maze's End or tutor by T8, hand empty from T3. d0 loses too |
+| 43 | 9 | 9 | 9 | - | 9 | 9 | draw-bound: Maze's End and Sylvan Scrying first seen on T8 |
+| 104 | 9 | 9 | 9 | - | 9 | 9 | draw-bound: the d0 and d5 games are byte-identical (no decision changes it) |
+| 78 | 8 | 8 | 8 | - | 8 | 8 | draw-bound: Maze's End first seen T7 |
+| 93 | 9 | 8 | 8 | - | 8 | 8 | land-screwed: 3 lands T3-T5. d0 loses |
+| 105 | 8 | 8 | 8 | - | 8 | 8 | budget-invariant to 100x. Maze's End seen from T5. d0 is the same |
+
+Reading:
+* The play budget b20 STARVES this deck. On these 40 seeds b200 is 0.225 turns/game faster, and 7 of the 13 slow
+  games recover at b100-b500. This agrees with the sweep's gi0, gi7 and gi13 (b100-b500 finds the turn earlier).
+* The depth setting is inert at b20 (5b). So for this deck the budget, not the depth, is the play-settings lever.
+* Raising b is a settings question for the USER (cost: b200 ship is 25.6 s/game against 3.2 s at b20, both at 8
+  workers; the suite gate measured 6.9 s/game at b20 under 32 workers).
+* No game is lost to the prunes at large budget.
+
+**5c2, the horizon-honest tie-break (`leaf_tiebreak_check.py` at PLAY settings, 6 blocks x 150, both arms pooled in
+ONE batch with the 5c ladder; MTG_PGO=0, 8 workers; `leaf/verdict.txt`).** For this deck the arm toggles
+`GradesNoWinLeaf`, which carries `MazesEndProvider::NoWinLeafProgress` (the A1 weights). Opponent life never moves
+here.
+
+| split | games | net turns | worse | better |
+|---|---|---|---|---|
+| half A | 450 | -6 | 22 | 27 |
+| half B | 450 | -14 | 28 | 38 |
+| ALL | 900 | **-20** | 50 | 65 |
+
+Binding 12.8% (115 of 900 changed). base 6.3667, leaf 6.3444. **VERDICT: KEEP THE DEFAULT (ON).** Both halves
+agree, so there is no opt-out. The sample is reduced from the script's 12 x 1000 default because 115 changed games
+is far above the 20-game sign threshold.
+
+**5h, viewer decision surface.**
+* `audit_viewer_decisions.py` (40 games from seed 9001; `viewer_audit.log`) observed every expected type: choose_color
+  (CLB Gates, Thran Portal), dig (Gateway Plaza, Burgeoning/Manabond crossings), land_entry (The Black Gate), target
+  and x_value (Guild Summit).
+* There was no HARD MISS, no UNVERIFIED tail, no self-guard failure and no driver failure. The rc=1 was the tool bug
+  fixed in `9ffcb7820`.
+* Oracle cross-check: one advisory, Talon Gates' "up to one target creature phases out". It carries its bracket note,
+  is the approved deferral (decision 33, USER B4), and is goldfish-inert.
+* `viewer_wiring`: all 5 types have an emitter in main.cpp and a GUI branch in index.html. Nothing to wire.
+
+**5i, discard.**
+* `STATUS_QUO_OK` is confirmed from the Stage 4 output (`build/scratch/maze/s4/analyze.json`): 400 evidence games,
+  67 cleanup-discard decisions, all multi-optimal, mean regret 0.
+* The skill still asks for an authored bucket policy, reported to the USER, even under STATUS_QUO_OK. None is
+  authored yet. The stakes are tiny (0.17 sheds/game, all ties).
+* Listed as an open item for the coordinator and the USER.
