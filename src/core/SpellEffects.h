@@ -53207,6 +53207,235 @@ inline int CountControlledWithParam(const GameState& state, int controller, Pred
     return n;
 }
 
+// ---- MAZE'S END P6: THE NON-WINNING OFF-MAIN ACTIVATION ---------------------------------------------------------
+// USER 2026-11-18 (ruling 6, VERBATIM): "2-7 I think we should allow something like this. It's especially easy if we
+// can respond to a trigger from Manabond or Burgeoning and activate in response. I cannot think of a reason why that
+// would not be good, so that could be heuristically pruned to always search and deploy. The searched decision would
+// be whether it is worth getting Maze's end back in hand without being able to redeploy. Ideally we would support
+// that as well and see what we can do to minimize the cost."
+// Maze's End's ability has no timing restriction (CR 602.2, 117.1b), so it can be activated whenever we hold
+// priority. Two shapes, both built on the crossing-land pin (the ordinals below are taken in event order, so the
+// boundary fan searches them with Manabond's yes/no and Burgeoning's which-land):
+//  1. RESPOND (MazeOffMainRespond): with a Manabond trigger (once its yes is taken) or a Burgeoning trigger on the
+//     stack, activate an untapped Maze's End; the trigger then puts it back (Manabond's yes puts every land in hand;
+//     Burgeoning's put is restricted to it). The activate / decline choice is the provider's to restrict
+//     (DecisionProvider::OffMainMazeRedeployForced; MazesEndProvider: always activate -- the premises are there);
+//     the FETCH TARGET is a searched ordinal over the P3 menu (TapTutorPutCandidates). Unrestricted, the ordinal is
+//     {target..., decline}.
+//  2. BANK (MazeOffMainBank): activate with no redeploy -- a searched ordinal {decline, target...} (rank 0 = decline,
+//     the playout default beyond the horizon). COST MINIMISED by where it is offered: only right after an off-main
+//     PUT (Manabond's dump at our end step, a Burgeoning put on the opponent's turn). Every other off-main point
+//     shows the board of our main phase 2 (F1-results, "windows that matter in a goldfish"), where the same
+//     activation is already a searched plan action -- and a better one (Guild Summit's draw arrives while it can
+//     still be cast), so offering it there again would only duplicate searched lines. The bank also needs an
+//     untapped Maze's End, the {3} payable with it tapped, and an admitted Gate target in the library.
+// The fail-to-find is never offered off-main: activating to find nothing (the {3}, Maze's End to hand, a shuffle)
+// is dominated by declining in a goldfish. Deck-gated on deck_has_crossing_land_put (Manabond / Burgeoning, the
+// only off-main put sources), so a no-op for every other deck. Same code in both worlds (both call
+// PerformEndStepManabond / ResolveBurgeoningTriggers at the same instant), so lockstep by construction.
+inline bool TryOffMainAltWinActivation(GameState& state);   // below (F1 defect 4)
+inline bool MazeOffMainRespondLever()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_OFFMAIN_RESPOND", true);   // DEFAULT ON (P6); =0 -> no off-main response
+    return heurarm::Flag(heurarm::MAZE_OFFMAIN_RESPOND, s_on);
+}
+inline bool MazeOffMainBankLever()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_OFFMAIN_BANK", true);   // DEFAULT ON (P6); =0 -> no off-main bank
+    return heurarm::Flag(heurarm::MAZE_OFFMAIN_BANK, s_on);
+}
+inline bool MazeOffMainHumanAsks() { return g_play_dig_chooser != nullptr && !g_tap_speculating; }
+
+// A Maze's End-shaped source: TapTutorPut that returns itself, with the distinct-named alternate win.
+inline bool IsMazeOffMainSourceDef(const CardDefinition* d)
+{
+    return d != nullptr && d->params.tap_tutor_put_cost.has_value() && d->params.tap_tutor_put_return_self
+        && d->params.alt_win_distinct_named_count > 0;
+}
+
+// Cheap necessary condition (no probe): an untapped Maze's End of ours and a Gate it could fetch in the library.
+// The crossing-pending predicate (TurnSolver CrossingLandUncoveredPending) reads it too.
+inline bool MazeOffMainMayAsk(const GameState& s, int me)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!IsMazeOffMainSourceDef(d)) { continue; }
+        for (const Card& lc : s.players[static_cast<std::size_t>(me)].library)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+            if (TapTutorPutLibraryCandidate(d->params, ld ? ld->card : lc)) { return true; }
+        }
+        return false;   // every Maze's End fetches from the same library
+    }
+    return false;
+}
+
+struct MazeOffMainTarget { std::string name; int pin; };
+// The fetch menu: each distinct admissible library name (library order), restricted / ordered by the provider (the
+// P3 menu, TapTutorPutCandidates) outside human play and the unpruned gate, the fail-to-find dropped (see above), one
+// entry per admitted as-enters value of the fetched land (autonomous only; the viewer asks at the entry).
+inline std::vector<MazeOffMainTarget> MazeOffMainTargets(const GameState& s, int me, const CardDefinition& md)
+{
+    std::vector<std::string> names;
+    for (const Card& lc : s.players[static_cast<std::size_t>(me)].library)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+        if (!TapTutorPutLibraryCandidate(md.params, ld ? ld->card : lc)) { continue; }
+        if (std::find(names.begin(), names.end(), lc.m_name.str()) == names.end()) { names.push_back(lc.m_name.str()); }
+    }
+    std::vector<MazeOffMainTarget> out;
+    if (names.empty()) { return out; }
+    const bool autonomous = !HumanPlayActive() && !MazeOffMainHumanAsks() && !DecisionUnpruned();
+    if (autonomous) { (void)ResolveProvider(s).TapTutorPutCandidates(s, md, names); }
+    for (const std::string& nm : names)
+    {
+        if (nm == kTutorDeclineTarget) { continue; }
+        const CardDefinition* td = CardDatabase::Instance().Lookup(nm);
+        std::vector<int> pins;
+        if (autonomous && td != nullptr && LandHasEntryPinChoice(*td))
+        { pins = ResolveProvider(s).LandEntryPinCandidates(s, me, *td); }
+        if (pins.empty()) { out.push_back(MazeOffMainTarget{ nm, -1 }); continue; }
+        for (int pin : pins) { out.push_back(MazeOffMainTarget{ nm, pin }); }
+    }
+    return out;
+}
+
+// Is the {3} payable now with `source_id` tapped as part of the cost? Probed on a quiet copy (the real board is
+// touched only by an activation that is then applied).
+inline bool MazeOffMainPayable(const GameState& s, int me, int source_id, const CardDefinition& md)
+{
+    RevealLogPause quiet;
+    GameState probe = s;
+    if (!PermAbilitySourceLive(probe, me, source_id, PermAbilityMode::TapTutorPut, nullptr)) { return false; }
+    SetPermTapped(probe, me, source_id, true);
+    return TapForCostDirect(probe, *md.params.tap_tutor_put_cost, /*for_creature=*/false);
+}
+
+// The first untapped Maze's End of ours (battlefield order) that can be activated now, with its fetch menu. Copies
+// are interchangeable (the same name, ability and library), so asking about the first is the whole choice.
+struct MazeOffMainSource { int id = -1; const CardDefinition* def = nullptr; std::vector<MazeOffMainTarget> targets; };
+inline MazeOffMainSource MazeOffMainFindSource(const GameState& s, int me)
+{
+    MazeOffMainSource out;
+    if (!MazeOffMainMayAsk(s, me)) { return out; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!IsMazeOffMainSourceDef(d) || !MazeOffMainPayable(s, me, p.card.m_number, *d)) { continue; }
+        std::vector<MazeOffMainTarget> t = MazeOffMainTargets(s, me, *d);
+        if (t.empty()) { return out; }
+        out.id = p.card.m_number;
+        out.def = d;
+        out.targets = std::move(t);
+        return out;
+    }
+    return out;
+}
+
+// The human's answer (the dig chooser over the fetchable Gates; -1 = decline). Returns an index into `targets`.
+inline int MazeOffMainHumanPick(const GameState& s, int me, const MazeOffMainSource& src, const std::string& why,
+                                bool default_activate)
+{
+    std::vector<Card> ex;
+    std::vector<int> legal;
+    for (const MazeOffMainTarget& t : src.targets)
+    {
+        const CardDefinition* td = CardDatabase::Instance().Lookup(t.name);
+        if (td == nullptr) { continue; }
+        legal.push_back(static_cast<int>(ex.size()));
+        ex.push_back(td->card);
+    }
+    if (ex.empty()) { return -1; }
+    const int r = (*g_play_dig_chooser)(s, me, "Maze's End: activate " + why + " (search for a Gate)?", ex, legal,
+                                        default_activate ? 0 : -1);
+    if (r < 0 || r >= static_cast<int>(ex.size())) { return -1; }
+    for (int i = 0; i < static_cast<int>(src.targets.size()); ++i)
+    { if (src.targets[static_cast<std::size_t>(i)].name == ex[static_cast<std::size_t>(r)].m_name.str()) { return i; } }
+    return -1;
+}
+
+// Apply the activation on the real board ({T}, then the {3}, then the ability: Maze's End to hand, the fetch, the
+// shuffle, the win check). The payment was proven on a probe (MazeOffMainPayable).
+inline bool MazeOffMainApply(GameState& s, int me, const MazeOffMainSource& src, const MazeOffMainTarget& t,
+                             const std::string& why)
+{
+    const SacNamedPinScope pin(0, &t.name);
+    if (!PermAbilitySourceLive(s, me, src.id, PermAbilityMode::TapTutorPut, nullptr)) { return false; }
+    SetPermTapped(s, me, src.id, true);
+    if (!TapForCostDirect(s, *src.def->params.tap_tutor_put_cost, /*for_creature=*/false))
+    { SetPermTapped(s, me, src.id, false); return false; }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(s.turn_number, "ability", src.def->card.m_name.str() + ": activated " + why
+                      + " (it has no timing restriction) -- fetches " + t.name);
+    }
+    LandEntryNoFloatScope no_float;   // off our main phase: an Amulet untap floats nothing
+    LandEntryPinScope entry(t.pin);
+    ApplyPermAbility(s, me, src.id, PermAbilityMode::TapTutorPut);
+    return true;
+}
+
+// 1. RESPOND. Returns the card number of the Maze's End activated in response (now in hand), or -1.
+inline int MazeOffMainRespond(GameState& s, int me, const char* trigger)
+{
+    if (!s.deck_has_crossing_land_put || s.won_by_effect || me != 0 || s.active_player_index != me
+        || !MazeOffMainRespondLever()) { return -1; }
+    const MazeOffMainSource src = MazeOffMainFindSource(s, me);
+    if (src.id < 0) { return -1; }
+    const std::string why = std::string("in response to ") + trigger;
+    int pick = -1;
+    if (MazeOffMainHumanAsks()) { pick = MazeOffMainHumanPick(s, me, src, why, /*default_activate=*/true); }
+    else
+    {
+        const bool forced = ResolveProvider(s).OffMainMazeRedeployForced(s, me);
+        const int n = static_cast<int>(src.targets.size());
+        const int r = TakeCrossingLandRank(s, n + (forced ? 0 : 1));   // unrestricted: {target..., decline}
+        pick = r < n ? r : -1;
+    }
+    if (pick < 0) { return -1; }
+    return MazeOffMainApply(s, me, src, src.targets[static_cast<std::size_t>(pick)], why) ? src.id : -1;
+}
+
+// Could MazeOffMainRespond activate now (same tests, no ordinal taken)? Manabond reads it before its yes/no: the
+// Maze's End the response would return is a land in hand at the resolution.
+inline bool MazeOffMainRespondPossible(const GameState& s, int me)
+{
+    if (!s.deck_has_crossing_land_put || s.won_by_effect || me != 0 || s.active_player_index != me
+        || !MazeOffMainRespondLever()) { return false; }
+    return MazeOffMainFindSource(s, me).id >= 0;
+}
+
+// 2. BANK, right after an off-main put. One ordinal per activation: {decline, target...}; a decline ends it (a second
+// copy is interchangeable with the first). The off-main WIN is re-checked after each bank (the fetched Gate can make
+// another copy's activation a win).
+inline int MazeOffMainBank(GameState& s, const char* window)
+{
+    const int me = s.active_player_index;
+    if (!s.deck_has_crossing_land_put || me != 0 || !MazeOffMainBankLever()) { return 0; }
+    int banked = 0;
+    while (!s.won_by_effect)
+    {
+        const MazeOffMainSource src = MazeOffMainFindSource(s, me);
+        if (src.id < 0) { break; }
+        const std::string why = std::string("with no redeploy, ") + window;
+        int pick = -1;
+        if (MazeOffMainHumanAsks()) { pick = MazeOffMainHumanPick(s, me, src, why, /*default_activate=*/false); }
+        else
+        {
+            const int r = TakeCrossingLandRank(s, static_cast<int>(src.targets.size()) + 1);   // rank 0 = decline
+            pick = r - 1;
+        }
+        if (pick < 0) { break; }
+        if (!MazeOffMainApply(s, me, src, src.targets[static_cast<std::size_t>(pick)], why)) { break; }
+        ++banked;
+        TryOffMainAltWinActivation(s);
+    }
+    return banked;
+}
+
 // BURGEONING -- "Whenever an opponent plays a land, you may put a land card from your hand onto the battlefield."
 // Called by ResolvePassiveOpponentLandTurn (both worlds) right after the opponent's land PLAY (a fetch's search is
 // not a play). One trigger per copy, snapshotted as the land is played (CR 603.2). Each trigger's menu: one option
@@ -53220,8 +53449,15 @@ inline void ResolveBurgeoningTriggers(GameState& state)
     const int me = 0;   // the passive opponent is seat 1 (ResolvePassiveOpponentLandTurn)
     const int n = CountControlledWithParam(state, me, [](const CardParams& p)
                                            { return p.opponent_land_play_put_land_from_hand; });
+    int puts_made = 0;
     for (int t = 0; t < n; ++t)
     {
+        // P6: an untapped Maze's End is activated in response to this trigger (MazeOffMainRespond), and the put is
+        // then restricted to it when the provider forces the redeploy (MazesEndProvider: the premises are there).
+        const int responded = MazeOffMainRespond(state, me, "Burgeoning");
+        if (state.won_by_effect) { return; }
+        const bool redeploy_only = responded >= 0 && !(g_play_dig_chooser && !g_tap_speculating)
+            && ResolveProvider(state).OffMainMazeRedeployForced(state, me);
         struct Opt { int number; const CardDefinition* def; int pin; };
         std::vector<Opt> opts;
         std::vector<Card> human_cards;
@@ -53230,6 +53466,7 @@ inline void ResolveBurgeoningTriggers(GameState& state)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d == nullptr || !d->card.IsLand()) { continue; }
+            if (redeploy_only && c.m_number != responded) { continue; }
             if (std::find(seen.begin(), seen.end(), c.m_name.str()) != seen.end()) { continue; }
             // The land-drop menu's provider restriction (LandPlayOffered: Maze's End P5, an unpayable Gateway
             // Plaza) applies to the autonomous put too -- Burgeoning's choice is the land drop's choice. The
@@ -53240,8 +53477,12 @@ inline void ResolveBurgeoningTriggers(GameState& state)
             human_cards.push_back(c);
             for (int pin : CrossingLandEntryPins(state, me, *d)) { opts.push_back(Opt{ c.m_number, d, pin }); }
         }
-        if (opts.empty()) { return; }   // no land in hand: nothing to put (a later trigger finds none either)
-        const int width = static_cast<int>(opts.size()) + 1;   // + "none"
+        if (opts.empty())   // no land in hand: nothing to put (a later trigger finds none either, unless P6 responds)
+        {
+            if (MazeOffMainRespondLever() && state.deck_has_crossing_land_put) { continue; }
+            return;
+        }
+        const int width = static_cast<int>(opts.size()) + (redeploy_only ? 0 : 1);   // + "none" (P6: none withheld)
         int k = TakeCrossingLandRank(state, width);
         int number = -1, pin = -1;
         const CardDefinition* def = nullptr;
@@ -53269,7 +53510,11 @@ inline void ResolveBurgeoningTriggers(GameState& state)
         LandEntryNoFloatScope no_float;
         LandEntryPinScope pin_scope(pin);
         EnterLand(state, *def, number, /*resolve_full_etb=*/true, /*fire_landfall=*/true, LandEntryTap::Natural, me);
+        ++puts_made;
     }
+    // P6: after a put the board is one our main phase never saw -- the off-main win, then the searched bank.
+    if (puts_made > 0 && MazeOffMainBankLever() && !TryOffMainAltWinActivation(state))
+    { MazeOffMainBank(state, "after a Burgeoning put"); }
 }
 
 // ---- MAZE'S END: THE OFF-MAIN WIN (sweep 61001 gi8; F1 defect 4) --------------------------------------------
@@ -53468,10 +53713,14 @@ inline void PerformEndStepManabond(GameState& state)
     const int me = state.active_player_index;
     const int n = CountControlledWithParam(state, me, [](const CardParams& p)
                                            { return p.endstep_may_dump_hand_lands_discard_hand; });
+    int dumped = 0;
     for (int t = 0; t < n; ++t)
     {
         Player& p = state.players[static_cast<std::size_t>(me)];
-        if (p.hand.empty()) { return; }   // nothing to reveal: yes == no
+        // P6: an untapped Maze's End can be activated in response (MazeOffMainRespond, after the yes below); its cost
+        // returns it to hand, so the resolution sees one more land in hand than the hand holds now.
+        const int resp = MazeOffMainRespondPossible(state, me) ? 1 : 0;
+        if (p.hand.empty() && resp == 0) { break; }   // nothing to reveal: yes == no
         int lands = 0;
         for (const Card& c : p.hand)
         {
@@ -53481,17 +53730,19 @@ inline void PerformEndStepManabond(GameState& state)
         // A "yes" with NO land in hand only reveals and discards the hand. The provider may prove that dominated
         // (a deck where no card gains from a discard or an emptier hand: MazesEndProvider) -- a RESTRICTION of the
         // menu to {no}, never consulted in human play (the person is asked).
-        if (lands == 0 && !(g_play_dig_chooser && !g_tap_speculating)
+        if (lands + resp == 0 && !(g_play_dig_chooser && !g_tap_speculating)
             && ResolveProvider(state).CrossingDumpWithoutLandDominated(state, me))
-        { return; }   // every later copy meets the same hand
+        { break; }   // every later copy meets the same hand
         // A hand of ONLY lands: "yes" puts every card and discards nothing. The provider may prove "no" dominated
         // (MazesEndProvider, P5) -- a RESTRICTION of the menu to {yes}, never consulted in human play. No rank is
-        // consumed (the crossing-pending predicate mirrors it).
-        const bool all_lands_yes = lands > 0 && lands == static_cast<int>(p.hand.size())
+        // consumed (the crossing-pending predicate mirrors it). P6: the responding Maze's End counts as a land in
+        // hand (an empty hand plus a response is the all-land hand {Maze's End}).
+        const bool all_lands_yes = lands + resp > 0 && lands == static_cast<int>(p.hand.size())
             && !(g_play_dig_chooser && !g_tap_speculating)
             && ResolveProvider(state).CrossingDumpAllLandsDominatesNo(state, me);
-        // rank 0 = the default answer (yes with a land to put, else no); rank 1 = the other.
-        const bool default_yes = lands > 0;
+        // rank 0 = the default answer (yes with a land to put, else no; P6: yes for the all-land hand a response
+        // makes of an empty one); rank 1 = the other.
+        const bool default_yes = lands > 0 || (resp > 0 && p.hand.empty());
         bool yes = all_lands_yes ? true : (TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes);
         if (g_play_dig_chooser && !g_tap_speculating)
         {
@@ -53508,6 +53759,13 @@ inline void PerformEndStepManabond(GameState& state)
             yes = (*g_play_dig_chooser)(state, me, src, ex, legal, yes ? 0 : -1) == 0;
         }
         if (!yes) { continue; }
+        // P6: respond with every untapped Maze's End that can activate (each returns to hand and is put back by this
+        // yes; the provider restricts activate / decline, the fetch target is a searched ordinal).
+        if (resp > 0)
+        {
+            while (MazeOffMainRespond(state, me, "Manabond") >= 0) { if (state.won_by_effect) { return; } }
+            if (state.won_by_effect) { return; }
+        }
         // The batch, in hand order: each land's pre-event tapped-ness and its own as-enters value.
         struct Put { Card card; const CardDefinition* def; bool tapped; int pin; };
         std::vector<Put> puts;
@@ -53554,7 +53812,11 @@ inline void PerformEndStepManabond(GameState& state)
             { (void)ResolveEtbSacUnlessPay(state, me, pt.card.m_number, pt.pin); }
             OnLandEntered(state, me, pt.card.m_number);
         }
+        dumped += static_cast<int>(puts.size());
     }
+    // P6: after a dump the board is one main phase 2 never saw -- the off-main win, then the searched bank.
+    if (dumped > 0 && MazeOffMainBankLever() && !TryOffMainAltWinActivation(state))
+    { MazeOffMainBank(state, "after Manabond's dump"); }
 }
 
 inline void ResolveOneLookTop(GameState& state, int controller, const std::string& watcher)

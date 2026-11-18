@@ -111834,6 +111834,10 @@ static bool CrossingLandUncoveredPending(const GameState& state)
         burgeoning = burgeoning || d->params.opponent_land_play_put_land_from_hand;
     }
     if (!manabond && !(burgeoning && state.opponent_plays_lands)) { return false; }
+    // P6 (SpellEffects.h, "THE NON-WINNING OFF-MAIN ACTIVATION"): an untapped Maze's End with a Gate to fetch can answer
+    // Manabond / Burgeoning (the fetch target is an ordinal) or be banked after a put. A conservative test (no mana
+    // probe): a crossing that then asks nothing has every ordinal at width 1 and fans nothing.
+    if ((MazeOffMainRespondLever() || MazeOffMainBankLever()) && MazeOffMainMayAsk(state, me)) { return true; }
     const Player& ap = state.players[static_cast<std::size_t>(me)];
     bool has_land = false;
     for (const Card& c : ap.hand)

@@ -1008,6 +1008,8 @@ enum Slot : int
     STUFFY_SPLIT_LETHAL_M1,   // MTG_STUFFY_SPLIT_LETHAL_M1  PROPOSED amendment to the Stuffy Doll main split (step 11; NOT the USER's rule, DEFAULT OFF until the USER rules): main 1 also admits a creature-sweeper cast whose reflection is projected to kill the opponent NOW (StuffyDollProvider::ExtraLethalDamage({sweeper}) >= opponent life, the board as it stands; a wider hand-optimistic bound measured worse). A sweep that ends the game this main wins on the same turn as any main-2 line, so it is an identity in the objective; it restores the greedy (depth-0 runner / beyond-horizon playout) kill the plain split loses because the greedy main 1 spends the mana the main-2 sweeper needed (scenario stuffy_d0_runner_finds_act_kill). Inert while the split is off
     LINE_KEEP_ALL,            // MTG_LINE_KEEP_ALL  MTG_LINE_REDUCER_KEEP's line-keep rung on EVERY applying line of two or more held casts, not only a line with a same-turn reducer credit: a payment that strands the rest of the line while the board pays both together is re-made (fewest greedy sources held out, then the oracle table's first keeping option). Dragons s30086708 T4 {Atsushi + Mind Stone}: Mind Stone's {2} took the Mountain and Atsushi's {R}{R} met Gruul Turf's {R}{G} alone; Treasure Hunt s30090713 T4: Land's Edge's {1} took the only {U}. =0 -> the reducer lines only, byte-identical
     ET_OPP_TURN_PRUNE,        // MTG_ET_OPP_TURN_PRUNE     Extra Turns (USER 2026-11-18: "It's silly to give your opponent an extra turn."): Time Warp's / Walk the Aeons' opponent target is not searched (ExtraTurnsProvider::OffersExtraTurnOpponentTarget). Human play unchanged. Default ON; =0 -> both recipients searched
+    MAZE_OFFMAIN_RESPOND,     // MTG_MAZE_OFFMAIN_RESPOND  Maze's End P6 (USER 2026-11-18 ruling 6): an untapped Maze's End is activated IN RESPONSE to a Manabond trigger (on a yes) or a Burgeoning trigger, then redeployed by that trigger (MazesEndProvider::OffMainMazeRedeployForced prunes the activate/decline choice to activate; the Gate fetched stays a searched crossing ordinal). Default ON; =0 -> no off-main response (with MAZE_OFFMAIN_BANK=0: the pre-P6 engine)
+    MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
     COUNT
 };
 
@@ -1960,6 +1962,8 @@ inline const char* Name(int slot)
         "MTG_STUFFY_SPLIT_LETHAL_M1",
         "MTG_LINE_KEEP_ALL",
         "MTG_ET_OPP_TURN_PRUNE",
+        "MTG_MAZE_OFFMAIN_RESPOND",
+        "MTG_MAZE_OFFMAIN_BANK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
