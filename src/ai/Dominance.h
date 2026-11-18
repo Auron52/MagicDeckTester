@@ -656,7 +656,9 @@ static_assert(sizeof(Player) == 216,
 // vector) -- the plan's combat-time reflection-target pins. FUTURE-DETERMINING within the turn (which target each
 // combat GC cascade's reflection takes), FOLDED in Build() beside scripted_prophets_sac (value-gated: empty on
 // every deck without reflect_armed). Measured by the tripwire (1632 before Maze's End I3).
-static_assert(sizeof(GameState) == 1640,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b
+// +8 bytes (2026-11-18 rebase): Maze's End's padding bools took the holes that held reflect_armed /
+// cant_gain_life_rest_of_game_mask, so those two now add a padded 8 bytes. Same classification and fold as above.
+static_assert(sizeof(GameState) == 1648,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
