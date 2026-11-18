@@ -8211,6 +8211,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::Channel)
         {
+            // The rollout twin's owed-aware hold (TurnSolver::TrailingStepOwedHold, the SAME shared probe step):
+            // the payment keeps back what the usual one would take from the pass's later owed activations.
+            // Installed before AvailableManaPool is read, so the accounting pool sees the same hold.
+            std::vector<int> owed_hold = TurnSolver::TrailingStepOwedHold(
+                state, a, trailing_acts,
+                [&a](GameState& s) { return TurnSolver::ApplyChannelStepDirect(s, a); });
+            std::optional<PlanSourceReserveScope> owed_scope;
+            if (!owed_hold.empty()) { owed_scope.emplace(TurnSolver::WithPlanReserve(owed_hold)); }
             ManaPool avail = AvailableManaPool(state);
             const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
             // Talon Gates of Madara's put (rollout twin: TurnSolver's apply): nothing is paid unless the
