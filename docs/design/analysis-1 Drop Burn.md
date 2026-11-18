@@ -246,3 +246,14 @@ Resolved / non-play findings:
   `logs/1dropburn/both5.log` (DONE marker). Expect: midrangeburn byte-identical (refactor only), onedropburn
   moves (folds). Next: accept onedropburn keys (deck filter), commit, overnight tier once, verify_deck,
   tie-break, viewer audit, discard A/B, report, push.
+* **~04:20 UTC: COMMITTED 42c6e9007** (folds + Needle drop report + onedropburn regression GT re-accept, 4 keys
+  digest-only; smoke unchanged; check_gt_logs 1263 consistent). midrangeburn smoke + 8/9 regression PASS;
+  **midrangeburn2hg_regression_d5_s2002 moved 5.9600/473dd2a6 -> 5.9467/bf75dda8, NOT accepted** -- the folds
+  cannot touch it (no Needle in that list; refactor identical), 95 upstream src commits since its 11-15 accept.
+  RUNNING: attribution build of upstream tip 17262a61f in `.claude/worktrees/odb-attrib` (log
+  `logs/1dropburn/attrib_build.log`, `rc=` line at end). Then, FROM THAT WORKTREE:
+  `bash test/regression.sh --regression --deck=midrangeburn2hg` -> FAIL there too = upstream drift (report to the
+  USER, leave unaccepted); PASS = our commits moved it (root-cause). Remove the worktree with
+  `scripts/safe_worktree_remove.sh` after check_references_safe. Next: overnight tier once
+  (`--overnight --deck=onedropburn,onedropburn2hg`, accept same filter), verify_deck, tie-break, viewer audit,
+  discard A/B, report, push (none yet this session), CronDelete 01e1d807.
