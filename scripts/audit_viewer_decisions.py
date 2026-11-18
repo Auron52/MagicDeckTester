@@ -2256,8 +2256,9 @@ STATE_GATED_TYPES = {
     ("aura_host_damage_back", "dig"):
         "Guilty Conscience's attack-hold prompt '(may attack)' exists only when a GC enchants a creature of ours "
         "that is NOT indestructible and can attack (a settled Boros Reckoner / Screaming Nemesis / Mogg Maniac / "
-        "Spiteful Sliver), and only under a provider that names it (StuffyDollProvider::MayDeclineAttack); the "
-        "forward sweep's default GC host is usually the indestructible Stuffy Doll. Pinned by "
+        "Spiteful Sliver / Nomads en-Kor), and only under a provider that names it (StuffyDollProvider::"
+        "MayDeclineAttack); a short sweep can miss that board (a 60-seed default-answer --claude-play probe reached "
+        "it on 10 seeds, step 9e). Pinned by "
         "test/unit/test_rfx_pipeline.cpp 'rfx step 9e: human play asks ...' and 'rfx step 9e: a "
         "--force-attackers replay ...'.",
     ("transform_back_name", "dig"):

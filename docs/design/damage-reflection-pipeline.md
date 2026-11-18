@@ -1889,3 +1889,66 @@ Where the code departs from the sections above, and why. Each entry names the sy
 * **d0 sanity (50 games, seed 1):** 44 won, avg win turn 5.386 (metric avg 5.82), the same win turns game by game; 9 of
   50 games changed play (digest 55be46e7fc8282d0 -> 54b7c0312d42fd02): the Stuffy `ScryKeepOnTop` default is now the
   verdict rule.
+
+
+### Step 9e (the attack-hold provider hook; human play's "attack with X?")
+
+* **The ruling (verbatim, ledger ~00:37 11-18; answers "the viewer has no attacker declaration, so a human can't hold a
+  GC'd creature").** *"I think we can make it an exception to the always attack-rule. Perhaps have a deck heuristic
+  that can be consulted to reject attacking?"*
+* **The hook: `DecisionProvider::MayDeclineAttack(const GameState&, const Permanent&) const`, default false.** It
+  names an attacker whose attack-or-hold is a real choice. It never decides the choice (restrict-only).
+  `StuffyDollProvider` overrides it with the step-9c predicate, moved out of the engine: the creature carries a
+  Guilty Conscience (`dmgrx::AuraHostDamageBackOn`) and is not indestructible (printed or `temp_indestructible`).
+  The engine keeps control, `CanAttackFull` and "would attack" (`AttackWith`) itself.
+* **Two readers, one set.** (1) The step-9c searched fan (TurnSolver `AppendSubdecisionAxes`) asks the hook in place of
+  its inline predicate. Every other gate is unchanged: `reflect_armed`, pre-combat, a top-level list, not human play,
+  not inside a combat probe, no combat suffix yet, `!wins_this_turn`, and at most 4 creatures. (2) Human play: the
+  real declaration `AIEngine::DeclareAttackers` calls the new `AskHumanAttackHolds` (Combat.cpp) before
+  `DeclareAttackerIndices`, never inside a rollout. For each creature that can attack, would attack, and is named
+  by the hook, it asks the shared dig chooser (a `dig` yes/no, source `"<name> (may attack) -- ..."`,
+  `examined[0]` = the creature; 0 attacks, -1 keeps it home; default attack). A "keep it home" answer is pushed
+  as `dmgrx::AttackHoldCode` onto the front of `GameState::scripted_combat_reflect`. This is the searched hold's own
+  encoding, so `AttackWith` refuses the creature and every existing hold reader applies. Inert unless the chooser
+  is set (human play only: `RevealLogPause` nulls it in every search scope), the state is armed, and the hook names
+  a creature. Every other deck gets no prompt.
+* **Reference replay (`--force-attackers`).** On a turn the recording pins, the prompt's default is the RECORDED
+  declaration. A named creature absent from the recorded set was held (default -1); a named one present attacked
+  (default 0). The pinned set is read in the same battlefield order and multiset consumption as
+  `DeclareAttackerIndices`. The replay's `--choices` answer, when present, decides. `DeclareAttackerIndices`'
+  pinned path now skips a pinned name that `dmgrx::AttackHeld` holds. The executor's `m_script_atk_pin`
+  (MTG_REAL_PAY_ATTACK_PIN) re-add also skips a held creature. Both are no-ops without hold codes: autonomous play
+  with a searched hold never lists the held creature as attacking, and no other deck writes hold codes.
+* **Deviation (disclosed):** the fan's cheap pre-check stays in the engine ("a GC on the battlefield or cast by the
+  plan"; `dmgrx::AnyAuraHostDamageBack` + `aura_host_damage_back` casts). It only skips the per-plan apply. It is
+  correct for the one rule that exists, and the code comment says a provider rule that does not need a Guilty
+  Conscience must widen it. The human prompt has no such pre-check; it asks the hook directly. Also the hold codes are
+  the damage-reflection pipeline's, so the human prompt is gated on `reflect_armed` too.
+* **Deviation (disclosed):** projections that run in human play BEFORE the declaration (e.g. the human-play aura-swap
+  payability probe `CombatSwapStaysPayable`) cannot know the answer yet, so they assume the named creature attacks.
+  This does not apply to Stuffy Doll (no combat aura swap).
+* **Test changes.** Under the generic provider the hook names nobody, so these cases lost their hold variant: the
+  step-5b and step-6 combat-fan cases (expected pin sets shrink by the hold) and arm 0 of the step-9c branch case
+  (now 0 hold lines; the Stuffy arm still 1). The step-9c "no hold axis" cases now run the Stuffy provider, plus a
+  positive control.
+* **Viewer.** DECISIONS.md: a new `dig` reuse row `(may attack)`, and the Guilty Conscience paragraph rewritten
+  (gap closed). README's open "route combat through the chooser" item is marked partly done. index.html
+  `digPanelHtml` has a `(may attack)` branch (the creature tile = Attack, "Keep it home"; the default is tagged).
+  main.cpp `WriteDigDecisionJson` has a `(may attack)` note. The audit maps `aura_host_damage_back` -> `dig`, moved
+  out of the no-choice classification, as a STATE-GATED type pinned by the 9e unit tests (a short sweep can miss
+  the board; the dynamic sweep cannot run yet anyway, since Stuffy has no profile).
+* **Verification.** Unit 3471/3471 (3 new 9e cases: the hook, the human prompt through `AskHumanAttackHolds` and the
+  real `AIEngine::DeclareAttackers`, and the `--force-attackers` defaults). Scenarios 580/580, with every outcome line
+  identical to step 9d. This includes `stuffy_gc_reckoner_hold_for_escape` and `stuffy_escape_gc_reckoner_loop_fan_fold`.
+  Smoke: 219/219 job digests identical to step 9d. The 44 FAILs are the stale origin GT, pre-existing. Stuffy Doll is
+  NOT a smoke case, so Stuffy was checked with an A/B: the step-9d binary (c60864f98, built in a scratch worktree) vs
+  step 9e on 50 games at d0 and 50 at d3/b10 (seed 1). Both are byte-identical: d0 54b7c0312d42fd02, avg 5.82; d3/b10
+  e5df6a1d0cf45c02, avg 4.44, 1,341,508 units on both. Reference replay `viewer_protocol_check.py --strict`: 875
+  refs, 0 play-drift / board-diverged / enum-gap / contract-fail, rc 0. Static viewer audit: Stuffy expects `dig`, rc 0.
+* **End-to-end claude-play check (the stateless `--claude-play --choices` route, no viewer).** A driver answering
+  every decision with its default (keep every hand) over seeds 1-60 met the `(may attack)` prompt on 10 seeds,
+  always for one GC'd, non-indestructible creature (Boros Reckoner, Screaming Nemesis, Spiteful Sliver, Nomads
+  en-Kor), default attack. Seed 14 T4 (choice 16): answering -1 leaves the opponent at 20 with the GC'd Reckoner
+  (#11) alive and untapped, and the next frame is the post-combat main. Answering 0 attacks: opponent 17, and
+  the next frame is the Reckoner's reflection `target`. A second Reckoner (#12) was summoning sick and not asked
+  about. Scripts: `build/scratch/stuffy/impl9e/tools/holdprobe.py`, `holdcheck.py`; results `impl9e/holdprobe.jsonl`.
