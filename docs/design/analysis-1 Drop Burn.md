@@ -411,3 +411,48 @@ Resolved / non-play findings:
     different 6 and the game is T4. SURFACE TO USER (candidate amendment: also admit a held card that only the
     Needle-drawn land makes payable).
   NEXT: build -> scenario + unit -> `ARMSET=burnorders2` A/B (base / fix / on) -> flip.
+- ~20:05 UTC burnorders2 A/B DONE (logs/1dropburn/burnorders2_ab.log): fix-alone vs base moves 0/25,696 games
+  (the credit needs OpaqueCastOrderActive, i.e. the order); on vs base ALL -0.0524 t at 0.830x units; 1DB
+  -0.0777 (891/177), 1DB 2HG -0.040, Midrange -0.0349 (403/28), Midrange 2HG -0.0132. Slower searched games 20
+  (logs/1dropburn/burnorders2_slower.txt); traced: 4004/186 Lavamancer ping (noncombat) forces Needle Drop into
+  main 1; 7007/12 Devil rank 12 (opp takes 4) vs OFF's main-2 Devil at opp 5 (declined -> a 4/3 attacker);
+  7007/64 main-2 rule + Fireblast-last: OFF's T3 combat -> Skewer x2 + Fireblast in main 2 has no main-1 twin
+  (Skewer at 30 precedes its only enabler Fireblast at 40); Midrange 5005/260 different bottom; 6006/120 a
+  4-mulligan no-win hand. All USER-rule trade-offs, surfaced. FLIPPED both defaults ON (DecisionProviders.cpp);
+  unit 3399/3399. Scoped smoke+regression running -> logs/1dropburn/flip_tiers.log, then accept the 4 decks.
+
+### CHECKPOINT ~20:45 UTC 2026-11-18 (pre-compaction)
+- COMMITTED (local, unpushed): bb820b141 activation rules + Midrange lever; b543ae64d MTG_SPECTACLE_CREDIT_ETB_OPP
+  (Vexing Devil enables spectacle in the plan credit, default ON, heurarm slot, scenario, burnorders2 armset).
+- UNCOMMITTED: (a) DecisionProviders.cpp FLIP -- MTG_ONEDROPBURN_ORDER and MTG_MIDRANGE_FIREBLAST_ORDER default ON
+  (built + unit 3399/3399 before the hoist edit); HeuristicArm.h slot comments neutral ("default lives at the
+  reader"). (b) MTG_SPECTACLE_CREDIT_HOIST (EngineFlags.h reader + heurarm slot + TurnSolver BuildSpectacleCreditCtx:
+  a hoisted face Lavamancer ping precedes every spectacle cast) -- found by the flip's regression gi99 (seed 3102:
+  T4 ping + Skewer {R} in main 1 was cut, engine did nothing). Scenario
+  test/scenarios/onedropburn_lavamancer_ping_enables_skewer_main1.json; `ARMSET=burnhoist` (base hoist OFF / fix ON)
+  in test/mana_tap_order_ab.sh. FULL REBUILD RUNNING -> logs/1dropburn/build_hoist.log ("rc=" at the end).
+- Flip tiers (logs/1dropburn/flip_tiers.log, BEFORE the hoist fix): every moved key faster/equal; refs pass;
+  1 searched slower = gi99 above. NOT accepted yet.
+- NEXT: build rc=0 -> both new scenarios PASS (+ with MTG_SPECTACLE_CREDIT_HOIST=0 the hoist one FAILS) -> unit ->
+  `ARMSET=burnhoist CASES=overnight DECKS=onedropburn bash test/mana_tap_order_ab.sh > logs/1dropburn/burnhoist_ab.log`
+  -> commit flip + hoist fix -> scoped `bash test/regression.sh --smoke --regression
+  --deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg` -> review slower -> `--accept` with the same
+  --deck filter (smoke + regression) -> check_gt_logs -> commit GT -> Stage 5 (verify_deck, leaf_tiebreak_check,
+  viewer audit, discard A/B) -> Stage 6 report -> push (check_references_safe, rebase origin, rebuild, smoke,
+  check_gt_logs, push, gh run watch --interval 60) -> CronDelete 01e1d807.
+- OPEN USER QUESTIONS: (1) Needle Drop clause -- admit a HELD card that only the Needle-drawn land makes payable?
+  (2) mulligan gen recipe/where: fast ~10.4 h PGO > 8 h window (weekend / second machine?). (3) rule trade-offs
+  surfaced: Lavamancer ping forces Needle Drop into main 1; Devil rank 12 vs a main-2 Devil the opponent declines;
+  Fireblast-last vs Fireblast as Skewer's only spectacle enabler. (4) viewer: launch after the flip lands.
+- PERF FINDINGS for the user: see the ~12:30 / ~14:50 / ~15:05 entries above (bottoming 89% of play work pre
+  keep table; mullgen d2 b3, K=11, fast ~13.5 h Release; discovery probe 163; value-leaf phase A ~1-2 h).
+
+### CHECKPOINT ~22:35 UTC 2026-11-18 -- burnhoist A/B landed; flip + hoist credit committed
+- A/B (logs/mana_tap_ab/20261118_220729_overnight; base = flip without MTG_SPECTACLE_CREDIT_HOIST, fix = with it;
+  onedropburn overnight cells, one pooled batch, 12/12 workers): ALL GAMES paired delta **-0.0042 +/- 0.0007**
+  (95% CI [-0.0056,-0.0028]), 47 better / 4 worse of 11010. Every searched cell (d3/d5/2HG, 3610 games) is
+  byte-identical; all movement is in the d0 (playout-policy) cells.
+- The 4 slower d0 games (8008 gi1019, 8008 gi1272, 4004 gi1104, 10010 gi475; T4 -> T5, the playout now spends Skewer
+  in main 1 off the hoisted-ping credit) all recover to T4 at `--depth 8 --budget-ms 0`. Bar met.
+- NEXT: scoped smoke+regression on onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg -> review -> accept ->
+  check_gt_logs -> commit GT; then Stage 5 (verify_deck, leaf_tiebreak_check, viewer audit, shed-worst A/B), Stage 6, push.

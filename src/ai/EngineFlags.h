@@ -1105,6 +1105,19 @@ inline bool SpectacleCreditEtbOppOn()
     return heurarm::Flag(heurarm::SPECTACLE_CREDIT_ETB_OPP, env_on);
 }
 
+// MTG_SPECTACLE_CREDIT_HOIST (DEFAULT ON; 2026-11-18, found by the 1 Drop Burn order flip, seed 3102 gi 99):
+// the spectacle plan credit's enablers are CASTS, but a provider that hoists the face graveyard ping
+// (DecisionProvider::HoistsFaceGraveyardDamage -- 1 Drop Burn's Grim Lavamancer, run ahead of the plan's casts by
+// TurnSolver::SpectacleGraveyardDamageFirst) makes that ACTIVATION the first damage of the main. Uncredited,
+// {ping, Skewer the Critics {R}} on two Mountains read Skewer at {3}{R} and was cut; the engine reached it only
+// via a main-2 Skewer, which the USER's main-2 rule bars after noncombat damage. Now a hoistable face ping in the
+// selection precedes every spectacle cast. Inert for every provider that does not hoist. =0 -> the old credit.
+inline bool SpectacleCreditHoistOn()
+{
+    static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_HOIST", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::SPECTACLE_CREDIT_HOIST, env_on);
+}
+
 inline bool SpectacleCreditSearchOnly()
 {
     static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_SEARCH_ONLY");   // DEFAULT OFF; =1 enables

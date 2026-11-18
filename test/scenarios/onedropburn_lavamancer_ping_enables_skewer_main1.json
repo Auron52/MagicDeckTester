@@ -1,0 +1,20 @@
+{
+  "deck": "decks/1 Drop Burn/1 Drop Burn.cod",
+  "profile": "decks/1 Drop Burn/1 Drop Burn.profile.json",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 5,
+  "resume_at": "main1",
+  "battlefield": [ { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Grim Lavamancer", "sick": false } ],
+  "graveyard": [ "Lava Spike", "Boltwave" ],
+  "hand": [ "Skewer the Critics" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 4,
+  "env": { "MTG_ONEDROPBURN_ORDER": "1" },
+  "expect_win_turn": 4,
+  "comment": "1 Drop Burn order flip 2026-11-18 (regression seed 3102 gi 99): opponent at 5, two Mountains, Grim Lavamancer with two graveyard cards, Skewer the Critics in hand. The USER's order hoists Lavamancer's face ping ahead of the casts in MAIN 1 (2 damage, spectacle on), then Skewer for {R} deals 3. The USER's main-2 rule bars Skewer after noncombat damage, so this must happen in main 1. Before MTG_SPECTACLE_CREDIT_HOIST the spectacle plan credit did not count the hoisted ping, Skewer was priced {3}{R} and the engine did nothing in main 1."
+}

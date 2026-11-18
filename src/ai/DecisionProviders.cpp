@@ -66965,7 +66965,7 @@ bool MidrangeBurnProvider::CleanupDiscardShedStable() const
 //    and its cast gate would refuse it. Before the on-cast self-damage tier (30). Everything else is the
 //    Generic order. Cast order is USER-owned: this tier was surfaced to the user at onboarding (2026-11-17).
 //
-// MTG_ONEDROPBURN_ORDER (default OFF): the FULL ORDER drafted for the USER's review (2026-11-17, "Can you
+// MTG_ONEDROPBURN_ORDER (DEFAULT ON since 2026-11-18): the FULL ORDER drafted for the USER's review (2026-11-17, "Can you
 // make a full cast order for me to review?"), AMENDED by the USER 2026-11-18: "needle drop and skewer the
 // critics should always default to later than other spells if possible. In particular, they need to be cast
 // before the attack phase if this is possible for prowess. We want to only cast them second main if there is
@@ -66989,7 +66989,9 @@ bool MidrangeBurnProvider::CleanupDiscardShedStable() const
 // Which main a cast goes in: main 1 is fully searched; MAIN 2 is the USER's rule (Main2CastAllowed below).
 static bool OneDropBurnOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_ONEDROPBURN_ORDER");   // default OFF (USER review); =1 -> full order
+    // DEFAULT ON (2026-11-18): USER-approved ("That order looks fine to me"), held-out A/B (burnorders2, 10,810
+    // pairs) -0.0777 turns at ~0.8x units with the Vexing Devil spectacle-credit fix; =0 -> the onboarding order.
+    static const bool on = EnvOn("MTG_ONEDROPBURN_ORDER", true);
     return heurarm::Flag(heurarm::ONEDROPBURN_ORDER, on);    // per-job manifest override (A/B in one pool)
 }
 
@@ -67178,7 +67180,9 @@ int MidrangeBurnProvider::CastOrderRank(const GameState& state, const CardDefini
     // sacrifices two UNTAPPED Mountains the later burn needed. At 25 the Mountains tap for every rank-20 spell
     // first; still before the spectacle spells (30), which its 4 damage turns on, and before Chandra's
     // Incinerator (1000), which its noncombat damage discounts.
-    static const bool fb_env = EnvOn("MTG_MIDRANGE_FIREBLAST_ORDER");   // default OFF until the A/B
+    // DEFAULT ON (2026-11-18): held-out A/B (burnorders2) Midrange Burn -0.0349 turns (14,006 pairs, 403 better /
+    // 28 worse), 2HG -0.0132; =0 -> Fireblast back with the burn at 20.
+    static const bool fb_env = EnvOn("MTG_MIDRANGE_FIREBLAST_ORDER", true);
     if (def.params.sacrifice_mountains_alternative && heurarm::Flag(heurarm::MIDRANGE_FIREBLAST_ORDER, fb_env))
     { return 25; }
     return DeckProvider::CastOrderRank(state, def);
