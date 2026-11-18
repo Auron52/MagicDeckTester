@@ -4892,6 +4892,15 @@ public:
     // unpinned cast, resolved by EtbTapSubtypeDrawDefault (also the beyond-horizon default). MTG_MAZE_SUMMIT_COUNT.
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const override;
     int EtbTapSubtypeDrawDefault(const GameState& s, int controller, const CardDefinition& def, int avail) const override;
+    // P1d item 5 (USER A4): MTG_MAZE_ACTIVATE_FIRST (DEFAULT OFF) -- with no land left to play, a plan activating
+    // Maze's End is tried first (a move-order tier; ORDER only).
+    bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                            const std::vector<int>& sel, bool projected_lethal) const override;
+    // P1d item 6 (USER A3, 2026-11-17: "Okay, I suppose 1 seems okay, but we can play with it more as needed."):
+    // the greedy subset walk is CHARGED one unit per visit (W = 1; P1b's census sweep: d5 b10 8.3 s vs 12.8 s at
+    // W = 0, win turn 6.600 vs 6.633; d3 b10 22.0 s vs 30.5 s, 6.550 vs 6.417). Levers kept: MTG_SOLVE_CHARGE_W
+    // (=0 uncharged) and the heurarm slot MTG_SOLVE_CHARGE (false = the uncharged A/B control).
+    int SolveChargeWeightOptIn() const override { return 1; }
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
