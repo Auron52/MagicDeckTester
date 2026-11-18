@@ -109,6 +109,7 @@ struct MtgTestSeam
     // GameEngine's private executor steps (Boars LK: the legend-rule SBA checkpoints).
     static void GeResolveStack(GameEngine& g, GameState& s) { g.ResolveStack(s); }
     static void GeEndStep(GameEngine& g, GameState& s) { g.EndStep(s); }
+    static void GeCheckSba(GameEngine& g, GameState& s) { g.CheckStateBasedActions(s); }
     // ...and the untap + upkeep (Boars LK3: the next-upkeep legend keep opens at the untap, closes at the upkeep's end).
     static void GeUntapStep(GameEngine& g, GameState& s) { g.UntapStep(s); }
     static void GeUpkeepStep(GameEngine& g, GameState& s) { g.UpkeepStep(s); }

@@ -77163,7 +77163,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Buccaneer and left the tapped Fiery Islet in play (Treasure #34 sat ahead of the Islet).
                 for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                 { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
-                ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
+                state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(state.battlefield[idx].card));
                 state.battlefield.erase(state.battlefield.begin() + idx);
             }
             else
@@ -79283,7 +79283,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Buccaneer and left the tapped Fiery Islet in play (Treasure #34 sat ahead of the Islet).
                 for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                 { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
-                ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
+                state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(state.battlefield[idx].card));
                 state.battlefield.erase(state.battlefield.begin() + idx);
             }
             else
@@ -80679,12 +80679,13 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
         // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
         const Card dead = p.card;
         const int  ctrl = p.controller_index;
+        const int  owner = p.owner_index;   // its graveyard (CR 400.3)
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
         const int total_counters = TotalCountersOn(p);
-        state.players[ctrl].graveyard.push_back(RevealedCard(dead));
+        state.players[owner].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);   // may append a token at the end -> safe (no echo_cost)
+        OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters, owner);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
     }
     // END OF THE UPKEEP STEP (CR 500.4): the pool empties, so an echo cost paid off a lumpy source

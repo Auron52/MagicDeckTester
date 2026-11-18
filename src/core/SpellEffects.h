@@ -15539,9 +15539,12 @@ struct DiesTuckPinScope
 // "if fewer than N-1 cards, the bottom" (the Long-Term Plans clamp; no RNG is drawn, so the seeded draw order of
 // every other card is untouched apart from the shift). NOT a top stack: top_stacked_turn stays unset.
 inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, const Card& dead_card,
-                                         int position)
+                                         int position, int dead_owner = -1)
 {
-    std::vector<Card>& gy = state.players[dead_controller].graveyard;
+    // The card is in its OWNER's graveyard and goes to its OWNER's library (CR 400.3); "you may" is the
+    // controller's. Equal except for a stolen creature (owner < 0 = the controller, the legacy callers).
+    const int owner = dead_owner >= 0 ? dead_owner : dead_controller;
+    std::vector<Card>& gy = state.players[owner].graveyard;
     std::size_t hit = gy.size();
     for (std::size_t g = gy.size(); g-- > 0; )
     { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
@@ -15567,7 +15570,7 @@ inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, 
     if (!tuck) { return; }
     Card back = gy[hit];
     gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
-    auto& lib = state.players[dead_controller].library;
+    auto& lib = state.players[owner].library;
     const std::size_t at = std::min<std::size_t>(static_cast<std::size_t>(position - 1), lib.size());
     const int num = back.m_number;
     const std::string nm = back.m_name.str();
@@ -15584,11 +15587,15 @@ inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, 
     }
 }
 
+// `dead_owner`: the dead card's OWNER, whose graveyard the death site pushed it into (CR 400.3) and whose
+// graveyard / library / control the "put into a graveyard" and "return it ... under its owner's control"
+// clauses below read. < 0 = the controller (equal for everything but a stolen creature).
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters,
                            const std::vector<int>* dwatch,
-                           int dead_total_counters)
+                           int dead_total_counters, int dead_owner = -1)
 {
+    const int gy_owner = dead_owner >= 0 ? dead_owner : dead_controller;
     if (dead_controller == state.active_player_index)
     { state.permanent_left_under_control_this_turn = true; }
     // MORBID (GameState::creature_died_this_turn). Only a CREATURE dying counts: the shared
@@ -15643,15 +15650,15 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
         if (dd && dd->params.graveyard_replace_shuffle_library)
         {
-            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            std::vector<Card>& gy = state.players[gy_owner].graveyard;
             for (std::size_t g = gy.size(); g-- > 0; )
             {
                 if (gy[g].m_name == dead_card.m_name)
                 {
                     Card back = gy[g];
                     gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
-                    state.players[dead_controller].library.push_back(std::move(back));
-                    ShuffleAfterSearch(state, dead_controller);
+                    state.players[gy_owner].library.push_back(std::move(back));
+                    ShuffleAfterSearch(state, gy_owner);
                     break;
                 }
             }
@@ -15664,11 +15671,12 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     {
         const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
         if (dd && dd->params.dies_to_library_position > 0)
-        { ResolveDiesToLibraryPosition(state, dead_controller, dead_card, dd->params.dies_to_library_position); }
+        { ResolveDiesToLibraryPosition(state, dead_controller, dead_card, dd->params.dies_to_library_position,
+                                       gy_owner); }
     }
     // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
     // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
-    FireGraveyardEntryTriggers(state, dead_controller, dead_card);
+    FireGraveyardEntryTriggers(state, gy_owner, dead_card);
 
     // Persist (Kitchen Finks / Murderous Redcap): "When this creature dies, if it had no -1/-1
     // counters on it, return it to the battlefield under its owner's control with a -1/-1 counter
@@ -15684,16 +15692,16 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
         if (dd && dd->params.persist)
         {
-            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            std::vector<Card>& gy = state.players[gy_owner].graveyard;
             for (std::size_t g = gy.size(); g-- > 0; )
             {
                 if (gy[g].m_name == dead_card.m_name)
                 {
                     Card back = gy[g];
                     gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
-                    const int n = MinusCounterReplacement(state, dead_controller, 1);
+                    const int n = MinusCounterReplacement(state, gy_owner, 1);
                     GraveyardEnterScope from_gy;   // Celes's graveyard-enter watcher reads this
-                    PutCardOntoBattlefield(state, dead_controller, back, "Persist", n);
+                    PutCardOntoBattlefield(state, gy_owner, back, "Persist", n);
                     break;
                 }
             }
@@ -15710,7 +15718,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
         if (dd && dd->params.dies_return_as_noncreature_enchantment)
         {
-            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            std::vector<Card>& gy = state.players[gy_owner].graveyard;
             std::size_t hit = gy.size();
             for (std::size_t g = gy.size(); g-- > 0; )
             { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
@@ -15724,7 +15732,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                 Card back = gy[hit];
                 gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
                 GraveyardEnterScope from_gy;
-                PutCardOntoBattlefield(state, dead_controller, back, dead_card.m_name.str(), 0,
+                PutCardOntoBattlefield(state, gy_owner, back, dead_card.m_name.str(), 0,
                                        /*as_noncreature_enchantment=*/true);
             }
         }
@@ -18282,6 +18290,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
     {
         if (!GyReturnHasFuel(state, controller, *d)) { return; }   // stale plan: never activated
         const Card sacrificed = state.battlefield[static_cast<std::size_t>(src)].card;
+        const int  sac_owner  = state.battlefield[static_cast<std::size_t>(src)].owner_index;
         const std::string src_label = sacrificed.m_name.str();
         if (d->params.gy_return_sacrifices_source)
         {
@@ -18291,7 +18300,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                 if (o.equipped_to      == sacrificed.m_number) { o.equipped_to      = 0; }
                 if (o.aura_attached_to == sacrificed.m_number) { o.aura_attached_to = 0; }
             }
-            state.players[controller].graveyard.push_back(RevealedCard(sacrificed));
+            state.players[sac_owner].graveyard.push_back(RevealedCard(sacrificed));
             FireSacrificeWatchers(state, controller);
         }
         else
@@ -18343,9 +18352,10 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         // graveyard by the time we move the picked card.
         // (`pick` stays valid: the sacrifice push_back only APPENDS to the graveyard.)
         const Card sacrificed = state.battlefield[src].card;
+        const int  sac_owner  = state.battlefield[src].owner_index;
         src_label = sacrificed.m_name.str();
         state.battlefield.erase(state.battlefield.begin() + src);
-        state.players[controller].graveyard.push_back(RevealedCard(sacrificed));
+        state.players[sac_owner].graveyard.push_back(RevealedCard(sacrificed));
     }
     else
     {
@@ -18990,14 +19000,15 @@ inline bool CardIsLord(const Card& c)
 }
 inline int SweepZeroToughnessSba(GameState& state)
 {
-    struct Dead { Card card; int controller; bool was_token; int minus; int total; };
+    struct Dead { Card card; int controller; bool was_token; int minus; int total; int owner; };
     std::vector<Dead> died;
     for (std::size_t i = 0; i < state.battlefield.size(); )
     {
         const Permanent& p = state.battlefield[i];
         if (!p.card.IsCreature() || p.EffectiveToughness() > 0 || LethalToughness(p, state) > 0) { ++i; continue; }
-        died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), TotalCountersOn(p) });
-        state.players[p.controller_index].graveyard.push_back(RevealedCard(p.card));
+        died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), TotalCountersOn(p),
+                             p.owner_index });
+        state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));   // OWNER's (CR 400.3)
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
     for (const Dead& d : died)
@@ -19011,7 +19022,7 @@ inline int SweepZeroToughnessSba(GameState& state)
                       + " creature(s) die at 0 toughness (a lord left)");
     }
     for (const Dead& d : died)
-    { OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus, nullptr, d.total); }
+    { OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus, nullptr, d.total, d.owner); }
     return static_cast<int>(died.size());
 }
 
@@ -19161,10 +19172,11 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     // and sacrificed to Falkenrath Pit Fighter goes to the opponent's graveyard, not ours. Identical for
     // every permanent we own -- i.e. every deck until a control change exists (Bolas's -2 victims are
     // never sacrificed by any suite deck: no outlet shares a list with Bolas).
-    state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(dead));
+    const int  dead_owner = state.battlefield[idx].owner_index;
+    state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
+    OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total, dead_owner);
     // A sacrificed LORD drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
     if (LordLeaveSbaOn() && CardIsLord(dead)) { SweepZeroToughnessSba(state); }
 }
@@ -19479,9 +19491,10 @@ inline void DestroyAttackedAtEndStep(GameState& state)
                 if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
                 if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
             }
-            state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
+            const int  owner     = q.owner_index;
+            state.players[owner].graveyard.push_back(RevealedCard(dead));
             state.battlefield.erase(state.battlefield.begin() + i);
-            OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total);
+            OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total, owner);
             break;
         }
     }
@@ -19572,7 +19585,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
     // other deck keeps the legacy body below, byte-for-byte.
     if (state.reflect_armed) { dmgrx::Sweep(state, controller, def, dmg); return; }
     (void)controller;
-    struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
+    struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
     std::vector<SweptDeath> died;
     int hit = 0;
 
@@ -19593,7 +19606,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
-                         MinusCountersOn(q), TotalCountersOn(q) });
+                         MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
         state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
         state.battlefield.erase(state.battlefield.begin()
                                 + static_cast<std::ptrdiff_t>(i));
@@ -19613,7 +19626,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
     for (const SweptDeath& d : died)
     {
         OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
-                       nullptr, d.total_counters);
+                       nullptr, d.total_counters, d.owner);
         if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
     }
 
@@ -19785,6 +19798,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     if (q.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
     const Card dead = q.card;
     const int  dead_ctrl = q.controller_index;
+    const int  dead_owner = q.owner_index;
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
@@ -19810,7 +19824,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
     // one leaving). Same shape as PerformDamageAllCreatures' pass 3.
     if (was_creature)
     {
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
     (void)source_id;
@@ -20177,7 +20191,7 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         }
         if (destroy && was_creature)
         {
-            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
             if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
         }
         else
@@ -20308,6 +20322,7 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
     if (q.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
     const Card dead = q.card;
     const int  dead_ctrl = q.controller_index;
+    const int  dead_owner = q.owner_index;
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
@@ -20328,7 +20343,7 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
     }
     if (was_creature)
     {
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
 }
@@ -20457,8 +20472,9 @@ inline void FireExiledOwnerIllusion(GameState& state, const Card& left)
             const Permanent& q = state.battlefield[i];
             if (!q.is_token || q.controller_index != owner || !q.card.IsCreature()) { continue; }
             const Card dead = q.card;
+            const int  tok_owner = q.owner_index;
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-            OnCreatureDies(state, owner, dead, /*was_token=*/true, 0, nullptr, 0);
+            OnCreatureDies(state, owner, dead, /*was_token=*/true, 0, nullptr, 0, tok_owner);
             if (owner != state.active_player_index) { FireOppCreatureDies(state, owner); }
         }
         return;
@@ -20563,7 +20579,7 @@ inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controll
         }
         if (was_creature)
         {
-            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
             if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
         }
     }
@@ -20686,7 +20702,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
                       + (desc.empty() ? std::string("no targets (deals no damage)") : desc));
     }
     if (hit_numbers.empty()) { return; }
-    struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
+    struct DividedDeath { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
     std::vector<DividedDeath> died;
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
@@ -20696,7 +20712,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (q.damage < LethalToughness(q, state)) { continue; }
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
-                         MinusCountersOn(q), TotalCountersOn(q) });
+                         MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
         if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
@@ -20711,7 +20727,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
     for (const DividedDeath& d : died)
     {
         OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
-                       nullptr, d.total_counters);
+                       nullptr, d.total_counters, d.owner);
         if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
     }
 }
@@ -21057,7 +21073,7 @@ inline void FireAttackSacFlingImpl(GameState& state, int controller,
 // ---- DEVOUR (CR 702.81; Mycoloth "Devour 2") ----------------------------------------------------
 // One creature that died to a devour sacrifice, held so its death triggers can fire AFTER the
 // devouring creature has entered.
-struct DevourDeath { Card card; bool was_token; int minus_counters; int total_counters; };
+struct DevourDeath { Card card; bool was_token; int minus_counters; int total_counters; int owner = 0; };
 
 // Apply devour AS THE CREATURE ENTERS, returning how many +1/+1 counters it should enter with.
 //
@@ -21201,8 +21217,8 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
         const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
         eaten.push_back(v.card.m_name.str());
         deferred.push_back(DevourDeath{ v.card, v.is_token,
-                                        MinusCountersOn(v), TotalCountersOn(v) });
-        state.players[controller].graveyard.push_back(RevealedCard(v.card));
+                                        MinusCountersOn(v), TotalCountersOn(v), v.owner_index });
+        state.players[v.owner_index].graveyard.push_back(RevealedCard(v.card));   // OWNER's (CR 400.3)
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
     // HISTORY VISIBILITY (USER 2026-09-18: "There was a phantom saproling hanging around after I
@@ -21250,7 +21266,7 @@ inline void FireDeferredDevourDeaths(GameState& state, int controller,
         // the trigger ACTUALLY created instead of what we predicted it would.
         const std::size_t before = state.battlefield.size();
         OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters,
-                       nullptr, d.total_counters);
+                       nullptr, d.total_counters, d.owner);
         if (g_play_event_sink && !g_tap_speculating && state.battlefield.size() > before)
         {
             std::string ev = d.card.m_name.str() + " died \xE2\x86\x92 ";
@@ -22206,13 +22222,13 @@ inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_d
                                BoardSources (&bsrc)[2])
 {
     // Snapshot what the triggers need: the bodies themselves do not survive the compaction.
-    struct Body { Card card; int ctrl; int minus; int total; };
+    struct Body { Card card; int ctrl; int minus; int total; int owner; };
     std::vector<Body> bodies;
     bodies.reserve(dying_desc.size());
     for (int i : dying_desc)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q), TotalCountersOn(q) });
+        bodies.push_back({ q.card, q.controller_index, MinusCountersOn(q), TotalCountersOn(q), q.owner_index });
     }
     // ONE pass. `dying_desc` is descending, so walking it from the back yields ascending indices
     // and no membership set is needed. Survivors keep their relative order, so anything elsewhere
@@ -22234,7 +22250,7 @@ inline void ApplyMassDeathBulk(GameState& state, const std::vector<int>& dying_d
         const std::size_t    expect = state.battlefield.size();
         const BoardSources*  ds     = &bsrc[b.ctrl];
         OnCreatureDies(state, b.ctrl, b.card, /*dead_was_token=*/true, b.minus,
-                       &ds->dwatch, b.total);
+                       &ds->dwatch, b.total, b.owner);
         // A trigger that added or removed a permanent (a death token) invalidates the lists.
         if (state.battlefield.size() != expect)
         {
@@ -22293,9 +22309,10 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         const Card dead   = q.card;
         const int  ctrl   = q.controller_index;
         const bool tok    = q.is_token;
+        const int  owner  = q.owner_index;
         const int  minus  = MinusCountersOn(q);
         const int  total  = TotalCountersOn(q);
-        if (!tok) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
+        if (!tok) { state.players[owner].graveyard.push_back(RevealedCard(dead)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         // Maintain the prefilters across the removal, then across whatever OnCreatureDies did.
         // The erase alone predicts exactly one fewer permanent; ANY other delta means a death
@@ -22307,7 +22324,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         // The erase is already applied to the lists above, so `dwatch` is valid for the board
         // OnCreatureDies is about to see -- which is the board the unprefiltered walk would read.
         const BoardSources* ds = srcs(ctrl);
-        OnCreatureDies(state, ctrl, dead, tok, minus, ds ? &ds->dwatch : nullptr, total);
+        OnCreatureDies(state, ctrl, dead, tok, minus, ds ? &ds->dwatch : nullptr, total, owner);
         if (state.battlefield.size() != expect)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -22371,6 +22388,7 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         if (q.created_by_number != source_number || !q.is_token) { continue; }
         const Card dead  = q.card;
         const int  ctrl  = q.controller_index;
+        const int  owner = q.owner_index;
         const int  minus = MinusCountersOn(q);
         const int  total = TotalCountersOn(q);
         if (!gathered)
@@ -22388,7 +22406,7 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
         const std::size_t expect = state.battlefield.size();
         const BoardSources* ds = (ctrl == 0 || ctrl == 1) ? &bsrc[ctrl] : nullptr;
         OnCreatureDies(state, ctrl, dead, /*dead_was_token=*/true, minus,
-                       ds ? &ds->dwatch : nullptr, total);
+                       ds ? &ds->dwatch : nullptr, total, owner);
         if (state.battlefield.size() != expect)
         {
             bsrc[0] = GatherBoardSources(state.battlefield, 0);
@@ -22637,7 +22655,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
         if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
         if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
     }
-    OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus, nullptr, dead_total);
+    OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus, nullptr, dead_total, dead_owner);
     // A LORD shrunk to death drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
     if (LordLeaveSbaOn() && CardIsLord(dead_card)) { SweepZeroToughnessSba(state); }
 }
@@ -22780,6 +22798,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false; bool victim_tok = false; int victim_m1 = 0;
     int victim_total_counters = 0;
+    int victim_owner = controller;   // the victim's OWNER: its graveyard (CR 400.3)
     // Dina, Soul Steeper: "+X/+0 where X is the sacrificed creature's power" -- LAST-KNOWN
     // information (Scryfall ruling: "the power the creature had when it was on the battlefield"),
     // so it is read BEFORE each erase below, with the same expression Surtland Flinger's fling uses
@@ -22799,7 +22818,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
         victim_total_counters = TotalCountersOn(state.battlefield[hidx]);
-        state.players[controller].graveyard.push_back(RevealedCard(victim));
+        victim_owner = state.battlefield[hidx].owner_index;
+        state.players[victim_owner].graveyard.push_back(RevealedCard(victim));
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
     // The baked victim id may be STALE: two outlets (or two activations) enumerated against the
@@ -22836,7 +22856,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
             victim_total_counters = TotalCountersOn(q);
-            state.players[controller].graveyard.push_back(RevealedCard(q.card));
+            victim_owner = q.owner_index;
+            state.players[victim_owner].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
         }
@@ -23058,7 +23079,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                           || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, victim, victim_tok, victim_m1,
-                   nullptr, victim_total_counters);   // death triggers / persist
+                   nullptr, victim_total_counters, victim_owner);   // death triggers / persist
     // The ability's own effects resolve AFTER the death triggers its cost caused (CR 603.3: those
     // triggers go on the stack above it). `op` points into the card DB, unaffected by the cascade.
     // Kami of False Hope: "Prevent all combat damage that would be dealt this turn."
@@ -27111,7 +27132,7 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // creature source (the Spawn is a pay-sac source by default and no suite deck runs Nest
         // Invader), so the artifact / land path below is the only one taken there -> byte-identical.
         if (p.card.IsCreature()) { SacrificePermanentAt(state, controller, i); return; }
-        state.players[controller].graveyard.push_back(RevealedCard(p.card));   // Lotus: sacrifice the source
+        state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));   // Lotus: sacrifice the source
         state.battlefield.erase(state.battlefield.begin() + i);
         return;
     }
@@ -27988,6 +28009,7 @@ inline void PerformUpkeepFading(GameState& state)
 
         // Cannot remove one -> sacrifice, then the LTB destroys every token it made.
         const Card dead = state.battlefield[static_cast<std::size_t>(idx)].card;
+        const int  dead_owner = state.battlefield[static_cast<std::size_t>(idx)].owner_index;
         const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead);
         state.battlefield.erase(state.battlefield.begin() + idx);
         if (g_play_event_sink)
@@ -27996,7 +28018,7 @@ inline void PerformUpkeepFading(GameState& state)
                           "\xE2\x8C\x9B " + dead.m_name.str()
                           + ": no fade counter left -- sacrificed");
         }
-        state.players[active].graveyard.push_back(RevealedCard(dead));
+        state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
         if (dd && dd->params.fade_ltb_destroys_created_tokens)
         { DestroyTokensCreatedBy(state, num); }
     }
@@ -28393,7 +28415,8 @@ inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note =
         Player&           ap       = state.players[active];
 
         // Sacrifice the enchantment (the cost of the resolution) BEFORE the search.
-        ap.graveyard.push_back(RevealedCard(state.battlefield[src_index].card));
+        state.players[state.battlefield[src_index].owner_index].graveyard.push_back(
+            RevealedCard(state.battlefield[src_index].card));
         state.battlefield.erase(state.battlefield.begin() + src_index);
 
         // The put-list: the searched rank into the provider's menu (the provider's pick when the pin does
@@ -30045,14 +30068,14 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     // (creature-ness is read on the doomed body as it leaves: a Heliod that is a creature at this
     // moment dies as a creature) and fired AFTER every erase, when no saved index is live -- the
     // "erase first, then OnCreatureDies" discipline every other death site follows.
-    struct DoomedDeath { Card card; int controller; bool token; int minus; int total; };
+    struct DoomedDeath { Card card; int controller; bool token; int minus; int total; int owner; };
     std::vector<DoomedDeath> doomed_creatures;
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
     {
         const Permanent& dp = state.battlefield[idx];
         if (dp.card.IsCreature())
         { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token,
-                                       MinusCountersOn(dp), TotalCountersOn(dp) }); }
+                                       MinusCountersOn(dp), TotalCountersOn(dp), dp.owner_index }); }
         // History narration (sink-guarded -> search/rollout byte-identical): a legend-rule death
         // is otherwise INVISIBLE in the viewer -- the user's Protege copied their own Maelstrom
         // Wanderer and "just vanished" (2026-09-04). A doomed copy-entrant is named by its
@@ -30074,7 +30097,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     // One SBA batch: every graveyard-shuffle trigger it fires resolves after ALL the deaths (inert elsewhere).
     GyShuffleBatch _gyb(state);
     for (const DoomedDeath& dd : doomed_creatures)
-    { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total); }
+    { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total, dd.owner); }
 }
 
 // Does `controller` control two legendary permanents with the same name? Allocation-free; the cheap guard the
@@ -36438,9 +36461,9 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
     const Permanent q = state.battlefield[i];
     const int num = q.card.m_number;
     // EXACTLY GameEngine::CheckStateBasedActions' death: the card -- a token too, the graveyard vector
-    // receives tokens there -- goes to its CONTROLLER's graveyard, and Equipment falls off (CR 301.5c).
-    // An Aura's link is left as that SBA leaves it.
-    state.players[q.controller_index].graveyard.push_back(RevealedCard(q.card));
+    // receives tokens there -- goes to its OWNER's graveyard (CR 400.3: never another player's; a stolen
+    // creature goes home), and Equipment falls off (CR 301.5c). An Aura's link is left as that SBA leaves it.
+    state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
     state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     for (Permanent& e : state.battlefield)
     {
@@ -36452,7 +36475,7 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
                       "\xE2\x98\xA0 " + q.card.m_name.str() + " dies (" + why + ")");
     }
     OnCreatureDies(state, q.controller_index, q.card, q.is_token,
-                   MinusCountersOn(q), nullptr, TotalCountersOn(q));
+                   MinusCountersOn(q), nullptr, TotalCountersOn(q), q.owner_index);
 }
 
 // Drain the doomed-entrant queue (g_pending_zero_toughness): each recorded entrant still at 0
@@ -37190,6 +37213,7 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
     if (q.HasKeyword(Keyword::Indestructible)) { return; }
     const Card dead = q.card;
     const int  dead_ctrl = q.controller_index;
+    const int  dead_owner = q.owner_index;
     const bool was_creature = q.card.IsCreature();
     const bool was_token = q.is_token;
     const int  m1 = MinusCountersOn(q);
@@ -37210,7 +37234,7 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
     }
     if (was_creature)
     {
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
         if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
     }
 }
@@ -38868,8 +38892,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // Both {T} and sacrifice are costs. The caller tapped this land before
             // paying {U}; remove it before either player's first draw.
             const Card raw = state.battlefield[static_cast<std::size_t>(idx)].card;
+            const int  raw_owner = state.battlefield[static_cast<std::size_t>(idx)].owner_index;
             state.battlefield.erase(state.battlefield.begin() + idx);
-            state.players[static_cast<std::size_t>(controller)].graveyard.push_back(RevealedCard(raw));
+            state.players[static_cast<std::size_t>(raw_owner)].graveyard.push_back(RevealedCard(raw));
             FireSacrificeWatchers(state, controller);
             if (g_threshold_loot_target == 0)
             {
@@ -39150,6 +39175,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 const int        snum = sq.card.m_number;
                 const Card       dead = sq.card;
                 const bool       tok  = sq.is_token;
+                const int        own  = sq.owner_index;   // its graveyard (CR 400.3)
                 state.battlefield.erase(state.battlefield.begin() + idx);
                 for (Permanent& o : state.battlefield)   // CR 301.5c, parity with every death path
                 {
@@ -39161,7 +39187,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 // a token today; the guard is parity with the sibling case, not speculation about it.
                 // PUSHED BEFORE the watchers fire, so a "whenever you sacrifice" trigger that reads
                 // the graveyard sees the card there (CR 701.17b).
-                if (!tok) { state.players[controller].graveyard.push_back(RevealedCard(dead)); }
+                if (!tok) { state.players[own].graveyard.push_back(RevealedCard(dead)); }
             }
             FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
             // ONE life-gain EVENT of per*N (CR 119.10), never N events of `per`. This is the
@@ -53829,7 +53855,7 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     }
     if (idx >= 0)
     {
-        ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
+        state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(state.battlefield[idx].card));
         state.battlefield.erase(state.battlefield.begin() + idx);
         FireSacrificeWatchers(state, state.active_player_index);   // Slaughter-Priest
     }
@@ -54415,7 +54441,8 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     const bool was_tok = state.battlefield[idx].is_token;
     const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
     const int  dead_total = TotalCountersOn(state.battlefield[idx]);
-    state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(dead));
+    const int  dead_owner = state.battlefield[idx].owner_index;
+    state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -54423,7 +54450,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
                       "\xF0\x9F\x94\xAA " + spell_name + " -- sacrificed " + dead.m_name.str());
     }
     FireSacrificeWatchers(state, active);   // Slaughter-Priest (a sac cost IS a sacrifice)
-    OnCreatureDies(state, active, dead, was_tok, dead_m1, nullptr, dead_total);
+    OnCreatureDies(state, active, dead, was_tok, dead_m1, nullptr, dead_total, dead_owner);
 }
 
 // ===== SHADOWBORN INT-2: THE DEMON TRIGGERS (Reaper from the Abyss, Abhorrent Overlord, Sire of Insanity)
@@ -54711,6 +54738,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }   // targeted, not destroyed
         const Card dead      = q.card;
         const int  dead_ctrl = q.controller_index;
+        const int  dead_owner = q.owner_index;
         const bool was_token = q.is_token;
         const int  m1        = MinusCountersOn(q);
         const int  total_counters = TotalCountersOn(q);
@@ -54728,7 +54756,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
             if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
             if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
         }
-        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters, dead_owner);
         if (dead_ctrl != me) { FireOppCreatureDies(state, dead_ctrl); }
     }
 }
@@ -57608,7 +57636,7 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
     const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
     const int dead_num       = target.card.m_number;
     if (def.params.damage > 0) { state.exile.push_back(RevealedCard(target.card)); }   // exile
-    else { state.players[static_cast<std::size_t>(tgt_controller)].graveyard.push_back(RevealedCard(target.card)); }
+    else { state.players[static_cast<std::size_t>(target.owner_index)].graveyard.push_back(RevealedCard(target.card)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     if (def.params.damage > 0) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)

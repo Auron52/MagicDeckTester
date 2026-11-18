@@ -1671,7 +1671,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         // Collect creatures that died this pass so their death-watchers (Pashalik ping / Rundvelt
         // impulse / Mogg death token) fire AFTER the erase loop -- OnCreatureDies may append tokens
         // to the battlefield, which would invalidate the iterator if fired mid-loop.
-        struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
+        struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; int total_counters;
+                              int owner; };
         std::vector<DeadCreature> died;
         for (std::vector<Permanent>::iterator it = state.battlefield.begin();
              it != state.battlefield.end(); )
@@ -1712,8 +1713,10 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             {
                 if (is_creature)
                 { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token,
-                                               MinusCountersOn(p), TotalCountersOn(p)}); }
-                state.players[p.controller_index].graveyard.push_back(RevealedCard(p.card));
+                                               MinusCountersOn(p), TotalCountersOn(p), p.owner_index}); }
+                // The OWNER's graveyard (CR 400.3): a stolen creature goes home. Every token and
+                // every permanent we did not steal has owner == controller.
+                state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));
                 it = state.battlefield.erase(it);
                 changed = true;
             }
@@ -1732,7 +1735,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         {
             // no-op unless a death-watcher (or persist) is in play
             OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters,
-                           nullptr, d.total_counters);
+                           nullptr, d.total_counters, d.owner);
         }
     }
 }

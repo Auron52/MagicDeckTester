@@ -1351,13 +1351,14 @@ inline void ApplyLandSearchActivationPinned(GameState& state, int controller, in
         const int        num = sq.card.m_number;
         const Card       dead = sq.card;
         const bool       tok  = sq.is_token;
+        const int        own  = sq.owner_index;   // its graveyard (CR 400.3)
         state.battlefield.erase(state.battlefield.begin() + src_idx);
         for (Permanent& o : state.battlefield)
         {
             if (o.equipped_to      == num) { o.equipped_to      = 0; }
             if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
         }
-        if (!tok) { state.players[static_cast<std::size_t>(controller)].graveyard.push_back(dead); }
+        if (!tok) { state.players[static_cast<std::size_t>(own)].graveyard.push_back(dead); }
         if (g_play_event_sink && !g_tap_speculating)
         { EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x94\xAA " + src_name + " -- sacrificed (cost)"); }
         FireSacrificeWatchers(state, controller);

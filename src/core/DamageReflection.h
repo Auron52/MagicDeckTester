@@ -19,7 +19,7 @@
 //   3. the trigger SNAPSHOT, taken before anything changes (last-known information, CR 603.10a: a
 //      reflector killed by this very event still triggers);
 //   4. apply: creature damage is marked, player damage goes through ApplyDamageToPlayer;
-//   5. SbaPass -- the one shared state-based-action pass (CounterPingSbaDead, controller's graveyard,
+//   5. SbaPass -- the one shared state-based-action pass (CounterPingSbaDead, owner's graveyard,
 //      Equipment detach, Aura links cleared and SweepOrphanedAuras run inline, OnCreatureDies,
 //      FireOppCreatureDies, then the life SBA);
 //   6. game over? Then nothing goes on the stack (the Stuffy Doll ruling: a player at 0 loses before
@@ -256,10 +256,9 @@ inline int ApplyDamageToPlayer(GameState& s, const SourceRef& src, int player, i
 // pass of its own, and the executor's GameEngine::CheckStateBasedActions afterwards finds nothing to
 // do). Mirrors that executor pass -- the CounterPingSbaDead predicate (toughness <= 0 kills through
 // indestructible, lethal damage does not), Equipment detach, OnCreatureDies after the erase loop,
-// repeated until nothing dies -- with one deliberate difference: the card goes to its OWNER's graveyard
-// (CR 400.3: an object that would go to a graveyard other than its owner's goes to its owner's), as the
-// legacy sweep already did; the executor pass's controller's-graveyard push is a pre-existing deviation
-// that only a stolen creature can observe (tokens included either way). Plus what the
+// repeated until nothing dies, the card into its OWNER's graveyard (CR 400.3: an object that would go to
+// a graveyard other than its owner's goes to its owner's; the executor pass does the same since the
+// Stuffy E-fixes, tokens included either way). Plus what the
 // executor leaves to later checkpoints but this pipeline needs NOW: Aura links cleared and
 // SweepOrphanedAuras run inline (an Aura whose host died is in the graveyard before any trigger
 // resolves), FireOppCreatureDies for an opponent's creature (the legacy sweep's clause), and the life
@@ -267,7 +266,7 @@ inline int ApplyDamageToPlayer(GameState& s, const SourceRef& src, int player, i
 // Returns the number of creatures that died.
 inline int SbaPass(GameState& s)
 {
-    struct Dead { Card card; int controller; bool was_token; int minus_counters; int total_counters; };
+    struct Dead { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
     int total = 0;
     for (;;)
     {
@@ -276,7 +275,8 @@ inline int SbaPass(GameState& s)
         {
             const Permanent& q = s.battlefield[i];
             if (!CounterPingSbaDead(q, s)) { ++i; continue; }
-            died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), TotalCountersOn(q) });
+            died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), TotalCountersOn(q),
+                             q.owner_index });
             s.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         }
@@ -293,7 +293,8 @@ inline int SbaPass(GameState& s)
         for (const Dead& d : died)
         {
             Log(s, "death", "\xE2\x98\xA0 " + d.card.m_name.str() + " dies (lethal damage)");
-            OnCreatureDies(s, d.controller, d.card, d.was_token, d.minus_counters, nullptr, d.total_counters);
+            OnCreatureDies(s, d.controller, d.card, d.was_token, d.minus_counters, nullptr, d.total_counters,
+                           d.owner);
             if (d.controller != s.active_player_index) { FireOppCreatureDies(s, d.controller); }
         }
         total += static_cast<int>(died.size());
