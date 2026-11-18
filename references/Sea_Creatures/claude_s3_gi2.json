@@ -1,0 +1,467 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [50] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 28, "name": "Overgrowth" }, { "num": 58, "name": "Worn Powerstone" }, { "num": 1, "name": "Breeding Pool" }, { "num": 5, "name": "Brinelin, the Moon Kraken" }, { "num": 41, "name": "Summon: Leviathan" }, { "num": 42, "name": "Summon: Leviathan" }, { "num": 46, "name": "Utopia Sprawl" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 50, "name": "Whelming Wave" }, { "num": 55, "name": "Wild Growth" }, { "num": 60, "name": "Worn Powerstone" }, { "num": 14, "name": "Hedge Maze" }, { "num": 19, "name": "Kiora Bests the Sea God" }, { "num": 9, "name": "Forest" }, { "num": 21, "name": "Koma, World-Eater" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 50, "name": "Whelming Wave", "win_optimal": true }, { "num": 55, "name": "Wild Growth", "win_optimal": true }, { "num": 60, "name": "Worn Powerstone", "win_optimal": true }, { "num": 14, "name": "Hedge Maze", "win_optimal": true }, { "num": 19, "name": "Kiora Bests the Sea God", "win_optimal": true }, { "num": 9, "name": "Forest", "win_optimal": true }, { "num": 21, "name": "Koma, World-Eater", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 19, "name": "Kiora Bests the Sea God" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Wild Growth@9"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Forest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 60, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Wild Growth → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 1, "summary": "land=Hedge Maze; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Forest", "cast=Utopia Sprawl@11", "cast=Worn Powerstone"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Utopia Sprawl" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 60, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Utopia Sprawl → Forest #1, Worn Powerstone", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Worn Powerstone"], "cast_order_canonical": ["Utopia Sprawl", "Worn Powerstone"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }, { "card": "Worn Powerstone" }] },
+    { "index": 1, "summary": "land=Forest; cast: Worn Powerstone, Utopia Sprawl → Forest #1", "declared_order_payability": "known_drops", "land": "Forest", "drops": ["Utopia Sprawl"], "casts": ["Worn Powerstone", "Utopia Sprawl"], "cast_order_canonical": ["Worn Powerstone", "Utopia Sprawl"], "actions": [{ "card": "Worn Powerstone" }, { "card": "Utopia Sprawl", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 2, "summary": "land=Forest; cast: Utopia Sprawl → Forest #2, Worn Powerstone", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl", "Worn Powerstone"], "cast_order_canonical": ["Utopia Sprawl", "Worn Powerstone"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 11, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }, { "card": "Worn Powerstone" }] },
+    { "index": 3, "summary": "land=Forest; cast: Worn Powerstone, Utopia Sprawl → Forest #2", "declared_order_payability": "known_drops", "land": "Forest", "drops": ["Utopia Sprawl"], "casts": ["Worn Powerstone", "Utopia Sprawl"], "cast_order_canonical": ["Worn Powerstone", "Utopia Sprawl"], "actions": [{ "card": "Worn Powerstone" }, { "card": "Utopia Sprawl", "enchant_target": 11, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 4, "summary": "land=Hedge Maze; cast: Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 5, "summary": "land=Hedge Maze; cast: Utopia Sprawl → Hedge Maze", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 14, "enchant_target_name": "Hedge Maze" }] },
+    { "index": 6, "summary": "land=Forest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 7, "summary": "land=Forest; cast: Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 8, "summary": "land=Forest; cast: Utopia Sprawl → Forest #2", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 11, "enchant_target_name": "Forest", "enchant_target_label": "Forest #2" }] },
+    { "index": 9, "summary": "land=none; cast: Utopia Sprawl → Forest #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 9, "enchant_target_name": "Forest", "enchant_target_label": "Forest #1" }] },
+    { "index": 10, "summary": "land=Hedge Maze; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "choose_color",
+  "source": "Utopia Sprawl",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "heuristic_default": 1,
+  "colors": [{ "ordinal": 0, "name": "White" }, { "ordinal": 1, "name": "Blue" }, { "ordinal": 2, "name": "Black" }, { "ordinal": 3, "name": "Red" }, { "ordinal": 4, "name": "Green" }],
+  "note": "reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent for the rest of the game. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "choose_color", "text": "Utopia Sprawl -- chose Blue" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Hedge Maze", "cast=Worn Powerstone"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Worn Powerstone" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Hedge Maze", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Hedge Maze; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 1, "summary": "land=none; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 2, "summary": "land=Hedge Maze; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "surveil",
+  "source": "Surveil",
+  "turn": 3,
+  "away_zone": "graveyard",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "looked": [{ "name": "Hullbreaker Horror", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to graveyard", "shuffle": false, "top": [], "away": ["Hullbreaker Horror"] }, { "index": 1, "label": "Top: Hullbreaker Horror", "shuffle": false, "top": ["Hullbreaker Horror"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top; the rest go to the graveyard."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Hullbreaker Horror" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 21, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": null, "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 1, "summary": "land=none; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": null, "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 2, "summary": "land=none; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": null, "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "sick": true, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "sick": true, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 13, "cast_order": ["**", "land=Misty Rainforest", "cast=Kiora Bests the Sea God"], "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Misty Rainforest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 27, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Hullbreaker Horror", "Misty Rainforest"], "actions": [{ "card": "Hullbreaker Horror" }, { "card": "Misty Rainforest", "src_num": 27, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Hullbreaker Horror"], "actions": [{ "card": "Misty Rainforest", "src_num": 27, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Hullbreaker Horror" }] },
+    { "index": 4, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 6, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 7, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 8, "summary": "land=none; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": null, "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 9, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Kiora Bests the Sea God", "Misty Rainforest"], "actions": [{ "card": "Kiora Bests the Sea God" }, { "card": "Misty Rainforest", "src_num": 27, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Kiora Bests the Sea God"], "actions": [{ "card": "Misty Rainforest", "src_num": 27, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kiora Bests the Sea God" }] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 14, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 15, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 16, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 17, "summary": "land=none; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": null, "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 18, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 27, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 19, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 4,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 18,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }], "graveyard": ["Misty Rainforest"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "Kiora Bests the Sea God (Chapter I): creates a 8/8 token" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "8/8 Kraken Token", "idx": 19, "num": 1000, "sick": true, "is_land": false, "power": 8, "toughness": 8 }, { "name": "Breeding Pool", "idx": 17, "num": 2, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Kiora Bests the Sea God", "idx": 18, "num": 19, "is_land": false }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest"], "library_size": 48, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Koma, World-Eater (8) — 8 to opponent (20→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "8/8 Kraken Token", "idx": 19, "num": 1000, "sick": true, "is_land": false, "power": 8, "toughness": 8 }, { "name": "Breeding Pool", "idx": 17, "num": 2, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 9, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "tapped": true, "is_land": true }, { "name": "Kiora Bests the Sea God", "idx": 18, "num": 19, "is_land": false }, { "name": "Koma's Coil", "idx": 20, "num": 1001, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 21, "num": 1002, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 22, "num": 1003, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 23, "num": 1004, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "tapped": true, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Misty Rainforest" }],
+  "events": [{ "turn": 6, "kind": "trigger", "text": "Kiora Bests the Sea God (Chapter II): taps the opponent's nonland permanents (6 tapped)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "8/8 Kraken Token", "idx": 19, "num": 1000, "is_land": false, "power": 8, "toughness": 8 }, { "name": "Breeding Pool", "idx": 17, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Kiora Bests the Sea God", "idx": 18, "num": 19, "is_land": false }, { "name": "Koma's Coil", "idx": 20, "num": 1001, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 21, "num": 1002, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 22, "num": 1003, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 23, "num": 1004, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Misty Rainforest"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Hullbreaker Horror", "Misty Rainforest"], "actions": [{ "card": "Hullbreaker Horror" }, { "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Hullbreaker Horror"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Hullbreaker Horror" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 6, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 7, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 8, "summary": "land=Misty Rainforest; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 9, "summary": "land=none; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": null, "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] },
+    { "index": 10, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 2,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 22,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 6,
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "8/8 Kraken Token", "idx": 19, "num": 1000, "is_land": false, "power": 8, "toughness": 8 }, { "name": "Breeding Pool", "idx": 17, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Kiora Bests the Sea God", "idx": 18, "num": 19, "is_land": false }, { "name": "Koma's Coil", "idx": 20, "num": 1001, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 21, "num": 1002, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 22, "num": 1003, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 23, "num": 1004, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest", "Misty Rainforest"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "8/8 Kraken Token", "idx": 19, "num": 1000, "is_land": false, "power": 8, "toughness": 8 }, { "name": "Breeding Pool", "idx": 17, "num": 2, "is_land": true, "taps": "GU" }, { "name": "Breeding Pool", "idx": 24, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Forest", "idx": 5, "num": 9, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Forest", "idx": 9, "num": 11, "is_land": true, "taps": "G", "yield": 2 }, { "name": "Hedge Maze", "idx": 14, "num": 14, "is_land": true, "taps": "GU" }, { "name": "Kiora Bests the Sea God", "idx": 18, "num": 19, "is_land": false }, { "name": "Koma's Coil", "idx": 20, "num": 1001, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 21, "num": 1002, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 22, "num": 1003, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma's Coil", "idx": 23, "num": 1004, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Koma, World-Eater", "idx": 16, "num": 21, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Utopia Sprawl", "idx": 10, "num": 46, "is_aura": true, "attached_to": 11, "attached_to_idx": 9, "is_land": false }, { "name": "Wild Growth", "idx": 6, "num": 55, "is_aura": true, "attached_to": 9, "attached_to_idx": 5, "is_land": false }, { "name": "Worn Powerstone", "idx": 11, "num": 60, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 15, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Hullbreaker Horror", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest", "Misty Rainforest"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500004, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 13, "num": 500005, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Hullbreaker Horror", "declared_order_payability": "not_verified", "land": null, "casts": ["Hullbreaker Horror"], "actions": [{ "card": "Hullbreaker Horror" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Koma, World-Eater (8), 8/8 Kraken Token (8), Koma's Coil (3), Koma's Coil (3), Koma's Coil (3), Koma's Coil (3) — 28 to opponent (12→-16)" }
+  ]
+}
