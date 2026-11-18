@@ -79716,6 +79716,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
     { if (!opponent_turn()) { return false; } }
+    PerformLastChanceTreasure(state);   // Heap Gate's last-chance Treasure (Maze's End P5; executor twin, same position)
     state.scripted_eot_face_up = -1;   // twin of RunTurnFrom's expiry
     state.scripted_crossing_lands = -1;   // Manabond / Burgeoning pin (I3): consumed by this crossing, expires here
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;

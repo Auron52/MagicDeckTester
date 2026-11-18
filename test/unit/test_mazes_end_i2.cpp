@@ -322,8 +322,8 @@ TEST_CASE("Maze's End I2: Gateway Plaza pays {1} or is sacrificed; Amulet lets i
 
 TEST_CASE("Maze's End I2: a CLB Gate locks a colour other than its printed one and makes both")
 {
-    // P1d: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
-    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; } } p1d_off;
+    // P1d/P5: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
+    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = 0; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = -1; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; } } p1d_off;
     LoadI2Cards();
     const CardDefinition& sea = D("Sea Gate");
     REQUIRE(sea.params.etb_choose_color_fixed == static_cast<int>(Color::Blue));
@@ -424,8 +424,8 @@ TEST_CASE("Maze's End I2: The Black Gate pays 3 life to enter untapped; declines
 
 TEST_CASE("Maze's End I2: the search is offered every admitted land-entry choice (drop and fetch)")
 {
-    // P1d: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
-    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
+    // P1d/P5: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
+    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = 0; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = -1; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
     LoadI2Cards();
     static const MazesEndProvider kProv;
     // A Cliffgate drop under an Amulet: the colour pins G and U are separate land options, and the G option
@@ -510,8 +510,8 @@ TEST_CASE("Maze's End I2: the search is offered every admitted land-entry choice
 
 TEST_CASE("Maze's End I2: Archdruid's Charm searches the found land's as-enters choice (decision 15)")
 {
-    // P1d: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
-    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
+    // P1d/P5: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
+    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = 0; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = 0; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_PLAZA_PAY] = -1; heurarm::t_arm[heurarm::MAZE_ONE_COLOUR] = -1; heurarm::t_arm[heurarm::MAZE_SPEND_NEVERCAST] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
     LoadI2Cards();
     static const MazesEndProvider kProv;
     const CardDefinition& charm = D("Archdruid's Charm");

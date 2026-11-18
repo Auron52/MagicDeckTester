@@ -179,8 +179,11 @@ TEST_CASE("Maze's End P1d (USER P1/P2): a chosen-colour land is offered ONE colo
         CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, D("Sea Gate")))
               == Sorted({ static_cast<int>(Color::Red), static_cast<int>(Color::Green) }));
     }
-    // Gateway Plaza's pay-or-sacrifice is not a colour: untouched.
-    CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, D("Gateway Plaza"))) == std::vector<int>{ 0, 1 });
+    // Gateway Plaza's pay-or-sacrifice is not a colour: untouched by P1 (P5's pay-only pinned off here).
+    {
+        const Arm plaza_off(heurarm::MAZE_PLAZA_PAY, 0);
+        CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, D("Gateway Plaza"))) == std::vector<int>{ 0, 1 });
+    }
 }
 
 TEST_CASE("Maze's End P1d (USER P3): land-search targets follow the USER's menu")
@@ -229,7 +232,9 @@ TEST_CASE("Maze's End P1d (USER P3): land-search targets follow the USER's menu"
         const Arm off(heurarm::MAZE_LAND_TARGETS, 0);
         CHECK(prov.TutorCandidates(nn, 0, scry).size() == 4);
     }
-    // Maze's End's own fetch: the same menu without Maze's End, the fail-to-find kept (returns false).
+    // Maze's End's own fetch: the same menu without Maze's End, the fail-to-find kept (returns false). P5's
+    // fail-to-find prune (MTG_MAZE_FIND_NOTHING) is pinned off for the rest of this test.
+    const Arm find_off(heurarm::MAZE_FIND_NOTHING, 0);
     const CardDefinition& maze = D("Maze's End");
     GameState f = Base();
     f.m_provider = &prov;

@@ -305,3 +305,124 @@ TEST_CASE("Maze's End P5: the v5 fetch weight and the colour / Talon variants")
     const Arm lack(heurarm::MAZE_TALON_LACKDROPS, 1);
     CHECK_FALSE(has_talon(t));
 }
+
+TEST_CASE("Maze's End P5 (USER): the strict Treasure rule -- never a branch, made at the last chance")
+{
+    // MTG_MAZE_HEAP_STRICT (USER: "there is no drawback to doing so"; "We can actually create the treasure at the very
+    // end of processing even after Maze's End"): no Treasure plan on the menu; PerformLastChanceTreasure makes it
+    // after the opponent's turn whenever the untapped sources still pay {1} + {T} Heap Gate + tap another Gate.
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    auto treasures = [](const GameState& g)
+    {
+        int n = 0;
+        for (const Permanent& p : g.battlefield) { if (p.is_token && p.controller_index == 0) { ++n; } }
+        return n;
+    };
+    GameState s = Base(prov);
+    Put(s, "Heap Gate", 10);
+    Put(s, "Planar Nexus", 11);   // a Gate (every nonbasic type)
+    Put(s, "Forest", 12);
+    // Lever off: nothing happens (byte-identical).
+    {
+        GameState g = s;
+        CHECK(PerformLastChanceTreasure(g) == 0);
+        CHECK(treasures(g) == 0);
+    }
+    const Arm strict(heurarm::MAZE_HEAP_STRICT, 1);
+    // Every Treasure plan leaves the menu (the Treasure-free plans stay).
+    {
+        const std::string none;
+        const std::vector<Action> empty;
+        const std::vector<Action> treasure_only = { Treasure() };
+        const std::vector<Action> cast_only = { Cast("Exploration", 0) };
+        const std::vector<Action> both = { Cast("Exploration", 0), Treasure() };
+        std::vector<DecisionProvider::PlanView> v = {
+            { &empty, &none }, { &treasure_only, &none }, { &cast_only, &none }, { &both, &none } };
+        std::vector<char> admit(v.size(), 1);
+        REQUIRE(prov.PlanListFilterLive(s));
+        prov.PlanListAdmit(s, v, admit);
+        CHECK(admit == std::vector<char>{ 1, 0, 1, 0 });
+    }
+    // Two spare sources besides Heap Gate's own tap (the Nexus as the tapped Gate, the Forest's {1}) after
+    // everything: the Treasure is made, once, and every source it used is tapped.
+    {
+        GameState g = s;
+        CHECK(PerformLastChanceTreasure(g) == 1);
+        CHECK(treasures(g) == 1);
+        int untapped_lands = 0;
+        for (const Permanent& p : g.battlefield) { if (p.card.IsLand() && !p.tapped) { ++untapped_lands; } }
+        CHECK(untapped_lands == 0);
+    }
+    // A plan that spent its mana (the Forest tapped): no {1} -> no Treasure.
+    {
+        GameState g = s;
+        for (Permanent& p : g.battlefield) { if (p.card.m_number == 12) { p.tapped = true; } }
+        CHECK(PerformLastChanceTreasure(g) == 0);
+        CHECK(treasures(g) == 0);
+    }
+    // No other untapped Gate to tap: no Treasure.
+    {
+        GameState g = s;
+        for (Permanent& p : g.battlefield) { if (p.card.m_number == 11) { p.tapped = true; } }
+        CHECK(PerformLastChanceTreasure(g) == 0);
+    }
+    // An off-main Maze's End activation fires first (it wins at the end step after Manabond's put) and leaves too
+    // little: no Treasure.
+    {
+        GameState g = s;
+        Put(g, "Maze's End", 1);
+        Put(g, "Forest", 13);
+        int n = 30;
+        for (const char* nm : { "Azorius Guildgate", "Boros Guildgate", "Dimir Guildgate", "Golgari Guildgate",
+                                "Gruul Guildgate", "Izzet Guildgate", "Orzhov Guildgate", "Rakdos Guildgate" })
+        { Put(g, nm, n++, /*tapped=*/true); }
+        g.players[0].library.push_back(C("Simic Guildgate", 50));
+        g.players[0].library.push_back(C("Selesnya Guildgate", 51));
+        REQUIRE(TryOffMainAltWinActivation(g));
+        CHECK(PerformLastChanceTreasure(g) == 0);
+        CHECK(treasures(g) == 0);
+    }
+}
+
+TEST_CASE("Maze's End P5 (USER): the three readings of \"lacking extra land drops\" for Talon Gates")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    const CardParams& scry = D("Sylvan Scrying").params;
+    auto has_talon = [&](const GameState& st)
+    {
+        const std::vector<std::string> c = prov.TutorCandidates(st, 0, scry);
+        return std::find(c.begin(), c.end(), "Talon Gates of Madara") != c.end();
+    };
+    GameState t = Base(prov);
+    Put(t, "Maze's End", 60);
+    Put(t, "Gond Gate", 61);
+    t.players[0].library.push_back(C("Talon Gates of Madara", 62));
+    t.players[0].library.push_back(C("Baldur's Gate", 63));
+    t.players[0].library.push_back(C("Maze's End", 64));
+    // One Burgeoning, no land in hand: (a) no, (b) yes (one copy), (c) yes (it cannot put anything).
+    GameState b = t;
+    Put(b, "Burgeoning", 65);
+    CHECK(has_talon(b));                                   // the always-offered amendment
+    { const Arm a(heurarm::MAZE_TALON_LACKDROPS, 1); CHECK_FALSE(has_talon(b)); }
+    { const Arm a(heurarm::MAZE_TALON_ATMOST1, 1);   CHECK(has_talon(b)); }
+    { const Arm a(heurarm::MAZE_TALON_EFFECTIVE, 1); CHECK(has_talon(b)); }
+    // One land in hand with the drop still open: not spare -> (c) still offers it.
+    GameState b1 = b;
+    b1.players[0].lands_played_this_turn = 0;
+    b1.players[0].hand.push_back(C("Forest", 66));
+    { const Arm a(heurarm::MAZE_TALON_EFFECTIVE, 1); CHECK(has_talon(b1)); }
+    // A second land: spare -> Burgeoning is effective -> (c) withholds Talon.
+    GameState b2 = b1;
+    b2.players[0].hand.push_back(C("Forest", 67));
+    { const Arm a(heurarm::MAZE_TALON_EFFECTIVE, 1); CHECK_FALSE(has_talon(b2)); }
+    // Burgeoning + a Manabond in hand: two copies -> (b) withholds.
+    GameState two = b;
+    two.players[0].hand.push_back(C("Manabond", 68));
+    { const Arm a(heurarm::MAZE_TALON_ATMOST1, 1); CHECK_FALSE(has_talon(two)); }
+    // Exploration always counts for (c).
+    GameState x = t;
+    Put(x, "Exploration", 69);
+    { const Arm a(heurarm::MAZE_TALON_EFFECTIVE, 1); CHECK_FALSE(has_talon(x)); }
+}

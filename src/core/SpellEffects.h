@@ -52542,6 +52542,67 @@ inline bool TryOffMainAltWinActivation(GameState& state)
     return false;
 }
 
+// ---- HEAP GATE: THE LAST-CHANCE TREASURE (Maze's End P5, MTG_MAZE_HEAP_STRICT) ------------------------------
+// "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token." The ability has no timing restriction. The
+// USER's rule (2026-11-18, VERBATIM): "But we generally just pass on the treasure unless the mana is going to be
+// wasted"; "there are cases where the search doesn't use the mana fully even if the option is available. In those
+// cases it should still activate, since there is no drawback to doing so."; "We can actually create the treasure at
+// the very end of processing even after Maze's End if that would help." So under the lever the Treasure is never a
+// searched branch (MazesEndProvider::PlanListAdmit drops every Treasure plan) and is made HERE, at the last
+// opportunity before our next untap step: after our end step (Manabond's dump, the off-main Maze's End win) and
+// after the opponent's notional turn (their land, Burgeoning's put, the off-main win again). Every other use of the
+// mana has had its chance by then, so whatever still pays the Treasure would otherwise be wasted.
+// DOMINANCE PREMISE (goldfish): nothing happens between this point and our untap step; the permanents it taps (Heap
+// Gate, another Gate, the {1}'s source) all untap there, so tapping them now costs nothing, and a Treasure only adds
+// (one more mana of any colour later; nothing in this list counts untapped permanents, artifacts or life). One
+// option, no branch -- a sound dominance fold, not a pick, so it is legal at every depth.
+// Both worlds call it at the same point (GameEngine::RunTurnFrom / TurnSolver::SimulateEndAndStartNextTurn, after
+// the opponent-turn block). Off in human play and under the unpruned gate (the menu keeps its Treasure plans there),
+// and with the lever off (byte-identical).
+inline bool MazeHeapStrictLever()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_HEAP_STRICT", false);   // A/B variant until measured
+    return heurarm::Flag(heurarm::MAZE_HEAP_STRICT, s_on);
+}
+inline int PerformLastChanceTreasure(GameState& state)
+{
+    if (!MazeHeapStrictLever() || state.won_by_effect || HumanPlayActive() || DecisionUnpruned()) { return 0; }
+    const int me = state.active_player_index;
+    if (me != 0) { return 0; }
+    int made = 0;
+    for (bool again = true; again; )
+    {
+        again = false;
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.tap_treasure_cost.has_value()) { continue; }
+            const int id = p.card.m_number;
+            auto pay = [&](GameState& g) -> bool
+            {
+                if (!PermAbilitySourceLive(g, me, id, PermAbilityMode::TapTreasure, nullptr)) { return false; }
+                SetPermTapped(g, me, id, true);
+                if (PayActivationOtherTap(g, me, id, PermAbilityMode::TapTreasure, *d) < 0) { return false; }
+                return TapForCostDirect(g, *d->params.tap_treasure_cost, /*for_creature=*/false);
+            };
+            bool ok = false;
+            {
+                RevealLogPause quiet;   // a probe never asks a human or emits events
+                GameState probe = state;
+                ok = pay(probe);
+            }
+            if (!ok || !pay(state)) { continue; }
+            ApplyPermAbility(state, me, id, PermAbilityMode::TapTreasure);
+            ++made;
+            again = true;
+            break;
+        }
+    }
+    return made;
+}
+
 // TALON GATES OF MADARA (Maze's End I4): "{4}: Put this card from your hand onto the battlefield." A from-HAND
 // activated ability riding Action::Kind::Channel (the Transmute precedent: the caller pays hand_put_self_cost
 // in both worlds, then calls this). The card leaves the hand and enters through EnterLand under `controller`
