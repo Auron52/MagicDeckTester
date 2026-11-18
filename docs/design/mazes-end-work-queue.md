@@ -85,3 +85,4 @@ The ties are the empty Tooth and Nail and Time Warp at the opponent, the scoring
 Sent to P5-2:
 - **Treasure:** offered only when the turn would end with unspent mana. Strict arm vs leftover-or-binds; mana held for an off-main Maze's End activation is not leftover.
 - **Talon:** variants (a) none of the three sources, (b) at most one, (c) effective sources only (Burgeoning/Manabond count only with a land to put), each vs always-offered.
+9. "Agreed, Maze's end is the one exception that we would rather activate than create a treasure. However, the cost is different, so even with Maze's end out it can be possible to be unable to afford it and able to afford the treasure." -> sent to P5-2: mana is reserved for Maze's End only when its {3}+{T} is affordable from what is left; otherwise the Treasure ({1}, {T} Heap, tap another Gate) stays offered. Unit cases for 2 spare (Treasure offered) and 3+ spare (activation preferred).
