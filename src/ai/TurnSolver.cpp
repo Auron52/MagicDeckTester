@@ -12041,6 +12041,49 @@ static bool IsUntapperUnlockDef(const CardDefinition* d)
         && !d->params.mana_requires_land_subtype.empty();
 }
 
+// MTG_AURA_CEIL_HASTE_UNTAPPER (HeuristicArm slot AURA_CEIL_HASTE_UNTAPPER; DEFAULT ON, =0 -> the old ceiling).
+// The land-Aura scalar ceiling in EnumeratePlansCore (the "ef-aura-scalar" pre-filter ahead of the sequential
+// walk) bounds a subset's supply by pool + aura_bonus * (1 + ready untappers). An untapper that a haste-Equipment
+// equip IN THE SAME SUBSET unlocks (a hand Arbor Elf / Voyaging Satyr, a GSZ/Finale-tutored copy, a summoning-
+// sick one) taps too: it re-taps the Aura'd host, so it adds both its own yield (haste_unlock, which the flat
+// pool already credits in `eff`) and one more Aura bonus. Without those two terms the ceiling was below the
+// real supply and refused payable plans at every budget -- Jumbo Cactuar s30118474 T3 {Overgrowth on the
+// Overgrowth'd Forest, Satyr, Greaves + equip, Tooth and Nail}: 14 mana from Forest 5 + Elf 5 + Satyr 5 + Forest
+// 1, ceiling 7 + 2*2 = 11 (mana-clean gate claude-regate-20261118: 185 of Jumbo's 301 ENUM-GAP). Still an upper
+// bound (every untapper is assumed to re-tap the host carrying every new Aura); the walk is the arbiter.
+// Read per call (heurarm). docs/design/jumbo-tooth-and-nail-enum-2026-11-18.md.
+static bool AuraCeilHasteUntapperOn()
+{
+    static const bool env_on = EnvOn("MTG_AURA_CEIL_HASTE_UNTAPPER", true);
+    return heurarm::Flag(heurarm::AURA_CEIL_HASTE_UNTAPPER, env_on);
+}
+
+// The definition of an Equip's unlock host `host_id` -- battlefield, hand or (a tutored copy) library -- when it
+// is an untap-target-land source (UntapLandSourceDef's / untap_target_land's shape); else null.
+static const CardDefinition* UnlockHostUntapperDef(const GameState& state, int host_id)
+{
+    if (host_id <= 0) { return nullptr; }
+    const int active = state.active_player_index;
+    const CardDefinition* d = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.m_number == host_id)
+        { d = CardDatabase::Instance().LookupCached(p.card); break; }
+    }
+    if (d == nullptr)
+    {
+        for (const Card& c : state.players[active].hand)
+        { if (c.m_number == host_id) { d = CardDatabase::Instance().LookupCached(c); break; } }
+    }
+    if (d == nullptr)
+    {
+        for (const Card& c : state.players[active].library)
+        { if (c.m_number == host_id) { d = CardDatabase::Instance().LookupCached(c); break; } }
+    }
+    if (d == nullptr) { return nullptr; }
+    return (d->params.untap_target_land || IsUntapperUnlockDef(d)) ? d : nullptr;
+}
+
 // The library card a battlefield-put tutor cast `a` brings in -- the FIRST library copy of its target, which is
 // the put's own rule (SpellEffects' tutor put: "find+remove the first library copy ... preserving its per-copy
 // number") -- when that card is an untapper unlock host; else 0. The Equip names that copy's number, so once the
@@ -85801,9 +85844,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 // The static pool can miss an extra tap when the newly hasted
                 // untapper follows this Aura. Let the real walk price that
                 // rare subset instead of treating this estimate as a bound.
+                // MTG_AURA_CEIL_HASTE_UNTAPPER (see AuraCeilHasteUntapperOn): each distinct untapper a
+                // same-subset haste equip unlocks adds its re-tap yield and one more tap of the Aura'd host.
+                int hasted_untappers = 0, hasted_untapper_yield = 0;
+                if (any_haste_dork && AuraCeilHasteUntapperOn())
+                {
+                    int seen[8]; int n_seen = 0;
+                    for (int j : sel)
+                    {
+                        if (haste_unlock[j].Total() <= 0) { continue; }
+                        const int host = cands[j].sac_victim_id;
+                        if (UnlockHostUntapperDef(state, host) == nullptr) { continue; }
+                        bool dup = false;
+                        for (int k = 0; k < n_seen; ++k) { if (seen[k] == host) { dup = true; break; } }
+                        if (dup) { continue; }
+                        if (n_seen < 8) { seen[n_seen++] = host; }
+                        ++hasted_untappers;
+                        hasted_untapper_yield += static_cast<int>(haste_unlock[j].Total());
+                    }
+                }
                 if (fresh_aura_untappers == 0
-                    && static_cast<int>(pool.Total())
-                       + aura_bonus * (1 + ready_aura_untappers)
+                    && static_cast<int>(pool.Total()) + hasted_untapper_yield
+                       + aura_bonus * (1 + ready_aura_untappers + hasted_untappers)
                            < combined.ManaValue())
                 { _ct.label = "ef-aura-scalar"; return false; }
             }
