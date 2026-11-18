@@ -61009,6 +61009,15 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
             }
         }
         if (a.direct_damage > 0 && (!a.sacrifice_land || sac_in_order)) { out.trig[j] = 1; }
+        // Vexing Devil: its ETB damage is the opponent's choice (MTG_SPECTACLE_CREDIT_ETB_OPP, EngineFlags.h).
+        // A spectacle cast after it is still in hand when the trigger resolves, so the policy is read with a
+        // card held; the pre-plan life is the highest the opponent can have at that point in this plan.
+        else if (a.def != nullptr && a.def->params.etb_opp_may_take_damage_to_sac > 0 && SpectacleCreditEtbOppOn())
+        {
+            const int me = state.active_player_index;
+            if (VexingDevilOpponentTakesDamage(state, me, 1 - me, a.def->params.etb_opp_may_take_damage_to_sac))
+            { out.trig[j] = 1; }
+        }
     }
     // The executor stable-sorts casts by CastOrderLess. Equal-ranked copies retain candidate order.
     for (std::size_t j = 0; j < m; ++j)

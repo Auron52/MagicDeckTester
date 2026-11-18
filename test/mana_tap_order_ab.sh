@@ -99,6 +99,13 @@ ARMSETS["burnorders"] = {
     "base": {"MTG_ONEDROPBURN_ORDER": False, "MTG_MIDRANGE_FIREBLAST_ORDER": False},
     "on":   {"MTG_ONEDROPBURN_ORDER": True,  "MTG_MIDRANGE_FIREBLAST_ORDER": True},
 }
+# Re-run after the Vexing Devil spectacle-credit fix (MTG_SPECTACLE_CREDIT_ETB_OPP, found by "burnorders" seed 6006
+# gi 149): base = shipped (orders OFF, fix OFF); "fix" = the fix alone; "on" = the fix + both orders.
+ARMSETS["burnorders2"] = {
+    "base": {"MTG_ONEDROPBURN_ORDER": False, "MTG_MIDRANGE_FIREBLAST_ORDER": False, "MTG_SPECTACLE_CREDIT_ETB_OPP": False},
+    "fix":  {"MTG_ONEDROPBURN_ORDER": False, "MTG_MIDRANGE_FIREBLAST_ORDER": False, "MTG_SPECTACLE_CREDIT_ETB_OPP": True},
+    "on":   {"MTG_ONEDROPBURN_ORDER": True,  "MTG_MIDRANGE_FIREBLAST_ORDER": True,  "MTG_SPECTACLE_CREDIT_ETB_OPP": True},
+}
 ARMS = ARMSETS[os.environ.get("ARMSET", "levers")]
 jobs = []
 for spec in cases:

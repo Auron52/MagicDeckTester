@@ -1,0 +1,20 @@
+{
+  "deck": "decks/1 Drop Burn/1 Drop Burn.cod",
+  "profile": "decks/1 Drop Burn/1 Drop Burn.profile.json",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 11,
+  "resume_at": "main1",
+  "battlefield": [ { "name": "Mountain" }, { "name": "Mountain" } ],
+  "graveyard": [],
+  "hand": [ "Mountain", "Vexing Devil", "Skewer the Critics", "Fireblast" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 3,
+  "env": { "MTG_ONEDROPBURN_ORDER": "1" },
+  "expect_win_turn": 3,
+  "comment": "1 Drop Burn order A/B 2026-11-18 (seed 6006 gi 149): opponent at 11, three Mountains after the land drop. Vexing Devil (the opponent takes 4: 11 > 7 while we hold cards) turns spectacle on, Skewer the Critics for {R} deals 3, Fireblast (two tapped Mountains) deals 4 -- all in MAIN 1, because the USER's main-2 rule bars Skewer after noncombat damage. Before MTG_SPECTACLE_CREDIT_ETB_OPP the spectacle plan credit did not count the Devil, Skewer was priced {3}{R} in main 1 and the search proved no win."
+}

@@ -1090,6 +1090,21 @@ inline bool KillTriggerComboOn()
 // probe, 1500 games: 49 faster / 39 slower). The SEARCH prices that land; the greedy does not. A measured
 // alternative, not a fix of a rules defect (the credit is faithful either way). Default OFF.
 // Read by the evaluators and by BurnProvider's d0 land hold (which must agree with what Solve can find).
+// MTG_SPECTACLE_CREDIT_ETB_OPP (DEFAULT ON; 2026-11-18, found by the 1 Drop Burn order A/B, seed 6006 gi 149):
+// the spectacle plan credit's "turns spectacle on" set counted only casts with direct_damage > 0, so a Vexing
+// Devil cast (its 4 is an ETB the OPPONENT chooses to take) never enabled a later Skewer the Critics in the
+// same plan -- the main-1 kill {Devil, Skewer, Fireblast} was priced at Skewer's printed {3}{R} and cut, and
+// the engine could only reach it by casting Skewer in main 2 (which the USER's 1 Drop Burn main-2 rule then
+// forbids after noncombat damage, losing a turn). Now a Devil cast counts when the ONE opponent policy
+// (SpellEffects.h VexingDevilOpponentTakesDamage, the function its resolution calls) says the opponent takes
+// the damage at the pre-plan state with a card still held (the spectacle spell itself). A modelling fix:
+// =0 restores the old credit for an A/B.
+inline bool SpectacleCreditEtbOppOn()
+{
+    static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_ETB_OPP", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::SPECTACLE_CREDIT_ETB_OPP, env_on);
+}
+
 inline bool SpectacleCreditSearchOnly()
 {
     static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_SEARCH_ONLY");   // DEFAULT OFF; =1 enables
