@@ -34,6 +34,7 @@ declare -A DECK_FILE=(
   [slivers]=decks/Slivers/Slivers.txt
   [burn]=decks/Burn/Burn.txt
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
+  [onedropburn]="decks/1 Drop Burn/1 Drop Burn.cod"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
   [merfolk]=decks/Merfolk/Merfolk.cod
   [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.cod"
@@ -105,6 +106,7 @@ declare -A DECK_PROF=(
   [slivers]=decks/Slivers/Slivers.profile.json
   [burn]=decks/Burn/Burn.profile.json
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
+  [onedropburn]="decks/1 Drop Burn/1 Drop Burn.profile.json"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
   [merfolk]=decks/Merfolk/Merfolk.profile.json
   [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.profile.json"
@@ -276,6 +278,13 @@ SMOKE_CASES=(
   "midrangeburn     3 1001   50 10"
   "midrangeburn     5 1001  100 20"
   "midrangeburn2hg  5 1001   25 20"
+  # 1 Drop Burn (onedropburn): ADDED 2026-11-17 by the analysis (docs/design/analysis-1 Drop Burn.md). Pre-keep-table
+  # ENTRY sizing at the built-in d5/b20 play setting. 2HG is a play row: every burn spell, Vexing Devil's
+  # "any opponent may" and spectacle read the 30-life team, so the race length changes with the format.
+  "onedropburn      0 1001 1000 0"
+  "onedropburn      3 1001   50 10"
+  "onedropburn      5 1001  100 20"
+  "onedropburn2hg   5 1001   25 20"
   # Modern RW Burn: baseline-profile ENTRY set. Boltwave scales with opposing heads.
   "modernrwburn     0 1001 1000 0"
   "modernrwburn     3 1001   50 10"
@@ -907,6 +916,12 @@ REGRESSION_CASES=(
   # regression.sh applies the 2e6-unit cap automatically.
   "midrangeburn     3 30021 3 0"
   "midrangeburn     5 30021 3 0"
+  # onedropburn: added 2026-11-17 with the deck. Screened 16 five-game blocks (30001..30301 step 20, d3+d5, budget 0,
+  # abandon_units 2000000, MTG_SLOW_GAME_MS=5000; logs/1dropburn/backstop_screen.*): s30281 ABANDONED one d5 game
+  # at the cap; the tail is heavy for a 3-4-turn deck (most blocks have a 5-17 s game). 30261 had no game over 5 s
+  # at either depth (~31k/23k units); 30161 (overnight) max 5.4 s. Heavy-deck size (5 games).
+  "onedropburn      3 30261 5 0"
+  "onedropburn      5 30261 5 0"
   # UNBUDGETED BACKSTOP (REGRESSION half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -1299,6 +1314,12 @@ REGRESSION_CASES=(
   "midrangeburn     5 2002  150 20"
   "midrangeburn     5 3003  150 20"
   "midrangeburn2hg  5 2002   75 20"
+  # 1 Drop Burn: see the SMOKE block.
+  "onedropburn      0 2002 1000 0"
+  "onedropburn      3 2002   75 10"
+  "onedropburn      5 2002  150 20"
+  "onedropburn      5 3003  150 20"
+  "onedropburn2hg   5 2002   75 20"
   # Modern RW Burn: most searched games run at the shipped d5/b20 setting.
   "modernrwburn     0 2002 1000 0"
   "modernrwburn     3 2002   75 10"
@@ -1499,6 +1520,9 @@ OVERNIGHT_CASES=(
   # 30041..30043 is disjoint from regression 30021..30023; both screened under 2e6 units.
   "midrangeburn     3 30041 3 0"
   "midrangeburn     5 30041 3 0"
+  # onedropburn: see the REGRESSION backstop note (the other clean block).
+  "onedropburn      3 30161 5 0"
+  "onedropburn      5 30161 5 0"
   # UNBUDGETED BACKSTOP (OVERNIGHT half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -2256,6 +2280,21 @@ OVERNIGHT_CASES=(
   "midrangeburn2hg  5  5005  170 20"
   "midrangeburn2hg  5  6006  170 20"
   "midrangeburn2hg  5  7007  170 20"
+  # 1 Drop Burn: pre-keep-table overnight ENTRY set (Hinata's shape); the FULL set lands with the keep table.
+  "onedropburn      0  4004 2000 0"
+  "onedropburn      0  6006 2000 0"
+  "onedropburn      0  8008 2000 0"
+  "onedropburn      0 10010 2000 0"
+  "onedropburn      3  4004  400 10"
+  "onedropburn      3  5005  400 10"
+  "onedropburn      3  6006  400 10"
+  "onedropburn      3  7007  400 10"
+  "onedropburn      5  4004  300 20"
+  "onedropburn      5  5005  300 20"
+  "onedropburn      5  6006  300 20"
+  "onedropburn      5  7007  300 20"
+  "onedropburn2hg   5  4004  100 20"
+  "onedropburn2hg   5  5005  100 20"
   # Modern RW Burn: pre-keep-table overnight ENTRY set.
   "modernrwburn     0  4004 2000 0"
   "modernrwburn     0  6006 2000 0"

@@ -14938,17 +14938,24 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
 // "When this creature enters, any opponent may have it deal N damage to them. If a player does, sacrifice
 // this creature."
 //
-// THE OPPONENT POLICY -- the ONE place it lives. PROVISIONAL (USER, docs/design/analysis-1 Drop Burn.md:
-// the user may change it): the opponent takes the N damage UNLESS that would be lethal (life <= N; the
-// opposing TEAM's shared life in 2HG, players[opponent]); otherwise the Devil stays. This is an
+// THE OPPONENT POLICY -- the ONE place it lives. USER ruling 2026-11-17, verbatim: "they will take the
+// damage unless they are at 4 or less when you have no cards in hand or 7 or less if you are holding
+// cards. Essentially, an attempt at determining whether you are likely to kill this turn without
+// clairvoyantly looking at your hand." So the opponent DECLINES (the Devil stays a 4/3) when its life
+// (the opposing TEAM's shared life in 2HG, players[opponent]) is <= N with our hand EMPTY, or <= N + 3
+// while we hold ANY card (the hand is counted when the trigger resolves -- the Devil itself has left it);
+// it TAKES the N damage otherwise. It reads only the hand's SIZE, never its contents: the opponent
+// cannot see our hand. N = 4 for the only card, giving the user's 4 / 7. This is an
 // ENVIRONMENT model of the passive goldfish opponent -- the choice is THEIRS, not ours -- so it is
 // neither a search branch nor a viewer decision, and it is not a greedy pick inside the search window
 // (CLAUDE.md "NO GREEDY PICK"): no option of OURS is collapsed. Executor and rollout reach it through the
 // same cascade (FireOwnEtbTriggers), so they cannot disagree.
 inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
-inline bool VexingDevilOpponentTakesDamage(const GameState& s, int opponent, int amount)
+inline bool VexingDevilOpponentTakesDamage(const GameState& s, int controller, int opponent, int amount)
 {
-    return s.players[static_cast<std::size_t>(opponent)].life > amount;
+    const bool holding = !s.players[static_cast<std::size_t>(controller)].hand.empty();
+    const int  decline_at_or_below = amount + (holding ? 3 : 0);
+    return s.players[static_cast<std::size_t>(opponent)].life > decline_at_or_below;
 }
 // Resolve the trigger for the entrant `devil_number` (re-found by number: the ETB body may have moved
 // the vector). Taken: N damage from the Devil (a red CREATURE source -- noncombat damage, so it marks the
@@ -14960,14 +14967,17 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
     const int amount = def.params.etb_opp_may_take_damage_to_sac;
     const int opp    = 1 - controller;
     const int before = state.players[static_cast<std::size_t>(opp)].life;
-    if (!VexingDevilOpponentTakesDamage(state, opp, amount))
+    if (!VexingDevilOpponentTakesDamage(state, controller, opp, amount))
     {
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "trigger",
                           "\xF0\x9F\x98\x88 " + def.card.m_name.str() + ": the opponent DECLINES the "
                           + std::to_string(amount) + " damage (life " + std::to_string(before)
-                          + " -- it would be lethal) -- " + def.card.m_name.str() + " stays");
+                          + (state.players[static_cast<std::size_t>(controller)].hand.empty()
+                             ? " with our hand empty -- it would be lethal) -- "
+                             : " while we hold cards -- the kill may be in hand) -- ")
+                          + def.card.m_name.str() + " stays");
         }
         return;
     }

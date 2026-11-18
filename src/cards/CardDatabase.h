@@ -3286,7 +3286,8 @@ struct CardParams
     // Vexing Devil: "When this creature enters, any opponent may have it deal N damage to them. If a
     // player does, sacrifice this creature." The choice is the OPPONENT'S, so it is an ENVIRONMENT model
     // of the passive goldfish opponent, not a decision of ours (no search branch, no viewer decision):
-    // VexingDevilOpponentTakesDamage (SpellEffects.h) is the ONE place the policy lives. Resolved in the
+    // VexingDevilOpponentTakesDamage (SpellEffects.h) is the ONE place the policy lives (USER 2026-11-17:
+    // decline at life <= N with our hand empty, <= N + 3 while we hold a card). Resolved in the
     // universal own-ETB cascade (FireOwnEtbTriggers), so every enter route, executor and rollout alike,
     // applies the same rule. > 0 gates it; the value is N.
     int etb_opp_may_take_damage_to_sac = 0;
