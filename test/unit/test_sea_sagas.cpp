@@ -11,6 +11,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -384,4 +385,41 @@ TEST_CASE("Sea I3: World War Hulk's chapters are unchanged by the restructure")
     REQUIRE(sk != nullptr);
     CHECK(sk->EffectivePower() == SgDef(kSK).card.m_power.value_or(0) + SgDef(kHulk).params.saga_ch2_counters_on_target);
     CHECK(s.eot_attack_draw_n == 0);
+}
+
+TEST_CASE("Sea Kiora III steal (MTG_SEA_STEAL_CREATURE): a creature at 8+ mana; lands stay searched below 8 or beside a 1/1")
+{
+    auto board = [](int forests, int spawn_power)
+    {
+        GameState s = SgBoard();
+        for (int k = 0; k < forests; ++k) { SgPut(s, "Forest", 100 + k); }
+        Permanent land;
+        land.card = SgDef("Opponent Basic Land").card;
+        land.card.m_number = 600000;
+        land.controller_index = 1;
+        land.owner_index = 1;
+        s.battlefield.push_back(land);
+        if (spawn_power > 0) { SgSpawn(s, 0, spawn_power, spawn_power); }
+        return s;
+    };
+    auto has_land = [](const GameState& s, const std::vector<int>& c)
+    {
+        for (const int i : c) { if (s.battlefield[static_cast<std::size_t>(i)].card.IsLand()) { return true; } }
+        return false;
+    };
+    if (!SgFoldsLive()) { return; }   // MTG_UNPRUNE=sagasteal: the full list by design
+    heurarm::Arm saved = heurarm::t_arm;
+    heurarm::t_arm[static_cast<int>(heurarm::SEA_STEAL_CREATURE)] = 1;
+    {
+        const GameState s = board(8, 2);
+        const std::vector<int> c = SagaStealSearchCandidates(s, 0);
+        CHECK(c.size() == 1);
+        CHECK_FALSE(has_land(s, c));
+    }
+    { const GameState s = board(7, 2); CHECK(has_land(s, SagaStealSearchCandidates(s, 0))); }   // below 8 mana
+    { const GameState s = board(8, 1); CHECK(SagaStealSearchCandidates(s, 0).size() == 2); }    // a 1/1: arguable
+    { const GameState s = board(8, 0); CHECK(has_land(s, SagaStealSearchCandidates(s, 0))); }   // no creature
+    heurarm::t_arm[static_cast<int>(heurarm::SEA_STEAL_CREATURE)] = 0;
+    { const GameState s = board(8, 2); CHECK(SagaStealSearchCandidates(s, 0).size() == 2); }    // =0: root list
+    heurarm::t_arm = saved;
 }

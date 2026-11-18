@@ -271,6 +271,8 @@ TEST_CASE("Sea fetch prune: Breeding Pool first, on the legacy route (Misty) and
 
 TEST_CASE("Sea fetch prune: no Pool left -> Island first, Forest under MTG_SEA_FETCH_ISLAND_FIRST=0; per-fetch legality")
 {
+    // The one-option ladder; Hedge Maze beside the pick (adopted, default ON) has its own case below.
+    ArmScope no_maze(heurarm::SEA_FETCH_MAZE, 0);
     EnsureCardsSea();
     ArmScope prune(heurarm::SEA_FETCH_PRUNE, 1);
     const CardDefinition& misty  = DefSea("Misty Rainforest");
@@ -295,6 +297,8 @@ TEST_CASE("Sea fetch prune: no Pool left -> Island first, Forest under MTG_SEA_F
 
 TEST_CASE("Sea fetch prune: the pick is stable under library order")
 {
+    // The one-option ladder; Hedge Maze beside the pick (adopted, default ON) has its own case below.
+    ArmScope no_maze(heurarm::SEA_FETCH_MAZE, 0);
     EnsureCardsSea();
     ArmScope prune(heurarm::SEA_FETCH_PRUNE, 1), isl(heurarm::SEA_FETCH_ISLAND_FIRST, 1);
     const CardDefinition& misty = DefSea("Misty Rainforest");
@@ -312,6 +316,8 @@ TEST_CASE("Sea fetch prune: the pick is stable under library order")
 
 TEST_CASE("Sea fetch prune: =0 restores every target on both routes; <= 3 life keeps the full held list")
 {
+    // The one-option ladder; Hedge Maze beside the pick (adopted, default ON) has its own case below.
+    ArmScope no_maze(heurarm::SEA_FETCH_MAZE, 0);
     EnsureCardsSea();
     const CardDefinition& misty = DefSea("Misty Rainforest");
     const CardDefinition& heath = DefSea("Windswept Heath");
@@ -349,7 +355,7 @@ TEST_CASE("Sea fetch Maze (MTG_SEA_FETCH_MAZE): admitted beside the untapped pic
     GameState busy = idle;                                 // + Utopia Sprawl ({G}): one more mana casts it -> needed
     HandSea(busy, { "Utopia Sprawl" });
     {
-        ArmScope maze(heurarm::SEA_FETCH_MAZE, 0);         // OFF (the default): the one-option rule, unchanged
+        ArmScope maze(heurarm::SEA_FETCH_MAZE, 0);         // OFF (=0): the one-option rule, unchanged
         CHECK(OnPlayNarrowed(idle, misty) == std::vector<std::string>{ "Breeding Pool" });
         CHECK(ActivationNamesSea(idle, heath.params) == std::vector<std::string>{ "Breeding Pool" });
     }
@@ -390,6 +396,8 @@ TEST_CASE("Sea fetch Maze (MTG_SEA_FETCH_MAZE): admitted beside the untapped pic
 
 TEST_CASE("Sea fetch prune: human play / the unpruned audit is never narrowed (process-static gates)")
 {
+    // The one-option ladder; Hedge Maze beside the pick (adopted, default ON) has its own case below.
+    ArmScope no_maze(heurarm::SEA_FETCH_MAZE, 0);
     EnsureCardsSea();
     ArmScope prune(heurarm::SEA_FETCH_PRUNE, 1);
     GameState s = BaseSea(1);

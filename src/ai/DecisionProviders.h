@@ -650,8 +650,12 @@ public:
 //     each default ON; =0 restores the engine's searched per-instance target digit (decline + every legal
 //     class). The two candidate counterexamples (re-buy a tapped Sol Ring; bounce a Saga past chapter I and recast
 //     it) are the Stage 5 A/B's to find. Human play and MTG_UNPRUNE=seabounce always offer every target.
-//   * A PER-TURN POST-COMBAT MAIN ON SUMMON: LEVIATHAN'S DRAW TURNS (I3; ledger Q12, the USER owns the main-2 shape --
-//     agent default PROVISIONAL). Cards drawn at declare-attackers by Leviathan II / III (GameState::
+//   * THE MAIN-PHASE SHAPE (USER, ADOPTED 2026-11-17, MTG_SEA_MAIN1_KRAKEN_ONLY default ON): a full searched main 2
+//     EVERY turn; main 1 is used only by a plan that casts Spawning Kraken (plus its land drop and mana that pays back
+//     this turn), and on a Kraken turn main 2 does not reconsider what main 1 held (Main1PlanAdmitted /
+//     Main1LandDropFolded / Main2CastAllowed). With =0 the I3 shape below applies instead:
+//   * (=0 only) A PER-TURN POST-COMBAT MAIN ON SUMMON: LEVIATHAN'S DRAW TURNS (I3; ledger Q12 -- superseded by the
+//     USER's rule above). Cards drawn at declare-attackers by Leviathan II / III (GameState::
 //     eot_attack_draw_n) are a combat-generated resource (2c-bis) castable only after combat. Instead of a deck-wide
 //     second main (DeckUsesSecondMain, which would solve a post-combat main on EVERY turn -- 1.6-4x in measured
 //     decks, against the 3x-Hinata gate), RestrictedSecondMainLive opens one exactly while an instance is live, with
@@ -729,6 +733,8 @@ public:
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
     bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
                            const std::string& land_to_play) const override;
+    // Kiora III steals a creature with 8+ mana (lands stay searched below 8, or beside 1/1s); MTG_SEA_STEAL_CREATURE.
+    void RestrictSagaStealCandidates(const GameState& s, int controller, std::vector<int>& cands) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "

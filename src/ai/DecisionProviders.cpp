@@ -194,7 +194,7 @@ static bool SeaFetchIslandFirstOn()
 }
 static bool SeaFetchMazeOn()
 {
-    static const bool e = EnvOn("MTG_SEA_FETCH_MAZE", false);         // DEFAULT OFF pending the USER; =1 -> admit Maze
+    static const bool e = EnvOn("MTG_SEA_FETCH_MAZE", true);          // ADOPTED (USER 2026-11-17 "3 sounds good to adopt."); =0 -> Maze last
     return heurarm::Flag(heurarm::SEA_FETCH_MAZE, e);
 }
 static bool SeaSprawlBlueOn()
@@ -375,9 +375,12 @@ bool SeaCreaturesProvider::RestrictedSecondMainLive(const GameState& s) const
 // keep their mana through combat, Leviathan's chapters advance at the precombat main whatever the cast timing.
 // MTG_SEA_MAIN1_KRAKEN_ATTACKER (agent refinement, measured for the USER): the Kraken plan is admitted only when a
 // creature of a watched subtype can attack this turn -- without one, the main-2 Kraken is the same.
+// ADOPTED 2026-11-17, default ON (USER: "Sure, let's go with my rule if the numbers look good."). Held-out A/B vs
+// the conditional main 2 (std 600 + 2HG 200, d5 b20): equal quality (0/1 std, a fetch-shuffle variance game; 1/0
+// 2HG), units 0.89x std / 1.01x 2HG. The attacker refinement measured identical and stays OFF.
 bool SeaMain1KrakenOnlyOn()
 {
-    static const bool e = EnvOn("MTG_SEA_MAIN1_KRAKEN_ONLY", false);   // DEFAULT OFF pending the USER
+    static const bool e = EnvOn("MTG_SEA_MAIN1_KRAKEN_ONLY", true);    // ADOPTED (USER 2026-11-17); =0 -> conditional main 2
     return heurarm::Flag(heurarm::SEA_MAIN1_KRAKEN_ONLY, e);
 }
 static bool SeaMain1KrakenAttackerOn()
@@ -457,6 +460,37 @@ bool SeaCreaturesProvider::Main1PlanAdmitted(const GameState& s, const std::vect
 // or payback-mana card held since main 1 was main 1's to cast, so main 2 does not offer it again; a card that arrived
 // after main 1 (a Leviathan draw: a new card or another copy) is always offered. On every other turn main 1 cast
 // nothing, so main 2 keeps the full menu. Lands need nothing here: a Kraken plan takes the open drop with it.
+// Kiora Bests the Sea God III -- USER 2026-11-17 (verbatim, in order): "The steal should be used on a creature if the
+// opponent has one." / "I mean a land is better than nothing as well, but probably less useful than a creature. I
+// guess a 1/1 is arguable." / "Maybe take a land if we don't yet have 8 mana." / "(or consider it)".
+// A provider PRUNE on top of the root's sound folds. With at least kSeaStealLandManaCap (8, the top of this curve:
+// Trench Gorger, Brinelin, Lorthos) mana available and an opposing creature of power >= 2 among the candidates, the
+// non-creatures are dropped and the search branches over the creatures left. Below 8 mana, or when every creature
+// is a 1-power body (the USER's "arguable" 1/1), lands stay searched beside the creatures; with no creature, the
+// lands are the list. The list is creatures-first, so the front survives. Human play and MTG_UNPRUNE=sagasteal keep
+// the full list (the root returns early for both; so does this).
+static constexpr int kSeaStealLandManaCap = 8;
+static bool SeaStealCreatureOn()
+{
+    static const bool e = EnvOn("MTG_SEA_STEAL_CREATURE", true);       // DEFAULT ON (USER ruling); =0 -> root list
+    return heurarm::Flag(heurarm::SEA_STEAL_CREATURE, e);
+}
+void SeaCreaturesProvider::RestrictSagaStealCandidates(const GameState& s, int controller, std::vector<int>& cands) const
+{
+    DecisionProvider::RestrictSagaStealCandidates(s, controller, cands);
+    if (cands.size() < 2 || !SeaStealCreatureOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::SagaSteal))
+    { return; }
+    auto creature = [&](int i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        return p.card.IsCreature() || p.is_animated;
+    };
+    const bool real_creature = std::any_of(cands.begin(), cands.end(), [&](int i)
+    { return creature(i) && s.battlefield[static_cast<std::size_t>(i)].EffectivePower() >= 2; });
+    if (!real_creature) { return; }
+    if (AvailableManaPool(s).Total() < kSeaStealLandManaCap) { return; }
+    cands.erase(std::remove_if(cands.begin(), cands.end(), [&](int i) { return !creature(i); }), cands.end());
+}
 bool SeaCreaturesProvider::RestrictsMain2Casts() const { return SeaMain1KrakenOnlyOn(); }
 bool SeaCreaturesProvider::Main2CastAllowed(const GameState& s, const Action& a) const
 {
