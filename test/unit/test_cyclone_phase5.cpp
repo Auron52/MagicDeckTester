@@ -282,6 +282,59 @@ TEST_CASE("Cyclone phase 5: the Scalding Tarn rule -- Steam Vents, then need; th
     }
 }
 
+TEST_CASE("Cyclone MTG_CYCLONE_LOUNGE_IDLE: Xander's Lounge beside the Tarn pick only when its mana is not needed")
+{
+    // USER 2026-11-17: "The Xander's Lounge change sounds good." -- the rule "(if we do not need it for mana this turn
+    // it is possible, otherwise not)", applied to the Lounge the Tarn rule searched beside every pick.
+    EnsureCards5();
+    heurarm::Clear();
+    const CardParams& tp = Def5(kTarn).params;
+    const std::vector<std::string> lib{ "Island", kLounge, "Mountain", kVents, kGrave, kCrypt };
+    auto search = [&](const GameState& s)
+    { return Prov5().FetchSearchCandidates(s, 0, tp, Prov5().FetchCandidates(s, 0, tp)); };
+    const std::vector<std::string> both{ kVents, kLounge }, pick{ kVents };
+    {   // Empty hand: nothing to spend it on -> the Lounge rides beside Steam Vents.
+        GameState s = Base5(1, lib, 0);
+        CHECK(search(s) == both);
+    }
+    {   // SEQUENCE: three mana (Island, Mountain, Vents) casts Ponder then not Brainsurge; one more casts both.
+        GameState s = Base5(1, lib, 0);
+        Put5(s, "Mountain", 60);
+        Put5(s, kVents, 61);
+        s.players[0].hand.push_back(Card5("Ponder", 120));
+        s.players[0].hand.push_back(Card5("Brainsurge", 121));
+        CHECK(search(s) == pick);
+        // Ponder alone: castable already, the extra mana casts nothing more -> idle.
+        s.players[0].hand.pop_back();
+        CHECK(search(s) == both);
+    }
+    {   // CYCLING counts as a use: one Island + Cyclone in hand ({3}{R}{R}, cycling {2}) -- the extra mana cycles it.
+        GameState s = Base5(1, lib, 0);
+        s.players[0].hand.push_back(Card5(kCyclone, 120));
+        CHECK(search(s) == pick);
+        // With no mana out, one mana still cannot pay {2}: idle.
+        GameState z = Base5(0, lib, 0);
+        z.players[0].hand.push_back(Card5(kCyclone, 120));
+        CHECK(search(z) == both);
+        // Curator ({2}{U}{U}, cycling {U}) with no mana out: the extra {U} cycles it.
+        z.players[0].hand.back() = Card5(kCurator, 121);
+        CHECK(search(z) == pick);
+    }
+    {   // goldfish_inert (Toxic Deluge) is never cast: a {B} that would pay for it is not "needed".
+        GameState s = Base5(1, { "Island", kLounge, "Mountain", kGrave, kCrypt }, 0);
+        Put5(s, "Mountain", 60);
+        Put5(s, kVents, 61);
+        s.players[0].hand.push_back(Card5("Toxic Deluge", 120));
+        CHECK(search(s) == std::vector<std::string>{ kGrave, kLounge });
+    }
+    {   // Lever off: the Lounge beside every pick (the pre-2026-11-17 rule).
+        ArmScope5 _a(heurarm::CYCLONE_LOUNGE_IDLE, 0);
+        GameState s = Base5(1, lib, 0);
+        s.players[0].hand.push_back(Card5(kCyclone, 120));
+        CHECK(search(s) == both);
+    }
+}
+
 TEST_CASE("Cyclone phase 5: the Myriad Landscape rule -- two Islands; two Mountains only while short on red")
 {
     EnsureCards5();

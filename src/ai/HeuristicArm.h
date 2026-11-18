@@ -1067,6 +1067,8 @@ enum Slot : int
     FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. Search enumerations only (g_rollout_nest == 0; the context is folded into the enumeration keys). DEFAULT OFF: held-out net +3 / 2,800 games (1 better / 4 worse); USER's call; =1 arms it
     FOLD_LAND_ORDER_SEEN,     // MTG_FOLD_LAND_ORDER_SEEN  P5b-2 (Maze's End; the same USER rule as FOLD_LAND_ORDER): the land-order identity as a FIRST-REACHED dedup -- the search loops' post-apply dedup sets key a state with our same-class (DecisionProvider::LandEntryOrderClass) lands that entered this turn re-filled in card-number order (TurnSolver SeenKey), so of two lines playing commuting lands in either order the one the loop reaches first is scored and the later is skipped. No enumeration, rank or order changes. DEFAULT ON (USER adopted 2026-11-21 after the RC fix: std -2, 2HG -1; =0 -> off). Was DEFAULT OFF: held-out net +1 Maze's End (2 better / 3 worse) / -1 2HG over 2,800 each, every slower game recovering at d8 b0 -- the USER's call; =1 arms it
     MAZE_MANABOND_TUTOR_PRUNE, // MTG_MAZE_MANABOND_TUTOR_PRUNE  sub-lever of MAZE_MANABOND_DISCARD (USER Q4 2026-11-21: "that is a probable hold case"): Manabond's yes is PRUNED when it would discard a held land tutor while no Maze's End is ours (battlefield or hand). Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> "no" only ordered first
+    CYCLONE_LOUNGE_IDLE,      // MTG_CYCLONE_LOUNGE_IDLE  Cyclone (USER 2026-11-17 "The Xander's Lounge change sounds good."): under MTG_CYCLONE_FETCH_RULE, Xander's Lounge is searched beside the Scalding Tarn pick only when one more mana of the pick's colours is NOT needed this turn (FetchManaNeededThisTurn: the FiveColour RULE 6 solo + sequence test, a hand card's mana cycling cost counted as a use, goldfish_inert cards never cast). Default ON (USER-adopted); =0 -> the Lounge beside every pick
+    FIVECOLOUR_TRIOME_BESIDE, // MTG_FIVECOLOUR_TRIOME_BESIDE  Five Colour (USER 2026-11-17 "On Five Colour we could give it a try."): when RULE 6 ranks an enters-tapped land (Zagoth Triome, Jetmir's Garden) first, the best untapped pick moves to second place and both are searched (width 2, every route: legacy, battlefield, land drop). Default OFF pending the USER; =1 enables
     COUNT
 };
 
@@ -2078,6 +2080,8 @@ inline const char* Name(int slot)
         "MTG_FOLD_LAND_ORDER",
         "MTG_FOLD_LAND_ORDER_SEEN",
         "MTG_MAZE_MANABOND_TUTOR_PRUNE",
+        "MTG_CYCLONE_LOUNGE_IDLE",
+        "MTG_FIVECOLOUR_TRIOME_BESIDE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
