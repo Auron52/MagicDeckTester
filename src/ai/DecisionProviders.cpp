@@ -67633,6 +67633,43 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
 // untaps it (the same untapped land, 3 life kept; with two or more Amulets it also floats mana). The
 // controller of a land drop is the active player (I3's opponent-turn puts keep active_player_index on
 // us). Otherwise the base answer.
+// P5b fold 2 -- THE COMMUTATION CLAIM for this list's lands (USER 2026-11-18: "the order doesn't matter much here
+// unless the second land is played after other things or we are paying for a cost like Gateway Plaza"). A land is
+// ORDER-SENSITIVE (-1) when its entry makes a choice or reads the board: an as-enters colour (the CLB Gates, Thran
+// Portal) -- P1's one colour reads the sources already down; Gateway Plaza's pay-or-sacrifice; Thran Portal's
+// "two or fewer other lands"; Gond Gate (it changes how every later Gate enters); The Black Gate's pay-3-life entry;
+// a Karoo bounce, a fetch on play, a modal face (none in this list, kept for a screened one). Everything else enters
+// the same way whatever entered before it (enters tapped or not, Amulet of Vigor untaps it) and has no entry
+// trigger of its own. Two board-level effects make an entry's SIDE EFFECTS depend on the land:
+//   * two or more Amulets FLOAT mana per tapped entry, coloured by the line's owed colour at that moment -> every
+//     land is order-sensitive;
+//   * Guild Summit draws a card per GATE entering -> a Gate and a non-Gate (Maze's End) are different classes, so
+//     the fold never moves a draw to a different point in the turn.
+// No permanent in this list has landfall (the engine also requires deck_has_landfall false). Human play is never
+// folded.
+int MazesEndProvider::LandEntryOrderClass(const GameState& s, int controller, const CardDefinition& def) const
+{
+    if (HumanPlayActive() || DecisionUnpruned() || !def.card.IsLand()) { return -1; }
+    const CardParams& p = def.params;
+    if (p.etb_choose_color || p.etb_sacrifice_unless_pay.has_value() || p.fastland_max_other_lands >= 0
+        || p.gates_enter_untapped || p.etb_pay_life_to_untap > 0 || p.etb_bounce_land || !p.mdfc_back_name.empty()
+        || FetchResolvesOnPlay(s, def))
+    { return -1; }
+    if (EnteringTappedUntapperCount(s, controller) >= 2) { return -1; }
+    bool gate_draw = false;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d == nullptr || d->params.draw_on_other_subtype_enter.empty()) { continue; }
+        if (d->params.draw_on_other_subtype_enter_once_each_turn) { return -1; }   // which entry draws moves
+        for (const std::string& st : d->params.draw_on_other_subtype_enter)
+        { if (st == "Gate") { gate_draw = true; } else { return -1; } }   // another subtype watcher: unclassified
+    }
+    if (!gate_draw) { return 0; }
+    return CardHasSubtype(def.card, "Gate") ? 1 : 2;
+}
+
 bool MazesEndProvider::LandEntersUntapped(const GameState& s, const CardDefinition& def, bool heuristic) const
 {
     if (def.params.etb_pay_life_to_untap > 0 && EnteringTappedUntapperCount(s, s.active_player_index) > 0

@@ -1004,6 +1004,7 @@ enum Slot : int
     MAZE_HEAP_STRICT,         // MTG_MAZE_HEAP_STRICT      Maze's End P5 (USER 2026-11-18: "there are cases where the search doesn't use the mana fully even if the option is available. In those cases it should still activate, since there is no drawback to doing so."; "We can actually create the treasure at the very end of processing even after Maze's End"): Heap Gate's Treasure is never a searched branch (every Treasure plan leaves the menu); PerformLastChanceTreasure makes it after the opponent's turn, in both worlds, whenever the untapped sources still pay it. Default ON (P5-2 A/B: net -5 turns / 550 held-out games, cheaper); =0 -> MAZE_HEAP_TREASURE's leftover-or-binds menu rule
     MAZE_TALON_ATMOST1,       // MTG_MAZE_TALON_ATMOST1    Maze's End P5 Talon VARIANT (b) (USER: "It is less clear whether 1 of them does"): Talon Gates is offered while AT MOST ONE copy of Exploration / Burgeoning / Manabond is controlled or held. Default OFF (an A/B arm)
     MAZE_TALON_EFFECTIVE,     // MTG_MAZE_TALON_EFFECTIVE  Maze's End P5 Talon VARIANT (c) (USER: "particularly if Burgeoning is the one and it is not going off"): Talon Gates is offered while no EFFECTIVE extra land drop is held or controlled -- Exploration always counts; Burgeoning and Manabond count only with a spare land in hand (more land cards than the open land drops). Default OFF (an A/B arm)
+    FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. A sound identity fold. Default ON; =0 -> every order enumerated
     COUNT
 };
 
@@ -1952,6 +1953,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_HEAP_STRICT",
         "MTG_MAZE_TALON_ATMOST1",
         "MTG_MAZE_TALON_EFFECTIVE",
+        "MTG_FOLD_LAND_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
