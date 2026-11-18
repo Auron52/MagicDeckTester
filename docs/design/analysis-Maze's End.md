@@ -4188,5 +4188,22 @@ Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (cod
   (contended; P6 code < 0.5% self time).
 - Slower games: 45/56 recover at d8 b0; 11 hit the b0 ceiling on both arms and all equal at d8 b2000.
 - Smoke: only the four `mazesend*` rows move (all faster). Smoke slower d5 g45/g60 and d0 g92 abandon at b0 on both
-  arms (b2000 replay owed); the rest recover.
-- OWED: the executor/rollout mismatch check (verify_deck `mismatch` gate + `MTG_LINE_PAY_AUDIT`) on the P6 binary.
+  arms; at d8 **b2000** all three reach the same turn on both arms (g45 T6=T6, g60 T6=T6, g92 T5=T5 byte-identical).
+- **P6b (2026-11-18): the executor/rollout check, then the GT accept.** Write-up: `logs/maze/P6-results.md`, "P6b".
+  - verify_deck `mismatch` gate: **PASS** (no nonconv / fd-diverge, 7001/8001 x 60, both arms completed). The gate
+    run's only FAIL is `regression_tiers` (overnight: no GT), which predates P6 (the overnight GT is scheduled).
+  - `MTG_LINE_PAY_AUDIT` (1010 games: d5 b20 x200 171001+, d3 b10 x150 172001+, d0 x600 173001+, 2HG d5 b20 x60
+    174001+): REAL `short_plans=466 joint_yes=151 rec_short=3`, i.e. **not 0, but PRE-EXISTING and not P6's**: a
+    pooled level-2 run with both arms gives the same counts and the same card mix with the levers OFF (base-identical)
+    as ON (DEFECT: d0 130/129, d3 8/8, d5 8/10, 2HG 3/4; rec_short off 7 / on 3). Every short step is a MAIN-PHASE
+    plan activation of Maze's End or Heap Gate (`act-unpaid` / `act-tapped`), which the audit's frames cover; none
+    is an off-main activation. **OPEN, proposed for a separate owner**: e.g. d5 b20 seed 171134 gi133
+    `plan=[Sylvan Scrying, Maze's End(act)] short=[act-unpaid Maze's End] joint=YES`.
+  - Regression tier (`--deck=mazesend,mazesend2hg`, 561/561 scenarios, 878 refs 0 drift): every moved aggregate
+    is better or equal (d0 6.9020 -> 6.8960; d3 5.7333 = 5.7333; d5 s2002 5.7337 -> 5.6902; d5 s3003 5.7200 -> 5.7000;
+    the s30081 backstops T5 = T5). 14 searched slower games, **all recover**: 9 at d8 b0; 4 abandon at the 2M b0
+    ceiling on both arms and are equal at d8 b2000; s2002 gi95 (base T4 / P6 T5 at b2000, b5000 and b10000) is
+    T5 = T5 byte-identical at d8 b0 with a 30M ceiling (6.4M / 7.9M units), so base's T4 is a budgeted find that
+    unlimited search does not reproduce. The 9 d0-slower games recover too (d0 g64 is FASTER on P6 at d8).
+  - **Accepted** smoke + regression GT scoped `--deck=mazesend,mazesend2hg`: 4 smoke + 6 regression keys moved,
+    nothing else; `check_gt_logs` 0 stale.
