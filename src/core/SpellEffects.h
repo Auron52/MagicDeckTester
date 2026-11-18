@@ -13847,7 +13847,10 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         for (int num : tap_numbers)
         {
             for (Permanent& q : state.battlefield)
-            { if (q.card.m_number == num && q.controller_index == controller) { q.tapped = true; break; } }
+            {
+                if (q.card.m_number == num && q.controller_index == controller)
+                { q.tapped = true; NoteLinePayNonManaTap(num, q.card.m_name.str()); break; }   // MTG_LINE_PAY_AUDIT
+            }
         }
         (void)self_number;
         const int drawn_n = static_cast<int>(tap_numbers.size());
@@ -38364,6 +38367,7 @@ inline int PayActivationOtherTap(GameState& state, int controller, int source_id
     }
     Permanent& q = state.battlefield[static_cast<std::size_t>(elig[static_cast<std::size_t>(pick)])];
     q.tapped = true;
+    NoteLinePayNonManaTap(q.card.m_number, q.card.m_name.str(), /*cost=*/true);   // MTG_LINE_PAY_AUDIT (measurement only)
     if (g_play_event_sink && !g_tap_speculating)
     { EmitPlayEvent(state.turn_number, "ability", def.card.m_name.str() + ": taps " + q.card.m_name.str() + " (cost)"); }
     return q.card.m_number;

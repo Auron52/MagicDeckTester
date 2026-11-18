@@ -1030,6 +1030,7 @@ enum Slot : int
     SPECTACLE_CREDIT_HOIST,   // MTG_SPECTACLE_CREDIT_HOIST  the spectacle plan credit counts a hoisted face graveyard ping (HoistsFaceGraveyardDamage: 1 Drop Burn's Lavamancer, run before the casts) as turning spectacle on for every spectacle cast in the selection (1 Drop Burn flip 2026-11-18, seed 3102 gi 99). Default ON (modelling fix); =0 -> old credit
     MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
+    OWED_ACTS_JOINT_PAY,      // MTG_OWED_ACTS_JOINT_PAY   Maze's End F5: when the usual payment of a plan's casts would leave its TRAILING activations' mana unpayable (MTG_LINE_PAY_AUDIT's joint=YES class) and one joint solve pays the whole line, the line is paid jointly (TurnSolver::OwedActsJointPrepay -> LineJointPrepayCore), both worlds. A completeness fix (the mana-payment exemption), engine-wide. Default ON; =0 -> the casts-only payment
     COUNT
 };
 
@@ -2004,6 +2005,7 @@ inline const char* Name(int slot)
         "MTG_SPECTACLE_CREDIT_HOIST",
         "MTG_MAZE_CAST_DOMINANCE",
         "MTG_MAZE_LAND_DOMINANCE",
+        "MTG_OWED_ACTS_JOINT_PAY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
