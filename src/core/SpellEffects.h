@@ -52417,6 +52417,11 @@ inline void ResolveBurgeoningTriggers(GameState& state)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d == nullptr || !d->card.IsLand()) { continue; }
             if (std::find(seen.begin(), seen.end(), c.m_name.str()) != seen.end()) { continue; }
+            // The land-drop menu's provider restriction (LandPlayOffered: Maze's End P5, an unpayable Gateway
+            // Plaza) applies to the autonomous put too -- Burgeoning's choice is the land drop's choice. The
+            // human is offered every land.
+            if (!(g_play_dig_chooser && !g_tap_speculating) && !DecisionUnpruned()
+                && !ResolveProvider(state).LandPlayOffered(state, me, *d)) { continue; }
             seen.push_back(c.m_name.str());
             human_cards.push_back(c);
             for (int pin : CrossingLandEntryPins(state, me, *d)) { opts.push_back(Opt{ c.m_number, d, pin }); }
@@ -52602,9 +52607,15 @@ inline void PerformEndStepManabond(GameState& state)
         if (lands == 0 && !(g_play_dig_chooser && !g_tap_speculating)
             && ResolveProvider(state).CrossingDumpWithoutLandDominated(state, me))
         { return; }   // every later copy meets the same hand
+        // A hand of ONLY lands: "yes" puts every card and discards nothing. The provider may prove "no" dominated
+        // (MazesEndProvider, P5) -- a RESTRICTION of the menu to {yes}, never consulted in human play. No rank is
+        // consumed (the crossing-pending predicate mirrors it).
+        const bool all_lands_yes = lands > 0 && lands == static_cast<int>(p.hand.size())
+            && !(g_play_dig_chooser && !g_tap_speculating)
+            && ResolveProvider(state).CrossingDumpAllLandsDominatesNo(state, me);
         // rank 0 = the default answer (yes with a land to put, else no); rank 1 = the other.
         const bool default_yes = lands > 0;
-        bool yes = TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes;
+        bool yes = all_lands_yes ? true : (TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes);
         if (g_play_dig_chooser && !g_tap_speculating)
         {
             std::vector<Card> ex;

@@ -968,9 +968,13 @@ enum Slot : int
     MAZE_LAND_TARGETS,        // MTG_MAZE_LAND_TARGETS     Maze's End P1d (USER P3): land-search targets (Sylvan Scrying, Archdruid's Charm's land find, Maze's End's fetch) pruned to the USER's menu: no Maze's End (battlefield+hand) -> {Maze's End}; else Maze's End unless 2+ held or 1 + an Amulet, Baldur's Gate if in the library, Gond Gate if none held (battlefield/hand) and one is in the library, and ONE new-name Gate (singleton first) only once Baldur's is gone and Gond is had. Maze's End's fetch: the same without Maze's End; fail-to-find kept. Human play unchanged. Default ON; =0 -> every distinct name
     MAZE_ACTIVATE_FIRST,      // MTG_MAZE_ACTIVATE_FIRST   Maze's End P1d (USER A4, item 5): with no land left to play this turn (no open drop, or no land in hand), a plan that activates Maze's End for a Gate is TRIED FIRST among its peers (PlanMoveOrderFront: a move-order tier, ORDER only, nothing removed). Beyond the horizon the playout already prefers the activation through the 200 new-name fetch eval. Default OFF until measured + USER adoption
     MAZE_TALON_TARGET,        // MTG_MAZE_TALON_TARGET     Maze's End P1d: AMENDMENT to the USER's P3 menu -- a land tutor (Sylvan Scrying, Archdruid's Charm) also offers Talon Gates of Madara while it is in the library and not held: its {4} put from hand is not a land play, so it is a new Gate name that does not compete for the drop (held-out d3 seed 94035 gi34: base fetched it T5 and won T6; P3 alone fetched Gond Gate and won T8). Default ON (S4, coordinator default, USER sign-off pending); =0 -> the USER's P3 menu alone
-    MAZE_WSEL_0,              // MTG_MAZE_WSEL_0           Maze's End P1d A1 weight sweep (TEMPORARY selector, heuristic-optimization skill): bit 0 of the variant index of the progress weights (MazeProgressWeights). All three bits off = the shipped weights
-    MAZE_WSEL_1,              // MTG_MAZE_WSEL_1           ...bit 1
-    MAZE_WSEL_2,              // MTG_MAZE_WSEL_2           ...bit 2
+    MAZE_FIND_NOTHING,        // MTG_MAZE_FIND_NOTHING     Maze's End P5 (USER 2026-11-18: "Maze's End \"find nothing\" should be heuristically pruned"): Maze's End's fail-to-find twin is withheld whenever a legal Gate target is offered. Default ON; =0 -> the fail-to-find stays on the menu
+    MAZE_PLAZA_PAY,           // MTG_MAZE_PLAZA_PAY        Maze's End P5 (USER: "We should either play it and pay the 1 or not play it. Sacrificing is a dominated option."): Gateway Plaza's as-enters menu is {pay}; a land drop / Burgeoning put / land tutor / Maze's End fetch of a Plaza whose {1} cannot be paid on entry is not offered. Default ON; =0 -> pay and sacrifice searched, every route offers it
+    MAZE_HEAP_TREASURE,       // MTG_MAZE_HEAP_TREASURE    Maze's End P5 (USER: "It is also worth it when we have literally nothing else to use the mana for. In fact, this is the main use-case."): a plan with Heap Gate's Treasure is kept only when no other enumerated spend could take its mana (no plan = the rest of it + one more mana-spending action), or next turn's mana / a colour binds. Default ON; =0 -> every Treasure plan searched
+    MAZE_COLOUR_ALT,          // MTG_MAZE_COLOUR_ALT       Maze's End P5 disclosure 1 VARIANT: the one colour alternates by source COUNT (G while green sources <= blue sources, else U) instead of P1's "no green -> G, no blue -> U, else G". Default OFF (an A/B arm)
+    MAZE_MANABOND_ALL_LANDS,  // MTG_MAZE_MANABOND_ALL_LANDS Maze's End P5 (USER: "\"no\" with only lands should be pruned heuristically"): Manabond's "no" is withheld when the hand is all lands, unless a Gateway Plaza in hand could not pay its {1} at the end step. Default ON; =0 -> yes and no searched
+    MAZE_FETCH_EVAL_V5,       // MTG_MAZE_FETCH_EVAL_V5    Maze's End P5 (A1 weights, the USER's "rest of the table"): the new-name fetch eval is 100 (v5) instead of 200 (v0); the other progress weights are unchanged. Replaces the temporary MTG_MAZE_WSEL_* selector. Default ON; =0 -> 200
+    MAZE_TALON_LACKDROPS,     // MTG_MAZE_TALON_LACKDROPS  Maze's End P5 VARIANT of the Talon amendment (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra land drops"): Talon Gates is offered only when no extra-land source (Exploration, Burgeoning, Manabond) is controlled or held. Default OFF (an A/B arm against the always-offered amendment)
     COUNT
 };
 
@@ -1883,9 +1887,13 @@ inline const char* Name(int slot)
         "MTG_MAZE_LAND_TARGETS",
         "MTG_MAZE_ACTIVATE_FIRST",
         "MTG_MAZE_TALON_TARGET",
-        "MTG_MAZE_WSEL_0",
-        "MTG_MAZE_WSEL_1",
-        "MTG_MAZE_WSEL_2",
+        "MTG_MAZE_FIND_NOTHING",
+        "MTG_MAZE_PLAZA_PAY",
+        "MTG_MAZE_HEAP_TREASURE",
+        "MTG_MAZE_COLOUR_ALT",
+        "MTG_MAZE_MANABOND_ALL_LANDS",
+        "MTG_MAZE_FETCH_EVAL_V5",
+        "MTG_MAZE_TALON_LACKDROPS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

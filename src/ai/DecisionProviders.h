@@ -4748,6 +4748,13 @@ public:
     // W = 0, win turn 6.600 vs 6.633; d3 b10 22.0 s vs 30.5 s, 6.550 vs 6.417). Levers kept: MTG_SOLVE_CHARGE_W
     // (=0 uncharged) and the heurarm slot MTG_SOLVE_CHARGE (false = the uncharged A/B control).
     int SolveChargeWeightOptIn() const override { return 1; }
+    // P5 (USER 2026-11-18): Gateway Plaza is not played / put / fetched when its {1} cannot be paid on entry
+    // (MTG_MAZE_PLAZA_PAY); Manabond's "no" is withheld for an all-land hand (MTG_MAZE_MANABOND_ALL_LANDS); Heap
+    // Gate's Treasure only where its mana would otherwise go unused (MTG_MAZE_HEAP_TREASURE).
+    bool LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const override;
+    bool CrossingDumpAllLandsDominatesNo(const GameState& s, int controller) const override;
+    bool PlanListFilterLive(const GameState& s) const override;
+    void PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
