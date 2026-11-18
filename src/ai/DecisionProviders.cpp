@@ -67269,12 +67269,13 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
         const std::string nn = MazePickNewNameGate(s, ctrl, names, prov);
         if (!nn.empty()) { out.push_back(nn); }
     }
-    // PROPOSED AMENDMENT (MTG_MAZE_TALON_TARGET, DEFAULT OFF until the USER rules): a land tutor also offers Talon
+    // P3 AMENDMENT (MTG_MAZE_TALON_TARGET, DEFAULT ON -- adopted by the coordinator's default, USER sign-off
+    // pending; measured better on top of the shipped prunes, ledger P1d ab2): a land tutor also offers Talon
     // Gates of Madara (hand_put_self_cost: "{4}: put this from your hand onto the battlefield" -- not a land play)
     // while it is in the library and no copy is held or controlled. It adds a Gate name WITHOUT using the land drop,
     // which the P3 menu's "one new name only after Baldur's and Gond" deferral cannot see (held-out d3 seed 94035
     // gi34: the unpruned search fetched it on T5 and won T6; P3 alone fetched Gond Gate and won T8).
-    static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET");   // DEFAULT OFF
+    static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET", true);   // DEFAULT ON; =0 -> the USER's P3 menu alone
     if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon))
     {
         for (const std::string& nm : names)

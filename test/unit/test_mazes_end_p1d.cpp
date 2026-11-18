@@ -1,8 +1,8 @@
 // Maze's End deck, P1d (2026-11-18; docs/design/analysis-Maze's End.md "Performance"): the USER-directed
 // provider prunes in MazesEndProvider -- B1 Guild Summit's count menu, P1 one chosen colour, P2 no red in the
 // spendable premise, P3 land-search targets. Each is a flag DEFAULT ON (heurarm slots MAZE_SUMMIT_COUNT,
-// MAZE_ONE_COLOUR, MAZE_SPEND_NEVERCAST, MAZE_LAND_TARGETS); each test also pins the flag off and checks the
-// unpruned menu comes back.
+// MAZE_ONE_COLOUR, MAZE_SPEND_NEVERCAST, MAZE_LAND_TARGETS, plus the P3 amendment MAZE_TALON_TARGET); each test
+// also pins the flag off and checks the unpruned menu comes back.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -251,4 +251,39 @@ TEST_CASE("Maze's End P1d (USER P3): land-search targets follow the USER's menu"
     CHECK_FALSE(prov.TapTutorPutCandidates(f2, maze, names));
     CHECK(names.size() == 1);
     CHECK((names.front() == "Simic Guildgate" || names.front() == "Izzet Guildgate"));
+}
+
+TEST_CASE("Maze's End P1d (P3 amendment, MTG_MAZE_TALON_TARGET default ON): a land tutor also offers Talon Gates")
+{
+    LoadP1dCards();
+    const MazesEndProvider prov;
+    const CardParams& scry = D("Sylvan Scrying").params;
+    GameState s = Base();
+    s.m_provider = &prov;
+    int n = 500;
+    for (const char* nm : { "Simic Guildgate", "Maze's End", "Baldur's Gate", "Gond Gate", "Talon Gates of Madara" })
+    { s.players[0].library.push_back(C(nm, n++)); }
+    s.players[0].hand.push_back(C("Maze's End", 550));
+    // Default ON: the USER's P3 menu (Maze's End, Baldur's, Gond) plus Talon Gates -- its {4} put from hand is not
+    // a land play, so it adds a Gate name without competing for the drop.
+    CHECK(prov.TutorCandidates(s, 0, scry)
+          == std::vector<std::string>{ "Maze's End", "Baldur's Gate", "Gond Gate", "Talon Gates of Madara" });
+    {
+        const Arm off(heurarm::MAZE_TALON_TARGET, 0);
+        CHECK(prov.TutorCandidates(s, 0, scry) == std::vector<std::string>{ "Maze's End", "Baldur's Gate", "Gond Gate" });
+    }
+    // Held in hand: not offered (a second copy is not a new name).
+    GameState h = s;
+    h.players[0].hand.push_back(C("Talon Gates of Madara", 551));
+    CHECK(prov.TutorCandidates(h, 0, scry) == std::vector<std::string>{ "Maze's End", "Baldur's Gate", "Gond Gate" });
+    // Controlled: not offered.
+    GameState b = s;
+    Put(b, "Talon Gates of Madara", 552);
+    CHECK(prov.TutorCandidates(b, 0, scry) == std::vector<std::string>{ "Maze's End", "Baldur's Gate", "Gond Gate" });
+    // With no Maze's End held the USER's "{Maze's End} alone" rule still wins.
+    GameState none = Base();
+    none.m_provider = &prov;
+    n = 600;
+    for (const char* nm : { "Maze's End", "Baldur's Gate", "Talon Gates of Madara" }) { none.players[0].library.push_back(C(nm, n++)); }
+    CHECK(prov.TutorCandidates(none, 0, scry) == std::vector<std::string>{ "Maze's End" });
 }
