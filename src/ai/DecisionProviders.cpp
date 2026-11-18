@@ -69071,6 +69071,8 @@ MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_L
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
 MAZE_P5_LEVER(MazeTalonEffectiveOn,   MAZE_TALON_EFFECTIVE,    "MTG_MAZE_TALON_EFFECTIVE",    false)   // A/B variant
+MAZE_P5_LEVER(MazeCastDominanceOn,    MAZE_CAST_DOMINANCE,     "MTG_MAZE_CAST_DOMINANCE",     true)    // P7
+MAZE_P5_LEVER(MazeLandDominanceOn,    MAZE_LAND_DOMINANCE,     "MTG_MAZE_LAND_DOMINANCE",     true)    // P7
 #undef MAZE_P5_LEVER
 bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
 
@@ -69806,6 +69808,56 @@ bool MazesEndProvider::OffMainMazeRedeployForced(const GameState& s, int control
 {
     (void)s; (void)controller;
     return MazeAutonomous();
+}
+
+// ---- P7 (performance; USER 2026-11-18: "We'll need more effective prunes to be applied", "It would be nice if there
+// was no extra branching given how easy the mana is in this list") -- the CAST / LAND DOMINANCE FOLD's premises
+// (the fold itself is the engine's CastDominanceFold, TurnSolver.cpp). MTG_MAZE_CAST_DOMINANCE (fold A + B) and
+// MTG_MAZE_LAND_DOMINANCE (fold B only), both DEFAULT ON (sound dominance under the premises below).
+//
+// CAST-DOMINANT CARDS (class 1, or 2 when order-sensitive against the land): Exploration (extra land drop),
+// Burgeoning (may put a land on the opponent's land play), Manabond (may put the hand's lands at our end step) and
+// Amulet of Vigor (untaps what enters tapped; class 2 -- cast before the land it is worth more, so fold B does not
+// trade "no land, Amulet" for "land, Amulet"). Each is a permanent whose every effect is optional or only adds
+// resources, so having it in play is never worse than holding it: it touches no library (no draw, no shuffle -- and
+// the stable reshuffle keys on card numbers, so a later search in the line shuffles the same either way), casting
+// it only shrinks the hand (fewer Manabond / cleanup discards), and nothing in the list counts cards in hand.
+// THE MANA PREMISE: what a plan leaves unspent in its main phase has no other use. Nothing in this list spends mana
+// off the main phase EXCEPT (i) Heap Gate's last-chance Treasure (PerformLastChanceTreasure, made from untapped
+// sources after the opponent's turn) and (ii) Gateway Plaza's {1} when Burgeoning or Manabond puts it outside our
+// main phase -- so the fold is not live while we control an untapped Treasure-making Gate or hold one, or hold a
+// Plaza. RE-CHECK when off-main Maze's End activation (P6) lands: mana held for it breaks the premise.
+// VETO (class -1): Guild Summit -- its rest-of-line Gate count (EtbTapSubtypeDrawDefault) reads what the rest of the
+// line still owes, so adding a cast to the line can change how many cards it draws.
+bool MazesEndProvider::CastDominanceLive(const GameState& s) const
+{
+    if (!MazeCastDominanceOn() || !MazeAutonomous()) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.tap_treasure_cost.has_value()) { return false; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.tap_treasure_cost.has_value() || d->params.etb_sacrifice_unless_pay.has_value()) { return false; }
+    }
+    return true;
+}
+
+int MazesEndProvider::CastDominanceClass(const GameState&, const CardDefinition& d) const
+{
+    if (d.card.IsLand()) { return 0; }
+    const CardParams& pp = d.params;
+    if (!pp.etb_tap_subtype_draw.empty()) { return -1; }
+    if (pp.untap_own_permanent_entering_tapped) { return 2; }
+    if (pp.static_extra_land_drops > 0 || pp.opponent_land_play_put_land_from_hand
+        || pp.endstep_may_dump_hand_lands_discard_hand)
+    { return MazeLandDominanceOn() ? 1 : 2; }
+    return 0;
 }
 
 // Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use

@@ -1028,6 +1028,8 @@ enum Slot : int
     ONEDROPBURN_M2_HELD,      // MTG_ONEDROPBURN_M2_HELD  1 Drop Burn main-2 rule: also admit a HELD card that only the land a main-2 Needle Drop drew makes payable (USER 2026-11-19: "I suppose we should allow that"). =0 -> only the drawn cards
     ONEDROPBURN_FIREBLAST_EARLY,// MTG_ONEDROPBURN_FIREBLAST_EARLY  1 Drop Burn order: Fireblast rank 28 (after the burn, BEFORE Needle Drop 29 / Skewer 30) instead of 40 (last); pairs with MTG_FIREBLAST_FLOAT (USER 2026-11-19). =0 -> rank 40
     SPECTACLE_CREDIT_HOIST,   // MTG_SPECTACLE_CREDIT_HOIST  the spectacle plan credit counts a hoisted face graveyard ping (HoistsFaceGraveyardDamage: 1 Drop Burn's Lavamancer, run before the casts) as turning spectacle on for every spectacle cast in the selection (1 Drop Burn flip 2026-11-18, seed 3102 gi 99). Default ON (modelling fix); =0 -> old credit
+    MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
+    MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
     COUNT
 };
 
@@ -2000,6 +2002,8 @@ inline const char* Name(int slot)
         "MTG_ONEDROPBURN_M2_HELD",
         "MTG_ONEDROPBURN_FIREBLAST_EARLY",
         "MTG_SPECTACLE_CREDIT_HOIST",
+        "MTG_MAZE_CAST_DOMINANCE",
+        "MTG_MAZE_LAND_DOMINANCE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

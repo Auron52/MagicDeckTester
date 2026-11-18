@@ -5133,6 +5133,16 @@ public:
     // user: Maze's End P5, Heap Gate's Treasure offered only when its mana would otherwise go unused.
     struct PlanView { const std::vector<Action>* actions; const std::string* land; };
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
+    // CastDominanceLive / CastDominanceClass -- a provider-DECLARED dominance premise for the engine's plan-list
+    // CAST / LAND DOMINANCE FOLD (TurnSolver.cpp CastDominanceFold; Maze's End P7). Live is asked once per
+    // enumeration. Class per cast card: 0 = no claim; 1 = casting it, when the same line can also afford it,
+    // never leaves a worse state than holding it (fold A drops "P" for "P + cast"), AND it is not order-sensitive
+    // against the land (fold B drops a land-less plan of only class-1 casts for "the same + a land"); 2 = as 1
+    // but order-sensitive against the land (fold A only); -1 = VETO: no plan holding that cast takes part (its
+    // resolution reads the rest of the line). Only REMOVES plans a kept sibling dominates. Default: not live.
+    // Never consulted in human play or under the unpruned gate.
+    virtual bool CastDominanceLive(const GameState&) const { return false; }
+    virtual int  CastDominanceClass(const GameState&, const CardDefinition&) const { return 0; }
     virtual void PlanListAdmit(const GameState&, const std::vector<PlanView>& /*plans*/,
                                std::vector<char>& /*admit*/) const {}
 

@@ -103005,6 +103005,138 @@ static std::string VampDumpAction(const Action& a)
     if (a.equiv_tag) { s += " e" + std::to_string(a.equiv_tag) + "." + std::to_string(a.equiv_ord); }
     return s;
 }
+// ---------------------------------------------------------------------------- CAST / LAND DOMINANCE FOLD
+// (Maze's End P7, 2026-11-18; USER: "It would be nice if there was no extra branching given how easy the mana is
+// in this list", "We'll need more effective prunes to be applied".) A provider that DECLARES a dominance premise
+// (DecisionProvider::CastDominanceLive / CastDominanceClass) gets two plan-list folds, both restrict-only:
+// A class < 0 VETOES the fold for every plan holding that cast (its resolution reads the rest of the line, e.g.
+// Guild Summit's rest-of-line Gate count, so P' = P + X may resolve it differently).
+//  (A) CAST: a plan P is removed when the same list holds P' = P plus ONE more cast of a card the provider
+//      classes as cast-dominant (class >= 1: a permanent whose presence never costs the line anything, e.g.
+//      Exploration), with the same land, the same other actions in the same order, and every other plan field
+//      (pins, breakpoint coordinates, axis choices) equal. P' affords everything P does plus the cast, and the
+//      mana P leaves unspent has no other use (the provider's premise), so P' reaches a state at least as good.
+//  (B) LAND: a plan P that plays NO land, whose actions are all class-1 casts (cast-dominant AND not order-
+//      sensitive against the land, so not Amulet of Vigor), is removed when the list holds the same plan plus a
+//      land (same actions, same order, every non-land field equal). With no tutor, draw or activation in P, the
+//      land P holds can only be played later by a breakpoint continuation (an Exploration drop) -- which P' can
+//      do too with its own open drop -- or not at all.
+// Sound dominance under the provider's premise, so it ships ON; the error is always toward KEEPING a plan (a
+// mismatch in any field keeps P). Dominance is a strict-superset order, so the maximal plans are always kept and
+// the list never empties. MTG_CAST_DOM_STATS=1 prints the fold's counters at exit (diagnostic only).
+namespace castdom
+{
+inline bool StatsOn() { static const bool on = EnvOn("MTG_CAST_DOM_STATS"); return on; }
+inline std::atomic<long long> g_lists{0}, g_seen{0}, g_drop_a{0}, g_drop_b{0}, g_pin_miss{0};
+inline std::atomic<int> g_diff_printed{0};
+struct Printer
+{
+    ~Printer()
+    {
+        if (!StatsOn()) { return; }
+        std::fprintf(stderr, "[cast-dom] lists=%lld plans=%lld dropped_cast=%lld dropped_land=%lld pin_mismatch=%lld\n",
+                     g_lists.load(), g_seen.load(), g_drop_a.load(), g_drop_b.load(), g_pin_miss.load());
+    }
+};
+inline Printer g_printer;
+}   // namespace castdom
+static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Plan>& all, const DecisionProvider& prov)
+{
+    const std::size_t n = all.size();
+    // Per plan: the class of each action (0 = not a cast-dominant cast) and whether P is a (B) candidate.
+    std::vector<std::vector<int>> cls(n);
+    std::vector<char> b_cand(n, 0), veto(n, 0);
+    bool any_dom = false;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const TurnSolver::Plan& p = all[i];
+        cls[i].resize(p.actions.size(), 0);
+        bool all_c1 = true;
+        for (std::size_t k = 0; k < p.actions.size(); ++k)
+        {
+            const Action& a = p.actions[k];
+            if (a.kind == Action::Kind::CastFromHand && a.def != nullptr)
+            { cls[i][k] = prov.CastDominanceClass(state, *a.def); }
+            if (cls[i][k] < 0) { veto[i] = 1; }   // an action whose resolution reads the rest of the line
+            if (cls[i][k] > 0) { any_dom = true; }
+            if (cls[i][k] != 1) { all_c1 = false; }
+        }
+        b_cand[i] = (!veto[i] && p.land_to_play.empty() && all_c1) ? 1 : 0;
+    }
+    bool any_b = false;
+    for (std::size_t i = 0; i < n; ++i) { if (b_cand[i]) { any_b = true; break; } }
+    if (castdom::StatsOn())
+    {
+        castdom::g_lists.fetch_add(1, std::memory_order_relaxed);
+        castdom::g_seen.fetch_add(static_cast<long long>(n), std::memory_order_relaxed);
+    }
+    if (!any_dom && !any_b) { return; }
+    // Every field but the ones the fold compares on its own terms (actions, land) and the evaluation-only ones.
+    auto norm = [](TurnSolver::Plan q, bool clear_land)
+    {
+        q.actions.clear();
+        q.value = -1; q.land_tie_key = -1; q.wins_this_turn = false; q.would_drop.clear();
+        q.searched_order = false; q.move_front = false;
+        if (clear_land) { q.land_to_play.clear(); q.land_decided = false; }
+        return q;
+    };
+    auto pins_equal = [&](const TurnSolver::Plan& p, const TurnSolver::Plan& q, bool clear_land)
+    {
+        const TurnSolver::Plan a = norm(p, clear_land), b = norm(q, clear_land);
+        if (a == b) { return true; }
+        if (castdom::StatsOn())
+        {
+            castdom::g_pin_miss.fetch_add(1, std::memory_order_relaxed);
+            if (castdom::g_diff_printed.fetch_add(1, std::memory_order_relaxed) < 12)
+            { std::fprintf(stderr, "[cast-dom] pin mismatch:%s\n", PbVerifyFieldDiff(a, b).c_str()); }
+        }
+        return false;
+    };
+    std::vector<char> drop(n, 0);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        if (veto[i]) { continue; }
+        const TurnSolver::Plan& p = all[i];
+        for (std::size_t j = 0; j < n && !drop[i]; ++j)
+        {
+            if (j == i || veto[j]) { continue; }
+            const TurnSolver::Plan& q = all[j];
+            // (A) q = p + one cast-dominant cast, same land.
+            if (any_dom && q.actions.size() == p.actions.size() + 1 && q.land_to_play == p.land_to_play)
+            {
+                for (std::size_t k = 0; k < q.actions.size(); ++k)
+                {
+                    if (cls[j][k] == 0) { continue; }
+                    bool same = true;
+                    for (std::size_t m = 0, t = 0; m < q.actions.size() && same; ++m)
+                    {
+                        if (m == k) { continue; }
+                        same = q.actions[m] == p.actions[t++];
+                    }
+                    if (same && pins_equal(p, q, /*clear_land=*/false))
+                    {
+                        drop[i] = 1;
+                        if (castdom::StatsOn()) { castdom::g_drop_a.fetch_add(1, std::memory_order_relaxed); }
+                        break;
+                    }
+                }
+                if (drop[i]) { break; }
+            }
+            // (B) q = p + a land, same actions.
+            if (b_cand[i] && !q.land_to_play.empty() && q.actions == p.actions
+                && pins_equal(p, q, /*clear_land=*/true))
+            {
+                drop[i] = 1;
+                if (castdom::StatsOn()) { castdom::g_drop_b.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+    }
+    std::size_t w = 0;
+    for (std::size_t i = 0; i < n; ++i)
+    { if (!drop[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+    if (w > 0) { all.resize(w); }
+}
+
 // MTG_SB_MAIN1_STATS=1 (DIAGNOSTIC, print-only, default off): how many root pre-combat plans the provider's
 // plan-level main-1 fold (Main1PlanFoldLive / Main1PlanAdmitted) saw and kept, printed at exit.
 namespace sbmain1
@@ -103070,6 +103202,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
             all.resize(w);
         }
+    }
+    // A PROVIDER-DECLARED CAST / LAND DOMINANCE FOLD (DecisionProvider::CastDominanceLive / CastDominanceClass;
+    // Maze's End P7). Every enumeration, root and continuation; it only removes plans that a kept sibling dominates.
+    if (all.size() > 1 && !HumanPlayActive() && !DecisionUnpruned() && sac_prov.CastDominanceLive(state))
+    {
+        if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+        CastDominanceFold(state, all, sac_prov);
     }
     // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
     // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
@@ -122907,15 +123046,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // decision" this engine already commits to, and a census with its own notion of a decision
     // boundary would attribute work to turns the ceiling bills elsewhere. root=2 tags the hybrid
     // host so a row can be told from SolveWithLookahead's (root=1) without inferring it.
-    if (fs_decision_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
+    // MTG_TURN_CENSUS_UNLIMITED=1 (diagnostic, default off; Maze's End P7): ALSO write a census row for an
+    // outermost decision at an UNLIMITED budget (the same nesting predicate, no budget). Only the census row --
+    // the work ceilings above stay budget-only. Off = byte-identical.
+    static const bool s_tc_unl = EnvOn("MTG_TURN_CENSUS_UNLIMITED");
+    const bool tc_root = fs_decision_root
+                      || (s_tc_unl && budget != nullptr && budget->Unlimited()
+                          && g_cs_solver_nest == 0 && g_rollout_nest == 0 && g_fsline_nest == 0);
+    if (tc_root && turncensus::On()) { turncensus::t_board = CensusBoardDesc(state); }
     // pre=1 ALWAYS: this host is reached only from the PRE-COMBAT main (AIEngine: `is_pre_combat_main &&
     // m_committed_line.empty()`). `second_main` is "the line also searches the second main", not the
     // phase -- before 2026-11-04 both this row and the dump below keyed the phase off it, so every
     // second-main deck's rows read pre=0 and MTG_PLAN_DUMP printed the second-main menu (no land drop).
-    turncensus::Scope _tc_fs(fs_decision_root, state.game_seed, state.turn_number,
+    turncensus::Scope _tc_fs(tc_root, state.game_seed, state.turn_number,
                              1, /*root_kind=*/2, depth,
                              budget != nullptr ? budget->Limit() : 0,
-                             fs_decision_root ? CensusStateKey(state) : 0);
+                             tc_root ? CensusStateKey(state) : 0);
     // DECISION DUMP (MTG_PLAN_DUMP=<turn>): the same root predicate again, so the dump describes
     // exactly the decision the census bills and the work ceiling bounds -- not a rollout's copy of
     // it. Before the search runs, so the board printed is the board the menu was built from.
