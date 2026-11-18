@@ -99704,19 +99704,61 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 TurnSolver::Plan p = std::move(work.back()); work.pop_back();
                 if (!plan_may_choose(p)) { expanded.push_back(std::move(p)); continue; }
-                std::vector<int> next;
-                std::size_t ordinal = 0;
                 const std::size_t n_main = dmgrx::MainPinCount(p.reflect_targets);
-                dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
-                    if (ordinal++ == n_main) { next = legal; }
-                };
-                GameState copy = state;
-                {
+                // One probe of the plan's main-phase apply: `nx` = the legal list at the first unpinned main-phase
+                // ordinal (empty: none), `fr` = the front at that ordinal and every later one. Returns whether the
+                // opponent lost in this main phase.
+                auto run_probe = [&](const TurnSolver::Plan& q, std::size_t pinned, std::vector<int>& nx,
+                                     std::vector<int>* fr) {
+                    nx.clear();
+                    if (fr) { fr->clear(); }
+                    std::size_t ordinal = 0;
+                    dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
+                        if (ordinal == pinned) { nx = legal; }
+                        if (fr && ordinal >= pinned && !legal.empty()) { fr->push_back(legal.front()); }
+                        ++ordinal;
+                    };
+                    GameState copy = state;
                     RevealLogPause quiet;
-                    dmgrx::TargetProbeScope probing(probe, p.reflect_targets, g_apd_depth);
-                    ApplyPlanDirect(copy, p, is_pre_combat);
+                    dmgrx::TargetProbeScope probing(probe, q.reflect_targets, g_apd_depth);
+                    ApplyPlanDirect(copy, q, is_pre_combat);
+                    return OpponentHasLost(copy);
+                };
+                std::vector<int> next, fronts;
+                const bool front_kills = run_probe(p, n_main, next, &fronts);
+                // SOUND DOMINANCE FOLD (step 9c; the combat fan's below): a main-phase line that KILLS cannot be
+                // improved, so the remaining choices are pinned to it instead of fanned -- every FRONT, else the
+                // opponent's FACE wherever legal (else the front), one choice at a time. Without it a sweeper over a
+                // GC'd indestructible reflector (or any unbounded reflection loop with a target choice per step)
+                // fans every interleaving of the loop's targets: exponential in the loop length.
+                std::optional<TurnSolver::Plan> killer;
+                auto insert_main_pin = [](TurnSolver::Plan& v, std::size_t at, int pin) {
+                    v.reflect_targets.insert(v.reflect_targets.begin() + static_cast<std::ptrdiff_t>(at), pin);
+                };
+                if (!next.empty() && front_kills)
+                {
+                    TurnSolver::Plan v = p;
+                    for (std::size_t i = 0; i < fronts.size(); ++i) { insert_main_pin(v, n_main + i, fronts[i]); }
+                    killer = std::move(v);
+                }
+                else if (!next.empty())
+                {
+                    const int face = dmgrx::PlayerId(1 - state.active_player_index);
+                    TurnSolver::Plan v = p;
+                    std::vector<int> nx = next;
+                    std::size_t pinned = n_main;
+                    bool kills = false;
+                    for (int guard = 0; guard < 4096 && !nx.empty(); ++guard)
+                    {
+                        const bool has_face = std::find(nx.begin(), nx.end(), face) != nx.end();
+                        insert_main_pin(v, pinned, has_face ? face : nx.front());
+                        ++pinned;
+                        kills = run_probe(v, pinned, nx, nullptr);
+                    }
+                    if (kills && nx.empty()) { killer = std::move(v); }
                 }
                 if (next.empty()) { expanded.push_back(std::move(p)); }
+                else if (killer) { expanded.push_back(std::move(*killer)); }
                 else
                 {
                     for (auto it = next.rbegin(); it != next.rend(); ++it)
