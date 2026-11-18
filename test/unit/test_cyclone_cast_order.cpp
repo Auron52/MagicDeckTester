@@ -573,3 +573,55 @@ TEST_CASE("Cyclone Q60: information slots preserve a required Song funding prefi
         CHECK(acts[order.front()].card_name == "Seething Song");
     }
 }
+
+// PONDER FIRST EARLY (USER 2026-11-17: "Ponder should be cast earlier because Brainstorm is more useful later. T1 is
+// the worst time to cast Brainstorm typically"). The move-order tier is ORDER only: PlanMoveOrderFront says which plans
+// go first. FRONT shape: a Ponder plan with no put-back goes first. DEMOTE shape (MTG_CYCLONE_PONDER_FIRST_DEMOTE): a
+// put-back plan with no Ponder goes LAST and every other plan (casting nothing included) keeps its relative order.
+TEST_CASE("Cyclone Ponder first early: the front and demote shapes of the move-order tier")
+{
+    ArmO arm;
+    GameState s = StateO({ "Island" }, { "Ponder", "Brainstorm", "Island" });
+    s.turn_number = 1;
+    std::vector<Action> cands(3);
+    cands[0].kind = Action::Kind::CastFromHand; cands[0].card_name = "Ponder";     cands[0].def = &DefO("Ponder");
+    cands[1].kind = Action::Kind::CastFromHand; cands[1].card_name = "Brainstorm"; cands[1].def = &DefO("Brainstorm");
+    cands[2].kind = Action::Kind::PlayLand;     cands[2].card_name = "Island";     cands[2].def = &DefO("Island");
+    const auto front = [&](const std::vector<int>& sel) { return ProvO().PlanMoveOrderFront(s, cands, sel, false); };
+    SUBCASE("off: no tier")
+    {
+        arm.Set(heurarm::CYCLONE_PONDER_FIRST_T1, 0);
+        CHECK_FALSE(front({ 0 }));
+        CHECK_FALSE(front({ 2 }));
+    }
+    SUBCASE("front shape: Ponder alone first; Brainstorm, both, or nothing are not fronted")
+    {
+        arm.Set(heurarm::CYCLONE_PONDER_FIRST_T1, 1).Set(heurarm::CYCLONE_PONDER_FIRST_DEMOTE, 0);
+        CHECK(front({ 0, 2 }));
+        CHECK_FALSE(front({ 1, 2 }));
+        CHECK_FALSE(front({ 0, 1 }));
+        CHECK_FALSE(front({ 2 }));
+    }
+    SUBCASE("demote shape: only Brainstorm-without-Ponder goes behind")
+    {
+        arm.Set(heurarm::CYCLONE_PONDER_FIRST_T1, 1).Set(heurarm::CYCLONE_PONDER_FIRST_DEMOTE, 1);
+        CHECK(front({ 0, 2 }));
+        CHECK_FALSE(front({ 1, 2 }));
+        CHECK(front({ 0, 1 }));            // both cast: no implication about their order (USER)
+        CHECK(front({ 2 }));               // casting nothing keeps its place, ahead of Brainstorm alone
+        CHECK(front({}));
+    }
+    SUBCASE("turn 2 without _T2, and turn 3: no tier")
+    {
+        arm.Set(heurarm::CYCLONE_PONDER_FIRST_T1, 1).Set(heurarm::CYCLONE_PONDER_FIRST_DEMOTE, 1)
+           .Set(heurarm::CYCLONE_PONDER_FIRST_T2, 0);
+        s.turn_number = 2;
+        CHECK_FALSE(front({ 2 }));
+        CHECK_FALSE(front({ 1, 2 }));
+        arm.Set(heurarm::CYCLONE_PONDER_FIRST_T2, 1);
+        CHECK(front({ 2 }));
+        CHECK_FALSE(front({ 1, 2 }));
+        s.turn_number = 3;
+        CHECK_FALSE(front({ 2 }));
+    }
+}
