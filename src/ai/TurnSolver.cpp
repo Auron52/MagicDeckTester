@@ -74138,21 +74138,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             ApplyBurnToCreature(state, tp, before, 0, state.active_player_index);
                         }
                     }
-                    // State-based: destroy creatures with lethal damage (highest index first so the
-                    // erase doesn't shift a not-yet-processed index).
-                    for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
-                    {
-                        Permanent& p = state.battlefield[bi];
-                        // LethalToughness, NOT the bare EffectiveToughness: this is the rollout's
-                        // SBA and it must kill exactly what GameEngine::CheckStateBasedActions
-                        // kills, or the run reports [fd-diverge]. See the helper's comment.
-                        if (p.card.IsCreature() && p.damage > 0
-                            && p.damage >= LethalToughness(p, state))
-                        {
-                            state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));
-                            state.battlefield.erase(state.battlefield.begin() + bi);
-                        }
-                    }
+                    // State-based actions: the executor's creature-death pass, SHARED
+                    // (SbaKillDeadCreatures), so this rollout SBA kills exactly what
+                    // GameEngine::CheckStateBasedActions kills, the way it kills it: indestructible
+                    // survives lethal damage (CR 704.5g), the dead go to the graveyard and fire
+                    // OnCreatureDies (morbid, death watchers, persist, LTB). It used to be an inline
+                    // loop with no indestructible test and no OnCreatureDies (design R7).
+                    SbaKillDeadCreatures(state, "lethal damage");
                 }
                 else
                 {
@@ -74243,13 +74235,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // copies on one creature both fire on death. Shared with EffectHandler (lockstep).
                     ApplyBurnToCreature(state, tgt, before, def.params.death_trigger_damage,
                                         state.active_player_index);
-                    bool lethal = tgt.damage >= tgt.EffectiveToughness();
                     // State-based action: a creature with lethal damage is destroyed.
                     // Without this the rollout keeps the dead creature on the battlefield
                     // as a phantom target, so a later creature-targeting burn (Searing
                     // Blaze/Blood) "re-kills" it and invents face damage -> phantom early
-                    // win. Mirrors the real engine's SBA after damage is dealt.
-                    if (lethal) { state.battlefield.erase(state.battlefield.begin() + ci); }
+                    // win. The executor's SBA death, SHARED (CounterPingSbaDead +
+                    // CounterPingKillAt): LethalToughness, indestructible survives (CR 704.5g),
+                    // the card goes to the graveyard and OnCreatureDies fires. It used to be a
+                    // bare EffectiveToughness test and an erase with no graveyard and no death
+                    // triggers (design R7).
+                    if (CounterPingSbaDead(tgt, state))
+                    { CounterPingKillAt(state, static_cast<std::size_t>(ci), "lethal damage"); }
                 }
             }
             // An all-illegal-target spell does not resolve any rider (CR 608.2b).

@@ -116,6 +116,14 @@ TEST_CASE("CR 400.3 CounterPingKillAt and the rollout sweep: a stolen creature g
         CHECK(InGraveyard(s, 1, "Llanowar Elves"));
         CHECK_FALSE(InGraveyard(s, 0, "Llanowar Elves"));
     }
+    {
+        GameState s = Fresh();
+        const std::size_t i = PutStolen(s, "Llanowar Elves", 40);
+        s.battlefield[i].damage = 1;
+        CHECK(SbaKillDeadCreatures(s, "test") == 1);
+        CHECK(InGraveyard(s, 1, "Llanowar Elves"));
+        CHECK_FALSE(InGraveyard(s, 0, "Llanowar Elves"));
+    }
 }
 
 TEST_CASE("CR 400.3 persist on a stolen creature: it returns under its OWNER's control (SBA death)")

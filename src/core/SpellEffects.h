@@ -36478,6 +36478,52 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
                    MinusCountersOn(q), nullptr, TotalCountersOn(q), q.owner_index);
 }
 
+// The executor SBA's CREATURE-death pass (GameEngine::CheckStateBasedActions), for a rollout site that
+// marks damage on SEVERAL creatures at once (the human any-target burn in ApplyPlanDirect) and must
+// kill exactly what that pass kills, the way the executor kills it: the CounterPingSbaDead predicate
+// (toughness <= 0 kills through indestructible, lethal damage does not -- CR 704.5f / 704.5g), every
+// creature dead in one pass erased first (simultaneous deaths), the card into its owner's graveyard
+// (as CounterPingKillAt), Equipment detached (CR 301.5c), then OnCreatureDies per death in battlefield
+// order, repeated until nothing dies (a death trigger can kill). Returns the number that died.
+inline int SbaKillDeadCreatures(GameState& state, const char* why)
+{
+    struct Dead { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
+    int total = 0;
+    for (;;)
+    {
+        std::vector<Dead> died;
+        for (std::size_t i = 0; i < state.battlefield.size(); )
+        {
+            const Permanent& q = state.battlefield[i];
+            if (!CounterPingSbaDead(q, state)) { ++i; continue; }
+            died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), TotalCountersOn(q),
+                             q.owner_index });
+            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        if (died.empty()) { break; }
+        for (const Dead& d : died)
+        {
+            for (Permanent& e : state.battlefield)
+            {
+                if (e.equipped_to == d.card.m_number) { e.equipped_to = 0; }
+            }
+        }
+        for (const Dead& d : died)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "death",
+                              "\xE2\x98\xA0 " + d.card.m_name.str() + " dies (" + why + ")");
+            }
+            OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters, nullptr, d.total_counters,
+                           d.owner);
+        }
+        total += static_cast<int>(died.size());
+    }
+    return total;
+}
+
 // Drain the doomed-entrant queue (g_pending_zero_toughness): each recorded entrant still at 0
 // toughness dies now. Called at the points the other enter-cascade queues drain, in BOTH worlds (the
 // rollout runs no SBA pass, the executor's would run later -- this keeps them on the same instant).
