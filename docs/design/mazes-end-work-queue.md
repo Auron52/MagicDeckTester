@@ -137,3 +137,5 @@ USER, follow-up (VERBATIM): "It's even worse if Manabond is in play, though I do
 USER (VERBATIM): "Fair enough, yeah. If the maze's end is getting dropped by some effect then that would be okay."
 USER (VERBATIM): "I think its okay not to always fetch. Fetching costs mana and if we have a lot of land in hand (and no manabond to drop them) it can be worse than playing them out. I don't think it should be ever worse (clairvoyance aside) if we have nothing to do with the mana, though."
 (Sent to P5d: the fetch ranks first when the {3} has no other use this turn; otherwise the ranking compares. The "fetch with idle mana" dominance is measured and offered as a USER-sign-off prune, not shipped.)
+USER (VERBATIM): "Yes, but there is a point at which we don't have enough lands in hand to keep playing them at full rate this or next turn. If that is the case it should win out over other effects."
+(Rule as now stated, sent to P5d: idle mana -> fetch first; lands in hand short of full-rate drops this or next turn -> fetch beats other uses of the mana; otherwise compare. End the turn with Maze's End deployed unless an effect returns it or the activation wins.)
