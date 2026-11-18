@@ -661,7 +661,7 @@ static_assert(sizeof(Player) == 216,
 // +56 bytes (2026-11-17, every deck's opponent plays lands; integrated onto 1648 after Maze's End + Stuffy Doll): 2HG's second head
 // `opponent2_hand` + `opponent2_library` (folded in Build() when opponent2_slot is set: sizes, ordinal,
 // hand). The one-byte opponent slots / ordinals and `opponent_library_read` (a deck constant) fit padding.
-static_assert(sizeof(GameState) == 0,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; 2HG second head
+static_assert(sizeof(GameState) == 1712,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; +56 2HG second head (+8 padding: Maze's End took its holes)
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
