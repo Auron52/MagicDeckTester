@@ -161,6 +161,11 @@ TEST_CASE("Maze's End I3: the search finds TWO land drops in one main phase (Exp
     CHECK(PlayOut(c) > 5);
 }
 
+// P5c (2026-11-18): the win is {Maze's End; at the site-9 occurrence play a Gate; at the site-10 occurrence the front
+// {Gate, activate Maze's End}}. With the new-name fetch valued in every state (MTG_MAZE_FETCH_DEFER deleted) the Gate
+// play sits at rank 3 of the first list and the front of the second is reached only BY PLAN -- the untargeted canon
+// withholds its activation -- so it is two deviations: the engine's canon-drop compound (BpWaveWalker::DevSeqCanonDrop)
+// is what finds it.
 TEST_CASE("Maze's End I3: the search finds THREE land drops in one main phase (two Explorations)")
 {
     LoadI3Cards();
