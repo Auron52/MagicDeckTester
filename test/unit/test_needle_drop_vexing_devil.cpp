@@ -9,6 +9,7 @@
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -336,4 +337,144 @@ TEST_CASE("Vexing Devil's taken damage makes Needle Drop castable in the same ma
     CHECK(roll.players[1].life == 15);
     CHECK(InGraveyard(roll, "Needle Drop"));
     CHECK(InGraveyard(roll, "Vexing Devil"));
+}
+
+// ---- the USER's amended order + main-2 rule (2026-11-18, MTG_ONEDROPBURN_ORDER) -----------------------------
+namespace
+{
+struct OrderPin
+{
+    explicit OrderPin(bool on) { heurarm::t_arm[heurarm::ONEDROPBURN_ORDER] = on ? 1 : 0; }
+    ~OrderPin() { heurarm::t_arm[heurarm::ONEDROPBURN_ORDER] = -1; }
+};
+const OneDropBurnProvider& OdbProv() { static const OneDropBurnProvider p; return p; }
+Action NCastAt(const char* name, int hand_index) { Action a = NCast(name); a.hand_index = hand_index; return a; }
+// Post-combat board: our hand as given, the deck's provider attached and its noncombat tracking armed.
+GameState NPostCombat(const std::vector<const char*>& hand)
+{
+    GameState s = NBoard(3, hand);
+    s.m_provider = &OdbProv();
+    s.deck_m2_tracks_noncombat = true;
+    s.phase = Phase::PostCombatMain;
+    return s;
+}
+}   // namespace
+
+TEST_CASE("1 Drop Burn order: Needle Drop and Skewer the Critics rank LAST but Fireblast, in either main")
+{
+    OrderPin on(true);
+    GameState s = NBoard(2, {});
+    s.m_provider = &OdbProv();
+    for (const Phase ph : { Phase::PreCombatMain, Phase::PostCombatMain })
+    {
+        s.phase = ph;
+        s.player_dealt_damage_this_turn[1] = GameState::kDealtDamage;   // the old main-2 tier keyed on this
+        CHECK(OdbProv().CastOrderRank(s, NDef("Needle Drop")) == 29);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Skewer the Critics")) == 30);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Lightning Bolt")) < 29);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Rift Bolt")) < 29);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Fireblast")) == 40);
+    }
+    // ONE CARD PER RANK (USER 2026-11-18): the twelve spells hold twelve distinct, increasing positions.
+    const char* order[] = { "Goblin Guide", "Monastery Swiftspear", "Vexing Devil", "Grim Lavamancer", "Boltwave",
+                            "Chain Lightning", "Lava Spike", "Lightning Bolt", "Rift Bolt", "Needle Drop",
+                            "Skewer the Critics", "Fireblast" };
+    for (std::size_t i = 1; i < sizeof(order) / sizeof(order[0]); ++i)
+    { CHECK(OdbProv().CastOrderRank(s, NDef(order[i - 1])) < OdbProv().CastOrderRank(s, NDef(order[i]))); }
+}
+
+TEST_CASE("1 Drop Burn: combat damage marks only DEALT; noncombat damage also marks NONCOMBAT, only when armed")
+{
+    GameState s = NBoard(1, {"Lightning Bolt"});
+    NPut(s, "Monastery Swiftspear", 20);
+    const int idx = static_cast<int>(s.battlefield.size()) - 1;
+    s.deck_m2_tracks_noncombat = true;
+    s.phase = Phase::Combat;
+    ResolveCombatDamage(s, {idx}, 0, false);
+    CHECK(s.player_dealt_damage_this_turn[1]);
+    CHECK_FALSE(s.PlayerDealtNoncombatDamage(1));
+
+    // A Bolt, in both worlds, marks noncombat damage.
+    GameState roll = NBoard(1, {"Lightning Bolt"});
+    roll.deck_m2_tracks_noncombat = true;
+    TurnSolver::ApplyPlan(roll, NPlan({ NCast("Lightning Bolt") }), /*is_pre_combat=*/true);
+    CHECK(roll.players[1].life == 17);
+    CHECK(roll.PlayerDealtNoncombatDamage(1));
+    GameState exec = NBoard(1, {"Lightning Bolt"});
+    exec.deck_m2_tracks_noncombat = true;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    NExecCast(eng, exec, "Lightning Bolt");
+    CHECK(exec.players[1].life == 17);
+    CHECK(exec.PlayerDealtNoncombatDamage(1));
+
+    // Not armed (every other deck, and this one with the order off): the bit is never written.
+    GameState off = NBoard(1, {"Lightning Bolt"});
+    TurnSolver::ApplyPlan(off, NPlan({ NCast("Lightning Bolt") }), /*is_pre_combat=*/true);
+    CHECK(off.player_dealt_damage_this_turn[1] == GameState::kDealtDamage);
+}
+
+TEST_CASE("1 Drop Burn main-2 rule: Needle Drop / Skewer only when combat is the only damage; then only what Needle Drop drew")
+{
+    {
+        OrderPin off(false);
+        CHECK_FALSE(OdbProv().RestrictsMain2Casts());
+        CHECK_FALSE(OdbProv().Main2RuleReadsNoncombatDamage());
+    }
+    OrderPin on(true);
+    CHECK(OdbProv().RestrictsMain2Casts());
+    CHECK(OdbProv().Main2RuleReadsNoncombatDamage());
+
+    GameState s = NPostCombat({"Needle Drop", "Skewer the Critics", "Lightning Bolt", "Goblin Guide"});
+    auto allowed = [&](const GameState& st, const char* name, int hi) { return OdbProv().Main2CastAllowed(st, NCastAt(name, hi)); };
+    // No damage at all: nothing is admitted (Needle Drop has no target; a hardcast Skewer belongs before combat).
+    CHECK_FALSE(allowed(s, "Needle Drop", 0));
+    CHECK_FALSE(allowed(s, "Skewer the Critics", 1));
+    CHECK_FALSE(allowed(s, "Lightning Bolt", 2));
+    CHECK_FALSE(allowed(s, "Goblin Guide", 3));
+
+    // Combat damage only: the two are admitted, nothing else.
+    s.MarkPlayerDealtDamage(1, 2, /*combat=*/true);
+    CHECK(allowed(s, "Needle Drop", 0));
+    CHECK(allowed(s, "Skewer the Critics", 1));
+    CHECK_FALSE(allowed(s, "Lightning Bolt", 2));
+    CHECK_FALSE(allowed(s, "Goblin Guide", 3));
+
+    // A NONCOMBAT source earlier this turn (a main-1 burn, Vexing Devil, an upkeep Rift Bolt): they were
+    // castable before the attack, so main 2 does not offer them.
+    GameState pre = s;
+    pre.MarkPlayerDealtDamage(1, 3);
+    CHECK_FALSE(allowed(pre, "Needle Drop", 0));
+    CHECK_FALSE(allowed(pre, "Skewer the Critics", 1));
+
+    // The main-2 Needle Drop stamps the hand; its own 1 damage is noncombat, yet Skewer stays admitted.
+    NoteMain2StagerCast(s, NDef("Needle Drop"));
+    CHECK(s.m2_stage_turn == s.turn_number);
+    s.players[0].hand.erase(s.players[0].hand.begin());   // Needle Drop left the hand
+    s.MarkPlayerDealtDamage(1, 1);                          // its 1 damage
+    CHECK(allowed(s, "Skewer the Critics", 0));
+    CHECK_FALSE(allowed(s, "Lightning Bolt", 1));           // held since before main 2
+    CHECK_FALSE(allowed(s, "Goblin Guide", 2));
+    // What it drew is admitted -- a second Bolt too, whichever copy's index the collect names.
+    s.players[0].hand.push_back(NCard("Lightning Bolt", 30));
+    CHECK(allowed(s, "Lightning Bolt", 1));
+    CHECK(allowed(s, "Lightning Bolt", 3));
+    s.players[0].hand.push_back(NCard("Chain Lightning", 31));
+    CHECK(allowed(s, "Chain Lightning", 4));
+    CHECK_FALSE(allowed(s, "Goblin Guide", 2));
+
+    // A main-2 Skewer first also stamps, and a later Needle Drop's draw is still "new".
+    GameState k = NPostCombat({"Skewer the Critics", "Needle Drop", "Lava Spike"});
+    k.MarkPlayerDealtDamage(1, 2, /*combat=*/true);
+    NoteMain2StagerCast(k, NDef("Skewer the Critics"));
+    CHECK(k.m2_stage_turn == k.turn_number);
+    CHECK(allowed(k, "Needle Drop", 1));
+    CHECK_FALSE(allowed(k, "Lava Spike", 2));
+    k.players[0].hand.push_back(NCard("Boltwave", 32));
+    CHECK(allowed(k, "Boltwave", 3));
+
+    // Rule off: a Needle Drop cast never stamps.
+    OrderPin off(false);
+    GameState t = NPostCombat({"Needle Drop"});
+    NoteMain2StagerCast(t, NDef("Needle Drop"));
+    CHECK(t.m2_stage_turn == -1);
 }

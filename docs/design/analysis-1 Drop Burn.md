@@ -82,6 +82,28 @@ we need to allow casting any cards drawn in main 2 if that happens."* / *"Skewer
 behaviour except it doesn't draw."* / *"if we cast it in main 1 that opens a breakpoint in which the new spells
 can be cast."*
 
+**Amended 2026-11-18 (USER), SUPERSEDES the 5/6 main-2 tier below:** *"The cast order is kind of weird, in
+particular needle drop and skewer the critics should always default to later than other spells if possible. In
+particular, they need to be cast before the attack phase if this is possible for prowess. We want to only cast
+them second main if there is no other damage source than combat. Beyond the two spells, only the card drawn by
+Needle Drop should be considered to cast Main 2 and only when they couldn't be cast earlier."*
+
+Implemented under the same `MTG_ONEDROPBURN_ORDER` (still OFF pending approval):
+* Ranks: Needle Drop 29, Skewer 30 in BOTH mains (the 5/6 main-2 tier is gone); Fireblast 40 stays last.
+* MAIN-2 RULE (`OneDropBurnProvider::RestrictsMain2Casts` / `Main2CastAllowed`, burn's MTG_BURN_M2_RULE shape):
+  main 2 admits Needle Drop / Skewer only while combat is the opponent's ONLY damage source this turn (a new
+  per-turn NONCOMBAT bit, `GameState::kDealtNoncombatDamage`, written only for this rule's deck); once one of
+  them is cast in main 2 the other stays admitted (Needle Drop's own 1 is noncombat). Every other hand cast is
+  main-1 only, EXCEPT the card(s) drawn after the first main-2 Needle Drop / Skewer (hand snapshot at that cast,
+  `Main2StagerSnapshotsHand`). Main 1 stays fully searched; human play is not narrowed.
+* Agent readings inside the ruling (surfaced to the USER): (a) a Lavamancer ping or Canyon draw are
+  ACTIVATIONS, not casts -- unrestricted in main 2, but a Lavamancer ping before a main-2 Needle Drop counts as
+  a noncombat source and bars it; (b) the land drop is not restricted; (c) with no damage at all, main 2 does
+  not offer a hardcast Skewer (it belongs before combat for prowess); (d) a card drawn by Sunbaked Canyon in
+  main 2 is castable only after a main-2 Needle Drop / Skewer was cast (the snapshot), not on its own.
+
+Previous draft (2026-11-17), kept for the A/B record:
+
 | rank | card | why |
 |---|---|---|
 | land | land drop | searched at depth > 0 (unchanged) |
@@ -263,3 +285,54 @@ Resolved / non-play findings:
   RUNNING: `bash test/regression.sh --overnight --deck=onedropburn,onedropburn2hg` -> logs/1dropburn/overnight.log
   (`rc=` line on completion). Then accept with the same filter + check_gt_logs, then verify_deck, tie-break,
   viewer audit, discard A/B, report, push (none yet this session), CronDelete 01e1d807.
+* **~07:00 UTC: overnight tier ACCEPTED** (df9705a3b, 16 new keys, check_gt_logs consistent). **USER amended the
+  cast order** (Needle Drop / Skewer last in either main; main 2 only when combat is the only damage; only
+  Needle Drop's draw castable in main 2) -- implemented behind MTG_ONEDROPBURN_ORDER (UNCOMMITTED: GameState
+  noncombat bit, DecisionProvider main-2 virtuals, NoteMain2StagerCast hand snapshot, OneDropBurnProvider rule,
+  unit tests). RUNNING: ./build.sh -> logs/1dropburn/m2rule_build.log (`rc=`). Next: mtg-test, smoke+regression
+  byte-identity (order OFF -> every key incl. onedropburn must PASS), then the paired A/B
+  (`ARMSET=onedropburn CASES=overnight DECKS=onedropburn,onedropburn2hg bash test/mana_tap_order_ab.sh`),
+  then verify_deck / tie-break / viewer audit / discard A/B / report / push.
+* **~09:10 UTC CHECKPOINT (pre-compaction).** UNCOMMITTED src (built, mtg-test 3396/3396 PASS): the USER's
+  amended order + main-2 rule (GameState `player_dealt_damage_this_turn` widened to uint8 bits, kDealtNoncombatDamage
+  + `deck_m2_tracks_noncombat`; Combat.cpp / DamageEvents pass combat; both key folds; GoldFishRunner stamp in
+  StampDeckTraits AND after m_provider attach; DecisionProvider `Main2StagerSnapshotsHand` /
+  `Main2RuleReadsNoncombatDamage`; NoteMain2StagerCast hand snapshot; OneDropBurnProvider RestrictsMain2Casts /
+  Main2CastAllowed; ONE CARD PER RANK by name: 10 Goblin Guide, 11 Swiftspear, 12 Vexing Devil, 13 Lavamancer,
+  20 Boltwave, 21 Chain Lightning, 22 Lava Spike, 23 Lightning Bolt, 26 Rift Bolt, 29 Needle Drop, 30 Skewer,
+  40 Fireblast; unit tests in test_needle_drop_vexing_devil.cpp).
+  RUNNING: `bash test/regression.sh --smoke --regression` (all decks, order OFF byte-identity) ->
+  logs/1dropburn/m2rule_tiers.log (`rc=` line). EXPECT: only the 39 known smoke drift keys (same got digests as
+  logs/1dropburn/smoke3.log) + midrangeburn2hg_regression drift (5.9467/bf75dda8b8606139); everything else PASS.
+  If so COMMIT the src + tests (do NOT accept anything; the drift is reconciled upstream in f71a7e0ce).
+  **USER rulings 2026-11-18 (verbatim):**
+  - *"For the cast order separation I think I meant that we need one item per row. We want every item to have a
+    distinct position rather than relying on hand position."* -> done (ranks above).
+  - *"That order looks fine to me, but the activation for Grim Lavamancer should be in there and before Neetle
+    Drop and Skewer the Critics. It should go in main 1 only. Sunbaked Canyon sac to draw should also be in there
+    and be main 1."* -> ORDER APPROVED: switch MTG_ONEDROPBURN_ORDER default ON after the amendments + A/B
+    (root-cause if any searched game is slower).
+  - Item 4 (upstream drift): *"Is this not fixed now? I had an agent correct this I believe."* -> yes, origin
+    f71a7e0ce reconciled GT (midrangeburn2hg = 5.9467/bf75...); arrives at the rebase.
+  - *"5. This is fine for now. 6. Yeah, the default mulligan is not great on this deck. It can easily work with 1
+    land, especially if there are ways to draw like Rift Bolt -> Needle Drop or just heavy creature hitting power.
+    The proper profile will fix this. 7. Let's addres this when we can."* -> planeswalker deferral OK; mulligan
+    profile stage will fix 1-land keeps; Midrange Burn Fireblast-first fix is a TODO for this session after 1DB.
+  **NEXT (activations, designed, not yet coded):**
+  1. Lavamancer before Needle/Skewer: extend `TurnSolver::SpectacleGraveyardDamageFirst` (TurnSolver.cpp ~64793,
+     both worlds already call it: ApplyPlanDirect ~77444, AIEngine ~8537) with a provider hook (default false;
+     1DB = order ON): when the plan holds a Needle Drop / Skewer cast and a face Lavamancer action
+     (GraveyardExileAbility gy_exile_mode==3, enchant_target==0), hoist it before the casts. Goldfish-equivalent
+     to "after the burn, before Needle/Skewer" (a ping fuelled only by this plan's burn falls back to the trailing
+     pass, and then that burn already enabled them). Order report: Lavamancer activation = rank 27.
+  2. Main 1 only for Lavamancer: OneDropBurnProvider RestrictsCollectedActions (order ON) + CollectedActionAllowed
+     -> false for a tap_graveyard_exile_damage GraveyardExileAbility when !is_pre_combat.
+  3. Canyon sac-draw (DigDraw via the dig loop, runs at the END of a main's apply = after Fireblast, "last"):
+     main 1 only -> override OneDropBurnProvider::ShouldConsiderDig: order ON && s.phase == PostCombatMain ->
+     false, else DeckProvider/Generic. Surface: Canyon draw sits after Fireblast.
+  4. Unit tests, build, scoped smoke+regression (--deck=onedropburn,onedropburn2hg; order OFF must PASS), then
+     the paired A/B `ARMSET=onedropburn CASES=overnight DECKS=onedropburn,onedropburn2hg bash
+     test/mana_tap_order_ab.sh` (ON vs OFF), then flip default ON, accept onedropburn GT (smoke+regression only).
+  5. Then verify_deck, tie-break, viewer audit, discard A/B, Midrange Burn Fireblast-first fix, report, rebase onto
+     origin (rebuild + smoke + check_gt_logs), push (none yet this session), gh run watch --interval 60,
+     CronDelete 01e1d807.

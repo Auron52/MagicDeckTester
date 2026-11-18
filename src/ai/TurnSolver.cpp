@@ -106544,6 +106544,9 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     {
         if (state.player_dealt_damage_this_turn[0]) { Fold(k, 0xDA3D0u); }
         if (state.player_dealt_damage_this_turn[1]) { Fold(k, 0xDA3D1u); }
+        // The NONCOMBAT bit (a provider main-2 rule reads it; set only while deck_m2_tracks_noncombat).
+        if (state.player_dealt_damage_this_turn[0] & GameState::kDealtNoncombatDamage) { Fold(k, 0xDA3D2u); }
+        if (state.player_dealt_damage_this_turn[1] & GameState::kDealtNoncombatDamage) { Fold(k, 0xDA3D3u); }
     }
     if (state.deck_has_turn_gods)
     {

@@ -1198,7 +1198,7 @@ struct NoncombatStateSnapshot
     // Needle Drop's damaged-this-turn bits: a mana-payment probe can deal damage (a tap-for-mana ping),
     // so every probe that rolls back the lost-life flag rolls these back with it. Unconditional (two
     // bools); unread and unfolded for every deck without a reader.
-    std::array<bool, 2> dealt_damage{};
+    decltype(GameState::player_dealt_damage_this_turn) dealt_damage{};
     explicit NoncombatStateSnapshot(const GameState& s) : enabled(s.deck_tracks_noncombat_damage),
         cant_gain_life(s.players_cant_gain_life_this_turn),
         cant_prevent_damage(s.damage_cant_be_prevented_this_turn),

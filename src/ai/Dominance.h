@@ -1079,6 +1079,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     {
         if (s.player_dealt_damage_this_turn[0]) { fold(0xDA3D00000ull); }
         if (s.player_dealt_damage_this_turn[1]) { fold(0xDA3D10000ull); }
+        // ...and the NONCOMBAT bit (GameState::kDealtNoncombatDamage): a provider's main-2 rule reads it (1 Drop
+        // Burn), so it is future-determining within the turn. Only ever set while deck_m2_tracks_noncombat, so
+        // every other deck and arm keeps its exact key.
+        if (s.player_dealt_damage_this_turn[0] & GameState::kDealtNoncombatDamage) { fold(0xDA3D20000ull); }
+        if (s.player_dealt_damage_this_turn[1] & GameState::kDealtNoncombatDamage) { fold(0xDA3D30000ull); }
     }
     // Kami of False Hope's prevention: FUTURE-DETERMINING within the turn (a prevented combat deals
     // nothing), so a "sacked Kami" board must not merge with an otherwise identical one (a Lurrus

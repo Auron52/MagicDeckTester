@@ -430,16 +430,41 @@ struct GameState
     // creature_died_this_turn pattern). FUTURE-DETERMINING within the turn for a deck holding a reader
     // (it decides Needle Drop's legal targets), so it is folded into dominance::Build and BuildSimKey
     // when TRUE and deck_reads_damage_dealt is set; every other deck keeps its exact key.
-    std::array<bool, 2>      player_dealt_damage_this_turn{};
+    //
+    // TWO BITS per player (uint8, not bool, so every snapshot / restore that copies the array carries both):
+    //   bit 0 (kDealtDamage)          -- dealt damage this turn, combat or noncombat (Needle Drop's target test;
+    //                                    every reader tests the value as a bool, which is this bit or more);
+    //   bit 1 (kDealtNoncombatDamage) -- dealt NONCOMBAT damage this turn. Written ONLY while
+    //                                    deck_m2_tracks_noncombat is set (a provider's main-2 rule reads it:
+    //                                    1 Drop Burn's "Needle Drop / Skewer go to main 2 only when combat is the
+    //                                    only damage source", USER 2026-11-18), so every other deck never sets
+    //                                    it and keeps its exact keys. The two combat-damage sites (Combat.cpp)
+    //                                    and DamageEvents' combat path pass combat=true; every other site is a
+    //                                    noncombat source (spells, ETBs, activations, triggers).
+    static constexpr std::uint8_t kDealtDamage          = 1;
+    static constexpr std::uint8_t kDealtNoncombatDamage = 2;
+    std::array<std::uint8_t, 2> player_dealt_damage_this_turn{};
     // Deck constant (StampDeckTraits): the list holds a card with
     // CardParams::target_dealt_damage_this_turn. Gates the folds above. DEFAULT TRUE (an unstamped
     // GameState -- the scenario harness -- keeps the fold, the only-err-true rule). Never folded.
     bool                     deck_reads_damage_dealt = true;
-    void MarkPlayerDealtDamage(int player, int amount)
+    // Deck constant (StampDeckTraits, once the provider is attached): the deck's provider has a main-2 rule
+    // that reads kDealtNoncombatDamage (DecisionProvider::Main2RuleReadsNoncombatDamage). DEFAULT FALSE: an
+    // unstamped state never writes the bit, so such a rule reads "combat only" and ADMITS (the widening
+    // direction). Never folded (a deck constant).
+    bool                     deck_m2_tracks_noncombat = false;
+    void MarkPlayerDealtDamage(int player, int amount, bool combat = false)
     {
         // A ChosenTarget's 2HG second head arrives as index 2: the same opposing team (index 1).
-        if (amount > 0 && player >= 0) { player_dealt_damage_this_turn[player == 0 ? 0 : 1] = true; }
+        if (amount > 0 && player >= 0)
+        {
+            std::uint8_t& b = player_dealt_damage_this_turn[player == 0 ? 0 : 1];
+            b |= kDealtDamage;
+            if (!combat && deck_m2_tracks_noncombat) { b |= kDealtNoncombatDamage; }
+        }
     }
+    bool PlayerDealtNoncombatDamage(int player) const
+    { return (player_dealt_damage_this_turn[player == 0 ? 0 : 1] & kDealtNoncombatDamage) != 0; }
     // Archive Trap: an opponent actually searched their own library this turn.
     // Searching the opponent's library ourselves (Surgical Extraction) does not qualify.
     bool                     opponent_searched_library_this_turn = false;
