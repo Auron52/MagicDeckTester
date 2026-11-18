@@ -132,3 +132,5 @@ Sent to P5-2:
 "Here is my issue with the gate-from-hand idea. Say you have 2 in hand, maze's end and exploration in play and 3 colourless. It seems like you are suggesting that the right play is to use the 2 from hand rather than take advantage of the 3 we have to preserve one for next turn. To me, that seems incorrect."
 
 Agreed: drops recur but hand Gates are finite, and Maze's End enters tapped, so a fetch without a same-turn replay loses an activation cycle. P5d (wip/maze-p5d, off 4ea2268d8) replaces the spare-drop rule with fetch + same-turn replay, root-causes the deletion's d5 b20 +11, A/Bs, accepts.
+USER, follow-up (VERBATIM): "It's even worse if Manabond is in play, though I don't know how your rule handles that case. As a side note, you usually do not want to pass the turn without Maze's End on the field because you might need it next turn and you definitely need it to win the game."
+(The spare-drop rule ignores Manabond entirely. Sent to P5d: with Manabond, hand Gates should not take drops; prefer ending the turn with Maze's End on the battlefield unless it returns before our next turn or the activation wins.)
