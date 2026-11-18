@@ -28720,6 +28720,52 @@ static std::size_t ScrySearchWidth()
     return w;
 }
 
+// How many dispositions a look of `look` cards has, SIZED OFF THE COUNT ALONE: every ordered subset kept
+// on top (sum_j look!/(look-j)!; the rest go to the bottom / graveyard). 2 for a one-card look.
+static std::size_t ScryLookDispositionCount(int look)
+{
+    std::size_t disp = 0;
+    for (int j = 0; j <= look; ++j)
+    {
+        std::size_t perm = 1;
+        for (int f = look - j + 1; f <= look; ++f) { perm *= static_cast<std::size_t>(f); }
+        disp += perm;
+    }
+    return disp;
+}
+
+// THE NON-CLAIRVOYANT ENUMERATION SCOPE (Stuffy E-fixes, 2026-11-18). MTG_NC_SEARCH's ReshuffleAvgChoosePlan
+// builds its candidate set on the REAL state and only then values each plan over sampled futures, so any
+// enumeration-time read of an undrawn library card there leaks the real deal into a search that must not
+// see it (USER 2026-11-18: "With the clairvoyance case, it would be a different story if it slipped through
+// to non-clairvoyant search. In that case it is a real bug to fix."). While this scope is held, a sizing
+// that would read the library top reads only what the player can see. The clairvoyant engine never holds
+// it (its enumeration reading the top is clairvoyance by design), and the blind search
+// (MTG_SEARCH_BLIND_UNKNOWN) enumerates on an already-blinded copy, so neither moves.
+static thread_local int t_enum_unseen_blind = 0;
+struct EnumUnseenBlindScope
+{
+    EnumUnseenBlindScope()  { ++t_enum_unseen_blind; }
+    ~EnumUnseenBlindScope() { --t_enum_unseen_blind; }
+    EnumUnseenBlindScope(const EnumUnseenBlindScope&) = delete;
+    EnumUnseenBlindScope& operator=(const EnumUnseenBlindScope&) = delete;
+};
+// Does the active player KNOW the top `look` cards? A position he placed himself (Library::KnownAt: a
+// put-back, a scry keep, Long-Term Plans), or a top shown by a continuous reveal (Courser,
+// NoteVisibleLibraryTop's test). Anything else is undrawn and unseen.
+static bool LibraryTopSeen(const GameState& state, int look)
+{
+    const Library& lib = state.ActivePlayer().library;
+    const bool top_shown = LibraryTopVisible(state) || MayCastTopMerfolk(state);
+    for (int i = 0; i < look; ++i)
+    {
+        if (lib.KnownAt(static_cast<std::size_t>(i))) { continue; }
+        if (i == 0 && top_shown) { continue; }
+        return false;
+    }
+    return true;
+}
+
 // ---- Cost-neutral action sub-decisions as a post-dedup AXIS -----------------------------------
 // A sub-decision that does not change what the plan can AFFORD (a tutor target, Ponder's
 // keep-vs-shuffle) produces variants with an identical cast-NAME set -- and EnumeratePlans'
@@ -43689,13 +43735,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && (g_search_candidate_enum || g_condemn_root_turn < 0))
                 {
                     const int look = std::min(def.params.cast_scry, static_cast<int>(ap.library.size()));
-                    std::size_t disp = 0;   // ordered subsets kept on top: sum_j look!/(look-j)!
-                    for (int j = 0; j <= look; ++j)
-                    {
-                        std::size_t perm = 1;
-                        for (int f = look - j + 1; f <= look; ++f) { perm *= static_cast<std::size_t>(f); }
-                        disp += perm;
-                    }
+                    const std::size_t disp = ScryLookDispositionCount(look);   // ordered subsets kept on top
                     scry_alts = std::min(126, static_cast<int>(std::min(disp, ScrySearchWidth())) - 1);
                 }
                 for (const auto& t : esc)
@@ -94128,6 +94168,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (n <= 0) { continue; }
             const int look = std::min<int>(n, static_cast<int>(ap.library.size()));
             if (look <= 0) { continue; }
+            // NON-CLAIRVOYANT ENUMERATION (EnumUnseenBlindScope; MTG_NC_SEARCH): the top `look` cards are
+            // unseen when the line is chosen, so the fan is sized off the LOOK COUNT alone (capped by
+            // MTG_SCRY_WIDTH, the Loran's Escape / step-9d shape) and the cards -- with the provider's firm
+            // ScryVerdict prune -- are read only at RESOLUTION, on the card the scry actually sees (a firm
+            // verdict leaves one candidate, so the pin clamps to 0 and the variant duplicates its base).
+            // Known positions (placed, or a revealed top) are read as before. A chain is sized off the
+            // library's COMPOSITION (its stop count), never its order, so it needs no blinding.
+            const bool unseen_look = t_enum_unseen_blind > 0 && !LibraryTopSeen(state, look);
             // The land drop is applied before this plan's casts, so the true top `look` cards are
             // what the ETB will see. A plan that draws first still resolves safely: the scripted
             // index is clamped to the candidate count at resolution.
@@ -94135,10 +94183,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // the `look` cards this scry/surveil actually sees instead of a whole-library read.
             // That is a genuine PREFIX reveal -- exactly what the mask is meant to represent -- so
             // here precision is available and an exemption would be wrong. Byte-identical: the same
-            // cards in the same order.
+            // cards in the same order. Not read at all for an unseen look.
             std::vector<Card> looked;
-            looked.reserve(static_cast<std::size_t>(look));
-            for (int lk = 0; lk < look; ++lk) { looked.push_back(ap.library[static_cast<std::size_t>(lk)]); }
+            if (!unseen_look)
+            {
+                looked.reserve(static_cast<std::size_t>(look));
+                for (int lk = 0; lk < look; ++lk) { looked.push_back(ap.library[static_cast<std::size_t>(lk)]); }
+            }
             // A SCRY-WATCHER CHAIN (Galadriel): the pin indexes ScryChainCandidates -- one skip
             // count per distinct chain policy -- instead of the one look's dispositions. Live when a
             // watcher is on the battlefield, or when the plan casts one BEFORE its land (a non-first
@@ -94158,6 +94209,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             const std::size_t k = chain
                 ? ScryChainCandidates(state).size()
+                : unseen_look ? ScryLookDispositionCount(look)
                 : TopDispositionCandidates(state, looked,
                                            surveil ? LookKind::Surveil : LookKind::Scry).size();
             const std::size_t width = chain ? k : ScrySearchWidth();
@@ -104547,6 +104599,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         if (g_fresh_axis_enum)  { Fold(k, 0x0F5A); }
         if (g_condemn_suppress) { Fold(k, 0xC5B9); }
     }
+    // The non-clairvoyant enumeration sizes its scry fan differently (EnumUnseenBlindScope): never trade lists
+    // with a clairvoyant frame. Root-only today (the memo needs a solver nest), so this is a guard, not a fix.
+    if (t_enum_unseen_blind > 0) { Fold(k, 0xB11DE); }
     FoldPhysicalCards(k, state);   // MTG_PLAN_CACHE_EXACT_KEY
     auto it = cache.find(k);
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's verdict on this lookup (see pledger).
@@ -123418,17 +123473,11 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     return report;
 }
 
-// Reshuffle-averaged non-clairvoyant search as a PLAY policy. See the header. Mirrors the per-
-// candidate evaluation of EnumerateEarliestWins' rollout branch, but (a) averages over K reshuffled
-// futures with COMMON RANDOM NUMBERS across candidates (same reshuffle per sample k -> low-variance
-// comparison), (b) returns the best Plan for the caller to execute against the TRUE library. The
-// continuation is honest (g_honest_teacher) at depth>0 so it never reads real draws; depth 0 is a
-// pure greedy non-clairvoyant rollout. NO memo/budget (each sample reshuffles a distinct future, so
-// the leaf TT's size=>content assumption breaks) -- expensive by design; this measures the ceiling.
-TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
-                                                    int max_turns, bool second_main, bool is_pre_combat)
+// The non-clairvoyant search's CANDIDATE SET, built on the real state under EnumUnseenBlindScope: nothing in it
+// may be sized off an undrawn card (see the scope). Shared by ReshuffleAvgChoosePlan and its test hook.
+static std::vector<TurnSolver::Plan> NcRootPlans(const GameState& state, bool is_pre_combat)
 {
-    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    EnumUnseenBlindScope _blind;
     std::vector<TurnSolver::Plan> plans;
     if (is_pre_combat)
     {
@@ -123454,6 +123503,26 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
         // decided here (MTG_ECHO_AXIS), over every plan of it.
         AppendIdleEchoVariants(state, plans, 0);
     }
+    return plans;
+}
+std::vector<TurnSolver::Plan> TurnSolver::NcRootPlansForTest(const GameState& state, bool is_pre_combat)
+{
+    RevealLogPause _rlp;
+    return NcRootPlans(state, is_pre_combat);
+}
+
+// Reshuffle-averaged non-clairvoyant search as a PLAY policy. See the header. Mirrors the per-
+// candidate evaluation of EnumerateEarliestWins' rollout branch, but (a) averages over K reshuffled
+// futures with COMMON RANDOM NUMBERS across candidates (same reshuffle per sample k -> low-variance
+// comparison), (b) returns the best Plan for the caller to execute against the TRUE library. The
+// continuation is honest (g_honest_teacher) at depth>0 so it never reads real draws; depth 0 is a
+// pure greedy non-clairvoyant rollout. NO memo/budget (each sample reshuffles a distinct future, so
+// the leaf TT's size=>content assumption breaks) -- expensive by design; this measures the ceiling.
+TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int K, int depth,
+                                                    int max_turns, bool second_main, bool is_pre_combat)
+{
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    std::vector<TurnSolver::Plan> plans = NcRootPlans(state, is_pre_combat);
     if (plans.empty())     { return TurnSolver::Plan{}; }
     if (plans.size() == 1) { return plans[0]; }
     if (K < 1) { K = 1; }
