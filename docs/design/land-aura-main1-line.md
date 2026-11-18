@@ -177,5 +177,22 @@ Raw: `build/scratch/sea-landaura/ab/` (manifest, err with `[win]` lines, t1.txt,
 - Accomplished Alchemist's PROPOSED cast order carries an `AURAS_FIRST` amendment (`AA_CAST_ORDER_AURAS_FIRST`).
   For the `{Wild Growth, Living Wish}` shape this fix already realises the Aura first, because the given order does
   not pay. Whether `AURAS_FIRST` is still wanted as its own lever is the USER's call.
+  **Measured 2026-11-18** (Claude, `build/scratch/claude_aa_aurasfirst/`, `compare.py`): one pooled 2x2 batch on
+  Accomplished Alchemist, the PROPOSED order (`MTG_AA_CAST_ORDER=1`, every other AA arm off) with / without
+  `AURAS_FIRST`, crossed with this lever on / off; held-out base 190001 (pairing `seed = base + off`, `game_index = off`),
+  500 games at the play setting (d4 b20) and 1,000 at d0, unwon = 9, binary = ac3eb4c47's tree.
+
+  | paired comparison | d4 b20 (500) faster / slower, net | d0 (1,000) faster / slower, net |
+  |---|---|---|
+  | AURAS_FIRST vs proposed, lever OFF | 7 / 3, -4 | 17 / 6, -28 |
+  | lever ON vs OFF, proposed order | 7 / 2, -5 | 13 / 2, -25 |
+  | AURAS_FIRST vs proposed, lever ON | 0 / 1, +1 | 4 / 4, -3 |
+  | lever ON vs OFF under AURAS_FIRST | 0 games differ | 1 game differs (same turn) |
+
+  So the lever delivers what AURAS_FIRST was for (round 1's mechanism 1, the Wish stranding the land Aura), and
+  AURAS_FIRST on top of it is turn-neutral (+1 / -3; 39 / 123 games still play differently, i.e. when BOTH orders pay
+  the rank still changes the line, but not the win turn). Under the AURAS_FIRST order the lever is inert, as expected.
+  The AA cast-order candidates still open for the USER (gw, gwf, v2) already cast the land Auras first, so
+  AURAS_FIRST is not part of that decision either way.
 - The ManaOracle `--validate-line` false positive on gi75 (above).
 - The 39 pre-existing smoke GT mismatches on the base branch (above).
