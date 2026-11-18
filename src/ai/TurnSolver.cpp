@@ -70376,6 +70376,192 @@ bool TurnSolver::HumanLineJointPrepay(GameState& state, const Plan& plan)
     return LineJointPrepayCore(state, jb, s_trace);
 }
 
+// OWED-ACTIVATIONS JOINT PAY (MTG_OWED_ACTS_JOINT_PAY, DEFAULT ON; =0 -> the casts-only payment). Maze's End F5
+// (2026-11-18): MTG_LINE_PAY_AUDIT found committed plans whose TRAILING ACTIVATION (Maze's End's {3},{T}; Heap
+// Gate's {1},{T}) came up unpaid although one joint payment pays the whole line. The plan's casts are paid first
+// -- the whole-turn prepay, or the per-cast greedy on a single-cast turn -- and neither sees the activations'
+// GENERIC mana (ActLineHoldMask holds their {T} sources and coloured pips only). The worked case (d0 s173041
+// gi40 T5, and the searched rows alike): Guild Summit {2}{U} off Simic Guildgate + Orzhov Guildgate + Baldur's
+// Gate's plain {C} left Cliffgate + Citadel Gate for Maze's End's {3}; feeding Baldur's Gate with the two
+// Guildgates (X = 4 other Gates) pays the Summit AND floats one, so the {3} pays. No hold can find that route
+// (it OVERPAYS a step and floats the surplus), so the fix is the joint solve the human line already uses
+// (LineJointPrepayCore): the casts' bill plus the OWED activations' bill (TrailingOwedBill -- the live
+// activations' own costs, their {T} sources set aside), paid in ONE solve on the board as it stands and
+// pre-loaded into the float, the activations' share in the line hold (g_line_hold_has_acts) so each pay site
+// takes its own share back out.
+// ENGAGED ONLY ON A STRAND: a scratch probe pays the line the usual way (BatchPrepayMainCasts, then each cast)
+// and prices the owed bill on the board it leaves; only when that fails AND the joint solve pays does the joint
+// payment replace it. A line that executed before executes byte-identically. Which sources pay is the
+// mana-payment exemption -- nothing the plan does changes, so this is no pick inside the search window -- and
+// nothing reads a budget, a node count or the depth (the same function of (state, acts) at --budget-ms 0).
+// LOCKSTEP: the executor (AIEngine::TakeTurn) and the rollout (ApplyPlanDirect) call it at the same point, just
+// before BatchPrepayMainCasts, with the same (state, plan.actions). Declines (state untouched) for every shape the
+// summed bill cannot carry exactly, and for a trailing step whose pay site does not take its share back out of
+// the hold (anything but ActivatePermAbility).
+// A HEAP GATE-style "tap an untapped Gate" cost (ActivationOtherTapSubtype) is honoured by setting aside, for each
+// such activation, the eligible permanent its apply would tap (EtbTapSubtypeOrder's first), in the probe and in
+// the joint solve alike.
+static bool OwedActsJointPayOn()
+{
+    static const bool s_on = EnvOn("MTG_OWED_ACTS_JOINT_PAY", true);   // DEFAULT ON; =0 -> the casts-only payment
+    return heurarm::Flag(heurarm::OWED_ACTS_JOINT_PAY, s_on);
+}
+// Set aside, on `c`, one eligible permanent per OWED other-tap activation in `acts` (its {T} source in
+// `owed_taps`, already set aside on `c`). Returns false when one has no eligible permanent left.
+static bool OwedOtherTapsAside(GameState& c, const std::vector<Action>& acts, const std::vector<int>& owed_taps,
+                               std::vector<int>* aside)
+{
+    const int ctl = c.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.def == nullptr) { continue; }
+        const std::string& sub = ActivationOtherTapSubtype(*a.def, a.ability_mode);
+        if (sub.empty()) { continue; }
+        if (std::find(owed_taps.begin(), owed_taps.end(), a.sac_source_id) == owed_taps.end()) { continue; }
+        std::vector<int> elig = ActivationOtherTapEligible(c, ctl, sub, a.sac_source_id);
+        if (elig.empty()) { return false; }
+        ResolveProvider(c).EtbTapSubtypeOrder(c, ctl, elig);
+        Permanent& q = c.battlefield[static_cast<std::size_t>(elig.front())];
+        q.tapped = true;
+        if (aside) { aside->push_back(q.card.m_number); }
+    }
+    return true;
+}
+bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>& acts)
+{
+    if (!OwedActsJointPayOn() || HumanPlayActive()) { return false; }
+    static const bool s_trace = EnvOn("MTG_OWED_ACTS_JOINT_PAY_TRACE");   // diagnostic only
+    auto why = [](const char* w) { if (s_trace) { std::fprintf(stderr, "[owed-joint] decline: %s\n", w); } return false; };
+    // Hot-path exit: no activation with a mana cost in the line.
+    bool any = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && OutletOwnCost(a).ManaValue() > 0) { any = true; break; }
+    }
+    if (!any) { return false; }
+    ManaCost owed{};
+    std::vector<int> owed_taps;
+    if (TrailingOwedBill(state, 0, acts, owed, owed_taps) <= 0 || owed.ManaValue() == 0) { return why("nothing owed"); }
+    LineJointBill jb;
+    auto add = [&jb](const ManaCost& c) -> bool
+    {
+        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0 || c.snow_pips != 0)
+        { return false; }
+        if (jb.bill.hybrid_count + c.hybrid_count > 6) { return false; }
+        for (int i = 0; i < c.hybrid_count; ++i) { jb.bill.hybrid_pair[jb.bill.hybrid_count++] = c.hybrid_pair[i]; }
+        jb.bill.generic += c.generic; jb.bill.white += c.white; jb.bill.blue += c.blue; jb.bill.black += c.black;
+        jb.bill.red += c.red; jb.bill.green += c.green; jb.bill.colorless += c.colorless;
+        return true;
+    };
+    for (const Action& a : acts)
+    {
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:
+                if (a.sacrifice_land || a.alt_cost || a.free_cast) { break; }
+                if (a.convoke_green > 0 || a.convoke_other > 0 || a.ritual_float > 0) { return false; }
+                if (!add(a.cost)) { return false; }
+                break;
+            case Action::Kind::ActivatePermAbility:
+                // A cost the dispatcher re-prices at its step, a land-search activation (paid before the casts),
+                // or a {T}-less sink asked for K activations (paid K times) is not this sum.
+                if (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::PingLoop
+                    || a.ability_mode == Action::AbilityMode::SacNamedTutorPut
+                    || a.ability_mode == Action::AbilityMode::TapTargetPump
+                    || TurnSolver::IsLandSearchActivation(a)
+                    || (!PermAbilityTaps(a.ability_mode) && a.chosen_x > 1)) { return false; }
+                break;
+            case Action::Kind::PlayLand:
+                break;
+            default:
+                if (a.cost.ManaValue() > 0 || a.ritual_float > 0) { return false; }
+                break;
+        }
+    }
+    const ManaCost casts_bill = jb.bill;
+    if (!add(owed)) { return false; }
+    jb.act_hold = owed;
+    jb.tap_src  = owed_taps;
+    const int ctl = state.active_player_index;
+    // The owed activations in the order the trailing pass pays them (OrderTrailingActivations, both worlds).
+    std::vector<Action> owed_acts;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility) { continue; }
+        if (std::find(owed_taps.begin(), owed_taps.end(), a.sac_source_id) == owed_taps.end()
+            && OutletOwnCost(a).ManaValue() == 0) { continue; }
+        if (!PermAbilitySourceLive(state, ctl, a.sac_source_id, a.ability_mode, &a.discard_name.str())) { continue; }
+        owed_acts.push_back(a);
+    }
+    TurnSolver::OrderTrailingActivations(state, owed_acts);
+    // 0. FAST PATH (no copy, no solve): when the owed bill wants no coloured pip and the untapped mana sources --
+    //    lands and rocks, the owed {T} sources excluded -- outnumber what the casts can possibly take (two sources
+    //    per coloured pip: a filter's feed and tap; one per generic) plus one per owed mana plus one per other-tap
+    //    cost, every payment order leaves each owed activation a source per mana: nothing can strand.
+    {
+        const bool owed_coloured = owed.white + owed.blue + owed.black + owed.red + owed.green + owed.hybrid_count > 0;
+        if (!owed_coloured)
+        {
+            int other_taps = 0;
+            for (const Action& a : owed_acts)
+            { if (a.def != nullptr && !ActivationOtherTapSubtype(*a.def, a.ability_mode).empty()) { ++other_taps; } }
+            const int casts_col = casts_bill.white + casts_bill.blue + casts_bill.black + casts_bill.red
+                                + casts_bill.green + casts_bill.hybrid_count;
+            const int need = (casts_bill.ManaValue() - casts_col) + 2 * casts_col + owed.ManaValue() + other_taps;
+            int have = 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != ctl || p.tapped || p.def_absent) { continue; }
+                if (std::find(owed_taps.begin(), owed_taps.end(), p.card.m_number) != owed_taps.end()) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || d->params.produces.empty()) { continue; }
+                if (!p.card.IsLand() && !(d->params.mana_rock && !p.card.IsCreature())) { continue; }
+                if (++have >= need) { return why("fast path: sources to spare"); }
+            }
+        }
+    }
+    RevealLogPause quiet;            // scratch probes: no log line, no chooser, no play event
+    // 1. Does the usual payment strand an owed activation? Pay the casts as the apply does (the whole-turn prepay,
+    //    then each cast from what floats), then each owed activation in trailing order, one at a time -- its {T}
+    //    and its other-tap first, then its own cost -- exactly as the trailing pass pays them.
+    {
+        GameState c = state;
+        TapSpeculationScope speculating;
+        bool stranded = false;
+        TurnSolver::BatchPrepayMainCasts(c, acts, /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true);
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost || a.free_cast) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (!TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature())) { stranded = true; }
+        }
+        for (const Action& a : owed_acts)
+        {
+            if (stranded) { break; }
+            if (!PermAbilitySourceLive(c, ctl, a.sac_source_id, a.ability_mode, &a.discard_name.str()))
+            { stranded = true; break; }
+            if (PermAbilityTaps(a.ability_mode)) { SetPermTapped(c, ctl, a.sac_source_id, true); }
+            if (a.def != nullptr && PayActivationOtherTap(c, ctl, a.sac_source_id, a.ability_mode, *a.def) < 0)
+            { stranded = true; break; }
+            const ManaCost oc = OutletOwnCost(a);
+            if (oc.ManaValue() > 0 && !TapForCostDirect(c, oc, /*for_creature=*/false)) { stranded = true; }
+        }
+        if (!stranded) { return why("usual payment strands nothing"); }   // byte-identical
+    }
+    // 2. ...and does ONE joint solve pay the whole line? (Rejects the lines nothing can save.)
+    {
+        GameState j = state;
+        for (const int id : owed_taps)
+        { for (Permanent& p : j.battlefield) { if (p.card.m_number == id && p.controller_index == ctl) { p.tapped = true; } } }
+        std::vector<int> other;
+        if (!OwedOtherTapsAside(j, acts, owed_taps, &other)) { return why("no Gate for an other-tap"); }
+        TapSpeculationScope speculating;
+        if (!TapForCostDirect(j, jb.bill, /*for_creature=*/false)) { return why("no joint payment"); }
+        for (const int id : other) { jb.tap_src.push_back(id); }   // the joint solve leaves them up too
+    }
+    return LineJointPrepayCore(state, jb, s_trace);
+}
+
 void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
 {
     if (q >= plan.actions.size()) { return; }
@@ -78715,8 +78901,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
         // is false in every rollout (HumanPlaySuppress) and every autonomous game -> byte-identical.
-        TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
-                                         /*mint_prefix=*/false, /*hand_demand=*/HumanPlayActive(), /*allow_partial=*/true);
+        // MTG_OWED_ACTS_JOINT_PAY (Maze's End F5; the executor's twin in AIEngine::TakeTurn): when the usual payment
+        // would strand the trailing activations' mana and one joint solve pays the whole line, pay it jointly.
+        // Never with a doubler armed for combat; never in human play (the function declines there itself).
+        const std::vector<Action>& pre_acts = TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch);
+        if (!(&pre_acts == &plan.actions && TurnSolver::OwedActsJointPrepay(state, plan.actions)))
+        {
+            TurnSolver::BatchPrepayMainCasts(state, pre_acts, /*mint_prefix=*/false, /*hand_demand=*/HumanPlayActive(),
+                                             /*allow_partial=*/true);
+        }
     }
 
 

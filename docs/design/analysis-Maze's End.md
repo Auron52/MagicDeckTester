@@ -4207,3 +4207,67 @@ Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (cod
     unlimited search does not reproduce. The 9 d0-slower games recover too (d0 g64 is FASTER on P6 at d8).
   - **Accepted** smoke + regression GT scoped `--deck=mazesend,mazesend2hg`: 4 smoke + 6 regression keys moved,
     nothing else; `check_gt_logs` 0 stale.
+
+## F5 (2026-11-18): the line-pay audit's short plans, classified and fixed
+
+Branch `wip/maze-f5` (rebased onto e682d7942, which holds P6). Finding (P6b): `MTG_LINE_PAY_AUDIT=1` over 1010 games (d5 b20 x200
+s171001, d3 b10 x150 s172001, d0 x600 s173001, 2HG d5 b20 x60 s174001) reported `short_plans=466 joint_yes=151
+rec_short=3` on the P6 engine, the same with P6's levers off.
+
+**Classification (the P6 engine; the re-run's base arm plays byte-identical digests on all four rows, so every one of
+the 466 is matched by (row, gi, turn, step)).** The audit was extended (measurement only) before classifying:
+- `SELFTAP`: an activation dropped `tapped` whose source the LINE ITSELF tapped other than for mana (Guild Summit's
+  ETB count, Heap Gate's "tap another Gate" cost). The plan's own choice, identical in both worlds.
+- The joint oracle sets aside the Gates Guild Summit's ETB tapped, and one eligible Gate per Heap Gate Treasure
+  activation (every choice tried). Before, both were counted as supply.
+- A RECORDED breakpoint continuation (`replay_recorded`) now marks the plan `CONT` like the resolve route did. It is a
+  mid-line re-plan the rollout made too.
+- `rec_short` is priced: the record lists a continuation's planned steps, including the ones the rollout dropped too.
+  So `rec_short` (DEFECT) now needs the recorded list to be jointly payable on the board at the replay's entry, and
+  `rec_no` counts the rest.
+
+| old class -> new class | count |
+|---|---|
+| DEFECT -> DEFECT (a real payment-order strand) | 38 (d0 36, d5 1, 2HG 1, d3 0) |
+| DEFECT -> unpayable (Heap Gate's other-Gate tap ~40 or Summit ETB taps ~8, both ~8 -- the old oracle counted them as supply) | 54 |
+| DEFECT -> SELFTAP (Summit's ETB count tapped the activation's own source) | 42 |
+| DEFECT -> CONT (a recorded continuation re-planned the turn; the brief's repro s171134 gi133 is one) | 17 |
+| unpayable -> unpayable | 277 |
+| unpayable -> CONT / SELFTAP | 24 / 14 |
+| rec_short 3 -> rec_no 3 (s171048 gi47 etc.: not jointly payable; both worlds drop it) | 3 |
+
+**Is d0 a different mechanism?** Partly. The real strand is the same at every depth. d0 has the volume because the d0
+runner commits its whole greedy plan every turn, activations included. Its other classes are d0-only in size:
+- SELFTAP 52 of 56. The provider's unpinned Guild Summit count (`EtbTapSubtypeDrawDefault`, the "rest-of-line" count)
+  reserves Maze's End's {3} but not a planned Heap Gate Treasure's {1} + {T} + other Gate.
+- unpayable 297 of 331. These are casts or activations the greedy planner afforded but the payer cannot pay. Examples:
+  Planar Nexus counted as a {G} source without its {1} feed (s171017 gi16 T2, also searched), or a fresh Treasure
+  under the fresh-hold.
+
+In the searched rows those plans also score as played (the rollout uses the same payer), so they are wasted branches,
+not scoring corruption.
+
+**Root cause of the 38 (the real class): a payment-order strand, the line jointly payable.** A plan's casts are paid
+before its trailing activations, and nothing in the casts' payment holds the activations' GENERIC mana.
+`ActLineHoldMask` holds their {T} sources and coloured pips only. Neither does one trailing activation's payment hold
+mana for the next one. `TrailingStepOwedHold` (F2) covers Channel steps only.
+- Worked case, d0 s173041 gi40 T5: Guild Summit {2}{U} was paid with Simic + Orzhov + Baldur's Gate's plain {C}, which
+  left Cliffgate + Citadel for Maze's End's {3}. Feeding Baldur's Gate with the two Guildgates (X = 4 other Gates)
+  pays the Summit and floats one, so the {3} pays.
+- Trailing-only case, d0 s173192 gi191 T4: Heap Gate's {1} paid plain stranded Maze's End's {3}.
+
+No hold can find these routes: the route OVERPAYS a step and floats the surplus. Both worlds share the payer, so the
+search scored the stranded line. The line "cast + activate" was unreachable at every budget, which is a completeness
+hole, not a lockstep divergence. That is consistent with the mismatch gate passing.
+
+**Fix: `MTG_OWED_ACTS_JOINT_PAY` (`TurnSolver::OwedActsJointPrepay`, DEFAULT ON, heurarm slot; =0 is the old
+payment).** Both apply worlds call it just before `BatchPrepayMainCasts`. It does three things:
+- A scratch probe pays the line the usual way: the prepay, each cast, then each owed activation in trailing order
+  (`OrderTrailingActivations`).
+- Only when that strands, and ONE joint solve pays the casts' bill plus the owed activations' bill (their {T} sources
+  and Heap Gate's other Gate set aside), the line is paid jointly. This is the human line's `LineJointPrepayCore`: the
+  bill is pre-loaded into the float and the activations' share goes in the line hold.
+- A count fast path skips the probe when the untapped sources cannot be exhausted.
+
+Which sources pay is the mana-payment exemption, so it is no pick in the search window. It reads no budget. It
+declines any shape the summed bill cannot carry.

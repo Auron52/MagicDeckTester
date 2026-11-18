@@ -1761,9 +1761,25 @@ struct LinePayAuditFrame
     // card the plan never named is a mid-line change of plan, not a payment-order defect.
     std::vector<std::string> cont_acts;
     bool cont_spent = false;                // a continuation applied >= 1 action (the line changed mid-apply)
+    // Maze's End F5: permanents THE LINE ITSELF tapped other than for mana -- Guild Summit's searched ETB count
+    // (tap N Gates, draw N) and Heap Gate's "tap an untapped Gate" cost (PayActivationOtherTap). Those taps are
+    // the line's own searched choices, so (a) the oracle sets them aside as it does a {T} source, and (b) an
+    // activation dropped `tapped` whose source was tapped THIS way (class SELFTAP) is the plan's own choice
+    // played out in both worlds, never a payment that stole its {T}.
+    std::vector<int> nonmana_tap_nums;          // Guild Summit's ETB taps only (the oracle sets these aside)
+    std::vector<std::string> nonmana_tap_names; // both kinds (the SELFTAP classification)
 };
 extern thread_local LinePayAuditFrame* g_line_pay_frame;
 void NoteLinePayShort(const char* kind, const char* card);
+// See LinePayAuditFrame::nonmana_tap_nums. Inert (one pointer test) unless a REAL audited apply is live.
+// `cost` = an activation's "tap an untapped Gate" cost (the oracle prices that per activation, so its pick is not
+// set aside again); otherwise an effect's tap (Guild Summit's ETB).
+inline void NoteLinePayNonManaTap(int number, const std::string& name, bool cost = false)
+{
+    if (g_line_pay_frame == nullptr || (!g_line_pay_frame->rollout && !g_real_resolution)) { return; }
+    if (!cost) { g_line_pay_frame->nonmana_tap_nums.push_back(number); }
+    g_line_pay_frame->nonmana_tap_names.push_back(name);
+}
 bool LinePayAuditRolloutOn();
 // [0] = REAL plan applies, [1] = rollout applies. Indices: plans audited, plans paying >= 2 steps, plans with
 // >= 1 payment-short step, short steps, short plans jointly payable (THE DEFECT), not jointly payable
@@ -1783,8 +1799,15 @@ bool LinePayAuditRolloutOn();
 // free in the other). Counted with the hold already DROPPED (the fix); under MTG_CANON_CONT_TRAITS=0 the same count
 // is the live hazard. World = g_real_resolution (REAL) / anything else (ROLLOUT, printed only with
 // MTG_LINE_PAY_AUDIT_ROLLOUT=1). Level 2 prints LINE_PAY_CANON_HOLD per section.
+// LPA_SELFTAP (Maze's End F5): short plans whose every short step is an activation dropped `tapped` whose source the
+// LINE ITSELF tapped other than for mana (Guild Summit's searched ETB count, Heap Gate's other-Gate cost --
+// LinePayAuditFrame::nonmana_tap_names): the plan's own searched choice, played identically in both worlds. Not
+// priced, and not in YES/NO/UNKNOWN.
 enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_REC,
-       LPA_CANON_HOLD, LPA_N };
+       LPA_CANON_HOLD, LPA_SELFTAP, LPA_REC_NO, LPA_N };
+// LPA_REC_NO (Maze's End F5): LPA_REC's rules-correct half -- the recorded steps were NOT jointly payable on the board
+// at the replay's entry (LineJointPayOracle), so the rollout dropped the same step: not a divergence. LPA_REC now
+// counts only the jointly payable ones.
 extern std::atomic<long> g_lpa[2][LPA_N];
 extern std::atomic<long> g_act_pay_calls;
 extern std::atomic<long> g_act_hold_mask;
