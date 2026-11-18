@@ -102225,7 +102225,8 @@ static std::string VampDumpAction(const Action& a)
 //      tutor, draw or activation in P, the land P holds can only be played later by a breakpoint continuation (an
 //      Exploration drop) -- which P' reproduces by playing that land first -- or not at all.
 //  KEEP: a candidate the provider KEEPS (DecisionProvider::CastDominanceKeep) is never dropped -- its unspent mana
-//      has an off-main use (Maze's End P6: the off-main Maze's End activation, MazesEndProvider::CastDominanceKeep).
+//      has an off-main use (Maze's End: P6's off-main Maze's End activation in a Manabond / Burgeoning window, Heap
+//      Gate's last-chance Treasure, Gateway Plaza's off-main {1}; MazesEndProvider::CastDominanceKeep).
 // Sound dominance under the provider's premise, so it ships ON; the error is always toward KEEPING a plan (a
 // mismatch in any field keeps P). Dominance is a strict-superset order, so the maximal plans are always kept and
 // the list never empties. MTG_CAST_DOM_STATS=1 prints the fold's counters at exit (diagnostic only).
