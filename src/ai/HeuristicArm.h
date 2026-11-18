@@ -1066,6 +1066,8 @@ enum Slot : int
     KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights policy for Acclaimed Contender's dig (2026-11-20): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default ON since 2026-11-20 (play-identical over 6000 A/B games, ~1.6-1.8% fewer units; the USER may overrule); =0 is the searched default + RED FLAG
     CYCLONE_LOUNGE_IDLE,      // MTG_CYCLONE_LOUNGE_IDLE  Cyclone (USER 2026-11-17 "The Xander's Lounge change sounds good."): under MTG_CYCLONE_FETCH_RULE, Xander's Lounge is searched beside the Scalding Tarn pick only when one more mana of the pick's colours is NOT needed this turn (FetchManaNeededThisTurn: the FiveColour RULE 6 solo + sequence test, a hand card's mana cycling cost counted as a use, goldfish_inert cards never cast). Default ON (USER-adopted); =0 -> the Lounge beside every pick
     FIVECOLOUR_TRIOME_BESIDE, // MTG_FIVECOLOUR_TRIOME_BESIDE  Five Colour (USER 2026-11-17 "On Five Colour we could give it a try."): when RULE 6 ranks an enters-tapped land (Zagoth Triome, Jetmir's Garden) first, the best untapped pick moves to second place and both are searched (width 2, every route: legacy, battlefield, land drop). Default OFF pending the USER; =1 enables
+    CYCLONE_LOUNGE_IDLE_AMEND,// MTG_CYCLONE_LOUNGE_IDLE_AMEND  amendment to CYCLONE_LOUNGE_IDLE's "needed" test (2026-11-18 A/B root causes, std gi 649 / 663): a mana cycling cost counts as a use only while Unpredictable Cyclone is on our battlefield, and a ritual (Seething Song) only when its float pays for another hand card. Default ON (refines the USER-adopted rule); =0 -> the 2026-11-18 test
+    FIVECOLOUR_RULE6_SEES_STEPS, // MTG_FIVECOLOUR_RULE6_SEES_STEPS  Five Colour RULE 6's "is the untapped land's mana spendable this turn" test also sees, as an added use: Deathrite fuel from the cracked fetch, a colour-exact pool (multicolour lands and domain dorks no longer wild), domain growth from a coloured permanent cast first, a Greaves-hasted mana creature cast this turn, and a bigger spell replacing a cheaper one (best total mana value, not card count). Width 1 (one target). Only ever ADDS untapped preference. Default OFF pending the USER
     COUNT
 };
 
@@ -2076,6 +2078,8 @@ inline const char* Name(int slot)
         "MTG_KN_ETBDIG_RANK",
         "MTG_CYCLONE_LOUNGE_IDLE",
         "MTG_FIVECOLOUR_TRIOME_BESIDE",
+        "MTG_CYCLONE_LOUNGE_IDLE_AMEND",
+        "MTG_FIVECOLOUR_RULE6_SEES_STEPS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

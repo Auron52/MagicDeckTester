@@ -798,3 +798,94 @@ TEST_CASE("Five Colour MTG_FIVECOLOUR_TRIOME_BESIDE: a tapped top pick searches 
     SetLib(only, { "Jetmir's Garden", "Zagoth Triome" });
     CHECK(NarrowedFr(only, foothills).size() == 1);
 }
+
+// ---- MTG_FIVECOLOUR_RULE6_SEES_STEPS (default OFF, pending the USER) -------------------------------------------------
+// RULE 6's "is the untapped land's mana spendable this turn" test, sharpened for the five blind spots the 2026-11-18
+// TRIOME_BESIDE A/B found. Each hand below reads IDLE to the old test (a triome tops the ranking) and NEEDED to the
+// sharpened one (an untapped land tops it). Width stays 1.
+namespace
+{
+struct Rule6StepsArm
+{
+    std::int8_t prev;
+    explicit Rule6StepsArm(bool on) : prev(heurarm::t_arm[heurarm::FIVECOLOUR_RULE6_SEES_STEPS])
+    { heurarm::t_arm[heurarm::FIVECOLOUR_RULE6_SEES_STEPS] = on ? 1 : 0; }
+    ~Rule6StepsArm() { heurarm::t_arm[heurarm::FIVECOLOUR_RULE6_SEES_STEPS] = prev; }
+};
+}  // namespace
+
+TEST_CASE("Five Colour MTG_FIVECOLOUR_RULE6_SEES_STEPS: RULE 6 sees the steps that spend the untapped land's mana")
+{
+    EnsureCardsFr();
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return; }
+    static const FiveColourProvider fc;
+    const CardDefinition& foothills = DefFr("Wooded Foothills");
+    const std::vector<std::string> lib{ "Mountain", "Stomping Ground", "Steam Vents", "Blood Crypt", "Jetmir's Garden",
+                                        "Zagoth Triome", "Forest" };
+    auto top_tapped = [&](const GameState& s, bool on)
+    {
+        Rule6StepsArm a(on);
+        const std::vector<std::string> r = fc.FetchCandidates(s, 0, foothills.params);
+        REQUIRE(!r.empty());
+        return TappedFr(r.front());
+    };
+    auto board = [&](const std::vector<std::string>& perms, const std::vector<std::string>& hand)
+    {
+        GameState s = BaseFr(fc, 3);
+        int n = 300;
+        for (const std::string& nm : perms) { PutFr(s, nm, n++); }
+        Hand(s, hand);
+        SetLib(s, lib);
+        return s;
+    };
+    SUBCASE("(1) Deathrite fuel: the cracked fetch feeds an unfuelled Deathrite")
+    {
+        // Forest + Deathrite (no land in the graveyard) + one more mana = Faeburrow Elder ({1}{G}{W}).
+        const GameState s = board({ "Forest", "Deathrite Shaman" }, { "Wooded Foothills", "Faeburrow Elder" });
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+    }
+    SUBCASE("(2) colour-exact: Steam Vents + Blood Crypt make no green for Bloom Tender")
+    {
+        // The flat pool books both shocks WILD, so Bloom Tender ({1}{G}) looked castable already.
+        const GameState s = board({ "Steam Vents", "Blood Crypt" }, { "Wooded Foothills", "Bloom Tender" });
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+    }
+    SUBCASE("(3) domain growth: Faeburrow first adds white to Bloom Tender, which then pays a second Tender")
+    {
+        // Bloom Tender (domain {G}) + Forest + Godless Shrine. One more mana pays Faeburrow from the lands alone, so
+        // the Tender taps for {G}{W} afterwards and casts the second Tender (5 mana value instead of 3).
+        GameState s = board({ "Bloom Tender", "Forest", "Godless Shrine" },
+                            { "Wooded Foothills", "Faeburrow Elder", "Bloom Tender" });
+        SetLib(s, { "Mountain", "Stomping Ground", "Blood Crypt", "Jetmir's Garden", "Zagoth Triome", "Forest" });
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+    }
+    SUBCASE("(4) Lightning Greaves: a Faeburrow cast this turn taps the same turn")
+    {
+        // Domain WUBRG (Cosmic Spider-Man), Forest + Plains + Mountain. One more mana: Faeburrow, hasted, taps for
+        // five and pays Two-Headed Hellkite. Without Greaves the same hand stays idle.
+        const std::vector<std::string> hand{ "Wooded Foothills", "Faeburrow Elder", "Two-Headed Hellkite" };
+        const GameState s = board({ "Lightning Greaves", "Cosmic Spider-Man", "Forest", "Plains", "Mountain" }, hand);
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+        const GameState no_greaves = board({ "Cosmic Spider-Man", "Forest", "Plains", "Mountain" }, hand);
+        CHECK(top_tapped(no_greaves, true));
+    }
+    SUBCASE("(5) best total mana value: Mana Cannons replaces Lightning Greaves")
+    {
+        // Four lands: Greaves + Bloom Tender (4). One more: Tender + Mana Cannons (5) -- two cards either way, so the
+        // cheapest-first count saw nothing.
+        const GameState s = board({ "Forest", "Forest", "Mountain", "Mountain" },
+                                  { "Wooded Foothills", "Lightning Greaves", "Bloom Tender", "Mana Cannons" });
+        CHECK(top_tapped(s, false));
+        CHECK_FALSE(top_tapped(s, true));
+    }
+    SUBCASE("idle stays idle: nothing in hand a fifth mana can add to")
+    {
+        const GameState s = board({ "Forest", "Forest", "Mountain", "Mountain" }, { "Wooded Foothills", "Progenitus" });
+        CHECK(top_tapped(s, false));
+        CHECK(top_tapped(s, true));
+    }
+}
