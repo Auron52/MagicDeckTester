@@ -4107,6 +4107,25 @@ Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
   - The rollout's matching end-step board has Maze's End #2 untapped and The Black Gate still in hand.
   - Leave-one-out: without fix 1 or without fix 2a, the realised game wins T4.
   - The mismatch gate FAILS on it. Repro and evidence: `logs/maze/F3-results.md` ("The new fd-diverge").
+  - **FIXED by F4 (2e9c0f36c), see below.**
+- **F4 (2026-11-18), integration check + the s7009 gi8 fd-diverge (FIXED 2e9c0f36c).**
+  - Integration (8272d6a59 = F1+F2+F3 + the tie-scoring fixes): units 3447/3447. On smoke, only the expected rows
+    move: vs F3's smoke the jumbo / extraturns / melira rows, and vs the scoring branch's smoke the mazesend /
+    Stompy rows. No interaction between the two change sets.
+  - Root cause: LOCKSTEP #19's reserve half.
+    - The T4 breakpoint continuation was an unbranched canon (`Plan::cont_canon`), `[Amulet of Vigor, activate
+      Maze's End#43]`. A canon applies its casts only.
+    - The rollout's cast-section reserve (`PlanReserveSources` -> `ActivationTapReserve`) still held Maze's End#43
+      for the never-applied activation, and paid the Amulet with Gateway Plaza. The end-step winning activation
+      after Manabond's dump then scored T4.
+    - The executor's record replay (casts only) held nothing, tapped Maze's End#43 for the Amulet, and won T5.
+  - The rollout was optimistic. A canon section's reserve is now built from the actions it applies, in every world
+    (`CastSectionUnlock(..., canon)`, riding `MTG_CANON_CONT_TRAITS`).
+  - With the honest rollout, the search commits the searched continuation `[Cliffgate, Amulet, activate Maze's
+    End]`, which wins T4 in both worlds.
+  - `MTG_LINE_PAY_AUDIT` gains `canon_hold=N (dropped)`. Unit test added.
+  - Smoke: 223/223 byte-identical to the integration smoke, so no A/B is owed. Full write-up:
+    `logs/maze/F4-results.md`.
 
 ## P5 (2026-11-18): the USER-directed provider prunes, measured
 
