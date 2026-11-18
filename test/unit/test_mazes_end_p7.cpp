@@ -4,6 +4,8 @@
 // Burgeoning / Manabond / Amulet of Vigor (fold A), and a land-less plan of only such casts (Amulet aside) for its
 // twin plus a land (fold B). Not live with a Treasure-making Gate untapped or in hand, or a Gateway Plaza in hand;
 // Guild Summit vetoes. MTG_MAZE_CAST_DOMINANCE / MTG_MAZE_LAND_DOMINANCE, both DEFAULT ON.
+// P7c: the off-main Maze's End keep needs a P6 window (MTG_MAZE_CASTDOM_WINDOWS); Heap Gate / Gateway Plaza are per-plan
+// keeps (MTG_MAZE_CASTDOM_PERPLAN), not a blanket switch-off.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -157,6 +159,8 @@ TEST_CASE("Maze's End P7: the fold's premise -- not live with a Treasure Gate, a
 {
     LoadP7Cards();
     const MazesEndProvider prov;
+    // The blanket switch-off of P7 (MTG_MAZE_CASTDOM_PERPLAN=0); P7c (b) replaces it with per-plan keeps (below).
+    const Arm pp_off(heurarm::MAZE_CASTDOM_PERPLAN, 0);
     {
         GameState s = T4(prov);
         Put(s, "Heap Gate", 40);                        // untapped: the last-chance Treasure could use held mana
@@ -188,6 +192,8 @@ TEST_CASE("Maze's End P7 x P6: a plan whose unspent mana pays an off-main Maze's
 {
     LoadP7Cards();
     const MazesEndProvider prov;
+    // The P7b guard as measured (mana alone, MTG_MAZE_CASTDOM_WINDOWS=0); P7c (a) narrows it to P6's windows (below).
+    const Arm w_off(heurarm::MAZE_CASTDOM_WINDOWS, 0);
     using PV = DecisionProvider::PlanView;
     const std::vector<Action> none;
     const std::string manor = "Manor Gate", no_land;
@@ -251,5 +257,125 @@ TEST_CASE("Maze's End P7 x P6: a plan whose unspent mana pays an off-main Maze's
         CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
         s.battlefield.back().tapped = false;
         CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
+    }
+}
+
+TEST_CASE("Maze's End P7c (a): the off-main Maze's End keep needs a P6 window and a fetchable Gate")
+{
+    LoadP7Cards();
+    const MazesEndProvider prov;
+    using PV = DecisionProvider::PlanView;
+    const std::vector<Action> none;
+    const std::string manor = "Manor Gate", no_land;
+    GameState s = T4(prov);
+    Put(s, "Izzet Guildgate", 20);
+    Put(s, "Dimir Guildgate", 21);
+    // U0 - 1 = 4 + 1 - 1 = 4 >= 3, Maze's End in hand -- but no Manabond and no Burgeoning controlled: P6 offers the
+    // activation in no window, so the unspent mana has no off-main use and the plan may go.
+    CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+    CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
+    {
+        const Arm w_off(heurarm::MAZE_CASTDOM_WINDOWS, 0);   // the P7b guard: kept on mana alone
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+    }
+    // A Burgeoning in play opens a window only while the opponent plays lands.
+    {
+        GameState b = s;
+        Put(b, "Burgeoning", 23);
+        CHECK_FALSE(prov.CastDominanceKeep(b, PV{ &none, &manor }));
+        b.opponent_plays_lands = true;
+        CHECK(prov.CastDominanceKeep(b, PV{ &none, &manor }));
+        // ... and needs a Gate Maze's End could fetch.
+        for (Card& c : b.players[0].library) { if (c.m_name.str() == "Izzet Guildgate") { c = C("Sylvan Scrying", c.m_number); } }
+        CHECK_FALSE(prov.CastDominanceKeep(b, PV{ &none, &manor }));
+    }
+    // A Manabond in play (or cast by P) is a window.
+    {
+        GameState m = s;
+        Put(m, "Manabond", 24);
+        CHECK(prov.CastDominanceKeep(m, PV{ &none, &manor }));
+    }
+    {
+        Action mb;
+        mb.kind = Action::Kind::CastFromHand;
+        mb.def = &D("Manabond");
+        mb.card_name = mb.def->card.m_name;
+        const std::vector<Action> cast_mb{ mb };
+        GameState m = s;
+        Put(m, "Golgari Guildgate", 25);   // one more source: U0 - 1 = 5 + 1 - 1 (Manabond) - 1 = 4 >= 3
+        CHECK(prov.CastDominanceKeep(m, PV{ &cast_mb, &manor }));
+    }
+    // A HELD Manabond counts only when P opens a breakpoint (an Exploration cast): its continuation may cast it.
+    {
+        GameState m = s;
+        Put(m, "Golgari Guildgate", 25);
+        m.players[0].hand.push_back(C("Manabond", 26));
+        CHECK_FALSE(prov.CastDominanceKeep(m, PV{ &none, &manor }));
+        Action ex;
+        ex.kind = Action::Kind::CastFromHand;
+        ex.def = &D("Exploration");
+        ex.card_name = ex.def->card.m_name;
+        const std::vector<Action> cast_ex{ ex };
+        CHECK(prov.CastDominanceKeep(m, PV{ &cast_ex, &no_land }));
+    }
+}
+
+TEST_CASE("Maze's End P7c (b): Heap Gate and Gateway Plaza are per-plan keeps, not a blanket switch-off")
+{
+    LoadP7Cards();
+    const MazesEndProvider prov;
+    using PV = DecisionProvider::PlanView;
+    const std::vector<Action> none;
+    const std::string manor = "Manor Gate", no_land;
+    auto no_maze = [](GameState& g)
+    {
+        auto& h = g.players[0].hand;
+        h.erase(std::remove_if(h.begin(), h.end(), [](const Card& c) { return c.m_name.str() == "Maze's End"; }), h.end());
+    };
+    {
+        // An untapped Heap Gate: the fold stays live; a plan is kept only when its leftover pays the Treasure's {1}
+        // besides the Gate's own tap.
+        GameState s = T4(prov);
+        no_maze(s);
+        Put(s, "Heap Gate", 40);
+        CHECK(prov.CastDominanceLive(s));
+        {
+            const Arm pp_off(heurarm::MAZE_CASTDOM_PERPLAN, 0);   // the blanket switch-off it replaces
+            CHECK_FALSE(prov.CastDominanceLive(s));
+        }
+        // U0 = 3 sources + 1 drop = 4: "Manor Gate" alone leaves 4 - 1 >= 1 -> kept.
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+        // A plan spending everything cannot fund it: five Amulet casts ({1} each, no extra drop) -> U0 <= 4 + 1 - 5 = 0.
+        Action am;
+        am.kind = Action::Kind::CastFromHand;
+        am.def = &D("Amulet of Vigor");
+        am.card_name = am.def->card.m_name;
+        const std::vector<Action> four{ am, am, am, am, am };
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &four, &manor }));
+        s.battlefield.back().tapped = true;   // a tapped Heap Gate cannot make a Treasure before our untap
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+    }
+    {
+        // A Heap Gate in hand: live, and kept on the same bound (it may enter untapped).
+        GameState s = T4(prov);
+        no_maze(s);
+        s.players[0].hand.push_back(C("Heap Gate", 41));
+        CHECK(prov.CastDominanceLive(s));
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+    }
+    {
+        // A Gateway Plaza in hand: live; kept only with a put window (Manabond, or Burgeoning while the opponent
+        // plays lands) and {1} left for its ETB.
+        GameState s = T4(prov);
+        no_maze(s);
+        s.players[0].hand.push_back(C("Gateway Plaza", 42));
+        CHECK(prov.CastDominanceLive(s));
+        {
+            const Arm pp_off(heurarm::MAZE_CASTDOM_PERPLAN, 0);
+            CHECK_FALSE(prov.CastDominanceLive(s));
+        }
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));   // Burgeoning held, no window
+        Put(s, "Manabond", 43);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
     }
 }
