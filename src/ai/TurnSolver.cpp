@@ -102224,21 +102224,24 @@ static std::string VampDumpAction(const Action& a)
 //      the list holds the same plan plus a land (same actions, same order, every non-land field equal). With no
 //      tutor, draw or activation in P, the land P holds can only be played later by a breakpoint continuation (an
 //      Exploration drop) -- which P' reproduces by playing that land first -- or not at all.
+//  KEEP: a candidate the provider KEEPS (DecisionProvider::CastDominanceKeep) is never dropped -- its unspent mana
+//      has an off-main use (Maze's End P6: the off-main Maze's End activation, MazesEndProvider::CastDominanceKeep).
 // Sound dominance under the provider's premise, so it ships ON; the error is always toward KEEPING a plan (a
 // mismatch in any field keeps P). Dominance is a strict-superset order, so the maximal plans are always kept and
 // the list never empties. MTG_CAST_DOM_STATS=1 prints the fold's counters at exit (diagnostic only).
 namespace castdom
 {
 inline bool StatsOn() { static const bool on = EnvOn("MTG_CAST_DOM_STATS"); return on; }
-inline std::atomic<long long> g_lists{0}, g_seen{0}, g_drop_a{0}, g_drop_b{0}, g_pin_miss{0};
+inline std::atomic<long long> g_lists{0}, g_seen{0}, g_drop_a{0}, g_drop_b{0}, g_pin_miss{0}, g_keep_mana{0};
 inline std::atomic<int> g_diff_printed{0};
 struct Printer
 {
     ~Printer()
     {
         if (!StatsOn()) { return; }
-        std::fprintf(stderr, "[cast-dom] lists=%lld plans=%lld dropped_cast=%lld dropped_land=%lld pin_mismatch=%lld\n",
-                     g_lists.load(), g_seen.load(), g_drop_a.load(), g_drop_b.load(), g_pin_miss.load());
+        std::fprintf(stderr, "[cast-dom] lists=%lld plans=%lld dropped_cast=%lld dropped_land=%lld pin_mismatch=%lld"
+                     " kept_offmain_mana=%lld\n", g_lists.load(), g_seen.load(), g_drop_a.load(), g_drop_b.load(),
+                     g_pin_miss.load(), g_keep_mana.load());
     }
 };
 inline Printer g_printer;
@@ -102273,6 +102276,14 @@ static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Pl
         }
         a_cand[i] = (!veto[i] && all_a) ? 1 : 0;
         b_cand[i] = (!veto[i] && p.land_to_play.empty() && all_b) ? 1 : 0;
+        // The provider's per-plan keep (DecisionProvider::CastDominanceKeep): the mana this plan leaves unspent has a
+        // use off the main phase that a sibling spending more might not afford (Maze's End P6's off-main activation).
+        if ((a_cand[i] || b_cand[i])
+            && prov.CastDominanceKeep(state, DecisionProvider::PlanView{ &p.actions, &p.land_to_play }))
+        {
+            a_cand[i] = b_cand[i] = 0;
+            if (castdom::StatsOn()) { castdom::g_keep_mana.fetch_add(1, std::memory_order_relaxed); }
+        }
     }
     bool any_b = false, any_a = false;
     for (std::size_t i = 0; i < n; ++i) { if (b_cand[i]) { any_b = true; } if (a_cand[i]) { any_a = true; } }
