@@ -5,12 +5,14 @@
 // state the variant really produces:
 //   1. a tutor variant that finds nothing (Tooth and Nail's empty pick, Finale's whiff) scores below a find and
 //      strictly below the pass;
-//   2. Time Warp aimed at the opponent gives US nothing -- strictly below the pass, below the self cast;
+//   2. Time Warp aimed at the opponent gives US nothing -- strictly below the pass, below the self cast (and, since
+//      USER 2026-11-18, the Extra Turns provider prunes that copy outright; the score holds where it is searched);
 //   3. Reveillark's evoke is scored by the creatures its leave trigger returns NOW, the hard cast by the body,
 //      so which mode scores higher depends on the graveyard -- and the search still sees both modes.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -176,6 +178,14 @@ TEST_CASE("Finale of Devastation: the whiff scores below the find; at X >= 10 th
     CHECK(saw_x10_whiff);
 }
 
+// Scoped heuristic-arm override (the manifest's per-job lever, set on this thread).
+struct ArmTs
+{
+    int slot;
+    ArmTs(int sl, int v) : slot(sl) { heurarm::t_arm[sl] = static_cast<std::int8_t>(v); }
+    ~ArmTs() { heurarm::t_arm[slot] = -1; }
+};
+
 TEST_CASE("Time Warp aimed at the opponent gives us nothing: below the self cast and strictly below the pass")
 {
     EnsureCardsTs();
@@ -184,6 +194,8 @@ TEST_CASE("Time Warp aimed at the opponent gives us nothing: below the self cast
     int n = 1;
     for (int k = 0; k < 5; ++k) { PermTs(s, "Snow-Covered Island", n++); }
     s.players[0].hand.push_back(CardTs("Time Warp", n++));
+    // The provider prune lifted (MTG_ET_OPP_TURN_PRUNE=0): both recipients enumerated, the opponent's scored as nothing.
+    const ArmTs both(heurarm::ET_OPP_TURN_PRUNE, 0);
     bool saw_self = false, saw_opp = false;
     int self_eval = 0, opp_eval = 0;
     for (const Action& a : CastsOf(s, "Time Warp"))
@@ -191,7 +203,6 @@ TEST_CASE("Time Warp aimed at the opponent gives us nothing: below the self cast
         if (a.player_target == 0) { saw_self = true; self_eval = a.eval; }
         else { saw_opp = true; opp_eval = a.eval; }
     }
-    // Both recipients stay ENUMERATED (a passive opponent's extra turn can deck them; the search owns it).
     REQUIRE(saw_self);
     REQUIRE(saw_opp);
     CHECK(self_eval > 0);
@@ -201,6 +212,40 @@ TEST_CASE("Time Warp aimed at the opponent gives us nothing: below the self cast
     REQUIRE(p.actions.size() == 1);
     CHECK(p.actions[0].card_name.str() == "Time Warp");
     CHECK(p.actions[0].player_target == 0);
+}
+
+TEST_CASE("Extra Turns (USER): the opponent target of a target-player extra turn is pruned in autonomous play")
+{
+    // USER 2026-11-18: "Yes, we should prune that for sure. It's silly to give your opponent an extra turn."
+    // ExtraTurnsProvider::OffersExtraTurnOpponentTarget -> false: Time Warp and Walk the Aeons (the deck's two
+    // "target player takes an extra turn" spells) are enumerated aimed at us only. The self-only "take an extra
+    // turn" spells (Temporal Manipulation, Nexus of Fate, ...) never had an opponent copy.
+    EnsureCardsTs();
+    for (const char* spell : { "Time Warp", "Walk the Aeons" })
+    {
+        CAPTURE(spell);
+        GameState s = BaseTs(TurnsTs(), 3);
+        s.deck_has_extra_turn = true;
+        int n = 1;
+        for (int k = 0; k < 6; ++k) { PermTs(s, "Snow-Covered Island", n++); }
+        s.players[0].hand.push_back(CardTs(spell, n++));
+        std::vector<Action> casts = CastsOf(s, spell);
+        REQUIRE_FALSE(casts.empty());
+        for (const Action& a : casts) { CHECK(a.player_target == 0); }
+        {
+            const ArmTs both(heurarm::ET_OPP_TURN_PRUNE, 0);
+            casts = CastsOf(s, spell);
+            CHECK(std::any_of(casts.begin(), casts.end(), [](const Action& a) { return a.player_target == 1; }));
+            CHECK(std::any_of(casts.begin(), casts.end(), [](const Action& a) { return a.player_target == 0; }));
+        }
+    }
+    // The base hook keeps both recipients: a provider that has not ruled searches the real choice.
+    const GenericProvider generic;
+    const CardDefinition* tw = CardDatabase::Instance().Lookup("Time Warp");
+    REQUIRE(tw != nullptr);
+    GameState g = BaseTs(generic, 3);
+    CHECK(generic.OffersExtraTurnOpponentTarget(g, *tw));
+    CHECK_FALSE(TurnsTs().OffersExtraTurnOpponentTarget(g, *tw));
 }
 
 TEST_CASE("Reveillark: evoke is scored by what the leave trigger returns now, so either mode can score higher")

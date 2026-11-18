@@ -1286,6 +1286,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"gchost", UnprunedGate::GcHost},
     {"escapetarget", UnprunedGate::EscapeTarget},
     {"stuffyscry", UnprunedGate::StuffyScry},
+    {"extraturntarget", UnprunedGate::ExtraTurnTarget},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -7406,6 +7407,22 @@ bool ExtraTurnsProvider::PreferIdleTappedFirstOpeningLand(const GameState& s) co
 {
     static const bool on = EnvOn("MTG_ET_T1_TAPPED_FIRST", true); // =0 restores ordinary land order
     return on && s.turn_number == 1;
+}
+
+// "Target player takes an extra turn after this one" (Time Warp, Walk the Aeons: extra_turns_on_resolve +
+// targeting Player). The ENGINE enumerates both recipients (CollectActions' target-player extra-turn pass); this
+// PRUNE drops the opponent's copy from AUTONOMOUS search (USER 2026-11-18: "Yes, we should prune that for sure.
+// It's silly to give your opponent an extra turn."). The line it removes: the passive opponent takes two turns in a
+// row before our next one, so it draws twice -- a deck-out (CR 104.3c) one round early when its library holds
+// more than one turn's draws but no more than two. Our extra turn is otherwise strictly better (a full turn: land,
+// mana, attacks, another Ulamog exile), and that window is nearly unreachable in a goldfish that ends turns 4-8.
+// Human play is unchanged (the viewer's target picker offers both players at the cast); MTG_UNPRUNED and
+// MTG_UNPRUNE=extraturntarget restore the opponent copy. MTG_ET_OPP_TURN_PRUNE=0 is the A/B arm (default ON).
+bool ExtraTurnsProvider::OffersExtraTurnOpponentTarget(const GameState& s, const CardDefinition& def) const
+{
+    (void)s; (void)def;
+    static const bool on = EnvOn("MTG_ET_OPP_TURN_PRUNE", true);
+    return !heurarm::Flag(heurarm::ET_OPP_TURN_PRUNE, on);
 }
 
 bool ExtraTurnsProvider::LandEntrySpotsRule(const GameState& s) const
@@ -68020,7 +68037,6 @@ bool MazeIsMazeDef(const CardDefinition* d) { return d != nullptr && d->params.a
 MAZE_P5_LEVER(MazeFindNothingOn,      MAZE_FIND_NOTHING,       "MTG_MAZE_FIND_NOTHING",       true)
 MAZE_P5_LEVER(MazePlazaPayOn,         MAZE_PLAZA_PAY,          "MTG_MAZE_PLAZA_PAY",          true)
 MAZE_P5_LEVER(MazeHeapTreasureOn,     MAZE_HEAP_TREASURE,      "MTG_MAZE_HEAP_TREASURE",      true)
-MAZE_P5_LEVER(MazeColourAltOn,        MAZE_COLOUR_ALT,         "MTG_MAZE_COLOUR_ALT",         false)   // A/B variant
 MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
@@ -68395,16 +68411,15 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
     if (base.empty() || !def.params.etb_choose_color || HumanPlayActive() || DecisionUnpruned())
     { return base; }
     bool spend[5] = { false, false, false, false, false };
-    // P1d (USER P2, MTG_MAZE_SPEND_NEVERCAST): "Gates ablaze can get heurstically skipped, so we don't need Red." A
-    // card this provider never casts autonomously (NeverCast: Gates Ablaze) spends nothing, so its pips do not
-    // admit a colour -- the menu is G/U for this list.
-    static const bool s_nc = EnvOn("MTG_MAZE_SPEND_NEVERCAST", true);   // DEFAULT ON; =0 -> G/U/R
-    const bool skip_never = heurarm::Flag(heurarm::MAZE_SPEND_NEVERCAST, s_nc);
+    // (P2, MTG_MAZE_SPEND_NEVERCAST -- "skip NeverCast cards' pips, so no red" -- was DELETED 2026-11-18, USER: "if
+    // P2 is redundant, you can delete it". With P1 below it is byte-inert: Gates Ablaze's {R} can admit red only
+    // beside G or U (every chosen-colour land in the list -- the four CLB Gates other than Cliffgate, Thran Portal --
+    // also offers G or U, and this list's green/blue spells keep both spendable), and P1 picks red only when neither G
+    // nor U is admitted. With P1 off, red is now on the searched menu.)
     auto scan = [&](const Card& c)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr || d->card.IsLand()) { return; }
-        if (skip_never && NeverCast(*d)) { return; }
         const ManaCost& mc = d->card.m_mana_cost;
         if (mc.white > 0) { spend[0] = true; }
         if (mc.blue  > 0) { spend[1] = true; }
@@ -68444,23 +68459,7 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
         const int g = static_cast<int>(Color::Green), u = static_cast<int>(Color::Blue);
         auto admitted = [&](int c) { return std::find(out.begin(), out.end(), c) != out.end(); };
         int pick = -1;
-        // P5 disclosure-1 VARIANT (MTG_MAZE_COLOUR_ALT, default OFF): alternate by source COUNT -- G while the green
-        // sources do not outnumber the blue ones, else U (G, U, G, U, ...).
-        if (MazeColourAltOn() && admitted(g) && admitted(u))
-        {
-            int ng = 0, nu = 0;
-            for (const Permanent& p : s.battlefield)
-            {
-                if (p.controller_index != controller) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (d == nullptr || d->params.any_color_filter || !d->params.mana_colors_of_controlled_subtype.empty())
-                { continue; }
-                for (Color c : EffectiveProducesFor(s, controller, *d, &p))
-                { if (c == Color::Green) { ++ng; } else if (c == Color::Blue) { ++nu; } }
-            }
-            pick = ng <= nu ? g : u;
-        }
-        else if (admitted(g) && !has_source(Color::Green)) { pick = g; }
+        if (admitted(g) && !has_source(Color::Green))      { pick = g; }
         else if (admitted(u) && !has_source(Color::Blue))  { pick = u; }
         else if (admitted(g))                              { pick = g; }
         else if (admitted(u))                              { pick = u; }

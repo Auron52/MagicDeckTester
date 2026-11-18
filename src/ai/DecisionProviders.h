@@ -205,6 +205,7 @@ enum class UnprunedGate
                      // instead of StuffyDollProvider::IndestructibleGrantTargetCandidates' one-target prune (USER)
     StuffyScry,      // Stuffy Doll (step 9d): Loran's Escape's searched scry keeps BOTH dispositions instead of
                      // StuffyDollProvider::ScryVerdict's firm keep / bottom prune (USER 2026-11-17 ~23:25)
+    ExtraTurnTarget, // Extra Turns: Time Warp's / Walk the Aeons' OPPONENT target restored (DecisionProvider::OffersExtraTurnOpponentTarget, USER 2026-11-18)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -771,6 +772,7 @@ public:
                             int dmg_unit, int& out) const override;
     bool ExtraTurnChainWalkEnabled() const override { return true; }
     bool ExtraTurnPreferMyriadNow(const GameState& state) const override;
+    bool OffersExtraTurnOpponentTarget(const GameState& state, const CardDefinition& def) const override;
     bool ExtraTurnChainFinisherPlanAllowed(const GameState& state, bool casts_emrakul,
                                            bool casts_ulamog, bool casts_turn_spell) const override;
     int WalkBuybackValueBonus(const GameState& state, const CardDefinition& def) const override;
