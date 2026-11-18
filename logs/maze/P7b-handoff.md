@@ -13,7 +13,7 @@ sections 7-9. Scratch: `build/scratch/maze/p7/`.
   and all 21 smoke/regression-slower games; b0 d3 finish 17/20 -> 20/20, d5 b0 finished-units 2.0x cheaper.
 
 ## In flight (not waited on)
-- `d8f/` (queued on the heavy lock): pre-P6 binary `mtg.p7b`, fold off, d8 b0 on the 8 games that persist vs the
+- `d8f/` -- UN-RUN: killed while still queued by P7c ("8-game batch would hold the machine-wide lock at 8/32 cores"); fold it into a larger pooled batch. Was: pre-P6 binary `mtg.p7b`, fold off, d8 b0 on the 8 games that persist vs the
   pre-P6 GT equally with the fold off. Read: `grep preP6 build/scratch/maze/p7/d8f/run.out | awk '{print $1,$3,$4}'`
   once `d8f/DONE` exists. Compare with the current-tree d8 b0 (`d8d/`, `d8e/` base rows): equal turn = GT budget luck;
   pre-P6 better = a P6 regression for the P6 owner (not the fold). Record the line in P7-results.md s8.
