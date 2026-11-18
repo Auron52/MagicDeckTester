@@ -11,9 +11,16 @@ in the order given, then the queue they produce. Owner: the Maze's End coordinat
 5. Fetch defer + max_lands: "2-5 I'm not entirely sure that is 100% the right solution given that there is value to banking extra lands even if you have a new-name gate in hand. That said, I don't have recommendations as to how to value this while still not breaking anything. 2-6 Not a huge deal either way because it is temporary. We just want to get the deck in a position that we can run the mulligan profile generation. However, if you would feel a lot better about it you can make the tweak."
 6. Off-main activation, b0, b20: "2-7 I think we should allow something like this. It's especially easy if we can respond to a trigger from Manabond or Burgeoning and activate in response. I cannot think of a reason why that would not be good, so that could be heuristically pruned to always search and deploy. The searched decision would be whether it is worth getting Maze's end back in hand without being able to redeploy. Ideally we would support that as well and see what we can do to minimize the cost. 3-8 We should address this at some point or we won't be able to do the value-leaf. I'll leave the timing to you. 3-9 This means we probably need to work more on performance to start which fits with 3-8. We'll need more effective prunes to be applied. Higher budget is not out of the realm of consideration, but only after we have exhausted other avenues."
 
-## Running (2026-11-18 09:20 UTC)
-- F4 (wip/maze-f4): first integrated build/units/smoke of F1+F2+F3+scoring, then fd-diverge s7009 gi8 (end-step Maze's End tapped for Amulet in the executor, untapped in the rollout).
-- DONE: tie-fix audit (ACCEPTED), scoring fixes, V1, F2, F3, P5/P5-2 (integrated onto wip/maze-end 36bf16849..5404ebef8; results `logs/maze/P5-results.md`).
+## USER, 2026-11-18 ~12:40 UTC (VERBATIM)
+13. "Please continue autonomously overnight. The idea is to get things as fast as possible, but you can test whatever you need to, to prepare for running the mulligan profile. You can even start it if you feel it necessary, but I will want to generate the references for the deck tomorrow."
+14. "But overall, the top priority are optimizations and fixes."
+
+## Running (2026-11-18 12:45 UTC)
+- P6 (wip/maze-p6, `5ac60ceba`): off-main Maze's End activation; held-out A/B done, being read.
+- P5c (wip/maze-p5c): fetch-defer root cause, delete `MTG_MAZE_FETCH_DEFER`.
+- P7 (wip/maze-p7): b0 degeneracy + b20 starvation, census-first prunes (excludes P5b's folds).
+- Next: P5b (duplicate-copy fold, Exploration land-order fold, Charm tutor-axis duplicate) once a build slot frees; integrate on wip/maze-shared.
+- DONE: tie-fix audit (ACCEPTED), scoring fixes, V1, F2, F3, F4, P5/P5-2; shared push 7093daceb (CI green).
 
 ## P5 DONE (2026-11-18, P5-2 `deadd9566`, cherry-picked as 5404ebef8)
 - Shipped vs pre-P5 engine: 35 better / 14 worse, net -22 turns over 550 held-out games per arm, 18% fewer units at d5 b20. Smoke vs F2: 219/223 byte-identical, only mazesend* move.
