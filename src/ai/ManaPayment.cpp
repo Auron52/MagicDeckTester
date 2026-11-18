@@ -5643,7 +5643,18 @@ struct PoSacFodder
     bool              start_live   = false;     // outlets already on the battlefield (pool0 is then built fodder-free)
     int               board_bodies = 0;         // the board's legal bodies (outlets included) + spore plan fodder
     int               board_outlets = 0;        // (start_live) live outlet permanents
+    int               board_fodder_outlets = 0; // (start_live) of those, the ones whose own body is legal fodder
 };
+// Is an outlet's OWN body fodder for an outlet with params `op` (subtype match; "Sacrifice ANOTHER" aside)?
+// Skirk Prospector is a Goblin and eats itself; Utopia Mycon is a Fungus and eats only Saprolings, so it is
+// never eaten -- the walk must not count it (Fungus s30125447 T2 {Thallid, Undercellar Myconid}: counting Mycon
+// as a body read Thallid-first as payable and the apply dropped the Myconid).
+static bool PoOutletBodyIsFodder(const CardDefinition* d, const CardParams& op)
+{
+    if (d == nullptr || !d->card.IsCreature()) { return false; }
+    const std::string& sub = op.sac_creature_requires_subtype;
+    return sub.empty() || CardHasSubtype(d->card, sub);
+}
 thread_local const PoSacFodder* t_po_sacfod = nullptr;
 thread_local bool               t_po_force  = false;   // judge the order even outside every producer domain
 
@@ -5666,23 +5677,55 @@ struct PoSacFodderWalk
 {
     const PoSacFodder* sf = nullptr;
     int outlets = 0;           // outlets on the battlefield
+    int fodder_outlets = 0;    // of those, the ones whose own body is legal fodder (PoOutletBodyIsFodder)
     int bodies  = 0;           // eatable NON-outlet bodies (meaningful while outlets > 0)
     int pending = 0;           // bodies waiting for the first outlet (plan-made outlet only)
     bool ever   = false;       // an outlet has been on the battlefield
+    // Of `bodies` / `pending`, the ones that were on the battlefield when the plan started (old), and how many
+    // old ones have been eaten. The payer eats the free tier first -- a body this turn's line just made cannot
+    // attack -- so the walk eats the plan's own (fresh) bodies before the board's. An old body eaten BEFORE a
+    // same-plan tap grant (Brightcap Badger) resolves is one the grant's stamped credit (SamePlanGrantCredit,
+    // counted off the pre-plan board) can no longer tap: GrantDebit takes it back (Fungus s30125172 T5 {Mycon,
+    // Badger, Ascension}: the Saproling eaten for the Badger was also credited as a Badger tap).
+    int old_b = 0, old_p = 0, old_eaten = 0;
     void Start()
     {
         sf = t_po_sacfod;
-        outlets = bodies = pending = 0; ever = false;
+        outlets = fodder_outlets = bodies = pending = 0; ever = false;
+        old_b = old_p = old_eaten = 0;
         if (sf == nullptr) { return; }
         if (sf->start_live)
         {
             outlets = sf->board_outlets; ever = outlets > 0;
-            bodies  = std::max(0, sf->board_bodies - (sf->op->sac_outlet_excludes_self ? 0 : outlets));
+            fodder_outlets = sf->board_fodder_outlets;
+            bodies  = std::max(0, sf->board_bodies - (sf->op->sac_outlet_excludes_self ? 0 : fodder_outlets));
+            old_b   = bodies;
         }
-        else { pending = sf->board_bodies; }
+        else { pending = sf->board_bodies; old_p = pending; }
+    }
+    void GrantDebit(ManaPool& pool, const Action& a)
+    {
+        if (sf == nullptr || old_eaten <= 0 || a.rock_mana.Total() <= 0) { return; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || d->params.granted_tap_mana_subtypes.empty()) { return; }
+        const std::string& sub = sf->op->sac_creature_requires_subtype;
+        bool reaches = false;   // does the grant reach the outlet's fodder (Saproling)?
+        for (const std::string& g : d->params.granted_tap_mana_subtypes) { if (g == sub) { reaches = true; break; } }
+        if (!reaches) { return; }
+        int left = std::min(old_eaten, a.rock_mana.Total());
+        auto take = [&](int credited, int& field)
+        {
+            const int t = std::min({ left, credited, std::max(0, field) });
+            field -= t; left -= t;
+        };
+        take(a.rock_mana.green, pool.green);     take(a.rock_mana.white, pool.white);
+        take(a.rock_mana.blue, pool.blue);       take(a.rock_mana.black, pool.black);
+        take(a.rock_mana.red, pool.red);         take(a.rock_mana.colorless, pool.colorless);
+        take(a.rock_mana.wild, pool.wild);
+        old_eaten = 0;   // each eaten body is debited once
     }
     int EatableOutlets() const
-    { return sf->op->sac_outlet_excludes_self ? std::max(0, outlets - 1) : outlets; }
+    { return sf->op->sac_outlet_excludes_self ? std::max(0, std::min(fodder_outlets, outlets - 1)) : fodder_outlets; }
     // The pool cannot pay `cost`: eat the fewest bodies that make it payable (non-outlet bodies first).
     bool TryEat(ManaPool& pool, const ManaCost& cost)
     {
@@ -5695,8 +5738,11 @@ struct PoSacFodderWalk
             if (!tmp.CanPay(cost)) { continue; }
             pool = tmp;
             const int from_bodies = std::min(k, bodies);
+            const int eat_old = std::max(0, from_bodies - (bodies - old_b));   // fresh bodies first
+            old_b -= eat_old; old_eaten += eat_old;
             bodies  -= from_bodies;
             outlets -= (k - from_bodies);
+            fodder_outlets -= (k - from_bodies);
             return true;
         }
         return false;
@@ -5706,14 +5752,20 @@ struct PoSacFodderWalk
         if (sf == nullptr) { return; }
         const int b = SacFodderBodies(a, *sf->op);
         const bool outlet = PoIsOutletPut(a);
+        const bool own_fodder = outlet && PoOutletBodyIsFodder(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name), *sf->op);
         // An outlet's own fodder body (if any) is tracked as an OUTLET, never as an ordinary body.
-        const int plain = b - ((outlet && !sf->op->sac_outlet_excludes_self && b > 0) ? 1 : 0);
-        if (ever && outlets <= 0) { return; }   // every outlet eaten: nothing can be eaten any more
+        const int plain = b - ((own_fodder && !sf->op->sac_outlet_excludes_self && b > 0) ? 1 : 0);
         if (outlet)
         {
+            // A body waits (pending) while no outlet is on the battlefield -- before the first, or after every
+            // outlet has been eaten -- and becomes eatable the moment the next outlet arrives (Goblins s30125489
+            // T1 {Skirk, Skirk, Lackey}: the second Skirk eats the first, then is itself eaten for the Lackey).
             ++outlets;
-            if (!ever) { ever = true; bodies += pending; pending = 0; }
-            bodies += plain;
+            if (own_fodder) { ++fodder_outlets; }
+            ever = true;
+            bodies += pending + plain;
+            old_b += old_p;
+            pending = 0; old_p = 0;
             return;
         }
         if (outlets > 0) { bodies += b; } else { pending += b; }
@@ -5759,6 +5811,7 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
         if (!pool.CanPay(cost) && !sfw.TryEat(pool, cost)) { return pos; }
         PayFromPool(pool, cost);
         CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
+        sfw.GrantDebit(pool, a);
         sfw.After(a);
         if (IsRippleGranterCast(a)) { ripple_live = true; }
         feed.Release(pool);
@@ -5920,7 +5973,16 @@ static int ExactOrderWalkOnce(const GameState& state, const std::vector<Action>&
     if (paid != nullptr) { paid->assign(order.size(), 0); }
     if (scaled_early != nullptr) { *scaled_early = false; }
     int first_fail = -1;
-    ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    // MTG_SAC_FODDER_MENU: under PayableCastOrderCore's fodder pass the bodies are modelled by the walk
+    // (PoSacFodderWalk, FirstUnpayablePosImpl's model), so a live outlet's pool is built fodder-free. Without
+    // this the producer domain (a same-turn rock, a land Aura -- MTG_PAYABLE_ORDER_EXACT) judged every order
+    // of a plan-made-fodder plan unpayable and kept one that drops a cast (Fungus s30125383 T2 {Sol Ring,
+    // Undercellar Myconid, Utopia Mycon, ...}: APPLY-DROP-ORDER). Inert (no context) everywhere else.
+    PoSacFodderWalk sfw;
+    sfw.Start();
+    ManaPool pool;
+    if (sfw.sf != nullptr && sfw.sf->start_live) { const PayFodderOffScope _fo; pool = AvailableManaPool(state); }
+    else { pool = AvailableManaPool(state); }   // already includes the turn-scoped float
     // LIFE-SCALED SOURCES (LifeScaledManaInOrderWalk; false -> none of this runs). Each untapped,
     // able-to-tap mana_per_life_gained source is taken OUT of the pool (its exact contribution: the pool
     // with it skipped, differenced) and held for a LATE tap: only when a cast cannot otherwise be paid is
@@ -5938,7 +6000,9 @@ static int ExactOrderWalkOnce(const GameState& state, const std::vector<Action>&
             if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (pd == nullptr || !pd->params.mana_per_life_gained || !CanTapNow(p, state.battlefield)) { continue; }
-            const ManaPool without = AvailableManaPool(state, &p);
+            ManaPool without;
+            if (sfw.sf != nullptr && sfw.sf->start_live) { const PayFodderOffScope _fo; without = AvailableManaPool(state, &p); }
+            else { without = AvailableManaPool(state, &p); }
             pool.white     -= full.white     - without.white;
             pool.blue      -= full.blue      - without.blue;
             pool.black     -= full.black     - without.black;
@@ -6054,7 +6118,7 @@ static int ExactOrderWalkOnce(const GameState& state, const std::vector<Action>&
                 --scaled_left;
                 if (scaled_early != nullptr && pos <= last_life_pos) { *scaled_early = true; }
             }
-            if (!pool.CanPay(cost))
+            if (!pool.CanPay(cost) && !sfw.TryEat(pool, cost))   // MTG_SAC_FODDER_MENU: fodder last
             {
                 if (restrict > 0) { pool.colorless -= restrict; pool.wild += restrict; }
                 if (paid == nullptr) { return pos; } if (first_fail < 0) { first_fail = pos; } continue;
@@ -6073,6 +6137,8 @@ static int ExactOrderWalkOnce(const GameState& state, const std::vector<Action>&
             cco = std::min(cco, pool.wild);
         }
         CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
+        sfw.GrantDebit(pool, a);   // MTG_SAC_FODDER_MENU (inert without a fodder pass)
+        sfw.After(a);
         if (IsRippleGranterCast(a)) { ripple_live = true; }
         feed.Release(pool);
         if (la_in != nullptr)
@@ -7200,7 +7266,11 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
                 {
                     if (p.controller_index != active || p.pay_sac_eaten || p.def_absent) { continue; }
                     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                    if (d != nullptr && IsSacManaOutlet(d->params)) { ++sf.board_outlets; }
+                    if (d != nullptr && IsSacManaOutlet(d->params))
+                    {
+                        ++sf.board_outlets;
+                        if (PoOutletBodyIsFodder(d, live.def->params)) { ++sf.board_fodder_outlets; }
+                    }
                 }
             }
         }

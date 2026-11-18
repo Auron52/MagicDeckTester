@@ -10044,6 +10044,40 @@ static int SacFodderMenuSubsetBodies(const SacFodderMenuCtx& ctx, const std::vec
     if (!ctx.outlet_live) { n += ctx.board_bodies; }
     return n;
 }
+// THE PREFIX TEST (same lever). The aggregate credit above lets a body pay for the very cast that brings it in
+// whenever that cast is not the smallest maker, so a plan whose BIG cast is the body maker reached the menu and the
+// apply dropped it (mana oracle PHANTOM, Goblins gate slice 83 -> 455 distinct decisions: {Siege-Gang + Skirk +
+// Stingscourger} off two Mountains and a Lackey -- Siege-Gang's three tokens "paid" its own {3}{R}{R}). In ANY
+// order, when action X is paid the mana spent so far is cost(B) + cost(X) for the set B paid before it, and the
+// supply so far is at most the whole turn's non-fodder supply T plus the fodder B (and the board) can bring:
+//     cost(X) <= T + per * board + sum over Y in B of (per * bodies(Y) - cost(Y)),
+// best case B = every other action that brings more bodies than it costs. Fodder needs an outlet before X: with
+// none live and no outlet among the others, X gets no fodder at all. An outlet X is never tested (its own case
+// needs no body). Costs are lower bounds (phyrexian / twobrid pips can be paid otherwise, an alternative cost pays
+// none) and the subset's global cost reductions are given back as supply (`refund`), so the test is a NECESSARY
+// condition: a subset it rejects has no payable order, whatever the fodder. `lb` is per cand, valid for `sel`.
+static bool SacFodderMenuPrefixOk(const SacFodderMenuCtx& ctx, const std::vector<int>& sel,
+                                  const std::vector<int>& lb, int supply)
+{
+    int gain = 0;          // sum over the selection of max(0, per * bodies - cost)
+    int outlets_in = 0;    // outlet candidates in the selection
+    for (int j : sel)
+    {
+        const std::size_t u = static_cast<std::size_t>(j);
+        gain += std::max(0, ctx.per * ctx.bodies[u] - lb[u]);
+        if (!ctx.outlet_live && ctx.outlet_cand[u]) { ++outlets_in; }
+    }
+    const int board = ctx.outlet_live ? 0 : ctx.per * ctx.board_bodies;   // live: already in the supply
+    for (int j : sel)
+    {
+        const std::size_t u = static_cast<std::size_t>(j);
+        if (!ctx.outlet_live && ctx.outlet_cand[u]) { continue; }
+        const bool fodder = ctx.outlet_live || outlets_in > 0;
+        const int  best   = fodder ? board + gain - std::max(0, ctx.per * ctx.bodies[u] - lb[u]) : 0;
+        if (lb[u] > supply + best) { return false; }
+    }
+    return true;
+}
 static void CreditSacFodderMenu(const SacFodderMenuCtx& ctx, int bodies, ManaPool& eff, ManaPool& eff_nc)
 {
     const int m = bodies * ctx.per;
@@ -85341,7 +85375,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         bool sacfod_credited = false;
         if (sacfod.live)
         {
-            const int bodies = SacFodderMenuSubsetBodies(sacfod, cands, sel, pool);
+            int bodies = SacFodderMenuSubsetBodies(sacfod, cands, sel, pool);
+            if (bodies > 0)
+            {
+                // The prefix test (SacFodderMenuPrefixOk): per-cast lower-bound costs, the same costs `combined`
+                // summed, with the reductions already taken off `combined` handed back as supply.
+                thread_local std::vector<int> sf_lb;
+                sf_lb.assign(cands.size(), 0);
+                int raw = 0;
+                for (int j : sel)
+                {
+                    const Action& c = cands[static_cast<std::size_t>(j)];
+                    const ManaCost& cc = spec_ctx.On(sel, j) ? spec_ctx.live_cost[static_cast<std::size_t>(j)] : c.cost;
+                    raw += cc.ManaValue();
+                    sf_lb[static_cast<std::size_t>(j)] = c.alt_cost ? 0
+                        : std::max(0, cc.ManaValue() - static_cast<int>(cc.phyrexian_count) - static_cast<int>(cc.twobrid_count));
+                }
+                const int refund = std::max(0, raw - combined.ManaValue());
+                if (!SacFodderMenuPrefixOk(sacfod, sel, sf_lb, eff.Total() + refund)) { bodies = 0; }
+            }
             if (bodies > 0) { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; }
         }
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }

@@ -131,6 +131,10 @@ TEST_CASE("Sac fodder menu: {cast Skirk Prospector + cast Lightning Bolt} off on
     REQUIRE(both != nullptr);
     // Siege-Gang's {3}{R}{R} stays off: one Mountain + three bodies (Lackey, Skirk, nothing else) is not five.
     CHECK(FindPlan(plans, { "Skirk Prospector", "Siege-Gang Commander" }) == nullptr);
+    // The prefix test: Siege-Gang's own three tokens cannot pay its {3}{R}{R}. Off one Mountain + Lackey + Skirk
+    // nothing before it brings enough, so {Bolt, Skirk, Siege-Gang} stays off even though the aggregate (with the
+    // smallest maker dropped as "last") would count Siege-Gang's four bodies.
+    CHECK(FindPlan(plans, { "Lightning Bolt", "Skirk Prospector", "Siege-Gang Commander" }) == nullptr);
 
     // The apply realises it: Skirk resolves off the Mountain, then a Goblin is eaten for the Bolt.
     GameState t = s;
@@ -255,4 +259,107 @@ TEST_CASE("Sac fodder menu: beside a LIVE Skirk the walk keeps the outlet for la
     std::vector<int> order = { 0, 1 };
     ApplyPayableCastOrder(s, acts, order);
     CHECK(order == std::vector<int>{ 1, 0 });
+}
+
+namespace
+{
+Action SfmCast(const std::string& name, int hand_index)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE(d != nullptr);
+    Action a;
+    a.kind       = Action::Kind::CastFromHand;
+    a.card_name  = InternedName(name);
+    a.def        = d;
+    a.cost       = d->card.m_mana_cost;
+    a.hand_index = hand_index;
+    a.is_noncreature = !d->card.IsCreature();
+    return a;
+}
+GameState SfmBoard(const DecisionProvider& prov)
+{
+    LoadSfm();
+    GameState s;
+    s.active_player_index        = 0;
+    s.turn_number                = 2;
+    s.phase                      = Phase::PreCombatMain;
+    s.players[0].life            = 20;
+    s.players[1].life            = 20;
+    s.m_provider                 = &prov;
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;
+    s.deck_has_upkeep_reanimate  = false;
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 20; ++i) { s.players[0].library.push_back(CardSfm("Forest", 100 + i)); }
+    return s;
+}
+}  // namespace
+
+TEST_CASE("Sac fodder menu: an outlet arriving after every outlet was eaten makes bodies eatable again (Skirk, Skirk, Lackey)")
+{
+    // Goblins s30125489 T1: one Mountain, hand Skirk Prospector x2 + Goblin Lackey. Skirk off the Mountain, the second
+    // Skirk eats the first, the Lackey eats the second. Skirk > Lackey > Skirk strands the second Skirk (the Lackey ate
+    // the only outlet), so the walk must move the Lackey after the second Skirk.
+    const GoblinsProvider prov;
+    GameState s = SfmBoard(prov);
+    PutSfm(s, "Mountain", 33);
+    s.players[0].hand.push_back(CardSfm("Skirk Prospector", 56));
+    s.players[0].hand.push_back(CardSfm("Goblin Lackey", 10));
+    s.players[0].hand.push_back(CardSfm("Skirk Prospector", 57));
+    const std::vector<Action> acts = { SfmCast("Skirk Prospector", 0), SfmCast("Goblin Lackey", 1),
+                                       SfmCast("Skirk Prospector", 2) };
+    SacFodderMenuArm arm(1);
+    std::vector<int> order = { 0, 1, 2 };
+    ApplyPayableCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{ 0, 2, 1 });
+}
+
+TEST_CASE("Sac fodder menu: an outlet that is not its own fodder (Utopia Mycon) is never eaten by the walk")
+{
+    // Fungus s30125447 T2: Forest + Ancient Tomb + a live Utopia Mycon ("Sacrifice a Saproling"; Mycon is a Fungus).
+    // Thallid {G} + Undercellar Myconid {2}{G} is four mana off three: only Myconid FIRST pays, its ETB Saproling eaten
+    // for the Thallid. Counting Mycon as a body read Thallid-first as payable and the apply dropped the Myconid.
+    const FungusProvider prov;
+    GameState s = SfmBoard(prov);
+    PutSfm(s, "Forest", 25);
+    PutSfm(s, "Utopia Mycon", 57);
+    PutSfm(s, "Ancient Tomb", 3);
+    s.players[0].hand.push_back(CardSfm("Thallid", 40));
+    s.players[0].hand.push_back(CardSfm("Undercellar Myconid", 53));
+    const std::vector<Action> acts = { SfmCast("Thallid", 0), SfmCast("Undercellar Myconid", 1) };
+    SacFodderMenuArm arm(1);
+    std::vector<int> order = { 0, 1 };
+    ApplyPayableCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{ 1, 0 });
+}
+
+TEST_CASE("Sac fodder menu: the EXACT walk (producer domain) models a plan-made outlet's fodder too")
+{
+    // Fungus s30125352 T3: Hickory Woodlot ({G}{G}) + Sol Ring; Utopia Mycon {G}, Undercellar Myconid {2}{G}, Wild
+    // Growth {G} on the Woodlot (a land Aura -> the producer domain -> MTG_PAYABLE_ORDER_EXACT's walk). Five mana off
+    // four: Mycon first, Myconid, then its Saproling eaten for the Wild Growth. The exact walk knew no fodder, read
+    // every order unpayable and kept one that drops the Mycon.
+    const FungusProvider prov;
+    GameState s = SfmBoard(prov);
+    PutSfm(s, "Hickory Woodlot", 33);
+    s.battlefield.back().counters.Add(Counter::Type::Depletion, 2);
+    PutSfm(s, "Sol Ring", 46);
+    s.players[0].hand.push_back(CardSfm("Undercellar Myconid", 53));
+    s.players[0].hand.push_back(CardSfm("Wild Growth", 58));
+    s.players[0].hand.push_back(CardSfm("Utopia Mycon", 57));
+    Action wg = SfmCast("Wild Growth", 1);
+    wg.enchant_target = 33;
+    const std::vector<Action> acts = { SfmCast("Undercellar Myconid", 0), wg, SfmCast("Utopia Mycon", 2) };
+    std::vector<int> off_order = { 0, 1, 2 };
+    {
+        SacFodderMenuArm arm(0);
+        ApplyPayableCastOrder(s, acts, off_order);
+    }
+    SacFodderMenuArm arm(1);
+    std::vector<int> order = { 0, 1, 2 };
+    ApplyPayableCastOrder(s, acts, order);
+    REQUIRE(order.size() == 3);
+    CHECK(off_order == std::vector<int>{ 0, 1, 2 });   // lever off: no order pays from the board alone
+    CHECK(order[2] == 1);   // the Wild Growth last, paid by the Myconid's Saproling (Mycon is in by then)
+    CHECK(order != off_order);
 }
