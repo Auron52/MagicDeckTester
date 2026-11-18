@@ -982,15 +982,24 @@ Recorded by V1 from the coordinator's report (2026-11-18). The sweep (analyze-de
 - seeds: base 61001
 - games: 16 (gi 0-15)
 - driver: Claude (Opus) agents, one per game. A second agent adversarially verified each flag.
-- flags: 4 unresolved. Each is an OPEN DEFECT owned by agent F1 (branch `wip/maze-fix`, worktree
-  `.claude/worktrees/maze-fix`). None is a deferral.
-  1. gi6, engine: Guild Summit's Gate-enter draw resolves before Maze's End's "then shuffle", against CR 603.3. The
-     player draws the known pre-shuffle top card.
-  2. gi1, search completeness: the Talon Gates {4} put + Maze's End activation combination is never enumerated
-     (`legal_not_enumerated` at d8 b0).
-  3. gi2, search completeness: the extra land drop after a same-plan Exploration cast is unreachable at T2 at d8 b0.
-  4. gi8, rules gap: there is no instant-speed window for the Maze's End activation (end step after Manabond, the
-     opponent's turn after Burgeoning). It cost a T6 win.
+- flags: 0 unresolved
+- resolution re-verified by F3 (2026-11-18) on the integrated tree `wip/maze-f3` 7a8a6f2c4 (= F1 + F2 + the F3
+  fd-diverge fix); full write-up `logs/maze/F3-results.md`. The four flags the sweep raised, each RESOLVED:
+  1. gi6, engine (FIXED bd32848c7, CR 603.3): Claude's CSV replayed to its T4 Maze's End activation (fetch Izzet
+     Guildgate). The pre-shuffle top was Gates Ablaze; Guild Summit's draw now takes Maze's End, the post-shuffle top.
+     Search bench (seed 61007 gi6 d5 b20): T4 (the sweep's bench and Claude both T5; the draws now differ).
+  2. gi1, search completeness (FIXED 8e2d4100e + e5daf237b): at Claude's T5 frame the menu now holds 21 plans that
+     combine the Talon Gates {4} put with the Maze's End activation. Before the fix it held none
+     (`legal_not_enumerated` at d8 b0). Bench T7; d8 b0 with Claude's keep: T7 (Claude T8). As the flag said, the
+     missing line did not decide this game's win turn.
+  3. gi2, search completeness (FIXED 5ea2d6be7): the bench's T2 now plays Izzet + Exploration + Selesnya (the extra
+     drop). d8 b0 with the kept 7: **T5 = Claude's T5**. The d5 b20 bench stays T6 from its own T1, a budget gap of
+     the same kind as gi0/gi7/gi13 below.
+  4. gi8, rules gap (MODELLED 8e2d4100e): the WINNING off-main activation explains the flag. Bench (seed 61009 gi8
+     d5 b20): T6 (sweep bench T7). The game log's T6 MAIN_2 is empty and the win lands on T6, so it came from the
+     end-step window after Manabond's dump. d8 b0 with the kept 7: T6. The flag's T6 is exactly that window. DISCLOSED, not a flag: the NON-winning
+     off-main activation (bank a Gate at the end step or on the opponent's turn) stays unmodelled. It is queued as P6
+     ("Sweep fixes" below; USER sign-off pending on F1's default).
 - 3 budget-bound search issues (gi0, gi7, gi13): the d5 b20 line is one turn slower, and b100-b500 finds the turn
   earlier. This is starvation evidence for 5c (see Verification).
 - 6 flags dismissed as false positives, with reasons in the summary.
@@ -4081,3 +4090,12 @@ Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
   WINNING off-main activation (our end step after Manabond, the opponent's turn after Burgeoning) is now taken
   (dominance). DISCLOSURE (USER sign-off pending): a NON-winning off-main activation is not modelled; it needs a
   searched end-step frame (design in F1-results).
+- **F3 (2026-11-18), V1's fd-diverge s121065 gi64 (FIXED 7a8a6f2c4):** a lockstep ordering bug at the land drop. The
+  executor played the committed plan's land before binding the line hold that `ApplyPlanDirect` binds at its entry.
+  Two Amulets of Vigor let Gruul Guildgate float mana in response, and `FloatLineOwedColour` commits that float to
+  the line's owed colour. So the rollout floated {G} and the executor floated {R}, the executor's prepay fed Baldur's
+  Gate with Maze's End's {C}, and the recorded continuation's Maze's End activation (the T6 win) lost its {T}. The
+  drop now runs under the plan's line hold, opens-unseen bit and payment pins. `MTG_LINE_PAY_AUDIT` gains
+  `rec_short` (a recorded-continuation step short in the executor = DEFECT). Adoption bar for F1+F2 (F3 task 1): all
+  9 held-out slower rows recover at d8 b0. V1's gi49 / gi122 now win at the d0 turn at b20. Full write-up:
+  `logs/maze/F3-results.md`.
