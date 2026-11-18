@@ -4070,11 +4070,13 @@ Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, u
 Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
 - **gi6 (engine bug, FIXED bd32848c7):** a search-put's draw triggers (Guild Summit, Kili, Puresteel, Vaultborn,
   Enduring Innocence, ETB self-draws) now wait for the ability's "then shuffle" (CR 603.3; SearchPutTriggerScope).
-- **gi1 (completeness, PARTLY FIXED 8e2d4100e):** Talon's put credits its {C}, so "put Talon + activate Maze's End"
-  is enumerated; plans hold Maze's End's {T} source. OPEN: the payer pays Talon's {4} plain instead of via fed
-  Baldur's Gate, so the combined plan still strands the activation at gi1 T5.
-- **gi2 (completeness, OPEN):** the extra land drop after a same-plan Exploration cast is never re-decided at T2
-  (no site-10 breakpoint in either world). Diagnosis in F1-results.
+- **gi1 (completeness, FIXED 8e2d4100e + e5daf237b):** Talon's put credits its {C}, so "put Talon + activate Maze's
+  End" is enumerated; plans hold Maze's End's {T} source; and (F2) the trailing pass pays a Channel-kind step with an
+  owed-aware hold (TrailingStepOwedHold) when the usual payment would strand a later activation -- Talon's {4} is paid
+  through Baldur's Gate's fed mode and the {3} stays payable. Both worlds.
+- **gi2 (completeness, FIXED 5ea2d6be7):** site 10 DID arm after a same-plan Exploration, but MTG_BP_NEW_ONLY emptied
+  its continuation list (every land in hand is "old", yet no base plan plays two lands). A land play after this
+  turn's first land now counts as new. T2 Selesnya + Exploration + Izzet + Sylvan Scrying; gi2 T6 -> T5.
 - **gi8 (rules-modelling gap, PARTLY MODELLED 8e2d4100e):** Maze's End's activation has no timing restriction. A
   WINNING off-main activation (our end step after Manabond, the opponent's turn after Burgeoning) is now taken
   (dominance). DISCLOSURE (USER sign-off pending): a NON-winning off-main activation is not modelled; it needs a
