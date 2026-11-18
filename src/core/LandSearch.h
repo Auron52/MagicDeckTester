@@ -745,6 +745,8 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                               const std::string& source, int pin, const char* source_suffix,
                               const ManaPool* put_credit)
 {
+    // CR 603.3: a put permanent's draw triggers wait for this search's "then shuffle" (SearchPutTriggerScope).
+    SearchPutTriggerScope trigger_scope(state);
     if (spec.count <= 0) { return; }
     // A searched decline of an optional trigger is distinct from searching,
     // failing to find, and shuffling. The last pin value is reserved for it.
