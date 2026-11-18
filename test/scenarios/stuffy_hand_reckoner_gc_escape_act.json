@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Damage reflection, Stuffy Doll step 9d (docs/design/damage-reflection-pipeline.md 14, USER 2026-11-17 ~23:25:",
+    "'That should be fixed, given the potential creature -> Guilty Conscience -> Loran's Escape -> Blasphemous Act",
+    "line.'). Boros Reckoner, Guilty Conscience, Loran's Escape and Blasphemous Act are all in HAND; we control no",
+    "creature. Eight opponent Spirits + the Reckoner make nine creatures, so the Act costs {R}: six lands pay",
+    "Reckoner 3 + GC {W} + Escape {W} + Act {R}. The only kill this turn is: cast the Reckoner, GC on it, the",
+    "Escape on it, then the Act: the indestructible Reckoner survives 13, reflects 13 (20 -> 7), GC deals 13 back,",
+    "it reflects 13 again: dead. Without the Escape the Reckoner dies to the Act (13, no loop); without GC one 13.",
+    "A TAPPED Mind Stone is the Escape's no-effect (scry-only) target. The step-9b Escape prune fixed its ONE target",
+    "at enumeration from the battlefield only, so it kept the Mind Stone and dropped the hand Reckoner: the step-9c",
+    "binary casts the Act first and wins T5 (and T4 under MTG_UNPRUNE=escapetarget). Step 9d admits the same-plan hand",
+    "reflector (the GC lands on it after it enters)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mind Stone", "tapped": true },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act", "Loran's Escape", "Guilty Conscience", "Boros Reckoner" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1
+}

@@ -698,6 +698,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // soulfire_own_targets is reused as Twinflame's searched strive-extras count.
                 if (IsSoloTargetTrick(def.params))
                 {
+                    // The cast's own searched scry (Action::scry_pin; Loran's Escape): the pin the search
+                    // scored, consumed by the trick's ScryTop. Lockstep with apply_one's scope.
+                    std::optional<ScriptedTopChoice> stc_pin;
+                    if (entry.scry_pin >= 0) { stc_pin.emplace(entry.scry_pin); }
                     ResolveSoloTargetTrick(state, entry.controller_index, def,
                                            entry.enchant_target,
                                            entry.soulfire_own_targets.value_or(0),

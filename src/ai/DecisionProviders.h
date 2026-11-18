@@ -203,6 +203,8 @@ enum class UnprunedGate
                      // StuffyDollProvider::DamageBackAuraHostCandidates' one-host (split case: two) prune (USER)
     EscapeTarget,    // Stuffy Doll (step 9b): Loran's Escape's target set restored to the engine's folded list
                      // instead of StuffyDollProvider::IndestructibleGrantTargetCandidates' one-target prune (USER)
+    StuffyScry,      // Stuffy Doll (step 9d): Loran's Escape's searched scry keeps BOTH dispositions instead of
+                     // StuffyDollProvider::ScryVerdict's firm keep / bottom prune (USER 2026-11-17 ~23:25)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -4203,6 +4205,10 @@ public:
     void DamageBackAuraHostCandidates(const GameState& s, const CardDefinition& aura, std::vector<int>& io) const override;
     void IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& def, int inert_rep,
                                              std::vector<int>& io) const override;
+    // Step 9d: Loran's Escape's searched scry -- the provider's firm verdict prunes it (definition note); the keep
+    // default agrees with every firm verdict, so a firm card leaves one candidate.
+    int  ScryVerdict(const GameState& s, const Card& card) const override;
+    bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
     // Step 9c: the USER's order -- Guilty Conscience before Loran's Escape (definition note).
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool HasExtraLethalModel() const override { return true; }

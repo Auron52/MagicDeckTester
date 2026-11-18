@@ -542,6 +542,15 @@ struct Action
     // matter). Rides CastRiders into both cast paths (a LegendKeepPinScope over the cast) and the executor's
     // StackEntry (the resolution); folded into plan_signature / ActSig / ActionFoldSig only when nonzero.
     std::int8_t legend_keep        = 0;
+    // A SPELL'S OWN SCRY (CardParams::cast_scry on a solo-target trick -- Loran's Escape's "Scry 1"; Stuffy Doll step
+    // 9d, USER 2026-11-17: "It should be searched and typically overridden by a provider"): which candidate of
+    // TopDispositionCandidates(Scry) the cast's scry takes at RESOLUTION. -1 = unpinned (the provider's disposition,
+    // == candidate 0, every other action and human play); k >= 1 = the k-th alternative. CollectActions twins the
+    // cast when the look it can predict (the library top at enumeration) has an alternative the provider's
+    // ScryVerdict does not prune; a stale width clamps at resolution (a duplicate line, never a lost one). Rides
+    // CastRiders into both worlds' resolution (a ScriptedTopChoice over ResolveSoloTargetTrick) and the executor's
+    // StackEntry; folded into plan_signature / ActionFoldSig / the effect signature only when set.
+    std::int8_t scry_pin           = -1;
     // LURRUS OF THE DREAM-DEN (CardParams::gy_cast_permanent_max_mv, 2026-11-10): a CastFromGraveyard
     // cast made under a graveyard CAST PERMISSION -- the permission source's card.m_number (a deck card
     // number, so it fits). -1 for every other action, including a retrace cast (which carries
@@ -1212,6 +1221,9 @@ struct CastRiders
     // Action::legend_keep (CR 704.5j keep, Boars I5b item 4): installed as the legend-keep pin over the cast by both
     // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
     std::int8_t legend_keep    = 0;
+    // Action::scry_pin (a spell's own searched scry, Loran's Escape): installed as a ScriptedTopChoice over the
+    // trick's resolution by both worlds (rollout apply_one; executor StackEntry -> EffectHandler). -1 = unpinned.
+    std::int8_t scry_pin       = -1;
 
     static CastRiders Of(const Action& a)
     {
@@ -1220,6 +1232,7 @@ struct CastRiders
         r.emerge            = a.emerge;
         r.dies_tuck         = a.dies_tuck;
         r.legend_keep       = a.legend_keep;
+        r.scry_pin          = a.scry_pin;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;

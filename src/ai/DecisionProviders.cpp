@@ -1285,6 +1285,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"redirectwindow", UnprunedGate::RedirectWindow},
     {"gchost", UnprunedGate::GcHost},
     {"escapetarget", UnprunedGate::EscapeTarget},
+    {"stuffyscry", UnprunedGate::StuffyScry},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -2737,21 +2738,37 @@ void StuffyDollProvider::DamageBackAuraHostCandidates(const GameState& s, const 
     if (!out.empty()) { io.swap(out); }
 }
 
-// (c) Loran's Escape's TARGET: a PRUNE to ONE target (USER 2026-11-17 ~21:14 and the three refinements after it).
-//       * a creature of ours carrying Guilty Conscience exists -> that creature (every such one in the list; if its
-//         grant is a no-effect line -- an indestructible Doll -- the engine's no-effect representative stands in);
-//       * else our highest-power damage-REFLECTING creature other than Stuffy Doll (Reckoner, Nemesis, Mogg Maniac,
-//         a Sliver under a Spiteful grant) on the battlefield ("it could allow a creature to survive a sweeper";
-//         "It should be a creature that reflects damage also"); ties: battlefield order;
-//       * else the scry-only / no-effect representative ("It is essentially a Scry 1"; kept castable, the scry digs);
-//       * else (no such representative) the engine's list stands.
-//     Same-plan HAND creatures are not kept: a hand target forces its cast into the same plan, and the USER asked
-//     for one target that keeps the Escape castable on its own.
+// (c) Loran's Escape's TARGET: a PRUNE (USER 2026-11-17 ~21:14 and the three refinements after it; widened to SAME-PLAN
+//     targets in step 9d, USER ~23:25: "That should be fixed, given the potential creature -> Guilty Conscience ->
+//     Loran's Escape -> Blasphemous Act line."). The Escape's target is bound at ENUMERATION (CollectActions emits one
+//     cast variant per target; both apply worlds replay it), so "the GC'd creature" and "the best reflector" must be
+//     read off what the SAME plan can still cast, not only off the battlefield. The rule:
+//       1. a creature of ours carrying Guilty Conscience exists -> that creature (every such one in the list; if its
+//          grant is a no-effect line -- an indestructible Doll -- the engine's no-effect representative stands in).
+//          Unchanged from step 9b.
+//       2. else the union of
+//          (a) WITH a Guilty Conscience in hand (the same plan may cast it; it resolves before the Escape -- the
+//              USER's order puts GC first): the creatures that GC would enchant -- the battlefield hosts the GC-host
+//              prune admits (DamageBackAuraHostCandidates over LegalEnchantTargets, the exact host set CollectActions
+//              offers GC), an indestructible one mapped to the no-effect representative -- plus the best same-plan
+//              HAND reflector (a creature cast earlier in the plan; GC lands on it once it is on the battlefield);
+//          (b) the highest-power damage-REFLECTING creature other than Stuffy Doll (Reckoner, Nemesis, Mogg Maniac, a
+//              Sliver under a Spiteful grant) over the battlefield AND the same-plan hand creatures ("it could allow a
+//              creature to survive a sweeper"; "It should be a creature that reflects damage also"); ties: battlefield
+//              first (it needs no cast), then battlefield order, then hand order;
+//       3. a hand target forces its cast into the plan, so when nothing kept is on the battlefield the Escape's
+//          castable-alone line is added: the best battlefield reflector, else the scry-only / no-effect
+//          representative ("It is essentially a Scry 1"; kept castable, the scry digs);
+//       4. nothing kept -> the engine's list stands.
+//     A plan that casts GC on one creature and the Escape on another is not filtered out (the restriction is per
+//     cast, read at enumeration; a per-plan consistency filter would need the plan) -- a widening, disclosed.
 void StuffyDollProvider::IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& /*def*/,
                                                              int inert_rep, std::vector<int>& io) const
 {
     if (DecisionUnpruned(UnprunedGate::EscapeTarget) || io.size() <= 1) { return; }
     const int me = s.active_player_index;
+    const auto& hand = s.players[static_cast<std::size_t>(me)].hand;
+    auto in_io = [&](int num) { return std::find(io.begin(), io.end(), num) != io.end(); };
     auto on_bf_own = [&](int num) -> const Permanent* {
         for (const Permanent& q : s.battlefield)
         { if (q.card.m_number == num && q.controller_index == me && q.card.IsCreature()) { return &q; } }
@@ -2764,28 +2781,176 @@ void StuffyDollProvider::IndestructibleGrantTargetCandidates(const GameState& s,
         if (q.controller_index != me || !q.card.IsCreature()) { continue; }
         if (dmgrx::AuraHostDamageBackOn(s, q.card.m_number) <= 0) { continue; }
         any_gc = true;
-        if (std::find(io.begin(), io.end(), q.card.m_number) != io.end()) { gc_in.push_back(q.card.m_number); }
+        if (in_io(q.card.m_number)) { gc_in.push_back(q.card.m_number); }
     }
-    std::vector<int> out;
+    std::vector<int> keep;
+    auto add = [&](int num) { if (num != 0 && std::find(keep.begin(), keep.end(), num) == keep.end()) { keep.push_back(num); } };
     if (any_gc)
     {
-        for (int num : io) { if (std::find(gc_in.begin(), gc_in.end(), num) != gc_in.end()) { out.push_back(num); } }
-        if (out.empty() && inert_rep != 0) { out.push_back(inert_rep); }
+        for (int num : gc_in) { add(num); }
+        if (keep.empty()) { add(inert_rep); }
     }
     else
     {
-        const Permanent* best = nullptr;
-        for (int num : io)
-        {
+        // A non-Doll reflector, as (power, id): battlefield members from the board, same-plan HAND members (an id in
+        // `io` that is a hand card) as the creature they would be on our battlefield (a probe permanent: printed
+        // reflection + the Spiteful grants on the board + its own grant when it is a Sliver granter).
+        struct R { int num; int power; bool bf; };
+        auto bf_reflector = [&](int num, R& r) -> bool {
             const Permanent* q = on_bf_own(num);
             if (q == nullptr || num == inert_rep || StuffyIsDoll(dmgrx::Def(*q)) || dmgrx::ReflectInstances(s, *q) <= 0)
-            { continue; }
-            if (best == nullptr || CombatPowerOf(*q, s) > CombatPowerOf(*best, s)) { best = q; }
+            { return false; }
+            r = { num, CombatPowerOf(*q, s), true };
+            return true;
+        };
+        auto hand_reflector = [&](int num, R& r) -> bool {
+            if (num == inert_rep) { return false; }
+            for (const Card& c : hand)
+            {
+                if (c.m_number != num) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d == nullptr || !d->card.IsCreature() || StuffyIsDoll(d)) { return false; }
+                Permanent probe;
+                probe.card = c;
+                probe.controller_index = me;
+                bool refl = dmgrx::ReflectInstances(s, probe) > 0;
+                if (!refl && d->params.grants_reflect_to_subtype != CardParams::ReflectTo::None)
+                { for (const std::string& sub : d->params.subtypes_affected) { if (CardHasSubtype(c, sub)) { refl = true; } } }
+                if (!refl) { return false; }
+                r = { num, CombatPowerOf(probe, s), false };
+                return true;
+            }
+            return false;
+        };
+        const R* best_bf = nullptr;
+        const R* best_hand = nullptr;
+        std::vector<R> rs;
+        rs.reserve(io.size());
+        for (int num : io)
+        {
+            R r{};
+            if (bf_reflector(num, r) || hand_reflector(num, r)) { rs.push_back(r); }
         }
-        if (best != nullptr)         { out.push_back(best->card.m_number); }
-        else if (inert_rep != 0)     { out.push_back(inert_rep); }
+        for (const R& r : rs)
+        {
+            const R*& slot = r.bf ? best_bf : best_hand;
+            if (slot == nullptr || r.power > slot->power) { slot = &r; }
+        }
+        // (b) the best reflector overall (battlefield wins a tie).
+        const R* best = best_bf;
+        if (best_hand != nullptr && (best == nullptr || best_hand->power > best->power)) { best = best_hand; }
+        // (a) the same plan's Guilty Conscience hosts.
+        const CardDefinition* gc = nullptr;
+        for (const Card& c : hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.aura_host_damage_back && d->params.is_aura) { gc = d; break; }
+        }
+        if (gc != nullptr)
+        {
+            std::vector<int> hosts = LegalEnchantTargets(s, me, gc->params);
+            if (hosts.size() > 1) { DamageBackAuraHostCandidates(s, *gc, hosts); }   // lifted by its own gate inside
+            for (int h : hosts)
+            {
+                if (in_io(h)) { add(h); continue; }
+                // Not an Escape target after the engine's folds: an indestructible host (the no-effect line) or a
+                // folded identical twin; only the former maps to the representative.
+                const Permanent* q = on_bf_own(h);
+                if (q != nullptr && q->HasKeyword(Keyword::Indestructible)) { add(inert_rep); }
+            }
+            if (best_hand != nullptr) { add(best_hand->num); }
+        }
+        if (best != nullptr) { add(best->num); }
+        // 3. keep the Escape castable on its own.
+        bool bf_kept = false;
+        for (int num : keep)
+        {
+            bool hand_num = false;
+            for (const Card& c : hand) { if (c.m_number == num) { hand_num = true; break; } }
+            if (!hand_num) { bf_kept = true; break; }
+        }
+        if (!bf_kept)
+        {
+            if (best_bf != nullptr) { add(best_bf->num); }
+            else                    { add(inert_rep); }
+        }
     }
+    std::vector<int> out;
+    for (int num : io) { if (std::find(keep.begin(), keep.end(), num) != keep.end()) { out.push_back(num); } }
     if (!out.empty()) { io.swap(out); }
+}
+
+// (d) Loran's Escape's SCRY 1 (step 9d): a FIRM verdict prunes the searched disposition (USER 2026-11-17 ~23:25: "It
+//     should be searched and typically overridden by a provider ... This is the kind of thing worth a prune."). The
+//     kill needs a damage REFLECTOR (Doll, Reckoner, Nemesis, Mogg Maniac, Spiteful Sliver -- a Sliver under a
+//     Spiteful grant counts once it is in play) and a STARTER our deck supplies as a sweeper (Blasphemous Act / Chain
+//     Reaction); everything costs at most five (Doll) once the creature count discounts the Act. So:
+//       * KEEP (+1) a missing combo piece: a reflector when we control and hold none; a sweeper when we hold none;
+//       * KEEP (+1) a land when short: lands in play + in hand < 5 (the Doll's cost);
+//       * BOTTOM (0) a dead card: a land when lands in play + in hand >= 7 (every card in the list is castable);
+//       * otherwise no verdict (-1): the search tries both.
+//     Lifted by MTG_UNPRUNE=stuffyscry (both dispositions searched). Human play never reads it (the viewer asks).
+namespace
+{
+int StuffyScryRule(const GameState& s, const Card& card)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+    if (d == nullptr) { return -1; }
+    const int me = s.active_player_index;
+    const auto& hand = s.players[static_cast<std::size_t>(me)].hand;
+    auto is_sweeper = [](const CardDefinition* x)
+    {
+        return x != nullptr && (x->params.damage_all_creatures > 0 || x->params.damage_all_creatures_count_creatures
+                                || x->params.x_damage_each_creature_and_player);
+    };
+    auto is_reflector = [](const CardDefinition* x)
+    {
+        return x != nullptr && x->card.IsCreature()
+            && (x->params.reflect_dealt_damage != CardParams::ReflectTo::None
+                || x->params.grants_reflect_to_subtype != CardParams::ReflectTo::None);
+    };
+    if (d->card.IsLand())
+    {
+        int lands = 0;
+        for (const Permanent& q : s.battlefield) { if (q.controller_index == me && q.card.IsLand()) { ++lands; } }
+        for (const Card& c : hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            if (hd != nullptr && hd->card.IsLand()) { ++lands; }
+        }
+        if (lands < 5)  { return 1; }
+        if (lands >= 7) { return 0; }
+        return -1;
+    }
+    if (is_sweeper(d))
+    {
+        for (const Card& c : hand) { if (is_sweeper(CardDatabase::Instance().LookupCached(c))) { return -1; } }
+        return 1;
+    }
+    if (is_reflector(d))
+    {
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == me && q.card.IsCreature() && dmgrx::ReflectInstances(s, q) > 0) { return -1; } }
+        for (const Card& c : hand) { if (is_reflector(CardDatabase::Instance().LookupCached(c))) { return -1; } }
+        return 1;
+    }
+    return -1;
+}
+}   // namespace
+
+int StuffyDollProvider::ScryVerdict(const GameState& s, const Card& card) const
+{
+    if (DecisionUnpruned(UnprunedGate::StuffyScry)) { return -1; }
+    return StuffyScryRule(s, card);
+}
+
+// The keep DEFAULT (candidate 0 of the searched fan, the playout and the d0 runner): the firm verdict when there is one
+// (so a firm card leaves exactly one candidate), else the generic rule.
+bool StuffyDollProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
+{
+    const int v = StuffyScryRule(s, top_card);
+    if (v >= 0) { return v == 1; }
+    return DeckProvider::ScryKeepOnTop(s, top_card);
 }
 
 // The lethal projection (design section 5). Optimistic by contract: it only ranks the greedy picker's

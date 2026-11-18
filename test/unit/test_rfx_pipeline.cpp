@@ -2271,3 +2271,199 @@ TEST_CASE("rfx step 9c: CAST ORDER -- Guilty Conscience before Loran's Escape (U
     }
     CHECK(both >= 1);
 }
+
+// ---- STEP 9d: Loran's Escape SAME-PLAN targets; the searched Loran's scry with a StuffyDollProvider verdict ----------
+// USER 2026-11-17 ~23:25: "That should be fixed, given the potential creature -> Guilty Conscience -> Loran's Excape ->
+// Blasphemous act line." and, on the scry: "It should be searched and typically overridden by a provider ... This is
+// the kind of thing worth a prune."
+
+namespace
+{
+Card HandRfx(GameState& s, const std::string& name, int number)
+{
+    Card c = DefRfx(name).card;
+    c.m_number = number;
+    s.players[0].hand.push_back(c);
+    return c;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9d: Loran's Escape prune admits SAME-PLAN targets (hand reflectors, the same plan's GC hosts)")
+{
+    const bool open_esc = DecisionUnpruned(UnprunedGate::EscapeTarget);
+    const bool open = open_esc || DecisionUnpruned(UnprunedGate::GcHost);   // the GC cases also read the host prune
+    const CardDefinition& lor = DefRfx("Loran's Escape");
+    auto run = [&](const GameState& s, int inert, std::vector<int> io) {
+        StuffyP().IndestructibleGrantTargetCandidates(s, lor, inert, io);
+        return io;
+    };
+    // A hand Reckoner and nothing on the battlefield but the scry-only Mind Stone: the Reckoner (it reflects; the
+    // plan casts it first) AND the castable-alone scry line. Step 9b kept the Mind Stone alone.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mind Stone", 4001).tapped = true;
+        HandRfx(s, "Boros Reckoner", 4002);
+        const std::vector<int> io{ 4002, 4001 };
+        CHECK(run(s, 4001, io) == io);
+    }
+    // No GC anywhere: the best reflector over battlefield + hand. A hand Reckoner (3) beats a settled Maniac (1); the
+    // Maniac stays as the castable-alone line. The reverse (battlefield Reckoner, hand Maniac): the Reckoner alone.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mogg Maniac", 4011);
+        HandRfx(s, "Boros Reckoner", 4012);
+        const std::vector<int> io{ 4011, 4012 };
+        CHECK(run(s, 0, io) == io);
+        GameState t = HostBoard();
+        PutRfx(t, "Boros Reckoner", 4021);
+        HandRfx(t, "Mogg Maniac", 4022);
+        CHECK(run(t, 0, { 4021, 4022 }) == (open_esc ? std::vector<int>{ 4021, 4022 } : std::vector<int>{ 4021 }));
+    }
+    // GC in HAND (the same plan may cast it, before the Escape): the creatures it would enchant. The GC-host prune's
+    // split case keeps the settled Maniac (can go off now) and the sick Reckoner (bigger, wait a turn) -> both are
+    // Escape targets; step 9b kept only the Reckoner (highest power), so "GC on the Maniac, Escape on it" was lost.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mogg Maniac", 4031);
+        PutRfx(s, "Boros Reckoner", 4032).entered_this_turn = true;
+        PutRfx(s, "Nomads en-Kor", 4033);
+        HandRfx(s, "Guilty Conscience", 4034);
+        const std::vector<int> io{ 4031, 4032, 4033 };
+        CHECK(run(s, 0, io) == (open ? io : std::vector<int>{ 4031, 4032 }));
+    }
+    // GC in hand, one battlefield host (the Maniac) and a hand Reckoner: GC can go on either (the Reckoner once the
+    // plan has cast it) -> both.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mogg Maniac", 4041);
+        HandRfx(s, "Boros Reckoner", 4042);
+        HandRfx(s, "Guilty Conscience", 4043);
+        const std::vector<int> io{ 4041, 4042 };
+        CHECK(run(s, 0, io) == io);
+    }
+    // GC in hand whose host is the indestructible Doll (a Doll with a starter is the ONE host): the no-effect
+    // representative stands for it, beside the best reflector.
+    {
+        GameState s = HostBoard();
+        s.deck_has_spell_target_watch = false;
+        PutRfx(s, "Stuffy Doll", 4051).chosen_player = 1;   // settled, untapped: its {T} ping is a starter
+        PutRfx(s, "Boros Reckoner", 4052);
+        PutRfx(s, "Nomads en-Kor", 4053);
+        HandRfx(s, "Guilty Conscience", 4054);
+        const std::vector<int> io{ 4052, 4053, 4051 };
+        CHECK(run(s, 4051, io) == (open ? io : std::vector<int>{ 4052, 4051 }));
+    }
+}
+
+TEST_CASE("rfx step 9d: the same-plan hand target reaches the search (Reckoner from hand, Escape on it)")
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.deck_has_spell_target_watch = false;
+    PutRfx(s, "Plains", 4101);
+    for (int i = 0; i < 4; ++i) { PutRfx(s, "Mountain", 4102 + i); }
+    PutRfx(s, "Mind Stone", 4110).tapped = true;    // the no-effect (scry-only) representative
+    HandRfx(s, "Boros Reckoner", 4111);
+    HandRfx(s, "Loran's Escape", 4112);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 4120 + i; s.players[0].library.push_back(m); }
+    std::set<std::string> hand_targets;
+    std::set<int> targets;
+    for (const auto& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() != "Loran's Escape") { continue; }
+            targets.insert(a.enchant_target);
+            if (!a.trick_hand_target.empty()) { hand_targets.insert(a.trick_hand_target); }
+        }
+    }
+    CHECK(hand_targets.count("Boros Reckoner") == 1);
+    CHECK(targets.count(4110) == 1);   // the castable-alone scry line stays
+}
+
+TEST_CASE("rfx step 9d: StuffyDollProvider ScryVerdict -- keep a missing piece / a land when short, bottom a flood land")
+{
+    const bool open = DecisionUnpruned(UnprunedGate::StuffyScry);
+    const StuffyDollProvider& p = StuffyP();
+    auto card = [](const std::string& n) { Card c = DefRfx(n).card; c.m_number = 4299; return c; };
+    // Lands: 3 in play + 1 in hand = 4 < 5 -> keep; 5 -> no verdict; 7 -> bottom.
+    GameState s = HostBoard();
+    for (int i = 0; i < 3; ++i) { PutRfx(s, "Mountain", 4201 + i); }
+    HandRfx(s, "Plains", 4210);
+    CHECK(p.ScryVerdict(s, card("Plains")) == (open ? -1 : 1));
+    PutRfx(s, "Mountain", 4204);
+    CHECK(p.ScryVerdict(s, card("Plains")) == -1);
+    PutRfx(s, "Mountain", 4205);
+    PutRfx(s, "Mountain", 4206);
+    CHECK(p.ScryVerdict(s, card("Plains")) == (open ? -1 : 0));
+    CHECK_FALSE(p.ScryKeepOnTop(s, card("Plains")));
+    // A sweeper: kept while we hold none; no verdict with one in hand.
+    CHECK(p.ScryVerdict(s, card("Blasphemous Act")) == (open ? -1 : 1));
+    CHECK(p.ScryKeepOnTop(s, card("Blasphemous Act")));
+    HandRfx(s, "Chain Reaction", 4211);
+    CHECK(p.ScryVerdict(s, card("Blasphemous Act")) == -1);
+    // A reflector: kept while we control and hold none; no verdict once one is in play.
+    CHECK(p.ScryVerdict(s, card("Boros Reckoner")) == (open ? -1 : 1));
+    PutRfx(s, "Mogg Maniac", 4212);
+    CHECK(p.ScryVerdict(s, card("Boros Reckoner")) == -1);
+    CHECK(p.ScryVerdict(s, card("Stuffy Doll")) == -1);
+    // Everything else: no verdict.
+    CHECK(p.ScryVerdict(s, card("Mind Stone")) == -1);
+    CHECK(p.ScryVerdict(s, card("Guilty Conscience")) == -1);
+    CHECK(p.ScryVerdict(s, card("Nomads en-Kor")) == -1);
+}
+
+namespace
+{
+// Plains + 2 Mountains, a settled Reckoner, Loran's Escape in hand, a library whose top is `top`.
+GameState ScryBoard(const std::string& top)
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.deck_has_spell_target_watch = false;
+    PutRfx(s, "Plains", 4301);
+    PutRfx(s, "Mountain", 4302);
+    PutRfx(s, "Mountain", 4303);
+    PutRfx(s, "Boros Reckoner", 4304);
+    HandRfx(s, "Loran's Escape", 4310);
+    Card t = DefRfx(top).card; t.m_number = 4320; s.players[0].library.push_back(t);
+    for (int i = 0; i < 9; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 4321 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9d: Loran's scry is SEARCHED (pinned twin, both worlds) and the verdict prunes a firm card")
+{
+    // Mind Stone on top: no verdict -> each Escape variant is twinned (scry_pin -1 = the provider's keep, 1 = bottom).
+    const GameState initial = ScryBoard("Mind Stone");
+    const auto plans = TurnSolver::EnumerateMainPlans(initial, true);
+    std::set<int> pins;
+    int checked = 0;
+    for (const auto& p : plans)
+    {
+        const Action* esc = nullptr;
+        for (const Action& a : p.actions) { if (a.card_name.str() == "Loran's Escape") { esc = &a; } }
+        if (esc == nullptr) { continue; }
+        pins.insert(esc->scry_pin);
+        INFO("scry_pin ", static_cast<int>(esc->scry_pin));
+        GameState roll = initial;
+        TurnSolver::ApplyPlan(roll, p, true);
+        GameState exec = initial;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        const auto& lib = roll.players[0].library;
+        REQUIRE(lib.size() == exec.players[0].library.size());
+        for (std::size_t i = 0; i < lib.size(); ++i) { CHECK(lib[i].m_number == exec.players[0].library[i].m_number); }
+        if (esc->scry_pin == 1) { CHECK(lib[lib.size() - 1].m_number == 4320); }   // bottomed
+        else                    { CHECK(lib[0].m_number == 4320); }  // kept (the provider's default for a nonland)
+        ++checked;
+    }
+    CHECK(pins == std::set<int>{ -1, 1 });
+    CHECK(checked >= 2);
+    // A firm card -- Blasphemous Act while we hold no sweeper: KEEP -- leaves one candidate: no twin (unless lifted).
+    std::set<int> firm;
+    for (const auto& p : TurnSolver::EnumerateMainPlans(ScryBoard("Blasphemous Act"), true))
+    { for (const Action& a : p.actions) { if (a.card_name.str() == "Loran's Escape") { firm.insert(a.scry_pin); } } }
+    CHECK(firm == (DecisionUnpruned(UnprunedGate::StuffyScry) ? std::set<int>{ -1, 1 } : std::set<int>{ -1 }));
+}

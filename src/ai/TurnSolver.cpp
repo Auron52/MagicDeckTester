@@ -3603,6 +3603,8 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         if (a.draw_target != 0)       { k += "/DT" + std::to_string(a.draw_target); }
         // Spellskite's redirect of a trick: a different line from the same cast unredirected.
         if (a.trick_redirect != 0)    { k += "/RD" + std::to_string(a.trick_redirect); }
+        // A trick's own searched scry (Loran's Escape, step 9d): keep vs bottom are two lines. Set-gated.
+        if (a.scry_pin >= 0)          { k += "/SC" + std::to_string(a.scry_pin); }
         // Morph: the face-down cast is a different line from the hard cast of the same card.
         if (a.face_down != 0)         { k += "/FD" + std::to_string(a.face_down); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
@@ -11645,6 +11647,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         { s += a.chosen_x ? "[vote time]" : "[vote money]"; }
         else if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
         if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
+        if (a.scry_pin >= 0)    { s += "[scry" + std::to_string(a.scry_pin) + "]"; }
         // An Aura's HOST is a searched variant (one plan per legal host); print it, or two host
         // variants of the same Aura read as one plan scanned twice (claude_s12_gi11 T3).
         if (a.enchant_target > 0) { s += "->#" + std::to_string(a.enchant_target); }
@@ -20622,6 +20625,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     if (a.draw_target != 0) { FoldMix(h, 0xD7A6ull + static_cast<std::uint64_t>(a.draw_target)); }
     // Spellskite's trick redirect (Action::trick_redirect): a searched axis, folded only when set.
     if (a.trick_redirect != 0) { FoldMix(h, 0x5E11ull + static_cast<std::uint64_t>(a.trick_redirect)); }
+    if (a.scry_pin >= 0) { FoldMix(h, 0x5C21ull + static_cast<std::uint64_t>(a.scry_pin)); }   // a trick's own scry (9d)
     // Magnetic Theft's Equipment target is a searched axis too (the creature rides enchant_target,
     // above). Folded only when set, so every other deck's signature is byte-identical.
     if (a.attach_equip_id != 0)
@@ -29978,6 +29982,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
         // Spellskite's trick redirect: a must-fold (redirected vs not are two plays). Set-gated.
         if (a.trick_redirect != 0) { fold(0x5244ull + static_cast<uint64_t>(a.trick_redirect) * 1009); }   // "RD"
+        if (a.scry_pin >= 0) { fold(0x5343ull + static_cast<uint64_t>(a.scry_pin) * 1013); }   // "SC": a trick's own scry (9d)
         // Morph's face-down cast vs the hard cast of the same name (they collided here). Set-gated.
         if (a.face_down != 0) { fold(0x4644ull + static_cast<uint64_t>(a.face_down)); }   // "FD"
         // Lurrus: a graveyard cast's permission source (gated on set -> every other fingerprint unchanged).
@@ -30351,6 +30356,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     { add("draw_target", std::to_string(x.draw_target), std::to_string(y.draw_target)); }
     if (x.trick_redirect != y.trick_redirect)
     { add("trick_redirect", std::to_string(x.trick_redirect), std::to_string(y.trick_redirect)); }
+    if (x.scry_pin != y.scry_pin)
+    { add("scry_pin", std::to_string(x.scry_pin), std::to_string(y.scry_pin)); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
     { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
            std::to_string(static_cast<long long>(y.replicate_count))); }
@@ -43641,10 +43648,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { if (std::find(ids.begin(), ids.end(), t.first) != ids.end()) { kept.push_back(t); } }
                     if (!kept.empty()) { esc.swap(kept); }
                 }
+                // THE SCRY IS SEARCHED (step 9d; USER 2026-11-17 ~23:25: "It should be searched and typically overridden
+                // by a provider ... This is the kind of thing worth a prune."). Each target variant is twinned per
+                // ALTERNATIVE disposition of the look this cast can predict -- the library top now (k >= 1, pinned by
+                // Action::scry_pin; the untwinned variant is the provider's disposition, candidate 0). The provider's
+                // ScryVerdict prunes the alternatives inside TopDispositionCandidates, so a firm verdict emits no twin.
+                // Resolution re-reads the real top and clamps the index (a same-plan draw before the Escape costs a
+                // duplicate line, never a lost one). Never under human play (the viewer's scry prompt asks).
+                int scry_alts = 0;
+                if (def.params.cast_scry > 0 && !HumanPlayActive() && !ap.library.empty())
+                {
+                    const int look = std::min(def.params.cast_scry, static_cast<int>(ap.library.size()));
+                    const std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+                    scry_alts = std::min(126, static_cast<int>(TopDispositionCandidates(state, looked, LookKind::Scry).size()) - 1);
+                }
                 for (const auto& t : esc)
                 {
+                    const std::size_t first = actions.size();
                     if (t.second.empty()) { emit(t.first, 0); }
                     else                  { emit(t.first, 0, t.second); }
+                    const std::size_t last = actions.size();
+                    for (int k = 1; k <= scry_alts; ++k)
+                    {
+                        for (std::size_t q = first; q < last; ++q)
+                        {
+                            Action v = actions[q];
+                            v.scry_pin = static_cast<std::int8_t>(k);
+                            actions.push_back(std::move(v));
+                        }
+                    }
                 }
                 continue;
             }
@@ -59155,7 +59187,7 @@ namespace solvememo
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
                 || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target
-                || x.trick_redirect != y.trick_redirect)
+                || x.trick_redirect != y.trick_redirect || x.scry_pin != y.scry_pin)
             { return false; }
         }
         return true;
@@ -73595,6 +73627,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
             rec.dies_tuck          = riders.dies_tuck;   // Ilharg's death "may" (I5b): the replay pins the same answer
             rec.legend_keep        = riders.legend_keep;   // ...and the CR 704.5j keep (I5b item 4)
+            rec.scry_pin           = riders.scry_pin;      // ...and a trick's own searched scry (step 9d)
             // ...and the RIPPLE chain pins (Shadowborn INT-3): the replayed cast must stamp the same script.
             rec.ripple_pinned      = riders.ripple_pinned;
             rec.ripple_reveals     = riders.ripple_reveals;
@@ -75238,8 +75271,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // enchant_target = the searched creature target (0 = up-to-one untargeted);
             // own_targets is reused as Twinflame's searched strive-extras count.
             // chosen_x carries Luxurious Libation's paid {X} (every copy copies it, CR 707.10).
-            ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
-                                   own_targets, chosen_x, riders.trick_redirect);
+            {
+                // The cast's own searched scry (Action::scry_pin; Loran's Escape) -- lockstep with the executor's
+                // StackEntry pin in EffectHandler.
+                std::optional<ScriptedTopChoice> stc_pin;
+                if (riders.scry_pin >= 0) { stc_pin.emplace(riders.scry_pin); }
+                ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
+                                       own_targets, chosen_x, riders.trick_redirect);
+            }
             // Draw breakpoint (trick class, site 5): a magnet fan-out mass-draws, so newly revealed
             // cards must be castable with the mana still available this turn. Same SHAPE as the
             // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (resolved after every
@@ -82109,6 +82148,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
                 if (d && (d->params.morph_cost || d->params.megamorph_cost)) { w.Put(act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                 if (act.trick_redirect != 0) { w.Put("#RD"); w.Int(act.trick_redirect); }   // Spellskite
+                if (act.scry_pin >= 0) { w.Put("#SC"); w.Int(act.scry_pin); }   // a trick's own scry (9d)
                 if (d && d->params.buyback_sacrifice_islands > 0)
                 { w.Put("#BB"); w.Put(act.tutor_target); }
                 if (act.player_target != 0) { w.Put("#PT"); w.Int(act.player_target); }   // target player
@@ -87527,6 +87567,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (cd && (cd->params.morph_cost || cd->params.megamorph_cost)) { k += (act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                         // Spellskite's redirect of a trick: the same cast redirected is another line.
                         if (act.trick_redirect != 0) { k += "#RD"; k += std::to_string(act.trick_redirect); }
+                        // A trick's own searched scry (Loran's Escape, step 9d): another line. Set-gated.
+                        if (act.scry_pin >= 0) { k += "#SC"; k += std::to_string(act.scry_pin); }
                         // TARGET PLAYER ("target player gains N life": Heroes' Reunion / Rest for the
                         // Weary). The kicker case once more -- both targets share one card name, so
                         // without a marker the dedup would keep one of them and the opponent variant
@@ -135473,6 +135515,7 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.trick_redirect, static_cast<int>(a.face_down) };
             for (int v : f) { k += "|" + std::to_string(v); }
             if (a.seed_pay_split != 0) { k += "|ps" + std::to_string(a.seed_pay_split); }   // Q61, set only when on
+            if (a.scry_pin >= 0) { k += "|sc" + std::to_string(a.scry_pin); }   // a trick's own scry (9d), set only when on
             ks.push_back(std::move(k));
         }
         std::sort(ks.begin(), ks.end());

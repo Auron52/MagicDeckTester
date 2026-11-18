@@ -10565,6 +10565,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     entry.dies_tuck = riders.dies_tuck;   // Ilharg's death "may" for this spell's resolution (legend-rule loser)
     entry.legend_keep = riders.legend_keep;   // the CR 704.5j keep for this spell's resolution (I5b item 4)
     if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite
+    entry.scry_pin = riders.scry_pin;   // Loran's Escape's searched scry (-1 = unpinned)
     // Magnetic Theft: the searched Equipment target, read at resolution by the shared
     // ResolveAttachTargetEquipment (the creature target is entry.enchant_target). Param-gated, so no
     // other deck's stack entries move.

@@ -232,6 +232,9 @@ struct StackEntry
                                         // I5b item 4): 0 unpinned, 1 keep the oldest copy, 2 keep the newest.
                                         // EffectHandler::Resolve installs it (LegendKeepPinScope) for the
                                         // resolution; the rollout twin is apply_one's scope.
+    std::int8_t         scry_pin       = -1;        // a spell's own searched scry (Action::scry_pin via CastRiders;
+                                        // Loran's Escape): EffectHandler installs a ScriptedTopChoice over the
+                                        // solo-target trick's resolution. -1 = unpinned (the provider's pick).
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::
