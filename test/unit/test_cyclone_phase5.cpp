@@ -308,17 +308,53 @@ TEST_CASE("Cyclone MTG_CYCLONE_LOUNGE_IDLE: Xander's Lounge beside the Tarn pick
         s.players[0].hand.pop_back();
         CHECK(search(s) == both);
     }
-    {   // CYCLING counts as a use: one Island + Cyclone in hand ({3}{R}{R}, cycling {2}) -- the extra mana cycles it.
+    {   // CYCLING counts as a use while a Cyclone is OUT: one Island + Cyclone in hand ({3}{R}{R}, cycling {2}) --
+        // the extra mana cycles it into the free cast.
         GameState s = Base5(1, lib, 0);
+        Put5(s, kCyclone, 70);
         s.players[0].hand.push_back(Card5(kCyclone, 120));
         CHECK(search(s) == pick);
         // With no mana out, one mana still cannot pay {2}: idle.
         GameState z = Base5(0, lib, 0);
+        Put5(z, kCyclone, 70);
         z.players[0].hand.push_back(Card5(kCyclone, 120));
         CHECK(search(z) == both);
         // Curator ({2}{U}{U}, cycling {U}) with no mana out: the extra {U} cycles it.
         z.players[0].hand.back() = Card5(kCurator, 121);
         CHECK(search(z) == pick);
+    }
+    {   // MTG_CYCLONE_LOUNGE_IDLE_AMEND (default ON): with NO Cyclone on the battlefield cycling is a cantrip the
+        // search can defer, so it is not a use (std gi 649) -- the same two hands read idle.
+        GameState s = Base5(1, lib, 0);
+        s.players[0].hand.push_back(Card5(kCyclone, 120));
+        CHECK(search(s) == both);
+        GameState z = Base5(0, lib, 0);
+        z.players[0].hand.push_back(Card5(kCurator, 121));
+        CHECK(search(z) == both);
+        // The amendment off: the 2026-11-18 test (cycling always counts).
+        ArmScope5 _a(heurarm::CYCLONE_LOUNGE_IDLE_AMEND, 0);
+        CHECK(search(s) == pick);
+        CHECK(search(z) == pick);
+    }
+    {   // SEETHING SONG ({2}{R}: RRRRR) counts only when its mana casts another card (std gi 663). Two Islands + the
+        // Song alone: the extra mana would cast the Song and nothing after it -> idle.
+        GameState s = Base5(2, lib, 0);
+        s.players[0].hand.push_back(Card5("Seething Song", 120));
+        CHECK(search(s) == both);
+        {
+            ArmScope5 _a(heurarm::CYCLONE_LOUNGE_IDLE_AMEND, 0);   // old test: the Song alone is a use
+            CHECK(search(s) == pick);
+        }
+        // Song + Cyclone in hand: one more mana casts the Song, whose RRRRR casts the Cyclone -> needed.
+        s.players[0].hand.push_back(Card5(kCyclone, 121));
+        CHECK(search(s) == pick);
+        // Song + Cyclone with two Islands and a Mountain: the Song is castable already and pays the Cyclone; the extra
+        // mana adds nothing -> idle.
+        GameState t = Base5(2, lib, 0);
+        Put5(t, "Mountain", 60);
+        t.players[0].hand.push_back(Card5("Seething Song", 120));
+        t.players[0].hand.push_back(Card5(kCyclone, 121));
+        CHECK(search(t) == both);
     }
     {   // goldfish_inert (Toxic Deluge) is never cast: a {B} that would pay for it is not "needed".
         GameState s = Base5(1, { "Island", kLounge, "Mountain", kGrave, kCrypt }, 0);

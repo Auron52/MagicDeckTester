@@ -29,6 +29,7 @@
 #include "../deck/DeckLoader.h"     // Decklist
 #include "LandPlay.h"               // PlayLandFromHand (the combo route's land drop)
 #include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
+#include "ManaPayment.h"            // BuildColorFeasibility (FiveColour RULE 6's colour-exact step test)
 #include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
 #include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
@@ -547,7 +548,8 @@ static int SeaFetchRank(const std::string& name)
 // castable with the extra mana already reads as "needed"); mana-costed activations are not scanned (none in this
 // list spends mana on an activation that a fetched land would pay this turn); a never-cast card (Whelming Wave under
 // MTG_SEA_WAVE_NEVER) is not counted.
-namespace { int CastableCount(ManaPool p, const std::vector<const ManaCost*>& costs); }   // FiveColour's, below
+namespace { int CastableCount(ManaPool p, const std::vector<const ManaCost*>& costs);   // FiveColour's, below
+            bool PayFrom(ManaPool& p, const ManaCost& cost); }
 // THE SHARED "NEEDED THIS TURN" TEST (Sea's Hedge Maze and Cyclone's Xander's Lounge; FiveColour's RULE 6 is the
 // same union, computed per colour inside its ranking). True when one more mana of some colour in `colours` either
 // (a) SOLO: lets a hand card be paid that the current pool cannot pay, or (b) SEQUENCE: pays for one MORE hand card
@@ -555,10 +557,18 @@ namespace { int CastableCount(ManaPool p, const std::vector<const ManaCost*>& co
 // never casts. `cycling`: a hand card's mana cycling cost (EffectiveCyclingCost) is a second use of the mana -- in
 // (a) either cost unlocking counts, in (b) each card contributes its CHEAPER cost (one use per card, so a card is
 // never counted as both cast and cycled). Off, both lists are the cast costs alone (Sea's test, byte-identical).
+// `cycling_live` (may be null): cycling counts only while it holds -- Cyclone's cycling is a mana use only with an
+// Unpredictable Cyclone on the battlefield; before that, cycling Curator or a Cyclone is a cantrip the search usually
+// defers. `ritual_payoff`: a ritual (ritual_floating_mana, Seething Song) is not a use by itself -- it counts only
+// when the mana it floats pays for ANOTHER hand card this turn. Each pool is tested with and without the hand's
+// rituals cast first (in hand order, while payable), and the ritual itself never enters either list. Both default
+// off; Sea sets neither (byte-identical).
 struct FetchNeedScan
 {
     bool (*never_cast)(const CardDefinition&) = nullptr;
     bool cycling = false;
+    bool (*cycling_live)(const GameState&, int) = nullptr;
+    bool ritual_payoff = false;
 };
 static bool FetchManaNeededThisTurn(const GameState& s, int controller, const std::vector<Color>& colours,
                                     const FetchNeedScan& scan)
@@ -567,15 +577,18 @@ static bool FetchManaNeededThisTurn(const GameState& s, int controller, const st
     std::vector<ManaCost> cyc;                 // the cycling costs (stable addresses: reserved up front)
     cyc.reserve(pl.hand.size());
     std::vector<const ManaCost*> solo, seq;
+    std::vector<const CardDefinition*> rituals;   // ritual_payoff only: cast first, never counted themselves
+    const bool cycling = scan.cycling && (scan.cycling_live == nullptr || scan.cycling_live(s, controller));
     for (const Card& c : pl.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr || d->card.IsLand()) { continue; }
         if (scan.never_cast != nullptr && scan.never_cast(*d)) { continue; }
+        if (scan.ritual_payoff && d->params.ritual_floating_mana > 0) { rituals.push_back(d); continue; }
         const ManaCost* cast = &d->card.m_mana_cost;
         solo.push_back(cast);
         const ManaCost* cheap = cast;
-        if (scan.cycling && d->params.cycling_cost.has_value())
+        if (cycling && d->params.cycling_cost.has_value())
         {
             cyc.push_back(EffectiveCyclingCost(s, controller, d->params.cycling_cost.value()));
             solo.push_back(&cyc.back());
@@ -587,13 +600,48 @@ static bool FetchManaNeededThisTurn(const GameState& s, int controller, const st
     std::stable_sort(seq.begin(), seq.end(),
                      [](const ManaCost* a, const ManaCost* b) { return a->ManaValue() < b->ManaValue(); });
     const ManaPool pool_now = AvailableManaPool(s);
-    const int base = CastableCount(pool_now, seq);
+    if (rituals.empty())
+    {
+        const int base = CastableCount(pool_now, seq);
+        for (Color col : colours)
+        {
+            ManaPool p = pool_now;
+            p.Add(col);
+            for (const ManaCost* mc : solo) { if (!pool_now.CanPay(*mc) && p.CanPay(*mc)) { return true; } }   // (a)
+            if (CastableCount(p, seq) > base) { return true; }                                                 // (b)
+        }
+        return false;
+    }
+    // The pool as-is, then after each further ritual in hand order (while it can be paid): the pools the turn can
+    // spend. A card counts as castable from a pool when ANY of its variants pays it.
+    auto variants = [&](ManaPool p)
+    {
+        std::vector<ManaPool> v{ p };
+        for (const CardDefinition* r : rituals)
+        {
+            if (!PayFrom(p, r->card.m_mana_cost)) { break; }
+            AddColorToPool(p, r->params.ritual_float_color, RitualFloatAmount(s, *r, 0));
+            v.push_back(p);
+        }
+        return v;
+    };
+    auto pays = [](const std::vector<ManaPool>& v, const ManaCost& mc)
+    { return std::any_of(v.begin(), v.end(), [&](const ManaPool& q) { return q.CanPay(mc); }); };
+    auto reach = [&](const std::vector<ManaPool>& v)
+    {
+        int n = 0;
+        for (const ManaPool& q : v) { n = std::max(n, CastableCount(q, seq)); }
+        return n;
+    };
+    const std::vector<ManaPool> now_v = variants(pool_now);
+    const int base = reach(now_v);
     for (Color col : colours)
     {
         ManaPool p = pool_now;
         p.Add(col);
-        for (const ManaCost* mc : solo) { if (!pool_now.CanPay(*mc) && p.CanPay(*mc)) { return true; } }   // (a)
-        if (CastableCount(p, seq) > base) { return true; }                                                 // (b)
+        const std::vector<ManaPool> ext_v = variants(p);
+        for (const ManaCost* mc : solo) { if (!pays(now_v, *mc) && pays(ext_v, *mc)) { return true; } }   // (a)
+        if (reach(ext_v) > base) { return true; }                                                       // (b)
     }
     return false;
 }
@@ -24502,6 +24550,206 @@ static bool FiveColourEntersTapped(const std::string& name)
     return d != nullptr && d->params.enters_tapped;
 }
 
+// MTG_FIVECOLOUR_RULE6_SEES_STEPS (DEFAULT OFF, pending the USER). RULE 6's own "can the untapped land's mana be
+// SPENT this turn" test (USER 2026-08-19: "if there is a spell that requires the land we should always go for
+// untapped ... triomes are STRICTLY for times when you cannot use the mana") read the board too coarsely: the
+// 2026-11-18 TRIOME_BESIDE A/B found 12 standard games where the untapped land's mana really was spent on a
+// later step that RULE 6 had called idle. This keeps width 1 (one target, no extra search) and fixes the test:
+//   (1) DEATHRITE FUEL: the cracked fetchland itself is a land card in our graveyard by the time we spend, so an
+//       untapped Deathrite with no fuel is one more mana (std 69, 447, 662; 2HG 94);
+//   (2) COLOUR-EXACT: AvailableManaPool books every multicolour land and domain dork as WILD, so a missing colour
+//       looked available; payment is re-checked by Hall's condition over the board's real colour sets
+//       (BuildColorFeasibility) (std 318, 818; 2HG 232);
+//   (3) DOMAIN GROWTH: a coloured permanent cast first adds its new colours to every untapped Bloom Tender /
+//       Faeburrow's yield (std 22, 933; 2HG 299, 115);
+//   (4) GREAVES HASTE: with Lightning Greaves out, a mana creature cast this turn taps the same turn (std 72, 396);
+//   (5) BEST TOTAL MANA VALUE, not the cheapest-first count: a bigger spell can replace a cheaper one (std 105, 453).
+// The result is OR-ed into RULE 6's own unlocks, so it only ever ADDS untapped preference.
+static bool FiveColourRule6StepsOn()
+{
+    static const bool on = EnvOn("MTG_FIVECOLOUR_RULE6_SEES_STEPS", false);
+    return heurarm::Flag(heurarm::FIVECOLOUR_RULE6_SEES_STEPS, on);
+}
+namespace
+{
+// One hand card as the step model sees it.
+struct R6Card
+{
+    std::vector<ManaCost> flats;   // its cost with each hybrid assignment expanded (one entry when none)
+    int  mv = 0;
+    int  colours = 0;              // 5-bit WUBRG mask of a PERMANENT's colours (0 for an instant / sorcery)
+    int  want = 0;                 // 5-bit mask of the colours its cost asks for (hybrid halves included)
+    bool dork = false;             // a mana creature (CardTemplate::ManaDork) that is not Deathrite
+    bool domain = false;           // ... whose yield is the domain (Bloom Tender, Faeburrow Elder)
+};
+}
+// Per colour index (W,U,B,R,G,C), whether ONE more mana of that colour lets this turn spend more: a single card
+// castable only with it (colour-exact), or a larger best total mana value over every castable subset of the hand
+// (with the step effects above). Read-only.
+static std::array<bool, 6> FiveColourRule6Steps(const GameState& s, int controller)
+{
+    std::array<bool, 6> out{};
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    std::vector<R6Card> cards;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand() || d->params.goldfish_inert) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.has_x || mc.x_pips != 0 || mc.phyrexian_count != 0 || mc.twobrid_count != 0 || mc.snow_pips != 0)
+        { continue; }
+        R6Card r;
+        r.mv = mc.ManaValue();
+        if (mc.hybrid_count == 0) { r.flats.push_back(mc); }
+        else { for (unsigned b = 0; b < (1u << mc.hybrid_count); ++b) { r.flats.push_back(mc.ExpandHybrids(b)); } }
+        for (const ManaCost& f : r.flats)
+        {
+            const int pips[5] = { f.white, f.blue, f.black, f.red, f.green };
+            for (int i = 0; i < 5; ++i) { if (pips[i] > 0) { r.want |= 1 << i; } }
+        }
+        if (!d->card.IsInstant() && !d->card.IsSorcery())
+        { for (int i = 0; i < 5; ++i) { if (d->card.HasColor(static_cast<Color>(i))) { r.colours |= 1 << i; } } }
+        r.dork   = d->tmpl == CardTemplate::ManaDork && !d->params.gy_land_exile_mana;
+        r.domain = r.dork && d->params.domain_mana;
+        cards.push_back(std::move(r));
+    }
+    if (cards.empty()) { return out; }
+    // At most ten cards (1024 subsets): keep the cheapest, which are the ones a turn can cast.
+    std::stable_sort(cards.begin(), cards.end(), [](const R6Card& a, const R6Card& b) { return a.mv < b.mv; });
+    if (cards.size() > 10) { cards.resize(10); }
+    const int n = static_cast<int>(cards.size());
+
+    // The board: domain (colours among our permanents), untapped domain sources, Deathrite, Greaves.
+    int dom = 0, ndom = 0, n_dr = 0;
+    bool haste = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        for (int i = 0; i < 5; ++i) { if (p.card.HasColor(static_cast<Color>(i))) { dom |= 1 << i; } }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.equip_grants_haste && d->params.equip_cost_generic == 0) { haste = true; }
+        if (p.tapped || !CanTapNow(p, s.battlefield)) { continue; }
+        if (d->params.domain_mana && d->tmpl == CardTemplate::ManaDork) { ++ndom; }
+        if (d->params.gy_land_exile_mana) { ++n_dr; }
+    }
+    ManaPool pool = AvailableManaPool(s);
+    ManaPool credit;                                  // supply beyond the board's colour-exact sources
+    // (1) The cracked fetchland feeds one more Deathrite (AvailableManaPool counts the fuel already there).
+    if (n_dr > GraveyardLandFuel(s, controller)) { pool.wild += 1; credit.wild += 1; }
+    const int dom_units = ndom * std::popcount(static_cast<unsigned>(dom));
+    const int base_total = pool.Total();
+    // (2) The colour-exact half (Hall over the board's real colour sets); unusable -> the flat pool is exact.
+    const ColorFeasibility fe = BuildColorFeasibility(s);
+
+    // grow / pip_open / haste_units apply only when early_cost (the permanents bringing new colours and the hasted
+    // dorks, paid before the domain sources tap) fits the supply that is not a domain source's.
+    struct Sub { int mv = 0; int grow = 0; int pip_open = 0; int haste_units = 0; int early_cost = 0; };
+    std::vector<Sub> subs(static_cast<std::size_t>(1) << n);
+    for (int m = 1; m < (1 << n); ++m)
+    {
+        Sub& u = subs[static_cast<std::size_t>(m)];
+        int grow = 0, early_cost = 0;
+        for (int j = 0; j < n; ++j)
+        {
+            if (!(m & (1 << j))) { continue; }
+            u.mv += cards[static_cast<std::size_t>(j)].mv;
+            grow |= cards[static_cast<std::size_t>(j)].colours & ~dom;
+        }
+        // (3) A colour X is new for the domain sources' GENERIC supply when any selected permanent has it, and
+        // for a PIP only of a card other than the one(s) bringing it (DomainOpenFor's rule). The permanents that
+        // bring new colours, and (4) the hasted dorks, must be paid before the domain sources tap.
+        for (int j = 0; j < n; ++j)
+        {
+            if (!(m & (1 << j))) { continue; }
+            const R6Card& r = cards[static_cast<std::size_t>(j)];
+            if ((r.colours & grow) != 0 || (haste && r.dork)) { early_cost += r.mv; }
+            for (int x = 0; x < 5; ++x)
+            {
+                if (!(grow & (1 << x)) || !(r.want & (1 << x))) { continue; }
+                for (int k = 0; k < n; ++k)
+                {
+                    if (k != j && (m & (1 << k)) && (cards[static_cast<std::size_t>(k)].colours & (1 << x)))
+                    { u.pip_open |= 1 << x; break; }
+                }
+            }
+        }
+        u.early_cost = early_cost;
+        u.grow = grow;
+        if (haste)
+        {
+            for (int j = 0; j < n; ++j)
+            {
+                if (!(m & (1 << j)) || !cards[static_cast<std::size_t>(j)].dork) { continue; }
+                u.haste_units += cards[static_cast<std::size_t>(j)].domain
+                               ? std::popcount(static_cast<unsigned>(dom | grow)) : 1;
+            }
+        }
+    }
+    // Is subset m payable with `extra` (a pool of at most one unit) on top?
+    auto payable = [&](int m, const ManaPool& extra) -> bool
+    {
+        const Sub& u = subs[static_cast<std::size_t>(m)];
+        const bool order_ok = u.early_cost <= base_total + extra.Total() - dom_units;
+        const int grow = order_ok ? u.grow : 0;
+        const int haste_units = order_ok ? u.haste_units : 0;
+        const int gen_units = ndom * std::popcount(static_cast<unsigned>(grow));
+        if (u.mv > base_total + extra.Total() + gen_units + haste_units) { return false; }
+        ManaPool flat = pool;
+        flat.AddPool(extra);
+        flat.wild += gen_units + haste_units;
+        ManaPool cred = credit;
+        cred.AddPool(extra);
+        cred.wild += haste_units;
+        const ColorFeasibility fx = (fe.usable && fe.dom_src > 0) ? fe.WithDomainOpen(u.pip_open & grow, grow) : fe;
+        // Each card's hybrid choice: an odometer over the selected cards' expansions.
+        std::vector<int> sel;
+        for (int j = 0; j < n; ++j) { if (m & (1 << j)) { sel.push_back(j); } }
+        std::vector<int> odo(sel.size(), 0);
+        for (;;)
+        {
+            ManaCost sum;
+            for (std::size_t t = 0; t < sel.size(); ++t)
+            {
+                const ManaCost& f = cards[static_cast<std::size_t>(sel[t])].flats[static_cast<std::size_t>(odo[t])];
+                sum.generic += f.generic; sum.white += f.white; sum.blue += f.blue; sum.black += f.black;
+                sum.red += f.red; sum.green += f.green; sum.colorless += f.colorless;
+            }
+            if (flat.CanPayFlat(sum))
+            {
+                if (!fx.usable) { return true; }
+                const int pips[5] = { sum.white, sum.blue, sum.black, sum.red, sum.green };
+                if (fx.PayablePips(pips, cred)) { return true; }
+            }
+            std::size_t t = 0;
+            while (t < sel.size() && ++odo[t] >= static_cast<int>(cards[static_cast<std::size_t>(sel[t])].flats.size()))
+            { odo[t] = 0; ++t; }
+            if (t == sel.size()) { return false; }
+        }
+    };
+    // Subsets by mana value, largest first: the first payable one is the turn's best.
+    std::vector<int> order;
+    for (int m = 1; m < (1 << n); ++m) { order.push_back(m); }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b)
+    { return subs[static_cast<std::size_t>(a)].mv > subs[static_cast<std::size_t>(b)].mv; });
+    const ManaPool none;
+    int best = 0;
+    for (int m : order) { if (payable(m, none)) { best = subs[static_cast<std::size_t>(m)].mv; break; } }
+    for (int i = 0; i < 6; ++i)
+    {
+        ManaPool one;
+        one.Add(static_cast<Color>(i));
+        for (int j = 0; j < n && !out[static_cast<std::size_t>(i)]; ++j)          // a single card it unlocks
+        { if (!payable(1 << j, none) && payable(1 << j, one)) { out[static_cast<std::size_t>(i)] = true; } }
+        for (int m : order)                                                          // a larger best
+        {
+            if (out[static_cast<std::size_t>(i)] || subs[static_cast<std::size_t>(m)].mv <= best) { break; }
+            if (payable(m, one)) { out[static_cast<std::size_t>(i)] = true; }
+        }
+    }
+    return out;
+}
+
 std::vector<std::string> FiveColourProvider::FetchSearchCandidates(const GameState& s, int controller,
     const CardParams& fetch_pp, const std::vector<std::string>& ranked) const
 {
@@ -24683,6 +24931,12 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
             p.Add(static_cast<Color>(i));
             if (need_any   && CastableCount(p, all_costs)   > base_all)   { any_unlocks[i]   = true; }
             if (need_accel && CastableCount(p, accel_costs) > base_accel) { accel_unlocks[i] = true; }
+        }
+        // MTG_FIVECOLOUR_RULE6_SEES_STEPS: the steps the two questions above cannot see (FiveColourRule6Steps).
+        if (FiveColourRule6StepsOn())
+        {
+            const std::array<bool, 6> steps = FiveColourRule6Steps(s, controller);
+            for (int i = 0; i < NC; ++i) { if (steps[static_cast<std::size_t>(i)]) { any_unlocks[i] = true; } }
         }
     }
 
@@ -38603,6 +38857,28 @@ bool CycloneLoungeIdleOn()
     static const bool on = EnvOn("MTG_CYCLONE_LOUNGE_IDLE", true);
     return heurarm::Flag(heurarm::CYCLONE_LOUNGE_IDLE, on);
 }
+// MTG_CYCLONE_LOUNGE_IDLE_AMEND (DEFAULT ON; part of MTG_CYCLONE_LOUNGE_IDLE, read only under it): the A/B of
+// 2026-11-18 found the "needed" test over-firing in two shapes that cost the Lounge for nothing -- a mana cycling
+// cost counted before Unpredictable Cyclone was on the battlefield (std gi 649: Curator cycled early, nothing left
+// to cycle once Cyclone landed) and Seething Song counted on its own (std gi 663). So cycling counts as a use only
+// while a Cyclone (cycle_draw_exile_shared_type_freecast) is on our battlefield, and a ritual only when its float
+// pays for another hand card. =0 -> the 2026-11-18 test (cycling always, a ritual as any other cast).
+bool CycloneLoungeIdleAmendOn()
+{
+    static const bool on = EnvOn("MTG_CYCLONE_LOUNGE_IDLE_AMEND", true);
+    return heurarm::Flag(heurarm::CYCLONE_LOUNGE_IDLE_AMEND, on);
+}
+// A permanent that makes cycling the deck's engine (Unpredictable Cyclone) on `controller`'s battlefield.
+bool CycloneCyclingLive(const GameState& s, int controller)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.cycle_draw_exile_shared_type_freecast) { return true; }
+    }
+    return false;
+}
 bool CycloneMyriadRuleOn()
 {
     static const bool on = EnvOn("MTG_CYCLONE_MYRIAD_RULE", true);   // DEFAULT ON (the USER's rule)
@@ -38797,6 +39073,11 @@ std::vector<std::string> CycloneProvider::FetchSearchCandidates(const GameState&
             FetchNeedScan scan;
             scan.never_cast = [](const CardDefinition& d) { return d.params.goldfish_inert; };
             scan.cycling    = true;
+            if (CycloneLoungeIdleAmendOn())
+            {
+                scan.cycling_live  = &CycloneCyclingLive;
+                scan.ritual_payoff = true;
+            }
             if (FetchManaNeededThisTurn(s, controller, top->params.produces, scan)) { return out; }
         }
     }
