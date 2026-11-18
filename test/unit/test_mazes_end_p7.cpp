@@ -107,10 +107,11 @@ TEST_CASE("Maze's End P7: the cast / land dominance fold drops plans a sibling d
     const MazesEndProvider prov;
     const GameState s = T4(prov);
     CHECK(prov.CastDominanceLive(s));
-    CHECK(prov.CastDominanceClass(s, D("Exploration")) == 1);
-    CHECK(prov.CastDominanceClass(s, D("Burgeoning")) == 1);
-    CHECK(prov.CastDominanceClass(s, D("Manabond")) == 1);
-    CHECK(prov.CastDominanceClass(s, D("Amulet of Vigor")) == 2);
+    using DP = DecisionProvider;
+    CHECK(prov.CastDominanceClass(s, D("Exploration")) == (DP::kCastDomAdd | DP::kCastDomLandOk | DP::kCastDomOpensBp));
+    CHECK(prov.CastDominanceClass(s, D("Burgeoning")) == (DP::kCastDomAdd | DP::kCastDomLandOk));
+    CHECK(prov.CastDominanceClass(s, D("Manabond")) == (DP::kCastDomAdd | DP::kCastDomLandOk));
+    CHECK(prov.CastDominanceClass(s, D("Amulet of Vigor")) == DP::kCastDomAdd);
     CHECK(prov.CastDominanceClass(s, D("Guild Summit")) == -1);
     CHECK(prov.CastDominanceClass(s, D("Sylvan Scrying")) == 0);
     CHECK(prov.CastDominanceClass(s, D("Gond Gate")) == 0);
@@ -131,7 +132,10 @@ TEST_CASE("Maze's End P7: the cast / land dominance fold drops plans a sibling d
     CHECK(on_menu.count("|") == 0);
     CHECK(on_menu.count("Manor Gate|") == 0);
     CHECK(on_menu.count("Gond Gate|") == 0);
-    // A land-less plan of class-1 casts goes for its land twin (fold B) ...
+    // A plan that opens a breakpoint is never dropped by fold A: "Manor Gate + Exploration" stays beside "Manor Gate +
+    // Exploration + Exploration" (its continuation may spend the mana the second cast would take).
+    if (off_menu.count("Manor Gate|Exploration,") == 1) { CHECK(on_menu.count("Manor Gate|Exploration,") == 1); }
+    // A land-less plan of land-ok casts goes for its land twin (fold B) ...
     if (off_menu.count("|Exploration,") == 1) { CHECK(on_menu.count("|Exploration,") == 0); }
     {
         // ... and stays with fold B off (fold A alone), as does every maximal plan.
@@ -148,7 +152,7 @@ TEST_CASE("Maze's End P7: the cast / land dominance fold drops plans a sibling d
     }
 }
 
-TEST_CASE("Maze's End P7: the fold's mana premise -- not live with a Treasure Gate or a Gateway Plaza")
+TEST_CASE("Maze's End P7: the fold's premise -- not live with a Treasure Gate, a Gateway Plaza or a Guild Summit")
 {
     LoadP7Cards();
     const MazesEndProvider prov;
@@ -170,6 +174,11 @@ TEST_CASE("Maze's End P7: the fold's mana premise -- not live with a Treasure Ga
     {
         GameState s = T4(prov);
         s.players[0].hand.push_back(C("Gateway Plaza", 42));   // Burgeoning / Manabond could put it off-main
+        CHECK_FALSE(prov.CastDominanceLive(s));
+    }
+    {
+        GameState s = T4(prov);
+        Put(s, "Guild Summit", 43);                     // a Gate entering draws: every land play is a breakpoint
         CHECK_FALSE(prov.CastDominanceLive(s));
     }
 }
