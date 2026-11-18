@@ -15912,13 +15912,6 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
 // plans after MoveOrderPlans' stable value sort, so the no-op sorted ahead and won every no-gain tie.
 constexpr int kNoGainCastEval = -2;
 
-// TEMPORARY A/B gate (delete with the A/B): MTG_TIE_SCORING_OLD=1 restores the copied evals for all three.
-static bool TieScoringOld()
-{
-    static const bool v = EnvOn("MTG_TIE_SCORING_OLD");   // DEFAULT OFF; =1 = the pre-fix evals
-    return heurarm::Flag(heurarm::TIE_SCORING_OLD, v);    // per-job manifest arm
-}
-
 // TOOTH AND NAIL (one variant per mode x library picks x hand puts). A card searched into the hand is the spell's
 // own unit `u` (EvalCard of Tooth and Nail -- the DrawSpell convention, one card to hand = 1 DMG); a creature put
 // onto the battlefield is a free cast, priced like one (EvalCard of the creature), floored at `u` because a
@@ -41369,7 +41362,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.cost = cost;
                         a.chosen_x = x;
                         a.tutor_target = pin;
-                        a.eval = TieScoringOld() ? EvalCard(def, state, x) : FinaleVariantEval(def, state, x, pin);
+                        a.eval = FinaleVariantEval(def, state, x, pin);
                         a.is_noncreature = true;
                         a.card_mv = def.card.m_mana_cost.ManaValue();
                         actions.push_back(std::move(a));
@@ -42854,7 +42847,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_name      = ap.hand[i].m_name;
                 a.hand_index     = i;
                 a.cost           = *def.params.evoke_cost;
-                a.eval           = TieScoringOld() ? EvalCard(def, state) : LtbEvokeEval(def, state);   // the returns, not the body
+                a.eval           = LtbEvokeEval(def, state);   // the returns, not the body
                 a.is_noncreature = false;
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.evoke          = true;
@@ -43768,7 +43761,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.cost = cost;
                         a.chosen_x = mode;
                         a.tutor_target = EncodeToothChoices(lib, put);
-                        a.eval = TieScoringOld() ? EvalCard(def, state) : ToothAndNailVariantEval(def, state, lib, put);
+                        a.eval = ToothAndNailVariantEval(def, state, lib, put);
                         a.is_noncreature = true;
                         a.card_mv = def.card.m_mana_cost.ManaValue();
                         actions.push_back(std::move(a));
@@ -53077,7 +53070,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].player_target != 0) { continue; }
             Action v = actions[i];
             v.player_target = 1;
-            if (!TieScoringOld()) { v.eval = kNoGainCastEval; }
+            v.eval = kNoGainCastEval;
             actions.push_back(std::move(v));
         }
     }
