@@ -127,3 +127,8 @@ Sent to P5-2:
 - Guild Summit B1: no Heap Gate Treasure reservation; Summit's cards come first. Sent to F5-3.
 - Unpayable-plan prune: build it for decks with no net-mana-positive cards (drop a plan once a subset of it is unpayable); own A/B + d8 b0 recovery. Sent to F5-3, after the leak fix and joint-pay landing.
 - b0 backstop re-screen: after every other item finishes.
+
+## USER on the spare-drop fetch rule (2026-11-18 ~22:30 UTC, VERBATIM)
+"Here is my issue with the gate-from-hand idea. Say you have 2 in hand, maze's end and exploration in play and 3 colourless. It seems like you are suggesting that the right play is to use the 2 from hand rather than take advantage of the 3 we have to preserve one for next turn. To me, that seems incorrect."
+
+Agreed: drops recur but hand Gates are finite, and Maze's End enters tapped, so a fetch without a same-turn replay loses an activation cycle. P5d (wip/maze-p5d, off 4ea2268d8) replaces the spare-drop rule with fetch + same-turn replay, root-causes the deletion's d5 b20 +11, A/Bs, accepts.
