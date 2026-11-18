@@ -1770,7 +1770,13 @@ bool LinePayAuditRolloutOn();
 // (rules-correct), not priceable by the oracle, and short plans whose line a breakpoint continuation changed
 // mid-apply (LPA_CONT: the continuation's own spend is a re-plan, not a payment-order defect; these are NOT
 // priced and NOT in YES/NO/UNKNOWN). The oracle bills a {T}-less sink's K repeats K times (as the apply pays them).
-enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_N };
+// LPA_REC (Maze's End F3, V1 fd-diverge s121065 gi64): REAL plans whose RECORDED breakpoint continuation
+// (Plan::breakpoint_actions, replayed verbatim by AIEngine replay_recorded) lost a step to payment -- an activation
+// dropped `tapped` / `unpaid`, or a cast short. The rollout PAID every recorded step when it scored the line, so each
+// is a rollout-vs-executor payment divergence by construction (a DEFECT, no oracle needed). The top-level classes
+// above deliberately ignore those steps ("a breakpoint continuation's own drops are its own plan's"), which is how
+// the fd-diverge's Maze's End activation stayed invisible.
+enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_REC, LPA_N };
 extern std::atomic<long> g_lpa[2][LPA_N];
 extern std::atomic<long> g_act_pay_calls;
 extern std::atomic<long> g_act_hold_mask;

@@ -3452,12 +3452,16 @@ struct LinePayAuditGuard
     const std::vector<Action>* prev_acts = nullptr;
     GameState s0;
     const std::vector<Action>* acts = nullptr;
+    // The plan's RECORDED breakpoint continuation (Plan::breakpoint_actions), or null. See LPA_REC.
+    const std::vector<Action>* recs = nullptr;
     int turn = 0;
-    LinePayAuditGuard(const GameState& state, const std::vector<Action>& a, bool in_rollout)
+    LinePayAuditGuard(const GameState& state, const std::vector<Action>& a, bool in_rollout,
+                      const std::vector<Action>* recorded = nullptr)
     {
-        if (!LinePayAuditOn() || a.empty()) { return; }
+        if (!LinePayAuditOn() || (a.empty() && (recorded == nullptr || recorded->empty()))) { return; }
         if (in_rollout ? !LinePayAuditRolloutOn() : !g_real_resolution) { return; }
         armed = true; s0 = state; acts = &a; turn = state.turn_number; frame.rollout = in_rollout;
+        recs = (recorded != nullptr && !recorded->empty()) ? recorded : nullptr;
         prev = g_line_pay_frame; g_line_pay_frame = &frame;
         prev_acts = t_lpa_acts; t_lpa_acts = &a;
     }
@@ -3481,6 +3485,35 @@ struct LinePayAuditGuard
             if (x.kind == Action::Kind::CastFromHand ? !x.sacrifice_land : x.cost.ManaValue() > 0) { ++steps; }
         }
         if (steps >= 2) { g_lpa[w][LPA_PAYING].fetch_add(1, std::memory_order_relaxed); }
+        // LPA_REC: short steps that belong to the RECORDED continuation and not to the top-level plan. The rollout
+        // paid every one of them when it scored the line, so a shortfall here is a lockstep divergence by
+        // construction; counted (and printed at level 2) before the top-level classification below.
+        if (recs != nullptr)
+        {
+            std::vector<std::string> rec_short;
+            for (const std::string& st : frame.short_steps)
+            {
+                const std::size_t sp = st.find(' ');
+                const std::string card = sp == std::string::npos ? st : st.substr(sp + 1);
+                bool top = false, rec = false;
+                for (const Action& x : *acts) { if (x.card_name.str() == card) { top = true; break; } }
+                for (const Action& x : *recs) { if (x.card_name.str() == card) { rec = true; break; } }
+                if (rec && !top) { rec_short.push_back(st); }
+            }
+            if (!rec_short.empty())
+            {
+                g_lpa[w][LPA_REC].fetch_add(1, std::memory_order_relaxed);
+                if (LinePayAuditLevel() >= 2)
+                {
+                    std::string line, rl;
+                    for (const std::string& st : rec_short) { line += (line.empty() ? "" : "; ") + st; }
+                    for (const Action& x : *recs) { rl += (rl.empty() ? "" : ", ") + x.card_name.str(); }
+                    std::fprintf(stderr, "LINE_PAY_REC_SHORT %s job=%s gi=%d t%d short=[%s] recorded=[%s]\n",
+                                 frame.rollout ? "rollout" : "real", escstats::t_job ? escstats::t_job : "-",
+                                 escstats::t_gi, turn, line.c_str(), rl.c_str());
+                }
+            }
+        }
         if (LinePayAuditLevel() >= 3 && !frame.rollout)
         {
             std::fprintf(stderr, "LINE_PAY_PLAN job=%s gi=%d t%d steps=%d short=%zu\n",
@@ -5137,6 +5170,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // the realised land ETB disposes of the top card exactly as the line assumed.
                     ScriptedTopChoice _stc(plan.scry_choice);
                     ScriptedBounceChoice _sbc(plan.bounce_choice);   // a non-deferred Karoo's searched bounce
+                    // THE LINE STATE THE ROLLOUT'S DROP SEES (Maze's End F3, V1 fd-diverge s121065 gi64 T6).
+                    // ApplyPlanDirect binds the plan's line hold, its opens-unseen bit and its payment pins at its
+                    // ENTRY, before its land drop (TurnSolver.cpp, `_luc` / `_lou` / `_pay`); this executor binds
+                    // its function-scope twins only after the drop (below, `_luc` / `_pay_exec`). A land entry
+                    // reads them: two Amulets of Vigor let a tapped-entering Gruul Guildgate tap for mana in
+                    // response, and FloatLineOwedColour commits that mana to the colour the line still owes. The
+                    // rollout floated {G} for Sylvan Scrying; the executor, with no hold bound, committed the
+                    // first listed colour, so its whole-turn prepay fed Baldur's Gate's {2} with Maze's End's {C}
+                    // and the recorded continuation's Maze's End activation (the T6 win) found its {T} spent.
+                    // Binding the same three values over the drop makes the drop -- and every payment it makes
+                    // (Gateway Plaza's {1}, a shock) -- the rollout's. Scoped to the drop only: the function-scope
+                    // twins below take over for the casts exactly as before.
+                    LineUnpaidCostScope  _luc_drop(LineCastCostTotal(plan.actions));
+                    LineOpensUnseenScope _lou_drop(LineOpensUnseenCasts(state, plan.actions));
+                    PlanPaymentPinScope  _pay_drop(plan);
                     TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face,
                                         plan.rad_mode, plan.land_from_top);
                 }
@@ -8551,7 +8599,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
     // after in both); the trailing pass skips them.
     // MTG_LINE_PAY_AUDIT (Morph INT-14): measurement only -- arms a frame over the rest of this apply.
-    LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout);
+    LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout, &plan.breakpoint_actions);
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
     { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
