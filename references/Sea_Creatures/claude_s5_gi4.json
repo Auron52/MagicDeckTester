@@ -1,0 +1,472 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 24, "name": "Misty Rainforest" }, { "num": 56, "name": "Windswept Heath" }, { "num": 19, "name": "Kiora Bests the Sea God" }, { "num": 32, "name": "Serpent of Yawning Depths" }, { "num": 33, "name": "Serpent of Yawning Depths" }, { "num": 52, "name": "Wild Growth" }, { "num": 58, "name": "Worn Powerstone" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "cast_order": ["**", "land=Windswept Heath", "cast=Wild Growth"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Worn Powerstone" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 24, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 56, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Wild Growth"], "actions": [{ "card": "Misty Rainforest", "src_num": 24, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "#1" }] },
+    { "index": 1, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #9", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Wild Growth"], "actions": [{ "card": "Misty Rainforest", "src_num": 24, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 9, "enchant_target_name": "#9" }] },
+    { "index": 2, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #1", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Wild Growth"], "actions": [{ "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "#1" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Wild Growth → #9", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Wild Growth"], "actions": [{ "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Wild Growth", "enchant_target": 9, "enchant_target_name": "#9" }] },
+    { "index": 4, "summary": "land=Misty Rainforest; cast: Wild Growth → #1", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "#1" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Wild Growth → #9", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 9, "enchant_target_name": "#9" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Wild Growth → #1", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Breeding Pool", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 1, "enchant_target_name": "#1" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Wild Growth → #9", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Wild Growth"], "actions": [{ "card": "Wild Growth", "enchant_target": 9, "enchant_target_name": "#9" }] },
+    { "index": 8, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 24, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 24, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wild Growth", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 24, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 24, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Misty Rainforest", "cast=Worn Powerstone"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Misty Rainforest" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 24, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Worn Powerstone"], "actions": [{ "card": "Misty Rainforest", "src_num": 24, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Worn Powerstone" }] },
+    { "index": 3, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 4, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 6, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 24, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 2,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "land_entry",
+  "source": "Breeding Pool",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Misty Rainforest", "cast=Serpent of Yawning Depths"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Koma, World-Eater" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Windswept Heath"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Serpent of Yawning Depths", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Serpent of Yawning Depths"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Serpent of Yawning Depths" }] },
+    { "index": 3, "summary": "land=Misty Rainforest; cast: Serpent of Yawning Depths", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Serpent of Yawning Depths"], "actions": [{ "card": "Serpent of Yawning Depths" }] },
+    { "index": 4, "summary": "land=Misty Rainforest; cast: Serpent of Yawning Depths", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Serpent of Yawning Depths"], "actions": [{ "card": "Serpent of Yawning Depths" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Serpent of Yawning Depths", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Serpent of Yawning Depths"], "actions": [{ "card": "Serpent of Yawning Depths" }] },
+    { "index": 6, "summary": "land=Misty Rainforest; cast: Worn Powerstone, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Worn Powerstone", "Misty Rainforest"], "actions": [{ "card": "Worn Powerstone" }, { "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Worn Powerstone"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Worn Powerstone" }] },
+    { "index": 11, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 12, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 14, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 15, "summary": "land=Misty Rainforest; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 16, "summary": "land=none; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 17, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 26, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 18, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "tapped": true, "is_land": true }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "tapped": true, "is_land": true }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Brinelin, the Moon Kraken" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Serpent of Yawning Depths", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Serpent of Yawning Depths", "declared_order_payability": "not_verified", "land": null, "casts": ["Serpent of Yawning Depths"], "actions": [{ "card": "Serpent of Yawning Depths" }] },
+    { "index": 1, "summary": "land=none; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "tapped": true, "is_land": true }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Serpent of Yawning Depths (6) — 6 to opponent (20→14)" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "tapped": true, "is_land": true }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "cast=Utopia Sprawl@4", "cast=Worn Powerstone"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Utopia Sprawl" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU" }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Utopia Sprawl", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Utopia Sprawl → Breeding Pool #1, Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl", "Worn Powerstone"], "cast_order_canonical": ["Utopia Sprawl", "Worn Powerstone"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }, { "card": "Worn Powerstone" }] },
+    { "index": 1, "summary": "land=none; cast: Worn Powerstone, Utopia Sprawl → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone", "Utopia Sprawl"], "cast_order_canonical": ["Worn Powerstone", "Utopia Sprawl"], "actions": [{ "card": "Worn Powerstone" }, { "card": "Utopia Sprawl", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Sprawl → Breeding Pool #2, Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl", "Worn Powerstone"], "cast_order_canonical": ["Utopia Sprawl", "Worn Powerstone"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }, { "card": "Worn Powerstone" }] },
+    { "index": 3, "summary": "land=none; cast: Worn Powerstone, Utopia Sprawl → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone", "Utopia Sprawl"], "cast_order_canonical": ["Worn Powerstone", "Utopia Sprawl"], "actions": [{ "card": "Worn Powerstone" }, { "card": "Utopia Sprawl", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 4, "summary": "land=none; cast: Worn Powerstone", "declared_order_payability": "not_verified", "land": null, "casts": ["Worn Powerstone"], "actions": [{ "card": "Worn Powerstone" }] },
+    { "index": 5, "summary": "land=none; cast: Utopia Sprawl → Breeding Pool #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 1, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #1" }] },
+    { "index": 6, "summary": "land=none; cast: Utopia Sprawl → Breeding Pool #2", "declared_order_payability": "not_verified", "land": null, "casts": ["Utopia Sprawl"], "actions": [{ "card": "Utopia Sprawl", "enchant_target": 4, "enchant_target_name": "Breeding Pool", "enchant_target_label": "Breeding Pool #2" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 16,
+  "type": "choose_color",
+  "source": "Utopia Sprawl",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Worn Powerstone", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 45, "land_drops_left": 1, "floating_mana": {"C": 2, "wild": 1} },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 4,
+  "colors": [{ "ordinal": 0, "name": "White" }, { "ordinal": 1, "name": "Blue" }, { "ordinal": 2, "name": "Black" }, { "ordinal": 3, "name": "Red" }, { "ordinal": 4, "name": "Green" }],
+  "note": "reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent for the rest of the game. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "choose_color", "text": "Utopia Sprawl -- chose Green" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 12, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Serpent of Yawning Depths (6), Serpent of Yawning Depths (6) — 12 to opponent (14→2)" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 12, "num": 59, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 24, "cast_order": ["**", "land=Misty Rainforest", "cast=Koma, World-Eater"], "decision": {
+  "decision_index": 19,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Misty Rainforest" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 12, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Misty Rainforest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Kiora Bests the Sea God", "Misty Rainforest"], "actions": [{ "card": "Kiora Bests the Sea God" }, { "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Kiora Bests the Sea God"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Kiora Bests the Sea God" }] },
+    { "index": 5, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 6, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 7, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 8, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 9, "summary": "land=Misty Rainforest; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 10, "summary": "land=none; cast: Kiora Bests the Sea God", "declared_order_payability": "not_verified", "land": null, "casts": ["Kiora Bests the Sea God"], "actions": [{ "card": "Kiora Bests the Sea God" }] },
+    { "index": 11, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 12, "summary": "land=Misty Rainforest; cast: Koma, World-Eater, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Koma, World-Eater", "Misty Rainforest"], "actions": [{ "card": "Koma, World-Eater" }, { "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 13, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken, Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Brinelin, the Moon Kraken", "Misty Rainforest"], "actions": [{ "card": "Brinelin, the Moon Kraken" }, { "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 14, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Koma, World-Eater"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Koma, World-Eater" }] },
+    { "index": 15, "summary": "land=Misty Rainforest; cast: Misty Rainforest: sacrifice it: search for land(s), put them onto the battlefield, Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Misty Rainforest", "Brinelin, the Moon Kraken"], "actions": [{ "card": "Misty Rainforest", "src_num": 25, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 22, "summary": "land=Misty Rainforest; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 23, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 24, "summary": "land=Misty Rainforest; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 25, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 26, "summary": "land=Misty Rainforest; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 27, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 28, "summary": "land=Misty Rainforest; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 29, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 30, "summary": "land=Misty Rainforest; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 31, "summary": "land=Misty Rainforest; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 32, "summary": "land=none; cast: Koma, World-Eater", "declared_order_payability": "not_verified", "land": null, "casts": ["Koma, World-Eater"], "actions": [{ "card": "Koma, World-Eater" }] },
+    { "index": 33, "summary": "land=none; cast: Brinelin, the Moon Kraken", "declared_order_payability": "not_verified", "land": null, "casts": ["Brinelin, the Moon Kraken"], "actions": [{ "card": "Brinelin, the Moon Kraken" }] },
+    { "index": 34, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Breeding Pool", "casts": [], "actions": [] },
+    { "index": 35, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Hedge Maze", "casts": [], "actions": [] },
+    { "index": 36, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 37, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 38, "summary": "land=Misty Rainforest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Misty Rainforest", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 39, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 75,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 20,
+  "type": "surveil",
+  "source": "Surveil",
+  "turn": 6,
+  "away_zone": "graveyard",
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "is_land": true, "taps": "GU", "yield": 2 }, { "name": "Hedge Maze", "idx": 13, "num": 14, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "is_land": true, "taps": "U" }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "is_land": false, "taps": "C" }, { "name": "Worn Powerstone", "idx": 12, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }, { "num": 22, "name": "Koma, World-Eater", "cost": "{3}{U}{U}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "looked": [{ "name": "Overgrowth", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to graveyard", "shuffle": false, "top": [], "away": ["Overgrowth"] }, { "index": 1, "label": "Top: Overgrowth", "shuffle": false, "top": ["Overgrowth"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top; the rest go to the graveyard."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Breeding Pool", "idx": 4, "num": 1, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Breeding Pool", "idx": 6, "num": 4, "tapped": true, "is_land": true, "yield": 2 }, { "name": "Hedge Maze", "idx": 13, "num": 14, "tapped": true, "is_land": true }, { "name": "Island", "idx": 8, "num": 18, "tapped": true, "is_land": true }, { "name": "Koma, World-Eater", "idx": 14, "num": 22, "sick": true, "is_land": false, "power": 8, "toughness": 12 }, { "name": "Serpent of Yawning Depths", "idx": 9, "num": 32, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Serpent of Yawning Depths", "idx": 10, "num": 33, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Utopia Sprawl", "idx": 11, "num": 47, "is_aura": true, "attached_to": 4, "attached_to_idx": 6, "is_land": false }, { "name": "Wild Growth", "idx": 5, "num": 52, "is_aura": true, "attached_to": 1, "attached_to_idx": 4, "is_land": false }, { "name": "Worn Powerstone", "idx": 7, "num": 58, "tapped": true, "is_land": false }, { "name": "Worn Powerstone", "idx": 12, "num": 59, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Brinelin, the Moon Kraken", "cost": "{6}{U}{U}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Kiora Bests the Sea God", "cost": "{5}{U}{U}", "mv": 7, "kind": "permanent" }], "graveyard": ["Misty Rainforest", "Misty Rainforest", "Misty Rainforest", "Windswept Heath"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Serpent of Yawning Depths (6), Serpent of Yawning Depths (6) — 12 to opponent (2→-10)" }
+  ]
+}
