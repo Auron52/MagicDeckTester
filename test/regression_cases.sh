@@ -98,6 +98,7 @@ declare -A DECK_FILE=(
   [boars]=decks/Boars/Boars.cod
   [sea]="decks/Sea Creatures/Sea Creatures.cod"
   [mazesend]="decks/Maze's End/Maze's End.cod"
+  [stuffy]="decks/Stuffy Doll/Stuffy Doll.cod"
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -158,6 +159,7 @@ declare -A DECK_PROF=(
   [boars]=decks/Boars/Boars.profile.json
   [sea]="decks/Sea Creatures/Sea Creatures.profile.json"
   [mazesend]="decks/Maze's End/Maze's End.profile.json"
+  [stuffy]="decks/Stuffy Doll/Stuffy Doll.profile.json"
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -225,6 +227,17 @@ SMOKE_CASES=(
   "sea        3  1001   50 10"
   "sea        5  1001  100 20"
   "sea2hg     5  1001   25 20"
+  # stuffy (Stuffy Doll): ADDED 2026-11-18 by the analysis (docs/design/analysis-Stuffy Doll.md), all three tiers at
+  # once, at Sea Creatures' pre-keep-table ENTRY shape (similar per-game cost: d5 b20 ~5.0 s/game thread-wall in the
+  # same-run cost probe vs Sea's 6.4). Boros damage-reflection combo, StuffyDollProvider, no value_play block -> play
+  # rows are d5 b20. No keep table and no value leaf yet, so GT WILL move when they land. stuffy2hg: Mogg Maniac
+  # (target_opponent), Spiteful Sliver (target_player) and Stuffy Doll (chosen_player) aim at one head of the shared
+  # team life, Forbidden Orchard's Spirit goes to a target opponent, and 30 team life outlasts two reflectors under
+  # one Blasphemous Act (26), so heads and starting life both matter.
+  "stuffy     0  1001 1000  0"
+  "stuffy     3  1001   50 10"
+  "stuffy     5  1001  100 20"
+  "stuffy2hg  5  1001   25 20"
   # Morph: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, hydras sizing
   # (similar per-game cost). No card scales with opponents or reads starting life, so morph2hg is the
   # small searched 2HG canary every deck carries. docs/design/analysis-Morph.md.
@@ -840,6 +853,18 @@ REGRESSION_CASES=(
   # Disjoint from the overnight block (30051).
   "sea              3 30011   5 0"
   "sea              5 30011   5 0"
+  # stuffy: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
+  "stuffy     0  2002 1000  0"
+  "stuffy     3  2002   50 10"
+  "stuffy     5  2002  150 20"
+  "stuffy     5  3003  150 20"
+  "stuffy2hg  5  2002   75 20"
+  # Stuffy Doll unlimited backstop (2026-11-18): 16 5-game blocks screened at d3 and d5 (budget 0, abandon_units
+  # 2e6, MTG_SLOW_GAME_MS=5000, 30001..30151 step 10). The deck's budget-0 tail is heavy: 6 of 160 games hit the
+  # cap (d5 30041/30111/30121/30141 x2, d3 30111) and d5 blocks ran up to 453 s. 30071 was the cheapest clean block
+  # (d3 2.1 s, d5 1.4 s for 5 games, no game over 5 s); keep it fixed. Disjoint from the overnight block (30091).
+  "stuffy           3 30071   5 0"
+  "stuffy           5 30071   5 0"
   # Morph: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
   "morph      0  2002 1000  0"
   "morph      3  2002   75 10"
@@ -1390,6 +1415,25 @@ OVERNIGHT_CASES=(
   # d3 8.7 s). Disjoint from the regression block (30011).
   "sea              3 30051   5 0"
   "sea              5 30051   5 0"
+  # stuffy: overnight ENTRY set before its keep table (2026-11-18; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
+  # play rows, stuffy2hg d5 4x75 b20). Expand to the FULL set just before the keep table is adopted.
+  "stuffy     0  4004 2000  0"
+  "stuffy     0  6006 2000  0"
+  "stuffy     0  8008 2000  0"
+  "stuffy     0 10010 2000  0"
+  "stuffy     3  4004  125 10"
+  "stuffy     5  4004  300 20"
+  "stuffy     5  5005  300 20"
+  "stuffy     5  6006  300 20"
+  "stuffy     5  7007  300 20"
+  "stuffy2hg  5  4004   75 20"
+  "stuffy2hg  5  5005   75 20"
+  "stuffy2hg  5  6006   75 20"
+  "stuffy2hg  5  7007   75 20"
+  # Stuffy Doll unlimited backstop (2026-11-18): block 30091 from the same screen (d3 2.4 s, d5 0.8 s for 5 games, no
+  # game over 5 s). Disjoint from the regression block (30071).
+  "stuffy           3 30091   5 0"
+  "stuffy           5 30091   5 0"
   # Morph: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
   # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
   "morph      0  4004 2000  0"
