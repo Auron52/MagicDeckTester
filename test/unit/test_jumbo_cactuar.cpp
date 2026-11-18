@@ -909,3 +909,40 @@ TEST_CASE("Jumbo Cactuar drains a hasted Arbor Elf before Greaves moves to the S
     CHECK(s.floating_mana.Total() == 3);        // ...for the Overgrowth Forest's {G}{G}{G}
     CHECK(!perm(55).tapped);                    // the Satyr is hasted and still untapped
 }
+
+// MTG_AURA_CEIL_HASTE_UNTAPPER (mana-clean gate claude-regate-20261118, ENUM-GAP s30118474 T3 m1, x20): the land-Aura
+// scalar ceiling ("ef-aura-scalar") read pool 7 + Overgrowth 2 x (1 + the one ready Arbor Elf) = 11 against 14 and
+// refused the plan before the sequential walk saw it. The Satyr Greaves hastes is a SECOND untapper: Overgrowth onto
+// the Overgrowth'd Forest (3 -> 5), the Elf, the Satyr and the Forest itself each take it, plus Forest#11 = 16 >= 14.
+TEST_CASE("Jumbo Cactuar enumerates a Greaves-hasted fresh Satyr re-tapping a new Overgrowth for Tooth and Nail")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Arbor Elf", 1);
+    PutOnBoard(s, "Forest", 11);
+    PutOnBoard(s, "Overgrowth", 39);
+    s.battlefield.back().aura_attached_to = 10;
+    s.players[0].hand.push_back(CopyOf("Lightning Greaves", 37));
+    s.players[0].hand.push_back(CopyOf("Overgrowth", 40));
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 53));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+
+    const std::vector<std::string> line = {"Lightning Greaves", "Overgrowth", "Tooth and Nail", "Voyaging Satyr"};
+    {
+        JumboArm on; on.Set(heurarm::AURA_CEIL_HASTE_UNTAPPER, 1);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK(HasPlanWith(plans, line, true));
+    }
+    {
+        JumboArm off; off.Set(heurarm::AURA_CEIL_HASTE_UNTAPPER, 0);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        CHECK_FALSE(HasPlanWith(plans, line, true));
+    }
+}
