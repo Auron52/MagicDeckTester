@@ -67171,6 +67171,76 @@ bool MazeLandTargetsOn()
     return heurarm::Flag(heurarm::MAZE_LAND_TARGETS, s_on);
 }
 bool MazeIsMazeDef(const CardDefinition* d) { return d != nullptr && d->params.alt_win_distinct_named_count > 0; }
+
+// ---- P5 levers (USER 2026-11-18; each a provider RESTRICTION, default ON unless a variant) ----------------------
+#define MAZE_P5_LEVER(fn, slot, env, dflt) \
+    bool fn() { static const bool s_on = EnvOn(env, dflt); return heurarm::Flag(heurarm::slot, s_on); }
+MAZE_P5_LEVER(MazeFindNothingOn,      MAZE_FIND_NOTHING,       "MTG_MAZE_FIND_NOTHING",       true)
+MAZE_P5_LEVER(MazePlazaPayOn,         MAZE_PLAZA_PAY,          "MTG_MAZE_PLAZA_PAY",          true)
+MAZE_P5_LEVER(MazeHeapTreasureOn,     MAZE_HEAP_TREASURE,      "MTG_MAZE_HEAP_TREASURE",      true)
+MAZE_P5_LEVER(MazeColourAltOn,        MAZE_COLOUR_ALT,         "MTG_MAZE_COLOUR_ALT",         false)   // A/B variant
+MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
+MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
+MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
+#undef MAZE_P5_LEVER
+bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
+
+// P5 (USER: "We should either play it and pay the 1 or not play it. Sacrificing is a dominated option."): can a
+// Gateway Plaza-shaped land (etb_sacrifice_unless_pay) entering for `ctrl` NOW pay its cost, with `owed_first`
+// generic mana spent before it (Maze's End's {3} for its own fetch)? Yes when it will be UNTAPPED on entry and so
+// can pay with itself (an Amulet of Vigor untaps it -- its trigger resolves before the Plaza's, decision 17's
+// order -- or a Gond Gate makes a Gate enter untapped), else when the board can pay owed + {1} now (a probe
+// payment on a copy, the same payer ResolveEtbSacUnlessPay uses). Optimistic by design where it approximates
+// (the probe may count the fetching Maze's End's own {C}): an over-admitted Plaza is a wasted branch, never a
+// lost line.
+bool MazePlazaPayable(const GameState& s, int ctrl, const CardDefinition& def, int owed_first)
+{
+    if (!def.params.etb_sacrifice_unless_pay.has_value()) { return true; }
+    if (EnteringTappedUntapperCount(s, ctrl) > 0) { return true; }
+    if (CardHasSubtype(def.card, "Gate"))
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != ctrl) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.gates_enter_untapped) { return true; }
+        }
+    }
+    ManaCost cost = *def.params.etb_sacrifice_unless_pay;
+    cost.generic += std::max(0, owed_first);
+    GameState probe = s;
+    return TapForCostDirect(probe, cost, /*for_creature=*/false);
+}
+// Drop every unpayable Plaza-shaped land from a tutor's / fetch's name list (P5). `allow_empty` false keeps the list
+// whole rather than emptying it (a land tutor's list: an emptied list would whiff); Maze's End's fetch may empty it
+// (its caller then re-offers the fail-to-find, which is no worse than a forced sacrifice).
+void MazeDropUnpayablePlaza(const GameState& s, int ctrl, std::vector<std::string>& names, int owed_first,
+                            bool allow_empty)
+{
+    if (!MazePlazaPayOn() || !MazeAutonomous() || names.empty()) { return; }
+    std::vector<std::string> out;
+    for (const std::string& nm : names)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d != nullptr && d->card.IsLand() && !MazePlazaPayable(s, ctrl, *d, owed_first)) { continue; }
+        out.push_back(nm);
+    }
+    if (!out.empty() || allow_empty) { names.swap(out); }
+}
+// P5 Talon variant: "lacking in extra land drops" = no Exploration, Burgeoning or Manabond controlled or in hand.
+bool MazeLacksExtraDrops(const GameState& s, int ctrl)
+{
+    auto extra = [](const CardDefinition* d)
+    {
+        return d != nullptr && (d->params.static_extra_land_drops > 0 || d->params.opponent_land_play_put_land_from_hand
+                                || d->params.endstep_may_dump_hand_lands_discard_hand);
+    };
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == ctrl && extra(CardDatabase::Instance().LookupCached(p.card))) { return false; } }
+    for (const Card& c : s.players[static_cast<std::size_t>(ctrl)].hand)
+    { if (extra(CardDatabase::Instance().LookupCached(c))) { return false; } }
+    return true;
+}
 bool MazeIsBaldurDef(const CardDefinition* d)
 { return d != nullptr && d->card.IsLand() && !d->params.mana_per_other_controlled_subtype.empty(); }
 bool MazeIsGondDef(const CardDefinition* d) { return d != nullptr && d->card.IsLand() && d->params.gates_enter_untapped; }
@@ -67276,7 +67346,10 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
     // which the P3 menu's "one new name only after Baldur's and Gond" deferral cannot see (held-out d3 seed 94035
     // gi34: the unpruned search fetched it on T5 and won T6; P3 alone fetched Gond Gate and won T8).
     static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET", true);   // DEFAULT ON; =0 -> the USER's P3 menu alone
-    if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon))
+    // P5 VARIANT (MTG_MAZE_TALON_LACKDROPS, default OFF -- an A/B arm): offer Talon Gates only while we lack extra
+    // land drops (USER: "Talon Gates is potentially a worthy candidate if we are lacking in extra land drops").
+    if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon)
+        && !(MazeTalonLackDropsOn() && !MazeLacksExtraDrops(s, ctrl)))
     {
         for (const std::string& nm : names)
         {
@@ -67325,6 +67398,10 @@ MazesEndProvider::TutorCandidates(const GameState& s, int controller, const Card
                      [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
     // P1d (USER P3, MTG_MAZE_LAND_TARGETS): the USER's restriction (1-3 names, usually 1-2). Human play and the
     // unpruned gate keep every name.
+    // P5 (MTG_MAZE_PLAZA_PAY): a tutor that PUTS the land (Archdruid's Charm mode 1, entering tapped) does not
+    // find a Gateway Plaza that cannot pay its {1} on entry. A tutor to HAND (Sylvan Scrying) is unaffected: the
+    // Plaza is played later, where the land menu applies the same rule.
+    if (pp.tutor_land_to_battlefield && MazeAutonomous()) { MazeDropUnpayablePlaza(s, controller, all, 0, /*allow_empty=*/false); }
     if (MazeLandTargetsOn() && !HumanPlayActive() && !DecisionUnpruned())
     { MazeRestrictLandTargets(s, controller, all, /*with_maze=*/true, *this); }
     return all;
@@ -67357,11 +67434,21 @@ bool MazesEndProvider::TapTutorPutCandidates(const GameState& s, const CardDefin
     // P1d (USER P3, MTG_MAZE_LAND_TARGETS): the USER's menu without Maze's End -- Baldur's Gate if in the
     // library, Gond Gate if none held, one new-name Gate once Baldur's is gone and Gond is had. A RESTRICTION
     // that keeps the fail-to-find (returns false). The caller already skips human play and the unpruned gate.
-    if (MazeLandTargetsOn() && MazeRestrictLandTargets(s, me, names, /*with_maze=*/false, *this)) { return false; }
-    // ORDER ONLY: new names first, duplicates last. Every name kept; the fail-to-find stays.
+    // P5 (MTG_MAZE_PLAZA_PAY): no Gateway Plaza the board cannot pay for after the activation's own {3}.
+    MazeDropUnpayablePlaza(s, me, names, pp.tap_tutor_put_cost.has_value() ? pp.tap_tutor_put_cost->ManaValue() : 0,
+                           /*allow_empty=*/true);
+    // P5 (USER 2026-11-18: "Maze's End \"find nothing\" should be heuristically pruned", MTG_MAZE_FIND_NOTHING): with
+    // a legal Gate target on the menu the fail-to-find is withheld (returning true). DOMINANCE PREMISE, deck-scoped:
+    // the activation's cost (the {3}, the tap, Maze's End to hand) and its shuffle are paid either way, and a found
+    // Gate only ADDS -- a land (mana), possibly a new name, a Guild Summit draw; nothing in this list rewards a
+    // smaller board or a bigger library. (Gateway Plaza that cannot pay is dropped above, so a find never forces a
+    // sacrifice; when nothing else is left the caller re-offers the fail-to-find.)
+    const bool no_decline = MazeFindNothingOn() && !names.empty();
+    if (MazeLandTargetsOn() && MazeRestrictLandTargets(s, me, names, /*with_maze=*/false, *this)) { return no_decline; }
+    // ORDER ONLY: new names first, duplicates last. Every name kept.
     std::stable_sort(names.begin(), names.end(),
                      [&](const std::string& a, const std::string& b) { return adds(a) && !adds(b); });
-    return false;
+    return no_decline;
 }
 
 bool MazesEndProvider::ProjectsAlternateWin(const GameState& s,
@@ -67432,6 +67519,14 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
                                                           const CardDefinition& def) const
 {
     std::vector<int> base = DeckProvider::LandEntryPinCandidates(s, controller, def);
+    // P5 (USER 2026-11-18: "We should either play it and pay the 1 or not play it. Sacrificing is a dominated
+    // option.", MTG_MAZE_PLAZA_PAY): Gateway Plaza's pay-or-sacrifice is {pay} alone. The pin is read only when the
+    // {1} is affordable at the entry (unaffordable = the forced sacrifice), and every route that would put an
+    // unpayable Plaza is restricted separately (LandPlayOffered, the tutor / fetch name lists). CAVEAT stated with
+    // the ruling: with Guild Summit out, a sacrificed Plaza would still have drawn a card on entry (and leaves the
+    // library one land thinner) -- the prune gives that up.
+    if (def.params.etb_sacrifice_unless_pay.has_value() && base.size() > 1 && MazePlazaPayOn() && MazeAutonomous())
+    { return { 1 }; }
     if (base.empty() || !def.params.etb_choose_color || HumanPlayActive() || DecisionUnpruned())
     { return base; }
     bool spend[5] = { false, false, false, false, false };
@@ -67484,7 +67579,23 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
         const int g = static_cast<int>(Color::Green), u = static_cast<int>(Color::Blue);
         auto admitted = [&](int c) { return std::find(out.begin(), out.end(), c) != out.end(); };
         int pick = -1;
-        if (admitted(g) && !has_source(Color::Green))      { pick = g; }
+        // P5 disclosure-1 VARIANT (MTG_MAZE_COLOUR_ALT, default OFF): alternate by source COUNT -- G while the green
+        // sources do not outnumber the blue ones, else U (G, U, G, U, ...).
+        if (MazeColourAltOn() && admitted(g) && admitted(u))
+        {
+            int ng = 0, nu = 0;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != controller) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || d->params.any_color_filter || !d->params.mana_colors_of_controlled_subtype.empty())
+                { continue; }
+                for (Color c : EffectiveProducesFor(s, controller, *d, &p))
+                { if (c == Color::Green) { ++ng; } else if (c == Color::Blue) { ++nu; } }
+            }
+            pick = ng <= nu ? g : u;
+        }
+        else if (admitted(g) && !has_source(Color::Green)) { pick = g; }
         else if (admitted(u) && !has_source(Color::Blue))  { pick = u; }
         else if (admitted(g))                              { pick = g; }
         else if (admitted(u))                              { pick = u; }
@@ -67641,25 +67752,13 @@ bool MazesEndProvider::PlanMoveOrderFront(const GameState& s, const std::vector<
     return !drop_open || !land_in_hand;
 }
 
-// Maze's End P1d (USER A1: "We may want the tuning sweep, because I have no idea how to pick these numbers."): the
-// progress weights behind a TEMPORARY three-bit variant selector (heurarm MAZE_WSEL_0..2) so one pooled batch can
-// sweep them. Variant 0 = the shipped P1b weights. Remove the selector once the USER picks.
+// Maze's End progress weights. P5 (the USER's "rest of the table": A1 -> v5): fetch eval 100 (MTG_MAZE_FETCH_EVAL_V5,
+// default ON; =0 -> the P1b 200). The temporary MTG_MAZE_WSEL_* selector of the P1d sweep is deleted (held-out: v5
+// d5 b10 6.337 vs 6.350 13/10, d1 b1 6.26 vs 6.33 9/2; every other variant equal or not validated).
 struct MazeProgressWeights { long long name, held, hand_new; int fetch; };
 static MazeProgressWeights MazeWeights()
 {
-    static const MazeProgressWeights kV[8] = {
-        { 2000000, 500000, 100000, 200 },   // 0 shipped: 2 life per name
-        { 1000000, 500000, 100000, 200 },   // 1 one life per name
-        { 4000000, 500000, 100000, 200 },   // 2 four life per name
-        { 2000000,      0,      0, 200 },   // 3 names only
-        { 2000000, 1000000, 300000, 200 },  // 4 heavier held / hand Gates
-        { 2000000, 500000, 100000, 100 },   // 5 fetch eval 100
-        { 2000000, 500000, 100000, 400 },   // 6 fetch eval 400
-        { 2000000, 1500000, 500000, 200 },  // 7 held and hand Gates near a name
-    };
-    const int v = (heurarm::Flag(heurarm::MAZE_WSEL_0, false) ? 1 : 0) | (heurarm::Flag(heurarm::MAZE_WSEL_1, false) ? 2 : 0)
-                | (heurarm::Flag(heurarm::MAZE_WSEL_2, false) ? 4 : 0);
-    return kV[v];
+    return { 2000000, 500000, 100000, MazeFetchEvalV5On() ? 100 : 200 };
 }
 
 // Maze's End P1b: ALTERNATE-WIN PROGRESS in the graded no-win leaf (see the base hook). The opponent's life never
@@ -67737,4 +67836,168 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
         }
     }
     return MazeWeights().fetch;
+}
+
+// ---- P5 (USER 2026-11-18) ------------------------------------------------------------------------------------
+// Gateway Plaza (MTG_MAZE_PLAZA_PAY): "We should either play it and pay the 1 or not play it." A land drop or an
+// autonomous Burgeoning put of a Plaza whose {1} cannot be paid on entry (MazePlazaPayable: no Amulet / Gond Gate to
+// untap it and no other mana to pay with) is not offered -- keeping the card dominates the forced sacrifice (the
+// card stays playable later). Caveat (stated with the ruling): with Guild Summit out the sacrificed Plaza would
+// still draw a card on entry. Manabond cannot leave one land out (it puts ALL of them), so its own prune
+// (CrossingDumpAllLandsDominatesNo) keeps "no" for exactly that case.
+bool MazesEndProvider::LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const
+{
+    if (!def.params.etb_sacrifice_unless_pay.has_value() || !MazePlazaPayOn() || !MazeAutonomous()) { return true; }
+    return MazePlazaPayable(s, controller, def, 0);
+}
+
+// Manabond with an ALL-LAND hand (MTG_MAZE_MANABOND_ALL_LANDS; USER: "Similarily \"no\" with only lands should be
+// pruned heuristically."): "yes" puts every card and discards nothing. DOMINANCE PREMISE (deck-scoped, re-check if
+// the list changes): every land on the battlefield is at least as good as the same land in hand -- it untaps at our
+// next untap (the end-step entry's tapped-ness costs nothing), Guild Summit draws for each Gate NOW rather than
+// later, and nothing in the list rewards holding a land: Burgeoning and Exploration only PUT lands from hand (the
+// lands are already in), no card counts cards in hand, and Maze's End's activations do not need a land in hand.
+// The one entry with a loss is Gateway Plaza that cannot pay its {1} at the end step (a forced sacrifice), so "no"
+// stays offered whenever such a Plaza is in hand.
+bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int controller) const
+{
+    if (!MazeManabondAllLandsOn() || !MazeAutonomous()) { return false; }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand() && !MazePlazaPayable(s, controller, *d, 0)) { return false; }
+    }
+    return true;
+}
+
+// Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use
+// the mana for. In fact, this is the main use-case."). Live while we control an untapped Treasure-making Gate.
+bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
+{
+    if (!MazeHeapTreasureOn() || !MazeAutonomous()) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.tap_treasure_cost.has_value()) { return true; }
+    }
+    return false;
+}
+
+namespace
+{
+// Does next turn's mana or a colour BIND, so that one more any-colour mana (a Treasure) makes a held spend castable?
+// Next turn's mana = our lands + our Treasures + 1 when a land is in hand (one per source; Baldur's Gate's scaling
+// ignored -- a conservative read that admits more). A spend binds when it needs exactly one more than that: a
+// nonland card in hand the provider casts (its mana value, or a coloured pip count one above the sources of that
+// colour), Talon Gates' {4} put, or Maze's End's {3} activation (its own tap excluded from the mana).
+bool MazeTreasureBinds(const GameState& s, int me, const DecisionProvider& prov)
+{
+    int lands = 0, treasures = 0, g_src = 0, u_src = 0;
+    bool maze = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (MazeIsMazeDef(d)) { maze = true; }
+        if (p.card.IsLand())
+        {
+            ++lands;
+            for (Color c : EffectiveProducesFor(s, me, *d, &p))
+            { if (c == Color::Green) { ++g_src; } else if (c == Color::Blue) { ++u_src; } }
+        }
+        else if (p.is_token && d->card.HasType(CardType::Artifact)) { ++treasures; ++g_src; ++u_src; }
+    }
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    bool land_in_hand = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { land_in_hand = true; }
+        if (MazeIsMazeDef(d)) { maze = true; }
+    }
+    const int next = lands + treasures + (land_in_hand ? 1 : 0);
+    auto one_short = [](int need, int have) { return need > have && need <= have + 1; };
+    if (maze && one_short(3, next - 1)) { return true; }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->card.IsLand())
+        {
+            if (d->params.hand_put_self_cost.has_value() && one_short(d->params.hand_put_self_cost->ManaValue(), next))
+            { return true; }
+            continue;
+        }
+        if (prov.NeverCast(*d)) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (one_short(mc.ManaValue(), next) || one_short(mc.green, g_src) || one_short(mc.blue, u_src)) { return true; }
+    }
+    return false;
+}
+}
+
+// The Treasure's plan is kept when its mana would otherwise go UNUSED -- defined, like B1's rest of the line, from
+// the plan list itself: a plan P carrying the Treasure is REMOVED when the list also holds the plan "P without the
+// Treasure, plus one more mana-spending action c" (same land) -- i.e. the board could pay for P's other spends AND
+// c, so the mana the Treasure takes had another use in this very menu. Kept regardless when next turn's mana or a
+// colour binds (MazeTreasureBinds: one more any-colour mana makes a held spend castable). A RESTRICTION: the search
+// still branches over every admitted plan, the Treasure-free plans are never touched, and the list never empties.
+// Equality on actions = kind, name, mode, target, X, source and hand index; a missing superset (another filter
+// pruned it) keeps the Treasure plan -- the error is always toward admitting.
+void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
+{
+    auto is_treasure = [](const Action& a)
+    { return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure; };
+    auto spends = [](const Action& a)
+    {
+        if (a.cost.ManaValue() > 0) { return true; }
+        return a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->card.m_mana_cost.ManaValue() > 0;
+    };
+    auto akey = [](const Action& a)
+    {
+        return std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str() + "|"
+             + std::to_string(static_cast<int>(a.ability_mode)) + "|" + a.tutor_target.str() + "|"
+             + std::to_string(a.chosen_x) + "|" + std::to_string(a.sac_source_id) + "|" + std::to_string(a.hand_index);
+    };
+    auto pkey = [](const std::string& land, std::vector<std::string> keys)
+    {
+        std::sort(keys.begin(), keys.end());
+        std::string k = land;
+        for (const std::string& x : keys) { k += '\x1e'; k += x; }
+        return k;
+    };
+    std::unordered_set<std::string> plain;          // plans without a Treasure
+    std::vector<std::string> spend_keys;            // every mana-spending non-Treasure action on the menu
+    std::vector<std::size_t> with_t;
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        bool t = false;
+        std::vector<std::string> keys;
+        for (const Action& a : *plans[i].actions)
+        {
+            if (is_treasure(a)) { t = true; continue; }
+            keys.push_back(akey(a));
+            if (spends(a) && std::find(spend_keys.begin(), spend_keys.end(), keys.back()) == spend_keys.end())
+            { spend_keys.push_back(keys.back()); }
+        }
+        if (t) { with_t.push_back(i); }
+        else   { plain.insert(pkey(*plans[i].land, std::move(keys))); }
+    }
+    if (with_t.empty() || spend_keys.empty()) { return; }
+    if (MazeTreasureBinds(s, s.active_player_index, *this)) { return; }
+    for (std::size_t i : with_t)
+    {
+        std::vector<std::string> rest;
+        for (const Action& a : *plans[i].actions) { if (!is_treasure(a)) { rest.push_back(akey(a)); } }
+        for (const std::string& c : spend_keys)
+        {
+            if (std::find(rest.begin(), rest.end(), c) != rest.end()) { continue; }
+            std::vector<std::string> plus = rest;
+            plus.push_back(c);
+            if (plain.count(pkey(*plans[i].land, std::move(plus))) != 0) { admit[i] = 0; break; }
+        }
+    }
 }

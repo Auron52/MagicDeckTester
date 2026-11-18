@@ -4973,6 +4973,30 @@ public:
     // walk still enumerates every target.
     virtual int TapTutorPutEval(const GameState&, const CardDefinition& /*source*/, const std::string& /*target*/) const
     { return 0; }
+
+    // (Appended at the END of the class, like every new hook: existing vtable slots keep their offsets.)
+    // LandPlayOffered -- may a land drop (the plan enumeration's land menu) or an autonomous Burgeoning put offer
+    // this land? A RESTRICTION hook (Maze's End P5: Gateway Plaza is not played when its {1} cannot be paid on
+    // entry -- the forced sacrifice is dominated by keeping the card). Default true: every land offered. Never
+    // consulted in human play or under the unpruned gate.
+    virtual bool LandPlayOffered(const GameState&, int /*controller*/, const CardDefinition&) const { return true; }
+
+    // CrossingDumpAllLandsDominatesNo -- Manabond's "you may reveal your hand and put all land cards ..." when the
+    // hand is ALL lands: "yes" puts every card and discards nothing. True drops "no" from the searched menu (Maze's
+    // End P5, USER 2026-11-18: "no" with only lands pruned). Default false: both answers searched. Never consulted
+    // in human play.
+    virtual bool CrossingDumpAllLandsDominatesNo(const GameState&, int /*controller*/) const { return false; }
+
+    // PlanListFilterLive / PlanListAdmit -- a provider's PLAN-LIST restriction, applied to every plan enumeration
+    // (root and breakpoint continuation alike) right after the enumeration builds its list. Live is asked once per
+    // enumeration; when true, Admit sees every plan (its actions and its land) and clears `admit[i]` for a plan it
+    // removes. It may only REMOVE plans; it never adds or reorders. If it would remove every plan, nothing is
+    // removed. Default: not live (byte-identical). Never consulted in human play or under the unpruned gate. First
+    // user: Maze's End P5, Heap Gate's Treasure offered only when its mana would otherwise go unused.
+    struct PlanView { const std::vector<Action>* actions; const std::string* land; };
+    virtual bool PlanListFilterLive(const GameState&) const { return false; }
+    virtual void PlanListAdmit(const GameState&, const std::vector<PlanView>& /*plans*/,
+                               std::vector<char>& /*admit*/) const {}
 };
 
 // ---------------------------------------------------------------------------------------------------
