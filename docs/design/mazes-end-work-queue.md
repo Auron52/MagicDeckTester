@@ -56,3 +56,10 @@ Added to P5 (same pooled A/B):
 - **Disclosure 28 extension:** Manabond "no" pruned when the hand is ALL lands ("yes" puts them all and discards nothing). Premise to check and state: an all-land hand where every land enters without a loss. Gateway Plaza entering at the end step without {1} available would be sacrificed; keep "no" offered in that case, or verify it cannot happen.
 - **Disclosures 16-21 and 31-32:** approved.
 - **Disclosure 25:** explained to the USER. The census over 90 games shows 0 overflow; no action unless the USER asks.
+
+## Tie fix: ACCEPTED (2026-11-18), the USER's conditions met
+Audit `logs/maze/tie/slower-games-audit.md`: all 11 searched slower rows (9 distinct games) come from one exact tie inside a greedy playout beyond the horizon, never from the root's options.
+- `MTG_TIE_OLD_CANON` alone reproduces the old game 11/11; `MTG_TIE_OLD_CACHE` plays no part.
+- Every game recovers at d8 b0, where new and old are byte-identical.
+
+The ties are the empty Tooth and Nail and Time Warp at the opponent, the scoring fixes already running. The 7 smoke GT moves are accepted at the next shared push, after integration, rebase and a smoke run. Diagnostic levers stay on `wip/maze-tie` c2fc9b328 (DO NOT MERGE).
