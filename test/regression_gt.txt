@@ -1,42 +1,8 @@
-# Regression ground truth -- commit de20b99af  date 2026-11-18
+# Regression ground truth -- commit 7deda94a9  date 2026-11-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
-# accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
-# accepted-with-regressions (smoke, 2026-11-15): Merfolk Turns smoke d0 gi247 T5 to T6 on merged shared source; reproduces with new Merfolk choices off; d0 net 28 faster and 1 slower, searched rows no slower; docs/design/analysis-Merfolk-Turns.md
-# accepted-with-regressions (smoke, 2026-11-15): Final Merfolk tutor and blue-fixing choices: smoke d0 gi168,302,763 each one turn slower than prior GT; searched smoke unchanged, regression searched three games faster, and held-out searched 26 faster/1 slower with 64.8% lower priced work. Control-prune OFF d0 A/B averaged 6.105 versus 6.093 ON, so retain package.
-# accepted-with-regressions (smoke, 2026-11-15): Mill opponent land and fetch policy changes outcomes. On seed 2003 the two searched T5-to-T6 cases recover at 4x and 16x search budget; regression d3 mean improves 5.0 to 4.6. Legacy references replay.
-# accepted-with-regressions (regression, 2026-11-15): Mill opponent land and fetch policy changes outcomes. On seed 2003 the two searched T5-to-T6 cases recover at 4x and 16x search budget; regression d3 mean improves 5.0 to 4.6. Legacy references replay.
-# accepted-with-regressions (smoke, 2026-11-15): Passive opponent now draws lands from seed % 50, plays its leftmost land, and cracks zero-cost fetches. Hinata target counts and Midrange Burn Price of Progress use the developed board. Smoke searched games: 10 slower, 19 faster; two slower recover at higher budgets. Regression searched games: 37 slower, 40 faster; one recovers, others reflect the changed opponent land distribution and resulting play/draw sequences. All 843 legacy references replay.
-# accepted-with-regressions (regression, 2026-11-15): Passive opponent now draws lands from seed % 50, plays its leftmost land, and cracks zero-cost fetches. Hinata target counts and Midrange Burn Price of Progress use the developed board. Smoke searched games: 10 slower, 19 faster; two slower recover at higher budgets. Regression searched games: 37 slower, 40 faster; one recovers, others reflect the changed opponent land distribution and resulting play/draw sequences. All 843 legacy references replay.
-# accepted-with-regressions (smoke, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
-# accepted-with-regressions (regression, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
-# accepted-with-regressions (smoke, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
-# accepted-with-regressions (regression, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
-# accepted-with-regressions (smoke, 2026-11-15): USER 2026-11-15 depth>=5: restore Hinata d5/b30 after invalid Nov11 d4 artifact; 500 matched play games +17 turns vs former d4 GT; 36/41 searched slower games recover at 4x/16x, 5 persist; retain adopted model, overnight left to periodic run
-# accepted-with-regressions (regression, 2026-11-15): USER 2026-11-15 depth>=5: restore Hinata d5/b30 after invalid Nov11 d4 artifact; 500 matched play games +17 turns vs former d4 GT; 36/41 searched slower games recover at 4x/16x, 5 persist; retain adopted model, overnight left to periodic run
-# accepted-with-regressions (smoke, 2026-11-15): Merfolk Turns d0 gi167/440/840 +1 turn from immediate Three Tree City legend SBA; former lines spent mana from both legendary Cities before priority. gi156 -1 turn after changed City line/shuffle. Searched and 2HG smoke unchanged.
-# accepted-with-regressions (smoke, 2026-11-15): Boars depth-0 Decimator order: gi194 T6->T7 with identical draws; both arms win T5 at depth8 unlimited; 49 games faster and 1 slower overall.
-# accepted-with-regressions (regression, 2026-11-15): Boars Decimator depth-0 rank: gi93 T6->T7 (Horn setup), gi406 T5->T6 (Greaves haste), gi936 T6->T7 (second Decimator); identical draws; 51 faster and 3 slower, net 49 turns saved; all searched cells unchanged.
-# accepted-with-regressions (smoke, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
-# accepted-with-regressions (regression, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
-# accepted-with-regressions (smoke, 2026-11-15): Red Elementals R30 mulligan profile: smoke d5 4.28->4.32 (+0.04t over 100 games); changed games attributed to mulligan count/bottom, zero unexplained; held-out keep and confounded bottoming improve -0.10175t/-0.02925t; regular d5 improves.
-# accepted-with-regressions (smoke, 2026-11-16): Creature-float later-color payment: 23 searched faster, one Soldiers d5 T4-to-T5 budget churn (recovers at 4x), net gain; small d0 changes reviewed.
-# accepted-with-regressions (regression, 2026-11-16): Creature-float later-color payment: 23 searched faster, one Soldiers d5 T4-to-T5 budget churn (recovers at 4x), net gain; small d0 changes reviewed.
-# accepted-with-regressions (smoke, 2026-11-16): Greaves-in-hand mana-dork rank: 2000 fresh searched games one turn faster, none slower; selected searched tiers no slower; three Boars d0 games one turn slower from fewer Herald counters.
-# accepted-with-regressions (regression, 2026-11-16): Greaves-in-hand mana-dork rank: 2000 fresh searched games one turn faster, none slower; selected searched tiers no slower; three Boars d0 games one turn slower from fewer Herald counters.
-# accepted-with-regressions (regression, 2026-11-16): Spirits pending Souls flashback Geist credit: d5 s3003 gi20 T4->T5 at play budget, recovers T4 at 4x and 16x; gi56 T5->T4, net zero turn-games. Fresh 5000-pair A/B had zero win changes.
-# accepted-with-regressions (smoke, 2026-11-18): GT RECONCILIATION at d90931741 (USER 2026-11-18: shared branch did not match GT after the 11-16/17 mana work). Catches up the unaccepted mana-payment fixes (Codex Dragonstorm/Boars/Spirits/Chancery; Claude PD, Minotaur, painland float, CONT_UNSEEN_PENDING, ONDEMAND_VISIBLE_CONTRIB, LEFTOVER_LINE_SWAP) plus the upstream Mill and Spirits keep tables. Net loss-penalized turn-games: smoke d0 -163 searched -10; regression d0 -121 searched -94 (Spirits -71). 75 searched slower all classified: churn incl. both win-to-loss (cyclone smoke d5 gi73, antilife regr d5 s3003 gi332); PERSISTS = Spirits keep-table hands + 11 same-draw line changes (creature_giving 5, cyclone 3, mill 2, fivecolour 1) in decks net <= 0. Supersedes the 11-14/11-15 smoke+regression notes (every key re-measured).
-# accepted-with-regressions (regression, 2026-11-18): GT RECONCILIATION at d90931741 (USER 2026-11-18: shared branch did not match GT after the 11-16/17 mana work). Catches up the unaccepted mana-payment fixes (Codex Dragonstorm/Boars/Spirits/Chancery; Claude PD, Minotaur, painland float, CONT_UNSEEN_PENDING, ONDEMAND_VISIBLE_CONTRIB, LEFTOVER_LINE_SWAP) plus the upstream Mill and Spirits keep tables. Net loss-penalized turn-games: smoke d0 -163 searched -10; regression d0 -121 searched -94 (Spirits -71). 75 searched slower all classified: churn incl. both win-to-loss (cyclone smoke d5 gi73, antilife regr d5 s3003 gi332); PERSISTS = Spirits keep-table hands + 11 same-draw line changes (creature_giving 5, cyclone 3, mill 2, fivecolour 1) in decks net <= 0. Supersedes the 11-14/11-15 smoke+regression notes (every key re-measured).
-# accepted-with-regressions (smoke, 2026-11-18): Cyclone Ponder-first T1+DEMOTE + MTG_UNSEEN_KEEP_SCARCE default ON (USER: 'whichever gets the best results'; UKS 'if and when the issue is resolved'). Held-out 10,000 Cyclone pairs net -16 (296 faster/280 slower); 279/280 recover at d8 b0, gi 570487 at d8 b1000/b5000/b30000 (T5). UKS over pf1d Cyclone 5000: net -1. Tiers: smoke 15 faster/3 slower, regression 12 faster/9 slower searched; 9 churn (recover at 4x/16x), 3 persist with draws diverging from T1 (Brainstorm vs Ponder = different library): cyclone2hg smoke d3 gi20, cyclone regr d3 s3003 gi8, d5 s2002 gi107. Dragonstorm d0/d5 and alchemist smoke d0 play/digest changes from UKS, no searched slower.
-# accepted-with-regressions (regression, 2026-11-18): Cyclone Ponder-first T1+DEMOTE + MTG_UNSEEN_KEEP_SCARCE default ON (USER: 'whichever gets the best results'; UKS 'if and when the issue is resolved'). Held-out 10,000 Cyclone pairs net -16 (296 faster/280 slower); 279/280 recover at d8 b0, gi 570487 at d8 b1000/b5000/b30000 (T5). UKS over pf1d Cyclone 5000: net -1. Tiers: smoke 15 faster/3 slower, regression 12 faster/9 slower searched; 9 churn (recover at 4x/16x), 3 persist with draws diverging from T1 (Brainstorm vs Ponder = different library): cyclone2hg smoke d3 gi20, cyclone regr d3 s3003 gi8, d5 s2002 gi107. Dragonstorm d0/d5 and alchemist smoke d0 play/digest changes from UKS, no searched slower.
-# accepted-with-regressions (smoke, 2026-11-18): MTG_LINE_REDUCER_KEEP (b99071691, default ON): Dragons Incubator reducer-line payment keep. smoke 3 / regression 4 configs digest-only, 0 slower 0 faster (Dragons, Spirits, Boars2HG); held-out gi 600000+ Dragons 5000 pairs net 0, 8 reducer decks 0 slower, Spirits -1.
-# accepted-with-regressions (regression, 2026-11-18): MTG_LINE_REDUCER_KEEP (b99071691, default ON): Dragons Incubator reducer-line payment keep. smoke 3 / regression 4 configs digest-only, 0 slower 0 faster (Dragons, Spirits, Boars2HG); held-out gi 600000+ Dragons 5000 pairs net 0, 8 reducer decks 0 slower, Spirits -1.
-# accepted-with-regressions (smoke, 2026-11-18): Maze's End branch rebased onto a76477d36: greedy tie-fix (canonical tie-break past 32 candidates), greedy scoring fixes (tutor/Tooth and Nail whiff, opponent Time Warp, Reveillark evoke by outcome), Maze's End F1-F4 + P5 (mazesend rows NEW, mazesend2hg smoke now d5 b20 x30), Stompy F2 move (digest-only). Every searched slower game attributed by single-game replay: tie fix (extraturns smoke d5/2hg gi13, regression d5 s3003 gi112; all recover at d8 b0 per logs/maze/tie audit + tie-scoring results), scoring fixes (jumbo regression d5 s2002 gi158, s3003 gi107/gi122; held-out jumbo net -3). Rebased mazesend rows byte-identical to the pre-rebase binary; every other row byte-identical to origin. Overnight GT left to the periodic run.
-# accepted-with-regressions (regression, 2026-11-18): Maze's End branch rebased onto a76477d36: greedy tie-fix (canonical tie-break past 32 candidates), greedy scoring fixes (tutor/Tooth and Nail whiff, opponent Time Warp, Reveillark evoke by outcome), Maze's End F1-F4 + P5 (mazesend rows NEW, mazesend2hg smoke now d5 b20 x30), Stompy F2 move (digest-only). Every searched slower game attributed by single-game replay: tie fix (extraturns smoke d5/2hg gi13, regression d5 s3003 gi112; all recover at d8 b0 per logs/maze/tie audit + tie-scoring results), scoring fixes (jumbo regression d5 s2002 gi158, s3003 gi107/gi122; held-out jumbo net -3). Rebased mazesend rows byte-identical to the pre-rebase binary; every other row byte-identical to origin. Overnight GT left to the periodic run. Regression also: hydras d0 s2002 gi435 and alchemist d0 gi175 (tie fix), melira d3 s2002 gi6 digest-only (scoring fixes).
-# accepted-with-regressions (smoke, 2026-11-18): rebase onto 7093daceb (Maze's End): GT aggregates re-joined to their per-game logs; 0 configs changed vs committed gt_logs; values identical to this session's accepts of Cyclone Ponder-first + MTG_UNSEEN_KEEP_SCARCE and MTG_LINE_REDUCER_KEEP.
-# accepted-with-regressions (regression, 2026-11-18): rebase onto 7093daceb (Maze's End): GT aggregates re-joined to their per-game logs; 0 configs changed vs committed gt_logs; values identical to this session's accepts of Cyclone Ponder-first + MTG_UNSEEN_KEEP_SCARCE and MTG_LINE_REDUCER_KEEP.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -57,6 +23,10 @@ sea_smoke_d0_s1001=6.5740/531434485f097a7c
 sea_smoke_d3_s1001=5.8600/96244dfbc32656c5
 sea_smoke_d5_s1001=5.8500/0b288f29c0c916b3
 sea2hg_smoke_d5_s1001=6.5200/98a711d8ddc9c626
+stuffy_smoke_d0_s1001=6.4520/c1ce15040e468b29
+stuffy_smoke_d3_s1001=4.6200/cbeb9523a9a4a4e7
+stuffy_smoke_d5_s1001=4.6400/2c8e3785e9c8362c
+stuffy2hg_smoke_d5_s1001=4.7200/e59e45b1bf3e3a13
 morph_smoke_d0_s1001=4.7380/2a16be40a3e862c3
 morph_smoke_d3_s1001=3.9800/e6391ce2fb15a901
 morph_smoke_d5_s1001=4.0600/da2bc0dbb8829578
@@ -101,7 +71,7 @@ th_smoke_d5_s1001=4.1029/73103308fb438b9c
 knights_smoke_d0_s1001=4.5400/ab04bf59077abf86
 knights_smoke_d3_s1001=4.4933/c3a3a913facbf65b
 knights_smoke_d5_s1001=4.3846/9584e5d50e468582
-whiteknights_smoke_d0_s1001=4.5830/61c96958d6e159e8
+whiteknights_smoke_d0_s1001=4.5830/1f86383d17efda44
 whiteknights_smoke_d3_s1001=4.1600/0d94744543d3367b
 whiteknights_smoke_d5_s1001=4.1323/f8d74fa5da95ba69
 kithkin_smoke_d0_s1001=4.9860/7e57c92e7158ae11
@@ -264,7 +234,7 @@ spirits_smoke_d0_s1001=4.9220/3763cd6097e82d8d
 spirits_smoke_d3_s1001=4.5400/fc7492dc25cff6b5
 spirits_smoke_d5_s1001=4.5800/93cb9fddd462b60b
 spirits2hg_smoke_d3_s1001=5.1400/e547d05b48663d6e
-merfolkturns_smoke_d0_s1001=6.1020/a4175fa8554c25a2
+merfolkturns_smoke_d0_s1001=6.0930/4631fb56c0df453f
 merfolkturns_smoke_d3_s1001=5.6000/35eabb416cb18b46
 merfolkturns_smoke_d5_s1001=5.6000/1cefeb8b4693a2b8
 merfolkturns2hg_smoke_d3_s1001=6.0000/03f13d2a2fafa76b
@@ -297,6 +267,13 @@ boars_regression_d3_s30261=5.0000/fc0f3091289555ee
 boars_regression_d5_s30261=5.0000/fc0f3091289555ee
 sea_regression_d3_s30011=6.2000/e4fe47c8d3e43598
 sea_regression_d5_s30011=6.2000/e4fe47c8d3e43598
+stuffy_regression_d0_s2002=6.4910/df9253e386739915
+stuffy_regression_d3_s2002=4.5000/865d0d8e22c1b9e7
+stuffy_regression_d5_s2002=4.5533/5866b304486f234c
+stuffy_regression_d5_s3003=4.6267/156e76ada7da6df0
+stuffy2hg_regression_d5_s2002=4.7867/62147a2513634bdd
+stuffy_regression_d3_s30071=4.0000/43175ce36a83ba7d
+stuffy_regression_d5_s30071=4.0000/19740a46b3741935
 morph_regression_d0_s2002=4.7730/258f39d48b3d2cb5
 morph_regression_d3_s2002=4.0267/532939362a099b06
 morph_regression_d5_s2002=4.0400/1e69093eba770cc1
@@ -428,7 +405,7 @@ knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08
 knights_regression_d5_s2002=4.3180/1cadf9100c46c412
 knights_regression_d5_s3003=4.3440/a6944f008a998fce
-whiteknights_regression_d0_s2002=4.5700/2fc062aabf753926
+whiteknights_regression_d0_s2002=4.5700/86fdc5f908b7b772
 whiteknights_regression_d3_s2002=4.0900/7bf0e912b2753e1a
 whiteknights_regression_d5_s2002=4.1620/49e180b9813ae9dd
 whiteknights_regression_d5_s3003=4.1220/1a29c60bbd40c9ed
@@ -627,7 +604,7 @@ spirits_regression_d0_s2002=4.8550/c3441f4ce7d919ad
 spirits_regression_d3_s2002=4.5333/1ea61cd189e3ec9c
 spirits_regression_d5_s2002=4.5333/1a8f67e8f5958abb
 spirits_regression_d5_s3003=4.5067/e279049c833e861f
-merfolkturns_regression_d0_s2002=6.0140/f2880a413778a8a5
+merfolkturns_regression_d0_s2002=6.0100/1d7d425819265b46
 merfolkturns_regression_d3_s2002=5.3600/511943ab5f5efcae
 merfolkturns_regression_d5_s2002=5.5667/8011a32354c3fb4a
 merfolkturns_regression_d5_s3003=5.6133/70b9eaa5b09ef91d
