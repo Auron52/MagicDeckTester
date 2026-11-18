@@ -478,6 +478,18 @@ inline bool LineSpareDepletionOn()
     return heurarm::Flag(heurarm::LINE_SPARE_DEPLETION, env_on);
 }
 
+// MTG_LINE_SPARE_STORAGE (DEFAULT ON; =0 restores the storage-never-spare rung) -- the LINE_FLOAT_TAP_FIRST rung
+// (LineFloatTapFirstPlan, ManaPayment.cpp) spends a charged STORAGE land (Mercadian Bazaar, Dwarven Hold) on the held
+// generic pips, but only when the named line would otherwise lose a floating colour it owes that no other untapped
+// source can make again, and the rung's plain spares cannot keep it. USER 2026-11-18 (Dragonstorm s30086338 T6):
+// "For Dragonstorm it should spend the counters if they are required for the line." Same shared payer -> executor,
+// rollout and walks in lockstep; byte-identical on every board without a charged storage land.
+inline bool LineSpareStorageOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_STORAGE", true);
+    return heurarm::Flag(heurarm::LINE_SPARE_STORAGE, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

@@ -11443,7 +11443,8 @@ std::uint64_t ActLineHoldSurplusBits(const GameState& state, std::uint64_t act_m
 //
 // SPARE source, for this payment: a land or rock (no dork -- attack -- and no depletion / storage /
 // pay-sac source -- banked or one-shot mana), whose payment-legal colours (ProducesForPayment) include no
-// colour a later pip owes. A creature-only-colour land (Territory, Cavern) is spare for a noncreature
+// colour a later pip owes. (A charged storage land is admitted by the STORAGE TIER at the end of
+// LineFloatTapFirstPlan, MTG_LINE_SPARE_STORAGE, only when the line needs its counters.) A creature-only-colour land (Territory, Cavern) is spare for a noncreature
 // payment only if every colour the line still owes that it could make for a later CREATURE is also on
 // offer from the reserve or from another unrestricted untapped source -- otherwise it may be that
 // colour's only provider (s7100151 T5: the Territory was Kolaghan's only {B}).
@@ -11607,6 +11608,11 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
     };
     int spare = 0;
     const int n = static_cast<int>(state.battlefield.size());
+    // STORAGE TIER candidates (MTG_LINE_SPARE_STORAGE): battlefield index and live yield (= its counters).
+    struct StoreCand { int idx; int y; };
+    constexpr int kMaxStore = 8;
+    StoreCand store[kMaxStore];
+    int n_store = 0, store_makes = 0;
     for (int i = 0; i < n; ++i)
     {
         const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
@@ -11639,7 +11645,21 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
             const int y = PermanentManaYield(state, p, *d);
             spare += y > 0 ? y : 0;
         }
-        else if (i < 64) { hold_mask |= (1ull << i); }
+        else if (i < 64)
+        {
+            hold_mask |= (1ull << i);
+            // A charged storage land, for the STORAGE TIER below (held here like every banked source).
+            if (d->params.storage_land && n_store < kMaxStore && StorageSourceLive(p, *d))
+            {
+                const int y = PermanentManaYield(state, p, *d);
+                if (y > 0)
+                {
+                    store[n_store++] = { i, y };
+                    for (Color c : EffectiveProducesFor(state, active, *d, &p))
+                    { const int ci = colour_idx(c); if (ci >= 0) { store_makes |= 1 << ci; } }
+                }
+            }
+        }
     }
     hold_k = std::min(owed_spend, spare);
     // ENOUGH PIPS HELD TO KEEP THE OWED FLOAT (MTG_LINE_FLOAT_HOLD_EXACT, DEFAULT ON; =0 the count above alone).
@@ -11669,6 +11689,96 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
             return true;
         };
         while (hold_k < cap && !keeps_owed(hold_k)) { ++hold_k; }
+    }
+    // STORAGE TIER (MTG_LINE_SPARE_STORAGE, DEFAULT ON; =0 -> storage is never spare here). A storage land is held
+    // above because its counters are BANKED mana (one tap bursts them all, TapSourceIntoFloat). USER 2026-11-18:
+    // *"For Dragonstorm it should spend the counters if they are required for the line."* Dragonstorm s30086338
+    // gi86338 T6, the named line {Pyretic Ritual, Pyretic Ritual, Desperate Ritual, Apex of Power, Dragonlord
+    // Kolaghan} off Mercadian Bazaar x2 (4 and 3 counters), Sandstone Needle and a floating {B} from Lotus Bloom: Apex's
+    // {7}{R}{R}{R} drained the reserve ({B} + 4 {R} after its pips) into the generic, tapped the Needle for the rest,
+    // and Kolaghan's {B} was gone -- no source left on the board makes black. The oracle pays the generic with a
+    // Bazaar's stored red instead and the {B} floats to Kolaghan.
+    // "Required" is read as the rung reads its own purpose: some colour the named line still owes (a) floats, (b) no
+    // untapped source other than a storage land can make again (a pay-sac source counts as making every colour), (c) no
+    // storage land makes either, and (d) the drain as held so far spends it. Then the hold grows to the fewest pips that
+    // keep (only) those colours, and the storage lands are released from the hold only for the units the plain spares
+    // cannot pay -- the smallest single land that covers them, else the largest first. If even every storage land
+    // cannot cover them, nothing changes (the counters would buy nothing). A storage tap's whole burst floats, so the
+    // tier never costs the line a unit; its only price is the banked counters, which is why it fires only when the
+    // line needs them. Unnamed demand (a card past a breakpoint opener the line does not name) is never read here:
+    // `later` holds only what the line names. Inert on a board without a charged storage land.
+    if (n_store > 0 && LineSpareStorageOn())
+    {
+        int risk = 0;
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (later[ci] <= 0 || rp[ci] <= 0 || (store_makes & (1 << ci))) { continue; }
+            bool provider = false;
+            for (const Permanent& o : state.battlefield)
+            {
+                if (o.controller_index != active || o.tapped) { continue; }
+                const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                if (od == nullptr || od->params.storage_land) { continue; }
+                if (PaySacSpendableNow(state, o, *od)) { provider = true; break; }
+                if (!is_src(o, *od) && !o.card.IsLand()) { continue; }
+                if (PermanentManaYield(state, o, *od) <= 0) { continue; }
+                for (Color k : EffectiveProducesFor(state, active, *od, &o))
+                { if (colour_idx(k) == ci) { provider = true; break; } }
+                if (provider) { break; }
+            }
+            if (!provider) { risk |= 1 << ci; }
+        }
+        auto keeps_risk = [&](int k) -> bool
+        {
+            ManaPool r = r_pips;
+            WildTrueRec w = w_pips;
+            ManaCost c = cost_in;
+            c.white = c.blue = c.black = c.red = c.green = c.colorless = 0;
+            c.generic = cost_in.generic - k;
+            replay.Drain(r, c, w);
+            const int rem[5] = { r.white, r.blue, r.black, r.red, r.green };
+            for (int ci = 0; ci < 5; ++ci)
+            { if ((risk & (1 << ci)) && rem[ci] < std::min(rp[ci], later[ci])) { return false; } }
+            return true;
+        };
+        if (risk != 0 && !keeps_risk(hold_k))
+        {
+            int k_need = -1;
+            for (int k = hold_k + 1; k <= cost_in.generic; ++k) { if (keeps_risk(k)) { k_need = k; break; } }
+            const int units = k_need - spare;   // what the plain spares cannot pay
+            if (k_need > 0 && units > 0)
+            {
+                std::uint64_t pick = 0;
+                int best = -1;
+                for (int s = 0; s < n_store; ++s)
+                { if (store[s].y >= units && (best < 0 || store[s].y < store[best].y)) { best = s; } }
+                if (best >= 0) { pick = 1ull << store[best].idx; }
+                else
+                {
+                    bool used[kMaxStore] = {};
+                    int got = 0;
+                    while (got < units)
+                    {
+                        int big = -1;
+                        for (int s = 0; s < n_store; ++s)
+                        { if (!used[s] && (big < 0 || store[s].y > store[big].y)) { big = s; } }
+                        if (big < 0) { break; }
+                        used[big] = true;
+                        got += store[big].y;
+                        pick |= 1ull << store[big].idx;
+                    }
+                    if (got < units) { pick = 0; }
+                }
+                static const bool s_store_dbg = EnvOn("MTG_TAPDBG");
+                if (s_store_dbg)
+                {
+                    std::fprintf(stderr, "[tapdbg] storage-tier T%d risk=%d hold_k=%d k_need=%d spare=%d units=%d pick=%llx\n",
+                                 state.turn_number, risk, hold_k, k_need, spare, units,
+                                 static_cast<unsigned long long>(pick));
+                }
+                if (pick != 0) { hold_mask &= ~pick; hold_k = k_need; }
+            }
+        }
     }
     return hold_k > 0;
 }

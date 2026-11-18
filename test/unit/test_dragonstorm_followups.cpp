@@ -1544,3 +1544,92 @@ TEST_CASE("Pay-sac line reserve: Staunch Crewmate's {U} takes Fiery Islet, the T
         CHECK(TapForCostDirect(s, cap, /*for_creature=*/true) == on);
     }
 }
+
+TEST_CASE("Line float, storage tier: Apex's generic spends a Mercadian Bazaar's counters to keep Kolaghan's {B} (MTG_LINE_SPARE_STORAGE)")
+{
+    // Dragonstorm s30086338 gi86338 T6 (USER 2026-11-18: "For Dragonstorm it should spend the counters if they are
+    // required for the line."). Line {Pyretic, Pyretic, Desperate, Apex of Power, Dragonlord Kolaghan}: at Apex the
+    // reserve holds Lotus Bloom's {B} and seven {R}; Mercadian Bazaar x2 (4 and 3 counters) and Sandstone Needle are
+    // up. The plain drain pays Apex's {7} with the {B} too and taps the Needle for the rest -> no black for Kolaghan.
+    GameState s0 = BoardFu({ "Mercadian Bazaar", "Mercadian Bazaar", "Sandstone Needle" }, {}, 6);
+    s0.battlefield[0].storage_counters = 4;
+    s0.battlefield[1].storage_counters = 3;
+    PutDepletionCounters(s0, s0.battlefield[2], 2);
+    s0.floating_mana.black = 1;
+    s0.floating_mana.red   = 7;
+    ManaCost apex;
+    apex.generic = 7;
+    apex.red = 3;
+    ManaCost kol;
+    kol.generic = 4;
+    kol.black = 1;
+    kol.red = 1;
+    ManaCost line = apex;
+    AddManaCost(line, kol);
+    for (const bool unseen : { true, false })
+    {
+        for (const bool on : { true, false })
+        {
+            CAPTURE(unseen);
+            CAPTURE(on);
+            ArmFu arm(heurarm::LINE_SPARE_STORAGE, on);
+            ArmFu rung(heurarm::LINE_FLOAT_TAP_FIRST, true);
+            GameState s = s0;
+            const bool prev_unseen = g_line_opens_unseen;
+            g_line_opens_unseen = unseen;
+            {
+                LineCostFu lc(line);
+                REQUIRE(TapForCostDirect(s, apex, /*for_creature=*/false));
+            }
+            g_line_opens_unseen = prev_unseen;
+            CHECK(s.floating_mana.black == (on ? 1 : 0));
+            // ON: the Needle stays up and the Bazaars pay the held pips. How many pips the {B} needs held is the
+            // payer's own drain: a line that opens a breakpoint (Apex) drains generic in WUBRG order, so the {B} goes
+            // first and all seven are held (both Bazaars, 4 + 3); a named-only line drains the red surplus first, so
+            // three are held and the smallest Bazaar that covers them (3 counters) pays alone.
+            CHECK(s.battlefield[0].tapped == (on && unseen));
+            CHECK(s.battlefield[1].tapped == on);
+            CHECK(s.battlefield[2].tapped == !on);
+            // Apex's ten red, then Kolaghan: payable only with the {B} kept.
+            s.floating_mana.red += 10;
+            CHECK(TapForCostDirect(s, kol, /*for_creature=*/true) == on);
+        }
+    }
+    {
+        // NOT REQUIRED (the line owes no black): the Bazaars keep their counters on both arms, taps identical.
+        ManaCost pyre;
+        pyre.generic = 1;
+        pyre.red = 1;
+        ManaCost line_r = apex;
+        AddManaCost(line_r, pyre);
+        std::vector<bool> t_on, t_off;
+        for (const bool on : { true, false })
+        {
+            ArmFu arm(heurarm::LINE_SPARE_STORAGE, on);
+            GameState s = s0;
+            LineCostFu lc(line_r);
+            REQUIRE(TapForCostDirect(s, apex, /*for_creature=*/false));
+            CHECK_FALSE(s.battlefield[0].tapped);
+            CHECK_FALSE(s.battlefield[1].tapped);
+            for (const Permanent& p : s.battlefield) { (on ? t_on : t_off).push_back(p.tapped); }
+        }
+        CHECK(t_on == t_off);
+    }
+    {
+        // NOT REQUIRED (another untapped source makes black: a Swamp): the counters stay banked, taps identical.
+        GameState sb = s0;
+        PutFu(sb, "Swamp", 399);
+        std::vector<bool> t_on, t_off;
+        for (const bool on : { true, false })
+        {
+            ArmFu arm(heurarm::LINE_SPARE_STORAGE, on);
+            GameState s = sb;
+            LineCostFu lc(line);
+            REQUIRE(TapForCostDirect(s, apex, /*for_creature=*/false));
+            CHECK_FALSE(s.battlefield[0].tapped);
+            CHECK_FALSE(s.battlefield[1].tapped);
+            for (const Permanent& p : s.battlefield) { (on ? t_on : t_off).push_back(p.tapped); }
+        }
+        CHECK(t_on == t_off);
+    }
+}
