@@ -499,3 +499,59 @@ TEST_CASE("Maze's End F3 (fd-diverge): the executor's land drop floats what the 
         CHECK_MESSAGE(q->tapped == p.tapped, p.card.m_name.str());
     }
 }
+
+// Maze's End F4 (verify_deck mismatch, seed 7009 gi8 d5 b20: predicted T4, realised T5). After Guild Summit's draw the
+// T4 breakpoint continuation was an UNBRANCHED CANON (Plan::cont_canon) [Amulet of Vigor, activate Maze's End#43]. A
+// canon applies its casts only, so the activation never fires -- yet the rollout's cast section reserved Maze's End's
+// {T} for it (ActivationTapReserve over the canon's full list) and paid Amulet's {1} with Gateway Plaza. The untapped
+// Maze's End then took the end-step winning activation after Manabond's dump (T4). The executor's committed-line replay
+// records the canon's CASTS only, held nothing, tapped Maze's End for the Amulet, and won T5. LOCKSTEP #19's reserve
+// half: a canon section holds nothing for activations it never applies, so both worlds pay the Amulet alike.
+TEST_CASE("Maze's End F4 (fd-diverge s7009 gi8): a canon continuation holds no {T} source for an activation it never applies")
+{
+    LoadF1Cards();
+    GameState s = FBase();
+    s.turn_number = 4;
+    FPut(s, "Gond Gate", 28);
+    FPut(s, "Gateway Plaza", 26);
+    FPut(s, "Citadel Gate", 15);
+    const int maze = FPut(s, "Maze's End", 43);
+    FPut(s, "Cliffgate", 17);
+    for (int k = 0; k < 4; ++k) { s.players[0].library.push_back(FCard("Gruul Guildgate", 900 + k)); }
+    s.players[0].hand.push_back(FCard("Amulet of Vigor", 1));
+    const std::vector<Action> acts = TurnSolver::CollectActionsForTest(s, true);
+    const Action* amulet = nullptr;
+    const Action* act = nullptr;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Amulet of Vigor") { amulet = &a; }
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && a.sac_source_id == maze) { act = &a; }
+    }
+    REQUIRE(amulet != nullptr);
+    REQUIRE(act != nullptr);
+    const std::vector<Action> canon_list{ *amulet, *act };   // the canon continuation the rollout applied
+    const std::vector<Action> rec_list{ *amulet };           // what the committed line RECORDED (casts only)
+    auto held = [maze](const std::vector<int>& v) { return std::find(v.begin(), v.end(), maze) != v.end(); };
+    // F1's in-plan hold stands: a plan (or a searched continuation) that activates Maze's End holds its {T}.
+    CHECK(held(TurnSolver::PlanReserveSources(s, canon_list)));
+    // ...a canon continuation, which never fires the activation, holds nothing for it.
+    CHECK_FALSE(held(TurnSolver::PlanReserveSources(s, canon_list, /*canon=*/true)));
+    // LOCKSTEP: the rollout's canon cast section and the executor's record replay pay Amulet's {1} from the same land.
+    GameState roll = s;
+    {
+        CastSectionUnlock sec(roll, canon_list, nullptr, /*canon=*/true);
+        REQUIRE(TapForCostDirect(roll, amulet->cost, false));
+    }
+    GameState rec = s;
+    {
+        CastSectionUnlock sec(rec, rec_list);
+        REQUIRE(TapForCostDirect(rec, amulet->cost, false));
+    }
+    for (const Permanent& p : roll.battlefield)
+    {
+        const Permanent* q = FFind(rec, p.card.m_number);
+        REQUIRE(q != nullptr);
+        CHECK_MESSAGE(q->tapped == p.tapped, p.card.m_name.str());
+    }
+}
