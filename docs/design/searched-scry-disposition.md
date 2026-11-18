@@ -285,3 +285,13 @@ Orchard is tapped, not by the turn-start model the engine uses now:
 
 > "I guess we can keep this for now, but you are correct that we will probably want to move toward
 > supporting it as written at some point."
+
+### 2026-11-18 finding (Stuffy step 9d): enumeration must not read the unseen top card
+Stuffy's Loran's Escape scry (step 9d) first sized its variant fan with `TopDispositionCandidates(Scry)` / `ScryVerdict`
+on the CURRENT library top at enumeration time -- the card the scry has not yet revealed. Fixed there: the variant
+count depends only on how many cards the scry looks at (capped by `MTG_SCRY_WIDTH`), and the provider verdict applies
+at RESOLUTION on the seen card (a firm verdict collapses the variant's pin onto that one option, so it duplicates the
+base, which is enumerated first and wins the tie). The land-ETB scry search (`Plan::scry_choice` in
+`EnumeratePlansWithLand`, ~TurnSolver.cpp:93195) still sizes off the unseen top: put it in the same shape as part of
+the engine-wide inventory. Sites seen but not inventoried yet: `ScryTop` (land-ETB), spell `cast_scry` (Magma Jet,
+Preordain), Curator discard-scry triggers, the Galadriel chain, `SurveilTop`, `ReorderTopOrShuffle` (Ponder).
