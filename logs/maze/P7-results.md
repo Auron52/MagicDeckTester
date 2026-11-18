@@ -251,3 +251,63 @@ two games: dropped_cast 322K, dropped_land 241K, **kept_offmain_mana 1.98M** -- 
    This turns the fold on in exactly the two census trees.
 3. The turn-1 blow-up itself is ladder warm passes over a 5-turn plan product (horizon rollouts); after 1-2, re-census
    single-threaded (`--threads 1` is a diagnostic exception) to see what is left; then per-node cost (greedy_walk).
+
+## 10. P7c (2026-11-18): rebase onto e682d7942, then (a) + (b)
+
+### Step 1: rebase (integrable fold2 + P6 guard state) -- `17d414e8f`, HEAD:src `c9f26082e`
+wip/maze-p7 rebased onto origin/phase-1-2-deck-analyzer `e682d7942` (already holds P6), dropping the P6 cherry-pick
+`cc32d32a3` and the old GT accept `82eeffb80`; conflicts additive (heurarm slots: upstream's, then P7's). Units
+3658/3658. Smoke (Release, MTG_PGO=0): 228 unchanged, 3 changed, all mazesend*, each **equal to the P7b accepted
+aggregate + digest** (5.3000/5c70708f, 5.7348/6bce5a98, 2hg 5.5333/97dccd64). Regression (all decks): 365 unchanged, 3
+changed, all mazesend*, each equal to P7b's (d3 s2002 5.7333/ef82be5a, d5 s2002 5.6685/75da65bb, d5 s3003
+5.6933/3d185283). Re-accepted `--deck=mazesend,mazesend2hg` (smoke) and `--deck=mazesend` (regression);
+check_gt_logs 1301 consistent / 0 stale. Pushed wip/maze-p7; Windows CI 44404519142 success.
+
+### d8f attribution (folded into ab4 as arms p6 / noP6, fold off, d8 b0, abandon 200M)
+The 8 games that persist against the pre-P6 GT with the fold off (smoke gi53/60/121; reg s2002 gi21/95; s3003
+gi121/56/73): **all 8 reach the same d8 b0 turn with P6 on and P6 off** (6 identical digests; smoke gi60 / gi121
+differ in play at the same turn). They are GT budget luck, not a P6 regression.
+
+### (a) + (b) -- `fc204f2f8` (HEAD:src `c291bb996`)
+(a) `MTG_MAZE_CASTDOM_WINDOWS`: the off-main Maze's End keep needs a P6 window (Manabond, or Burgeoning while the
+opponent plays lands; controlled or cast by P, or held when P opens a breakpoint) and a fetchable Gate. (b)
+`MTG_MAZE_CASTDOM_PERPLAN`: Heap Gate's Treasure / Gateway Plaza's off-main {1} are per-plan keeps instead of
+switching the fold off. Both default ON; premises at `MazesEndProvider::CastDominanceKeep`. Units 3660/3660.
+
+Held-out A/B `ab4/` (ONE pooled batch, 2016 jobs, arms innermost, 32 threads, 10m05s, max RSS 6.4 GB; binary
+`mtg.p7f`; base = both levers 0 = step 1's play). Fresh seeds.
+| cell | base avg | narrow avg | better / worse | net | units/game base -> narrow | same digest |
+|---|---|---|---|---|---|---|
+| d5 b20 x300 (161001+gi) | 5.6233 | 5.6233 | 2 / 1 | 0 | 122.8K -> 121.2K (-1.3%) | 289/300 |
+| d3 b10 x150 (162001+gi) | 5.6467 | 5.6400 | 1 / 0 | -1 | 97.1K -> 97.8K (+0.7%) | 144/150 |
+| d1 b1 x100 (163001+gi) | 5.8200 | 5.8300 | 0 / 1 | +1 | 33.5K -> 32.2K (-3.9%) | 97/100 |
+| d1 b3 x100 (164001+gi) | 5.5700 | 5.5700 | 0 / 0 | 0 | 41.4K -> 39.2K (-5.3%) | 99/100 |
+| d0 x300 (165001+gi) | 6.8833 | 6.8833 | 0 / 0 | 0 | -- | 300/300 |
+| **held-out searched (650)** | | | **3 / 2** | **0** | | |
+| starvation st111 x7 | 6.5714 | 6.5714 | 0 / 0 | 0 | 306.9K -> 303.2K | 7/7 |
+| sweep 61001 x3 | 5.3333 | 5.3333 | 0 / 0 | 0 | 77.3K -> 74.5K | 3/3 |
+b0 (gi0-4 of 30001/30021/30041/30061, abandon 10M): d3 20/20 finish both arms, finished units 43.1M -> **38.5M
+(-10.8%)**; d5 15/20 both arms (same 5 abandons: 30001 gi0, 30025 gi4, 30061 gi0 mulligans; 30042 gi1, 30065 gi4),
+finished units 15.9M -> **14.0M (-11.9%)**; every finished game identical digest on both arms.
+d8 b0 (abandon 50M, `d8g/`) on both slower games, both arms:
+| game (repro) | base b | narrow b | d8 b0 base = narrow | units d8 base -> narrow | reading |
+|---|---|---|---|---|---|
+| d1b1 gi58 (`--seed 163059 --game-index 58`) | 5 | 6 | 5 (same digest) | 392K -> 144K | recovers to base's budgeted turn |
+| d5b20 gi254 (`--seed 161255 --game-index 254`) | 7 | 9 | 8 (same digest) | 2.08M -> 1.80M | = base d8 b0; base's b20 T7 beat its own d8 b0 |
+Net 0 <= 0 (the bar: "0 is neutral"), sound, cheaper everywhere but d3b10 (+0.7%, inside noise): ships ON.
+
+### Step 5: re-census of 30042 gi1 / 30065 gi4 on fc204f2f8 (d5 b0, abandon 20M, ONE game per process, `--threads 1`; `cen4a/`, `cen4b/`)
+| game | fold | turn | units | wall (1 thread) | us/unit | where the units go |
+|---|---|---|---|---|---|---|
+| 30042 gi1 | **live now** (Heap Gate in hand was a blanket veto) | T1 **commits** (P7b: abandoned on T1) | 12.08M | 93 s | 7.7 | greedy_walk 63%, rollout_step 12%, greedy_fallback 12% -> **87% beyond-horizon playouts**; la_cand + la_bp_wave 7.5%; lad_warm 11.5M vs commit 38K |
+| 30042 gi1 | live | T2 (abandoned at the 20M total) | 7.92M | 247 s | **31** | fs_bp_wave 6.85M (87%): interior breakpoint waves; 12.9M plans emitted, odometer 25.6M, every plan dedup-distinct, newonly drops 25% |
+| 30065 gi4 | **live now** (Gateway Plaza in hand was a blanket veto) | T1 (abandoned) | 20M | 238 s | 11.9 | greedy_walk 70%, la_bp_wave 9%, rollout_step 7%, greedy_fallback 7%; idwaste 18.8M (the aborted pass = the abandon itself) |
+[cast-dom]: 30042 dropped 29K cast + 6K land, kept_offmain_mana 304K; 30065 dropped 373K + 242K, kept 2.04M. (kept counts
+every candidate the keep saved, with or without a dominating sibling, so it over-states what the keep blocks.)
+Readings: (1) The kept 7s are still dominated by horizon playouts at turn 1 (70-87% of units: ~10 subsets walked per
+rollout call), with low reuse (rollout-game-cache 40% hits, m1-rollout-memo 0.3%). That residual is PER-NODE playout
+cost, not branching: the next move there is profiling the playout's greedy subset walk (`greedy_walk`). (2) 30042's
+turn 2 is the next BRANCHING target: a 2-land turn whose depth-5 subtree emits 12.9M plans through breakpoint waves,
+at 4x the per-unit cost of turn 1. (3) Sound refinement (c), not built: Heap Gate's and Gateway Plaza's keeps only
+need to block fold A -- fold B's twin (P + a land, same actions) holds every source P holds plus the land, so it pays
+the Treasure / Plaza at least as well. The keep returns one answer for both folds today.
