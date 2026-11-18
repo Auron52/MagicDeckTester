@@ -419,13 +419,14 @@ inline bool LeftoverLineSwapOn()
     return heurarm::Flag(heurarm::LEFTOVER_LINE_SWAP, env_on);
 }
 
-// MTG_UNSEEN_KEEP_SCARCE -- DEFAULT OFF pending the USER's call (=1 enables). See UnseenScarceNamedMask (ManaPayment.cpp),
-// its reader in SpendFloatingTowardCost (SpellEffects.h) and docs/design/unseen-keep-scarce-2026-11-17.md: it fixes the
-// oracle's Dragonstorm s30083167 drop family, but the held-out A/B is net +1 on Cyclone (one search butterfly that
-// recovers at d8 b0), which is a trade-off and not the agent's to adopt.
+// MTG_UNSEEN_KEEP_SCARCE -- DEFAULT ON since 2026-11-18 (=0 reverts). See UnseenScarceNamedMask (ManaPayment.cpp), its
+// reader in SpendFloatingTowardCost (SpellEffects.h) and docs/design/unseen-keep-scarce-2026-11-17.md: it fixes the
+// oracle's Dragonstorm s30083167 drop family. Its one cost was Cyclone gi 560506 (+1, a T1 Brainstorm/Ponder near-tie).
+// USER 2026-11-17: "I agree we can turn on if and when the issue is resolved." With the Cyclone Ponder-first T1+DEMOTE
+// order adopted, re-measured on Cyclone 560000-564999: 1 earlier, 0 later (net -1), gi 560506 identical (T4).
 inline bool UnseenKeepScarceOn()
 {
-    static const bool env_on = EnvOn("MTG_UNSEEN_KEEP_SCARCE", false);   // DEFAULT OFF (USER decision pending)
+    static const bool env_on = EnvOn("MTG_UNSEEN_KEEP_SCARCE", true);   // DEFAULT ON; =0 reverts
     return heurarm::Flag(heurarm::UNSEEN_KEEP_SCARCE, env_on);
 }
 

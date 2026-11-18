@@ -298,7 +298,7 @@ critter_regression_d5_s3003	788
 critter_smoke_d0_s1001	1
 critter_smoke_d3_s1001	2219
 critter_smoke_d5_s1001	724
-cyclone2hg_smoke_d3_s1001	60598
+cyclone2hg_smoke_d3_s1001	57492
 cyclone_overnight_d0_s10010	1
 cyclone_overnight_d0_s4004	1
 cyclone_overnight_d0_s6006	1
@@ -314,15 +314,15 @@ cyclone_overnight_d5_s5005	55646
 cyclone_overnight_d5_s6006	56461
 cyclone_overnight_d5_s7007	57818
 cyclone_regression_d0_s2002	1
-cyclone_regression_d3_s2002	49362
-cyclone_regression_d3_s3003	52284
-cyclone_regression_d3_s30031	330830
-cyclone_regression_d5_s2002	63217
-cyclone_regression_d5_s3003	63640
-cyclone_regression_d5_s30031	322341
+cyclone_regression_d3_s2002	48947
+cyclone_regression_d3_s3003	52132
+cyclone_regression_d3_s30031	249078
+cyclone_regression_d5_s2002	64586
+cyclone_regression_d5_s3003	64933
+cyclone_regression_d5_s30031	399107
 cyclone_smoke_d0_s1001	1
-cyclone_smoke_d3_s1001	54630
-cyclone_smoke_d5_s1001	69665
+cyclone_smoke_d3_s1001	52748
+cyclone_smoke_d5_s1001	68463
 dragons2hg_smoke_d3_s1001	5994
 dragons2hg_smoke_d5_s1001	5223
 dragons_overnight_d0_s10010	1
@@ -369,7 +369,7 @@ dragonstorm_regression_d0_s2002	1
 dragonstorm_regression_d3_s2002	2170
 dragonstorm_regression_d3_s3003	2778
 dragonstorm_regression_d3_s30201	2823
-dragonstorm_regression_d5_s2002	1485
+dragonstorm_regression_d5_s2002	1484
 dragonstorm_regression_d5_s3003	1832
 dragonstorm_regression_d5_s30201	536
 dragonstorm_smoke_d0_s1001	1
@@ -662,7 +662,7 @@ hinata_regression_d0_s2002	1
 hinata_regression_d3_s2002	53711
 hinata_regression_d3_s30001	71693
 hinata_regression_d3_s3003	49612
-hinata_regression_d5_s2002	71842
+hinata_regression_d5_s2002	71843
 hinata_regression_d5_s30001	278331
 hinata_regression_d5_s3003	85096
 hinata_smoke_d0_s1001	1
@@ -1093,7 +1093,7 @@ niv2hg_overnight_d5_s5005	25500
 niv2hg_overnight_d5_s6006	30301
 niv2hg_overnight_d5_s7007	33398
 niv2hg_regression_d3_s2002	15140
-niv2hg_regression_d5_s2002	27495
+niv2hg_regression_d5_s2002	27496
 niv2hg_smoke_d3_s1001	12096
 niv2hg_smoke_d5_s1001	25416
 niv_overnight_d0_s10010	1
@@ -1111,7 +1111,7 @@ niv_overnight_d5_s7007	26551
 niv_regression_d0_s2002	1
 niv_regression_d3_s2002	14044
 niv_regression_d3_s3003	12857
-niv_regression_d5_s2002	29555
+niv_regression_d5_s2002	29576
 niv_regression_d5_s3003	23799
 niv_smoke_d0_s1001	1
 niv_smoke_d3_s1001	14602
@@ -1273,7 +1273,7 @@ shadowborn_regression_d0_s2002	1
 shadowborn_regression_d3_s2002	13493
 shadowborn_regression_d3_s3003	10503
 shadowborn_regression_d3_s30073	20882
-shadowborn_regression_d5_s2002	17702
+shadowborn_regression_d5_s2002	17701
 shadowborn_regression_d5_s3003	16813
 shadowborn_regression_d5_s30073	18011
 shadowborn_smoke_d0_s1001	1

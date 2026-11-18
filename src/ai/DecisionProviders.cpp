@@ -38459,7 +38459,7 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
     return CyclonePonderKeepShuffleOn();
 }
 
-// ---- PONDER FIRST EARLY (MTG_CYCLONE_PONDER_FIRST_T1 / MTG_CYCLONE_PONDER_FIRST_T2, DEFAULT OFF) ------------------
+// ---- PONDER FIRST EARLY (MTG_CYCLONE_PONDER_FIRST_T1 DEFAULT ON, MTG_CYCLONE_PONDER_FIRST_T2 DEFAULT OFF) ---------
 // USER 2026-11-17 on Cyclone gi 560506 (T1 Brainstorm, won T5; the other arm's T1 Ponder won T4): "Ponder should be
 // cast earlier because Brainstorm is more useful later. T1 is the worst time to cast Brainstorm typically, because you
 // cannot set up your topdeck or immediately shuffle away garbage." Then: "it could make sense to reorder them. I
@@ -38471,7 +38471,7 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
 // strictly better one still wins its pass; it matters for ties, cutoffs and what a cut-short pass reached.
 static bool CyclonePonderFirstT1On()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_T1");   // DEFAULT OFF
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_T1", true);   // DEFAULT ON (adopted 2026-11-18, see DEMOTE)
     return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T1, on);
 }
 static bool CyclonePonderFirstT2On()
@@ -38491,14 +38491,19 @@ static bool CyclonePonderFirstT2HandOn()
     return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_T2_HAND, on);
 }
 
-// THE DEMOTE SHAPE (MTG_CYCLONE_PONDER_FIRST_DEMOTE, DEFAULT OFF; needs _T1). The 5,000-pair A/B of the fronting shape
+// THE DEMOTE SHAPE (MTG_CYCLONE_PONDER_FIRST_DEMOTE, DEFAULT ON with _T1; adopted 2026-11-18). The 5,000-pair A/B of the fronting shape
 // (games 570000-574999) was net +11 (T1), +10 (T1-2), +9 (T1-2 + hand); per-game traces of the changed games put +4 of
 // pf1's +11 on games where the committed play cast NOTHING on T1 and the fronted tier pulled Ponder ahead of that line.
 // The USER's rule compares Ponder with BRAINSTORM ("Brainstorm is more useful later"), not with passing, so this shape
 // sends a plan that casts a put-back cantrip and no Ponder BEHIND every other plan, which keep their relative order.
+// ADOPTED as T1 + DEMOTE (USER: "I'll want whichever gets the best results"): games 570000-574999 net -2, held-out
+// 575000-579999 net -14 (10,000 pairs: 296 earlier / 280 later, net -16); 279 of the 280 slower games recover at d8 b0,
+// and the last (gi 570487, b5 a6; its d8 b0 replay did not finish in ~6 h) recovers to T5 at d8 b1000, b5000 and b30000
+// (USER 2026-11-18: "even if we have to try different budgets instead"; build/scratch/claude_570487_ladder). The
+// T1-2 variants measured net +5 / +8 and stay OFF. The effect is near zero: this is the USER's order, not a win.
 static bool CyclonePonderFirstDemoteOn()
 {
-    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_DEMOTE");   // DEFAULT OFF; needs _T1
+    static const bool on = EnvOn("MTG_CYCLONE_PONDER_FIRST_DEMOTE", true);   // DEFAULT ON; needs _T1
     return heurarm::Flag(heurarm::CYCLONE_PONDER_FIRST_DEMOTE, on);
 }
 

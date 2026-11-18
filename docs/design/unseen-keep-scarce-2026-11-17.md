@@ -1,7 +1,11 @@
-# Opener line keeps a scarce named colour floating (2026-11-17) -- DEFAULT OFF, USER decision pending
+# Opener line keeps a scarce named colour floating (2026-11-17) -- DEFAULT ON since 2026-11-18
 
-Lever: `MTG_UNSEEN_KEEP_SCARCE` (heurarm slot `UNSEEN_KEEP_SCARCE`), **DEFAULT OFF**; `=1` enables. It is
-committed off because the held-out A/B is a trade-off (below), and adopting a trade-off is the USER's call.
+Lever: `MTG_UNSEEN_KEEP_SCARCE` (heurarm slot `UNSEEN_KEEP_SCARCE`), **DEFAULT ON**; `=0` reverts. It was committed off
+because the held-out A/B cost Cyclone one game (gi 560506, net +1). USER 2026-11-17, verbatim: *"I agree we can turn on
+if and when the issue is resolved."* The Cyclone Ponder-first T1+DEMOTE order (`docs/design/cyclone-cast-order.md`)
+resolved it: re-measured over that order on Cyclone 560000-564999 (5,000 pairs), 1 earlier (gi 560147 T6 -> T5),
+0 later, net -1, 4 digest-only; gi 560506 is byte-identical on both arms (T4). Every other deck was byte-identical in
+the original held-out A/B below. Scratch: `build/scratch/claude_uks_over_pf1d/`.
 
 ## The defect
 
