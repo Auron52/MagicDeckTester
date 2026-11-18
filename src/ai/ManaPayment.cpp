@@ -10044,7 +10044,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     {
         for (unsigned m = 1; m < (1u << nt); ++m)
         {
-            if (__builtin_popcount(m) != k) { continue; }
+            if (std::popcount(m) != k) { continue; }
             held.clear();
             for (int t = 0; t < nt; ++t) { if (m & (1u << t)) { held.push_back(tapped[static_cast<std::size_t>(t)]); } }
             RampScratch b(state);
