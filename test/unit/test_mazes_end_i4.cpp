@@ -7,6 +7,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameEngine.h"
@@ -126,6 +127,11 @@ TEST_CASE("Maze's End I4: Heap Gate's Treasure is a searched plan action only wh
 {
     LoadI4Cards();
     static const MazesEndProvider kProv;
+    // The ENUMERATION's offer (P5's leftover rule). MTG_MAZE_HEAP_STRICT (default ON) takes every Treasure plan off
+    // the menu -- this list's only plans hold it, and the filter may empty a list (F5) -- so pin the strict rule off
+    // here; test_mazes_end_p5.cpp pins the strict rule itself.
+    heurarm::t_arm[heurarm::MAZE_HEAP_STRICT] = 0;
+    struct Restore { ~Restore() { heurarm::t_arm[heurarm::MAZE_HEAP_STRICT] = -1; } } restore;
     auto offered = [](const GameState& s) {
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
         {

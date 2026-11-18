@@ -5108,8 +5108,8 @@ public:
     // PlanListFilterLive / PlanListAdmit -- a provider's PLAN-LIST restriction, applied to every plan enumeration
     // (root and breakpoint continuation alike) right after the enumeration builds its list. Live is asked once per
     // enumeration; when true, Admit sees every plan (its actions and its land) and clears `admit[i]` for a plan it
-    // removes. It may only REMOVE plans; it never adds or reorders. If it would remove every plan, nothing is
-    // removed. Default: not live (byte-identical). Never consulted in human play or under the unpruned gate. First
+    // removes. It may only REMOVE plans; it never adds or reorders. It may remove every plan (an empty list is
+    // the ordinary no-castable-play result; Maze's End F5). Default: not live (byte-identical). Never consulted in human play or under the unpruned gate. First
     // user: Maze's End P5, Heap Gate's Treasure offered only when its mana would otherwise go unused.
     struct PlanView { const std::vector<Action>* actions; const std::string* land; };
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
