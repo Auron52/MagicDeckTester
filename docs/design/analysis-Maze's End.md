@@ -791,6 +791,49 @@ d5 97001+gi, 60 games; d1 b1 98001+gi and d1 b3 98101+gi, 30 games; 8 workers, 5
 * **P3 amendment `MTG_MAZE_TALON_TARGET` (DEFAULT OFF, USER call): better on top of ship** (d3 -0.033 3/1, d5 -0.050
   3/0, +6% cost) and on top of P3 alone (d5 -0.100, 4/0). Recommendation: adopt.
 
+(ms in this second batch are CONTENDED: another agent's 8-worker batch started at ~01:59 UTC and overlapped it.
+Quality and units stand; the cost verdict is re-timed below.)
+
+**Item 3 -- "d3 is weirdly expensive" (USER A5): it is not; the census sets were different games.** On the SAME
+seeds, d3 b10 and d5 b10 play byte-identical games: 60/60 digests on seeds 96001+gi with the shipped tree
+(`p1d/pair1`: both 150K units/game, 6.200) and 16/16 on seeds 92001+gi with every prune off and W = 0 (`p1d/pair2`:
+both 772,743 units/game, 6.625). At a 10 ms budget (~9,000 units per decision, with the 25x overrun ceiling) the
+search spends its allowance before any line reaches a fourth turn, so `--depth 5` never binds and the two rows run
+one search. Every "d3 costs more than d5" reading (P1: 109 vs 54 s/game; P1b/P1c: 30 vs 13 s) compared d3 on the
+91001 seed set with d5 on the 92001 set -- and 91001 holds the heavy games (91021 gi20 alone was 7.7 s of P1b's
+30.5 s/game). Re-attribution of 91021 gi20 after the prunes (W = 1, census `p1d/diag/c91021_d3.tsv`, single thread,
+instrumented): 22 s wall (was 432-465 s), 163 decisions, median 11,680 units, max 42,275 (4x the median -- no tail
+decision left); units by site greedy_walk 45.6% (billed now, W = 1), la_cand 20.2%, rollout_step 15.6%,
+greedy_fallback 15.0%; option groups never wider than 3. Consequence for the suite: a d3 b10 row adds no coverage
+over a d5 b10 row for this deck at this budget (they are the same game) -- the USER's call whether to keep both.
+
+**Item 4 -- memory.** jemalloc heap profiles (Profile build, `MTG_POOL_ALLOC=0`, seed 91021 gi20 d3 b10 single
+thread; `p1d/diag/heap*`):
+* PRE-prune (all four off, W = 0): peak RSS 1.60 GB; sampled live heap at the peak 1.36 GB, 99% under the mulligan
+  BOTTOMING rollouts (`BottomCards` -> `RolloutWinTurnFrom` -> `FullSearchLine` -> `FSLineTail`). Self: the mana
+  cache's tier-1 store `McTier1Insert` 434 MB (tier 1 + its tier-2 spill share the allocation site); the plan COPIES
+  of the sub-decision axis fan (`AppendSubdecisionAxes` / `PbAxesAndTwins` -> `TurnSolver::Plan::Plan`, 373 MB, plus
+  160 MB of `reserve`); `TapForCostBacktrackTop` self 170 MB.
+* SHIPPED (prunes on): peak RSS 218 MB; live heap 158 MB (mana cache 53 MB, payment 20 MB, plan copies 15 MB).
+* What is unbounded: the per-enumeration plan fan -- every sub-decision axis variant of every plan is
+  MATERIALISED as a full `Plan` copy (a vector of 496-byte `Action`s), so the transient is the PRODUCT of the axis
+  widths (Summit count x colours x tutor targets x ...). The USER's prunes collapse exactly those axes, which is why
+  the heavy game went 1.6 GB -> 0.22 GB and the 8-worker batch peak 15.4 GB -> 2.4 GB. The mana caches are bounded
+  (tier 1 24 MB portable per thread, tier 2 256 MB per process) but their REAL bytes run ~1.5x the portable count.
+  At the shipped settings a 32-worker tier projects to ~7-10 GB, under the 16 GB cap. A structural bound for the
+  general case (generate the axis variants lazily instead of copying every Plan) is an ENGINE change, proposed, not
+  built.
+
+**Item 7 -- A1 weight sweep** (heuristic-optimization; TEMPORARY selector heurarm `MTG_MAZE_WSEL_0..2`, 8 variants of
+(per-name, Maze's End held, per new-name Gate in hand, fetch eval): v0 shipped (2M, 0.5M, 0.1M, 200), v1 1M/name,
+v2 4M/name, v3 names only (0 held, 0 hand), v4 (2M, 1M, 0.3M), v5 fetch 100, v6 fetch 400, v7 (2M, 1.5M, 0.5M)).
+TRAIN (`p1d/wtrain`, d5 b10 99001+gi x100, d1 b1 99501+gi x60): v1, v2, v4, v7 play (near-)identical games to v0;
+v3 best (d1 b1 6.267 vs 6.400, 7/0; d5 6.41 vs 6.43, 5/5), v5 next (d5 6.41, 6/4). HELD-OUT (`p1d/wval`, d5 b10
+99801+gi x300, d1 b1 99601+gi x100): **v3 does NOT validate** (d5 6.363 vs 6.350, 11/15; d1 b1 6.34 vs 6.33, 8/10);
+**v5 (fetch eval 100) is slightly better** (d5 6.337 vs 6.350, 13/10; d1 b1 6.26 vs 6.33, 9/2). On the pruned tree
+the weights barely move play. Default unchanged (v0) pending the USER; the selector is to be deleted once the USER
+picks (ms contended; units comparable).
+
 ### Memory (new finding, P1b)
 A heavy Maze's End d3 game holds ~1.5-2+ GB of transient RSS beyond the bounded pools (the pools read fsl 0 /
 plan 512M / t2 256M at the cap), so a census batch at 32, 20, 12 and 8 workers with the heaviest seeds first

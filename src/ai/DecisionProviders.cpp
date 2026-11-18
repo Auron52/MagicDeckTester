@@ -67640,6 +67640,27 @@ bool MazesEndProvider::PlanMoveOrderFront(const GameState& s, const std::vector<
     return !drop_open || !land_in_hand;
 }
 
+// Maze's End P1d (USER A1: "We may want the tuning sweep, because I have no idea how to pick these numbers."): the
+// progress weights behind a TEMPORARY three-bit variant selector (heurarm MAZE_WSEL_0..2) so one pooled batch can
+// sweep them. Variant 0 = the shipped P1b weights. Remove the selector once the USER picks.
+struct MazeProgressWeights { long long name, held, hand_new; int fetch; };
+static MazeProgressWeights MazeWeights()
+{
+    static const MazeProgressWeights kV[8] = {
+        { 2000000, 500000, 100000, 200 },   // 0 shipped: 2 life per name
+        { 1000000, 500000, 100000, 200 },   // 1 one life per name
+        { 4000000, 500000, 100000, 200 },   // 2 four life per name
+        { 2000000,      0,      0, 200 },   // 3 names only
+        { 2000000, 1000000, 300000, 200 },  // 4 heavier held / hand Gates
+        { 2000000, 500000, 100000, 100 },   // 5 fetch eval 100
+        { 2000000, 500000, 100000, 400 },   // 6 fetch eval 400
+        { 2000000, 1500000, 500000, 200 },  // 7 held and hand Gates near a name
+    };
+    const int v = (heurarm::Flag(heurarm::MAZE_WSEL_0, false) ? 1 : 0) | (heurarm::Flag(heurarm::MAZE_WSEL_1, false) ? 2 : 0)
+                | (heurarm::Flag(heurarm::MAZE_WSEL_2, false) ? 4 : 0);
+    return kV[v];
+}
+
 // Maze's End P1b: ALTERNATE-WIN PROGRESS in the graded no-win leaf (see the base hook). The opponent's life never
 // moves for this deck, so without it every no-win rollout end ties and the search cannot tell a line that reached
 // eight Gate names from one that reached four. Life-equivalent: ten names win, as twenty life does, so one NEW
@@ -67657,7 +67678,8 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     const int me = s.active_player_index;
     const int need = mp.alt_win_distinct_named_count;
     const int names = CountDistinctNamedLandsWithSubtype(s, me, mp.alt_win_distinct_named_subtype, need);
-    long long p = static_cast<long long>(names) * 2000000LL;
+    const MazeProgressWeights w = MazeWeights();
+    long long p = static_cast<long long>(names) * w.name;
     bool held = false;
     for (const Permanent& q : s.battlefield)
     {
@@ -67678,8 +67700,8 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
         if (dup || MazeControlsGateNamed(s, me, nm)) { continue; }
         seen[static_cast<std::size_t>(hand_new++)] = &nm;
     }
-    if (held) { p += 500000LL; }
-    p += static_cast<long long>(hand_new) * 100000LL;
+    if (held) { p += w.held; }
+    p += static_cast<long long>(hand_new) * w.hand_new;
     return p;
 }
 
@@ -67713,5 +67735,5 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
             }
         }
     }
-    return 200;
+    return MazeWeights().fetch;
 }
