@@ -69403,7 +69403,7 @@ bool MazesEndProvider::OffMainMazeRedeployForced(const GameState& s, int control
 // off the main phase EXCEPT (i) Heap Gate's last-chance Treasure (PerformLastChanceTreasure, made from untapped
 // sources after the opponent's turn) and (ii) Gateway Plaza's {1} when Burgeoning or Manabond puts it outside our
 // main phase -- so the fold is not live while we control an untapped Treasure-making Gate or hold one, or hold a
-// Plaza. RE-CHECK when off-main Maze's End activation (P6) lands: mana held for it breaks the premise.
+// Plaza -- and (iii) P6's off-main Maze's End activation, handled per plan by CastDominanceKeep below.
 // VETO (class -1): Guild Summit -- its rest-of-line Gate count (EtbTapSubtypeDrawDefault) reads what the rest of the
 // line still owes, so adding a cast to the line can change how many cards it draws.
 // BREAKPOINTS: fold A never drops a plan that opens one (Exploration carries kCastDomOpensBp), because a continuation
@@ -69441,6 +69441,67 @@ int MazesEndProvider::CastDominanceClass(const GameState&, const CardDefinition&
     if (pp.opponent_land_play_put_land_from_hand || pp.endstep_may_dump_hand_lands_discard_hand)
     { return kCastDomAdd | land_ok; }                                                          // Burgeoning, Manabond
     return 0;
+}
+
+// P7 x P6: THE OFF-MAIN MAZE'S END ACTIVATION IS A USE FOR UNSPENT MAIN-PHASE MANA. P6 (core/SpellEffects.h,
+// MazeOffMainRespond / MazeOffMainBank) activates an untapped Maze's End ({3}, {T}) at our end step (in response to
+// Manabond's yes, or banked after its dump) and on the opponent's turn (in response to a Burgeoning trigger, or banked
+// after its put), paid from the sources our main phase left untapped -- they stay tapped until our next untap. So the
+// fold's mana premise ("unspent main-phase mana has no other use") fails for a plan P that could fund one: P + cast
+// (fold A) may not afford it any more, and P without its land (fold B) keeps a land in hand whose off-main put opens
+// the bank window P + land never sees. THE RULE: a plan P is dropped only when P could not pay even ONE off-main
+// activation, by an upper bound U(P) on the mana left for its {3}:
+//   U(P) = UntappedManaUpperBound (every untapped source we control, over-counted) + the floating pool
+//        + E, the land cards in hand that can still reach the battlefield before our next untap (each may enter
+//          untapped -- Amulet, or a land that enters untapped): min(lands in hand, land drops left this turn
+//          (1 + bonus drops - lands played + the extra drops of P's Exploration casts) + off-main puts (every land
+//          in hand with a Manabond controlled or cast by P; one per Burgeoning controlled or cast by P, the passive
+//          opponent playing at most one land a turn))
+//        - the mana value of P's casts (fold candidates are only casts of the four cast-dominant cards, printed cost)
+//        - 1: the activating Maze's End taps itself for the cost, and it is always one of the sources counted (an
+//          untapped one we control, or one from hand counted in E -- a tapped one cannot untap before our untap).
+//   P is KEPT when U(P) >= 3 and a Maze's End could be activated at all (one we control untapped, or one in hand) and
+//   P6 is on (MTG_MAZE_OFFMAIN_RESPOND or MTG_MAZE_OFFMAIN_BANK). U only over-counts, so the error is toward keeping.
+bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) const
+{
+    if (!MazeOffMainRespondLever() && !MazeOffMainBankLever()) { return false; }
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    bool maze = false;
+    int dumps = 0, burg = 0, extra = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (!p.tapped && IsMazeOffMainSourceDef(d)) { maze = true; }
+        if (d->params.endstep_may_dump_hand_lands_discard_hand) { ++dumps; }
+        if (d->params.opponent_land_play_put_land_from_hand) { ++burg; }
+    }
+    int hand_lands = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        ++hand_lands;
+        if (IsMazeOffMainSourceDef(d)) { maze = true; }
+    }
+    if (!maze) { return false; }
+    int spent = 0;
+    for (const Action& a : *v.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        spent += a.def->card.m_mana_cost.ManaValue();
+        extra += a.def->params.static_extra_land_drops;
+        if (a.def->params.endstep_may_dump_hand_lands_discard_hand) { ++dumps; }
+        if (a.def->params.opponent_land_play_put_land_from_hand) { ++burg; }
+    }
+    const int drops = std::max(0, pl.LandDropsAvailable() + extra - pl.lands_played_this_turn);
+    const int puts  = dumps > 0 ? hand_lands : (s.opponent_plays_lands ? burg : 0);
+    const int enter = std::min(hand_lands, drops + puts);
+    const int u = UntappedManaUpperBound(s, /*for_creature=*/false, /*reserved_mask=*/0)
+                + s.floating_mana.Total() + enter - spent - 1;
+    return u >= 3;
 }
 
 // Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use

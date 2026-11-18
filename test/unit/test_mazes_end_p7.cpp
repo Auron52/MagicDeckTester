@@ -14,6 +14,7 @@
 #include "core/HeuristicDefaults.h"
 #include "mtg_test_seam.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
@@ -180,5 +181,75 @@ TEST_CASE("Maze's End P7: the fold's premise -- not live with a Treasure Gate, a
         GameState s = T4(prov);
         Put(s, "Guild Summit", 43);                     // a Gate entering draws: every land play is a breakpoint
         CHECK_FALSE(prov.CastDominanceLive(s));
+    }
+}
+
+TEST_CASE("Maze's End P7 x P6: a plan whose unspent mana pays an off-main Maze's End activation is kept")
+{
+    LoadP7Cards();
+    const MazesEndProvider prov;
+    using PV = DecisionProvider::PlanView;
+    const std::vector<Action> none;
+    const std::string manor = "Manor Gate", no_land;
+    {
+        // T4: Baldur's Gate + Golgari Guildgate untapped, one land drop. U("Manor Gate", no casts) = 2 + 1 (the drop)
+        // - 0 - 1 (Maze's End taps itself) = 2 < 3: no off-main activation affordable, the fold may drop it.
+        const GameState s = T4(prov);
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
+        const std::set<std::string> on_menu = Menu(s);
+        CHECK(on_menu.count("Manor Gate|") == 0);
+        CHECK(on_menu.count("|") == 0);
+    }
+    {
+        // Two more untapped Gates: U = 4 + 1 - 0 - 1 = 4 >= 3. The land alone and the pass now leave the {3} that an
+        // end-step / opponent's-turn activation of Maze's End (held in hand, played or put later) could use, so the
+        // fold keeps them -- with P6 on; with P6's levers off the old premise holds and they go.
+        GameState s = T4(prov);
+        Put(s, "Izzet Guildgate", 20);
+        Put(s, "Dimir Guildgate", 21);
+        CHECK(prov.CastDominanceLive(s));
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
+        std::set<std::string> off_menu;
+        {
+            const Arm off(heurarm::MAZE_CAST_DOMINANCE, 0);
+            off_menu = Menu(s);
+        }
+        const std::set<std::string> on_menu = Menu(s);
+        for (const std::string& k : on_menu) { CHECK(off_menu.count(k) == 1); }
+        REQUIRE(off_menu.count("Manor Gate|") == 1);
+        CHECK(on_menu.count("Manor Gate|") == 1);
+        CHECK(on_menu.count("|") == 1);
+        {
+            const Arm r_off(heurarm::MAZE_OFFMAIN_RESPOND, 0);
+            const Arm b_off(heurarm::MAZE_OFFMAIN_BANK, 0);
+            CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+            const std::set<std::string> p5_menu = Menu(s);
+            CHECK(p5_menu.count("Manor Gate|") == 0);
+            CHECK(p5_menu.count("|") == 0);
+        }
+    }
+    {
+        // The same mana but no Maze's End reachable (none in play, none in hand): nothing off-main can use it.
+        GameState s = T4(prov);
+        Put(s, "Izzet Guildgate", 20);
+        Put(s, "Dimir Guildgate", 21);
+        auto& h = s.players[0].hand;
+        h.erase(std::remove_if(h.begin(), h.end(), [](const Card& c) { return c.m_name.str() == "Maze's End"; }), h.end());
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &manor }));
+        CHECK(Menu(s).count("Manor Gate|") == 0);
+    }
+    {
+        // A tapped Maze's End in play cannot be activated before our untap; one untapped can. 3 untapped other sources:
+        // U(no land, no casts) = 3 (+ Maze's End's own {C}) + 1 (the drop) - 1 = 4 with it untapped.
+        GameState s = T4(prov);
+        auto& h = s.players[0].hand;
+        h.erase(std::remove_if(h.begin(), h.end(), [](const Card& c) { return c.m_name.str() == "Maze's End"; }), h.end());
+        Put(s, "Izzet Guildgate", 20);
+        Put(s, "Maze's End", 22, /*tapped=*/true);
+        CHECK_FALSE(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
+        s.battlefield.back().tapped = false;
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }));
     }
 }
