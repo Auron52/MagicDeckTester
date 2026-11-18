@@ -336,3 +336,38 @@ Resolved / non-play findings:
   5. Then verify_deck, tie-break, viewer audit, discard A/B, Midrange Burn Fireblast-first fix, report, rebase onto
      origin (rebuild + smoke + check_gt_logs), push (none yet this session), gh run watch --interval 60,
      CronDelete 01e1d807.
+
+### CHECKPOINT ~09:25 UTC 2026-11-18 (post-compaction)
+- b93e3e803: amended order + main-2 rule committed (pending the order-OFF tier check, logs/1dropburn/m2rule_tiers.log).
+- UNCOMMITTED, not yet built: the activation rules (HoistsFaceGraveyardDamage hook in
+  TurnSolver::SpectacleGraveyardDamageFirst; OneDropBurnProvider CollectedActionAllowed = Lavamancer main 1 only;
+  ShouldConsiderDig / DigOfferAt closed in PostCombatMain = Canyon main 1 only), all under MTG_ONEDROPBURN_ORDER;
+  plus Midrange Burn's Fireblast rank 25 (MTG_MIDRANGE_FIREBLAST_ORDER, heurarm slot, default OFF until A/B);
+  unit tests; `ARMSET=burnorders` in test/mana_tap_order_ab.sh.
+- NEXT: build -> unit -> scoped smoke+regression (onedropburn*, midrangeburn*: must PASS, both levers OFF) ->
+  `ARMSET=burnorders CASES=overnight DECKS=onedropburn,midrangeburn bash test/mana_tap_order_ab.sh` -> root-cause
+  any slower game -> flip both defaults ON, accept smoke+regression for the four decks.
+- ~10:25 UTC: the order-OFF tier run (~97% by cost) is still going; a background waiter (b9ssejbok) prints its FAILs + rc=.
+  User asked how long until viewer/references and artifacts: answered ~5-7 h to push (then mullgen), viewer best
+  after the order flip (~4 h) or now if the user wants (human play is never narrowed). USER has not answered yet.
+
+### CHECKPOINT ~12:30 UTC 2026-11-18 -- order-OFF tier verdict + USER perf request
+- USER (verbatim): "Okay, in that case I will generate the references tomorrow after the overnight. In the meantime I
+  would like you to do everything you can about performance including testing bits of mulligan profile generation
+  and value-leaf generation to see if there are any major inefficiencies."
+- Order-OFF tier run (logs/1dropburn/m2rule_tiers.log, b93e3e803, makespan 3h18m): smoke 39 FAIL = exactly the
+  known smoke3 drift (same got digests). Regression 56 FAIL: 49 match origin f71a7e0ce's reconciled GT exactly
+  (upstream drift), midrangeburn2hg (known upstream), and 7 (mill x4, mill2hg, creature_giving d0, jumbo d0) that
+  match neither -- the same decks drift in smoke on the pre-b93 binary; jumbo d0 being re-run on build/PGO/mtg
+  (= df9705a3b src f0c9c2ee, pre-b93) via build/scratch/1db/attr7.json to prove it.
+- PERF FINDINGS (single-thread diagnostics, logs/1dropburn/perf/):
+  * ~89% of 1 Drop Burn's per-game search work is mulligan LOOKAHEAD BOTTOMING playouts (no keep table yet):
+    20 std games d5 b20, MTG_DECISION_PROGRESS: bot 877,380 vs real 104,232 work. The slowest 2HG suite game
+    (seed 2008 gi 6, 2.03M units, 355 s contended / 92 s solo) is 99.97% bottoming (9 full-game playouts).
+    Real play ~5.2k units/game, below Midrange Burn (which has a keep table). => the keep table is the big lever.
+  * MTG_BRANCH_STATS 10 games vs Midrange: 9x EnumeratePlans calls, 10x plans; Rift Bolt suspend/cast groups +
+    Lavamancer dominate the raw odometer; raw enumerated ~= final, nothing obviously unreasonable. perf: flat
+    profile (CollectActions 4.3% top), no hotspot.
+- ~13:10 UTC: attribution PROVEN -- the 7 keys replayed on build/PGO/mtg (pre-b93 src) give the identical got digests
+  (logs/1dropburn/perf/attr7_pre.out), so b93e3e803 is byte-identical with the order OFF on the whole suite.
+  Activation rules + Midrange Fireblast lever built; unit suite 3399/3399 PASS (logs/1dropburn/unit_all2.log); committed.

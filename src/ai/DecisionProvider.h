@@ -3438,6 +3438,13 @@ public:
     // same options (lockstep); human play keeps the full set. A restriction, never a pick: what survives
     // is still searched. Defaults false / true -> byte-identical. VampiresProvider: the USER's rules of
     // 2026-10-21 (no Captivating Vampire steal; Vampire Socialite only after combat).
+    // HoistsFaceGraveyardDamage -- run the plan's face-targeted graveyard-damage activation (Grim Lavamancer)
+    // BEFORE the plan's casts whenever it can be paid, instead of in the trailing activation pass after them
+    // (TurnSolver::SpectacleGraveyardDamageFirst, both worlds). An ORDER of the plan's own actions, never a pick:
+    // what the plan activates is unchanged. Default false -> the spectacle-only hoist, byte-identical.
+    // OneDropBurnProvider: the USER's 2026-11-18 order ("the activation for Grim Lavamancer should be in there
+    // and before Needle Drop and Skewer the Critics").
+    virtual bool HoistsFaceGraveyardDamage(const GameState& s) const { (void)s; return false; }
     virtual bool RestrictsCollectedActions() const { return false; }
     // OffersLandDeferral -- may the PRE-combat enumeration offer the plans that play NO land while the drop is
     // open and a land is in hand (defer to main 2 / hold it)? false drops them (EnumeratePlansWithLandUncached;

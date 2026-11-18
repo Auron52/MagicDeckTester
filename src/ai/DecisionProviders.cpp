@@ -66970,21 +66970,22 @@ bool MidrangeBurnProvider::CleanupDiscardShedStable() const
 // critics should always default to later than other spells if possible. In particular, they need to be cast
 // before the attack phase if this is possible for prowess. We want to only cast them second main if there is
 // no other damage source than combat. Beyond the two spells, only the card drawn by Needle Drop should be
-// considered to cast Main 2 and only when they couldn't be cast earlier." Param tiers, NAME tie-break
-// (CastOrderTotalByName), binding inside draw plans too (OrderOpaqueCastsByRank: Needle Drop is a cantrip,
-// so every set holding it is order-opaque):
-//   10 HASTE creatures (Goblin Guide, Monastery Swiftspear): first, prowess sees every later spell.
-//   12 Vexing Devil: right after them and before every burn spell, so the opponent decides at its HIGHEST
-//      life of the main (it takes 4 unless <= 4 with our hand empty / <= 7 while we hold cards); its 4
-//      also turns on spectacle and makes Needle Drop legal.
-//   13 other creatures (Grim Lavamancer: no haste, its ping needs a tap -- a body this turn).
-//   22 the {R} burn by name (Boltwave, Chain Lightning, Lava Spike, Lightning Bolt); 26 Rift Bolt hardcast.
-//   29/30 Needle Drop then Skewer the Critics at the END of the main, in EITHER main: after the burn that
-//      makes them live (Needle Drop draws first so the rest of the mana sees the card; Skewer's spectacle
-//      {R}). In main 2 they are the only hand cards admitted before Needle Drop's draw, so "end of the main"
-//      there still puts Needle Drop first and the drawn card after it.
+// considered to cast Main 2 and only when they couldn't be cast earlier." and approved with the activations
+// 2026-11-18 ("That order looks fine to me, but the activation for Grim Lavamancer should be in there and before
+// Neetle Drop and Skewer the Critics"). ONE CARD PER RANK (CastOrderRank below), binding inside draw plans too
+// (OrderOpaqueCastsByRank: Needle Drop is a cantrip, so every set holding it is order-opaque):
+//   10 Goblin Guide, 11 Monastery Swiftspear: haste first, prowess sees every later spell.
+//   12 Vexing Devil: before every burn spell, so the opponent decides at its HIGHEST life of the main (it takes
+//      4 unless <= 4 with our hand empty / <= 7 while we hold cards); its 4 also turns on spectacle and makes
+//      Needle Drop legal.
+//   13 Grim Lavamancer (no haste, its ping needs a tap -- a body this turn).
+//   20 Boltwave, 21 Chain Lightning, 22 Lava Spike, 23 Lightning Bolt; 26 Rift Bolt hardcast.
+//   (27 Grim Lavamancer's ping -- an activation, not a cast: hoisted, see HoistsFaceGraveyardDamage below.)
+//   29 Needle Drop, 30 Skewer the Critics at the END of the main's spells, in EITHER main: after the burn that
+//      makes them live (Needle Drop draws first so the rest of the mana sees the card; Skewer's spectacle {R}).
 //   40 Fireblast: LAST -- its alternative cost sacrifices two Mountains, so they tap for every other spell
 //      first.
+//   (Sunbaked Canyon's sacrifice-draw: the dig loop, after every cast of main 1 -- below.)
 // Which main a cast goes in: main 1 is fully searched; MAIN 2 is the USER's rule (Main2CastAllowed below).
 static bool OneDropBurnOrderEnabled()
 {
@@ -67040,8 +67041,8 @@ int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition&
 //   * the card(s) a main-2 Needle Drop drew: cards NOT in the hand snapshot taken at the main's first Needle
 //     Drop / Skewer cast (Main2StagerSnapshotsHand) -- "only when they couldn't be cast earlier", which a card
 //     drawn after combat never could.
-// Every other hand cast is a main-1 cast. Activations (Lavamancer, Sunbaked Canyon) and the land drop are not
-// casts and are untouched; human play is never narrowed (the CollectActions call site).
+// Every other hand cast is a main-1 cast. The land drop is untouched; the activations have their own USER rules
+// (below). Human play is never narrowed (the CollectActions call site).
 bool OneDropBurnProvider::RestrictsMain2Casts() const           { return OneDropBurnOrderEnabled(); }
 bool OneDropBurnProvider::Main2RuleReadsNoncombatDamage() const { return OneDropBurnOrderEnabled(); }
 
@@ -67068,6 +67069,38 @@ bool OneDropBurnProvider::Main2CastAllowed(const GameState& s, const Action& a) 
         if ((s.m2_prestaged_mask[hc.m_number >> 6] & (uint64_t{1} << (hc.m_number & 63))) == 0) { return true; }
     }
     return false;
+}
+
+// THE USER'S ACTIVATION RULES (2026-11-18, with MTG_ONEDROPBURN_ORDER): "the activation for Grim Lavamancer
+// should be in there and before Neetle Drop and Skewer the Critics. It should go in main 1 only. Sunbaked Canyon
+// sac to draw should also be in there and be main 1."
+//   * Lavamancer BEFORE Needle Drop / Skewer: its face ping is hoisted ahead of the plan's casts
+//     (TurnSolver::SpectacleGraveyardDamageFirst, both worlds), so it makes Needle Drop legal and pays
+//     Skewer's spectacle. Shown in the order as position 27 (after the burn, before Needle Drop): in a goldfish
+//     the two positions are outcome-equal -- an activation triggers no prowess, and where only this main's own
+//     spells would fuel the exile the hoist cannot be paid and the ping stays in the trailing pass, AFTER
+//     burn that has already dealt damage, so it was never the enabler there.
+//   * Lavamancer in MAIN 1 only: no post-combat collect offers its activation.
+//   * Sunbaked Canyon's sacrifice-draw in MAIN 1 only: the dig gate is closed after combat, and no no-dig twin
+//     is offered there (it would be the base plan itself). In main 1 it is the dig loop's position: after the
+//     main's casts (Fireblast included), with the drawn card re-solved in the same main.
+bool OneDropBurnProvider::HoistsFaceGraveyardDamage(const GameState& s) const
+{ (void)s; return OneDropBurnOrderEnabled(); }
+bool OneDropBurnProvider::RestrictsCollectedActions() const { return OneDropBurnOrderEnabled(); }
+bool OneDropBurnProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    (void)s;
+    return is_pre_combat || a.kind != Action::Kind::GraveyardExileAbility || a.gy_exile_mode != 3;
+}
+bool OneDropBurnProvider::ShouldConsiderDig(const GameState& s) const
+{
+    if (OneDropBurnOrderEnabled() && s.phase == Phase::PostCombatMain) { return false; }
+    return DeckProvider::ShouldConsiderDig(s);
+}
+DigOffer OneDropBurnProvider::DigOfferAt(const GameState& s) const
+{
+    if (OneDropBurnOrderEnabled() && s.phase == Phase::PostCombatMain) { return DigOffer{}; }
+    return DeckProvider::DigOfferAt(s);
 }
 
 bool OneDropBurnProvider::CastOrderTotalByName() const   { return OneDropBurnOrderEnabled(); }
@@ -67140,6 +67173,14 @@ int MidrangeBurnProvider::CastOrderRank(const GameState& state, const CardDefini
     // plans through OrderOpaqueCastsByRank below.
     static const bool spectacle_order = EnvOn("MTG_MIDRANGE_SPECTACLE_ORDER", true);
     if (spectacle_order && def.params.spectacle_cost.has_value()) { return 30; }
+    // FIREBLAST AFTER THE OTHER BURN (MTG_MIDRANGE_FIREBLAST_ORDER; the USER asked for the fix 2026-11-18, found
+    // on 1 Drop Burn): ranked with the burn (20), plan order could cast it first, and its alternative cost then
+    // sacrifices two UNTAPPED Mountains the later burn needed. At 25 the Mountains tap for every rank-20 spell
+    // first; still before the spectacle spells (30), which its 4 damage turns on, and before Chandra's
+    // Incinerator (1000), which its noncombat damage discounts.
+    static const bool fb_env = EnvOn("MTG_MIDRANGE_FIREBLAST_ORDER");   // default OFF until the A/B
+    if (def.params.sacrifice_mountains_alternative && heurarm::Flag(heurarm::MIDRANGE_FIREBLAST_ORDER, fb_env))
+    { return 25; }
     return DeckProvider::CastOrderRank(state, def);
 }
 
