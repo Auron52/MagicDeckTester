@@ -968,6 +968,9 @@ enum Slot : int
     MAZE_LAND_TARGETS,        // MTG_MAZE_LAND_TARGETS     Maze's End P1d (USER P3): land-search targets (Sylvan Scrying, Archdruid's Charm's land find, Maze's End's fetch) pruned to the USER's menu: no Maze's End (battlefield+hand) -> {Maze's End}; else Maze's End unless 2+ held or 1 + an Amulet, Baldur's Gate if in the library, Gond Gate if none held (battlefield/hand) and one is in the library, and ONE new-name Gate (singleton first) only once Baldur's is gone and Gond is had. Maze's End's fetch: the same without Maze's End; fail-to-find kept. Human play unchanged. Default ON; =0 -> every distinct name
     MAZE_ACTIVATE_FIRST,      // MTG_MAZE_ACTIVATE_FIRST   Maze's End P1d (USER A4, item 5): with no land left to play this turn (no open drop, or no land in hand), a plan that activates Maze's End for a Gate is TRIED FIRST among its peers (PlanMoveOrderFront: a move-order tier, ORDER only, nothing removed). Beyond the horizon the playout already prefers the activation through the 200 new-name fetch eval. Default OFF until measured + USER adoption
     MAZE_TALON_TARGET,        // MTG_MAZE_TALON_TARGET     Maze's End P1d: AMENDMENT PROPOSED to the USER's P3 menu -- a land tutor (Sylvan Scrying, Archdruid's Charm) also offers Talon Gates of Madara while it is in the library and not held: its {4} put from hand is not a land play, so it is a new Gate name that does not compete for the drop (held-out d3 seed 94035 gi34: base fetched it T5 and won T6; P3 alone fetched Gond Gate and won T8). Default OFF until the USER rules
+    MAZE_WSEL_0,              // MTG_MAZE_WSEL_0           Maze's End P1d A1 weight sweep (TEMPORARY selector, heuristic-optimization skill): bit 0 of the variant index of the progress weights (MazeProgressWeights). All three bits off = the shipped weights
+    MAZE_WSEL_1,              // MTG_MAZE_WSEL_1           ...bit 1
+    MAZE_WSEL_2,              // MTG_MAZE_WSEL_2           ...bit 2
     COUNT
 };
 
@@ -1880,6 +1883,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_LAND_TARGETS",
         "MTG_MAZE_ACTIVATE_FIRST",
         "MTG_MAZE_TALON_TARGET",
+        "MTG_MAZE_WSEL_0",
+        "MTG_MAZE_WSEL_1",
+        "MTG_MAZE_WSEL_2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
