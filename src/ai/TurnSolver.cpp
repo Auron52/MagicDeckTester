@@ -128038,6 +128038,17 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             bool uses_new = false, new_act = false, unknown = false, plan_pending = false;
             if (p.land_decided && !p.land_to_play.empty() && name_is_new(p.land_to_play))
             { uses_new = true; }
+            // A LAND DROP THE BASE PLANS COULD NOT USE (Maze's End F2, sweep 61003 gi2). The sibling argument is
+            // "a base plan already carries this old card", and for a land it holds only while the base could
+            // still have played it: every base plan plays AT MOST ONE land. Once this turn has played a land, a
+            // continuation that plays another one is spending a drop the plan itself opened (Exploration /
+            // Burgeoning cast this turn, an Explore / Growth Spiral) or one the plan's own land left -- in every
+            // case a line with TWO land plays in one main phase, which no base plan is. Dropping it emptied the
+            // site-10 extra-drop list outright (T2 Selesnya Guildgate + Exploration, then Talon Gates: the list
+            // was 0 long, so no depth or budget could reach the second land). A superset in the safe direction:
+            // when the base itself could have used this drop (a main 2 after a main-1 land with an extra drop
+            // already standing) the kept entry is a sibling's line scored twice, never a line deleted.
+            if (p.land_decided && !p.land_to_play.empty() && ap.lands_played_this_turn > 0) { uses_new = true; }
             // A LIBRARY-TOP land (Courser of Kruphix) is never in the hand snapshot, so the by-hand
             // rule above cannot judge it. The usual arrival here is exactly a NEW top -- a shuffle, a
             // Genesis Wave or Courser entering is what armed the breakpoint (TopLandNewlyPlayable) --
@@ -128079,7 +128090,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     else { unknown = true; }
                     break;
                 case Action::Kind::PlayLand:
-                    if (name_is_new(a.card_name)) { uses_new = true; }
+                    // ...and a land drop the base could not use (the land_to_play rule above).
+                    if (name_is_new(a.card_name) || ap.lands_played_this_turn > 0) { uses_new = true; }
                     break;
                 // Puts a NAMED hand card onto the battlefield: new if that card is. Otherwise the
                 // activation itself is not keyed (the put's availability depends on the hand, which
