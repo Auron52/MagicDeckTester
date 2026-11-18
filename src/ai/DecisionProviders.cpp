@@ -69932,13 +69932,25 @@ bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) 
 bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
 {
     if (!MazeHeapTreasureOn() || !MazeAutonomous()) { return false; }
+    // Live whenever a Treasure-tap land (Heap Gate) can be tapped by SOME plan on this menu: one untapped on our
+    // battlefield, OR one in hand (a plan plays it as its land and taps it -- F5, 2026-11-18: d5 s171015 gi14 T3
+    // committed [Guild Summit, Heap Gate(act)] with Heap Gate played from hand, because only the battlefield was
+    // read), OR one in the library (a plan's Maze's End activation or fetch can put it onto the battlefield
+    // untapped). Admit itself drops nothing from a menu with no Treasure plan.
     const int me = s.active_player_index;
+    auto treasure_land = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->params.tap_treasure_cost.has_value();
+    };
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && d->params.tap_treasure_cost.has_value()) { return true; }
+        if (treasure_land(p.card)) { return true; }
     }
+    const Player& pl = s.players[me];
+    for (const Card& c : pl.hand)    { if (treasure_land(c)) { return true; } }
+    for (const Card& c : pl.library) { if (treasure_land(c)) { return true; } }
     return false;
 }
 
@@ -70001,7 +70013,7 @@ bool MazeTreasureBinds(const GameState& s, int me, const DecisionProvider& prov)
 // Treasure, plus one more mana-spending action c" (same land) -- i.e. the board could pay for P's other spends AND
 // c, so the mana the Treasure takes had another use in this very menu. Kept regardless when next turn's mana or a
 // colour binds (MazeTreasureBinds: one more any-colour mana makes a held spend castable). A RESTRICTION: the search
-// still branches over every admitted plan, the Treasure-free plans are never touched, and the list never empties.
+// still branches over every admitted plan, the Treasure-free plans are never touched; in the leftover rule a plain superset always stays.
 // Equality on actions = kind, name, mode, target, X, source and hand index; a missing superset (another filter
 // pruned it) keeps the Treasure plan -- the error is always toward admitting.
 void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
@@ -70026,6 +70038,14 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
         for (const std::string& x : keys) { k += '\x1e'; k += x; }
         return k;
     };
+    if (MazeHeapStrictOn())
+    {   // MTG_MAZE_HEAP_STRICT (below): every Treasure plan leaves the menu; no keys needed.
+        for (std::size_t i = 0; i < plans.size(); ++i)
+        {
+            for (const Action& a : *plans[i].actions) { if (is_treasure(a)) { admit[i] = 0; break; } }
+        }
+        return;
+    }
     std::unordered_set<std::string> plain;          // plans without a Treasure
     std::vector<std::string> spend_keys;            // every mana-spending non-Treasure action on the menu
     std::vector<std::size_t> with_t;
@@ -70051,7 +70071,7 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
     // End if that would help."): the Treasure is never a searched branch. Every Treasure plan leaves the menu, and
     // the Treasure is made instead by PerformLastChanceTreasure (SpellEffects.h) at the LAST opportunity before our
     // next untap -- after the opponent's turn, once every off-main activation has had its chance -- whenever the
-    // untapped sources still pay it. The menu never empties (the caller keeps it whole if this would).
+    // untapped sources still pay it. The menu may empty (the do-nothing line stays the caller's).
     if (MazeHeapStrictOn())
     {
         for (std::size_t i : with_t) { admit[i] = 0; }
