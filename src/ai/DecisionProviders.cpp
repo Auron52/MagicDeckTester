@@ -1288,6 +1288,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"stuffyscry", UnprunedGate::StuffyScry},
     {"extraturntarget", UnprunedGate::ExtraTurnTarget},
     {"heuristicrequired", UnprunedGate::HeuristicRequired},
+    {"oppdraw",    UnprunedGate::OpponentDraw},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -8933,6 +8934,46 @@ std::vector<int> DecisionProvider::DrawXCandidates(const GameState& s, const Car
         if (x >= 1 && x <= cap && std::find(out.begin(), out.end(), x) == out.end()) { out.push_back(x); }
     }
     return out;
+}
+
+// See DecisionProvider::OpponentDrawCandidates. The counts are PICKS (Braingeyser: X, one card each;
+// Unite: draw modes aimed at the opponent, draws_per_pick cards each).
+std::vector<int> OpponentDrawCandidatesFor(const GameState& s, const CardDefinition& def, int max_picks,
+                                           int draws_per_pick, bool unpruned, bool human)
+{
+    std::vector<int> out;
+    // No library dealt: ForcedDraw is inert, so the variant could change nothing. This is also what
+    // keeps a legacy-board replay's menu exactly as it was recorded.
+    if (max_picks <= 0 || draws_per_pick <= 0 || !s.opponent_library_dealt) { return out; }
+    const int lethal = opponentdeck::ForcedDrawLethalX(s);   // cards; 0 = no count decks them
+    const int lethal_picks = lethal > 0 ? (lethal + draws_per_pick - 1) / draws_per_pick : 0;
+    const bool lethal_fits = lethal_picks > 0 && lethal_picks <= max_picks;
+    if (human)
+    {
+        // Garth's Braingeyser: the X is auto-maxed for the self copy too (no x_value decision on this
+        // route), so ONE opponent variant -- the kill when the pool pays it, else the same max X.
+        if (def.tmpl == CardTemplate::DrawX) { out.push_back(lethal_fits ? lethal_picks : max_picks); }
+        else { for (int k = 1; k <= max_picks; ++k) { out.push_back(k); } }
+        return out;
+    }
+    if (unpruned)
+    {
+        for (int k = 1; k <= max_picks; ++k) { out.push_back(k); }
+        return out;
+    }
+    // THE PRUNE (USER 2026-11-17, a provider restriction -- the engine enumerates the target): the
+    // minimal lethal count only. More picks than lethal is the same kill for less (Braingeyser: more
+    // mana; Unite: fewer face-damage or self-draw picks), and fewer decks nobody.
+    if (lethal_fits) { out.push_back(lethal_picks); }
+    return out;
+}
+
+std::vector<int> DecisionProvider::OpponentDrawCandidates(const GameState& s, const CardDefinition& def,
+                                                          int max_picks, int draws_per_pick) const
+{
+    if (max_picks <= 0 || draws_per_pick <= 0 || !s.opponent_library_dealt) { return {}; }
+    return OpponentDrawCandidatesFor(s, def, max_picks, draws_per_pick,
+                                     DecisionUnpruned(UnprunedGate::OpponentDraw), HumanPlayActive());
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
@@ -43104,7 +43145,21 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
 
     // Lethal on board this turn or next, once Unite's 10 is added; or two more threats to deploy.
     const bool go_face = (s.players[opp].life <= face_damage + board_power) || (threats >= 2);
-    if (go_face) { out.push_back(N); return; }
+    if (go_face)
+    {
+        out.push_back(N);
+        // ...and, when the draw mode could DECK them (their library within Unite's picks -- the opponent
+        // target OpponentDrawCandidates keeps when lethal, USER 2026-11-17), the split that leaves those
+        // picks: the all-in has no draw pick to aim. Unreachable at a full library; inert otherwise.
+        const int per    = def.params.modal_draw_per_choice;
+        const int lethal = opponentdeck::ForcedDrawLethalX(s);
+        if (per > 0 && lethal > 0)
+        {
+            const int picks = (lethal + per - 1) / per;
+            if (picks <= N) { out.push_back(N - picks); }
+        }
+        return;
+    }
 
     // Otherwise draw 3-5 and spend the remainder on damage: S = 0, 1, 2 -- PLUS the all-in split,
     // always. This hook is consulted at EVERY search node, including hypothetical future turns, so

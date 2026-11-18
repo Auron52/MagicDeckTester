@@ -1875,7 +1875,9 @@ struct CardParams
     // Unite the Coalition (user-approved collapse 2026-08-06): "Choose five. You may choose the
     // same mode more than once." -> a SEARCHED split S in [0..modal_choose_n]: S picks of "deal
     // modal_damage_per_choice to any target" (collapsed to the opponent face) + (N-S) picks of
-    // "target player draws modal_draw_per_choice" (self). The three dead modes (phase out /
+    // "target player draws modal_draw_per_choice" (each pick at us or at the opponent: Action::
+    // draw_target counts the opponent's picks, pruned to a lethal count by the provider's
+    // OpponentDrawCandidates, USER 2026-11-17). The three dead modes (phase out /
     // exile a graveyard / destroy artifact-or-enchantment) are dropped -- provably dead vs this
     // opponent model; disclosed. S rides Action::chosen_x / StackEntry::chosen_x; one CastFromHand
     // variant per S (shared hand_index -> mutually exclusive).
@@ -4985,8 +4987,10 @@ struct CardParams
     // ALSO a deck trait: it is one of the params GoldFishRunner::DeckTouchesOpponentZones keys on, so
     // a deck holding such a card is dealt the opponent's library (GameState::opponent_library_dealt).
     // Without that the opponent variant would draw from an EMPTY zone and silently do nothing.
-    // Deliberately NOT set on Braingeyser / Unite the Coalition: no deck holding them deals an
-    // opponent library, so the opponent half would be a no-op there (their notes say so).
+    // NOT set on Braingeyser / Unite the Coalition: their opponent target is modelled by their own
+    // routes (ApplyGarthActivate's braingeyser_target; Unite's per-pick Action::draw_target count),
+    // enumerated by the engine and pruned to a lethal count by DecisionProvider::OpponentDrawCandidates
+    // (USER 2026-11-17). Every deck's opponent is dealt a library now, so neither needs this trait.
     bool                    draw_target_player = false;
 
     // AETHER HUB. "When this land enters, you get {E} (an energy counter). / {T}: Add {C}. /

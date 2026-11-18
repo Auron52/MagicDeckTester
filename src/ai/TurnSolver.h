@@ -684,6 +684,14 @@ struct Action
                                        // resolution through the consume-once CastRiders (apply_one's
                                        // cast_riders -> PerformDrawX in the rollout; AIEngine::
                                        // m_cast_riders -> the Player entry.targets -> ResolveDrawX).
+                                       // Two more users, same 0 = us convention: Garth One-Eye's
+                                       // conjured Braingeyser (GarthActivate; nonzero = the opponent
+                                       // draws chosen_x, ApplyGarthActivate's braingeyser_target) and
+                                       // Unite the Coalition, where it is a COUNT -- how many of the
+                                       // split's draw picks target the opponent (StackEntry::
+                                       // modal_opp_draw_picks in the executor). Both opponent targets
+                                       // are enumerated by the engine and pruned to a lethal count by
+                                       // DecisionProvider::OpponentDrawCandidates (USER 2026-11-17).
     InternedName attach_equip_hand;    // ...and the Equipment target's NAME when it is a same-plan HAND
                                        // cast (cast the Hammer, then Theft it onto the Duelist): the
                                        // subset must cast an Equipment of that name
@@ -3525,6 +3533,15 @@ public:
     static std::string GarthLotusCrackColor(const GameState& state, const std::vector<Action>& acts,
                                             const Action& self)
     { return IsGarthLotusCrack(self) ? SacFloatColorFor(state, acts, self) : std::string(); }
+    // GARTH ACQUISITION: a GarthActivate whose copy puts cards in OUR hand -- Regrowth, and Braingeyser
+    // aimed at us. Braingeyser aimed at the OPPONENT (draw_target != 0) adds nothing to our hand, so it
+    // arms no post-cast re-solve and earns no breakpoint site. The one predicate for every place that
+    // special-cases those two names (the rollout's arming, the executor's second pass, the site masks).
+    static bool IsGarthAcquisition(const Action& a)
+    {
+        return a.kind == Action::Kind::GarthActivate
+            && (a.tutor_target == "Regrowth" || (a.tutor_target == "Braingeyser" && a.draw_target == 0));
+    }
 
     // "We are resolving a BREAKPOINT CONTINUATION" marker, for MTG_CONDEMN_M1_BP.
     // g_bp_enum_depth is NOT the right signal: it only covers EnumerateBreakpointPlans, i.e. the

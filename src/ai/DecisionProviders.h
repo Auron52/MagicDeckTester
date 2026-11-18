@@ -208,6 +208,9 @@ enum class UnprunedGate
     ExtraTurnTarget, // Extra Turns: Time Warp's / Walk the Aeons' OPPONENT target restored (DecisionProvider::OffersExtraTurnOpponentTarget, USER 2026-11-18)
     HeuristicRequired, // "a provider heuristic is REQUIRED" bypassed: a deck holding a registered card runs under a provider that
                        // does not implement it, on the engine's measurement menu (ProviderHeuristicRequired.h). Measurement only.
+    OpponentDraw,    // the OPPONENT target of Garth One-Eye's conjured Braingeyser and of Unite the Coalition's draw
+                     // mode opened to every count, lethal or not (DecisionProvider::OpponentDrawCandidates prunes it
+                     // to the minimal lethal count; USER 2026-11-17)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -216,6 +219,11 @@ static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks 
 // else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
 // form. Default (neither env) => false.
 bool DecisionUnpruned(UnprunedGate g);
+
+// DecisionProvider::OpponentDrawCandidates' default body with its two process-static reads (MTG_UNPRUNE
+// and HumanPlayActive) passed in, so a unit test can pin every branch. See the virtual's comment.
+std::vector<int> OpponentDrawCandidatesFor(const GameState& s, const CardDefinition& def, int max_picks,
+                                           int draws_per_pick, bool unpruned, bool human);
 
 // A/B gate for the learned mid-game evaluator (MTG_EVAL_MODEL). Default OFF: even when a deck ships
 // an eval sidecar, the learned plan ranking is used only when this is set, so every existing ground

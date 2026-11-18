@@ -16114,9 +16114,16 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
 // "{T}, Sacrifice: add three mana of any one colour" is a mana ability -- a player who conjures it
 // mid-turn cracks it into the very casts it was conjured for. The colour is the caller's (the plan's
 // own float colour, TurnSolver::GarthLotusCrackColor), so every apply world cracks the same way.
+//
+// `braingeyser_target` (Braingeyser only; Action::draw_target): the copy's "Target player draws X cards"
+// target, chosen as it is cast -- 0 = we draw (the acquisition route), nonzero = the OPPONENT draws X
+// through opponentdeck::ForcedDraw, the Stroke of Genius deck-out primitive (CR 704.5b when it over-asks
+// their library). Which target is offered is the search's (CollectActions emits both; the provider's
+// OpponentDrawCandidates prunes the opponent one to a lethal X by default, USER 2026-11-17).
 inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
                                const std::string& name, int braingeyser_x,
-                               const std::string& lotus_crack_color = std::string())
+                               const std::string& lotus_crack_color = std::string(),
+                               int braingeyser_target = 0)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     const int bit = GarthNameBit(name);
@@ -16167,6 +16174,10 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
         if (name == "Black Lotus" && !lotus_crack_color.empty())
         { ApplySacForMana(state, controller, copy_id, lotus_crack_color, cd->params.sac_for_mana_amount, 0); }
+    }
+    else if (name == "Braingeyser" && braingeyser_target != 0)
+    {
+        opponentdeck::ForcedDraw(state, braingeyser_x);   // the opponent draws X (inert with no library)
     }
     else if (name == "Braingeyser")
     {

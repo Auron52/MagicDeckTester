@@ -728,7 +728,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                         state.players[1 - entry.controller_index].life -= dmg;
                         state.opponent_lost_life_this_turn = true;
                     }
-                    const int draws = (def.params.modal_choose_n - sN)
+                    // The opponent's share of the draw picks (clamped like the rollout's twin).
+                    const int opp_picks = std::clamp(entry.modal_opp_draw_picks, 0,
+                                                     std::max(0, def.params.modal_choose_n - sN));
+                    const int draws = (def.params.modal_choose_n - sN - opp_picks)
                                       * def.params.modal_draw_per_choice;
                     Player& mp = state.players[entry.controller_index];
                     std::size_t before = mp.hand.size();
@@ -746,6 +749,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                         for (std::size_t hi = before; hi < mp.hand.size(); ++hi)
                         { g_play_draw_sink->push_back({ state.turn_number, mp.hand[hi].m_name.str() }); }
                     }
+                    if (opp_picks > 0)
+                    { opponentdeck::ForcedDraw(state, opp_picks * def.params.modal_draw_per_choice); }
                 }
                 // (Cascade is no longer resolved here: it is a CAST trigger -- CastSpellFromHand /
                 // PushFreeCast push Triggered{Cascade} entries that resolve BEFORE this spell.)

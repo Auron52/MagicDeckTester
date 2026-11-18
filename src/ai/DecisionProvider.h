@@ -2151,6 +2151,29 @@ public:
     virtual std::vector<int> DrawXCandidates(const GameState& s, const CardDefinition& def,
                                              bool target_opponent, int max_affordable) const;
 
+    // OpponentDrawCandidates -- the OPPONENT target of a "target player draws" effect that is not a
+    // hand-cast draw_x spell: Garth One-Eye's conjured Braingeyser ("Target player draws X cards"; `def`
+    // = Braingeyser, one pick of X cards, so max_picks = the X the pool pays and draws_per_pick = 1) and
+    // Unite the Coalition's "Target player draws a card" mode (`def` = Unite, each of the split's draw
+    // picks may be aimed at either player, so max_picks = the split's draw picks and draws_per_pick =
+    // modal_draw_per_choice). The ENGINE enumerates the opponent target for both; this hook only
+    // RESTRICTS which opponent counts reach the menu (1..max_picks; the self target is never asked about
+    // and is always emitted). One variant per returned count; empty -> no opponent variant. Default
+    // (DecisionProviders.cpp, OpponentDrawCandidatesFor):
+    //   * autonomous: only the minimal LETHAL count -- the picks that deck the opponent through
+    //     opponentdeck::ForcedDraw (ForcedDrawLethalX) -- and only when it fits. USER 2026-11-17:
+    //     "Opponent targets for draws are only useful when they have a chance of decking them. I can't
+    //     see a way for Garth or Unite to make that happen so we should keep it heuristically pruned.
+    //     (not pruned by the engine)". A non-lethal forced draw hands a passive opponent cards it never
+    //     uses; Garth's Braingeyser is once per game per Garth and Unite's picks are at most five, so
+    //     the Stroke-style split-over-two-turns deck-out has no second half to finish it here;
+    //   * HUMAN PLAY: the opponent target is always offered (Braingeyser: ONE variant, the minimal lethal
+    //     X when the pool pays it, else the same auto-maxed X the self copy uses; Unite: every count);
+    //   * MTG_UNPRUNE=oppdraw (or MTG_UNPRUNED): every count 1..max_picks.
+    // Never offered when no opponent library was dealt (a draw from an absent zone does nothing).
+    virtual std::vector<int> OpponentDrawCandidates(const GameState& s, const CardDefinition& def,
+                                                    int max_picks, int draws_per_pick) const;
+
     // OfferFailToFindPut -- should the autonomous search also be offered a FAIL-TO-FIND cast of an
     // X-capped put-tutor (Chord of Calling / Green Sun's Zenith: "search ... may fail to find", CR
     // 701.19b), at X = 0? The enumerator's X axis is otherwise the (target, X = its MV) pairs, so a

@@ -743,6 +743,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     // variants apart -- "you draw 5" and "the opponent draws 40 (deck-out)" share a name.
                     if (xd && xd->params.draw_target_player)
                     { tag += (a.draw_target != 0) ? " \xE2\x86\x92 opponent draws" : " \xE2\x86\x92 you draw"; }
+                    // Unite the Coalition: the opponent's share of the draw picks (0 = all ours, unlabelled).
+                    if (xd && xd->params.modal_choose_n > 0 && a.draw_target > 0)
+                    {
+                        const int od = a.draw_target * std::max(1, xd->params.modal_draw_per_choice);
+                        tag += " (opponent draws " + std::to_string(od) + ")";
+                    }
                 }
                 // Terastodon's destroy count K rides chosen_x with no {X} in the cost, and the K fan is
                 // the whole difference between its variants (claude-play sweep gi5: four plans read
@@ -930,6 +936,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // play_invariants hand check and any human reading the plan list).
             case Action::Kind::GarthActivate:
                 tag = a.card_name + ": conjure " + a.tutor_target;
+                // Braingeyser's target player: "you draw" is the unlabelled historical default.
+                if (a.draw_target != 0)
+                { tag += " \xE2\x86\x92 opponent draws " + std::to_string(a.chosen_x); }
                 if (TurnSolver::IsGarthLotusCrack(a))   // conjure-and-crack (autonomous menus only)
                 {
                     tag += a.chosen_float_color.empty() ? std::string(" and crack it")
@@ -3411,6 +3420,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                            || (ac.kind == Action::Kind::ActivatePermAbility
                                && ac.ability_mode == Action::AbilityMode::ThresholdLoot)))
                 { os << ", \"draw_target\": \"" << (ac.draw_target != 0 ? "opponent" : "self") << "\""; }
+                // Garth's Braingeyser at the opponent (the self copy keeps its historical shape) ...
+                else if (ac.kind == Action::Kind::GarthActivate && ac.draw_target != 0)
+                { os << ", \"draw_target\": \"opponent\""; }
+                // ... and Unite the Coalition's draw picks aimed at the opponent (0 = all ours: omitted).
+                else if (dd && dd->params.modal_choose_n > 0 && ac.draw_target > 0)
+                { os << ", \"opponent_draw_picks\": " << ac.draw_target; }
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }

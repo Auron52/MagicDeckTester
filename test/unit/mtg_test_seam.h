@@ -73,6 +73,17 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, false, false, false, riders);
     }
 
+    // The executor's hand cast with the searched draw-target rider (CastRiders::draw_target: Stroke's
+    // target player, Unite the Coalition's opponent pick count). Pushes the StackEntry; the caller resolves it.
+    static void CastWithDrawTarget(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int chosen_x,
+                                   int draw_target)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.draw_target = draw_target;
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), chosen_x, 0, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
     // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
     // committed-line pop) instead of searching -- the only way a test can hand the real executor a
     // specific plan, e.g. to check it realises a plan exactly as the rollout's ApplyPlan does.

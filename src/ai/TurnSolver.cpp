@@ -44342,7 +44342,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ma.direct_damage  = sN * def.params.modal_damage_per_choice;
                 ma.is_noncreature = true;
                 ma.card_mv        = def.card.m_mana_cost.ManaValue();
-                actions.push_back(std::move(ma));
+                // "Target player draws a card": EACH draw pick may target either player (CR 700.2,
+                // targets chosen per mode as the spell is cast). The engine enumerates the opponent's
+                // share D in 1..(N-S) beside the all-ours variant, carried on Action::draw_target (the
+                // count of picks aimed at the opponent; 0 = all ours); WHICH D reach the menu is the
+                // provider's (OpponentDrawCandidates -- by default only the minimal D that decks them,
+                // USER 2026-11-17). Resolution: (N-S-D) draws for us, D x per-pick for the opponent
+                // through opponentdeck::ForcedDraw (both worlds).
+                const int draw_picks = def.params.modal_draw_per_choice > 0 ? def.params.modal_choose_n - sN : 0;
+                std::vector<int> opp_picks;
+                if (draw_picks > 0)
+                {
+                    opp_picks = ResolveProvider(state).OpponentDrawCandidates(
+                        state, def, draw_picks, def.params.modal_draw_per_choice);
+                }
+                if (opp_picks.empty()) { actions.push_back(std::move(ma)); }
+                else
+                {
+                    const Action self_variant = ma;
+                    actions.push_back(std::move(ma));
+                    const int lethal = opponentdeck::ForcedDrawLethalX(state);
+                    for (int dn : opp_picks)
+                    {
+                        if (dn < 1 || dn > draw_picks) { continue; }
+                        Action mo = self_variant;
+                        mo.draw_target = dn;
+                        const int opp_cards = dn * def.params.modal_draw_per_choice;
+                        // ORDERING ONLY: the opponent's picks leave our draws; a deck-out kill is priced
+                        // decisive (the Stroke precedent), a non-lethal forced draw at nothing.
+                        mo.eval = sN * def.params.modal_damage_per_choice * 100
+                                + (draw_picks - dn) * def.params.modal_draw_per_choice * 60
+                                + ((lethal > 0 && opp_cards >= lethal) ? 5000 : 0);
+                        actions.push_back(std::move(mo));
+                    }
+                }
             }
             continue;
         }
@@ -47188,10 +47221,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.tutor_target  = name;
                 a.sac_source_id = p.card.m_number;
                 a.is_noncreature = true;
+                // Braingeyser's OPPONENT target ("Target player draws X cards", chosen as the copy is
+                // cast): the engine enumerates it beside the self copy; WHICH X (if any) reaches the
+                // menu is the provider's (OpponentDrawCandidates -- by default only the minimal X
+                // that decks them, USER 2026-11-17). Emitted right after the self variant.
+                std::vector<Action> garth_opp;
                 if (name == "Braingeyser")
                 {
                     int x = garth_pool.Total() - 2;   // {U}{U} reserved
                     if (x < 1) { continue; }
+                    {
+                        const int lethal = opponentdeck::ForcedDrawLethalX(state);
+                        for (int xo : ResolveProvider(state).OpponentDrawCandidates(state, *cd, x, 1))
+                        {
+                            if (xo < 1 || xo > x) { continue; }
+                            Action o = a;
+                            o.chosen_x     = xo;
+                            o.cost.has_x   = false;
+                            o.cost.generic += xo;
+                            o.draw_target  = 1;
+                            // ORDERING ONLY: a deck-out kill is priced decisive (the Stroke precedent);
+                            // a non-lethal forced draw (human / unpruned only) is worth nothing here.
+                            o.eval         = (lethal > 0 && xo >= lethal) ? 50 * DMG : 0;
+                            garth_opp.push_back(std::move(o));
+                        }
+                    }
                     // RESERVED-X policy (USER 2026-08-19, under the ordered-Garth doctrine):
                     // "I wouldn't max X willy-nilly. You should keep up at least 5-7 mana if you
                     // can do that while holding X=5 or greater ... Otherwise you max it out.
@@ -47249,6 +47303,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     crack.eval         = 0;   // the on-board crack's eval: its value is what it pays for
                 }
                 actions.push_back(std::move(a));
+                for (Action& o : garth_opp) { actions.push_back(std::move(o)); }
                 if (lotus_crack)
                 {
                     // ONE VARIANT PER COLOUR, never the sac-colour fold. The fold resolves an on-board
@@ -75299,7 +75354,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 state.players[opp_idx].life -= dmg;
                 state.opponent_lost_life_this_turn = true;
             }
-            const int draws = (def.params.modal_choose_n - sN) * def.params.modal_draw_per_choice;
+            // The opponent's share of the draw picks (Action::draw_target via the cast rider; 0 = all
+            // ours), clamped to the split's picks. Lockstep twin: EffectHandler's modal_opp_draw_picks.
+            const int opp_picks = std::clamp(cast_draw_tgt, 0, std::max(0, def.params.modal_choose_n - sN));
+            const int draws = (def.params.modal_choose_n - sN - opp_picks) * def.params.modal_draw_per_choice;
             std::size_t before = ap.hand.size();
             // Counted per draw (the per-turn draw cap reads the count before each draw; same total).
             // Lockstep twin: EffectHandler's modal draws.
@@ -75315,6 +75373,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
                 { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
             }
+            if (opp_picks > 0) { opponentdeck::ForcedDraw(state, opp_picks * def.params.modal_draw_per_choice); }
         }
         else if (def.params.tooth_and_nail)
         {
@@ -76944,7 +77003,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         line_order_trace("garth", a);
                         if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                         { ApplyGarthActivate(state, me, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                              TurnSolver::GarthLotusCrackColor(state, acts, a)); }
+                                              TurnSolver::GarthLotusCrackColor(state, acts, a), a.draw_target); }
                     }
                     else if (TurnSolver::IsTrailingActivation(a.kind))
                     {
@@ -77082,7 +77141,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                 {
                     ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                       TurnSolver::GarthLotusCrackColor(state, acts, a));
+                                       TurnSolver::GarthLotusCrackColor(state, acts, a), a.draw_target);
                     // ACQUISITION RE-SOLVE (USER 2026-08-19: "we want to encode a way to take
                     // advantage of the cards in hand ... Regrowth is a very similar story"):
                     // Braingeyser's draws and Regrowth's returned card compete for this turn's
@@ -77090,7 +77149,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // deferred post-cast re-solve. Executor lockstep: depth 0 gets the
                     // note_draw_engine second pass at its Garth sites; depth > 0 replays the
                     // recorded breakpoint script this re-solve commits.
-                    if ((a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                    if (TurnSolver::IsGarthAcquisition(a)   // Braingeyser at US, or Regrowth
                         && !s_human_play && sink_stack.empty())
                     {
                         deferred_cantrip_resolve = true;
@@ -78651,7 +78710,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!GarthOrderedEnabled()
                 && TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                 TurnSolver::GarthLotusCrackColor(state, trailing_acts, a)); }
+                                 TurnSolver::GarthLotusCrackColor(state, trailing_acts, a), a.draw_target); }
         }
     }
     };
@@ -82395,7 +82454,12 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.cast_from_top) { w.Put("#TOP"); }
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
-                if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
+                if (d && d->params.modal_choose_n > 0)
+                {
+                    w.Put("#S"); w.Int(act.chosen_x);
+                    // ...and how many of its draw picks the OPPONENT takes (0 = all ours: no bytes)
+                    if (act.draw_target != 0) { w.Put("/O"); w.Int(act.draw_target); }
+                }
                 if (d && d->params.boros_charm_modal)
                 { w.Put("#BC"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.enchant_target); }
                 if (d && d->params.tooth_and_nail)
@@ -82577,6 +82641,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.Begin(kSigM); w.Put("GARTH#"); w.Int(act.sac_source_id); w.Put('#'); w.Put(act.tutor_target);
                 // Conjure-and-crack vs conjure-and-keep are different plans (and a fanned crack's colour).
                 if (TurnSolver::IsGarthLotusCrack(act)) { w.Put('!'); w.Put(act.chosen_float_color); }
+                // Braingeyser at the opponent vs at us (and its X) are different plans; gated on the
+                // target so no self copy's key moves.
+                if (act.draw_target != 0) { w.Put("@O"); w.Int(act.chosen_x); }
                 w.End(); break;
             case Action::Kind::AttachAllEquipment:
                 w.Begin(kSigM); w.Put("BALAN#"); w.Int(act.sac_source_id); w.End(); break;
@@ -87841,7 +87908,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (!act.chosen_float_color.empty()) { k += '#'; k += act.chosen_float_color.str(); }
                         if (act.free_cast) { k += "#FREE"; }
                         const CardDefinition* const cd = act.def;
-                        if (cd && cd->params.modal_choose_n > 0) { k += "#S"; k += std::to_string(act.chosen_x); }
+                        if (cd && cd->params.modal_choose_n > 0)
+                        {
+                            k += "#S"; k += std::to_string(act.chosen_x);
+                            // the opponent's share of the draw picks (0 = all ours: no bytes)
+                            if (act.draw_target != 0) { k += "/O"; k += std::to_string(act.draw_target); }
+                        }
                         if (cd && cd->params.boros_charm_modal)
                         { k += "#BC"; k += std::to_string(act.chosen_x); k += '/'; k += std::to_string(act.enchant_target); }
                         if (cd && cd->params.tooth_and_nail)
@@ -88212,7 +88284,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                   + "#" + act.tutor_target
                                   // conjure-and-crack (and a fanned crack's colour) is its own plan
                                   + (TurnSolver::IsGarthLotusCrack(act)
-                                     ? "!" + act.chosen_float_color.str() : std::string())); break;
+                                     ? "!" + act.chosen_float_color.str() : std::string())
+                                  // Braingeyser at the opponent (and its X): its own plan
+                                  + (act.draw_target != 0
+                                     ? "@O" + std::to_string(act.chosen_x) : std::string())); break;
                 // Balan attach-all: which Balan (legend rule -> effectively one).
                 case Action::Kind::AttachAllEquipment:
                     msf.push_back("BALAN#" + std::to_string(act.sac_source_id)); break;
@@ -90674,8 +90749,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // three places, which is the drift hazard site 10's clause already warns about.
         if (BpAcqClauseOn() && a.kind == Action::Kind::GarthActivate)
         {
-            const std::string gt = a.tutor_target.str();
-            if (gt == "Braingeyser" || gt == "Regrowth") { mask |= 1 << 3; }
+            if (TurnSolver::IsGarthAcquisition(a)) { mask |= 1 << 3; }   // Braingeyser at US, or Regrowth
         }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
@@ -90973,8 +91047,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // the executor already special-cases exactly those two names for its second pass.
             if (a.kind == Action::Kind::GarthActivate)
             {
-                const std::string t = a.tutor_target.str();
-                if (t == "Braingeyser" || t == "Regrowth") { mask |= 1 << 10; continue; }
+                if (TurnSolver::IsGarthAcquisition(a)) { mask |= 1 << 10; continue; }   // Braingeyser at US, or Regrowth
             }
             // Recruitment Officer's activated dig puts a creature into hand from an ACTIVATION --
             // a non-cast hand entry, so the section-level arming fires site 10; the found card must
@@ -133896,10 +133969,28 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             {
                 const int n     = mdef->params.modal_choose_n;
                 const int dmg   = a.chosen_x * mdef->params.modal_damage_per_choice;
-                const int draws = (n - a.chosen_x) * mdef->params.modal_draw_per_choice;
-                const std::string desc = std::to_string(dmg) + " damage + " + std::to_string(draws)
-                                       + " card" + (draws == 1 ? "" : "s");
+                // draw_target = how many of the draw picks the OPPONENT takes (0 = all ours, whose
+                // wording is unchanged).
+                const int opp   = std::max(0, a.draw_target) * mdef->params.modal_draw_per_choice;
+                const int draws = (n - a.chosen_x) * mdef->params.modal_draw_per_choice - opp;
+                std::string desc = std::to_string(dmg) + " damage + " + std::to_string(draws)
+                                 + " card" + (draws == 1 ? "" : "s");
+                if (opp > 0)
+                { desc += " + the opponent draws " + std::to_string(opp) + " card" + (opp == 1 ? "" : "s"); }
                 addSub(a.card_name + " " + desc, a.card_name + " modes", desc, a.card_name, "modal");
+            }
+            // Garth One-Eye's conjured Braingeyser ("Target player draws X cards"), once an opponent
+            // library exists: its two variants differ by WHO draws (and the X each is offered at), so
+            // the dimension is the target with its X -- the generic "X=n" sub below would make an
+            // equal-X pair identical and the dedup would drop one. No library dealt (a legacy-board
+            // replay): no opponent variant exists, and the old X sub stands.
+            else if (a.kind == Action::Kind::GarthActivate && a.tutor_target == "Braingeyser"
+                     && state.opponent_library_dealt && a.chosen_x > 0)
+            {
+                const std::string who = (a.draw_target != 0 ? "the opponent draws X=" : "you draw X=")
+                                      + std::to_string(a.chosen_x);
+                addSub(a.card_name + " Braingeyser \xE2\x86\x92 " + who, a.card_name + " Braingeyser target",
+                       who, "Braingeyser", "modal");
             }
             // Kessig Wolf Run's pump (TapTargetPump): BOTH decisions are subs -- WHICH creature (the
             // untapper's board-object shape, so two same-named Plants get distinct choices) and the X,

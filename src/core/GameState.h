@@ -235,6 +235,11 @@ struct StackEntry
     std::int8_t         scry_pin       = -1;        // a spell's own searched scry (Action::scry_pin via CastRiders;
                                         // Loran's Escape): EffectHandler installs a ScriptedTopChoice over the
                                         // solo-target trick's resolution. -1 = unpinned (the provider's pick).
+    int                 modal_opp_draw_picks = 0;   // Unite the Coalition: how many of the split's "target
+                                        // player draws a card" picks target the OPPONENT (Action::draw_target
+                                        // via the CastRiders rider; 0 = all ours). Stamped by the executor's
+                                        // cast site; read by EffectHandler's modal branch, whose rollout twin
+                                        // is apply_one's. 0 for every other spell.
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::

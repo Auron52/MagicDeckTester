@@ -8252,10 +8252,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                 {
                     ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                       TurnSolver::GarthLotusCrackColor(state, trailing_acts, a));
+                                       TurnSolver::GarthLotusCrackColor(state, trailing_acts, a), a.draw_target);
                     // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                     // script): Braingeyser's draws / Regrowth's return are same-turn castable.
-                    if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                    if (TurnSolver::IsGarthAcquisition(a))   // Braingeyser at US, or Regrowth
                     { cast_draw_engine = true; }
                     // Viewer visibility (USER 2026-08-19: "We should definitely have garth's
                     // ability in the viewer") -- this was the only battlefield activation with
@@ -8263,7 +8263,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (m_logger)
                     { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
                                            "conjure + cast " + a.tutor_target.str()
-                                           + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+                                           + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")
+                                       + (a.draw_target != 0 ? " targeting the opponent" : "")); }
                 }
             }
         }
@@ -8919,15 +8920,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
                 ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a));
+                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a), a.draw_target);
                 // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                 // script): Braingeyser's draws / Regrowth's return are same-turn castable.
-                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                if (TurnSolver::IsGarthAcquisition(a))   // Braingeyser at US, or Regrowth
                 { cast_draw_engine = true; }
                 if (m_logger)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "conjure + cast " + a.tutor_target.str()
-                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")
+                                       + (a.draw_target != 0 ? " targeting the opponent" : "")); }
             }
         }
         else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
@@ -9034,15 +9036,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
                 ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x,
-                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a));
+                                   TurnSolver::GarthLotusCrackColor(state, plan.actions, a), a.draw_target);
                 // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
                 // script): Braingeyser's draws / Regrowth's return are same-turn castable.
-                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                if (TurnSolver::IsGarthAcquisition(a))   // Braingeyser at US, or Regrowth
                 { cast_draw_engine = true; }
                 if (m_logger)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "conjure + cast " + a.tutor_target.str()
-                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")
+                                       + (a.draw_target != 0 ? " targeting the opponent" : "")); }
             }
             continue;
         }
@@ -10565,6 +10568,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // "Target player gains N life": the searched player target (0 = us). Read at resolution by
     // ApplyCastLifegain (EffectHandler) -- the rollout twin passes apply_one's rider.
     if (riders.player_target != 0) { entry.player_target = riders.player_target; }
+    // Unite the Coalition: the opponent's share of the draw picks (a count, 0 = all ours).
+    if (def->params.modal_choose_n > 0 && riders.draw_target > 0) { entry.modal_opp_draw_picks = riders.draw_target; }
     entry.dies_tuck = riders.dies_tuck;   // Ilharg's death "may" for this spell's resolution (legend-rule loser)
     entry.legend_keep = riders.legend_keep;   // the CR 704.5j keep for this spell's resolution (I5b item 4)
     if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite
