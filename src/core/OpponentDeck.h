@@ -14,6 +14,7 @@
 // by seed % 50 from the frozen primary decklist pool. Other decks with opponent
 // zone effects retain the established fixed list. The opponent stays passive.
 // Every library card is a name-only placeholder; read its types from CardDatabase at use time.
+#include "EnvFlags.h"
 #include "GameState.h"
 #include "DrawCap.h"
 #include "OpponentDeckPool.h"
@@ -187,6 +188,23 @@ struct LandPlayResult
 // an immediately usable fetch. Choose the first eligible library land; this is
 // an opponent policy, not a search branch for our solver. The caller performs
 // the shuffle and offers the Archive Trap instant window after resolution.
+// ORDER-CANONICAL PLACEMENT (MTG_OPP_LANDS_FRONT, DEFAULT ON; =0 restores push_back). The
+// opponent's lands enter as ONE block at the FRONT of the shared battlefield, in their own arrival
+// order, ahead of all of ours: the layout the legacy three-land board always had. push_back
+// interleaved each opponent land between our permanents by the TURN we happened to cast them, so two
+// lines reaching the same position ("cast X and Y on T2" vs "X on T2, Y on T3") differed in
+// battlefield ORDER, and every order-exact consumer (FsOrderSig: the SimulateToEnd TT, FSL win lines,
+// bp-enum plans, enumeration dedup) stopped sharing them. jumbo_regression_d5_s30001 gi11 (budget 0):
+// the T1 decision's rollout work rose 3.2x over the legacy board. This is an identity fold, not a
+// narrowing: each side's permanents keep their relative order, the board's contents are unchanged,
+// and nothing holds a battlefield index across the opponent's turn (attachments, targets and linked
+// exiles name card numbers), so only the interleave -- which no rule reads -- moves.
+inline bool OpponentLandsFrontOn()
+{
+    static const bool v = EnvOn("MTG_OPP_LANDS_FRONT", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+
 // One head's land play from the given hand and library (players[1]'s, or 2HG's second head's with
 // graveyard == nullptr: nothing reads that head's graveyard). Life is the opponent's (team) life.
 inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& hand, Library& library,
@@ -215,6 +233,13 @@ inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& 
         // The passive opponent declines optional shock-land life payments.
         perm.tapped = force_tapped || land_def.params.enters_tapped
             || land_def.params.etb_pay_life_to_untap > 0;
+        if (OpponentLandsFrontOn())
+        {
+            auto pos = state.battlefield.begin();
+            while (pos != state.battlefield.end() && pos->controller_index == 1) { ++pos; }
+            state.battlefield.insert(pos, std::move(perm));
+            return;
+        }
         state.battlefield.push_back(std::move(perm));
     };
     const bool typed_fetch = !def->params.fetch_land_types.empty();

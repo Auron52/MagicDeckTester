@@ -278,3 +278,65 @@ TEST_CASE("2HG deals both opponent heads a pool list; the cheaper one is the tar
     const GameState legacy = GoldFishRunner::SetupGame(plain, 7, 0, true);
     CHECK_FALSE(opponentdeck::HasSecondHead(legacy));
 }
+
+TEST_CASE("opponent lands enter as one front block, so the battlefield order is independent of which turn we cast on")
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+    REQUIRE(opponentdeck::OpponentLandsFrontOn());   // DEFAULT ON (MTG_OPP_LANDS_FRONT)
+
+    Decklist plain;
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    const CardDefinition* island = CardDatabase::Instance().Lookup("Island");
+    const CardDefinition* swamp = CardDatabase::Instance().Lookup("Swamp");
+    REQUIRE(forest != nullptr);
+    REQUIRE(island != nullptr);
+    REQUIRE(swamp != nullptr);
+    for (int i = 0; i < 20; ++i) { plain.mainboard.push_back(forest->card); }
+
+    auto ours = [&](GameState& s, int number) {
+        Permanent p;
+        p.card = forest->card;
+        p.card.m_number = number;
+        p.controller_index = 0;
+        p.owner_index = 0;
+        s.battlefield.push_back(p);
+    };
+    auto opp_land_turn = [&](GameState& s, const CardDefinition* land, int number) {
+        s.players[1].hand.clear();
+        Card c = land->card;
+        c.m_number = number;
+        s.players[1].hand.push_back(c);
+        ResolvePassiveOpponentLandTurn(s);
+    };
+
+    // Line A: we cast X and Y on the same turn, then the opponent plays two lands.
+    // Line B: X, opponent land, Y, opponent land. The same position after the second opponent turn.
+    GameState a = GoldFishRunner::SetupGame(plain, 1, 0);
+    GameState b = a;
+    REQUIRE(a.battlefield.empty());
+    ours(a, 101); ours(a, 102);
+    opp_land_turn(a, island, 901);
+    opp_land_turn(a, swamp, 902);
+    ours(b, 101);
+    opp_land_turn(b, island, 901);
+    ours(b, 102);
+    opp_land_turn(b, swamp, 902);
+
+    // The opponent's lands lead, in their own arrival order; ours follow in theirs.
+    const std::array<int, 4> expected{901, 902, 101, 102};
+    REQUIRE(a.battlefield.size() == expected.size());
+    REQUIRE(b.battlefield.size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        CHECK(a.battlefield[i].card.m_number == expected[i]);
+        CHECK(b.battlefield[i].card.m_number == expected[i]);
+        CHECK(a.battlefield[i].controller_index == b.battlefield[i].controller_index);
+        CHECK(a.battlefield[i].card.m_name == b.battlefield[i].card.m_name);
+    }
+    CHECK(a.battlefield[0].controller_index == 1);
+    CHECK(a.battlefield[1].controller_index == 1);
+}
