@@ -971,6 +971,7 @@ enum Slot : int
     MAZE_WSEL_0,              // MTG_MAZE_WSEL_0           Maze's End P1d A1 weight sweep (TEMPORARY selector, heuristic-optimization skill): bit 0 of the variant index of the progress weights (MazeProgressWeights). All three bits off = the shipped weights
     MAZE_WSEL_1,              // MTG_MAZE_WSEL_1           ...bit 1
     MAZE_WSEL_2,              // MTG_MAZE_WSEL_2           ...bit 2
+    TIE_SCORING_OLD,          // MTG_TIE_SCORING_OLD       TEMPORARY A/B arm (tie-scoring, 2026-11-18; delete with the A/B): =1 restores the copied evals of three cast variants -- a tutor that finds nothing, Time Warp aimed at the opponent, Reveillark's evoke (TurnSolver.cpp TieScoringOld). Default OFF
     COUNT
 };
 
@@ -1886,6 +1887,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_WSEL_0",
         "MTG_MAZE_WSEL_1",
         "MTG_MAZE_WSEL_2",
+        "MTG_TIE_SCORING_OLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
