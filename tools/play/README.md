@@ -442,7 +442,11 @@ external-chooser surface exposes:
     needs the `claude-play` apply path to emit the `tools/replay/` action log (Gamble discard /
     Soulfire reveals / targets) and the GUI to render that step.
   - Route **mulligan/keep/bottom** and **combat (attackers/blockers)** through the chooser too,
-    for a fully human-controlled game.
+    for a fully human-controlled game. *Partly done (2026-11-18, Stuffy Doll step 9e):* the attack
+    declaration now asks "attack with X?" (a `dig` yes/no, `(may attack)`) for each would-attack creature
+    the deck's provider names under `DecisionProvider::MayDeclineAttack` (today only Stuffy Doll's
+    Guilty-Conscience-enchanted, non-indestructible creatures). Every other attacker, and every other
+    deck, is still declared by `AttackWith`.
 - **v1 line-check limits:** validates land + plain casts + tutors + every board activation
   (`sacout=` / `equip=` / `equipallfree=` / `attachall=` / `sfput=` / `jittemode=`); only **{X}** casts report
   *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the

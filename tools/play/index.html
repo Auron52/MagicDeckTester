@@ -4910,6 +4910,23 @@ function digPanelHtml(d){
        `<button class="ghost" data-opt="-1">Leave it in the graveyard</button></div>`;
     return h;
   }
+  // The attack HOLD ("(may attack)" in the source; Stuffy Doll step 9e): a yes/no at the attack declaration for a
+  // creature the deck's provider names (a Guilty-Conscience-enchanted, non-indestructible creature of ours).
+  if (/\(may attack\)/.test(d.source||'')) {
+    const nm=(d.examined&&d.examined[0]&&d.examined[0].name)||'it';
+    const defHold=d.heuristic_default===-1;
+    let h=`<h3>Attack with ${esc(nm)}?</h3>`;
+    h+=`<div class="sub">${esc(d.source||'')}<br/>Guilty Conscience deals the damage it deals back to it. Keeping it home means it does not attack this turn; every other creature attacks as usual.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig${defHold?'':' def'}" data-opt="${c.index}" data-name="${esc(c.name)}" title="Attack with it">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Attack</em>`+
+         (defHold?'':'<span class="deftag">AI pick</span>')+'</span>';
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost${defHold?' def':''}" data-opt="-1">Keep it home</button></div>`;
+    return h;
+  }
   if (/\(attack pay\)/.test(d.source||'')) {
     let h=`<h3>Militia's Pride — pay {W} for a Kithkin Soldier?</h3>`;
     h+=`<div class="sub">${esc(d.source||'')}<br/>The 1/1 white Kithkin Soldier enters tapped and attacking now. Each Pride trigger is a separate choice.</div>`;

@@ -2404,6 +2404,17 @@ public:
     // override never makes the search predict an attack the executor won't make.
     virtual bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const = 0;
 
+    // MayDeclineAttack -- the deck's exception to "attack with everything that would attack" (USER
+    // 2026-11-18, Stuffy Doll step 9e: "I think we can make it an exception to the always attack-rule.
+    // Perhaps have a deck heuristic that can be consulted to reject attacking?"). True names an attacker
+    // of ours whose ATTACK vs HOLD is a real choice; it never decides it. Two readers, one set: the
+    // searched hold fan (TurnSolver::AppendSubdecisionAxes, step 9c: every subset of the named would-attack
+    // creatures is a plan variant) and human play (AIEngine::DeclareAttackers asks "attack with X?" for
+    // each named would-attack creature, default attack). Restrict-only in the NO-GREEDY sense: it admits a
+    // branch, it never picks one. Default false -> no fan, no prompt: every other deck is unchanged.
+    virtual bool MayDeclineAttack(const GameState& s, const Permanent& attacker) const
+    { (void)s; (void)attacker; return false; }
+
     // AttackWith -- the gate every combat site actually calls (declaration + all projections;
     // NEVER call ShouldAttackWith directly at a combat site). Non-virtual: it applies the
     // engine-level collapsed-main mana hold first -- with the main-phase filter active

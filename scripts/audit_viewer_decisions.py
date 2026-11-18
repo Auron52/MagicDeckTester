@@ -110,6 +110,11 @@ MANIFEST = {
     # Ilharg, the Raze-Boar (Boars I5b): "When Ilharg dies ..., you may put it into its owner's library third from
     # the top" -- asked as a `dig` yes/no "(dies to library)" (ResolveDiesToLibraryPosition).
     "dies_to_library_position": ("dig",             positive),
+    # Guilty Conscience (Stuffy Doll step 9e, 2026-11-18): its trigger has no choice ('that creature'; the host is
+    # is_aura's enchant-target variant), but a creature it enchants may stay home -- the `dig` yes/no
+    # "(may attack)" at the attack declaration (Combat.cpp AskHumanAttackHolds), asked for the creatures the deck's
+    # provider names under DecisionProvider::MayDeclineAttack (Stuffy: GC'd and not indestructible).
+    "aura_host_damage_back": ("dig",                truthy),
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -1623,7 +1628,6 @@ INERT_PARAMS = {
     # --- Auras (Bogles): effect/stat/trigger detail params -- no interactive player choice ---
     "aura_power_bonus": "aura stat grant (rides is_aura)", "aura_tough_bonus": "aura stat grant (rides is_aura)",
     "aura_grants_lifelink": "automatic lifelink grant, no choice",
-    "aura_host_damage_back": "Guilty Conscience's damage-back trigger: no choice ('that creature'); the host is is_aura's enchant-target variant",
     "aura_scale_kind": "aura scaling selector (rides is_aura)", "aura_scale_power": "aura scaling stat (rides is_aura)",
     "aura_scale_tough": "aura scaling stat (rides is_aura)",
     "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",
@@ -2249,6 +2253,13 @@ STATE_GATED_TYPES = {
     ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
     ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
 
+    ("aura_host_damage_back", "dig"):
+        "Guilty Conscience's attack-hold prompt '(may attack)' exists only when a GC enchants a creature of ours "
+        "that is NOT indestructible and can attack (a settled Boros Reckoner / Screaming Nemesis / Mogg Maniac / "
+        "Spiteful Sliver), and only under a provider that names it (StuffyDollProvider::MayDeclineAttack); the "
+        "forward sweep's default GC host is usually the indestructible Stuffy Doll. Pinned by "
+        "test/unit/test_rfx_pipeline.cpp 'rfx step 9e: human play asks ...' and 'rfx step 9e: a "
+        "--force-attackers replay ...'.",
     ("transform_back_name", "dig"):
         "Bloodline Keeper's in-combat transform window is asked only when the five-Vampire restriction holds "
         "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "

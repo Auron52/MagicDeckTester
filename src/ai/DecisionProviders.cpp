@@ -2975,6 +2975,20 @@ int StuffyDollProvider::CastOrderRank(const GameState& s, const CardDefinition& 
     return r;
 }
 
+// Step 9e (USER 2026-11-18 ~00:37: "I think we can make it an exception to the always attack-rule. Perhaps have a
+// deck heuristic that can be consulted to reject attacking?"). The step-9c predicate, moved here from the engine's
+// hold fan: a creature that carries a Guilty Conscience and is NOT indestructible (printed or this turn's
+// Loran's Escape) may stay home -- attacking deals combat damage, GC deals it back, and the creature may die before
+// next turn's Escape makes the loop safe (USER ~20:45: "We need to not always attack in the meantime."). An
+// indestructible host loses nothing by attacking (the hold could only delay damage), so it is not named. Restrict-
+// only: this admits the hold as a SEARCHED branch (TurnSolver's fan) and as the human's "attack with X?" prompt; it
+// never chooses. The engine checks control, eligibility (CanAttackFull) and "would attack" (AttackWith) itself.
+bool StuffyDollProvider::MayDeclineAttack(const GameState& s, const Permanent& attacker) const
+{
+    if (attacker.HasKeyword(Keyword::Indestructible)) { return false; }
+    return dmgrx::AuraHostDamageBackOn(s, attacker.card.m_number) != 0;
+}
+
 int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const
 {
     constexpr int kHuge = 1 << 20;

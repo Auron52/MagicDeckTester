@@ -4795,6 +4795,18 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "-1 to leave it in the graveyard. Default = the search's pick when it pinned one, otherwise the AI's "
                "default (tuck unless another copy stays on your battlefield).");
     }
+    else if (source.find("(may attack)") != std::string::npos)
+    {
+        // The attack HOLD (Combat.cpp AskHumanAttackHolds; Stuffy Doll step 9e, USER 2026-11-18): asked at the
+        // attack declaration, once per would-attack creature the deck's provider names (DecisionProvider::
+        // MayDeclineAttack; Stuffy Doll: a creature of ours enchanted by Guilty Conscience that is not
+        // indestructible). examined[0] is that creature.
+        d.Note("reply 0 to ATTACK with this creature (examined[0]) this combat, or -1 to keep it home (it does "
+               "not attack this turn). Every other creature attacks as usual. Guilty Conscience deals the "
+               "combat damage it deals back to it, so an attacker that is not indestructible may die; keeping "
+               "it home saves it for a later turn (e.g. after Loran's Escape makes it indestructible). "
+               "Default = attack (on a reference replay: the recorded declaration).");
+    }
     else if (source.find("(attack pay)") != std::string::npos)
     {
         d.Note("reply 0 to pay {W} for this declared nontoken attacker's Militia's Pride trigger. "

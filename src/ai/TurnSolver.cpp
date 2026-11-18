@@ -99835,12 +99835,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // USER 2026-11-17 ~20:45: "One slightly messy case is if we need to Guilty Conscience and Loren's Escape next
     // turn. We need to not always attack in the meantime." The attack itself stays the provider's AttackWith (the
     // standing attack exemption); what is SEARCHED here is withholding each creature of ours that, on the plan's
-    // post-apply board, carries a GC, is not indestructible, and would attack: every subset of those (at most
-    // four; the rest attack as the provider says) is a plan variant, the natural attack first. The hold rides the
+    // post-apply board, the provider names as MAY DECLINE (DecisionProvider::MayDeclineAttack, step 9e; Stuffy:
+    // carries a GC and is not indestructible) and would attack: every subset of those (at most four; the rest
+    // attack as the provider says) is a plan variant, the natural attack first. The GC-on-board-or-cast pre-check
+    // below is only a cost filter for the one rule that exists (it skips the per-plan apply); a provider whose
+    // rule does not need a Guilty Conscience must widen it. The hold rides the
     // front of the plan's combat suffix (dmgrx::AttackHoldCode, DamageReflection.h) onto the state, where
     // AttackWith refuses it in the rollout's SimulateCombat and in the executor's real combat alike. Same scope as
-    // the combat-target fan below (pre-combat top-level lists, never human play -- the viewer declares attackers
-    // itself); beyond the horizon nothing clones, so the playout keeps the provider's attack. Inert unless the
+    // the combat-target fan below (pre-combat top-level lists, never human play -- there the human is asked at the
+    // declaration itself, AIEngine::DeclareAttackers, step 9e); beyond the horizon nothing clones, so the playout keeps the provider's attack. Inert unless the
     // deck is armed and a GC is on the battlefield or cast by the plan.
     if (state.reflect_armed && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive()
         && dmgrx::t_combat_probe.probe == nullptr)
@@ -99889,8 +99892,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         for (const Permanent& q : copy.battlefield)
                         {
                             if (holdable.size() >= 4) { break; }
-                            if (q.controller_index != me || q.HasKeyword(Keyword::Indestructible)) { continue; }
-                            if (dmgrx::AuraHostDamageBackOn(copy, q.card.m_number) == 0) { continue; }
+                            if (q.controller_index != me) { continue; }
+                            // Step 9e: WHO may stay home is the deck's rule (DecisionProvider::MayDeclineAttack;
+                            // Stuffy: a GC'd, non-indestructible creature), the same hook human play's
+                            // "attack with X?" prompt reads (AIEngine::DeclareAttackers): one set for both.
+                            if (!prov.MayDeclineAttack(copy, q)) { continue; }
                             if (!CanAttackFull(q, copy.battlefield, me) || !prov.AttackWith(copy, q)) { continue; }
                             holdable.push_back(q.card.m_number);
                         }

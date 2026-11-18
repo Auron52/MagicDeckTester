@@ -824,9 +824,9 @@ TEST_CASE("rfx step 5b: the search BRANCHES the combat-time reflection target, a
         combat_pins.insert(dmgrx::CombatPinsOf(p.reflect_targets));
     }
     // Both admitted targets are branched: the opponent's face and the GC'd Doll. (Our own face is F1-folded.)
-    // Step 9c adds the HOLD of the GC'd, non-indestructible Reckoner (no combat damage, so no target choice);
-    // its branch is checked by the step-9c cases.
-    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1603 }, { dmgrx::AttackHoldCode(1601) } });
+    // Step 9c's HOLD of the GC'd Reckoner is not here: since step 9e WHO may stay home is the provider's
+    // MayDeclineAttack, and this board runs the generic provider (default: nobody). The step-9c/9e cases check it.
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1603 } });
     int doll_lines = 0, face_lines = 0;
     for (const auto& p : plans)
     {
@@ -1020,9 +1020,8 @@ TEST_CASE("rfx step 6: the search BRANCHES the Reckoner's target over the Sliver
     }
     // Every admitted target is its own line: the face and each Spiteful Sliver. The Slivers' own granted
     // "target player" triggers are singletons after F1 and take no pin.
-    // Step 9c adds the HOLD of the GC'd, non-indestructible Reckoner (checked by the step-9c cases).
-    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1803 }, { 1804 },
-                                                     { dmgrx::AttackHoldCode(1801) } });
+    // No step-9c HOLD here: the generic provider names nobody under MayDeclineAttack (step 9e).
+    CHECK(combat_pins == std::set<std::vector<int>>{ { dmgrx::PlayerId(1) }, { 1803 }, { 1804 } });
     for (const auto& p : plans)
     {
         const std::vector<int> pins = dmgrx::CombatPinsOf(p.reflect_targets);
@@ -2177,7 +2176,8 @@ TEST_CASE("rfx step 9c: the search BRANCHES attack vs hold for a GC'd Reckoner, 
             CHECK(exec.players[1].life == roll.players[1].life);
             CHECK((Find(exec, 3603) != nullptr) == (Find(roll, 3603) != nullptr));
         }
-        CHECK(hold_lines == 1);
+        // Step 9e: the generic provider names nobody under MayDeclineAttack, so only the Stuffy arm holds.
+        CHECK(hold_lines == (arm == 1 ? 1 : 0));
         CHECK(attack_lines >= 1);
     }
 }
@@ -2186,7 +2186,9 @@ TEST_CASE("rfx step 9c: no hold axis for an indestructible GC host, a sick one, 
 {
     TurnSolver::Plan pass;
     pass.land_decided = true;
-    auto holds = [&](const GameState& s) {
+    // Step 9e: the hold set is the provider's MayDeclineAttack -- every case runs the Stuffy provider.
+    auto holds = [&](GameState s) {
+        s.m_provider = &StuffyP();
         int n = 0;
         for (const auto& p : TurnSolver::SubdecisionAxesForTest(s, true, { pass }))
         {
@@ -2222,8 +2224,10 @@ TEST_CASE("rfx step 9c: no hold axis for an indestructible GC host, a sick one, 
         s.reflect_armed = false;
         CHECK(holds(s) == 0);
     }
+    CHECK(holds(HoldBoard()) == 1);   // the control: the settled GC'd Reckoner is held under the Stuffy provider
     {   // two GC'd attackers: every subset (3 holds beside the natural attack)
         GameState s = HoldBoard();
+        s.m_provider = &StuffyP();
         PutRfx(s, "Mogg Maniac", 3607);
         AttachGc(s, 3608, 3607);
         std::set<std::vector<int>> subsets;
@@ -2481,4 +2485,160 @@ TEST_CASE("rfx step 9d: Loran's scry is SEARCHED (pinned twin, both worlds) and 
         CHECK(bottomed == (esc->scry_pin == 1 && DecisionUnpruned(UnprunedGate::StuffyScry)));
     }
     CHECK(firm == std::set<int>{ -1, 1 });
+}
+
+// ---- STEP 9e: the attack-hold PROVIDER HOOK (USER 2026-11-18 ~00:37) and human play's "attack with X?" --------
+// "I think we can make it an exception to the always attack-rule. Perhaps have a deck heuristic that can be
+// consulted to reject attacking?" DecisionProvider::MayDeclineAttack names who may stay home (default: nobody);
+// the searched fan (step 9c) and the human prompt (AskHumanAttackHolds) read the same hook.
+
+TEST_CASE("rfx step 9e: MayDeclineAttack -- default false; Stuffy names a GC'd, non-indestructible creature only")
+{
+    GameState s = HoldBoard();                                   // a settled GC'd Reckoner (3603, GC 3604)
+    PutRfx(s, "Stuffy Doll", 3605).chosen_player = 1;
+    AttachGc(s, 3606, 3605);                                     // GC'd but indestructible (printed)
+    PutRfx(s, "Mogg Maniac", 3607);                              // no GC
+    PutRfx(s, "Mogg Maniac", 3608).temp_indestructible = true;   // GC'd, Escaped this turn
+    AttachGc(s, 3609, 3608);
+    const GenericProvider g;
+    for (const Permanent& q : s.battlefield)
+    {
+        INFO("permanent ", q.card.m_number);
+        CHECK_FALSE(g.MayDeclineAttack(s, q));
+        CHECK(StuffyP().MayDeclineAttack(s, q) == (q.card.m_number == 3603));
+    }
+}
+
+namespace
+{
+struct HumanAttackAsk
+{
+    int answer = -1;
+    std::vector<int> asked;          // examined[0]'s card number per ask
+    std::vector<int> defaults;       // heuristic_pick per ask
+    std::vector<std::string> sources;
+    DigChooser fn;
+    DigChooser* prior = nullptr;
+    HumanAttackAsk()
+    {
+        fn = [this](const GameState&, int, const std::string& src, const std::vector<Card>& ex,
+                    const std::vector<int>& legal, int def) {
+            REQUIRE(ex.size() == 1u);
+            CHECK(legal == std::vector<int>{ 0 });
+            asked.push_back(ex[0].m_number);
+            defaults.push_back(def);
+            sources.push_back(src);
+            return answer == 99 ? def : answer;
+        };
+        prior = g_play_dig_chooser;
+        g_play_dig_chooser = &fn;
+    }
+    ~HumanAttackAsk() { g_play_dig_chooser = prior; }
+};
+bool Declared(const GameState& s, int number)
+{
+    for (int i : DeclareAttackerIndices(s)) { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == number) { return true; } }
+    return false;
+}
+// HoldBoard + a settled Mogg Maniac without a GC (3607): it attacks and is never asked about.
+GameState HumanHoldBoard()
+{
+    GameState s = HoldBoard();
+    s.m_provider = &StuffyP();
+    PutRfx(s, "Mogg Maniac", 3607);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9e: human play asks 'attack with X?' ONLY for the creature the hook names; 'no' holds it")
+{
+    {   // "keep it home": asked once, for the GC'd Reckoner, default attack; it does not attack, the Maniac does
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = -1;
+        CHECK(AskHumanAttackHolds(s) == 1);
+        CHECK(h.asked == std::vector<int>{ 3603 });
+        CHECK(h.defaults == std::vector<int>{ 0 });
+        CHECK(h.sources[0].find("(may attack)") != std::string::npos);
+        CHECK(dmgrx::AttackHeld(s, 3603));
+        CHECK_FALSE(Declared(s, 3603));
+        CHECK(Declared(s, 3607));
+    }
+    {   // "attack": no hold written, both attack
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = 0;
+        CHECK(AskHumanAttackHolds(s) == 1);
+        CHECK(s.scripted_combat_reflect.empty());
+        CHECK(Declared(s, 3603));
+        CHECK(Declared(s, 3607));
+    }
+    {   // the REAL declaration (AIEngine::DeclareAttackers) asks and honours the answer
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = -1;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        const std::vector<Permanent*> atk = eng.DeclareAttackers(s);
+        CHECK(h.asked == std::vector<int>{ 3603 });
+        REQUIRE(atk.size() == 1u);
+        CHECK(atk[0]->card.m_number == 3607);
+    }
+    {   // the generic provider names nobody: no prompt at all (every other deck)
+        GameState s = HumanHoldBoard();
+        s.m_provider = nullptr;
+        HumanAttackAsk h;
+        CHECK(AskHumanAttackHolds(s) == 0);
+        CHECK(h.asked.empty());
+        CHECK(Declared(s, 3603));
+    }
+    {   // an indestructible GC host (the Doll) and a summoning-sick GC'd creature are not asked about
+        GameState s = HumanHoldBoard();
+        for (Permanent& q : s.battlefield) { if (q.card.m_number == 3603) { q.entered_this_turn = true; } }
+        PutRfx(s, "Stuffy Doll", 3605).chosen_player = 1;
+        AttachGc(s, 3606, 3605);
+        HumanAttackAsk h;
+        CHECK(AskHumanAttackHolds(s) == 0);
+    }
+    {   // no chooser (autonomous play, every search scope): nothing asked, nothing held
+        GameState s = HumanHoldBoard();
+        CHECK(AskHumanAttackHolds(s) == 0);
+        CHECK(s.scripted_combat_reflect.empty());
+    }
+}
+
+TEST_CASE("rfx step 9e: a --force-attackers replay -- the prompt's default is the RECORDED declaration")
+{
+    std::vector<std::string> recorded;
+    AttackersChooser pin = [&](int) -> const std::vector<std::string>* { return &recorded; };
+    AttackersChooser* prior = g_play_attackers_chooser;
+    g_play_attackers_chooser = &pin;
+    {   // the recording held the Reckoner (absent from the recorded set): default -1, held
+        recorded = { "Mogg Maniac" };
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = 99;   // take the default
+        CHECK(AskHumanAttackHolds(s) == 1);
+        CHECK(h.defaults == std::vector<int>{ -1 });
+        CHECK_FALSE(Declared(s, 3603));
+        CHECK(Declared(s, 3607));
+    }
+    {   // the recording attacked with it: default 0, attacks
+        recorded = { "Boros Reckoner", "Mogg Maniac" };
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = 99;
+        CHECK(AskHumanAttackHolds(s) == 1);
+        CHECK(h.defaults == std::vector<int>{ 0 });
+        CHECK(Declared(s, 3603));
+    }
+    {   // a stream answer "keep it home" outranks a pin that names it (the pinned path reads the hold)
+        recorded = { "Boros Reckoner", "Mogg Maniac" };
+        GameState s = HumanHoldBoard();
+        HumanAttackAsk h;
+        h.answer = -1;
+        AskHumanAttackHolds(s);
+        CHECK_FALSE(Declared(s, 3603));
+        CHECK(Declared(s, 3607));
+    }
+    g_play_attackers_chooser = prior;
 }

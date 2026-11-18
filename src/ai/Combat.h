@@ -25,6 +25,19 @@
 // pointers, SimulateCombat inlined the identical predicate.
 std::vector<int> DeclareAttackerIndices(const GameState& state);
 
+// HUMAN PLAY's attack hold (Stuffy Doll step 9e; USER 2026-11-18). For each creature of the active player that can
+// attack, would attack, and the deck's provider names as MAY DECLINE (DecisionProvider::MayDeclineAttack), ask the
+// shared dig chooser "attack with X?" (examined[0] = the creature; 0 = attack, -1 = keep it home). Each "keep it
+// home" answer becomes a hold code at the front of GameState::scripted_combat_reflect (dmgrx::AttackHoldCode), the
+// very state the searched hold (step 9c) writes, so DecisionProvider::AttackWith and the --force-attackers pin
+// refuse it alike. Default = attack; on a reference replay that pins this turn's attackers (--force-attackers) the
+// default is the RECORDED declaration -- a named creature absent from the recorded set was held. Called only by
+// the real declaration (AIEngine::DeclareAttackers, never inside a rollout); inert unless the dig chooser is set
+// (human play only: RevealLogPause nulls it for every search scope), the deck is armed (the hold codes are the
+// damage-reflection pipeline's) and the provider names a creature, so every other deck asks nothing.
+// Returns how many creatures were asked.
+int AskHumanAttackHolds(GameState& state);
+
 struct CombatDamageResult
 {
     int total_damage      = 0;   // combat damage + attack-trigger life loss (the attack-log total)

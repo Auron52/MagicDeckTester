@@ -35,6 +35,47 @@ static int AttackerDamageLowerBound(const GameState& state, const Permanent& p, 
     return base_pw;
 }
 
+int AskHumanAttackHolds(GameState& state)
+{
+    if (g_play_dig_chooser == nullptr || !state.reflect_armed) { return 0; }
+    const int active = state.active_player_index;
+    if (active != 0) { return 0; }   // the human's deck is player 0 under --claude-play
+    const DecisionProvider& provider = ResolveProvider(state);
+    // The pin's default, read exactly as DeclareAttackerIndices consumes it (battlefield order, eligible only).
+    const std::vector<std::string>* pin =
+        g_play_attackers_chooser != nullptr ? (*g_play_attackers_chooser)(state.TurnSeq()) : nullptr;
+    std::vector<std::string> want = pin != nullptr ? *pin : std::vector<std::string>{};
+    std::vector<int> holds;
+    int asked = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        bool named = false;
+        if (pin != nullptr)
+        {
+            auto it = std::find(want.begin(), want.end(), p.card.m_name.str());
+            if (it != want.end()) { want.erase(it); named = true; }
+        }
+        if (!provider.MayDeclineAttack(state, p)) { continue; }
+        if (!named && !provider.AttackWith(state, p)) { continue; }   // it would not attack: nothing to decline
+        const int def = (pin != nullptr && !named) ? -1 : 0;
+        const std::vector<Card> examined{ p.card };
+        const std::vector<int> legal{ 0 };
+        const std::string source = p.card.m_name.str() + " (may attack) -- attack with " + p.card.m_name.str()
+            + " this combat, or keep it home";
+        ++asked;
+        if ((*g_play_dig_chooser)(state, active, source, examined, legal, def) != 0) { holds.push_back(p.card.m_number); }
+    }
+    if (!holds.empty())
+    {
+        std::vector<int> codes;
+        for (int n : holds) { codes.push_back(dmgrx::AttackHoldCode(n)); }
+        state.scripted_combat_reflect.insert(state.scripted_combat_reflect.begin(), codes.begin(), codes.end());
+    }
+    return asked;
+}
+
 std::vector<int> DeclareAttackerIndices(const GameState& state)
 {
     std::vector<int> atk_idx;
@@ -81,7 +122,16 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
                 if (p.controller_index != active) { continue; }
                 if (!CanAttackFull(p, state.battlefield, active)) { continue; }
                 auto it = std::find(want.begin(), want.end(), p.card.m_name.str());
-                if (it != want.end()) { want.erase(it); atk_idx.push_back(i); continue; }
+                // A human HOLD answered at this declaration (AskHumanAttackHolds, step 9e) outranks the pin:
+                // the prompt's default on a pinned turn IS the recorded set, so the two only disagree when the
+                // replay's --choices stream says the recorded game held it. Consumed either way (the multiset
+                // stays aligned with the recording's copies).
+                if (it != want.end())
+                {
+                    want.erase(it);
+                    if (!dmgrx::AttackHeld(state, p.card.m_number)) { atk_idx.push_back(i); }
+                    continue;
+                }
                 // Invisible to the recording (see above): let the heuristic decide, exactly as it
                 // would on an unpinned turn. The bound is conservative -- it never reports 0 for a
                 // creature that would actually connect -- so this can only ever re-admit an

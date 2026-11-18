@@ -4211,6 +4211,8 @@ public:
     bool ScryKeepOnTop(const GameState& s, const Card& top_card) const override;
     // Step 9c: the USER's order -- Guilty Conscience before Loran's Escape (definition note).
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    // Step 9e: a Guilty-Conscience-enchanted, non-indestructible creature may stay home (definition note).
+    bool MayDeclineAttack(const GameState& s, const Permanent& attacker) const override;
     bool HasExtraLethalModel() const override { return true; }
     int  ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
     CertStance Certificate() const override

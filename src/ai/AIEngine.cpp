@@ -11513,6 +11513,10 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
     else if (pin == 2) { g_dork_atk_override = 0; }
     else if (pin == 3) { g_dork_atk_override = 3; }
     else if (pin == 4) { g_dork_atk_override = 4; }   // Soulstoke held for the opponent's end-step window
+    // Step 9e: human play's "attack with X?" for the creatures the deck's provider names (MayDeclineAttack). A
+    // "keep it home" answer lands as a hold code on the state, read by AttackWith and the --force-attackers pin.
+    // Inert unless the dig chooser is set (human play) and the provider names a would-attack creature.
+    if (!m_in_rollout) { AskHumanAttackHolds(state); }
     std::vector<Permanent*> attackers;
     for (int idx : DeclareAttackerIndices(state))
     { attackers.push_back(&state.battlefield[idx]); }
@@ -11546,6 +11550,7 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
             const bool listed_atk = std::find(pinned.begin(), pinned.end(),  num) != pinned.end();
             const bool listed_not = std::find(pinned.begin(), pinned.end(), -num) != pinned.end();
             const bool natural    = std::find(attackers.begin(), attackers.end(), &q) != attackers.end();
+            if (listed_atk && dmgrx::AttackHeld(state, num)) { continue; }   // a hold (searched or human) stands
             if (listed_atk)
             {
                 if (!CanAttackFull(q, state.battlefield, active)) { parted = true; break; }
