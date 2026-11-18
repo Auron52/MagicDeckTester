@@ -3300,10 +3300,8 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
     {
         if (p.controller_index == controller && p.card.m_name == def.card.m_name)
         {
-            // Cast triggers resolve before the duplicate enters. Even d0 must see a second
-            // Mihail: the resident one can turn its cast into a token for {1}.
-            if (DuplicateCastHasUpside(s, controller, def)) { return true; }
-            // ...unless the ENTRY or the legend-rule DEATH itself has upside, in which case the
+            // Offer the duplicate anyway when the CAST, the ENTRY or the legend-rule DEATH itself
+            // has upside -- but only below the greedy gate further down. In that case the
             // cast was never the tie this prune assumes (see DuplicateEntryOrDeathHasUpside above:
             // a second Lathliss is a 5/5 Dragon token, a second Lyra Dawnbringer is three life-gain
             // events, a team of +1/+1 counters and a Spirit).
@@ -3326,6 +3324,15 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
             // exactly the rejection this fix exists to remove; the human path is d0 without being
             // greedy, since a person, not the static scorer, is choosing.
             if (!HumanPlayActive() && !g_searched_play) { return false; }
+            // Cast triggers resolve before the duplicate enters (DuplicateCastHasUpside above: a
+            // resident Emperor Mihail II can turn a second Mihail's cast into a Merfolk token for
+            // {1}; a Worthy Knight makes a 1/1 Human off a second Adeline). Searched and human play
+            // see that option; autonomous d0 does NOT, per the same 2026-08-29 ruling (USER,
+            // 2026-11-18, restoring it: "Yes, we should restore the gate most likely. It's too
+            // tricky to get depth-0 to be smart about this for now."). 451a4c571 had placed this
+            // call above the gate, which let greedy d0 trade a castable creature for a dead legend
+            // plus a token (White Knights d0 gi 318/373/847/968).
+            if (DuplicateCastHasUpside(s, controller, def)) { return true; }
             if (DuplicateEntryOrDeathHasUpside(s, controller, def)) { return true; }
             // ...and, for searched/human play only, offer the duplicate whenever its ENTRY or its
             // legend-rule DEATH has upside (DuplicateEntryOrDeathHasUpside above: a second Lathliss

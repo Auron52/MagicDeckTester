@@ -332,15 +332,27 @@ TEST_CASE("A second Emperor Mihail II cast remains available for the first one's
     Card copy = emperor->card;
     copy.m_number = 402;
     state.players[0].hand.push_back(copy);
+    auto offered_in_plans = [&state]() {
+        bool offered = false;
+        for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+        {
+            for (const Action& action : plan.actions)
+            { offered |= action.kind == Action::Kind::CastFromHand
+                      && action.card_name == "Emperor Mihail II"; }
+        }
+        return offered;
+    };
+    const bool saved_searched = g_searched_play;
+    // Autonomous d0 keeps the duplicate-legend prune even for a cast trigger (USER 2026-08-29 ruling,
+    // restored 2026-11-18): the greedy scorer cannot weigh the dead legend against the token.
+    TurnSolver::SetSearchedPlay(false);
+    CHECK_FALSE(provider.OfferDuplicateLegendCast(state, 0, *emperor));
+    CHECK_FALSE(offered_in_plans());
+    // Searched play is offered the cast, so the search can weigh the {1} token payment.
+    TurnSolver::SetSearchedPlay(true);
     CHECK(provider.OfferDuplicateLegendCast(state, 0, *emperor));
-    bool offered = false;
-    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
-    {
-        for (const Action& action : plan.actions)
-        { offered |= action.kind == Action::Kind::CastFromHand
-                  && action.card_name == "Emperor Mihail II"; }
-    }
-    CHECK(offered);
+    CHECK(offered_in_plans());
+    TurnSolver::SetSearchedPlay(saved_searched);
     state.floating_mana.colorless = 1;
     state.scripted_mihail_pay_choice.Pin(1);
     state.scripted_mihail_pay_choice.bits[0] = 1;
