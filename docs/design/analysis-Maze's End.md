@@ -430,8 +430,9 @@ Before that: Maze's End (when its condition holds) + Baldur's if missing + Gond 
 fetch. Fail-to-find unchanged.
 USER clarification (VERBATIM): "Have for Gond Gate here includes in hand. We shouldn't search it if we have it
 anywhere." So Gond Gate is offered only with none on the battlefield AND none in hand, and "we have Gond Gate" in the
-new-name gate means battlefield or hand. Baldur's Gate: the same "anywhere" reading is the COORDINATOR's default, not
-the user's.
+new-name gate means battlefield or hand. Baldur's Gate: the same "anywhere" reading was first the COORDINATOR's
+default; now CONFIRMED by the USER (2026-11-18, relayed by the coordinator, VERBATIM): "Baldur's gate would also be
+fine that way, but it doesn't matter because there is one copy. If it is in hand you cannot search for it."
 USER ruling on Maze's End's count (VERBATIM): "Same with Maze's end, actually. Having 2 in hand means we don't need
 anymore." So "have" for Maze's End = battlefield + hand (USER): 2+ anywhere -> not offered; 1 anywhere + an Amulet of
 Vigor -> not offered.
@@ -699,6 +700,96 @@ measurement also carries mulligan-GENERATION shapes d1 b1 and d1 b3 (~30 games e
 * **B2 verified as built** (USER's corrected ruling): unit "Maze's End P1c (USER B2)" -- Charm (ForcedTapped) ->
   Gond Gate with no other Gond: tapped; with an Amulet: untapped; with another Gond out: untapped; Charm -> Simic
   with a Gond out: untapped. No code change.
+
+### P1d (2026-11-18): the USER-directed provider prunes (B1, P1-P3)
+All in `MazesEndProvider`, engine untouched, each a heurarm lever DEFAULT ON (`cd5d47686`); units in
+`test/unit/test_mazes_end_p1d.cpp` (the older menu tests pin the prunes off):
+* **B1 `MTG_MAZE_SUMMIT_COUNT`** -- Guild Summit's count menu {rest-of-line, 0, all} (U <= 1 keeps {0, all}). The
+  rest-of-line count rides the UNPINNED cast (chosen_x 0) and is computed at resolution by
+  `EtbTapSubtypeDrawDefault`: untapped Gates minus what the rest of the applying line owes (`g_line_unpaid_cost`, plus
+  Maze's End's {3} when an untapped Maze's End is ours and the hold carries no activations), net of floating mana and
+  untapped non-Gate lands. It is ALSO the beyond-horizon / unpinned default now (decision 8 was "all") -- a playout
+  policy change bundled with the prune. The hold covers casts only, so the Maze's End reserve is a board heuristic.
+* **P1 `MTG_MAZE_ONE_COLOUR`** -- one colour: no green source on our battlefield -> G; else no blue source -> U; else
+  G; neither admitted -> the first admitted. A source = a permanent's own colours (`EffectiveProducesFor`, locked
+  CLB / Thran Portal colours included); filters (Planar Nexus, Heap Gate, Talon Gates) and Gond Gate's reflection
+  are not sources (default taken).
+* **P2 `MTG_MAZE_SPEND_NEVERCAST`** -- the spendable-colour premise skips `NeverCast` cards (Gates Ablaze), so G/U.
+  Gates Ablaze never autonomous: VERIFIED (`NeverCast`, unchanged since I1).
+* **P3 `MTG_MAZE_LAND_TARGETS`** -- the USER's menu (coordinator reading above). Defaults taken: the Amulet counts
+  on the battlefield OR in hand; the new-name Gate is not-in-hand first, then FEWEST copies left in the library
+  (singleton), then usable on entry, then the higher ManaSourceRank; an empty menu falls back to every name.
+  Burgeoning / Manabond are NOT the same decision (they put lands from HAND, a which-land choice, not a search) --
+  listed under P4.
+
+**Held-out A/B** (`build/scratch/maze/p1d/ab1`; seeds d3 b10 94001+gi, d5 b10 95001+gi, d0 93001+gi, 60 games
+each; 6 arms innermost in ONE pooled batch, 8 workers -- MEMORY exception, peak RSS 15.4 GB, 45 min; W = 0 then):
+
+| shape | arm | avg win turn | wins <= T8 | ms/game | units/game | vs base (better/worse) |
+|---|---|---|---|---|---|---|
+| d3 b10 | base (all off) | 6.7500 | 57 | 50,936 | 1,391,578 | |
+| d3 b10 | B1 | **6.4833** | 58 | 46,814 | 1,243,012 | 18/3 |
+| d3 b10 | P1 | 6.6500 | 56 | 35,780 | 1,014,769 | 10/4 |
+| d3 b10 | P2 | 6.7167 | 56 | 39,510 | 1,186,743 | 5/3 |
+| d3 b10 | P3 | 6.9500 | 52 | 8,910 | 218,733 | 9/16 |
+| d3 b10 | **all** | **6.3667** | **58** | **5,504** | **134,942** | **25/3** |
+| d5 b10 | base | 6.5500 | 58 | 35,804 | 1,085,939 | |
+| d5 b10 | B1 | 6.3167 | 59 | 32,779 | 959,079 | 13/0 |
+| d5 b10 | P1 | 6.4333 | 59 | 27,466 | 868,056 | 9/4 |
+| d5 b10 | P2 | 6.4833 | 59 | 31,828 | 979,533 | 5/2 |
+| d5 b10 | P3 | 6.6333 | 57 | 6,962 | 194,908 | 11/15 |
+| d5 b10 | **all** | **6.2167** | 59 | **4,934** | **130,107** | **20/7** |
+| d0 | base | 7.3167 | 45 | | | |
+| d0 | B1 / P1 / P2 | 7.3333 / 7.3333 / 7.2500 | 45 / 47 / 46 | | | 7/5, 4/6, 7/3 |
+| d0 | P3 / all | 7.0667 / 7.1833 | 48 / 46 | | | 14/6, 16/10 |
+
+All four together: -0.383 turns at d3, -0.333 at d5, ~9x / ~7x cheaper. B1, P1, P2 each better alone. **P3 alone is
+WORSE** at d3 (+0.200, 52 vs 57 wins) and d5 (+0.083) though ~6x cheaper and better at d0; together with the others
+it is part of the best arm. Root cause (replays in `p1d/diag/`): **d3 seed 94035 gi34** -- base: T5 Sylvan Scrying
+finds **Talon Gates of Madara**, put from hand for {4} the same turn (NOT a land play), win T6; P3 alone: Baldur's Gate
+is already out but Gond Gate is not held, so the menu is {Gond Gate} (the new-name slot waits for Gond), Gond takes
+T5's land drop, win T8. The rule cannot see that Talon Gates is a new name that does not compete for the drop.
+Other P3-worse replays (d5 95043 gi42, d3 94012 gi11, 94030 gi29) diverge on turn 2-3 search choices (Manabond vs
+Guild Summit, which land first) with no single menu cause visible: search-value differences under the narrower
+tree. **Proposed amendment (USER call), lever `MTG_MAZE_TALON_TARGET` (DEFAULT OFF):** a land tutor also offers Talon
+Gates while it is in the library and not held -- measured below. P3 stays ON (the "all" arm is the best arm).
+
+**Second pooled batch (`p1d/ab2`, binary with W = 1 default + the two new levers; NEW held-out seeds d3 96001+gi,
+d5 97001+gi, 60 games; d1 b1 98001+gi and d1 b3 98101+gi, 30 games; 8 workers, 5.8 min, peak RSS 2.4 GB):**
+
+| shape | arm | avg win turn | wins <= T8 | ms/game | units/game | vs ship (better/worse) |
+|---|---|---|---|---|---|---|
+| d3 b10 | **ship** (all 4 prunes, W = 1) | 6.2000 | 59 | **1,794** | 150,254 | |
+| d3 b10 | W = 0 | 6.1667 | 59 | 2,868 | 103,953 | 5/3 |
+| d3 b10 | + ACTIVATE_FIRST | 6.2333 | 59 | 1,831 | 153,115 | 0/2 |
+| d3 b10 | + TALON_TARGET | **6.1667** | 59 | 1,908 | 165,036 | 3/1 |
+| d3 b10 | P3 alone, W = 0 | 6.6833 | 58 | 5,701 | 189,509 | 1/23 |
+| d3 b10 | P3 + TALON alone, W = 0 | 6.6833 | 58 | 5,941 | 200,470 | (vs P3 alone 4/2) |
+| d5 b10 | **ship** | 6.3000 | 58 | **1,170** | 95,891 | |
+| d5 b10 | W = 0 | 6.3167 | 58 | 2,132 | 68,846 | 2/3 |
+| d5 b10 | + ACTIVATE_FIRST | 6.3000 | 58 | 1,164 | 95,897 | 1/1 |
+| d5 b10 | + TALON_TARGET | **6.2500** | 58 | 1,238 | 101,295 | 3/0 |
+| d5 b10 | P3 alone, W = 0 | 6.7833 | 55 | 3,474 | 99,703 | 1/23 |
+| d5 b10 | P3 + TALON alone, W = 0 | 6.6833 | 56 | 3,273 | 99,636 | (vs P3 alone 4/0) |
+| d1 b1 (mulligan gen) | ship (W = 1) | 6.3000 | 28/30 | **733** | 63,767 | |
+| d1 b1 | W = 0 | 6.3667 | 28/30 | 1,148 | 36,165 | 2/4 |
+| d1 b3 (mulligan gen) | ship (W = 1) | 6.3333 | 30/30 | **3,077** | 229,750 | |
+| d1 b3 | W = 0 | 6.2667 | 30/30 | 5,039 | 136,742 | 6/3 |
+
+* **Cost vs the 3x rule (15,510 ms/game):** d3 b10 1.8 s and d5 b10 1.2 s per game at the shipped shape (8-worker
+  contention; not yet `suite_gate.py --cost`, which needs suite cases). Both well under; was 30-51 s (d3) and 12-36 s
+  (d5) before the prunes.
+* **W = 1 (USER A3) is now the default** (`MazesEndProvider::SolveChargeWeightOptIn` = 1; levers kept:
+  `MTG_SOLVE_CHARGE_W`, heurarm `MTG_SOLVE_CHARGE` = false for the uncharged control). On the pruned tree W = 1 is
+  ~1.6-1.8x cheaper at every shape and within noise on win turn (d3 +0.033, d5 -0.017, d1 b1 -0.067, d1 b3 +0.067).
+* **d1 (mulligan generation): the uncharged greedy walk dominates.** At W = 0 the walk is unbilled: d1 b1 spends 1,148
+  ms on 36K units (31.7 us/unit) against W = 1's 733 ms on 64K units (11.5 us/unit); ~28K of W = 1's units are walk
+  visits now billed. Read: about two thirds of a W = 0 d1 game's wall is the greedy walk.
+* **Item 5, `MTG_MAZE_ACTIVATE_FIRST` (USER A4, a move-order tier, DEFAULT OFF): no gain** (d3 0/2 worse, d5 1/1).
+  Beyond the horizon it is already covered: the playout's 200 new-name fetch eval takes the activation whenever no
+  land drop + new-name Gate remain (the P1c deferral). Recommendation: leave OFF (the USER's call).
+* **P3 amendment `MTG_MAZE_TALON_TARGET` (DEFAULT OFF, USER call): better on top of ship** (d3 -0.033 3/1, d5 -0.050
+  3/0, +6% cost) and on top of P3 alone (d5 -0.100, 4/0). Recommendation: adopt.
 
 ### Memory (new finding, P1b)
 A heavy Maze's End d3 game holds ~1.5-2+ GB of transient RSS beyond the bounded pools (the pools read fsl 0 /

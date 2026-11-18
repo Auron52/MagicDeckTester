@@ -66463,6 +66463,26 @@ bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::stri
         const std::string nn = MazePickNewNameGate(s, ctrl, names, prov);
         if (!nn.empty()) { out.push_back(nn); }
     }
+    // PROPOSED AMENDMENT (MTG_MAZE_TALON_TARGET, DEFAULT OFF until the USER rules): a land tutor also offers Talon
+    // Gates of Madara (hand_put_self_cost: "{4}: put this from your hand onto the battlefield" -- not a land play)
+    // while it is in the library and no copy is held or controlled. It adds a Gate name WITHOUT using the land drop,
+    // which the P3 menu's "one new name only after Baldur's and Gond" deferral cannot see (held-out d3 seed 94035
+    // gi34: the unpruned search fetched it on T5 and won T6; P3 alone fetched Gond Gate and won T8).
+    static const bool s_talon = EnvOn("MTG_MAZE_TALON_TARGET");   // DEFAULT OFF
+    if (with_maze && heurarm::Flag(heurarm::MAZE_TALON_TARGET, s_talon))
+    {
+        for (const std::string& nm : names)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            if (d == nullptr || !d->params.hand_put_self_cost.has_value() || !MazeDefIsGate(d)
+                || MazeControlsGateNamed(s, ctrl, nm)
+                || std::find(out.begin(), out.end(), nm) != out.end()) { continue; }
+            bool in_hand = false;
+            for (const Card& c : s.players[static_cast<std::size_t>(ctrl)].hand) { if (c.m_name.str() == nm) { in_hand = true; break; } }
+            if (!in_hand) { out.push_back(nm); }
+            break;
+        }
+    }
     if (out.empty()) { return false; }
     names.swap(out);
     return true;
@@ -66783,6 +66803,35 @@ int MazesEndProvider::EtbTapSubtypeDrawDefault(const GameState& s, int controlle
         ++other;
     }
     return std::clamp(avail - std::max(0, owed - other), 0, avail);
+}
+
+// Maze's End P1d item 5 (USER A4: "If we have no land drop, though, (and hence Maze's end let's us use the drop it
+// might make sense to use."), MTG_MAZE_ACTIVATE_FIRST, DEFAULT OFF until measured and adopted by the USER. With no land
+// left to play this turn -- no open land drop after the plan's own land, or no land card in hand -- a plan that
+// activates Maze's End for a Gate (not the fail-to-find) is TRIED FIRST among its peers: a move-order tier
+// (MoveOrderLess, below wins_this_turn), ORDER only, nothing removed, so a budget reaches it first and an unlimited
+// budget searches exactly the same set. Beyond the horizon nothing is needed: the greedy playout already ranks a
+// new-name fetch at 200 (TapTutorPutEval) and the P1c deferral zeroes it only while a drop and a new-name Gate remain.
+bool MazesEndProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                                          const std::vector<int>& sel, bool projected_lethal) const
+{
+    static const bool s_on = EnvOn("MTG_MAZE_ACTIVATE_FIRST");   // DEFAULT OFF
+    if (!heurarm::Flag(heurarm::MAZE_ACTIVATE_FIRST, s_on))
+    { return DeckProvider::PlanMoveOrderFront(s, cands, sel, projected_lethal); }
+    bool activates = false, plays_land = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::PlayLand) { plays_land = true; }
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && MazeIsMazeDef(a.def) && a.tutor_target != kTutorDeclineTarget) { activates = true; }
+    }
+    if (!activates) { return false; }
+    const Player& pl = s.players[static_cast<std::size_t>(s.active_player_index)];
+    const bool drop_open = pl.LandDropsAvailable() - pl.lands_played_this_turn - (plays_land ? 1 : 0) >= 1;
+    bool land_in_hand = false;
+    for (const Card& c : pl.hand) { if (c.IsLand()) { land_in_hand = true; break; } }
+    return !drop_open || !land_in_hand;
 }
 
 // Maze's End P1b: ALTERNATE-WIN PROGRESS in the graded no-win leaf (see the base hook). The opponent's life never
