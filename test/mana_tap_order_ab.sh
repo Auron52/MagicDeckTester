@@ -106,6 +106,12 @@ ARMSETS["burnorders2"] = {
     "fix":  {"MTG_ONEDROPBURN_ORDER": False, "MTG_MIDRANGE_FIREBLAST_ORDER": False, "MTG_SPECTACLE_CREDIT_ETB_OPP": True},
     "on":   {"MTG_ONEDROPBURN_ORDER": True,  "MTG_MIDRANGE_FIREBLAST_ORDER": True,  "MTG_SPECTACLE_CREDIT_ETB_OPP": True},
 }
+# After the flip (orders DEFAULT ON): the hoisted-Lavamancer spectacle credit alone (MTG_SPECTACLE_CREDIT_HOIST,
+# found by the flip's regression seed 3102 gi 99), base = shipped flip without it.
+ARMSETS["burnhoist"] = {
+    "base": {"MTG_SPECTACLE_CREDIT_HOIST": False},
+    "fix":  {"MTG_SPECTACLE_CREDIT_HOIST": True},
+}
 ARMS = ARMSETS[os.environ.get("ARMSET", "levers")]
 jobs = []
 for spec in cases:

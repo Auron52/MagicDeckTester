@@ -61019,10 +61019,23 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
             { out.trig[j] = 1; }
         }
     }
+    // A HOISTED face graveyard ping (MTG_SPECTACLE_CREDIT_HOIST, EngineFlags.h) runs ahead of every cast of the
+    // plan (SpectacleGraveyardDamageFirst), so it precedes every spectacle cast in the selection.
+    std::vector<int> hoisted;
+    if (SpectacleCreditHoistOn() && ResolveProvider(state).HoistsFaceGraveyardDamage(state))
+    {
+        for (std::size_t k = 0; k < m; ++k)
+        {
+            const Action& h = cands[k];
+            if (h.kind == Action::Kind::GraveyardExileAbility && h.gy_exile_mode == 3 && h.enchant_target == 0)
+            { hoisted.push_back(static_cast<int>(k)); }
+        }
+    }
     // The executor stable-sorts casts by CastOrderLess. Equal-ranked copies retain candidate order.
     for (std::size_t j = 0; j < m; ++j)
     {
         if (!out.spec[j]) { continue; }
+        for (int k : hoisted) { out.prior_trig[j].push_back(k); out.live = true; }
         for (std::size_t k = 0; k < m; ++k)
         {
             if (k == j || !out.trig[k]) { continue; }
