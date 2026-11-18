@@ -9943,6 +9943,116 @@ static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
     return widened ? scratch : have;
 }
 
+// ---- SAC-FOR-MANA FODDER ON THE PLAN MENU (MTG_SAC_FODDER_MENU) ----------------------------------------
+// The §2b payer (TapForCostSharedImpl's fodder-last block) eats a legal body through a LIVE sac-for-mana
+// outlet (Skirk Prospector "Sacrifice a Goblin: Add {R}", Utopia Mycon "Sacrifice a Saproling: Add one mana
+// of any color") whenever the board cannot pay without one. The enumerator's mana gates credited that
+// supply only through AvailableManaPool / BuildNonCreaturePool, i.e. only when the outlet is ALREADY on the
+// battlefield as the menu is built. So a plan that CASTS the outlet and then pays a later cast by eating
+// (Skirk itself, a Goblin Lackey on the board, a Goblin cast earlier in the same plan) never reached the
+// menu -- at ANY budget: an unfindable line (mana oracle ENUM-GAP, Goblins gate slice gi 125000-126999:
+// 688 of 706; Fungus 119 of 129; docs/design/sac-fodder-menu-2026-11-18.md).
+//
+// This context is the plan-made supply, built once per enumeration:
+//   * an outlet CAST (or vialed / Bronze-put) in the subset makes every legal body on the board, the
+//     outlet's own body (unless "Sacrifice ANOTHER") and the subset's own matching bodies fodder;
+//   * with an outlet already live, the board's bodies are already in the pool, so only the subset's own
+//     matching bodies (a Goblin cast this turn, Siege-Gang's three tokens) are added.
+// A NECESSARY-CONDITION widening, the same over-count licence every addend of these gates takes ("a loose
+// bound fails to prune; a tight one prunes a payable cost"): it can only ADMIT a subset, never refuse one,
+// and the apply pays for real. Same gates as LiveSacPayOutlet (the payer's own): off in human play, with
+// the payer's lever off, and where a death pays (SacOutletEatHasValue keeps the payer off).
+struct SacFodderMenuCtx
+{
+    bool         live        = false;   // anything to credit in this enumeration
+    bool         outlet_live = false;   // an outlet already on the battlefield (its board fodder is in the pool)
+    SacPayOutlet outlet;                // the live outlet, or the first one a candidate puts in
+    int          board_bodies = 0;      // (outlet not live) board fodder + spore plan fodder
+    int          per          = 1;      // mana per body
+    int          bound        = 0;      // upper bound of the credit over every subset (the odometer's addend)
+    std::vector<unsigned char> outlet_cand;   // per cand: puts an outlet onto the battlefield
+    std::vector<unsigned char> bodies;        // per cand: matching bodies it puts onto the battlefield
+};
+static void BuildSacFodderMenuCtx(const GameState& state, const std::vector<Action>& cands, SacFodderMenuCtx& out)
+{
+    out = SacFodderMenuCtx{};
+    if (!state.deck_has_sac_mana_outlet || !SacFodderMenuOn()) { return; }
+    if (g_pay_fodder_off || !SacOutletPayEnabled() || HumanPlayActive()) { return; }
+    const int active = state.active_player_index;
+    SacPayOutlet so = LiveSacPayOutlet(state, active);
+    out.outlet_live = so.valid();
+    if (!out.outlet_live)
+    {
+        const CardDefinition* od = PlanSacOutletDef(state, cands);
+        if (od == nullptr) { return; }
+        so.def = od; so.source_id = -1;   // not on the battlefield yet: no body is "itself"
+    }
+    out.outlet = so;
+    const CardParams& op = so.def->params;
+    out.per = std::max(1, op.sac_outlet_add_mana_amount);
+    out.outlet_cand.assign(cands.size(), 0);
+    out.bodies.assign(cands.size(), 0);
+    int plan_bodies = 0;
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        if (!SacFodderPutKind(a) || a.def == nullptr) { continue; }
+        if (!out.outlet_live && IsSacManaOutlet(a.def->params)) { out.outlet_cand[j] = 1; }
+        const int n = SacFodderBodies(a, op);
+        out.bodies[j] = static_cast<unsigned char>(std::min(n, 255));
+        plan_bodies += n;
+    }
+    if (!out.outlet_live)
+    {
+        out.board_bodies = SacPayFodderCount(state, active, so) + SacPayPlanFodderCount(state, active, so);
+    }
+    out.bound = out.per * (out.board_bodies + plan_bodies);
+    out.live  = out.bound > 0;
+}
+// The supply one subset's plan-made fodder adds (0 = none). With the outlet not yet live, a selected outlet
+// must be payable off the board (`pool`) -- an outlet never funds its own cast, the rock rule.
+static int SacFodderMenuSubsetBodies(const SacFodderMenuCtx& ctx, const std::vector<Action>& cands,
+                                     const std::vector<int>& sel, const ManaPool& pool)
+{
+    if (!ctx.live) { return 0; }
+    // The outlet (when not yet live): the first selected one the board can pay for.
+    int outlet_j = -1;
+    if (!ctx.outlet_live)
+    {
+        for (int j : sel)
+        {
+            if (ctx.outlet_cand[static_cast<std::size_t>(j)] && pool.CanPay(cands[static_cast<std::size_t>(j)].cost))
+            { outlet_j = j; break; }
+        }
+        if (outlet_j < 0) { return 0; }
+    }
+    // THE LAST ACTION FUNDS NOTHING. In any order of the subset, the bodies the LAST mana-spending action
+    // brings in arrive after every cost is paid, and a cast never pays for itself with its own body or its
+    // own ETB tokens (Siege-Gang's three Goblins do not pay its {3}{R}{R}). The outlet cannot be that last
+    // action either -- fodder is spendable only after it resolves -- so the credit drops the SMALLEST body
+    // count among the other selected actions (any of them may be last). Still a necessary condition: no
+    // order of the subset can eat more than this.
+    int n = 0, last_min = std::numeric_limits<int>::max();
+    for (int j : sel)
+    {
+        const int b = ctx.bodies[static_cast<std::size_t>(j)];
+        n += b;
+        if (j != outlet_j) { last_min = std::min(last_min, b); }
+    }
+    if (last_min == std::numeric_limits<int>::max()) { return 0; }   // the outlet alone: nothing to fund
+    n -= last_min;
+    if (!ctx.outlet_live) { n += ctx.board_bodies; }
+    return n;
+}
+static void CreditSacFodderMenu(const SacFodderMenuCtx& ctx, int bodies, ManaPool& eff, ManaPool& eff_nc)
+{
+    const int m = bodies * ctx.per;
+    if (m <= 0) { return; }
+    const std::vector<Color>& prod = SacPayOutletColors(ctx.outlet.def->params);
+    if (prod.size() > 1) { eff.wild += m; eff_nc.wild += m; }
+    else                 { eff.Add(prod[0], m); eff_nc.Add(prod[0], m); }
+}
+
 // MTG_RESCUE_TAP_SOURCE -- see the note inside SubsetPayableWithFilters. Default OFF: it makes the
 // rescue STRICTER, so it removes plans and moves ground truth; adopting it is a rebaseline, not a
 // silent perf tweak.
@@ -83302,6 +83412,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // presence widening (MTG_SUBSET_SAC_COLOR). Inert for every deck without one.
     bool any_sac_float = false;
     for (const Action& ra : cands) { if (SubsetSacColorSource(ra)) { any_sac_float = true; break; } }
+    // MTG_SAC_FODDER_MENU: the sac-for-mana fodder this enumeration's plans can make (an outlet cast in the
+    // subset, or bodies the subset adds beside a live one). Inert (live = false) for every deck without an outlet.
+    SacFodderMenuCtx sacfod;
+    BuildSacFodderMenuCtx(state, cands, sacfod);
     // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
@@ -85222,6 +85336,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 }
             }
         }
+        // MTG_SAC_FODDER_MENU: the fodder this subset makes available (see SacFodderMenuCtx). Unrestricted
+        // mana, so both pools. Its colours widen the presence table below (sacfod_cols).
+        bool sacfod_credited = false;
+        if (sacfod.live)
+        {
+            const int bodies = SacFodderMenuSubsetBodies(sacfod, cands, sel, pool);
+            if (bodies > 0) { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; }
+        }
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
@@ -85785,6 +85907,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel,
                                                         /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
                                                         /*any_rock_cand=*/any_rock, /*any_sac_cand=*/any_sac_float);
+        bool have_sacfod[5];
+        if (sacfod_credited)
+        {
+            for (int ci = 0; ci < 5; ++ci) { have_sacfod[ci] = have_eff[ci]; }
+            for (Color c : SacPayOutletColors(sacfod.outlet.def->params))
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have_sacfod[ci] = true; } }
+            have_eff = have_sacfod;
+        }
         bool have_haste[5];
         if (haste_cols != 0)
         {
@@ -86370,7 +86500,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         : ManaPruneBound(pool, cands,
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
                          haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound
-                             + widen_bound + spec_ctx.bound_credit,
+                             + widen_bound + spec_ctx.bound_credit
+                             + sacfod.bound,   // MTG_SAC_FODDER_MENU: plan-made fodder (0 when inert)
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
                          // terms above already have (Solve passes none). Its consumer is the
                          // MTG_EDF_SEQ_ETB rescue in eval_and_push, which Solve::consider
@@ -86428,7 +86559,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork
         && enter_haste_unlock.empty() && growth_bound == 0
-        && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe)
+        && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe
+        && !sacfod.live)   // MTG_SAC_FODDER_MENU: its terms cannot see plan-made fodder -- the same bail
     {
         auto idx = std::make_unique<ManaGateIndex>();
         // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list

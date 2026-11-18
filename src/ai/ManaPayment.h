@@ -399,6 +399,20 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
 // keeps the maker / reveal domain, so subset admission is unchanged.
 // See ManaPayment.cpp for the search order. MTG_PAYABLE_ORDER_STATS prints fire counts at exit.
 bool PayableOrderOn();
+// ---- MTG_SAC_FODDER_MENU: sac-for-mana fodder an outlet CAST IN THE SAME PLAN makes available ----------------
+// (docs/design/sac-fodder-menu-2026-11-18.md). The §2b payer eats a legal body through a LIVE outlet (Skirk
+// Prospector, Utopia Mycon); these let the plan menu (EnumeratePlansCore) and the apply's payable-order walk
+// (PayableCastOrderCore) see the outlet the plan itself puts in, and the bodies the plan itself adds.
+bool SacFodderMenuOn();
+// Does this action put a permanent onto the battlefield (cast, Vial, Bronze put, retrace)?
+bool SacFodderPutKind(const Action& a);
+// The legal fodder bodies this action adds for an outlet with params `op`: its own body (a matching
+// creature; not the outlet itself under "Sacrifice ANOTHER") plus its matching ETB tokens.
+int  SacFodderBodies(const Action& a, const CardParams& op);
+// The outlet a plan of `acts` would make live: the first outlet put among them, when NO outlet is live
+// yet and the payer would eat through it (the LiveSacPayOutlet gates: lever on, not human play, no
+// fodder-free scope, no death that pays). nullptr otherwise.
+const CardDefinition* PlanSacOutletDef(const GameState& state, const std::vector<Action>& acts);
 // Both forms END with ApplyAttachSpellDependencyOrder (below), so every cast-order sort site in both
 // apply worlds realises the attach-spell dependency whatever rank, arrangement or payable rescue
 // produced the order.

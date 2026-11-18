@@ -5574,6 +5574,153 @@ static void PoLandAuraSubtractHeld(ManaPool& pool, const PoLandAuraHold& la)
 // The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
 // With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking). With `la` the
 // pool starts WITHOUT the held host (the caller's pool is the held one).
+// ---- MTG_SAC_FODDER_MENU (ManaPayment.h; docs/design/sac-fodder-menu-2026-11-18.md) ----------------------------
+bool SacFodderMenuOn()
+{
+    // DEFAULT ON pending its held-out A/B (see the design doc for the measurement); =0 restores the board-only
+    // fodder credit on the plan menu and in the payable-order walk.
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU", true);
+    return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
+}
+
+bool SacFodderPutKind(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial
+        || a.kind == Action::Kind::BronzePut    || a.kind == Action::Kind::CastFromGraveyard;
+}
+
+int SacFodderBodies(const Action& a, const CardParams& op)
+{
+    if (!SacFodderPutKind(a)) { return 0; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return 0; }
+    const std::string& sub = op.sac_creature_requires_subtype;
+    int n = 0;
+    if (d->card.IsCreature() && (sub.empty() || CardHasSubtype(d->card, sub))
+        && !(IsSacManaOutlet(d->params) && op.sac_outlet_excludes_self)) { ++n; }
+    if (d->params.etb_self_creates_tokens > 0)
+    {
+        bool ok = sub.empty();
+        for (const std::string& st : d->params.etb_created_token_subtypes) { if (st == sub) { ok = true; break; } }
+        if (ok) { n += d->params.etb_self_creates_tokens; }
+    }
+    return n;
+}
+
+const CardDefinition* PlanSacOutletDef(const GameState& state, const std::vector<Action>& acts)
+{
+    if (!state.deck_has_sac_mana_outlet || !SacFodderMenuOn()) { return nullptr; }
+    if (g_pay_fodder_off || !SacOutletPayEnabled() || HumanPlayActive()) { return nullptr; }
+    const int active = state.active_player_index;
+    if (LiveSacPayOutlet(state, active).valid()) { return nullptr; }
+    for (const Action& a : acts)
+    {
+        if (!SacFodderPutKind(a)) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || !IsSacManaOutlet(d->params)) { continue; }
+        // A death that pays keeps the payer OFF on this board (LiveSacPayOutlet's own test), so the outlet
+        // this plan puts in would not be eaten through either.
+        if (SacOutletEatHasValue(state, active, d->params)) { return nullptr; }
+        return d;
+    }
+    return nullptr;
+}
+
+namespace
+{
+// The payable-order walk's view of sac-for-mana fodder (set by PayableCastOrderCore's fodder pass only; null
+// everywhere else, so every other walk is untouched). It models the payer's contract, not an aggregate:
+//   * a body is eatable only once it AND an outlet are on the battlefield, and only AFTER the action that
+//     brings it in is paid (the walk is sequential: a cast never pays for itself with its own body);
+//   * a payment eats only when the pool cannot pay without it, and then the FEWEST bodies (the fodder-last
+//     block's k-ladder);
+//   * the OUTLET's own body goes last, and once every outlet is eaten nothing more can be (Skirk eaten for
+//     Goblin Matron leaves the Goblin Lackey cast after it with no source -- s30125176 T2).
+struct PoSacFodder
+{
+    const CardParams* op           = nullptr;   // the outlet's params (live or plan-made)
+    int               per          = 1;
+    bool              start_live   = false;     // outlets already on the battlefield (pool0 is then built fodder-free)
+    int               board_bodies = 0;         // the board's legal bodies (outlets included) + spore plan fodder
+    int               board_outlets = 0;        // (start_live) live outlet permanents
+};
+thread_local const PoSacFodder* t_po_sacfod = nullptr;
+thread_local bool               t_po_force  = false;   // judge the order even outside every producer domain
+
+void PoSacFodderAdd(ManaPool& pool, const PoSacFodder& sf, int bodies)
+{
+    const int m = bodies * sf.per;
+    if (m <= 0) { return; }
+    const std::vector<Color>& prod = SacPayOutletColors(*sf.op);
+    if (prod.size() > 1) { pool.wild += m; } else { pool.Add(prod[0], m); }
+}
+
+static bool PoIsOutletPut(const Action& a)
+{
+    if (!SacFodderPutKind(a)) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && IsSacManaOutlet(d->params);
+}
+
+struct PoSacFodderWalk
+{
+    const PoSacFodder* sf = nullptr;
+    int outlets = 0;           // outlets on the battlefield
+    int bodies  = 0;           // eatable NON-outlet bodies (meaningful while outlets > 0)
+    int pending = 0;           // bodies waiting for the first outlet (plan-made outlet only)
+    bool ever   = false;       // an outlet has been on the battlefield
+    void Start()
+    {
+        sf = t_po_sacfod;
+        outlets = bodies = pending = 0; ever = false;
+        if (sf == nullptr) { return; }
+        if (sf->start_live)
+        {
+            outlets = sf->board_outlets; ever = outlets > 0;
+            bodies  = std::max(0, sf->board_bodies - (sf->op->sac_outlet_excludes_self ? 0 : outlets));
+        }
+        else { pending = sf->board_bodies; }
+    }
+    int EatableOutlets() const
+    { return sf->op->sac_outlet_excludes_self ? std::max(0, outlets - 1) : outlets; }
+    // The pool cannot pay `cost`: eat the fewest bodies that make it payable (non-outlet bodies first).
+    bool TryEat(ManaPool& pool, const ManaCost& cost)
+    {
+        if (sf == nullptr || outlets <= 0) { return false; }
+        const int avail = bodies + EatableOutlets();
+        for (int k = 1; k <= avail; ++k)
+        {
+            ManaPool tmp = pool;
+            PoSacFodderAdd(tmp, *sf, k);
+            if (!tmp.CanPay(cost)) { continue; }
+            pool = tmp;
+            const int from_bodies = std::min(k, bodies);
+            bodies  -= from_bodies;
+            outlets -= (k - from_bodies);
+            return true;
+        }
+        return false;
+    }
+    void After(const Action& a)
+    {
+        if (sf == nullptr) { return; }
+        const int b = SacFodderBodies(a, *sf->op);
+        const bool outlet = PoIsOutletPut(a);
+        // An outlet's own fodder body (if any) is tracked as an OUTLET, never as an ordinary body.
+        const int plain = b - ((outlet && !sf->op->sac_outlet_excludes_self && b > 0) ? 1 : 0);
+        if (ever && outlets <= 0) { return; }   // every outlet eaten: nothing can be eaten any more
+        if (outlet)
+        {
+            ++outlets;
+            if (!ever) { ever = true; bodies += pending; pending = 0; }
+            bodies += plain;
+            return;
+        }
+        if (outlets > 0) { bodies += b; } else { pending += b; }
+    }
+};
+} // namespace
+
 static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Action>& acts,
                                  const std::vector<int>& order, ManaPool pool,
                                  std::vector<PoHandCard>* hand, const PoLandAuraHold* la = nullptr)
@@ -5581,6 +5728,8 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
     PoLandAuraLive live;   // allocates only with a hold
     if (la != nullptr) { live.Start(*la); }
     bool ripple_live = RippleGranterOnBattlefield(state);
+    PoSacFodderWalk sfw;   // MTG_SAC_FODDER_MENU: inert unless PayableCastOrderCore's fodder pass set t_po_sacfod
+    sfw.Start();
     FilterFeedHold feed;   // MTG_RAMP_FILTER_FEED_ORDER
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
@@ -5594,7 +5743,7 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
             if (rop) { cost = PoRevealAwareCost(a, *hand); }
             PoRemoveFromHand(*hand, a.card_name);
         }
-        if (a.alt_cost) { continue; }   // as before: an alt-cost cast is neither paid nor credited
+        if (a.alt_cost) { sfw.After(a); continue; }   // as before: an alt-cost cast is neither paid nor credited (its body still arrives)
         // Each held host taps now, in `prio` order, only while this cast cannot be paid without it.
         if (la != nullptr)
         {
@@ -5607,9 +5756,10 @@ static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Actio
                 live.held[static_cast<std::size_t>(k)] = 0;
             }
         }
-        if (!pool.CanPay(cost)) { return pos; }
+        if (!pool.CanPay(cost) && !sfw.TryEat(pool, cost)) { return pos; }
         PayFromPool(pool, cost);
         CreditCastOutput(state, acts, a, pool, ripple_live, feed.Take(a));
+        sfw.After(a);
         if (IsRippleGranterCast(a)) { ripple_live = true; }
         feed.Release(pool);
         if (la != nullptr)
@@ -6747,11 +6897,19 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
             producer_only = (site == 0);
         }
     }
+    // MTG_SAC_FODDER_MENU: PayableCastOrderCore's fodder passes judge the order even when no producer domain
+    // above admits it (an outlet's fodder is a producer this domain scan does not know).
+    if (!any && (t_po_force || t_po_sacfod != nullptr)) { any = true; }
     if (!any) { return false; }
     if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return false; }
     g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
 
-    ManaPool pool0 = AvailableManaPool(state);   // already includes the turn-scoped float
+    // MTG_SAC_FODDER_MENU: under a fodder pass the board's bodies are modelled by the walk (PoSacFodderWalk),
+    // so the starting pool is built fodder-free.
+    const bool po_fodder_free = t_po_sacfod != nullptr && t_po_sacfod->start_live;
+    ManaPool pool0;
+    if (po_fodder_free) { const PayFodderOffScope _fo; pool0 = AvailableManaPool(state); }
+    else                { pool0 = AvailableManaPool(state); }   // already includes the turn-scoped float
     if (extra_wild > 0) { pool0.wild += extra_wild; }
     thread_local std::vector<PoHandCard> hand0, hand;
     hand0.clear();
@@ -6779,6 +6937,8 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
     ManaPool la_pool0 = pool0;
     if (la_host != nullptr && !exact)
     {
+        std::optional<PayFodderOffScope> fo;   // MTG_SAC_FODDER_MENU (see pool0)
+        if (po_fodder_free) { fo.emplace(); }
         if (la.hosts.size() < 2) { la_pool0 = AvailableManaPool(state, la_host); }
         else { la_pool0 = AvailableManaPool(state); PoLandAuraSubtractHeld(la_pool0, la); }   // every host held
         if (extra_wild > 0) { la_pool0.wild += extra_wild; }
@@ -6907,6 +7067,12 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
             }
             else { add_bound_cost(a.cost); }
         }
+        if (const PoSacFodder* sf = t_po_sacfod)   // MTG_SAC_FODDER_MENU: every body the order can bring in
+        {
+            int b = sf->board_bodies;   // pool0 is fodder-free under every fodder pass
+            for (int i : order) { b += SacFodderBodies(acts[i], *sf->op); }
+            PoSacFodderAdd(bound, *sf, b);
+        }
         if (widen_only) { bound.wild += w_live * std::popcount(static_cast<unsigned>(w_union)); }
         if (la_host != nullptr) { for (const ManaPool& b : la.bonus) { bound.AddPool(b); } }
         // More than six hybrid pips cannot fit in ManaCost's metadata. In that
@@ -7008,16 +7174,74 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
                                  std::vector<int>& order, const std::vector<InternedName>* hand_exits,
                                  int extra_wild, int site)
 {
+    // MTG_SAC_FODDER_MENU: the fodder the PLAN makes. An outlet the plan itself puts in (no outlet live yet), or
+    // -- beside a live one -- the bodies the plan casts, are supply the aggregate pool cannot see; without this the
+    // apply kept an order that casts Skirk Prospector LAST and dropped the cast its fodder was to pay (mana
+    // oracle APPLY-DROP-ORDER, Goblins s30125177 T1 {Lackey, Skirk}). Fodder stays the LAST resort: the order
+    // is first judged without it, and only when no order pays from the board alone is the walk shown the
+    // bodies. Inert (no context) with the lever off, no outlet anywhere, or in human play.
+    PoSacFodder sf;
+    bool sf_on = false;
+    if (!g_pay_fodder_off && order.size() >= 2 && site == 0 && state.deck_has_sac_mana_outlet && SacFodderMenuOn())
+    {
+        const int active = state.active_player_index;
+        const SacPayOutlet live = LiveSacPayOutlet(state, active);
+        if (live.valid())
+        {
+            // Beside a live outlet only the plan's OWN bodies are new supply (the board's are in the pool):
+            // with none, nothing changes here.
+            int b = 0;
+            for (int i : order) { b += SacFodderBodies(acts[i], live.def->params); }
+            if (b > 0)
+            {
+                sf.op = &live.def->params; sf.start_live = true; sf_on = true;
+                sf.board_bodies = SacPayFodderCount(state, active, live) + SacPayPlanFodderCount(state, active, live);
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != active || p.pay_sac_eaten || p.def_absent) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d != nullptr && IsSacManaOutlet(d->params)) { ++sf.board_outlets; }
+                }
+            }
+        }
+        else if (const CardDefinition* od = PlanSacOutletDef(state, acts))
+        {
+            SacPayOutlet hyp; hyp.def = od; hyp.source_id = -1;
+            sf.op = &od->params;
+            sf.board_bodies = SacPayFodderCount(state, active, hyp) + SacPayPlanFodderCount(state, active, hyp);
+            sf_on = true;
+        }
+        if (sf_on) { sf.per = std::max(1, sf.op->sac_outlet_add_mana_amount); }
+    }
+    struct PoSacScope
+    {
+        const PoSacFodder* prev_sf; bool prev_force;
+        PoSacScope(const PoSacFodder* p, bool f) : prev_sf(t_po_sacfod), prev_force(t_po_force) { t_po_sacfod = p; t_po_force = f; }
+        ~PoSacScope() { t_po_sacfod = prev_sf; t_po_force = prev_force; }
+    };
     if (!g_pay_fodder_off && order.size() >= 2 && LiveSacPayOutlet(state, state.active_player_index).valid())
     {
         std::vector<int> nf = order;
         bool found;
         {
             const PayFodderOffScope _fo;
+            const PoSacScope _sc(nullptr, sf_on);   // judged even outside a producer domain when the plan holds fodder
             found = PayableCastOrderCoreImpl(state, acts, nf, hand_exits, extra_wild, site);
         }
         if (found) { order.swap(nf); return; }
     }
+    else if (sf_on)
+    {
+        // A PLAN-made outlet: the fodder-free judgement (the board alone, every order) first.
+        std::vector<int> nf = order;
+        bool found;
+        {
+            const PoSacScope _sc(nullptr, true);
+            found = PayableCastOrderCoreImpl(state, acts, nf, hand_exits, extra_wild, site);
+        }
+        if (found) { order.swap(nf); return; }
+    }
+    const PoSacScope _sc(sf_on ? &sf : nullptr, false);
     (void)PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site);
 }
 
