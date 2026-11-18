@@ -54479,7 +54479,7 @@ bool AaGenericWeatherFlex()
     static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_FLEX");         // DEFAULT OFF (measurement arm)
     return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_FLEX, s_env);
 }
-// MTG_AA_CAST_ORDER_V2 (DEFAULT OFF): the proposed total order (kAaV2Order below) + the same mana ladder + the
+// MTG_AA_CAST_ORDER_V2 (DEFAULT OFF): the proposed total order (kAaV2List below: casts and board activations) + the same mana ladder + the
 // board-activation order. Overrides MTG_AA_CAST_ORDER and the generic arms while on.
 bool AaCastOrderV2On()
 {
@@ -54603,31 +54603,89 @@ const char* AaCastOrderSlotName(int slot)
     }
 }
 
-// ---- MTG_AA_CAST_ORDER_V2: THE PROPOSED TOTAL ORDER (2026-10-22, for the USER's review) -------------------
-// THE ONE ARRAY TO EDIT: the casts in order. Position = index + 2 (position 1 is the land drop); one position
-// per card, so no two different cards ever tie (CastOrderTotalByName is on as well). A Stroke of Genius aimed
-// at the OPPONENT is the kill and goes after every cast (kAaV2StrokeAtOpp, CastOrderActionRank); aimed at
-// ourselves it is a dig at its listed position. Unlisted cards (none of the 75) go after everything, in their
-// generic tier order. The reasons the coordinator gave, per card:
-//   Galvanic Alchemist after the Accomplished Alchemist (soulbond pairs with it); Living Wish after every
-//   creature (a fetched creature never waits behind a second Wish) and before the lifegain (Galvanic gets the
-//   Alchemist's blue ahead of Feed the Clan -- the g700 / g937 mechanism); Eternal Witness after the spells it
-//   can return; Stroke as a dig before the untappers (the g731 reservation); Weather the Storm the preferred
-//   LAST cast, with the mana ladder moving an untapper behind it when the line needs the Alchemist's X.
-constexpr AaOrderSlot kAaV2Order[] = {
-    kAaSprawl, kAaWildGrowth, kAaArbor, kAaHarbinger, kAaAlchemist, kAaGalvanic, kAaWitch, kAaEzuri, kAaScholar,
-    kAaTruffle, kAaBoar, kAaWish, kAaNourish, kAaFeed, kAaWitness, kAaStroke, kAaUmbra, kAaStaff, kAaWeather };
-static_assert(sizeof(kAaV2Order) / sizeof(kAaV2Order[0]) == static_cast<std::size_t>(kAaSlots),
-              "MTG_AA_CAST_ORDER_V2: every order slot exactly once");
-constexpr int kAaV2LandDrop    = 1;    // position 1
-constexpr int kAaV2StrokeAtOpp = 28;   // the ability block's FINISH 28: Stroke at the opponent, after every cast
-constexpr int kAaV2Unlisted    = 40;   // after every listed card and the kill
-
-int AaV2Position(int slot)
+// ---- MTG_AA_CAST_ORDER_V2: THE ONE LIST (2026-10-22 proposal; amended by the USER 2026-11-18) -------------------
+// THE ONE ARRAY TO EDIT: every step of an Alchemist turn in the order we do it -- the CASTS and the BOARD ACTIVATIONS
+// in one list (USER 2026-11-18: "Activations should be in the list in some form"). Position = index + 2 (position 1
+// is the land drop); one position per step, so no two different cards ever tie (CastOrderTotalByName is on as well).
+// A cast step's position is its CAST rank (x kAaOrderScale); an activation step's position is its TRAILING rank
+// (ActivationOrderRankForAction). Both read the same list, so the numbering is one sequence.
+// HOW THE ENGINE REALISES IT: a plan casts first and runs its board activations in a trailing pass after every cast
+// (the ladder orders casts only), so within one plan every cast precedes every activation whatever the list says.
+// A cast listed AFTER an activation (Scholar of Athreos, Stroke at the opponent) is therefore the LAST cast of a plan,
+// and reaches its place after the untap loop through the loop route's chained payoff (loop -> cast -> drain), which
+// is how the deck kills once the mana is unbounded.
+// The amendments (USER 2026-11-18): Scholar of Athreos's CAST moves from after Ezuri to the finish, right before its
+// drain ("You would expect Scholar to be later in the list as it is the last thing we do") -- it is a sideboard card
+// that arrives through Living Wish, and "it's fine to end the game with the Scholar once we have the infinite mana"
+// (USER 2026-10-20); the activations are steps of the list instead of a separate numbering.
+// The coordinator's reasons for the rest (2026-10-22): Galvanic Alchemist after the Accomplished Alchemist (soulbond
+// pairs with it); Living Wish after every creature it would fetch for the setup and before the lifegain (Galvanic
+// gets the Alchemist's blue ahead of Feed the Clan -- the g700 / g937 mechanism); Eternal Witness after the spells it
+// can return; Stroke as a dig before the untappers (the g731 reservation); Weather the Storm the last SETUP cast, with
+// the mana ladder moving an untapper behind it when the line needs the Alchemist's X; the board: life -> untap the
+// Alchemist (cheapest per iteration first) -> finish -> combat pumps. The Alchemist's own {T}: X is PAYMENT, not a
+// step: the payer taps it as late as possible (the gwf payment change).
+enum AaV2Act : int
 {
-    for (int i = 0; i < kAaSlots; ++i) { if (kAaV2Order[i] == slot) { return i + 2; } }
+    kAaActBoarSac = 0,     // Brindle Boar's sacrifice (life)
+    kAaActStaffLife,       // Staff of Domination {2},{T}: gain 1
+    kAaActUmbraUntap,      // untap the Alchemist: Crab Umbra {2}{U}
+    kAaActGalvanicUntap,   // untap the Alchemist: Galvanic's granted {2}{U}
+    kAaActStaffUntap,      // untap the Alchemist: Staff {3},{T} + {1}
+    kAaActWitchUntap,      // untap the Alchemist: Seedcradle Witch {2}{G}{W} on a life-scaled mana creature
+    kAaActStrokeAtOpp,     // a CAST: Stroke of Genius at the opponent (the deck-out kill; CastOrderActionRank)
+    kAaActScholarDrain,    // Scholar of Athreos {2}{B}: drain
+    kAaActStaffDraw,       // Staff {5},{T}: draw (dig to a Stroke)
+    kAaActEzuriPump,       // combat: Ezuri's team pump
+    kAaActWitchPump,       // combat: the Witch's untap + pump on any other creature
+    kAaActs
+};
+struct AaV2Step { bool cast; int id; };
+constexpr AaV2Step AaCast(AaOrderSlot slot) { return AaV2Step{true, slot}; }
+constexpr AaV2Step AaAct(AaV2Act act)       { return AaV2Step{false, act}; }
+constexpr AaV2Step kAaV2List[] = {
+    // setup casts
+    AaCast(kAaSprawl), AaCast(kAaWildGrowth), AaCast(kAaArbor), AaCast(kAaHarbinger), AaCast(kAaAlchemist),
+    AaCast(kAaGalvanic), AaCast(kAaWitch), AaCast(kAaEzuri), AaCast(kAaTruffle), AaCast(kAaBoar), AaCast(kAaWish),
+    AaCast(kAaNourish), AaCast(kAaFeed), AaCast(kAaWitness), AaCast(kAaStroke), AaCast(kAaUmbra), AaCast(kAaStaff),
+    AaCast(kAaWeather),
+    // the board: life, then untap the Alchemist (cheapest per iteration first)
+    AaAct(kAaActBoarSac), AaAct(kAaActStaffLife),
+    AaAct(kAaActUmbraUntap), AaAct(kAaActGalvanicUntap), AaAct(kAaActStaffUntap), AaAct(kAaActWitchUntap),
+    // the finish: Stroke at the opponent, or Scholar of Athreos cast and drain; the Staff's draw digs for a Stroke
+    AaAct(kAaActStrokeAtOpp), AaCast(kAaScholar), AaAct(kAaActScholarDrain), AaAct(kAaActStaffDraw),
+    // combat-only kills last
+    AaAct(kAaActEzuriPump), AaAct(kAaActWitchPump) };
+constexpr int kAaV2Steps = static_cast<int>(sizeof(kAaV2List) / sizeof(kAaV2List[0]));
+constexpr int AaV2Pos(bool cast, int id)
+{
+    for (int i = 0; i < kAaV2Steps; ++i) { if (kAaV2List[i].cast == cast && kAaV2List[i].id == id) { return i + 2; } }
     return -1;
 }
+constexpr bool AaV2EveryStepOnce()
+{
+    for (int k = 0; k < kAaSlots; ++k)
+    {
+        int n = 0;
+        for (int i = 0; i < kAaV2Steps; ++i) { if (kAaV2List[i].cast && kAaV2List[i].id == k) { ++n; } }
+        if (n != 1) { return false; }
+    }
+    for (int k = 0; k < kAaActs; ++k)
+    {
+        int n = 0;
+        for (int i = 0; i < kAaV2Steps; ++i) { if (!kAaV2List[i].cast && kAaV2List[i].id == k) { ++n; } }
+        if (n != 1) { return false; }
+    }
+    return kAaV2Steps == kAaSlots + kAaActs;
+}
+static_assert(AaV2EveryStepOnce(), "MTG_AA_CAST_ORDER_V2: every cast slot and every activation exactly once");
+constexpr int kAaV2LandDrop    = 1;                                   // position 1
+constexpr int kAaV2StrokeAtOpp = AaV2Pos(false, kAaActStrokeAtOpp);   // a cast rank: after every setup cast
+constexpr int kAaV2Unlisted    = 40;                                  // after every listed step
+static_assert(kAaV2Steps + 2 < kAaV2Unlisted, "MTG_AA_CAST_ORDER_V2: an unlisted card or activation trails the list");
+
+int AaV2Position(int slot) { return slot >= 0 ? AaV2Pos(true, slot) : -1; }
+int AaV2ActPosition(AaV2Act act) { return AaV2Pos(false, act); }
 
 // The mana ladder runs under either arm that asks for it.
 bool AaWeatherFlexActive() { return AaCastOrderV2On() || (!AaCastOrderOn() && AaGenericWeatherFlex()); }
@@ -54670,13 +54728,14 @@ const char* AccomplishedAlchemistProvider::CastOrderTierName(int rank) const
         if (rank / kAaOrderScale >= kAaV2Unlisted) { return "UNLISTED: after every listed card, in generic tier order"; }
         if (rank % kAaOrderScale != 0) { return nullptr; }
         const int pos = rank / kAaOrderScale;
-        if (pos == kAaV2StrokeAtOpp) { return "STROKE OF GENIUS AT THE OPPONENT: the kill, after every cast"; }
-        if (pos >= 2 && pos < 2 + kAaSlots)
+        if (pos == kAaV2StrokeAtOpp) { return "STROKE OF GENIUS AT THE OPPONENT: the kill, after every setup cast"; }
+        if (pos >= 2 && pos < 2 + kAaV2Steps && kAaV2List[pos - 2].cast)
         {
-            const int slot = kAaV2Order[pos - 2];
+            const int slot = kAaV2List[pos - 2].id;
             switch (slot)
             {
-                case kAaWeather:  return "WEATHER THE STORM: the preferred LAST cast (an untapper moves behind it when the line needs the Alchemist's X)";
+                case kAaWeather:  return "WEATHER THE STORM: the last SETUP cast (an untapper moves behind it when the line needs the Alchemist's X)";
+                case kAaScholar:  return "SCHOLAR OF ATHREOS: the finish -- the last cast, right before its drain (USER 2026-11-18)";
                 case kAaStroke:   return "STROKE OF GENIUS as a dig: before the untappers (the g731 reservation)";
                 case kAaGalvanic: return "GALVANIC ALCHEMIST: after the Accomplished Alchemist, so soulbond pairs with it";
                 case kAaWish:     return "LIVING WISH: after every creature, before the lifegain (Galvanic gets the Alchemist's blue first)";
@@ -54840,14 +54899,14 @@ void AccomplishedAlchemistProvider::ArrangeCastOrder(const GameState& s, const s
 bool AccomplishedAlchemistProvider::ExactOrderWalk() const { return AaWeatherFlexActive(); }
 bool AccomplishedAlchemistProvider::LifeScaledManaInOrderWalk() const { return AaWeatherFlexActive(); }
 
-// V2's BOARD ACTIVATIONS, after every cast (USER: "the abilities need to go at the end"), in the coordinator's
-// numbering: LIFE (21 Brindle Boar's sacrifice, 22 Staff of Domination's {2},{T}: gain 1), the Alchemist's tap
-// (23, a mana ability -- payment, not a position), UNTAP THE ALCHEMIST cheapest per iteration first (24 Crab
-// Umbra {2}{U}, 25 Galvanic's granted {2}{U}, 26 Staff {3},{T} + {1}, 27 Seedcradle Witch {2}{G}{W} -- on a
-// target that is not a life-scaled mana creature the Witch is a combat pump, 33), FINISH (29 Scholar's drain,
-// 31 the Staff's {5},{T} draw), combat pumps (32 Ezuri). A trailing plan holds one activation per source family,
-// so the Staff's three modes never meet in one pass; the rank orders it against the OTHER sources. Anything
-// else trails at 40. Not V2 -> the inherited rank (byte-identical).
+// V2's BOARD ACTIVATIONS, after every cast (USER: "the abilities need to go at the end"), at their steps of the ONE
+// list (kAaV2List): LIFE (Brindle Boar's sacrifice, Staff of Domination's {2},{T}: gain 1), UNTAP THE ALCHEMIST
+// cheapest per iteration first (Crab Umbra {2}{U}, Galvanic's granted {2}{U}, Staff {3},{T} + {1}, Seedcradle Witch
+// {2}{G}{W} -- on a target that is not a life-scaled mana creature the Witch is a combat pump), FINISH (Scholar's
+// drain, the Staff's {5},{T} draw), combat pumps (Ezuri). The Alchemist's tap is a mana ability -- payment, not a
+// step. A trailing plan holds one activation per source family, so the Staff's three modes never meet in one pass;
+// the rank orders it against the OTHER sources. Anything else trails at kAaV2Unlisted. Not V2 -> the inherited rank
+// (byte-identical).
 int AccomplishedAlchemistProvider::ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
                                                                 const Action& a) const
 {
@@ -54856,40 +54915,41 @@ int AccomplishedAlchemistProvider::ActivationOrderRankForAction(const GameState&
     switch (a.kind)
     {
         case Action::Kind::SacCreatureOutlet:
-            if (p.sac_outlet_lifegain > 0) { return 21; }
+            if (p.sac_outlet_lifegain > 0) { return AaV2ActPosition(kAaActBoarSac); }
             break;
         case Action::Kind::ActivatePermAbility:
-            if (a.ability_mode == Action::AbilityMode::TapLifegain) { return 22; }
-            if (a.ability_mode == Action::AbilityMode::Drain)       { return 29; }
-            if (a.ability_mode == Action::AbilityMode::TapDraw)     { return 31; }
+            if (a.ability_mode == Action::AbilityMode::TapLifegain) { return AaV2ActPosition(kAaActStaffLife); }
+            if (a.ability_mode == Action::AbilityMode::Drain)       { return AaV2ActPosition(kAaActScholarDrain); }
+            if (a.ability_mode == Action::AbilityMode::TapDraw)     { return AaV2ActPosition(kAaActStaffDraw); }
             break;
         case Action::Kind::ActivateUntap:
         {
             switch (a.gy_exile_mode)
             {
-                case 1: return 24;   // Crab Umbra
-                case 2: return 25;   // Galvanic Alchemist's granted untap
-                case 3: return 26;   // Staff of Domination
+                case 1: return AaV2ActPosition(kAaActUmbraUntap);      // Crab Umbra
+                case 2: return AaV2ActPosition(kAaActGalvanicUntap);   // Galvanic Alchemist's granted untap
+                case 3: return AaV2ActPosition(kAaActStaffUntap);      // Staff of Domination
                 case 4:
                 {
                     for (const Permanent& t : s.battlefield)
                     {
                         if (t.card.m_number != a.sac_victim_id || t.def_absent) { continue; }
                         const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
-                        return (td != nullptr && td->params.mana_per_life_gained) ? 27 : 33;
+                        return (td != nullptr && td->params.mana_per_life_gained) ? AaV2ActPosition(kAaActWitchUntap)
+                                                                                   : AaV2ActPosition(kAaActWitchPump);
                     }
-                    return 33;
+                    return AaV2ActPosition(kAaActWitchPump);
                 }
                 default: break;
             }
             break;
         }
         case Action::Kind::ActivatePump:
-            if (p.team_pump_cost.has_value()) { return 32; }
+            if (p.team_pump_cost.has_value()) { return AaV2ActPosition(kAaActEzuriPump); }
             break;
         default: break;
     }
-    return 40;
+    return kAaV2Unlisted;
 }
 
 // ---- AccomplishedAlchemistProvider: the closed-form untap loop and its payoffs (chunk C2b) ---------

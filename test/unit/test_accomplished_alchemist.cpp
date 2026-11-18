@@ -4237,41 +4237,52 @@ TEST_CASE("Weather flex: the USER's line realised as ONE cast list -- spell, Wea
     CHECK(gwf == 2);
 }
 
-TEST_CASE("Cast order V2 (DEFAULT OFF): one position per card, the land drop first, Stroke at the opponent after every cast")
+TEST_CASE("Cast order V2 (DEFAULT OFF): one list of casts and activations, the land drop first, Scholar at the finish")
 {
     GameState g = FreshAa();
     g.m_provider = &AaProv();
     const AccomplishedAlchemistProvider& p = AaProv();
-    const std::vector<std::string> v2 = {
+    // The SETUP casts, positions 2..20 (USER 2026-11-18: Scholar of Athreos moved to the finish).
+    const std::vector<std::string> setup = {
         "Utopia Sprawl", "Wild Growth", "Arbor Elf", "Elvish Harbinger", "Accomplished Alchemist", "Galvanic Alchemist",
-        "Seedcradle Witch", "Ezuri, Renegade Leader", "Scholar of Athreos", "Trufflesnout", "Brindle Boar", "Living Wish",
+        "Seedcradle Witch", "Ezuri, Renegade Leader", "Trufflesnout", "Brindle Boar", "Living Wish",
         "Nourish", "Feed the Clan", "Eternal Witness", "Stroke of Genius", "Crab Umbra", "Staff of Domination",
         "Weather the Storm" };
+    std::vector<std::string> v2 = setup;
+    v2.push_back("Scholar of Athreos");
     {
         FlexArmsAa a(0, 0, 0, 1);
         CHECK(p.LandDropCastOrderRank() == 64);
         int pos = 1;
-        for (const std::string& n : v2)
+        for (const std::string& n : setup)
         {
             CAPTURE(n);
             const int r = p.CastOrderRank(g, DefAa(n));
             CHECK(r == ++pos * 64);
             CHECK(p.CastOrderTierName(r) != nullptr);
         }
+        // Then the board activations (positions 20..25), Stroke at the opponent (26), Scholar's cast (27), its drain.
+        const int weather = p.CastOrderRank(g, DefAa("Weather the Storm"));
+        const int scholar = p.CastOrderRank(g, DefAa("Scholar of Athreos"));
+        CHECK(scholar == 27 * 64);
+        CHECK(scholar > weather);
+        CHECK(p.CastOrderTierName(scholar) != nullptr);
         CHECK(p.CastOrderTotalByName());
         std::vector<std::string> rev(v2.rbegin(), v2.rend());
         CHECK(SortedCastsAa(g, rev) == v2);
         // V2 overrides the PROPOSED order and the generic arms.
         { FlexArmsAa b(1, 1, 1, 1); CHECK(SortedCastsAa(g, rev) == v2); }
-        // Stroke at the opponent: the kill, after every cast (Weather included); as a dig, its own slot.
+        // Stroke at the opponent: the kill, after every setup cast (Weather included), before Scholar's cast; as a
+        // dig, its own slot.
         Action dig = PaidCastAa("Stroke of Genius");
         Action kill = dig;
         kill.draw_target = 1;
         const int stroke = p.CastOrderRank(g, DefAa("Stroke of Genius"));
         CHECK(p.CastOrderActionRank(g, dig, stroke) == stroke);
-        CHECK(p.CastOrderActionRank(g, kill, stroke) == 28 * 64);
-        CHECK(p.CastOrderActionRank(g, kill, stroke) > p.CastOrderRank(g, DefAa("Weather the Storm")));
-        CHECK(p.CastOrderTierName(28 * 64) != nullptr);
+        CHECK(p.CastOrderActionRank(g, kill, stroke) == 26 * 64);
+        CHECK(p.CastOrderActionRank(g, kill, stroke) > weather);
+        CHECK(p.CastOrderActionRank(g, kill, stroke) < scholar);
+        CHECK(p.CastOrderTierName(26 * 64) != nullptr);
     }
     // Off: the generic tiers, and the action rank untouched.
     {
@@ -4318,16 +4329,18 @@ TEST_CASE("Cast order V2: the board activations -- life, then untap the Alchemis
     auto r = [&](const Action& a) { return p.ActivationOrderRankForAction(s, *a.def, a); };
     {
         FlexArmsAa on(0, 0, 0, 1);
-        CHECK(r(boar) == 21);
-        CHECK(r(sgain) == 22);
-        CHECK(r(umbra) == 24);
-        CHECK(r(galv) == 25);
-        CHECK(r(suntap) == 26);
-        CHECK(r(witch) == 27);
-        CHECK(r(drain) == 29);
-        CHECK(r(sdraw) == 31);
-        CHECK(r(ezuri) == 32);
-        CHECK(r(wpump) == 33);
+        // Their steps of the ONE list (after Weather the Storm at 20): Scholar's cast (27) sits between Stroke at
+        // the opponent (26) and its drain.
+        CHECK(r(boar) == 20);
+        CHECK(r(sgain) == 21);
+        CHECK(r(umbra) == 22);
+        CHECK(r(galv) == 23);
+        CHECK(r(suntap) == 24);
+        CHECK(r(witch) == 25);
+        CHECK(r(drain) == 28);
+        CHECK(r(sdraw) == 29);
+        CHECK(r(ezuri) == 30);
+        CHECK(r(wpump) == 31);
         // Both trailing passes sort by it (one shared definition): a shuffled pass comes out in the numbering.
         std::vector<Action> pass = { wpump, ezuri, sdraw, drain, witch, suntap, galv, umbra, sgain, boar };
         TurnSolver::OrderTrailingActivations(s, pass);

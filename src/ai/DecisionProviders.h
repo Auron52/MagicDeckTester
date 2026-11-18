@@ -3944,8 +3944,9 @@ public:
                           std::vector<int>& order) const override;
     bool ExactOrderWalk() const override;
     bool LifeScaledManaInOrderWalk() const override;
-    // MTG_AA_CAST_ORDER_V2: the proposed total order (one array, kAaV2Order); Stroke of Genius at the opponent
-    // after every cast; the board activations life -> untap loop (cheapest first) -> finish -> combat pumps.
+    // MTG_AA_CAST_ORDER_V2: ONE list of casts and board activations (kAaV2List; USER-amended 2026-11-18: Scholar of
+    // Athreos's cast at the finish, before its drain); Stroke of Genius at the opponent after every setup cast; the
+    // board activations life -> untap loop (cheapest first) -> finish -> combat pumps.
     int  CastOrderActionRank(const GameState& s, const Action& a, int rank) const override;
     int  ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
 };
