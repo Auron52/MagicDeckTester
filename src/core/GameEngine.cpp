@@ -1699,7 +1699,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             {
                 if (is_creature)
                 { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token,
-                                               MinusCountersOn(p), TotalCountersOn(p)}); }
+                                               MinusCountersOn(p), DyingCountersTotal(p)}); }
                 state.players[p.controller_index].graveyard.push_back(RevealedCard(p.card));
                 it = state.battlefield.erase(it);
                 changed = true;

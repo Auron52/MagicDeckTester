@@ -139,6 +139,7 @@ add_library(mtg-core STATIC
     src/deck/DeckLoader.cpp
     src/ai/AIEngine.cpp
     src/ai/DecisionProviders.cpp
+    src/ai/ProviderHeuristicRequired.cpp
     src/ai/TurnSolver.cpp
     src/ai/ManaPayment.cpp
     src/ai/ManaOracle.cpp
@@ -397,6 +398,8 @@ add_executable(mtg-test
     test/unit/test_sea_bounce.cpp
     test/unit/test_sea_sin.cpp
     test/unit/test_sea_gorger.cpp
+    test/unit/test_sea_sin_dies.cpp
+    test/unit/test_provider_heuristic_required.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp

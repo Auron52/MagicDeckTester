@@ -194,6 +194,8 @@ enum class UnprunedGate
     SeaSin,          // Sea Creatures: Sin's searched counter-harvest subsets restored (SeaCreaturesProvider::CounterHarvestSearchSubsets, USER 2026-11-17)
     SeaGorger,       // Sea Creatures: Trench Gorger's full exile menu restored (SeaCreaturesProvider::RestrictExileLibraryLandsMenu, USER 2026-11-16)
     GorgerZero,      // Trench Gorger: the "search and exile 0" entry restored (DecisionProvider::RestrictExileLibraryLandsMenu's 0/0 prune)
+    HeuristicRequired, // "a provider heuristic is REQUIRED" bypassed: a deck holding a registered card runs under a provider that
+                       // does not implement it, on the engine's measurement menu (ProviderHeuristicRequired.h). Measurement only.
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -720,6 +722,11 @@ public:
     // Trench Gorger: exile ALL lands when the library holds >= 6 of them, else decline (I6; USER 2026-11-16).
     void RestrictExileLibraryLandsMenu(const GameState& s, int controller, const std::vector<int>& copies,
                                        std::vector<std::vector<int>>& keep, bool& decline_offered) const override;
+    // ...which is the REQUIRED provider heuristic for Trench Gorger (ProviderHeuristicRequired.h; USER 2026-11-18).
+    // MTG_SEA_GORGER_ALL=0 / MTG_UNPRUNE=seagorger lift the policy for MEASUREMENT (the engine's searched menu) -- the
+    // same thing the global unpruned route does for a deck with no policy.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::ExileLibraryLands; }
     // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }

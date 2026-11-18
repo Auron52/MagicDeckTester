@@ -147,7 +147,19 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 13. Kiora II "don't untap during next untap step" deferral (the opponent never untaps; setting
     skip_next_untap would wrongly keep a later-stolen creature tapped). PROVISIONAL.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
-   this list. PROVISIONAL.
+   this list. PROVISIONAL. **USER 2026-11-18:** *"Sin dies might be worth modeling just because it is something that
+   could come up if we changed the list."* -> **MODELLED (branch `sea-sin-gorger`)**:
+   `dies_put_counters_on_own_creature_shuffle_self`, one body (`ResolveDiesCountersToOwnCreature`) in the shared
+   `OnCreatureDies`, both worlds. "Its counters" = the same number of EACH KIND Sin had as it left (last-known
+   information, snapshotted at all 24 death sites by `DyingCountersTotal`), put on the target (a put: doubler-aware,
+   -1/-1 through Melira / Vizier, CR 704.5r annihilation), then the card is shuffled into its owner's library on the
+   search-shuffle ordinal; a token copy shuffles nothing. **Correction to the brief:** with NO legal target the
+   ability is removed from the stack (CR 603.3d) and, per the 2025-06-06 ruling, *"none of its effects will happen.
+   Sin will remain in the zone it went to"* -- so the shuffle does NOT happen either (built that way). Target =
+   `DecisionProvider::DiesCountersTargetOrder`'s front (base: the World War Hulk chapter-II order); human play asks on
+   the board (`target`). **Still PROVISIONAL / USER question:** the target is not a searched axis (the Ilharg
+   `dies_tuck` twin shape is owed for the first list where Sin can die; unreachable in every current list).
+   Units: `test/unit/test_sea_sin_dies.cpp`.
 3. ~~Utopia Sprawl colour~~ — **USER 2026-11-16:** *"Utopia sprawl should prioritize blue as well. Green
    is a minor colour in the deck."* Implemented as: the provider's ETB colour axis restricted to {U, G}
    (W/B/R have no consumer: sound fold), plus a default-ON one-option prune to BLUE (=0 restores {U, G}
@@ -191,6 +203,17 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
     future leaf cannot see what the exile is worth. (g) Early signal, not the Stage 5 A/B: at d3 b10 on 40 games only 4
     Gorgers resolved, with 12-16 library lands each. The =0 searched arm picked `exile_all` 4/4. It was digest-identical
     to the prune, with +7.8% units. The <6-lands decline never fired.
+    **USER 2026-11-18 (on (a)):** *"For Trench Gorger this is a bit of a mess. It is one of those cases where we might
+    want to consider it searched, but then would always want to prune it anyway. Maybe the best way to handle this is
+    throwing an error if we don't implement a heuristic in the provider? Essentially we want the agent working on this
+    to be forced to implement something because fully searched and what you mentioned are both unacceptable for normal
+    usage."* / *"(i.e. searching a massive combinatoric set is not practical, but neither is removing them in library
+    order anywhere near correct)"* -> **BUILT (branch `sea-sin-gorger`)**: `docs/design/provider-heuristic-required.md`.
+    A deck holding Trench Gorger is REFUSED at setup unless its provider declares
+    `ImplementsRequiredHeuristic(ExileLibraryLands)`; SeaCreaturesProvider does. Bypasses: human play, `MTG_UNPRUNED`,
+    `MTG_UNPRUNE=heuristicrequired`. `MTG_SEA_GORGER_ALL=0` / `MTG_UNPRUNE=seagorger` are kept as Sea's measurement
+    route (the engine menu). The engine menu itself is unchanged (it is the measurement menu now). Candidate list for
+    further registrations (Genesis Wave, Ranger of Eos, Dragonstorm, Acclaimed Contender, ...) is in that doc: USER call.
 
 ## Stage 3 / 4 / 4-bis (2026-11-17)
 

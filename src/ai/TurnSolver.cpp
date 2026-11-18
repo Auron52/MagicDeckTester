@@ -79702,7 +79702,7 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
         const int  ctrl = p.controller_index;
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
-        const int total_counters = TotalCountersOn(p);
+        const int total_counters = DyingCountersTotal(p);
         state.players[ctrl].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);   // may append a token at the end -> safe (no echo_cost)

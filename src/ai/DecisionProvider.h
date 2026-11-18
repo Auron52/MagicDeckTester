@@ -65,6 +65,7 @@
 #include "../cards/CardDatabase.h"
 #include "KeepModel.h"    // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
 #include "PlanContext.h"  // PlanTraits for the reserve-override hooks (Action-free header)
+#include "ProviderHeuristicRequired.h"   // RequiredHeuristic (ImplementsRequiredHeuristic)
 #include "../core/MadnessTypes.h"   // MadnessOption / MadnessWindow (MadnessCastDefault)
 #include <algorithm>
 #include <array>
@@ -218,6 +219,12 @@ public:
     // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
     // no engine path branches on this.
     virtual const char* Name() const { return "Generic"; }
+    // "A PROVIDER HEURISTIC IS REQUIRED" (ProviderHeuristicRequired.h, docs/design/provider-heuristic-required.md):
+    // does this provider implement the deck-specific policy for `h`? A deck holding a card that carries a registered
+    // decision is REFUSED at setup under a provider that answers false (USER 2026-11-18: "fully searched and what you
+    // mentioned are both unacceptable for normal usage"). The root / generic answer is false. A provider answers true
+    // only for a policy it really implements in the named hook.
+    virtual bool ImplementsRequiredHeuristic(RequiredHeuristic h) const { (void)h; return false; }
     // A deck-specific searched periodic target sequence for Hedron Crab. Zero
     // means no narrowing policy has been supplied; the solver must not silently
     // use a bounded sequence for such a deck.
@@ -899,6 +906,14 @@ public:
     // nothing is pinned. Default (DecisionProviders.cpp): tuck unless another permanent of the same name stays on
     // `controller`'s battlefield (a legend-rule loser beside its survivor would be redrawn into the same rule).
     virtual bool DiesTuckDefault(const GameState& s, int controller, const Card& dead) const;
+
+    // Sin, Unending Cataclysm's death clause (CardParams::dies_put_counters_on_own_creature_shuffle_self): "put its
+    // counters on target creature you control". ORDER ONLY: permute `cands` (battlefield indices of every creature
+    // `controller` controls -- the full rules-legal set, never empty here); the FRONT is what the trigger targets
+    // (no search axis exists for this target yet: see ResolveDiesCountersToOwnCreature), and it pre-selects the
+    // human's board click. Default (DecisionProviders.cpp): the World War Hulk chapter-II order -- a creature that can
+    // attack right now first, then the most power, ties to the lowest battlefield index.
+    virtual void DiesCountersTargetOrder(const GameState& s, int controller, std::vector<int>& cands) const;
 
     // Search-only dredge menu. Entries are physical graveyard card numbers;
     // zero means take the ordinary draw. The default keeps the complete menu.

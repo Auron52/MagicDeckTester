@@ -2235,6 +2235,10 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // (GoldFishRunner / BatchRunner / AnalyzerEngine / main) funnel through, and every
     // search/rollout state is a copy of this one, so the pointer reaches every node.
     state.m_provider = &SelectDecisionProvider(deck);
+    // "A provider heuristic is REQUIRED" (ProviderHeuristicRequired.h): refuse, before the game starts, a deck holding a
+    // registered card under a provider that does not implement its policy. Human play and the unpruned measurement
+    // route are the only bypasses. Reads nothing into the state.
+    EnforceRequiredHeuristics(deck, *state.m_provider, "");
 
     // Every passive opponent starts with three inert lands. Across ten game indices, two have
     // 0 nonbasics, two have 1, three have 2, and three have 3. The extra slots go to buckets

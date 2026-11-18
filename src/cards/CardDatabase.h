@@ -4003,6 +4003,15 @@ struct CardParams
     // human play asks through the `dig` yes/no. The EXILE half ("or is put into exile from the battlefield") is not
     // wired (D3 PROVISIONAL: nothing in Boars can exile our permanent).
     int  dies_to_library_position = 0;
+    // Sin, Unending Cataclysm's death clause (Sea Creatures, 2026-11-18): "When Sin dies, put its counters on target
+    // creature you control, then shuffle this card into its owner's library." A TARGETED dies TRIGGER (CR 603.6c /
+    // 700.4), resolved in OnCreatureDies (SpellEffects.h, ResolveDiesCountersToOwnCreature), shared by both worlds.
+    // "Its counters" is LAST-KNOWN information (CR 608.2h): the same number of EACH KIND the permanent carried as it
+    // left the battlefield (Scryfall ruling 2025-06-06: a PUT, not a move, so a doubler applies), captured at the
+    // death site by DyingCountersTotal. No legal target as it triggers (CR 603.3d) -> the ability is removed and the
+    // card stays in the graveyard (ruling: an illegal target -> "none of its effects will happen"). A token copy puts
+    // the counters but is not a card, so nothing is shuffled (CR 111.7). false = no such clause.
+    bool dies_put_counters_on_own_creature_shuffle_self = false;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the
