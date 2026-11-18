@@ -97,6 +97,7 @@ declare -A DECK_FILE=(
   [mill]=decks/Mill/Mill.cod
   [boars]=decks/Boars/Boars.cod
   [sea]="decks/Sea Creatures/Sea Creatures.cod"
+  [mazesend]="decks/Maze's End/Maze's End.cod"
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -156,6 +157,7 @@ declare -A DECK_PROF=(
   [mill]=decks/Mill/Mill.profile.json
   [boars]=decks/Boars/Boars.profile.json
   [sea]="decks/Sea Creatures/Sea Creatures.profile.json"
+  [mazesend]="decks/Maze's End/Maze's End.profile.json"
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -186,6 +188,15 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # mazesend (Maze's End): ADDED 2026-11-18 by the analysis (docs/design/analysis-Maze's End.md, "S4"), all three
+  # tiers at once, at Hinata's pre-keep-table ENTRY shape. Gates alternate-win ramp (Maze's End + ten Gate names),
+  # MazesEndProvider, no value_play block -> play rows are d5 b20. No keep table and no value leaf yet, so GT WILL
+  # move when they land. mazesend2hg is the small searched 2HG canary: no card reads heads or starting life
+  # (Burgeoning's passive-opponent land play is one per opponent turn; Gates Ablaze is never cast).
+  "mazesend     0 1001 1000 0"
+  "mazesend     3 1001   50 10"
+  "mazesend     5 1001  100 20"
+  "mazesend2hg  3 1001   50 10"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 1001 100 0"
   "mill 3 1001   5 10"
@@ -779,6 +790,21 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # mazesend: see the SMOKE block (2026-11-18, pre-keep-table ENTRY set).
+  "mazesend     0 2002 1000 0"
+  "mazesend     3 2002   75 10"
+  "mazesend     5 2002  150 20"
+  "mazesend     5 3003  150 20"
+  # Maze's End unlimited backstop (2026-11-18): budget-0 play is DEGENERATE on this deck -- screened 28 blocks
+  # (30001..30541 step 20; 10 games each for 30001..30181, 3 for the rest; d3+d5, abandon_units 2000000,
+  # MTG_SLOW_GAME_MS=5000, 8 workers): 171 of 246 games hit the 2M-unit cap (12-110 s each). No block's first
+  # two games finish at both depths, so each row is ONE game (a block's first game, the only shape whose seed and
+  # game_index match the screen). 30121 gi0 under 5 s at both depths; 30081 gi0 d3 9.0 s / 1.10M units, d5 under
+  # 5 s. Disjoint from the overnight blocks.
+  "mazesend     3 30121    1 0"
+  "mazesend     5 30121    1 0"
+  "mazesend     3 30081    1 0"
+  "mazesend     5 30081    1 0"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 2002 100 0"
   "mill 3 2002   5 10"
@@ -1296,6 +1322,24 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # mazesend: overnight ENTRY set before its keep table (2026-11-18; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
+  # play rows). No mazesend2hg overnight rows: the deck reads no heads or starting life (see the SMOKE canary note).
+  # Expand to the FULL set just before the keep table is adopted.
+  "mazesend     0  4004 2000 0"
+  "mazesend     0  6006 2000 0"
+  "mazesend     0  8008 2000 0"
+  "mazesend     0 10010 2000 0"
+  "mazesend     3  4004  125 10"
+  "mazesend     5  4004  300 20"
+  "mazesend     5  5005  300 20"
+  "mazesend     5  6006  300 20"
+  "mazesend     5  7007  300 20"
+  # Maze's End unlimited backstop: same 2026-11-18 screen (see the REGRESSION half). 30341 gi0 and 30441 gi0
+  # finished under 5 s at both depths.
+  "mazesend     3 30341    1 0"
+  "mazesend     5 30341    1 0"
+  "mazesend     3 30441    1 0"
+  "mazesend     5 30441    1 0"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 4004 100 0"
   "mill 3 4004   5 10"
