@@ -34825,7 +34825,9 @@ static thread_local int g_bp_seen_last = 0;
 //
 // SCOPE. By default a compound slot opens only at a LATENT occurrence -- a site-9 re-open, the one place an
 // untargeted occurrence applies NOTHING rather than the canon, so a single deviation can reach no
-// continuation there at all (gi144's whole line runs through them). At every other class-on occurrence an
+// continuation there at all (gi144's whole line runs through them) -- and, since P5c (2026-11-18), at a CANON-DROP
+// occurrence: an untargeted one whose canon withheld the front's board activations (g_bp_canon_drop_mask), where
+// the full front is likewise reachable only by targeting it. At every other class-on occurrence an
 // untargeted one plays the nested canon, and the one-deviation walk is the designed coverage; opening
 // sequences there too is MTG_BP_DEV_SEQ_ALL (DEFAULT OFF), measured 2026-10-29: it makes the walk the full
 // cross product, and without a breakpoint-level transposition (the apply's whole resume context, a
@@ -34852,6 +34854,17 @@ static bool BpDevSeqAllOn()
 // the index such an occurrence WOULD have taken, +1 (a count, like g_bp_seen_last); the walker opens a
 // compound slot at it. Written only under the lever; reset by the walker hosts beside g_bp_seen_last.
 static thread_local int g_bp_seen_latent = 0;
+// ...and the UNTARGETED occurrences whose canon DROPPED a board activation (MTG_BP_DEV_SEQ; P5c 2026-11-18): bit i set
+// when occurrence i of a searched apply (g_rollout_nest == 0, g_bp_enum_depth == 0) was not targeted by the plan's
+// choice, took TurnSolver::BpUnbranchedCanon's front, and that front carries a board activation the canon does not
+// apply (Plan::cont_canon, MTG_CANON_CONT_NOACTS). Such an occurrence is LATENT in exactly the site-9 re-open's sense:
+// the one-deviation walk's designed coverage is "one deviation, the front everywhere else", and with the canon's
+// activations withheld the front is not what the untargeted occurrence plays -- the FULL front (its activations
+// run) is reachable only by TARGETING the occurrence. Maze's End s.t. unit "THREE land drops": rank 3 at the site-9
+// occurrence (play a Gate) and then the site-10 front {Gate, activate Maze's End} -- two deviations from the canon,
+// so the win was unfindable at every budget (the uniform arm found it only when both were rank 0). The walker opens
+// compound slots for it (BpWaveWalker::DevSeqCanonDrop); reset by the walker hosts beside g_bp_seen_latent.
+static thread_local std::uint64_t g_bp_canon_drop_mask = 0;
 // THE TWO PASSES (MTG_BP_DEV_SEQ; see TurnSolver::FullSearchLine). A full-line search runs first with the
 // compound waves SUPPRESSED (g_devseq_suppress) -- the one-deviation search, cheap -- and only then, if that
 // pass met a latent occurrence at all (g_devseq_latent_hit), a second pass with them on, bounded by the
@@ -73356,6 +73369,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!resolved && !EquipRouteDfsActive() && !AlchemistComboRouteInProgress()
             && TurnSolver::BpUnbranchedCanon(state, is_pre_combat, plan, seen_before, class_on, out))
         { resolved = true; canon_used = true; }
+        // MTG_BP_DEV_SEQ: an untargeted occurrence whose canon withheld the front's board activations is LATENT (see
+        // g_bp_canon_drop_mask). Recorded, never counted, so the numbering stays the executor's. seen_before >= 0 only
+        // for a plan carrying a choice at a class-on occurrence, which is the walker's domain.
+        if (canon_used && out.cont_canon && seen_before >= 0 && seen_before < 64 && BpDevSeqOn()
+            && g_rollout_nest == 0 && g_bp_enum_depth == 0)
+        {
+            for (const Action& ca : out.actions)
+            {
+                if (!TurnSolver::IsTrailingActivation(ca.kind)) { continue; }
+                g_bp_canon_drop_mask |= (std::uint64_t{1} << seen_before);
+                g_devseq_latent_hit = true; ++g_devseq_latent_n;
+                g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+                break;
+            }
+        }
         // The playout fold's premise, checked rather than assumed: the measured base resolved this
         // occurrence by the unconditional EMPTY fallback below and nothing else (pofold).
         if (resolved && pofold::t_base.plan == &plan) { ++pofold::t_base.asym; }
@@ -93275,11 +93303,14 @@ public:
     // slot here to report through, so the host hands its reach in (see Report for `reach`). `tmpl` is
     // the index in `plans` of a plan with the variant's actions (the variant itself, or its base plan);
     // `pre`/`at`/`choice` its deviation(s). Opens the same compound slots Report would.
-    void SeedDevSeq(std::size_t tmpl, const std::vector<int>& pre, int at, int choice, int seen, int latent)
+    // `drop` = the apply's g_bp_canon_drop_mask (the untargeted occurrences whose canon withheld an activation).
+    void SeedDevSeq(std::size_t tmpl, const std::vector<int>& pre, int at, int choice, int seen, int latent,
+                    std::uint64_t drop = 0)
     {
         if (!m_devseq || choice < 0 || at < 0) { return; }
         if (choice >= TurnSolver::kBpChainChoice) { return; }   // a chain arm: its rank's own slot carries it
         DevSeqOpen(tmpl, pre, at, choice, seen, latent);
+        DevSeqCanonDrop(tmpl, pre, at, choice, drop);
     }
     void SeedDevSeq(const CandSeq& plans, std::size_t pos, int seen, int latent)
     {
@@ -93315,6 +93346,7 @@ private:
             Slot& sl = m_slots[here];
             if (sl.done) { continue; }
             if (!m_canon_only.empty() && (m_canon_only.count(sl.base_slot) != 0) != (phase == 1)) { continue; }
+            if (sl.kcap >= 0 && sl.k_next >= sl.kcap) { sl.done = true; continue; }   // DevSeqCanonDrop's rank 0
             if (sl.n >= 0 && sl.k_next >= sl.n)
             {
                 // THE SLOT'S "CAST NOTHING MORE" (MTG_BP_WAVE_EMPTY). Every in-list rank has been
@@ -93551,6 +93583,8 @@ private:
         // MTG_BP_DEV_SEQ: a COMPOUND slot's earlier deviations (Plan::bp_pre, length == at); empty on an
         // ordinary slot. A compound slot's base_slot is kCompoundBase: it owns no m_bases entry.
         std::vector<int> pre;
+        // A canon-drop compound's rank ceiling (DevSeqCanonDrop: rank 0 only); -1 = the whole list.
+        int         kcap = -1;
     };
     static constexpr std::size_t kCompoundBase = static_cast<std::size_t>(-1);
     static uint64_t SlotKey(std::size_t bi, int at)
@@ -93699,7 +93733,67 @@ private:
     {
         if (!m_devseq) { return; }
         const Slot& sl = m_slots[m_last];
-        DevSeqOpen(sl.base, sl.pre, sl.at, m_last_choice, seen, g_bp_seen_latent);
+        // Copies: DevSeqOpen may grow m_deferred only, but keep the slot's fields stable for the second call.
+        const std::size_t tmpl = sl.base;
+        const std::vector<int> pre = sl.pre;
+        const int at = sl.at;
+        DevSeqOpen(tmpl, pre, at, m_last_choice, seen, g_bp_seen_latent);
+        if (m_last_choice < TurnSolver::kBpChainChoice)
+        { DevSeqCanonDrop(tmpl, pre, at, m_last_choice, g_bp_canon_drop_mask); }
+    }
+    // THE CANON-DROP COMPOUNDS (MTG_BP_DEV_SEQ; see g_bp_canon_drop_mask). The variant (template `tmpl`, earlier
+    // deviations `pre`, `choice` at `at`) applied the canon at the occurrences in `drop`, and the canon there withheld
+    // the front's board activations -- so "this deviation, the FULL front at those occurrences" is a line no single
+    // deviation reaches. Two compound slots restore it, one deviation more than the variant (a later wave, so a
+    // finite budget spends on exactly what it spent on before and only then on these; an unlimited one reaches
+    // them all -- a PRICE, never a gate):
+    //   * BEFORE the deviation: every dropped occurrence i < at takes rank 0 (the front, by plan: its activations
+    //     run), and `at` walks its whole list again -- "the front at i" is wanted for every rank at `at`, and each of
+    //     them meets the same i, so the slot is opened once (m_seq_opened) and serves them all.
+    //   * AFTER it: the FIRST dropped occurrence j > at takes rank 0 only (Slot::kcap) with the variant's own
+    //     deviation kept. Rank 0 alone is the line the canon stood in for; the other ranks at j are two deviations
+    //     from the front, outside the one-deviation coverage this restores (MTG_BP_DEV_SEQ_ALL's territory). Its
+    //     own apply reports the next dropped occurrence, so a chain of them is walked one link at a time.
+    void DevSeqCanonDrop(std::size_t tmpl, const std::vector<int>& pre_in, int at, int choice, std::uint64_t drop)
+    {
+        if (!m_devseq || drop == 0 || at < 0 || choice < 0 || at >= 64) { return; }
+        std::vector<int> dev = pre_in;
+        dev.resize(static_cast<std::size_t>(at), -1);
+        bool any_before = false;
+        for (int i = 0; i < at; ++i)
+        {
+            if (((drop >> i) & 1) != 0 && dev[static_cast<std::size_t>(i)] < 0)
+            { dev[static_cast<std::size_t>(i)] = 0; any_before = true; }
+        }
+        if (any_before)
+        {
+            std::vector<int> key = dev;
+            key.push_back(at);
+            key.push_back(static_cast<int>(tmpl));
+            if (m_seq_opened.insert(std::move(key)).second)
+            {
+                Slot cs{ tmpl, kCompoundBase, at, 0, 0, -1, false, m_empty };
+                cs.pre = dev;
+                m_deferred.push_back(std::move(cs));
+            }
+        }
+        const std::uint64_t after = (at + 1 < 64) ? (drop >> (at + 1)) << (at + 1) : 0;
+        if (after == 0) { return; }
+        int j = at + 1;
+        while (((after >> j) & 1) == 0) { ++j; }
+        std::vector<int> pa = pre_in;
+        pa.resize(static_cast<std::size_t>(at), -1);
+        pa.push_back(choice);
+        pa.resize(static_cast<std::size_t>(j), -1);
+        std::vector<int> key = pa;
+        key.push_back(j);
+        key.push_back(static_cast<int>(tmpl));
+        key.push_back(-7);   // a rank-0-only slot: kept apart from a full compound at the same (pre, at)
+        if (!m_seq_opened.insert(std::move(key)).second) { return; }
+        Slot cs{ tmpl, kCompoundBase, j, 0, 0, -1, false, false };
+        cs.pre  = std::move(pa);
+        cs.kcap = 1;
+        m_deferred.push_back(std::move(cs));
     }
     // The variant (template `tmpl`, earlier deviations `pre`, `choice` at `at`) reached `seen` counted
     // occurrences and, LATENT, `latent` (0 = none; else the index of the one it could reach only by
@@ -93740,11 +93834,13 @@ struct DevSeqSeed
     int         choice;
     int         seen;     // counted occurrences the apply reached (g_bp_seen_last)
     int         latent;   // ...and the latent one, +1 (g_bp_seen_latent; 0 = none)
+    std::uint64_t drop = 0;   // ...and its canon-drop occurrences (g_bp_canon_drop_mask)
 };
-// Worth seeding? Only a variant that reached past its own deviation in the walker's scope.
-static bool DevSeqSeedWorth(int at, int seen, int latent)
+// Worth seeding? Only a variant that reached past its own deviation in the walker's scope, or met an
+// untargeted occurrence whose canon withheld an activation (either side of its deviation).
+static bool DevSeqSeedWorth(int at, int seen, int latent, std::uint64_t drop = 0)
 {
-    return latent > at + 1 || (BpDevSeqAllOn() && seen > at + 1);
+    return latent > at + 1 || drop != 0 || (BpDevSeqAllOn() && seen > at + 1);
 }
 
 // One node-hosted plan whose value-best child reached nested breakpoints (MTG_BP_NODE_NESTED_SLOTS):
@@ -93942,7 +94038,7 @@ std::vector<TurnSolver::DevSeqStep> TurnSolver::WaveWalkerDevSeqForTest(const Ga
         const int r = reach_of(v);
         g_bp_seen_latent = r < 0 ? -r : 0;
         w.Report(plans, listed ? list_len : 0, r < 0 ? v.bp_at + 1 : r, -1);
-        g_bp_seen_latent = 0;
+        g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;
         out.push_back(DevSeqStep{ v.bp_pre, v.bp_choice, v.bp_at });
     }
     return out;
@@ -115400,10 +115496,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // MTG_BP_DEV_SEQ: a variant this loop applies (a wave-0 rank) has no walker slot to report
             // through, so its reach is read here and seeded into the walker below.
             const bool m2_dvs = m2_devseq && q.bp_choice >= 0 && !q.bp_all;
-            if (m2_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; }
+            if (m2_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0; }
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
-            if (m2_dvs && !node_snap.pending && DevSeqSeedWorth(q.bp_at, g_bp_seen_last, g_bp_seen_latent))
-            { m2_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(&q - post.data()), q.bp_at, q.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
+            if (m2_dvs && !node_snap.pending && DevSeqSeedWorth(q.bp_at, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask))
+            { m2_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(&q - post.data()), q.bp_at, q.bp_choice, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask }); }
             if (q.bp_choice < 0 && g_bp_base_canon_last != m2_canon_before && BpCanonWaveOn())
             { m2_canon_bases.insert(static_cast<std::size_t>(&q - post.data())); }
             m2_dig_fold.Record(q, !node_snap.pending, static_cast<int>(&q - post.data()));
@@ -115526,10 +115622,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     g_bp_cands_last   = 0;
                     g_bp_demoted_last = 0;
                     cantripattr::t_last_cont_axis = -1;
-                    if (m2_devseq) { g_bp_seen_latent = 0; }   // the resume seeds g_bp_seen_last itself
+                    if (m2_devseq) { g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0; }   // the resume seeds g_bp_seen_last itself
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
-                    if (m2_devseq && DevSeqSeedWorth(v.bp_at, g_bp_seen_last, g_bp_seen_latent))
-                    { m2_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(&q - post.data()), v.bp_at, v.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
+                    if (m2_devseq && DevSeqSeedWorth(v.bp_at, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask))
+                    { m2_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(&q - post.data()), v.bp_at, v.bp_choice, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask }); }
                     if (k == 0) { pb_node.TakeChannel(); }
                     pb_node.Record(k);
                     // MTG_CANTRIP_ATTRIB: the rest of this child (dedup, recursion) is spent under the
@@ -115797,7 +115893,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                 m2_canon_bases.empty() ? nullptr : &m2_canon_bases);
             // The node's nested breakpoints and demoted waves (see the FSLineWin host's twin).
             NodeNestedToWalker(walker, post, node_nested);
-            for (const DevSeqSeed& sd : m2_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent); }   // MTG_BP_DEV_SEQ
+            for (const DevSeqSeed& sd : m2_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent, sd.drop); }   // MTG_BP_DEV_SEQ
             // MTG_BP_M2_WAVE_FIXPOINT: give the walker's lines this loop's fixpoint step (m2_fixpoint).
             static const bool s_m2w_fix_env = EnvOn("MTG_BP_M2_WAVE_FIXPOINT", true);   // DEFAULT ON; =0 reverts
             const bool m2w_fix = m2fmode != 0 && heurarm::Flag(heurarm::BP_M2_WAVE_FIXPOINT, s_m2w_fix_env);
@@ -115825,7 +115921,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     std::vector<Action> bp;
                     g_bp_cands_last = 0;          // 0 == this apply reached no eligible breakpoint
                     g_bp_seen_last  = 0; g_bp_demoted_last = 0;          // ... and reached no nested one either
-                    g_bp_seen_latent = 0;         // ... nor one it could reach only by targeting it (MTG_BP_DEV_SEQ)
+                    g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;         // ... nor one it could reach only by targeting it (MTG_BP_DEV_SEQ)
                     if (m2w_fix) { g_bp_fired_last = 0; }   // the fixpoint gate reads THIS apply's count
                     if (hit != prefix_cache.end())
                     { ApplyPlanDirect(s, v, false, &bp, nullptr, &hit->second); }
@@ -118301,13 +118397,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // MTG_BP_DEV_SEQ: a variant this loop applies (a wave-0 rank) has no walker slot to report
         // through, so its reach is read here and seeded into the walker below.
         const bool m1_dvs = m1_devseq && p.bp_choice >= 0 && !p.bp_all;
-        if (m1_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; }
+        if (m1_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0; }
         const unsigned long long dvs_lat_apply0 = g_devseq_latent_n;   // MTG_DEV_SEQ_TAIL_SKIP (the apply skip)
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
         const bool dvs_apply_latent = g_devseq_latent_n != dvs_lat_apply0;
         const int  dvs_apply_n = g_bp_cands_last, dvs_apply_m = g_bp_demoted_last;
-        if (m1_dvs && !node_snap.pending && DevSeqSeedWorth(p.bp_at, g_bp_seen_last, g_bp_seen_latent))
-        { m1_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(p_pos), p.bp_at, p.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
+        if (m1_dvs && !node_snap.pending && DevSeqSeedWorth(p.bp_at, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask))
+        { m1_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(p_pos), p.bp_at, p.bp_choice, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask }); }
         if (p.bp_choice < 0 && g_bp_base_canon_last != m1_canon_before && BpCanonWaveOn())
         { m1_canon_bases.insert(static_cast<std::size_t>(p_pos)); }
         etbc_fold.Record(pre_i, ec_w0,
@@ -118558,10 +118654,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     std::vector<Action> bp3;
                     g_bp_cands_last   = 0;
                     g_bp_demoted_last = 0;
-                    if (m1_devseq) { g_bp_seen_latent = 0; }   // the resume seeds g_bp_seen_last itself
+                    if (m1_devseq) { g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0; }   // the resume seeds g_bp_seen_last itself
                     ApplyPlanDirect(s3, v, true, &bp3, nullptr, &node_snap);
-                    if (m1_devseq && DevSeqSeedWorth(v.bp_at, g_bp_seen_last, g_bp_seen_latent))
-                    { m1_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(p_pos), v.bp_at, v.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
+                    if (m1_devseq && DevSeqSeedWorth(v.bp_at, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask))
+                    { m1_dvs_seeds.push_back(DevSeqSeed{ static_cast<std::size_t>(p_pos), v.bp_at, v.bp_choice, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask }); }
                     if (k == 0) { pb_node.TakeChannel(); }
                     pb_node.Record(k);
                     // Child 0 is cands.front() -- what MTG_BP_NESTED_CANON hands every variant at an
@@ -119170,7 +119266,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // The node's nested breakpoints and demoted waves (MTG_BP_NODE_NESTED_SLOTS /
         // MTG_BP_NEW_ONLY_DEMOTE; see BpWaveWalker::AddHostedNested / AddHostedDemoted).
         NodeNestedToWalker(walker, pre_view, node_nested);
-        for (const DevSeqSeed& sd : m1_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent); }   // MTG_BP_DEV_SEQ
+        for (const DevSeqSeed& sd : m1_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent, sd.drop); }   // MTG_BP_DEV_SEQ
         if (walker.Empty())
         {
             if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -119215,7 +119311,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 std::vector<Action> bp;
                 g_bp_cands_last = 0;              // 0 == this apply reached no eligible breakpoint
                 g_bp_seen_last  = 0; g_bp_demoted_last = 0;              // ... and reached no nested one either
-                g_bp_seen_latent = 0;             // ... nor one it could reach only by targeting it (MTG_BP_DEV_SEQ)
+                g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;             // ... nor one it could reach only by targeting it (MTG_BP_DEV_SEQ)
                 if (hit != prefix_cache.end())
                 { ApplyPlanDirect(s, v, true, &bp, nullptr, &hit->second); }
                 else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
@@ -119474,7 +119570,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 GameState s = state;
                 bp_out.clear();
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0;   // MTG_BP_DEV_SEQ
+                g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;   // MTG_BP_DEV_SEQ
                 ApplyPlanDirect(s, v, true, &bp_out);
                 // Post-apply state dedup against everything scored at this node: a tranche plan
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
@@ -126379,8 +126475,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool la_dvs = false;   // THIS candidate's apply is read for a seed (set beside cand_index)
         auto la_dvs_record = [&](const Plan& pl)
         {
-            if (la_dvs && DevSeqSeedWorth(pl.bp_at, g_bp_seen_last, g_bp_seen_latent))
-            { la_dvs_seeds.push_back(DevSeqSeed{ cand_index, pl.bp_at, pl.bp_choice, g_bp_seen_last, g_bp_seen_latent }); }
+            if (la_dvs && DevSeqSeedWorth(pl.bp_at, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask))
+            { la_dvs_seeds.push_back(DevSeqSeed{ cand_index, pl.bp_at, pl.bp_choice, g_bp_seen_last, g_bp_seen_latent, g_bp_canon_drop_mask }); }
         };
         // THE PLAYOUT WAVE-0 IDENTITY (MTG_BP_PO_W0_FOLD; see the pofold namespace for the identity and
         // its three measured asymmetries). PLAYOUTS ONLY -- that is where both canon defaults stand down,
@@ -126903,7 +126999,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             cand_index = ci;
             // MTG_BP_DEV_SEQ: a wave-0 variant's own apply (a shared combat-pin state applies nothing).
             la_dvs = la_devseq && plan.bp_choice >= 0 && !plan.bp_all && cp_shared == nullptr;
-            if (la_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; }
+            if (la_dvs) { g_bp_seen_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0; }
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
             canon_before = g_bp_base_canon_last;
             classon_before = g_bp_classon_last;   // ...and its enabled-class twin
@@ -127616,7 +127712,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                 bp_nobp.empty() ? nullptr : &bp_nobp,
                                 /*host_pends=*/false,   // this loop never passes the node a capture
                                 bp_canon.empty() ? nullptr : &bp_canon);
-            for (const DevSeqSeed& sd : la_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent); }   // MTG_BP_DEV_SEQ
+            for (const DevSeqSeed& sd : la_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent, sd.drop); }   // MTG_BP_DEV_SEQ
             if (walker.Empty())
             {
                 if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -127661,7 +127757,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     GameState copy = (hit != prefix_cache.end()) ? hit->second.state : state;
                     g_bp_cands_last = 0;
                     g_bp_seen_last  = 0; g_bp_demoted_last = 0;
-                    g_bp_seen_latent = 0;   // MTG_BP_DEV_SEQ (see the FSLineWin host)
+                    g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;   // MTG_BP_DEV_SEQ (see the FSLineWin host)
                     if (is_pre_combat)
                     {
                         if (hit != prefix_cache.end())
@@ -127825,7 +127921,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
                 g_bp_cands_last = 0;
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0;   // MTG_BP_DEV_SEQ
+                g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;   // MTG_BP_DEV_SEQ
                 if (is_pre_combat)
                 {
                     ApplyPlanDirect(copy, v, true);
