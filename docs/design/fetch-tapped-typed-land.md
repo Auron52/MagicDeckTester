@@ -232,7 +232,8 @@ Results:
      2HG -0.017, 5 faster / 0 slower.
    - `MTG_FIVECOLOUR_TRIOME_BESIDE`: width 2, 1.24-1.30x units. Std -0.030, 31/1. 2HG -0.017, 8/3.
    - Both together: plays exactly as BESIDE.
-   - The agent's recommendation: RULE6_SEES_STEPS. See "Recommendation" below.
+   - No-shuffle bracket: BESIDE std -0.014 vs RULE6 -0.009; 2HG -0.023 vs -0.010. BESIDE keeps a real edge at
+     1.17-1.33x units. The agent leans to RULE6_SEES_STEPS; see "Recommendation".
 5. ~~Cyclone: build the amendment?~~ Built ON in round 2 (`MTG_CYCLONE_LOUNGE_IDLE_AMEND`). It measures neutral:
    std +0.000, 2HG -0.003. `=0` restores the round-1 test.
 
@@ -377,21 +378,38 @@ The no-land plan is not soundly dominated. Hand size feeds discard, and Emrakul'
 cannot be folded away, and nothing was changed. Worth recording for whoever next touches no-win tie-breaking: a
 no-land main 1 in a deck with no main 2 can win a tie only through a discard effect.
 
+### Non-clairvoyant bracket (round 2, `MTG_NO_SEARCH_SHUFFLE=1`, all four Five Colour arms, same seeds)
+
+| Set | A vs B | Delta | se | Faster | Slower | Units A/B |
+|---|---|---|---|---|---|---|
+| std | bes vs off | -0.0140 | 0.0037 | 14 | 0 | 1.332 |
+| std | stp vs off | -0.0090 | 0.0033 | 10 | 1 | 0.994 |
+| std | both vs off | -0.0130 | 0.0039 | 14 | 1 | 1.269 |
+| std | stp vs bes | +0.0050 | 0.0022 | 0 | 5 | 0.746 |
+| 2HG | bes vs off | -0.0233 | 0.0099 | 8 | 1 | 1.172 |
+| 2HG | stp vs off | -0.0100 | 0.0058 | 3 | 0 | 1.012 |
+| 2HG | both vs off | -0.0267 | 0.0093 | 8 | 0 | 1.158 |
+| 2HG | stp vs bes | +0.0133 | 0.0081 | 1 | 5 | 0.864 |
+
+BESIDE's standard gain shrinks from -0.030 to -0.014, the same as in round 1. RULE 6's shrinks from -0.018 to
+-0.009. So in the game that no fetch target can win on luck, RULE 6 delivers about 65% of BESIDE's standard gain and
+43% of its 2HG gain. BESIDE keeps a REAL residual edge over it: std -0.005 (t 2.3, 5 games, 0 the other way) and
+2HG -0.013 (t 1.6). These are steps the one-target test cannot see. RULE 6's one slower no-shuffle game, std 896,
+is library composition. RULE 6 plays the textbook turn 1 (Tarn into Breeding Pool, Birds; Cannons on T2). Fetching
+the Pool rather than playing Blood Crypt changes which land is left in the library, and the T4 draw differs
+(Two-Headed Hellkite instead of Breeding Pool). It does not recover at 4x budget because the draws are
+deterministic, not because the search misses anything.
+
 ### Recommendation (agent's; the decision is the USER's)
 
-Adopt `MTG_FIVECOLOUR_RULE6_SEES_STEPS`, not BESIDE and not both.
-- **It keeps the USER's doctrine.** "Triomes are STRICTLY for times when you cannot use the mana" stays a one-target
-  rule; the test is simply more accurate about when the mana can be used.
-- **It costs nothing.** About 1.0x search units, against BESIDE's 1.24-1.30x on the suite's costliest deck per game.
-- **It takes most of BESIDE's measured gain.** Std -0.018 vs -0.030; 2HG equal (-0.017), with 0 slower games against
-  BESIDE's 3.
-- **The rest of BESIDE's standard gain looks like draw luck, but this is not yet confirmed.** That extra gain is
-  -0.012 (stp vs bes: 13 games where BESIDE is faster, 1 where it is slower). Most of it appears to be draw luck
-  from the post-fetch shuffle: round 1's no-shuffle bracket shrank BESIDE's standard gain from -0.030 to -0.014.
-  The remaining real cases are std 440 (an attack) and 2HG 258 (a mid-turn draw), which only width 2 can see.
+There is a genuine trade, and the numbers above are the input:
+- **`MTG_FIVECOLOUR_RULE6_SEES_STEPS` (width 1):** about 1.0x search units. It keeps "triomes are STRICTLY for
+  times when you cannot use the mana" as a one-target rule. Default game: std -0.018, 2HG -0.017. No-shuffle
+  bracket: std -0.009, 2HG -0.010.
+- **`MTG_FIVECOLOUR_TRIOME_BESIDE` (width 2, or both flags):** 1.17-1.33x search units on the suite's costliest deck
+  per game, for a further real std -0.005 and 2HG -0.013 in the bracket. The search, not the rule, decides.
 
-**Bracket still owed: round 2's no-shuffle run.** It has the same seeds, all four Five Colour arms and
-`MTG_NO_SEARCH_SHUFFLE=1`, in `build/scratch/fetch-typed2/manifest2_nss.json`. It is queued and was not finished
-when this was written (output `err2_nss` / `t1_2nss.txt`, marker `DONE2`). It is the direct test of the paragraph
-above. Analyse it with:
-`python3 an.py err2_nss t1_2nss.txt fc bes off stp off both off stp bes`
+The agent's lean: RULE6_SEES_STEPS. It is free and stays inside the USER's doctrine. BESIDE's extra ~0.005-0.013
+turns costs about 25-30% more search on every Five Colour game. If the USER prefers the larger gain, "both" is the
+form to adopt: it plays like BESIDE, at slightly fewer units (0.95-0.98x of BESIDE). It also keeps the more accurate
+untapped-first order, which rollouts use.
