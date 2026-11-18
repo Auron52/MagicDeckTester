@@ -988,6 +988,10 @@ enum Slot : int
     MAZE_LEAF_PROGRESS,       // MTG_MAZE_LEAF_PROGRESS    Maze's End P1b: the graded no-win leaf subtracts the deck's alternate-win PROGRESS (distinct Gate names controlled, life-equivalent 2 per name, plus Maze's End held and new-name Gates in hand under it) -- MazesEndProvider::NoWinLeafProgress. Evaluation, not a prune. Default ON; =0 -> opponent life alone (every no-win leaf ties)
     MAZE_FETCH_EVAL,          // MTG_MAZE_FETCH_EVAL       Maze's End P1b: a Maze's End activation that fetches a NEW Gate name carries plan eval 200 (MazesEndProvider::TapTutorPutEval), so the greedy walk (beyond-horizon playout / d0 runner) prefers making progress over leaving the {3} idle; a duplicate name or the fail-to-find stays 0. Default ON; =0 -> every fetch 0
     MAZE_FETCH_DEFER,         // MTG_MAZE_FETCH_DEFER      Maze's End P1c: the new-name fetch eval (MAZE_FETCH_EVAL) is 0 while a land drop is open AND a new-name Gate is in hand (read after the plan's own land play) -- the win check runs only at the activation, so activating before the hand's Gates are down spends the check early; the value-ranked breakpoint list (wave-0 width W=2) otherwise put two such dead-end activations ahead of the land play the win needs (unit "THREE land drops"). Evaluation/order only. Default ON; =0 -> the P1b eval in every state
+    MAZE_SUMMIT_COUNT,        // MTG_MAZE_SUMMIT_COUNT     Maze's End P1d (USER B1): Guild Summit's searched "tap any number of Gates" count is pruned from N = 0..U to at most {the rest-of-line count, 0, all}: the rest-of-line count rides the unpinned cast (chosen_x 0) and is computed at RESOLUTION by MazesEndProvider::EtbTapSubtypeDrawDefault = the untapped Gates minus what the rest of the applying line still owes (g_line_unpaid_cost, plus Maze's End's {3} when an untapped Maze's End is ours and the hold carries no activations), net of floating mana and untapped non-Gate lands. Also the beyond-horizon default. A USER-directed provider prune. Default ON; =0 -> every N searched, all Gates unpinned
+    MAZE_ONE_COLOUR,          // MTG_MAZE_ONE_COLOUR       Maze's End P1d (USER P1): a chosen-colour land (Thran Portal, the CLB Gates) is offered ONE colour: no green source -> G; else no blue source -> U; else G; neither offered -> the first admitted. A USER-directed provider prune; human play still asks. Default ON; =0 -> every admitted colour searched
+    MAZE_SPEND_NEVERCAST,     // MTG_MAZE_SPEND_NEVERCAST  Maze's End P1d (USER P2): the spendable-colour restriction (ledger decision 20) ignores cards the provider never casts autonomously (Gates Ablaze), so the colour menu is G/U only (no red). Human play unchanged. Default ON; =0 -> G/U/R
+    MAZE_LAND_TARGETS,        // MTG_MAZE_LAND_TARGETS     Maze's End P1d (USER P3): land-search targets (Sylvan Scrying, Archdruid's Charm's land find, Maze's End's fetch) pruned to the USER's menu: no Maze's End (battlefield+hand) -> {Maze's End}; else Maze's End unless 2+ held or 1 + an Amulet, Baldur's Gate if in the library, Gond Gate if none held (battlefield/hand) and one is in the library, and ONE new-name Gate (singleton first) only once Baldur's is gone and Gond is had. Maze's End's fetch: the same without Maze's End; fail-to-find kept. Human play unchanged. Default ON; =0 -> every distinct name
     COUNT
 };
 
@@ -1920,6 +1924,10 @@ inline const char* Name(int slot)
         "MTG_MAZE_LEAF_PROGRESS",
         "MTG_MAZE_FETCH_EVAL",
         "MTG_MAZE_FETCH_DEFER",
+        "MTG_MAZE_SUMMIT_COUNT",
+        "MTG_MAZE_ONE_COLOUR",
+        "MTG_MAZE_SPEND_NEVERCAST",
+        "MTG_MAZE_LAND_TARGETS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

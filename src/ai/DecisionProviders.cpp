@@ -67163,6 +67163,116 @@ bool MazeNameIsGate(const std::string& name)
     const CardDefinition* d = CardDatabase::Instance().Lookup(name);
     return d != nullptr && CardHasSubtype(d->card, "Gate");
 }
+
+// ---- P1d (USER P3): the land-search target menu -------------------------------------------------------------
+bool MazeLandTargetsOn()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_LAND_TARGETS", true);   // DEFAULT ON; =0 -> every distinct name
+    return heurarm::Flag(heurarm::MAZE_LAND_TARGETS, s_on);
+}
+bool MazeIsMazeDef(const CardDefinition* d) { return d != nullptr && d->params.alt_win_distinct_named_count > 0; }
+bool MazeIsBaldurDef(const CardDefinition* d)
+{ return d != nullptr && d->card.IsLand() && !d->params.mana_per_other_controlled_subtype.empty(); }
+bool MazeIsGondDef(const CardDefinition* d) { return d != nullptr && d->card.IsLand() && d->params.gates_enter_untapped; }
+bool MazeIsAmuletDef(const CardDefinition* d) { return d != nullptr && d->params.untap_own_permanent_entering_tapped; }
+bool MazeDefIsGate(const CardDefinition* d)
+{ return d != nullptr && d->card.IsLand() && (CardHasSubtype(d->card, "Gate") || d->card.m_subtypes.AllNonbasicLandTypes()); }
+
+// What the controller HAS for the USER's P3 rule. "Have" = battlefield (controlled) + hand (USER: "Have for Gond
+// Gate here includes in hand"; "Same with Maze's end, actually. Having 2 in hand means we don't need anymore";
+// Baldur's Gate: "If it is in hand you cannot search for it" -- one copy). The Amulet counts on the battlefield or
+// in hand (coordinator default: one held is cast for {1}).
+struct MazeHoldings
+{
+    int  maze = 0;              // Maze's Ends on our battlefield + in hand
+    bool amulet = false;        // an Amulet of Vigor on our battlefield or in hand
+    bool gond = false;          // a Gond Gate on our battlefield or in hand
+    bool gond_in_library = false;
+    bool baldur_in_library = false;
+};
+MazeHoldings MazeHoldingsOf(const GameState& s, int ctrl)
+{
+    MazeHoldings h;
+    auto held = [&](const CardDefinition* d)
+    {
+        if (MazeIsMazeDef(d)) { ++h.maze; }
+        if (MazeIsAmuletDef(d)) { h.amulet = true; }
+        if (MazeIsGondDef(d)) { h.gond = true; }
+    };
+    const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
+    for (const Card& c : pl.hand) { held(CardDatabase::Instance().LookupCached(c)); }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == ctrl) { held(CardDatabase::Instance().LookupCached(p.card)); } }
+    for (const Card& c : pl.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (MazeIsGondDef(d)) { h.gond_in_library = true; }
+        if (MazeIsBaldurDef(d)) { h.baldur_in_library = true; }
+    }
+    return h;
+}
+
+// The ONE new-name Gate of the USER's "pick one singleton we don't have yet to increase variety": among `names`, a
+// Gate (Planar Nexus included) that is not Baldur's / Gond Gate (their own menu slots), whose name we do not
+// control; not in hand first (in hand only when nothing else is left -- a fetch of a held name still lands it
+// NOW), then the FEWEST copies left in the library (a singleton: a multi-copy name will be drawn), then usable on
+// entry (enters untapped / an Amulet or Gond untaps it), then the better mana source (higher ManaSourceRank),
+// then the base order. Empty when there is none.
+std::string MazePickNewNameGate(const GameState& s, int ctrl, const std::vector<std::string>& names,
+                                const DecisionProvider& prov)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(ctrl)];
+    std::string best;
+    std::tuple<int, int, int, int> best_key{};
+    for (std::size_t i = 0; i < names.size(); ++i)
+    {
+        const std::string& nm = names[i];
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (!MazeDefIsGate(d) || MazeIsBaldurDef(d) || MazeIsGondDef(d) || MazeControlsGateNamed(s, ctrl, nm)) { continue; }
+        int in_hand = 0, lib = 0;
+        for (const Card& c : pl.hand)    { if (c.m_name.str() == nm) { in_hand = 1; break; } }
+        for (const Card& c : pl.library) { if (c.m_name.str() == nm) { ++lib; } }
+        const int usable = LandUsableOnEntry(s, *d, /*allow_pay_life=*/true, ctrl) ? 0 : 1;
+        const std::tuple<int, int, int, int> key{ in_hand, lib, usable, -prov.ManaSourceRank(s, *d) };
+        if (best.empty() || key < best_key) { best = nm; best_key = key; }
+    }
+    return best;
+}
+
+// The USER's menu over `names` (distinct library names, base order). `with_maze`: a land tutor (Sylvan Scrying,
+// Archdruid's Charm) may find Maze's End; Maze's End's own fetch finds Gates only. Returns false (names untouched)
+// when the rule would leave nothing.
+bool MazeRestrictLandTargets(const GameState& s, int ctrl, std::vector<std::string>& names, bool with_maze,
+                             const DecisionProvider& prov)
+{
+    const MazeHoldings h = MazeHoldingsOf(s, ctrl);
+    auto find_def = [&](bool (*pred)(const CardDefinition*)) -> std::string
+    {
+        for (const std::string& nm : names) { if (pred(CardDatabase::Instance().Lookup(nm))) { return nm; } }
+        return std::string();
+    };
+    const std::string maze = with_maze ? find_def(&MazeIsMazeDef) : std::string();
+    // "Maze's End when we have none is usually the right call so we might be able to prune that case."
+    if (!maze.empty() && h.maze == 0) { names = { maze }; return true; }
+    std::vector<std::string> out;
+    // "Maze's end should remain a candidate if you don't have 2 or 1 and Amulet of Vigor."
+    if (!maze.empty() && !(h.maze >= 2 || (h.maze >= 1 && h.amulet))) { out.push_back(maze); }
+    // "Baldur's gate is a good call as it generates a lot of mana" (one copy: in the library = missing).
+    const std::string baldur = find_def(&MazeIsBaldurDef);
+    if (!baldur.empty()) { out.push_back(baldur); }
+    // "...and so is Gond Gate if you are missing it" (anywhere: battlefield or hand).
+    const std::string gond = find_def(&MazeIsGondDef);
+    if (!gond.empty() && !h.gond) { out.push_back(gond); }
+    // "I would probably skip the 'one gate name' option until Baldur's gate is gone and we have Gond Gate."
+    if (!h.baldur_in_library && (h.gond || !h.gond_in_library))
+    {
+        const std::string nn = MazePickNewNameGate(s, ctrl, names, prov);
+        if (!nn.empty()) { out.push_back(nn); }
+    }
+    if (out.empty()) { return false; }
+    names.swap(out);
+    return true;
+}
 }
 
 std::vector<std::string>
@@ -67192,6 +67302,10 @@ MazesEndProvider::TutorCandidates(const GameState& s, int controller, const Card
     };
     std::stable_sort(all.begin(), all.end(),
                      [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
+    // P1d (USER P3, MTG_MAZE_LAND_TARGETS): the USER's restriction (1-3 names, usually 1-2). Human play and the
+    // unpruned gate keep every name.
+    if (MazeLandTargetsOn() && !HumanPlayActive() && !DecisionUnpruned())
+    { MazeRestrictLandTargets(s, controller, all, /*with_maze=*/true, *this); }
     return all;
 }
 
@@ -67219,6 +67333,10 @@ bool MazesEndProvider::TapTutorPutCandidates(const GameState& s, const CardDefin
         for (const std::string& nm : names)
         { if (adds(nm)) { names = { nm }; return true; } }
     }
+    // P1d (USER P3, MTG_MAZE_LAND_TARGETS): the USER's menu without Maze's End -- Baldur's Gate if in the
+    // library, Gond Gate if none held, one new-name Gate once Baldur's is gone and Gond is had. A RESTRICTION
+    // that keeps the fail-to-find (returns false). The caller already skips human play and the unpruned gate.
+    if (MazeLandTargetsOn() && MazeRestrictLandTargets(s, me, names, /*with_maze=*/false, *this)) { return false; }
     // ORDER ONLY: new names first, duplicates last. Every name kept; the fail-to-find stays.
     std::stable_sort(names.begin(), names.end(),
                      [&](const std::string& a, const std::string& b) { return adds(a) && !adds(b); });
@@ -67296,10 +67414,16 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
     if (base.empty() || !def.params.etb_choose_color || HumanPlayActive() || DecisionUnpruned())
     { return base; }
     bool spend[5] = { false, false, false, false, false };
+    // P1d (USER P2, MTG_MAZE_SPEND_NEVERCAST): "Gates ablaze can get heurstically skipped, so we don't need Red." A
+    // card this provider never casts autonomously (NeverCast: Gates Ablaze) spends nothing, so its pips do not
+    // admit a colour -- the menu is G/U for this list.
+    static const bool s_nc = EnvOn("MTG_MAZE_SPEND_NEVERCAST", true);   // DEFAULT ON; =0 -> G/U/R
+    const bool skip_never = heurarm::Flag(heurarm::MAZE_SPEND_NEVERCAST, s_nc);
     auto scan = [&](const Card& c)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d == nullptr || d->card.IsLand()) { return; }
+        if (skip_never && NeverCast(*d)) { return; }
         const ManaCost& mc = d->card.m_mana_cost;
         if (mc.white > 0) { spend[0] = true; }
         if (mc.blue  > 0) { spend[1] = true; }
@@ -67315,7 +67439,38 @@ std::vector<int> MazesEndProvider::LandEntryPinCandidates(const GameState& s, in
     for (const Permanent& p : s.battlefield) { if (p.owner_index == controller) { scan(p.card); } }
     std::vector<int> out;
     for (int c : base) { if (c >= 0 && c < 5 && spend[c]) { out.push_back(c); } }
-    return out.empty() ? base : out;
+    if (out.empty()) { out = base; }
+    // P1d (USER P1, MTG_MAZE_ONE_COLOUR): "Typically those choosing lands only should target Green and Blue. Once
+    // we have one green we can get blue and once we have one blue the rest can go to green." ONE colour: no green
+    // source on our battlefield -> G; else no blue source -> U; else G; neither admitted -> the first admitted. A
+    // source = a permanent whose OWN colours (EffectiveProducesFor, a CLB Gate's / Thran Portal's locked colour
+    // included) make it; a filter ({1},{T}: any colour) or a reflector (Gond Gate) is not one. Human play asks.
+    static const bool s_one = EnvOn("MTG_MAZE_ONE_COLOUR", true);   // DEFAULT ON; =0 -> every admitted colour
+    if (out.size() > 1 && heurarm::Flag(heurarm::MAZE_ONE_COLOUR, s_one))
+    {
+        auto has_source = [&](Color want)
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != controller) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || d->params.any_color_filter || !d->params.mana_colors_of_controlled_subtype.empty())
+                { continue; }
+                for (Color c : EffectiveProducesFor(s, controller, *d, &p)) { if (c == want) { return true; } }
+            }
+            return false;
+        };
+        const int g = static_cast<int>(Color::Green), u = static_cast<int>(Color::Blue);
+        auto admitted = [&](int c) { return std::find(out.begin(), out.end(), c) != out.end(); };
+        int pick = -1;
+        if (admitted(g) && !has_source(Color::Green))      { pick = g; }
+        else if (admitted(u) && !has_source(Color::Blue))  { pick = u; }
+        else if (admitted(g))                              { pick = g; }
+        else if (admitted(u))                              { pick = u; }
+        else                                               { pick = out.front(); }
+        out = { pick };
+    }
+    return out;
 }
 
 // The Black Gate ("As The Black Gate enters, you may pay 3 life. If you don't, it enters tapped."): with an
@@ -67378,6 +67533,62 @@ int MazesEndProvider::ActivationOrderRankForAction(const GameState& s, const Car
 {
     if (a.kind == Action::Kind::Channel && d.params.hand_put_self_cost.has_value()) { return -1; }
     return DeckProvider::ActivationOrderRankForAction(s, d, a);
+}
+
+// Maze's End P1d (USER B1, MTG_MAZE_SUMMIT_COUNT): "I would probably heuristically prune this. A common answer from
+// play is tap none, but tap all unused is also reasonable. Possibly the best is to just use whatever mana we don't
+// spend in the line?" Guild Summit's searched count N = 0..U becomes at most three: the REST-OF-LINE count (the
+// unpinned cast, chosen_x 0 -- resolved by EtbTapSubtypeDrawDefault below, because what the rest of the line owes
+// is known only at resolution), N = 0 (pin 1) and N = all (pin U + 1). U <= 1 keeps the base menu ({0, all} already).
+// A USER-directed provider prune (restricts the menu; the search still branches over the three). The two fixed
+// options can coincide with the rest-of-line count at resolution (a duplicate branch, not a loss).
+static bool MazeSummitCountOn()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_COUNT", true);   // DEFAULT ON; =0 -> every N searched
+    return heurarm::Flag(heurarm::MAZE_SUMMIT_COUNT, s_on);
+}
+
+std::vector<int> MazesEndProvider::EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const
+{
+    std::vector<int> base = DeckProvider::EtbChoiceCandidates(s, controller, def);
+    if (def.params.etb_tap_subtype_draw.empty() || base.size() <= 2 || !MazeSummitCountOn()
+        || HumanPlayActive() || DecisionUnpruned())
+    { return base; }
+    return { 0, 1, base.back() };
+}
+
+// The rest-of-line count: the untapped Gates (`avail`) minus what the REST of the applying line still has to pay
+// for and cannot pay otherwise. Owed = g_line_unpaid_cost (the line's casts not yet paid; Summit's own cost is paid
+// by now) plus, when the hold carries no activations (g_line_hold_has_acts), Maze's End's {3} if an untapped Maze's
+// End of ours could still activate -- the deck's one recurring activation. Covered otherwise by floating mana and the
+// untapped non-Gate lands (another Maze's End's {C}). Every Gate counts one mana (Baldur's Gate taps last -- the
+// EtbTapSubtypeOrder tiers -- so it is among those left). Outside a plan apply the hold is empty, so the count is
+// all the Gates less the Maze's End reserve. This is also the beyond-horizon / unpinned default (ledger decision 8
+// was "all").
+int MazesEndProvider::EtbTapSubtypeDrawDefault(const GameState& s, int controller, const CardDefinition& def,
+                                               int avail) const
+{
+    if (!MazeSummitCountOn() || HumanPlayActive()) { return DeckProvider::EtbTapSubtypeDrawDefault(s, controller, def, avail); }
+    int owed = g_line_unpaid_cost.ManaValue();
+    int maze_reserved = -1;   // card number of the Maze's End whose activation is reserved
+    if (!g_line_hold_has_acts && controller == s.active_player_index)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value())
+            { owed += d->params.tap_tutor_put_cost->ManaValue(); maze_reserved = p.card.m_number; break; }
+        }
+    }
+    int other = s.floating_mana.Total();
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped || !p.card.IsLand() || p.card.m_number == maze_reserved) { continue; }
+        if (LandHasSubtypeNow(s, p, def.params.etb_tap_subtype_draw)) { continue; }
+        ++other;
+    }
+    return std::clamp(avail - std::max(0, owed - other), 0, avail);
 }
 
 // Maze's End P1b: ALTERNATE-WIN PROGRESS in the graded no-win leaf (see the base hook). The opponent's life never

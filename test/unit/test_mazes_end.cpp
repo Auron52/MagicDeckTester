@@ -6,6 +6,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/LandPlay.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -206,6 +207,8 @@ TEST_CASE("Maze's End I1: a fail-to-find with ten names already wins; Planar Nex
 
 TEST_CASE("Maze's End I1: the deck provider folds the fetch to one target only when the activation wins")
 {
+    // P1d: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
+    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_SUMMIT_COUNT] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_SUMMIT_COUNT] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
     LoadMazeCards();
     const MazesEndProvider prov;
     const CardDefinition& maze = MDef("Maze's End");
@@ -281,6 +284,8 @@ TEST_CASE("Maze's End I1: Guild Summit draws when a Gate enters by land drop and
 
 TEST_CASE("Maze's End I1: Guild Summit's ETB taps the pinned count of Gates and draws that many")
 {
+    // P1d: this test checks the UNPRUNED engine menu -- pin the USER-directed provider prunes off.
+    struct P1dOff { P1dOff() { heurarm::t_arm[heurarm::MAZE_SUMMIT_COUNT] = 0; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = 0; } ~P1dOff() { heurarm::t_arm[heurarm::MAZE_SUMMIT_COUNT] = -1; heurarm::t_arm[heurarm::MAZE_LAND_TARGETS] = -1; } } p1d_off;
     LoadMazeCards();
     GameState s = MBase();
     for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(MCard("Forest", 900 + k)); }
