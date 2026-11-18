@@ -1867,6 +1867,14 @@ public:
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
     bool Main2StagerSnapshotsHand() const override { return true; }
     bool Main2RuleReadsNoncombatDamage() const override;
+    // THE USER'S ACTIVATION RULES (2026-11-18), part of MTG_ONEDROPBURN_ORDER: Grim Lavamancer's ping runs
+    // before Needle Drop / Skewer (HoistsFaceGraveyardDamage) and in main 1 only (CollectedActionAllowed);
+    // Sunbaked Canyon's sacrifice-draw in main 1 only (ShouldConsiderDig / DigOfferAt).
+    bool HoistsFaceGraveyardDamage(const GameState& s) const override;
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    bool ShouldConsiderDig(const GameState& s) const override;
+    DigOffer DigOfferAt(const GameState& s) const override;
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by

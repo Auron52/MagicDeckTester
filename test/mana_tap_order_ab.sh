@@ -19,6 +19,7 @@
 #   rollback           base / rollback / all3                -- the payment rollback alone and on top
 #   all                base / needs / attack / both / rollback / all3   (930 jobs on the regression tier)
 #   onedropburn        base / draft                  -- 1 Drop Burn's draft cast order (MTG_ONEDROPBURN_ORDER)
+#   burnorders         base / on                     -- + Midrange Burn's Fireblast rank (MTG_MIDRANGE_FIREBLAST_ORDER)
 #
 # Usage:
 #   bash test/mana_tap_order_ab.sh                 # regression-tier cells, the `levers` arms
@@ -90,6 +91,13 @@ ARMSETS = {
 ARMSETS["onedropburn"] = {
     "base":  {"MTG_ONEDROPBURN_ORDER": False},
     "draft": {"MTG_ONEDROPBURN_ORDER": True},
+}
+# The USER's 2026-11-18 burn-order items in ONE pool: 1 Drop Burn's amended order + main-2 / activation rules,
+# and Midrange Burn's Fireblast-after-burn rank. Each flag is read only by its own deck's provider, so one
+# "on" arm is a per-deck A/B of each (run with DECKS=onedropburn,midrangeburn).
+ARMSETS["burnorders"] = {
+    "base": {"MTG_ONEDROPBURN_ORDER": False, "MTG_MIDRANGE_FIREBLAST_ORDER": False},
+    "on":   {"MTG_ONEDROPBURN_ORDER": True,  "MTG_MIDRANGE_FIREBLAST_ORDER": True},
 }
 ARMS = ARMSETS[os.environ.get("ARMSET", "levers")]
 jobs = []

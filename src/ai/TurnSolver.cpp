@@ -66829,7 +66829,21 @@ int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector
 int TurnSolver::SpectacleGraveyardDamageFirst(const GameState& state, const std::vector<Action>& acts)
 {
     static const bool enabled = EnvOn("MTG_SPECTACLE_GY_FIRST", true);
-    if (!enabled || state.opponent_lost_life_this_turn) { return -1; }
+    if (!enabled) { return -1; }
+    // A provider that orders the ping before every cast (HoistsFaceGraveyardDamage): the first face-targeted
+    // activation, whatever the casts are. Unpayable now (too little graveyard fuel) -> the caller's activation
+    // dispatcher declines it and it stays in the trailing pass.
+    if (ResolveProvider(state).HoistsFaceGraveyardDamage(state))
+    {
+        for (std::size_t i = 0; i < acts.size(); ++i)
+        {
+            const Action& a = acts[i];
+            if (a.kind == Action::Kind::GraveyardExileAbility && a.gy_exile_mode == 3 && a.enchant_target == 0)
+            { return static_cast<int>(i); }
+        }
+        return -1;
+    }
+    if (state.opponent_lost_life_this_turn) { return -1; }
     bool spectacle = false;
     int lavamancer = -1;
     for (std::size_t i = 0; i < acts.size(); ++i)

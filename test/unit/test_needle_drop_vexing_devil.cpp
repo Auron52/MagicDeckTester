@@ -478,3 +478,100 @@ TEST_CASE("1 Drop Burn main-2 rule: Needle Drop / Skewer only when combat is the
     NoteMain2StagerCast(t, NDef("Needle Drop"));
     CHECK(t.m2_stage_turn == -1);
 }
+
+// ---- the USER's activation rules (2026-11-18, MTG_ONEDROPBURN_ORDER): Lavamancer before Needle Drop / Skewer and
+// main 1 only; Sunbaked Canyon's sacrifice-draw main 1 only ------------------------------------------------------
+namespace
+{
+Action NLavaPing(int source)
+{
+    Action lava;
+    lava.kind = Action::Kind::GraveyardExileAbility;
+    lava.card_name = "Grim Lavamancer"; lava.def = &NDef("Grim Lavamancer");
+    lava.sac_source_id = source; lava.gy_exile_mode = 3; lava.cost.red = 1;
+    lava.tutor_target = GraveyardDamageFuelSpec("Lightning Bolt", "Mountain");
+    lava.enchant_target = 0; lava.direct_damage = 2;
+    return lava;
+}
+// Lavamancer (not sick) + 3 Mountains, two fuel cards in the yard, Needle Drop in hand; the plan lists Needle Drop
+// BEFORE the ping (the trailing activation pass is where a plan's activations run).
+GameState NLavaBoard()
+{
+    GameState s = NBoard(3, {"Needle Drop"});
+    s.m_provider = &OdbProv();
+    NPut(s, "Grim Lavamancer", 60);
+    s.players[0].graveyard = { NCard("Lightning Bolt", 50), NCard("Mountain", 51) };
+    return s;
+}
+}   // namespace
+
+TEST_CASE("1 Drop Burn: Lavamancer's ping is hoisted before Needle Drop, so Needle Drop is castable (order ON only)")
+{
+    {
+        OrderPin on(true);
+        CHECK(OdbProv().HoistsFaceGraveyardDamage(NBoard(0, {})));
+        GameState s = NLavaBoard();
+        const std::vector<Action> acts = { NCastAt("Needle Drop", 0), NLavaPing(60) };
+        CHECK(TurnSolver::SpectacleGraveyardDamageFirst(s, acts) == 1);
+        TurnSolver::ApplyPlan(s, NPlan(acts), /*is_pre_combat=*/true);
+        CHECK(s.players[1].life == 17);           // 2 from the ping, then Needle Drop's 1
+        CHECK(InGraveyard(s, "Needle Drop"));
+        CHECK_FALSE(InHand(s, "Needle Drop"));
+    }
+    {
+        OrderPin off(false);
+        CHECK_FALSE(OdbProv().HoistsFaceGraveyardDamage(NBoard(0, {})));
+        GameState s = NLavaBoard();
+        const std::vector<Action> acts = { NCastAt("Needle Drop", 0), NLavaPing(60) };
+        CHECK(TurnSolver::SpectacleGraveyardDamageFirst(s, acts) == -1);   // no spectacle cast: not hoisted
+        TurnSolver::ApplyPlan(s, NPlan(acts), /*is_pre_combat=*/true);
+        CHECK(s.players[1].life == 18);           // the ping trails; Needle Drop had no target when it came up
+        CHECK(InHand(s, "Needle Drop"));
+    }
+}
+
+TEST_CASE("1 Drop Burn: Lavamancer is never offered after combat; Sunbaked Canyon's dig is closed after combat (order ON)")
+{
+    OrderPin on(true);
+    CHECK(OdbProv().RestrictsCollectedActions());
+    GameState s = NBoard(2, {});
+    const Action ping = NLavaPing(60);
+    CHECK(OdbProv().CollectedActionAllowed(s, ping, /*is_pre_combat=*/true));
+    CHECK_FALSE(OdbProv().CollectedActionAllowed(s, ping, /*is_pre_combat=*/false));
+    CHECK(OdbProv().CollectedActionAllowed(s, NCast("Lightning Bolt"), /*is_pre_combat=*/false));
+
+    // Canyon: 3 lands besides it, nothing castable -> the generic gate passes in main 1, and is closed in main 2.
+    GameState c = NBoard(3, {});
+    c.m_provider = &OdbProv();
+    NPut(c, "Sunbaked Canyon", 61);
+    c.phase = Phase::PreCombatMain;
+    const bool main1 = OdbProv().ShouldConsiderDig(c);
+    CHECK(main1 == GenericProvider().ShouldConsiderDig(c));
+    CHECK(main1);
+    CHECK(OdbProv().DigOfferAt(c).Any() == GenericProvider().DigOfferAt(c).Any());
+    c.phase = Phase::PostCombatMain;
+    CHECK_FALSE(OdbProv().ShouldConsiderDig(c));
+    CHECK_FALSE(OdbProv().DigOfferAt(c).Any());
+
+    OrderPin off(false);
+    CHECK_FALSE(OdbProv().RestrictsCollectedActions());
+    CHECK(OdbProv().ShouldConsiderDig(c) == GenericProvider().ShouldConsiderDig(c));
+}
+
+TEST_CASE("Midrange Burn: Fireblast ranks after the other burn and before the spectacle spells (lever ON only)")
+{
+    static const MidrangeBurnProvider mb;
+    GameState s = NBoard(2, {});
+    s.m_provider = &mb;
+    {
+        heurarm::t_arm[heurarm::MIDRANGE_FIREBLAST_ORDER] = 1;
+        CHECK(mb.CastOrderRank(s, NDef("Fireblast")) == 25);
+        CHECK(mb.CastOrderRank(s, NDef("Lightning Bolt")) < 25);
+        CHECK(mb.CastOrderRank(s, NDef("Rift Bolt")) < 25);
+        CHECK(mb.CastOrderRank(s, NDef("Skewer the Critics")) > 25);
+        CHECK(mb.CastOrderRank(s, NDef("Chandra's Incinerator")) > 25);
+    }
+    heurarm::t_arm[heurarm::MIDRANGE_FIREBLAST_ORDER] = 0;
+    CHECK(mb.CastOrderRank(s, NDef("Fireblast")) == mb.CastOrderRank(s, NDef("Lightning Bolt")));
+    heurarm::t_arm[heurarm::MIDRANGE_FIREBLAST_ORDER] = -1;
+}
