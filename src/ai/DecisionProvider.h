@@ -5133,6 +5133,13 @@ public:
     // and Burgeoning's which-land menu to the returned Maze's End. Default false: activate-or-decline searched and
     // every land offered. Never consulted in human play (the person is asked).
     virtual bool OffMainMazeRedeployForced(const GameState&, int /*controller*/) const { return false; }
+    // LandEntryOrderClass -- the deck-scoped COMMUTATION claim behind the extra-drop land-order fold (Maze's End
+    // P5b, MTG_FOLD_LAND_ORDER; TurnSolver's EnumeratePlansWithLand). Two lands of the SAME class >= 0 reach the
+    // same board in either entry order when nothing else happens between them: no as-enters choice, no conditional
+    // entry, no entry effect another land's presence changes, and the same entry side effects (the same number of
+    // draw triggers, say). -1 = order-sensitive (never folded). The engine adds the turn-level conditions (land-only
+    // turn so far, pool empty, the land held since main 1). Default -1 for every land: byte-identical.
+    virtual int LandEntryOrderClass(const GameState&, int /*controller*/, const CardDefinition&) const { return -1; }
 };
 
 // ---------------------------------------------------------------------------------------------------

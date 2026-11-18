@@ -1018,6 +1018,7 @@ enum Slot : int
     SEQ_TRAILING_EQUIP,       // MTG_SEQ_TRAILING_EQUIP  the enumeration's sequential walk (SeqWalkFixedOrder; SubsetPayableSequential, OrderPaysSequentially) prices a PAID equip that unlocks no mana -- and a planned unlock its host no longer needed (Surrak hasted it) -- at its end, as both apply worlds pay it in the trailing equip pass, instead of refusing the subset as an unmodelled kind. Jumbo Cactuar s30119376 T5 {Tooth and Nail, Surrak, Satyr x2, equip Chariot} (ENUM-GAP x19, ef-walk-fail) was unfindable at any budget while the same line without the equip was offered. A completeness fix of the walk. DEFAULT ON; =0 -> refused as before. docs/design/jumbo-apply-drop-order-2026-11-18.md
     MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
+    FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. A sound identity fold. Default ON; =0 -> every order enumerated
     COUNT
 };
 
@@ -1980,6 +1981,7 @@ inline const char* Name(int slot)
         "MTG_SEQ_TRAILING_EQUIP",
         "MTG_MAZE_CAST_DOMINANCE",
         "MTG_MAZE_LAND_DOMINANCE",
+        "MTG_FOLD_LAND_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
