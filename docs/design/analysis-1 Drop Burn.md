@@ -100,6 +100,65 @@ Agent choices inside the ruling (surfaced): Needle Drop before Skewer in both wi
 the damage test for Skewer (first in an undamaged main 2 it would be hardcast for 3 when a same-main Devil /
 burn could make it {R}); an undamaged main 2 leaves both at the end rather than pruning that window.
 
+### Cast-order A/B (2026-11-18, held-out overnight cells, paired, both arms one pooled batch)
+
+`ARMSET=onedropburn CASES=overnight DECKS=onedropburn,onedropburn2hg bash test/mana_tap_order_ab.sh` at
+41be66453 (Release; `build/scratch/1dropburn/order_ab/paired.txt`). Draft = `MTG_ONEDROPBURN_ORDER=1`.
+
+| cells | games | draft - base | better / worse |
+|---|---|---|---|
+| d3 b10 (4 x 400) | 1600 | -0.0075 .. -0.0225 per cell | 27 / 0 |
+| d5 b20 (4 x 300) | 1200 | -0.0100 .. -0.0167 per cell | 17 / 0 |
+| 2HG d5 b20 (2 x 100) | 200 | -0.020, -0.030 | 5 / 0 |
+| d0 (4 x 2000) | 8000 | -0.0905 .. -0.1090 per cell | 760 / 62 |
+| backstops d3/d5 b0 | 10 | 0 | 0 / 0 |
+| **ALL** | **11010** | **-0.0763 +/- 0.0032** (95% CI -0.083..-0.070) | 809 / 62 |
+
+Every searched cell is <= 0 with **zero slower games**; units ~-1.5%. Mechanisms (sweep, below): Fireblast last
+(rank 40) stops it sacrificing untapped Mountains a same-plan burn needed; Needle Drop ordered after the damage
+(rank 29/5) inside its order-opaque set; the binding order activates the SPECTACLE PLAN CREDIT so "burn ->
+Skewer {R}" is one enumerable plan. **Recommendation to the USER: adopt the draft. Still OFF pending approval.**
+
+## Claude-play sweep
+- commit: `41be66453`
+- seeds: 50001..50016 (one game each; benchmark d5 b20) games: 16
+- driver: 8 Opus agents x 2 seeds
+- flags: 1 unresolved
+  - **50008 (AI T4, Claude T3): the order-OFF canonical order casts Fireblast BEFORE Boltwave** (generic tier 20
+    tie), Fireblast's alternative cost sacrifices both untapped Mountains, Boltwave is dropped: the T3 kill is
+    unfindable at d5 b20, d8 b200 AND d8 b0. With `MTG_ONEDROPBURN_ORDER=1` (Fireblast rank 40) the seed wins T3.
+    Resolves when the USER adopts the order (or rules on a Fireblast-last tier alone); surfaced to the USER.
+
+Results: Claude = AI in 13 games; faster in 3 (50008 above; 50010 T4 v T5 and 50011 T3 v T5 are 1-land 7-card
+keeps the default policy mulligans -- chosen with the draws visible, so mulligan-profile input, not a search
+misplay). Per-game JSON: `logs/1dropburn/sweep/<seed>.json`.
+
+Verified correct with arithmetic across the games: Vexing Devil's USER rule (takes at 20/18/17/16/14/13/12/10/8,
+takes at 5 and 6 with an empty hand, declines at 7/6/5/4/3 holding cards); Needle Drop (only a damaged target,
+draws, the drawn card castable in the same main incl. main 2); Skewer spectacle only after life loss; Fireblast's
+sacrifice (tapped Mountains allowed); Rift Bolt suspend + upkeep free cast; Lavamancer; Goblin Guide reveal;
+Swiftspear prowess; Sunbaked Canyon pain and sac-draw; Lava Spike players-only.
+
+Resolved / non-play findings:
+- PARTLY FIXED (viewer): a Needle Drop plan with no earlier damage source was listed without `drops` and silently
+  did nothing. `apply_one`'s DamagedTargetCastLegal gate now reports the drop with its reason to the committed
+  line's drop sink (the viewer's drop banner / the claude-play result; search silent). The MENU still lists it
+  as `not_verified` (the menu trials only some plans), and **the search enumerates it** (`search_lines`:
+  `engine_full: true, payable: false`): a sound collapse candidate, DEFERRED -- "certainly dropped" must hold
+  for the realised order AND for self-damage (Sunbaked Canyon's pain makes US a legal Needle Drop target, a
+  legal cantrip line), so the fold needs the payment's damage model, not just "no burn in the subset".
+- FIXED (search waste, sound folds): Lavamancer's exile fanned over every graveyard pair and Fireblast over every
+  Mountain pair; 1 Drop Burn now shares Midrange Burn's identity/dominance folds, plus a sound paid-Fireblast
+  six-mana bound (`MTG_ONEDROPBURN_{FIREBLAST_PAIR,LAVAMANCER_FUEL,FIREBLAST_PAID}`, default ON).
+- MENU ONLY (deferred): Fireblast plans annotate phantom drops -- the trial apply has no human chooser, so it
+  does not float the sacrificed Mountain's {R} as the human commit does (`PayFireblastAlternative`).
+- VIEWER ONLY (deferred): `--validate-line` rejects a legal line ending in Fireblast ("can't pay {4}{R}{R}");
+  its free-alternative test (TurnSolver ~132198) knows the life-gain kind only.
+- CLAUDE-PLAY ONLY (deferred): a lethal upkeep Rift Bolt does not end the game before the main-1 decision
+  (GameEngine checks CheckWinCondition after main 1 / combat, not after upkeep / draw), and its damage line is
+  missing from the events.
+- Midrange Burn likely shares the Fireblast-before-burn drop (its order has no Fireblast tier): for that deck.
+
 ## Open questions for the USER
 
 1. ~~Vexing Devil opponent policy~~ -- RULED 2026-11-17 (above).
@@ -176,3 +235,14 @@ burn could make it {R}); an undamaged main 2 leaves both at the end rather than 
   d3 3.653->3.640, the rest same avg / new digest); check_gt_logs 1263 consistent, 0 stale.
   RUNNING: the order A/B -> `logs/1dropburn/order_ab.log` (DONE marker), results
   `build/scratch/1dropburn/order_ab/paired.txt`. Next: report it to the USER, commit, overnight rows, Stage 5.
+* **~01:40 UTC: COMMITTED 41be66453** (Devil rule, rows+GT, profile, draft order OFF, A/B armset). Claude-play
+  sweep LAUNCHED at 41be66453: 8 Opus agents x 2 seeds, 50001..50016, d5 b20 benchmark; per-game results
+  `logs/1dropburn/sweep/<seed>.json`. Order A/B still running. Next: A/B report, overnight rows, verify_deck,
+  tie-break, viewer, discard A/B, report, push.
+* **~02:45 UTC:** A/B done (draft -0.0763 +/- 0.0032, 0 slower searched games; REPORTED to the USER, OFF pending
+  approval). Sweep done (16 games, 1 unresolved: 50008 Fireblast-first, fixed by the draft). UNCOMMITTED: the
+  three sound folds + the Needle Drop drop report (DecisionProviders.{h,cpp}, TurnSolver.cpp); built, unit
+  tests pass. RUNNING: `--smoke --regression --deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg` ->
+  `logs/1dropburn/both5.log` (DONE marker). Expect: midrangeburn byte-identical (refactor only), onedropburn
+  moves (folds). Next: accept onedropburn keys (deck filter), commit, overnight tier once, verify_deck,
+  tie-break, viewer audit, discard A/B, report, push.

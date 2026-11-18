@@ -73765,8 +73765,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // AuraSpellCastLegal; AIEngine::CastSpellFromHand returns before paying on the same predicate).
         if (!AuraSpellCastLegal(state, state.active_player_index, def, enchant_target)) { return; }
         // ...nor Needle Drop with no target dealt damage this turn (the SHARED DamagedTargetCastLegal;
-        // AIEngine::CastSpellFromHand returns before paying on the same predicate).
-        if (!DamagedTargetCastLegal(state, state.active_player_index, def)) { return; }
+        // AIEngine::CastSpellFromHand returns before paying on the same predicate). The viewer / audit is told
+        // (claude-play sweep 2026-11-18: a "Needle Drop" plan with no earlier damage source was listed with no
+        // `drops` and validated as accept, then silently did nothing). Search stays silent (sink_stack / null sink).
+        if (!DamagedTargetCastLegal(state, state.active_player_index, def))
+        {
+            if (sink_stack.empty() && g_play_dropped_cast_sink)
+            {
+                PlayReportDrop(name, PlayDropReasonWanted()
+                    ? name + " has no legal target: nothing was dealt damage this turn yet" : std::string());
+            }
+            return;
+        }
         if (riders.awaken && AwakenLandTargetIndex(state, state.active_player_index, enchant_target) < 0)
         { return; }
         // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"): the evoke's cost is a hand card.
