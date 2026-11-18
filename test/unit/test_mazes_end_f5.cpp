@@ -158,7 +158,14 @@ bool JointPrepayInApplyScope(GameState& t, const std::vector<Action>& acts)
     return TurnSolver::OwedActsJointPrepay(t, acts);
 }
 
-bool ActivatedMaze(const GameState& g, int maze) { return F5Find(g, maze) == nullptr && F5InHand(g, maze); }
+// Maze's End's activation resolved: its fetched Gate (the library's #20 / #21 in every board here) is on the
+// battlefield, or Maze's End itself is back in hand. (A line with a spare land drop -- Exploration -- may replay the
+// returned Maze's End at once, so its being in hand is not required.)
+bool ActivatedMaze(const GameState& g, int maze)
+{
+    if (F5Find(g, 20) != nullptr || F5Find(g, 21) != nullptr) { return true; }
+    return F5Find(g, maze) == nullptr && F5InHand(g, maze);
+}
 }   // namespace
 
 TEST_CASE("Maze's End F5 (gi40): the usual payment strands Maze's End's {3}; the joint payment pays the line")
@@ -322,6 +329,10 @@ TEST_CASE("Maze's End F5 (d0 s173192 gi191): a TRAILING step strands a later one
     LoadF5Cards();
     GameState s = F5Base();
     s.turn_number = 4;
+    // The deck's provider: Heap Gate's other-Gate cost taps a pure-mana Gate before Baldur's Gate (its
+    // EtbTapSubtypeOrder tiers). The base provider's order taps Baldur's Gate, and then nothing pays the line.
+    static const MazesEndProvider kMazeProv;
+    s.m_provider = &kMazeProv;
     const int heap = F5Put(s, "Heap Gate", 1);
     F5Put(s, "Manor Gate", 2);
     F5Put(s, "Manor Gate", 3);
