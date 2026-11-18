@@ -1,0 +1,122 @@
+{
+  "card_scores": {
+    "Amulet of Vigor": [
+      -0.07837837837837824,
+      -0.2384615384615385
+    ],
+    "Archdruid's Charm": [
+      0.034469696969697594
+    ],
+    "Azorius Guildgate": [
+      0.05629543471939513
+    ],
+    "Baldur's Gate": [
+      0.1517030879631136
+    ],
+    "Basilisk Gate": [
+      -0.04222222222222172
+    ],
+    "Black Dragon Gate": [
+      0.2693227245888625
+    ],
+    "Boros Guildgate": [
+      -0.24343140587428103
+    ],
+    "Burgeoning": [
+      0.05838783241297385,
+      -0.1441636182241437
+    ],
+    "Citadel Gate": [
+      0.0787487515316263
+    ],
+    "Cliffgate": [
+      -0.10966281424997071
+    ],
+    "Dimir Guildgate": [
+      -0.02845590247165042
+    ],
+    "Exploration": [
+      0.0005820947650274633,
+      -0.5902860275975508
+    ],
+    "Gates Ablaze": [
+      -0.42030641548014547
+    ],
+    "Gateway Plaza": [
+      0.02722496943798891
+    ],
+    "Golgari Guildgate": [
+      0.21542135597363643
+    ],
+    "Gond Gate": [
+      0.053625687772029806,
+      0.04756787735511114
+    ],
+    "Gruul Guildgate": [
+      0.06537973791743035
+    ],
+    "Guild Summit": [
+      0.34344784438630427,
+      -0.34498587570621453
+    ],
+    "Heap Gate": [
+      -0.0008171603677222805
+    ],
+    "Izzet Guildgate": [
+      0.09108805533386555
+    ],
+    "Manabond": [
+      0.2531599416626147
+    ],
+    "Manor Gate": [
+      0.03194690048138327
+    ],
+    "Maze's End": [
+      0.23893011703419287,
+      -0.3056647735546818
+    ],
+    "Orzhov Guildgate": [
+      -0.207106649070659
+    ],
+    "Planar Nexus": [
+      -0.011031664964249899
+    ],
+    "Rakdos Guildgate": [
+      0.08481334575253019
+    ],
+    "Sea Gate": [
+      0.19539083185885175
+    ],
+    "Selesnya Guildgate": [
+      -0.06540429782019963
+    ],
+    "Simic Guildgate": [
+      0.00909101899200948
+    ],
+    "Sylvan Scrying": [
+      0.022370865849126176,
+      0.03738277919863631
+    ],
+    "Talon Gates of Madara": [
+      -0.006610729722857478
+    ],
+    "The Black Gate": [
+      0.22348484848484862
+    ],
+    "Thran Portal": [
+      0.2582166543846718
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
