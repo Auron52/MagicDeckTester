@@ -1427,6 +1427,19 @@ bool DecisionUnpruned(UnprunedGate g)
     return ((UnpruneMask() >> static_cast<int>(g)) & 1u) != 0;
 }
 
+// Stuffy Doll step-9b prunes (RedirectWindow / GcHost / EscapeTarget): the MTG_UNPRUNE mask, plus the per-job
+// heurarm lever MTG_STUFFY_UNPRUNE_9B, which lifts all three under the same suppressions the mask honours (human-
+// play exemption, the claude-play hand-back, human-play suppression). MTG_UNPRUNE is one process-wide mask, so the
+// lever is what lets a pooled batch carry the unpruned arm next to the shipped one. DEFAULT OFF.
+static bool StuffyStep9bUnpruned(UnprunedGate g)
+{
+    if (DecisionUnpruned(g)) { return true; }
+    static const bool env = EnvOn("MTG_STUFFY_UNPRUNE_9B");
+    if (!heurarm::Flag(heurarm::STUFFY_UNPRUNE_9B, env)) { return false; }
+    if (UnpruneHumanExempt(g) || g_unpruned_suppressed || UnpruneHumanSuppressed()) { return false; }
+    return true;
+}
+
 std::vector<std::string> MillProvider::FetchCandidates(
     const GameState& state, int controller, const CardParams& fetch_pp) const
 {
@@ -2568,7 +2581,8 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
                                                  int /*amount*/, int /*kind*/, std::vector<int>& io) const
 {
     if (DecisionUnpruned(UnprunedGate::ReflectTarget)) { return; }
-    static const bool s_opp_prune = EnvOn("MTG_STUFFY_OPP_CREATURE_PRUNE");
+    static const bool s_opp_prune_env = EnvOn("MTG_STUFFY_OPP_CREATURE_PRUNE");   // DEFAULT OFF; =1 drops opp creatures
+    const bool s_opp_prune = heurarm::Flag(heurarm::STUFFY_OPP_CREATURE_PRUNE, s_opp_prune_env);
     const int opp_face = dmgrx::PlayerId(1 - controller);
     const bool face_in = std::find(io.begin(), io.end(), opp_face) != io.end();
     const bool any_gc  = dmgrx::AnyAuraHostDamageBack(s);
@@ -2627,7 +2641,7 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
 bool StuffyDollProvider::RedirectWindowAdmitted(const GameState& /*s*/, int controller, int window,
                                                 int src_controller) const
 {
-    if (DecisionUnpruned(UnprunedGate::RedirectWindow)) { return true; }
+    if (StuffyStep9bUnpruned(UnprunedGate::RedirectWindow)) { return true; }
     return window == static_cast<int>(dmgrx::RiderWindow::Sweep) && src_controller == controller;
 }
 
@@ -2685,7 +2699,7 @@ bool StuffySweeperCastable(const GameState& s, int me, int extra_mv)
 void StuffyDollProvider::DamageBackAuraHostCandidates(const GameState& s, const CardDefinition& aura,
                                                       std::vector<int>& io) const
 {
-    if (DecisionUnpruned(UnprunedGate::GcHost) || io.size() <= 1) { return; }
+    if (StuffyStep9bUnpruned(UnprunedGate::GcHost) || io.size() <= 1) { return; }
     const int me = s.active_player_index;
     struct H { int num; bool doll; bool starter; int power; };
     std::vector<H> hs;
@@ -2766,7 +2780,7 @@ void StuffyDollProvider::DamageBackAuraHostCandidates(const GameState& s, const 
 void StuffyDollProvider::IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& /*def*/,
                                                              int inert_rep, std::vector<int>& io) const
 {
-    if (DecisionUnpruned(UnprunedGate::EscapeTarget) || io.size() <= 1) { return; }
+    if (StuffyStep9bUnpruned(UnprunedGate::EscapeTarget) || io.size() <= 1) { return; }
     const int me = s.active_player_index;
     const auto& hand = s.players[static_cast<std::size_t>(me)].hand;
     auto in_io = [&](int num) { return std::find(io.begin(), io.end(), num) != io.end(); };
