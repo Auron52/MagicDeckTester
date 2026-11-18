@@ -101,8 +101,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 2. Hedge Maze (Forest Island, enters tapped, surveil 1) as a fetch target: where in the pruned order?
    Agent default (PROVISIONAL): after Island and Forest. **USER 2026-11-17:** *"Hedge maze is a maybe if we
    absolutely do not need it for mana."* / *"(if we do not need it for mana this turn it is possible, otherwise
-   not)"* -> built as `MTG_SEA_FETCH_MAZE` (default OFF; A/B 6 faster / 0 slower), see "Hedge Maze fetch" below.
-   OPEN: adopt as default ON?
+   not)"* -> built as `MTG_SEA_FETCH_MAZE` (A/B 6 faster / 0 slower), see "Hedge Maze fetch" below.
+   **ANSWERED (USER 2026-11-17):** *"3 sounds good to adopt."* -> default ON (`14af88ca6`).
 4. Hullbreaker Flash / Brinelin Partner deferrals (inert: main-phase cast dominates; Commander-only).
    PROVISIONAL.
 5. Serpent of Yawning Depths evasion + Lorthos {8} tap (always declined, dominance) deferrals. PROVISIONAL.
@@ -141,6 +141,9 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
     main 2 opened only on turns with combat draws (Summon II/III). Agent default (PROVISIONAL): the
     conditional main 2; measure both before Stage 5j. **USER 2026-11-17:** *"I do lean toward conditional mains
     when I can, though, so that is probably correct."* The re-measure with the land-Aura fix is 0 / 0 (below).
+    **ANSWERED (USER 2026-11-17):** the USER's own main-phase rule replaces the conditional main 2: *"Sure, let's
+    go with my rule if the numbers look good."* -> `MTG_SEA_MAIN1_KRAKEN_ONLY` default ON (`14af88ca6`); see
+    "Main-phase shape" below.
 13. Kiora II "don't untap during next untap step" deferral (the opponent never untaps; setting
     skip_next_untap would wrongly keep a later-stolen creature tapped). PROVISIONAL.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
@@ -307,7 +310,8 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   -0.0033 t. **6 faster / 0 slower**, units within 1%. Repro std gi223: the on-arm's Windswept Heath fetches Hedge
   Maze on T3 while its mana is idle (mechanism confirmed). The arms already diverge at T1, so draw order is mixed
   into the per-game gain.
-* **Status:** commit `4147878d2` (branch `sea-maze-fetch`), cherry-picked here. Adopt as default ON? USER Q.
+* **Status: ADOPTED, default ON** (USER 2026-11-17: *"3 sounds good to adopt."*; `14af88ca6`). The one-option
+  fetch-prune unit tests pin it off (`ArmScope no_maze`). `MTG_SEA_FETCH_MAZE=0` restores Maze-last.
 
 ## Main-phase shape: USER rule `MTG_SEA_MAIN1_KRAKEN_ONLY` (2026-11-17, default OFF -> USER)
 
@@ -336,7 +340,24 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   The one slower std game under the USER rule (gi348, 6 -> 7) is fetch-shuffle variance: T2 base plays Island,
   the rule's arm cracks Flooded Strand, and the draws differ from T3. Quality is equal; the USER rule is ~11% cheaper
   in standard, flat in 2HG. The attacker refinement changes nothing measurable.
-* **Open:** adopt the USER rule as the default (replacing the conditional main 2)? Attacker refinement on or off?
+* **ADOPTED, default ON** (USER 2026-11-17: *"Sure, let's go with my rule if the numbers look good."*;
+  `14af88ca6`). The attacker refinement stays OFF (it measured nothing).
+
+## Kiora III steal: `MTG_SEA_STEAL_CREATURE` (2026-11-17, default ON)
+
+* **USER (verbatim, in order):** "The steal should be used on a creature if the opponent has one." / "I mean a
+  land is better than nothing as well, but probably less useful than a creature. I guess a 1/1 is arguable." /
+  "Maybe take a land if we don't yet have 8 mana." / "(or consider it)"
+* **Built** (`SeaCreaturesProvider::RestrictSagaStealCandidates`, heurarm `SEA_STEAL_CREATURE`): after the root's
+  identity and dominance folds, the menu is restricted to creatures only when we have >= 8 mana available AND the
+  opponent has a creature with power >= 2. Otherwise lands stay on the menu beside the creatures, and the search
+  picks. Test in `test/unit/test_sea_sagas.cpp`.
+* **Held-out paired A/B** (d5 b20, std 600 g base 9800001, 2HG 200 g base 9900001, main-phase rule ON,
+  `build/scratch/sea/steal/`): **0 / 0 changed** in both formats; units 0.997 std, 0.980 2HG. Under the passive
+  opponent the opponent rarely has a creature to steal, so this is a menu cut with no measured play effect.
+* **Combined suite with all three rules ON** (Sea-scoped smoke + regression): searched 9 faster / 1 slower
+  (sea2hg reg s2002 gi18 6->7, draws diverge at T5, persists at 4x and 16x = fetch-shuffle variance); d0 20 faster.
+  Accepted `d489cbd6c` (11 Sea rows).
 
 ## Approved deferrals
 

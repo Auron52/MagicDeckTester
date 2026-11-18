@@ -94,3 +94,11 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
 * Stage 6 report delivered. Everything left is a USER decision (ledger "Open USER questions", the Hedge Maze
   section, `docs/design/fetch-tapped-typed-land.md`, `docs/design/sea-creatures-discard-policy-proposal.md`) or
   belongs to another owner (104 upstream-drift GT rows + Creature Giving: `build/scratch/sea/land2/attrib.txt`).
+
+## Reopened and closed again, 2026-11-18 ~05:10 UTC
+
+- USER rulings 2026-11-17 adopted in `14af88ca6`: the USER main-phase rule (`MTG_SEA_MAIN1_KRAKEN_ONLY` ON), the
+  Kiora III steal rule (`MTG_SEA_STEAL_CREATURE` ON), the Hedge Maze fetch (`MTG_SEA_FETCH_MAZE` ON). Units
+  3470/3470. Sea-scoped smoke + regression accepted in `d489cbd6c`. Ledger updated.
+- Next: push in the 4-hour window, then CI watch. Separate work (not Sea-only): every deck's passive opponent plays
+  a real pool deck's lands, incl. two 2HG heads (branch `opponent-lands-all-decks`), validated on the full suite.
