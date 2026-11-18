@@ -10395,7 +10395,15 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (!state.opponent_library_dealt)
     {
         // Every deck's passive opponent plays lands from a real pool list (SetupGame).
-        opponentdeck::Deal(state, true, state.game_seed, true, gamesetup::OpponentHeads());
+        // "legacy_passive_opponent_lands": true keeps a fixture on the pre-2026-11-17 opponent that
+        // plays no lands (SetupGame's --legacy-passive-opponent-lands; the fixture's own battlefield
+        // list is the opponent's whole board) -- for a fixture whose point is an EMPTY opposing board.
+        const bool legacy = j.value("legacy_passive_opponent_lands", false);
+        const bool touches = GoldFishRunner::DeckTouchesOpponentZones(deck);
+        const bool diverse = GoldFishRunner::DeckUsesDiverseOpponentPool(deck);
+        opponentdeck::Deal(state, legacy ? touches : true, state.game_seed,
+                           legacy ? diverse : true, legacy ? 1 : gamesetup::OpponentHeads());
+        if (legacy) { state.opponent_plays_lands = false; }
     }
     state.opponent_library_read = GoldFishRunner::DeckTouchesOpponentZones(deck)
         || GoldFishRunner::DeckUsesDiverseOpponentPool(deck);
