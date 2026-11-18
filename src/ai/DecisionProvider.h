@@ -5070,12 +5070,15 @@ public:
     virtual bool PlanListFilterLive(const GameState&) const { return false; }
     // CastDominanceLive / CastDominanceClass -- a provider-DECLARED dominance premise for the engine's plan-list
     // CAST / LAND DOMINANCE FOLD (TurnSolver.cpp CastDominanceFold; Maze's End P7). Live is asked once per
-    // enumeration. Class per cast card: 0 = no claim; 1 = casting it, when the same line can also afford it,
-    // never leaves a worse state than holding it (fold A drops "P" for "P + cast"), AND it is not order-sensitive
-    // against the land (fold B drops a land-less plan of only class-1 casts for "the same + a land"); 2 = as 1
-    // but order-sensitive against the land (fold A only); -1 = VETO: no plan holding that cast takes part (its
-    // resolution reads the rest of the line). Only REMOVES plans a kept sibling dominates. Default: not live.
-    // Never consulted in human play or under the unpruned gate.
+    // enumeration; it must also guarantee that a land entering opens no breakpoint (no land-entry draw). Class per
+    // cast card, a bit set: kCastDomAdd = casting it, when the same line can also afford it, never leaves a worse
+    // state than holding it (fold A drops a breakpoint-free "P" for "P + cast"); kCastDomLandOk = not
+    // order-sensitive against the land (fold B drops a land-less plan of such casts for "the same + a land");
+    // kCastDomOpensBp = its cast opens a breakpoint (a plan holding it is never dropped by fold A: its continuation
+    // may spend the mana). 0 = no claim; -1 = VETO: no plan holding that cast takes part (its resolution reads the
+    // rest of the line). Only REMOVES plans a kept sibling dominates. Default: not live. Never consulted in human
+    // play or under the unpruned gate.
+    enum : int { kCastDomAdd = 1, kCastDomLandOk = 2, kCastDomOpensBp = 4 };
     virtual bool CastDominanceLive(const GameState&) const { return false; }
     virtual int  CastDominanceClass(const GameState&, const CardDefinition&) const { return 0; }
     virtual void PlanListAdmit(const GameState&, const std::vector<PlanView>& /*plans*/,
