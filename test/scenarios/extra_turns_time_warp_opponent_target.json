@@ -2,22 +2,46 @@
   "_comment": [
     "The opponent has one card left. Giving them an extra turn draws it, then",
     "their scheduled regular turn tries to draw from an empty library, winning",
-    "in this round. Self-targeting cannot win this round with no attacker."
+    "in this round. Self-targeting cannot win this round with no attacker.",
+    "MECHANISM PIN with the provider prune LIFTED (MTG_ET_OPP_TURN_PRUNE=0): the",
+    "Extra Turns provider prunes the opponent target by default (USER 2026-11-18:",
+    "\"It's silly to give your opponent an extra turn.\"); the shipped-default twin",
+    "is extra_turns_time_warp_opponent_target_pruned.json."
   ],
   "deck": "decks/Extra Turns/Extra Turns.cod",
+  "env": {
+    "MTG_ET_OPP_TURN_PRUNE": "0"
+  },
   "turn": 3,
   "on_the_play": true,
   "active_life": 20,
   "opponent_life": 20,
   "opponent_library_size": 1,
   "battlefield": [
-    { "name": "Snow-Covered Island", "controller": 0 },
-    { "name": "Snow-Covered Island", "controller": 0 },
-    { "name": "Snow-Covered Island", "controller": 0 },
-    { "name": "Snow-Covered Island", "controller": 0 },
-    { "name": "Snow-Covered Island", "controller": 0 }
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    },
+    {
+      "name": "Snow-Covered Island",
+      "controller": 0
+    }
   ],
-  "hand": ["Time Warp"],
+  "hand": [
+    "Time Warp"
+  ],
   "library_filler": "Snow-Covered Island",
   "library_size": 30,
   "depth": 2,
