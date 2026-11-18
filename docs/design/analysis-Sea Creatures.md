@@ -400,7 +400,7 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   in the design doc for the USER. The Sin finisher projection now counts the damage through the turn Sin attacks
   (Summon -> Sin = 21 at 20 life), which the first build undercounted (15). The Stage 5i bound (~0 turns) already said the discard choice barely moves this deck; this is the USER's
   correctness rule for the rare case.
-* **Measurements (2026-11-18, build d3b93f4f6 = rules 1-10, d5 b20):**
+* **Measurements (2026-11-18, src tree 555a477e8 = commit cdc248958, rules 1-10, d5 b20):**
   * Units: 16 Sea discard cases pass; full suite 3489/3489.
   * Scoped suite (`regression.sh --both --deck=sea,sea2hg`, NOT accepted): only Sea rows move. Every aggregate is
     unchanged except sea2hg regression d5 s2002 6.3867 -> 6.3733 (gi61 T8 -> T7). Smoke searched slower 0 / faster 0

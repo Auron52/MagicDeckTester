@@ -126,7 +126,7 @@ threats (worst first) > unrecognised cards > mana between the floor and 8 > the 
 
 ## Measurements
 
-Build d3b93f4f6 (rules 1-10), d5 b20.
+src tree 555a477e8 (commit cdc248958, rules 1-10), d5 b20.
 
 * Units: 16 Sea discard cases pass; full suite 3489/3489.
 * Scoped suite (`regression.sh --both --deck=sea,sea2hg`, NOT accepted): only Sea rows move. Every aggregate is
