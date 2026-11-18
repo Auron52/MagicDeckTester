@@ -925,6 +925,55 @@ Exploration/Burgeoning extras, Maze's End bounce-replay loops with Amulet, Guild
 `--check` over every deck: exit 0; only the standing name-mismatch notes (Eldrazi Displacer Flicker ->
 EldraziFlicker, Slivers -> Vial).
 
+## Regression suite (4-bis / 5j, S4 2026-11-18)
+
+**Cost gate (`suite_gate.py --cost`, ONE pooled regression run of mazesend + hinata + hinata2hg, Release, harness
+default 32 workers, only P1c's single b0 game alongside):** mazesend **6,914 ms/game** (worst searched shape
+d5 b20, seeds 2002+3003 pooled; ~255K units/game) vs Hinata **4,769 ms/game** = **1.45x -- PASS** (limit 3x,
+15,510 at P1b's yardstick, 14,307 at this run's). Total 2,358 core-s over 8 jobs. (Under a 32-worker tier the
+per-unit cost is ~2.3x P1d's 8-worker re-timing, so 6.9 s/game here vs 1.1 s at d5 b10 there is load + b20, not
+a regression: units/game 255K at b20 vs 96K at b10.)
+
+**Rows added (all three tiers, ENTRY set, Hinata's shape; key `mazesend`; no value_play block -> d5 rows = play
+d5 b20):**
+* SMOKE: d0 1000, d3 50 b10, d5 100 b20, `mazesend2hg` d3 50 b10 (the small 2HG canary: no card reads heads or
+  starting life -- Burgeoning's passive opponent plays one land per turn, Gates Ablaze is never cast; its digest
+  equals the 1-head d3 row's, as expected).
+* REGRESSION: d0 2002 x1000, d3 2002 x75 b10, d5 2002/3003 x150 b20, plus the unbudgeted backstop.
+* OVERNIGHT: d0 4x2000, d3 4004 x125 b10, d5 4004-7007 4x300 b20, plus the unbudgeted backstop. NOT run and NOT
+  accepted here (the overnight tier is the periodic run); its 13 keys are NEW until that run accepts them.
+
+**Unbudgeted backstop -- budget-0 play is DEGENERATE on this deck (new finding).** Screened 28 blocks
+(30001..30541 step 20; 10 games for 30001..30181, 3 for the rest; d3 + d5; abandon_units 2,000,000;
+`build/scratch/maze/s4/bscreen{,2}`): **171 of 246 games hit the 2M-unit cap** (12-110 s each, 8 workers; 2.5 GB
+peak RSS). No block's first TWO games finish at both depths, so every backstop row is ONE game (a block's first
+game -- the only sub-block whose seed and game_index match the screen): regression 30121 and 30081 (30081 gi0 d3
+1.10M units, 20.9 s in the 32-worker tier), overnight 30341 and 30441. This matches P1c's d3 b0 game (seed 91005
+gi4), still running after 3.5 h. It is a performance finding for the unbudgeted paths, not a suite blocker (the
+backstop smokes the paths; it does not measure quality) -- surfaced to the USER.
+
+**Tier results (Release, MTG_PGO=0):**
+
+| key | avg win turn / digest | ms/game | units/game |
+|---|---|---|---|
+| mazesend_smoke_d0_s1001 | 7.4050 / b8e19b29 | 1 | - |
+| mazesend_smoke_d3_s1001 | 6.4600 / 35415b86 | 5,116 | 184K |
+| mazesend_smoke_d5_s1001 | 6.3200 / e95ebd31 | 5,948 | 230K |
+| mazesend2hg_smoke_d3_s1001 | 6.4600 / 35415b86 | 4,776 | 184K |
+| mazesend_regression_d0_s2002 | 7.4490 / e3af3e5e | 1 | - |
+| mazesend_regression_d3_s2002 | 6.2933 / 131ce989 | 3,379 | 145K |
+| mazesend_regression_d5_s2002 | 6.2333 / cb2b46a6 | 7,022 | 252K |
+| mazesend_regression_d5_s3003 | 6.3667 / 4e9ef361 | 6,805 | 259K |
+| backstop d3/d5 s30121 | 5.0000 / 5.0000 | 7,620 / 649 | 358K / 16K |
+| backstop d3/d5 s30081 | 6.0000 / 5.0000 | 20,913 / 819 | 1.10M / 17K |
+
+Accepted with the deck-scoped accepts (`--smoke --accept --deck=mazesend,mazesend2hg`, `--accept --deck=mazesend`):
+the GT diff is exactly the 12 new keys plus the header line; `check_gt_logs.py` 1264 consistent, 0 stale.
+`job_cost.tsv` keeps only the mazesend entries (Hinata's re-recorded costs reverted). **Something else moved:**
+`hinata_regression_d5_s2002` and `_s3003` FAIL digest-only (one game each, gi122 / gi128, same win turn) -- NOT
+this branch: their new digests equal the GT already on `origin/phase-1-2-deck-analyzer` (f71a7e0ce reconciled
+them); this branch's base GT predates that. Not accepted here.
+
 ## Approved deferrals
 
 * **Decision 9, Archdruid's Charm mode 2** (target creature we control; the list has none) -- USER B3 2026-11-17: "I

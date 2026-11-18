@@ -212,12 +212,12 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 5169.6267,
+   "cost_per_game_ms": 4768.9133,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 2168727,
-   "worst_case": "hinata2hg_regression_d5_b30"
+   "total_core_ms": 2145421,
+   "worst_case": "hinata_regression_d5_b30"
   },
   "hydras": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
@@ -291,6 +291,15 @@
    "tier": "regression",
    "total_core_ms": 1694052,
    "worst_case": "martyr2hg_regression_d5_b20"
+  },
+  "mazesend": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 6913.54,
+   "jobs": 8,
+   "key": "mazesend",
+   "tier": "regression",
+   "total_core_ms": 2358365,
+   "worst_case": "mazesend_regression_d5_b20"
   },
   "melira": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
