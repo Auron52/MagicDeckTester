@@ -2248,6 +2248,19 @@ public:
         // uncovered plan at rank 0 instead of rank W, which demotes MAXBASE to a cost prune: it
         // decides who waits, not who is reachable. Meaningless once the plan is applied.
         bool bp_wave0 = false;
+        // MTG_SAC_FODDER_MENU, two scheduling/identity tags (both false with the lever off; neither prunes):
+        //  * sacfod_admit -- the board provably cannot pay this plan without eating bodies (a scalar UPPER bound
+        //    of the non-fodder supply -- the pool, every other credit, the subset's land-Aura bonuses, ritual
+        //    floats and rock mana -- is short of its cost), so its apply EATS bodies its value still counts
+        //    (Skirk Prospector + Goblin Lackey off one Mountain scored two bodies for a turn that ends with the
+        //    Lackey alone). The move order scans it after every board-payable plan of its wins tier: a
+        //    re-pricing, the plan stays on the menu. An upper bound, so a board-payable plan is never demoted.
+        //  * sacfod_credit -- the plan-made fodder credit was applied to this subset. Its land-Aura hosts are kept
+        //    distinct in the dedup signature: the name-only host fold assumes host variants are interchangeable,
+        //    and a body-eating host (Wild Growth on a tapped-to-pay depletion land) is not interchangeable with a
+        //    board-payable one (Fungus gi 630182 / 630865: the fold kept the eating host and dropped the T4 line).
+        bool sacfod_admit  = false;
+        bool sacfod_credit = false;
         // MTG_BP_VARIANT_FIRST: scheduling-only tag (1 on a wave-0 variant). MoveOrderPlans breaks an
         // EXACT value tie in its favour, so a base plan's searched continuations are scored before the
         // base's own EMPTY-continued line. Never read by anything that decides; ordering only.

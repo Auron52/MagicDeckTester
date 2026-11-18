@@ -3508,6 +3508,12 @@ static void StableSortPlans(std::vector<TurnSolver::Plan>& plans, Less less)
 static bool MoveOrderLess(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
 {
     if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn; }
+    // MTG_SAC_FODDER_MENU: a plan payable only by eating bodies (Plan::sacfod_admit) is scanned after every
+    // board-payable plan of its wins tier. Its value still counts the bodies its apply eats (Skirk Prospector +
+    // Goblin Lackey off one Mountain scored 800, two bodies, for a turn that ends with the Lackey alone), so by
+    // value it sorted FIRST and a budgeted pass spent its deepest units on it (Goblins gi 620281 / 620470).
+    // Ordering only: the plan stays on the menu and a larger budget reaches it. False everywhere with the lever off.
+    if (a.sacfod_admit != b.sacfod_admit) { return b.sacfod_admit; }
     // Pump-waste tie-break (SubsetPumpWasted): a plan whose pump payload cannot be
     // used sorts after its siblings, so among horizon-tied wins first-verified-win
     // commits the line the tuned auto-fire hold would pick. Below wins_this_turn on
@@ -10077,6 +10083,28 @@ static bool SacFodderMenuPrefixOk(const SacFodderMenuCtx& ctx, const std::vector
         if (lb[u] > supply + best) { return false; }
     }
     return true;
+}
+// Plan::sacfod_admit's test: true only when the board provably cannot pay `need` without eating a body. `supply` is
+// the flat pool with every credit but the fodder; the subset's land-Aura bonuses, ritual floats and same-turn rock
+// mana are added on top (the sequencing rescues' own supply terms), and a subset holding a supply this cannot price
+// (an ETB land untapper, an untap-X effect, a cost reducer) is never called short. An UPPER bound of the non-fodder
+// supply, so a plan the board can pay is never tagged: the tag only demotes, and only a plan that must eat.
+static bool SacFodderBoardShort(const std::vector<Action>& cands, const std::vector<int>& sel, int supply, int need)
+{
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.def != nullptr)
+        {
+            const CardParams& cp = c.def->params;
+            if (cp.etb_untap_lands > 0 || cp.untap_x_mana_sources
+                || !cp.reduces_spell_subtype.empty() || !cp.reduces_spell_color.empty())
+            { return false; }
+            if (cp.is_land_aura) { supply += std::max(0, cp.land_aura_extra_mana); }
+        }
+        supply += std::max(0, c.ritual_float) + static_cast<int>(c.rock_mana.Total());
+    }
+    return supply < need;
 }
 static void CreditSacFodderMenu(const SacFodderMenuCtx& ctx, int bodies, ManaPool& eff, ManaPool& eff_nc)
 {
@@ -82437,7 +82465,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
-                if (d && d->params.is_land_aura && act.enchant_target > 0 && host_sig) { w.Put("#H"); w.Int(act.enchant_target); }
+                // (|| sacfod_credit: a fodder-credited plan's land-Aura host never folds into another host --
+                // see TurnSolver::Plan::sacfod_credit; lockstep with plan_signature_legacy.)
+                if (d && d->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit)) { w.Put("#H"); w.Int(act.enchant_target); }
                 if ((cre_host_sig || (d && d->params.aura_host_damage_back))
                     && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
                 { w.Put("#A"); w.Int(act.enchant_target); }   // Guilty Conscience: always (see CreatureAuraHostInert)
@@ -85373,6 +85403,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // MTG_SAC_FODDER_MENU: the fodder this subset makes available (see SacFodderMenuCtx). Unrestricted
         // mana, so both pools. Its colours widen the presence table below (sacfod_cols).
         bool sacfod_credited = false;
+        bool sacfod_admit    = false;   // the board is provably short without eating (TurnSolver::Plan::sacfod_admit)
         if (sacfod.live)
         {
             int bodies = SacFodderMenuSubsetBodies(sacfod, cands, sel, pool);
@@ -85394,7 +85425,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 const int refund = std::max(0, raw - combined.ManaValue());
                 if (!SacFodderMenuPrefixOk(sacfod, sel, sf_lb, eff.Total() + refund)) { bodies = 0; }
             }
-            if (bodies > 0) { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; }
+            if (bodies > 0)
+            {
+                // Before the credit: is the board provably short without eating (Plan::sacfod_admit)?
+                sacfod_admit = SacFodderBoardShort(cands, sel, static_cast<int>((credited ? eff : pool).Total()),
+                                                   combined.ManaValue());
+                CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true;
+            }
         }
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
@@ -86317,6 +86354,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
+        plan.sacfod_admit   = sacfod_admit;      // MTG_SAC_FODDER_MENU (both false with the lever off)
+        plan.sacfod_credit  = sacfod_credited;
         plan.freshmode_choice = fresh_tag ? 1 : 0;   // fresh-spend priced at the base (MTG_MINT_CREDIT_EXACT)
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
@@ -87110,7 +87149,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     {
         const TurnSolver::Plan& c = plans[i];
         const TurnSolver::Plan& b = plans[j];
-        return c.wins_this_turn != b.wins_this_turn ? c.wins_this_turn : c.value > b.value;
+        if (c.wins_this_turn != b.wins_this_turn) { return c.wins_this_turn; }
+        if (c.sacfod_admit != b.sacfod_admit) { return b.sacfod_admit; }   // plan_rank_less's fodder tier
+        return c.value > b.value;
     };
     auto ds_compact = [&]()
     {
@@ -87664,6 +87705,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     auto plan_rank_less = [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
     {
         if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
+        // MTG_SAC_FODDER_MENU: body-eating plans after the board-payable ones (see MoveOrderLess). Also the
+        // dedup's representative rule: a class keeps a board-payable member over a body-eating one.
+        if (a.sacfod_admit != b.sacfod_admit) { return b.sacfod_admit; }
         return a.value > b.value;
     };
     // MTG_ENUM_DEDUP_STREAM's SIGNATURE CACHE: the stream already built every walk plan's fast signature
@@ -88020,8 +88064,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // already narrows the host set (LandAuraHostCandidates, two), so keeping the
                         // variants distinct at most doubles the Aura plans. Gated on the param, so no
                         // deck without land Auras moves; =0 restores the name-only fold.
-                        if (cd && cd->params.is_land_aura && act.enchant_target > 0 && host_sig)
-                        { k += "#H"; k += std::to_string(act.enchant_target); }
+                        if (cd && cd->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit))
+                        { k += "#H"; k += std::to_string(act.enchant_target); }   // sacfod_credit: see PlanSignatureFast
                         if ((cre_host_sig || (cd && cd->params.aura_host_damage_back))
                             && cd && cd->params.is_aura && !cd->params.is_land_aura && act.enchant_target > 0)
                         { k += "#A"; k += std::to_string(act.enchant_target); }   // + Guilty Conscience: always
@@ -101219,7 +101263,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 776;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below); +24: Plan::reflect_targets (Stuffy Doll step 3).
+static constexpr std::size_t kPlanDomAssertedSize = 784;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below); +24: Plan::reflect_targets (Stuffy Doll step 3); +8: Plan::sacfod_admit/sacfod_credit (MTG_SAC_FODDER_MENU scheduling/identity tags -- not a play axis, so not keyed).
 // Recheck after integrating Boars axes with dynamic Mihail choices.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
@@ -103372,6 +103416,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
+            // MTG_SAC_FODDER_MENU: body-eating plans after the board-payable ones (see MoveOrderLess).
+            if (a.sacfod_admit != b.sacfod_admit) { return b.sacfod_admit; }
             // While the combo is live every card is AMMUNITION: cycling is 1-for-1 (draws a
             // replacement AND pings) where a cast or a land drop is 1-for-0, so either one
             // permanently shortens the chain by a ping. Rank the plans that spend nothing FIRST.
