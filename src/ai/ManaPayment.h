@@ -960,17 +960,36 @@ void SubManaCost(ManaCost& dst, const ManaCost& paid);
 // nested apply binds its own casts-only hold) and restored with it.
 extern thread_local bool g_line_hold_has_acts;
 
+// THE LINE'S SAME-TURN REDUCER CREDIT (MTG_LINE_REDUCER_KEEP; LineReducerCreditScope below). The hold above sums each
+// cast's Action::cost, the price at enumeration -- before a reducer cast EARLIER IN THE SAME LINE (Urza's Incubator,
+// Goblin Warchief, Ruby Medallion) is on the battlefield. The subset math afforded the line with that discount
+// (SameTurnReducerGenericCredit, TurnSolver.cpp), so the hold over-states what the rest of the line will really be
+// charged by exactly this many generic units. Both are cleared by every LineUnpaidCostScope, so a nested apply or
+// walk that binds its own hold never reads an outer line's credit (0 = inert: the line-keep rung does not fire).
+extern thread_local int g_line_reducer_credit;
+// ...and the mana value of the line's NONCREATURE casts, so the rung can tell when the rest of the line is creature
+// casts only (a colored_creature_only land's colour pays them).
+extern thread_local int g_line_noncreature_mv;
+
 class LineUnpaidCostScope
 {
 public:
-    explicit LineUnpaidCostScope(const ManaCost& c) : m_prev(g_line_unpaid_cost), m_prev_acts(g_line_hold_has_acts)
-    { g_line_unpaid_cost = c; g_line_hold_has_acts = false; }
-    ~LineUnpaidCostScope() { g_line_unpaid_cost = m_prev; g_line_hold_has_acts = m_prev_acts; }
+    explicit LineUnpaidCostScope(const ManaCost& c)
+        : m_prev(g_line_unpaid_cost), m_prev_acts(g_line_hold_has_acts),
+          m_prev_credit(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv)
+    { g_line_unpaid_cost = c; g_line_hold_has_acts = false; g_line_reducer_credit = 0; g_line_noncreature_mv = 0; }
+    ~LineUnpaidCostScope()
+    {
+        g_line_unpaid_cost = m_prev; g_line_hold_has_acts = m_prev_acts;
+        g_line_reducer_credit = m_prev_credit; g_line_noncreature_mv = m_prev_nc;
+    }
     LineUnpaidCostScope(const LineUnpaidCostScope&)            = delete;
     LineUnpaidCostScope& operator=(const LineUnpaidCostScope&) = delete;
 private:
     ManaCost m_prev;
     bool     m_prev_acts;
+    int      m_prev_credit;
+    int      m_prev_nc;
 };
 
 // THE SCARCE HOLD OUTRANKS A LAND AURA'S HOST HOLD (MTG_SCARCE_COLOR_MASK). Both per-cast host holds (the rollout's
@@ -1088,6 +1107,29 @@ public:
     LineHasteTakersScope& operator=(const LineHasteTakersScope&) = delete;
 private:
     int m_prev;
+};
+
+// THE LINE-KEEP RUNG'S SEED (MTG_LINE_REDUCER_KEEP, see LineReducerKeepHold in ManaPayment.cpp). Bound right AFTER
+// the line's LineUnpaidCostScope (which clears it), from the same action list, at both apply worlds (ApplyPlanDirect
+// and AIEngine::TakeTurn) and at every payer walk that binds the hold from an action list. `credit` is the generic
+// the line's same-turn reducers take off its later casts (LineReducerCredit: the enumerator's own per-cast discount,
+// SameTurnReducerDiscountFor, summed); `noncreature_mv` the line's noncreature cast bill. Both 0 with the lever off.
+int LineReducerCredit(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel);
+int LineReducerCredit(const GameState& state, const std::vector<Action>& acts);
+int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel);
+int LineNoncreatureMv(const std::vector<Action>& acts);
+class LineReducerCreditScope
+{
+public:
+    LineReducerCreditScope(int credit, int noncreature_mv)
+        : m_prev(g_line_reducer_credit), m_prev_nc(g_line_noncreature_mv)
+    { g_line_reducer_credit = credit; g_line_noncreature_mv = noncreature_mv; }
+    ~LineReducerCreditScope() { g_line_reducer_credit = m_prev; g_line_noncreature_mv = m_prev_nc; }
+    LineReducerCreditScope(const LineReducerCreditScope&)            = delete;
+    LineReducerCreditScope& operator=(const LineReducerCreditScope&) = delete;
+private:
+    int m_prev;
+    int m_prev_nc;
 };
 
 // (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted

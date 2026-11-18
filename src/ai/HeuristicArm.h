@@ -1004,6 +1004,7 @@ enum Slot : int
     MAZE_HEAP_STRICT,         // MTG_MAZE_HEAP_STRICT      Maze's End P5 (USER 2026-11-18: "there are cases where the search doesn't use the mana fully even if the option is available. In those cases it should still activate, since there is no drawback to doing so."; "We can actually create the treasure at the very end of processing even after Maze's End"): Heap Gate's Treasure is never a searched branch (every Treasure plan leaves the menu); PerformLastChanceTreasure makes it after the opponent's turn, in both worlds, whenever the untapped sources still pay it. Default ON (P5-2 A/B: net -5 turns / 550 held-out games, cheaper); =0 -> MAZE_HEAP_TREASURE's leftover-or-binds menu rule
     MAZE_TALON_ATMOST1,       // MTG_MAZE_TALON_ATMOST1    Maze's End P5 Talon VARIANT (b) (USER: "It is less clear whether 1 of them does"): Talon Gates is offered while AT MOST ONE copy of Exploration / Burgeoning / Manabond is controlled or held. Default OFF (an A/B arm)
     MAZE_TALON_EFFECTIVE,     // MTG_MAZE_TALON_EFFECTIVE  Maze's End P5 Talon VARIANT (c) (USER: "particularly if Burgeoning is the one and it is not going off"): Talon Gates is offered while no EFFECTIVE extra land drop is held or controlled -- Exploration always counts; Burgeoning and Manabond count only with a spare land in hand (more land cards than the open land drops). Default OFF (an A/B arm)
+    LINE_REDUCER_KEEP,        // MTG_LINE_REDUCER_KEEP  a payment of an applying line whose own same-turn reducer (Urza's Incubator, Dragonspeaker Shaman cast this turn, Goblin Warchief, Ruby Medallion) makes the rest of the line cheaper than its hold reads: when the greedy payment strands the rest of the line (hold net of this payment and of the reducer credit) while the board pays both together, the payment is re-made with the fewest of the greedy's sources held out that keeps the rest payable (LineReducerKeepHold, ManaPayment.cpp). Dragons mana-clean gate claude-moderate-20261117 s30081761 T5: Incubator's {3} took Mind Stone + both Mountains, Gruul Turf's {R}{G} was left for Inferno's {R}{R} and the Dragon was dropped. DEFAULT ON; =0 -> the greedy payment, byte-identical
     COUNT
 };
 
@@ -1952,6 +1953,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_HEAP_STRICT",
         "MTG_MAZE_TALON_ATMOST1",
         "MTG_MAZE_TALON_EFFECTIVE",
+        "MTG_LINE_REDUCER_KEEP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

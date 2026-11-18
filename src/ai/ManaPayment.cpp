@@ -8340,6 +8340,8 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local int      g_line_reducer_credit = 0;   // see ManaPayment.h (LineReducerCreditScope)
+thread_local int      g_line_noncreature_mv = 0;   // see ManaPayment.h (LineReducerCreditScope)
 thread_local bool     g_line_hold_has_acts = false;   // see ManaPayment.h (LineUnpaidCostScope)
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
@@ -9888,6 +9890,196 @@ static bool PayProviderHoldUp(GameState& state, const ManaCost& cost_in, const s
     return ok;
 }
 
+// ---- THE LINE-KEEP RUNG: re-pay a reducer line's payment that strands the rest of its line (MTG_LINE_REDUCER_KEEP) ----
+//
+// THE HOLE (the mana-clean gate claude-moderate-20261117, Dragons: 583 APPLY-DROPs, the leading family). Dragons
+// s30081761 T5: Mountain x2, Mind Stone, Gruul Turf ({R}{G} per tap), Dragonspeaker Shaman in play; the line {Urza's
+// Incubator {3}, Inferno of the Star Mounts}. The payable-order decider casts the Incubator first, and with it in play
+// Inferno costs {R}{R} (the Shaman's {2} and the Incubator's {2}). The greedy paid the {3} pip by pip -- Mind Stone,
+// then the two Mountains, the ladder ranking a basic ahead of the Karoo -- and Inferno met Gruul Turf's {R}{G} alone:
+// dropped, in the executor, the rollout and the walks alike. Mind Stone + Gruul Turf pay the {3} exactly and keep both
+// Mountains for the {R}{R}. Two things hid it from every line-aware rung. The line hold (g_line_unpaid_cost) sums each
+// cast's Action::cost, the price at enumeration, so it still read Inferno at {2}{R}{R} and the line as 7 mana on a
+// 5-mana board -- the subset math had afforded it with the reducer credit (SameTurnReducerGenericCredit), the hold had
+// not; and no per-pip rule can see that the Karoo's two units must go together on the generic.
+//
+// THE REPAIR is the hold-out shape of HoldOutFor, decided BEFORE the payment so a payment is still made exactly once.
+// While the line carries a reducer credit (g_line_reducer_credit, LineReducerCreditScope -- the same per-cast discount
+// the subset math used), the REST of the line is the hold net of this payment, less that credit. The payment is TRIED
+// on a scratch board; only when that trial leaves the rest unpayable, while the board this payment found pays this
+// bill and the rest together, are alternatives tried: the same payer with SOME of the trial's sources held out, the
+// fewest first (then battlefield order). The first whose board pays the rest is the payment made. Not a preference:
+// everywhere else the payment is the greedy's, byte for byte, and the replaced payment provably strands the rest of
+// the declared line. A rest priced too LOW (the reducer cast after the card it discounts) can only make the rung fire
+// less: a payment that strands the lower bill strands the true one too.
+//
+// The rest is judged as one bill by the complete backtracker, as a CREATURE bill when every noncreature cast of the
+// line is this payment (a colored_creature_only land's colour pays a Dragon: Haven of the Spirit Dragon).
+//
+// COST. A counter test unless the applying line holds a same-turn reducer (rare: Dragons, Goblins, Boars, ...) and the
+// rest owes a coloured pip; then one scratch trial and one backtracker solve; the alternatives only when it strands.
+namespace
+{
+std::atomic<unsigned long long> g_lrk_trial{0}, g_lrk_strand{0}, g_lrk_fired{0};
+struct LineReducerKeepStats
+{
+    ~LineReducerKeepStats()
+    {
+        if (!EnvOn("MTG_LINE_REDUCER_KEEP_STATS")) { return; }
+        std::fprintf(stderr, "[line-reducer-keep] trials=%llu stranded=%llu fired=%llu\n",
+                     g_lrk_trial.load(), g_lrk_strand.load(), g_lrk_fired.load());
+    }
+};
+LineReducerKeepStats g_lrk_stats;
+
+// `bill` payable on a copy of `s` (the complete backtracker; RampLaterPayable's shape with the creature mode exposed).
+bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature)
+{
+    RampScratch sc(s);
+    GameState& c = sc.Board();
+    if (!PaymentManaCovers(c, for_creature, bill.ManaValue() - static_cast<int>(c.floating_mana.Total())))
+    { return false; }
+    ManaPool start = c.floating_mana;
+    return TapForCostBacktrack(c, bill, for_creature, start);
+}
+
+// PayHolding for a SET of sources (card numbers): each untapped one is unable to pay for the span of the payment.
+bool PayHoldingSet(GameState& b, const std::vector<int>& held, const ManaCost& cost_in, bool for_creature,
+                   ManaPool* available, bool honor_legacy_cco)
+{
+    std::vector<int> marked;
+    for (int num : held)
+    {
+        Permanent* hp = PermByNumber(b, num);
+        if (hp != nullptr && !hp->tapped) { hp->tapped = true; marked.push_back(num); }
+    }
+    const bool ok = TapForCostSharedDiag(b, cost_in, for_creature, available, honor_legacy_cco);
+    for (int num : marked)
+    {
+        Permanent* hq = PermByNumber(b, num);
+        if (hq != nullptr) { hq->tapped = false; }
+    }
+    return ok;
+}
+}   // namespace
+
+// Make the oracle-table option `opt` for `cost_in` on `b` (PayRefineAfter's procedure): its taps, its set-aside units
+// held off the bill, the bill paid float-only by the shared payer, the set-aside units back in the float.
+static bool MakeLineKeepOption(GameState& b, const manaoracle::PayOption& opt, const ManaCost& cost_in, bool for_creature,
+                               ManaPool* available, bool honor_legacy_cco)
+{
+    if (!manaoracle::PerformPayTaps(b, opt)) { return false; }
+    ManaPool& f = b.floating_mana;
+    const ManaPool& st = opt.stash;
+    if (f.white < st.white || f.blue < st.blue || f.black < st.black || f.red < st.red || f.green < st.green
+        || f.colorless < st.colorless || b.floating_haste_c < opt.stash_haste)
+    { return false; }
+    f.white -= st.white; f.blue -= st.blue; f.black -= st.black; f.red -= st.red; f.green -= st.green;
+    f.colorless -= st.colorless;
+    b.floating_haste_c -= opt.stash_haste;
+    f.snow_units = std::min(f.snow_units, f.Total());
+    const bool prev_fo = manaoracle::t_float_only;
+    manaoracle::t_float_only = true;
+    const bool ok = TapForCostSharedDiag(b, cost_in, for_creature, available, honor_legacy_cco);
+    manaoracle::t_float_only = prev_fo;
+    f.white += st.white; f.blue += st.blue; f.black += st.black; f.red += st.red; f.green += st.green;
+    f.colorless += st.colorless;
+    b.floating_haste_c += opt.stash_haste;
+    return ok;
+}
+
+// What the rung decided: the greedy with `held` held out, or the oracle-table option `opt`; neither = the greedy.
+struct LineKeepPlan
+{
+    std::vector<int>                       held;
+    std::optional<manaoracle::PayOption>   opt;
+    bool Any() const { return !held.empty() || opt.has_value(); }
+};
+// The rung's own payments (its trials, and the oracle table's verifications) never re-enter it.
+static thread_local int t_lrk_depth = 0;
+// MTG_LINE_REDUCER_KEEP's options-table cap: the rung takes the FIRST option of the oracle's table that keeps the rest
+// payable, so it asks for no more than this many (a deterministic prefix of the same table).
+static constexpr std::size_t kLineKeepTableOpts = 64;
+
+static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
+                                        ManaPool* available, bool honor_legacy_cco)
+{
+    LineKeepPlan none;
+    ++t_lrk_depth;
+    struct DepthGuard { ~DepthGuard() { --t_lrk_depth; } } _depth_guard;
+    // The hold must evidently carry this payment (LineRestAfter's test): an activation's payment is not in it.
+    const ManaCost& lu = g_line_unpaid_cost;
+    if (lu.ManaValue() < cost_in.ManaValue() || lu.white < cost_in.white || lu.blue < cost_in.blue
+        || lu.black < cost_in.black || lu.red < cost_in.red || lu.green < cost_in.green
+        || lu.colorless < cost_in.colorless)
+    { return none; }
+    ManaCost rest = lu;
+    SubManaCost(rest, cost_in);
+    rest.generic = std::max(0, rest.generic - g_line_reducer_credit);
+    // Only WHICH sources pay can strand a pip; a generic-only rest is a question of amount, the same for every payment.
+    if (rest.white + rest.blue + rest.black + rest.red + rest.green + rest.colorless == 0) { return none; }
+    const int floating = static_cast<int>(state.floating_mana.Total());
+    if (cost_in.ManaValue() <= floating) { return none; }   // the float pays it: nothing is tapped
+    const bool rest_creature = g_line_noncreature_mv == 0
+                            || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv);
+    const ManaCost joint = AddManaCosts(cost_in, rest);
+    const bool joint_creature = rest_creature || for_creature;   // a necessary-condition bound: the looser mode
+    if (!PaymentManaCovers(state, joint_creature, joint.ManaValue() - floating)) { return none; }
+    g_lrk_trial.fetch_add(1, std::memory_order_relaxed);
+    TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
+    RevealLogPause _quiet;
+    g_play_tap_pref_chooser = tap_pref;
+    RampScratch a(state);
+    ManaPool av_a = available ? *available : ManaPool{};
+    if (!TapForCostSharedDiag(a.Board(), cost_in, for_creature, available ? &av_a : nullptr, honor_legacy_cco))
+    { return none; }
+    if (LineBillPayable(a.Board(), rest, rest_creature)) { return none; }
+    if (!LineBillPayable(state, joint, joint_creature)) { return none; }
+    g_lrk_strand.fetch_add(1, std::memory_order_relaxed);
+    std::vector<int> tapped;
+    PaymentTapped(state, a.Board(), tapped, nullptr);
+    const int nt = static_cast<int>(tapped.size());
+    std::vector<int> held;
+    for (int k = 1; k <= (nt <= 10 ? nt : 0); ++k)
+    {
+        for (unsigned m = 1; m < (1u << nt); ++m)
+        {
+            if (__builtin_popcount(m) != k) { continue; }
+            held.clear();
+            for (int t = 0; t < nt; ++t) { if (m & (1u << t)) { held.push_back(tapped[static_cast<std::size_t>(t)]); } }
+            RampScratch b(state);
+            ManaPool av_b = available ? *available : ManaPool{};
+            if (!PayHoldingSet(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
+            { continue; }
+            if (!LineBillPayable(b.Board(), rest, rest_creature)) { continue; }
+            g_lrk_fired.fetch_add(1, std::memory_order_relaxed);
+            none.held = held;
+            return none;
+        }
+    }
+    // No hold-out keeps it: the keeping payment taps MORE than the greedy's minimal set and floats the rest's colour
+    // (Dragons s30081938 T5: Gruul Turf x2 + Mind Stone for the Incubator's {3}, the two {G} and the {C} on the generic,
+    // {R}{R} floating for Inferno -- the greedy pays Mind Stone + one Turf exactly). The oracle's payment table, the
+    // one MTG_PAY_REFINE already makes in play, offers that superset (a multi-unit tap plus one more); its options are
+    // made in table order and the first whose board pays the rest is the payment.
+    const std::vector<manaoracle::PayOption> opts =
+        manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(), /*whole_float=*/false,
+                                    nullptr, nullptr, 0, kLineKeepTableOpts, 0);
+    for (const manaoracle::PayOption& opt : opts)
+    {
+        if (opt.fail) { continue; }
+        RampScratch b(state);
+        ManaPool av_b = available ? *available : ManaPool{};
+        if (!MakeLineKeepOption(b.Board(), opt, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
+        { continue; }
+        if (!LineBillPayable(b.Board(), rest, rest_creature)) { continue; }
+        g_lrk_fired.fetch_add(1, std::memory_order_relaxed);
+        none.opt = opt;
+        return none;
+    }
+    return none;
+}
+
 // The card number of the source to hold out of this payment, or 0 to pay as the greedy does.
 static int AnyFilterFeedRouteHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
                                   ManaPool* available, bool honor_legacy_cco)
@@ -10203,6 +10395,12 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     const bool refine = can_snap && PayRefineOn();
     const bool exact_float = can_snap && !for_creature && cost_in.has_x
                           && state.deck_has_land_aura && state.deck_has_mana_untapper;
+    // MTG_LINE_REDUCER_KEEP (see LineReducerKeepHold): a reducer line's payment that strands the rest of the line.
+    // Off, outside such a line, or under another rung's decision: a counter test and out.
+    LineKeepPlan lrk;
+    if (t_pay_nest == 1 && t_lrk_depth == 0 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !phu_pay_first
+        && g_line_reducer_credit > 0 && !state.dmg_events_armed && !manaoracle::t_float_only && LineReducerKeepOn())
+    { lrk = LineReducerKeepHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     std::optional<PayRefineSnap> refine_pre;
     if (refine || exact_float) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
@@ -10222,6 +10420,20 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     {
         // The trial proved this payment; should the real board disagree, the greedy pays as it always did.
         ok = PayHolding(state, afr_held, cost_in, for_creature, available, honor_legacy_cco);
+        if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
+    }
+    else if (lrk.Any())
+    {
+        // The trial proved this payment; should the real board disagree, the greedy pays as it always did.
+        if (!lrk.held.empty())
+        { ok = PayHoldingSet(state, lrk.held, cost_in, for_creature, available, honor_legacy_cco); }
+        else
+        {
+            RampScratch pre(state);
+            ManaPool av_pre = available ? *available : ManaPool{};
+            ok = MakeLineKeepOption(state, *lrk.opt, cost_in, for_creature, available, honor_legacy_cco);
+            if (!ok) { state = pre.Board(); if (available != nullptr) { *available = av_pre; } }
+        }
         if (!ok) { ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
     }
     else if (!state.dmg_events_armed)

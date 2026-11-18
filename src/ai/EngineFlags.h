@@ -491,6 +491,19 @@ inline bool LineSpareStorageOn()
     return heurarm::Flag(heurarm::LINE_SPARE_STORAGE, env_on);
 }
 
+// MTG_LINE_REDUCER_KEEP (DEFAULT ON; =0 restores the greedy payment) -- a payment of an applying line whose same-turn
+// reducer makes the rest of the line cheaper than the line hold reads (g_line_reducer_credit, ManaPayment.h): if the
+// greedy payment strands the rest of the line while the board pays this bill and the rest together, the payment is
+// re-made with the fewest of the greedy's own sources held out that keeps the rest payable (LineReducerKeepHold,
+// ManaPayment.cpp). Dragons s30081761 T5: Urza's Incubator's {3} off Mind Stone + both Mountains stranded Inferno of
+// the Star Mounts' {R}{R} behind Gruul Turf's {R}{G}. Read PER CALL (heurarm slot LINE_REDUCER_KEEP); seeded at both
+// apply worlds and the payer walks, decided in the shared payer, so executor, rollout and walks move together.
+inline bool LineReducerKeepOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_REDUCER_KEEP", true);
+    return heurarm::Flag(heurarm::LINE_REDUCER_KEEP, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

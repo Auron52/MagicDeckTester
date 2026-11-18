@@ -8564,6 +8564,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
     // every default-flag game; it is what makes that lever's executor half exist at all.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and the line's same-turn reducer credit (MTG_LINE_REDUCER_KEEP), the twin of ApplyPlanDirect's scope.
+    const int _lrc_credit = LineReducerCredit(state, plan.actions);
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(plan.actions) : 0);
     // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point
     // and from the same actions as ApplyPlanDirect's scope (lockstep).
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));

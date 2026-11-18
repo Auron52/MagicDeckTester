@@ -11443,6 +11443,8 @@ static bool SubsetPayableAsExecutedImpl(const GameState& state, const std::vecto
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(acts));
+    const int _lrc_credit = LineReducerCredit(cp, acts);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(acts) : 0);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, acts));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
@@ -11927,6 +11929,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
+    const int _lrc_credit = LineReducerCredit(cp, cands, ord);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(cands, ord) : 0);
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     // ...and whether the walked order casts a breakpoint opener (the twin of both apply paths' scope).
     LineOpensUnseenScope _lou([&]
@@ -12893,6 +12897,8 @@ static bool OrderPrepaysWholeTurnImpl(const GameState& state, const std::vector<
     PayScratch _scratch(state);
     GameState& cp = _scratch.Board();
     LineUnpaidCostScope _luc(LineCastCostTotal(sub));
+    const int _lrc_credit = LineReducerCredit(cp, sub);   // the apply's twin (MTG_LINE_REDUCER_KEEP)
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(sub) : 0);
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(cp, sub));
     LineHasteTakersScope _lht(0);   // a walk: no cast-site count-down (MTG_SERVANT_HASTE_KEEP)
     PlanTraits traits;
@@ -68820,6 +68826,65 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     return total;
 }
 
+// THE LINE-KEEP RUNG'S SEED (MTG_LINE_REDUCER_KEEP; declared in ManaPayment.h, read by LineReducerKeepHold in
+// ManaPayment.cpp). The generic the line's own same-turn reducers take off its later casts, priced by the very
+// function the subset math afforded the line with (SameTurnReducerDiscountFor over CountSameTurnReducers), summed
+// over the casts LineCastCostTotal holds. Dragons s30081761 T5 {Urza's Incubator, Inferno of the Star Mounts}: the
+// hold reads Inferno at {2}{R}{R} (Dragonspeaker Shaman's discount only), but once the Incubator is in play it costs
+// {R}{R}; the credit is that {2}. 0 with the lever off, and for every line without a reducer.
+static bool LineCastHeld(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return false; }
+    return !a.free_cast && !a.alt_cost;
+}
+int LineReducerCredit(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (sel.size() < 2 || !LineReducerKeepOn()) { return 0; }
+    bool any_reducer = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (ActionGyCastReducerAmount(a) > 0) { any_reducer = true; break; }
+        const CardDefinition* d = a.def;
+        if (d != nullptr && (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type
+                             || !d->params.reduces_spell_color.empty()))
+        { any_reducer = true; break; }
+    }
+    if (!any_reducer) { return 0; }
+    const SameTurnReducerCounts rc = CountSameTurnReducers(state, cands, sel);
+    if (!rc.Any()) { return 0; }
+    int credit = 0;
+    for (int j : sel)
+    { if (LineCastHeld(cands[j])) { credit += SameTurnReducerDiscountFor(state, rc, cands, j); } }
+    return credit;
+}
+int LineReducerCredit(const GameState& state, const std::vector<Action>& acts)
+{
+    if (acts.size() < 2 || !LineReducerKeepOn()) { return 0; }
+    std::vector<int> sel(acts.size());
+    for (std::size_t i = 0; i < acts.size(); ++i) { sel[i] = static_cast<int>(i); }
+    return LineReducerCredit(state, acts, sel);
+}
+int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (!LineReducerKeepOn()) { return 0; }
+    int mv = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (!LineCastHeld(a)) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { mv += a.cost.ManaValue(); }
+    }
+    return mv;
+}
+int LineNoncreatureMv(const std::vector<Action>& acts)
+{
+    std::vector<int> sel(acts.size());
+    for (std::size_t i = 0; i < acts.size(); ++i) { sel[i] = static_cast<int>(i); }
+    return LineNoncreatureMv(acts, sel);
+}
+
 // Does the line cast a breakpoint opener -- a card whose resolution reveals NEW castables this turn, so
 // the hold above is a lower bound on what the turn will owe (g_line_opens_unseen, MTG_LINE_FLOAT_UNSEEN_
 // GUARD)? The classifier is ParamKeyedDrawClass, the one the breakpoint site numbering already trusts in
@@ -70533,6 +70598,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
     // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and the generic the line's own same-turn reducers take off its later casts (MTG_LINE_REDUCER_KEEP; the
+    // executor's twin in AIEngine::TakeTurn). 0 -> the line-keep rung is inert.
+    const int _lrc_credit = LineReducerCredit(state, plan.actions);
+    LineReducerCreditScope _lrc(_lrc_credit, _lrc_credit > 0 ? LineNoncreatureMv(plan.actions) : 0);
     // ...and whether this line casts a breakpoint opener, so the hold above is incomplete (see
     // g_line_opens_unseen). Same scope, same nesting: a continuation's nested apply binds its own.
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
