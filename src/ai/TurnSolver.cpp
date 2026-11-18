@@ -100415,6 +100415,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         all.resize(w);
     }
+    // A PROVIDER'S PLAN-LIST RESTRICTION (DecisionProvider::PlanListFilterLive / PlanListAdmit; Maze's End P5: Heap
+    // Gate's Treasure only where its mana would otherwise go unused). Every enumeration, root and continuation; it
+    // only removes plans, and never all of them. Not live for any other deck (one virtual call).
+    if (!all.empty() && !HumanPlayActive() && !DecisionUnpruned() && sac_prov.PlanListFilterLive(state))
+    {
+        if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+        std::vector<DecisionProvider::PlanView> views;
+        views.reserve(all.size());
+        for (const TurnSolver::Plan& p : all) { views.push_back({ &p.actions, &p.land_to_play }); }
+        std::vector<char> admit(all.size(), 1);
+        sac_prov.PlanListAdmit(state, views, admit);
+        std::size_t n_admit = 0;
+        for (char a : admit) { n_admit += a ? 1 : 0; }
+        if (n_admit > 0 && n_admit < all.size())
+        {
+            std::size_t w = 0;
+            for (std::size_t i = 0; i < all.size(); ++i)
+            { if (admit[i]) { if (w != i) { all[w] = std::move(all[i]); } ++w; } }
+            all.resize(w);
+        }
+    }
     // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
     // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
     // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)
@@ -100913,6 +100934,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
 
     std::vector<std::string>        land_names;   // representatives, in hand order
     std::unordered_set<std::string> seen_key;
+    // A provider's land-menu RESTRICTION (DecisionProvider::LandPlayOffered; Maze's End P5: an unpayable Gateway
+    // Plaza). Autonomous play only; the default answers true for every land.
+    const DecisionProvider& land_offer_prov = ResolveProvider(state);
+    const bool land_offer_filter = !HumanPlayActive() && !DecisionUnpruned();
     if (s_human_play_lands || s_legacy_land_sig)
     {
         for (const Card& c : ap.hand)
@@ -100923,6 +100948,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
             if (!def) { continue; }
             if (karoo_self_bounce(def)) { continue; }
+            if (land_offer_filter && !land_offer_prov.LandPlayOffered(state, state.active_player_index, *def)) { continue; }
             const std::string key = s_human_play_lands ? c.m_name
                                   : land_sig_named(front && front->card.IsLand() ? def : front);
             // s_human_play_lands forces condemn_lands false, so `key` is the signature here.
@@ -100948,6 +100974,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
             if (!def) { continue; }
             if (karoo_self_bounce(def)) { continue; }
+            if (land_offer_filter && !land_offer_prov.LandPlayOffered(state, state.active_player_index, *def)) { continue; }
             // Signature: a real land keys on its own params; a spell//land keys on the FRONT's
             // (which carries the mdfc_back fields -> a distinct group from every real land).
             const std::string sg = land_sig_named(front && front->card.IsLand() ? def : front);
@@ -110536,6 +110563,21 @@ static bool CrossingLandUncoveredPending(const GameState& state)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr && d->card.IsLand()) { has_land = true; break; }
+    }
+    // A hand of ONLY lands with Manabond alone live (no Burgeoning put pending) and the provider proving "no"
+    // dominated (PerformEndStepManabond's same restriction, P5): the yes is forced, so the crossing is a choice only
+    // if a dumped land still has two or more admitted as-enters values.
+    if (has_land && manabond && !(burgeoning && state.opponent_plays_lands)
+        && ResolveProvider(state).CrossingDumpAllLandsDominatesNo(state, me))
+    {
+        bool all_lands = true, multi_pin = false;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand()) { all_lands = false; break; }
+            if (CrossingLandEntryPins(state, me, *d).size() > 1) { multi_pin = true; }
+        }
+        if (all_lands && !multi_pin) { return false; }
     }
     if (has_land) { return true; }
     // No land in hand: Burgeoning has nothing to put; Manabond's yes only discards -- a choice unless the provider

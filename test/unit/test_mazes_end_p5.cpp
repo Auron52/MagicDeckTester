@@ -1,0 +1,307 @@
+// Maze's End deck, P5 (2026-11-18; docs/design/analysis-Maze's End.md "P5"): the USER-directed provider prunes of
+// the P4 candidate list and the B disclosures -- Maze's End's fail-to-find, Gateway Plaza pay-or-don't-play,
+// Heap Gate's Treasure only where its mana is otherwise unused, Manabond's "no" with an all-land hand, the v5
+// fetch weight, and the two A/B variants (one colour alternating; Talon only while lacking extra drops). Each lever
+// is DEFAULT ON (variants OFF); each test also pins it the other way.
+#include <doctest/doctest.h>
+
+#include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
+#include "ai/TurnSolver.h"
+#include "cards/CardDatabase.h"
+#include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
+#include "mtg_test_seam.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
+namespace
+{
+void LoadP5Cards()
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+}
+
+const CardDefinition& D(const char* name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE(d != nullptr);
+    return *d;
+}
+
+Card C(const char* name, int number)
+{
+    Card c = D(name).card;
+    c.m_number = number;
+    return c;
+}
+
+void Put(GameState& s, const char* name, int number, bool tapped = false)
+{
+    Permanent p;
+    p.card = C(name, number);
+    p.controller_index = 0;
+    p.owner_index = 0;
+    p.tapped = tapped;
+    s.battlefield.push_back(p);
+}
+
+GameState Base(const DecisionProvider& prov)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 5;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.m_provider          = &prov;
+    s.deck_has_crossing_land_put = true;
+    return s;
+}
+
+struct Arm
+{
+    int slot;
+    Arm(int sl, int v) : slot(sl) { heurarm::t_arm[sl] = static_cast<std::int8_t>(v); }
+    ~Arm() { heurarm::t_arm[slot] = -1; }
+};
+
+Action Cast(const char* name, int hand_index)
+{
+    Action a;
+    a.kind = Action::Kind::CastFromHand;
+    a.card_name = D(name).card.m_name;
+    a.def = &D(name);
+    a.hand_index = hand_index;
+    a.cost = D(name).card.m_mana_cost;
+    return a;
+}
+
+Action Treasure()
+{
+    Action a;
+    a.kind = Action::Kind::ActivatePermAbility;
+    a.card_name = D("Heap Gate").card.m_name;
+    a.def = &D("Heap Gate");
+    a.ability_mode = Action::AbilityMode::TapTreasure;
+    a.sac_source_id = 10;
+    ManaCost one; one.generic = 1;
+    a.cost = one;
+    return a;
+}
+}   // namespace
+
+TEST_CASE("Maze's End P5 (USER): Maze's End's fail-to-find is withheld while a Gate target is offered")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    const CardDefinition& maze = D("Maze's End");
+    GameState s = Base(prov);
+    for (const char* g : { "Azorius Guildgate", "Boros Guildgate", "Dimir Guildgate" }) { Put(s, g, 500 + static_cast<int>(s.battlefield.size())); }
+    std::vector<std::string> names = { "Azorius Guildgate", "Simic Guildgate" };
+    {
+        const Arm p3(heurarm::MAZE_LAND_TARGETS, 0);
+        CHECK(prov.TapTutorPutCandidates(s, maze, names));          // narrowed: no fail-to-find
+        CHECK(names == std::vector<std::string>{ "Simic Guildgate", "Azorius Guildgate" });
+        names = { "Azorius Guildgate", "Simic Guildgate" };
+        const Arm off(heurarm::MAZE_FIND_NOTHING, 0);
+        CHECK_FALSE(prov.TapTutorPutCandidates(s, maze, names));    // the fail-to-find stays
+    }
+    // With the P3 menu on, the restricted menu also withholds it.
+    names = { "Azorius Guildgate", "Simic Guildgate", "Gond Gate" };
+    s.players[0].library.push_back(C("Gond Gate", 600));
+    CHECK(prov.TapTutorPutCandidates(s, maze, names));
+    CHECK_FALSE(names.empty());
+}
+
+TEST_CASE("Maze's End P5 (USER): Gateway Plaza is paid for or not played")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    const CardDefinition& plaza = D("Gateway Plaza");
+    GameState s = Base(prov);
+    // The as-enters menu is {pay}.
+    CHECK(prov.LandEntryPinCandidates(s, 0, plaza) == std::vector<int>{ 1 });
+    {
+        const Arm off(heurarm::MAZE_PLAZA_PAY, 0);
+        CHECK(prov.LandEntryPinCandidates(s, 0, plaza) == std::vector<int>{ 1, 0 });
+        CHECK(prov.LandPlayOffered(s, 0, plaza));
+    }
+    // No mana, no Amulet, no Gond Gate: not offered (its {1} cannot be paid on entry).
+    CHECK_FALSE(prov.LandPlayOffered(s, 0, plaza));
+    // Every other land is offered.
+    CHECK(prov.LandPlayOffered(s, 0, D("Simic Guildgate")));
+    // An untapped land pays it.
+    GameState f = s;
+    Put(f, "Forest", 20);
+    CHECK(prov.LandPlayOffered(f, 0, plaza));
+    // A TAPPED land does not.
+    GameState t = s;
+    Put(t, "Forest", 21, /*tapped=*/true);
+    CHECK_FALSE(prov.LandPlayOffered(t, 0, plaza));
+    // Amulet of Vigor untaps it (it pays with itself); so does a Gond Gate (a Gate enters untapped).
+    GameState a = t;
+    Put(a, "Amulet of Vigor", 22);
+    CHECK(prov.LandPlayOffered(a, 0, plaza));
+    GameState g = t;
+    Put(g, "Gond Gate", 23, /*tapped=*/true);
+    CHECK(prov.LandPlayOffered(g, 0, plaza));
+    // Maze's End's fetch: the activation's {3} comes first. One untapped Forest cannot pay {3}+{1}: the Plaza is
+    // dropped; with nothing else to find, the menu empties and the caller re-offers the fail-to-find.
+    std::vector<std::string> names = { "Gateway Plaza" };
+    {
+        const Arm p3(heurarm::MAZE_LAND_TARGETS, 0);
+        CHECK_FALSE(prov.TapTutorPutCandidates(f, D("Maze's End"), names));
+        CHECK(names.empty());
+        names = { "Gateway Plaza", "Simic Guildgate" };
+        CHECK(prov.TapTutorPutCandidates(f, D("Maze's End"), names));
+        CHECK(names == std::vector<std::string>{ "Simic Guildgate" });
+        // Four untapped Forests pay {3} + {1}: kept.
+        GameState four = f;
+        for (int k = 0; k < 3; ++k) { Put(four, "Forest", 30 + k); }
+        names = { "Gateway Plaza", "Simic Guildgate" };
+        CHECK(prov.TapTutorPutCandidates(four, D("Maze's End"), names));
+        CHECK(names.size() == 2);
+    }
+    // Burgeoning's put follows the land menu: a lone unpayable Plaza in hand is not put.
+    GameState b = s;
+    Put(b, "Burgeoning", 40);
+    b.players[0].hand.push_back(C("Gateway Plaza", 41));
+    ResolveBurgeoningTriggers(b);
+    CHECK(b.players[0].hand.size() == 1);
+    {
+        const Arm off(heurarm::MAZE_PLAZA_PAY, 0);
+        GameState b2 = s;
+        Put(b2, "Burgeoning", 40);
+        b2.players[0].hand.push_back(C("Gateway Plaza", 41));
+        ResolveBurgeoningTriggers(b2);
+        CHECK(b2.players[0].hand.empty());   // put, then sacrificed (unaffordable)
+    }
+}
+
+TEST_CASE("Maze's End P5 (USER): Manabond's no is withheld for an all-land hand, unless a Plaza cannot pay")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    GameState s = Base(prov);
+    s.phase = Phase::Ending;
+    Put(s, "Manabond", 700);
+    s.players[0].hand.push_back(C("Simic Guildgate", 710));
+    s.players[0].hand.push_back(C("Forest", 711));
+    CHECK(prov.CrossingDumpAllLandsDominatesNo(s, 0));
+    // The searched "no" (rank 1) is gone: the dump happens and no rank is consumed.
+    {
+        GameState t = s;
+        t.scripted_crossing_lands = 1;
+        PerformEndStepManabond(t);
+        CHECK(t.players[0].hand.empty());
+        CHECK(t.scripted_crossing_lands == 1);
+    }
+    {
+        const Arm off(heurarm::MAZE_MANABOND_ALL_LANDS, 0);
+        CHECK_FALSE(prov.CrossingDumpAllLandsDominatesNo(s, 0));
+        GameState t = s;
+        t.scripted_crossing_lands = 1;
+        PerformEndStepManabond(t);
+        CHECK(t.players[0].hand.size() == 2);   // the searched no
+    }
+    // A Gateway Plaza that cannot pay at the end step keeps "no".
+    GameState p = s;
+    p.players[0].hand.push_back(C("Gateway Plaza", 712));
+    CHECK_FALSE(prov.CrossingDumpAllLandsDominatesNo(p, 0));
+    // ...but with an untapped land to pay it, "no" is pruned again.
+    Put(p, "Forest", 713);
+    CHECK(prov.CrossingDumpAllLandsDominatesNo(p, 0));
+}
+
+TEST_CASE("Maze's End P5 (USER): Heap Gate's Treasure plan only where its mana has no other use")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    GameState s = Base(prov);
+    Put(s, "Heap Gate", 10);
+    Put(s, "Simic Guildgate", 11);
+    for (int k = 0; k < 4; ++k) { Put(s, "Forest", 12 + k); }   // 7 lands: next turn's mana does not bind
+    s.players[0].hand.push_back(C("Exploration", 20));
+    CHECK(prov.PlanListFilterLive(s));
+    const std::string none, land = "Forest";
+    const std::vector<Action> treasure_only = { Treasure() };
+    const std::vector<Action> cast_only     = { Cast("Exploration", 0) };
+    const std::vector<Action> both          = { Cast("Exploration", 0), Treasure() };
+    const std::vector<Action> empty;
+    // The menu holds {Exploration}: the Treasure alone took mana the cast could use -> removed; the plan that casts
+    // AND makes the Treasure stays (nothing else to spend on), as do the Treasure-free plans.
+    std::vector<DecisionProvider::PlanView> v = {
+        { &empty, &none }, { &treasure_only, &none }, { &cast_only, &none }, { &both, &none } };
+    std::vector<char> admit(v.size(), 1);
+    prov.PlanListAdmit(s, v, admit);
+    CHECK(admit == std::vector<char>{ 1, 0, 1, 1 });
+    // Lever off: not live.
+    {
+        const Arm off(heurarm::MAZE_HEAP_TREASURE, 0);
+        CHECK_FALSE(prov.PlanListFilterLive(s));
+    }
+    // Next turn's mana binds (a held Talon Gates' {4} with three lands and none in hand): the Treasure is kept.
+    GameState b = Base(prov);
+    Put(b, "Heap Gate", 10);
+    Put(b, "Simic Guildgate", 11);
+    b.players[0].hand.push_back(C("Talon Gates of Madara", 21));
+    b.players[0].hand.push_back(C("Exploration", 20));
+    std::vector<char> admit2(v.size(), 1);
+    prov.PlanListAdmit(b, v, admit2);
+    CHECK(admit2 == std::vector<char>{ 1, 1, 1, 1 });
+}
+
+TEST_CASE("Maze's End P5: the v5 fetch weight and the colour / Talon variants")
+{
+    LoadP5Cards();
+    const MazesEndProvider prov;
+    GameState s = Base(prov);
+    s.players[0].library.push_back(C("Guild Summit", 100));
+    s.players[0].library.push_back(C("Sylvan Scrying", 101));
+    Put(s, "Azorius Guildgate", 50);
+    // v5: a new-name fetch scores 100 (no land drop open).
+    s.players[0].lands_played_this_turn = 1;
+    CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 100);
+    {
+        const Arm off(heurarm::MAZE_FETCH_EVAL_V5, 0);
+        CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 200);
+    }
+    // Colour variant: alternate by source count. Azorius (W/U) is a blue source, no green: G either way.
+    const CardDefinition& cliff = D("Cliffgate");
+    CHECK(prov.LandEntryPinCandidates(s, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Green) });
+    GameState g2 = s;
+    Put(g2, "Forest", 51);
+    Put(g2, "Forest", 52);
+    // P1: green and blue sources -> G. The variant: 2 green > 1 blue -> U.
+    CHECK(prov.LandEntryPinCandidates(g2, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Green) });
+    {
+        const Arm alt(heurarm::MAZE_COLOUR_ALT, 1);
+        CHECK(prov.LandEntryPinCandidates(g2, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Blue) });
+    }
+    // Talon variant: with an Exploration controlled, a land tutor no longer offers Talon Gates.
+    GameState t = Base(prov);
+    Put(t, "Maze's End", 60);
+    Put(t, "Gond Gate", 61);
+    t.players[0].library.push_back(C("Talon Gates of Madara", 62));
+    t.players[0].library.push_back(C("Baldur's Gate", 63));   // in the library: no new-name slot on the P3 menu
+    t.players[0].library.push_back(C("Maze's End", 64));
+    const CardParams& scry = D("Sylvan Scrying").params;
+    auto has_talon = [&](const GameState& st)
+    {
+        const std::vector<std::string> c = prov.TutorCandidates(st, 0, scry);
+        return std::find(c.begin(), c.end(), "Talon Gates of Madara") != c.end();
+    };
+    CHECK(has_talon(t));
+    Put(t, "Exploration", 65);
+    CHECK(has_talon(t));
+    const Arm lack(heurarm::MAZE_TALON_LACKDROPS, 1);
+    CHECK_FALSE(has_talon(t));
+}

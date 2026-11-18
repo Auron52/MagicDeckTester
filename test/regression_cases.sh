@@ -191,9 +191,12 @@ SMOKE_CASES=(
   # MazesEndProvider, no value_play block -> play rows are d5 b20. No keep table and no value leaf yet, so GT WILL
   # move when they land. mazesend2hg is the small searched 2HG canary: no card reads heads or starting life
   # (Burgeoning's passive-opponent land play is one per opponent turn; Gates Ablaze is never cast).
+  # P5 (USER 2026-11-18: "No point in playing d3 if we can test play settings instead at a cheaper price."): most d3
+  # b10 games moved to d5 b20 play-setting games at about equal tier cost (S4 units/game: d3 b10 184K, d5 b20 230K
+  # in smoke, 145K / 255K in regression), a small d3 sanity row kept in every tier. Same in REGRESSION/OVERNIGHT.
   "mazesend     0 1001 1000 0"
-  "mazesend     3 1001   50 10"
-  "mazesend     5 1001  100 20"
+  "mazesend     3 1001   10 10"
+  "mazesend     5 1001  132 20"
   "mazesend2hg  3 1001   50 10"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 1001 100 0"
@@ -781,8 +784,8 @@ SMOKE_CASES=(
 REGRESSION_CASES=(
   # mazesend: see the SMOKE block (2026-11-18, pre-keep-table ENTRY set).
   "mazesend     0 2002 1000 0"
-  "mazesend     3 2002   75 10"
-  "mazesend     5 2002  150 20"
+  "mazesend     3 2002   15 10"
+  "mazesend     5 2002  184 20"
   "mazesend     5 3003  150 20"
   # Maze's End unlimited backstop (2026-11-18): budget-0 play is DEGENERATE on this deck -- screened 28 blocks
   # (30001..30541 step 20; 10 games each for 30001..30181, 3 for the rest; d3+d5, abandon_units 2000000,
@@ -1306,11 +1309,11 @@ OVERNIGHT_CASES=(
   "mazesend     0  6006 2000 0"
   "mazesend     0  8008 2000 0"
   "mazesend     0 10010 2000 0"
-  "mazesend     3  4004  125 10"
+  "mazesend     3  4004   25 10"
   "mazesend     5  4004  300 20"
   "mazesend     5  5005  300 20"
   "mazesend     5  6006  300 20"
-  "mazesend     5  7007  300 20"
+  "mazesend     5  7007  357 20"
   # Maze's End unlimited backstop: same 2026-11-18 screen (see the REGRESSION half). 30341 gi0 and 30441 gi0
   # finished under 5 s at both depths.
   "mazesend     3 30341    1 0"

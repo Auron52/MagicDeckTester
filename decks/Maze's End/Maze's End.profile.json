@@ -111,7 +111,7 @@
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "two_drop",
-    "max_lands": 5,
+    "max_lands": 6,
     "min_color_sources": {},
     "min_lands": 1,
     "min_playable": 0,
