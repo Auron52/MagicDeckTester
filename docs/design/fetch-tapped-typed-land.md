@@ -1,8 +1,13 @@
 # Fetching a tapped typed land (Hedge Maze, Triomes): only when the mana is not needed this turn
 
-Status (2026-11-18): Sea Creatures flag built (`MTG_SEA_FETCH_MAZE`, default OFF), A/B measured below. Cyclone's
-narrowing built and **ON** (`MTG_CYCLONE_LOUNGE_IDLE`, USER-adopted). Five Colour's width-2 Triome built and **OFF**
-(`MTG_FIVECOLOUR_TRIOME_BESIDE`, USER "give it a try"; adoption is the USER's call). Both measured below.
+Status (2026-11-18, round 2): Sea Creatures' Maze fetch is ADOPTED (`MTG_SEA_FETCH_MAZE`, default ON).
+- Cyclone: the Lounge narrowing is ON (`MTG_CYCLONE_LOUNGE_IDLE`, USER-adopted). Its round-2 amendment is ON as well
+  (`MTG_CYCLONE_LOUNGE_IDLE_AMEND`, a refinement of that rule).
+- Five Colour has two OFF options, and adoption is the USER's call:
+  - the width-2 Triome (`MTG_FIVECOLOUR_TRIOME_BESIDE`);
+  - the sharpened width-1 RULE 6 test (`MTG_FIVECOLOUR_RULE6_SEES_STEPS`).
+
+Round 2 is at the end of this file.
 
 ## The USER's rule (2026-11-17, verbatim)
 
@@ -222,14 +227,171 @@ Results:
 
 ## Open questions for the USER
 
-4. **Five Colour:** adopt `MTG_FIVECOLOUR_TRIOME_BESIDE` (a real -0.014 to -0.030 turns at 1.2-1.3x search units),
-   or sharpen RULE 6's own test instead (the four amendments above, width 1)?
-5. **Cyclone:** build the amendment to the "needed" test (cycling counts only with Cyclone out; Seething Song only
-   when its mana casts something more)?
+4. **Five Colour:** which, if either, to adopt? The round-2 numbers are below.
+   - `MTG_FIVECOLOUR_RULE6_SEES_STEPS`: width 1, about 1.0x search units. Std -0.018, 19 faster / 1 slower.
+     2HG -0.017, 5 faster / 0 slower.
+   - `MTG_FIVECOLOUR_TRIOME_BESIDE`: width 2, 1.24-1.30x units. Std -0.030, 31/1. 2HG -0.017, 8/3.
+   - Both together: plays exactly as BESIDE.
+   - The agent's recommendation: RULE6_SEES_STEPS. See "Recommendation" below.
+5. ~~Cyclone: build the amendment?~~ Built ON in round 2 (`MTG_CYCLONE_LOUNGE_IDLE_AMEND`). It measures neutral:
+   std +0.000, 2HG -0.003. `=0` restores the round-1 test.
 
 ## Open questions for the USER (Sea, earlier)
 
-1. **Sea:** adopt `MTG_SEA_FETCH_MAZE` as default ON?
+1. ~~Sea: adopt `MTG_SEA_FETCH_MAZE` as default ON?~~ Adopted by the USER ("3 sounds good to adopt."), ON.
 2. ~~Cyclone: narrow the Lounge?~~ Adopted by the USER 2026-11-17, built ON (above).
 3. ~~Five Colour: offer the Triome beside the untapped pick?~~ USER "give it a try"; built OFF and measured (above,
    question 4).
+
+## Round 2 (2026-11-18): the Cyclone amendment, Five Colour RULE 6 sharpened, one pooled A/B
+
+### Cyclone amendment (`MTG_CYCLONE_LOUNGE_IDLE_AMEND`, HeuristicArm slot `CYCLONE_LOUNGE_IDLE_AMEND`, default ON)
+
+It is part of `MTG_CYCLONE_LOUNGE_IDLE` and is read only under it. It refines the "needed" test that the USER
+adopted. `=0` restores the round-1 test. Two changes in `FetchManaNeededThisTurn`, as two new `FetchNeedScan` fields
+that only Cyclone sets (Sea sets neither, so Sea is byte-identical by construction):
+- `cycling_live`: a mana cycling cost counts as a use only while an Unpredictable Cyclone
+  (`cycle_draw_exile_shared_type_freecast`) is on our battlefield.
+- `ritual_payoff`: a ritual (`ritual_floating_mana`, Seething Song) is never counted by itself. Each pool is tested
+  with and without the hand's rituals cast first, so the Song counts only when its RRRRR pays for another hand card.
+
+Unit tests: `test/unit/test_cyclone_phase5.cpp`, "Cyclone MTG_CYCLONE_LOUNGE_IDLE" (cycling with and without a
+Cyclone out, the Song alone, the Song + Cyclone, and the amendment off).
+
+**The one-mana cantrip that "could wait" (not built; judgement).** Leave it alone. Whether Brainstorm or Ponder
+can wait a turn depends on next turn's mana and draws, which is a projection the test cannot make. The evidence
+points both ways. In round 1, 395 and 894 wanted the Lounge; 76, 260 and 553 used the mana and lost only on luck.
+Round 2 adds 649, where the remaining loss is a T1 Brainstorm. The OFF arm took the Lounge on T1 instead, so this
+is the cantrip class too, not the cycling class (the amendment did fix 649's T2 cycling read). And 832 (below) lost
+because the extra mana went UNUSED by a Brainstorm draw. A cantrip rule would also have to model what the cantrip
+draws. There is no clean rule here. The search already branches on the Lounge whenever the test says "idle".
+
+### Five Colour RULE 6 sharpened (`MTG_FIVECOLOUR_RULE6_SEES_STEPS`, slot `FIVECOLOUR_RULE6_SEES_STEPS`, default OFF)
+
+This is the width-1 alternative from round 1. `FiveColourRule6Steps` (in `src/ai/DecisionProviders.cpp`) asks, per
+colour, whether one more mana of that colour lets this turn spend more. "Spend more" means either of:
+- a single hand card castable only with it (colour-exact);
+- a larger best TOTAL MANA VALUE over every castable subset of the hand (at most 10 cards, so at most 1024 subsets).
+
+The model:
+- **(1) Deathrite fuel.** An untapped Deathrite with no fuel gets the cracked fetchland as fuel: one more wild mana.
+- **(2) Colour-exact.** Payment is re-checked with Hall's condition over the board's real colour sets
+  (`BuildColorFeasibility` / `PayablePips`, with `WithDomainOpen` at the board's domain). Multicolour lands and
+  domain dorks are no longer wild.
+- **(3) Domain growth.** A coloured permanent in the subset adds its new colours to every untapped domain dork:
+  generic supply for all, and a pip for another card (the `DomainOpenFor` rule).
+- **(4) Greaves.** With Lightning Greaves out, a mana creature in the subset taps the same turn (Birds 1, a domain
+  dork its domain).
+- (3) and (4) count only when the permanents bringing new colours and the hasted dorks fit the supply that is not
+  a domain dork's, since they must be paid before the dorks tap.
+- **(5) Best total mana value.** The subset search replaces the cheapest-first count.
+
+The result is OR-ed into RULE 6's `any_unlocks`, so it only ever adds untapped preference. The ranking still returns
+one target. Unit tests: `test/unit/test_boars_fetch_rank.cpp`, "Five Colour MTG_FIVECOLOUR_RULE6_SEES_STEPS". There is
+one SUBCASE per blind spot. Each hand reads idle to the old test (a triome is the top pick) and needed to the new one
+(an untapped land is the top pick), plus an idle-stays-idle case.
+
+### Measurement (one pooled `mtg --batch`, 364 jobs, 24/24 workers; same seeds and play settings as round 1)
+
+Cyclone arms: `off` (`LOUNGE_IDLE=0`), `cur` (`LOUNGE_IDLE=1`, `AMEND=0`, the round-1 ON), `amd` (both on, the new
+default). Five Colour arms: `off`, `bes` (`TRIOME_BESIDE`), `stp` (`RULE6_SEES_STEPS`), `both`. The `cur`-vs-`off` and
+`bes`-vs-`off` rows reproduce round 1 game for game, so the rebase moved nothing in either deck. Delta = A - B
+(negative = A faster). Faster/slower count games where A beat B / lost to B.
+
+| Deck, set | A vs B | Games | A | B | Delta | se | Faster | Slower | Units A/B | Wall A/B |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cyclone std | amd vs off | 1000 | 4.7340 | 4.7440 | -0.0100 | 0.0057 | 19 | 10 | 0.966 | 0.957 |
+| Cyclone std | cur vs off | 1000 | 4.7340 | 4.7440 | -0.0100 | 0.0063 | 23 | 14 | 0.961 | 0.951 |
+| Cyclone std | **amd vs cur** | 1000 | 4.7340 | 4.7340 | +0.0000 | 0.0035 | 6 | 6 | 1.005 | 1.006 |
+| Cyclone 2HG | amd vs off | 300 | 4.7967 | 4.8100 | -0.0133 | 0.0094 | 6 | 2 | 0.955 | 0.913 |
+| Cyclone 2HG | cur vs off | 300 | 4.8000 | 4.8100 | -0.0100 | 0.0111 | 7 | 4 | 0.944 | 0.910 |
+| Cyclone 2HG | **amd vs cur** | 300 | 4.7967 | 4.8000 | -0.0033 | 0.0058 | 2 | 1 | 1.011 | 1.003 |
+| Five Colour std | bes vs off | 1000 | 4.7480 | 4.7780 | -0.0300 | 0.0056 | 31 | 1 | 1.244 | 1.237 |
+| Five Colour std | **stp vs off** | 1000 | 4.7600 | 4.7780 | **-0.0180** | 0.0044 | 19 | 1 | **0.991** | 1.024* |
+| Five Colour std | both vs off | 1000 | 4.7480 | 4.7780 | -0.0300 | 0.0056 | 31 | 1 | 1.184 | 1.179 |
+| Five Colour std | stp vs bes | 1000 | 4.7600 | 4.7480 | +0.0120 | 0.0037 | 1 | 13 | 0.797 | - |
+| Five Colour 2HG | bes vs off | 300 | 5.2967 | 5.3133 | -0.0167 | 0.0110 | 8 | 3 | 1.300 | 1.306 |
+| Five Colour 2HG | **stp vs off** | 300 | 5.2967 | 5.3133 | **-0.0167** | 0.0074 | 5 | 0 | **1.020** | 1.020* |
+| Five Colour 2HG | stp vs bes | 300 | 5.2967 | 5.2967 | +0.0000 | 0.0082 | 3 | 3 | 0.785 | - |
+| Five Colour 2HG | both vs off | 300 | 5.2967 | 5.3133 | -0.0167 | 0.0110 | 8 | 3 | 1.272 | 1.245 |
+
+The `stp` rows are the FINAL version of the RULE 6 test (commit `634d3023f`), measured in a second pooled batch on
+the same seeds (`manifest2.json`: off / stp / both). Its `off` arm is byte-identical, game for game, to the first
+batch's `off`. The first version (`31d3aeb4f`) measured std -0.0170 (se 0.0043, 18/1, units 0.993) and 2HG -0.0167
+(5/0). The final version adds std 72 (Faeburrow hasted by Greaves into Mana Cannons). The first version forced the
+red Cannons to be paid before the hasted dork, though no domain source was waiting on its colour. Wall ratios marked
+* come from the second batch, which ran on a contended box; units are the reliable cost measure.
+
+RULE 6 now catches 10 of the 12 standard real steps from round 1: 22, 69, 72, 105, 318, 396, 447, 453, 662, 818.
+It misses 933 (domain growth whose order the model rejects) and 440 (an untapped land freeing a creature to attack;
+only width 2 can see that). It also gains 50, 186, 484, 559, 624, 637, 689, 712 and 979. In 2HG it gains 69, 77,
+115, 232 and 258.
+
+The one slower RULE 6 game, std 849, is search noise. The fetch targets are identical in both arms through T2. The
+split is the T2 cast (Bloom Tender versus Mana Cannons), and both arms win T5 at 4x budget (`--budget-ms 160`).
+
+`both` plays every game exactly as `bes` does (0 faster, 0 slower against it). With the untapped land already
+searched beside the triome, re-ranking which of the two is on top changes the search order (units 0.95-0.98x of
+`bes`) but not one outcome.
+
+### Cyclone: what the amendment moved (amd vs cur)
+
+- **Faster (std 6, 2HG 2):** std 107, 112, 158, 489, 663, 877; 2HG 89, 124. 663 is the Seething Song game predicted
+  in round 1. 112, 158 and 2HG 89 were round-1 slower games.
+- **Slower (std 6, 2HG 1):** std 210, 212, 352, 621, 825, 832; 2HG 23. Each was replayed in both arms
+  (`triage.sh`: first divergence, boards, both arms at 4x budget, `--budget-ms 80`).
+  - **Six are search and shuffle noise.** At 4x budget the two arms tie. The first divergence is a root choice with
+    the same options in both arms:
+    - Tarn versus a plain land on T1 (210);
+    - Ponder shuffle-or-keep (212);
+    - the turn-2 or turn-3 land choice (352, 621, 825);
+    - a Brainsurge-or-discard line (2HG 23).
+    Fetch targets are identical up to that point. The draws then diverge.
+  - **One is real: std 832, and it is not fixable by this test.** T2: Island out; hand Brainstorm, Tarn, Cascade
+    Bluffs, Cyclone, Brainsurge. Amended: the Cyclone cycling cost no longer counts (no Cyclone out), so the extra
+    mana reads idle. The search, offered both, took the Lounge and cast Brainstorm. The round-1 test called the mana
+    "needed" for the wrong reason (cycling with no Cyclone out) and played Cascade Bluffs. Its Brainstorm then drew
+    Ponder, which the second mana cast. This is the mid-turn-draw class (Five Colour's (7)): the extra mana is spent
+    on a card drawn this turn. It stays slower at 4x budget.
+- **649 is still slower than OFF.** Its loss is a T1 Brainstorm: the rule's pick, where OFF took the Lounge on T1.
+  That is the cantrip-could-wait class, not cycling.
+- **Net:** standard exactly neutral (+0.0000, se 0.0035), 2HG -0.0033, units 1.005-1.011x. The amendment removes
+  two counting errors without changing the deck's result.
+
+### 2HG game 124: the missing T1 land drop
+
+Replayed with the round-1 binary at `LOUNGE_IDLE=1`, with `MTG_FD_TRACE=1 MTG_TRACE=search`. T1 hand: Steam Vents,
+two Scalding Tarns, two Emrakuls, Cyclone, Ponder, Island (8 cards, on the draw).
+- At the shipped b20, all three T1 ladder passes are "win=9" (no win inside the horizon). The committed main-1 plan
+  is `land=(defer)` with no casts. Cyclone plays no main 2, so the drop is simply not made. Cleanup discards Emrakul,
+  whose trigger shuffles the graveyard into the library.
+- At `--budget-ms 40` and `80`, the identical ladder (same pass costs) commits Steam Vents + Ponder and wins T4. So
+  do OFF and `MTG_NO_SEARCH_SHUFFLE=1`.
+
+Verdict: **not a defect of the flag, and not a small engine bug.** It is a beyond-horizon tie between no-win plans
+(both estimate T5). It is broken by budget-dependent work after the ladder. The no-land plan's estimate rides a
+search-world re-shuffle: holding 8 cards forces the Emrakul discard, and the discard shuffles the library. That is
+the in-search shuffle clairvoyance class.
+
+The no-land plan is not soundly dominated. Hand size feeds discard, and Emrakul's discard is a real shuffle. So it
+cannot be folded away, and nothing was changed. Worth recording for whoever next touches no-win tie-breaking: a
+no-land main 1 in a deck with no main 2 can win a tie only through a discard effect.
+
+### Recommendation (agent's; the decision is the USER's)
+
+Adopt `MTG_FIVECOLOUR_RULE6_SEES_STEPS`, not BESIDE and not both.
+- **It keeps the USER's doctrine.** "Triomes are STRICTLY for times when you cannot use the mana" stays a one-target
+  rule; the test is simply more accurate about when the mana can be used.
+- **It costs nothing.** About 1.0x search units, against BESIDE's 1.24-1.30x on the suite's costliest deck per game.
+- **It takes most of BESIDE's measured gain.** Std -0.018 vs -0.030; 2HG equal (-0.017), with 0 slower games against
+  BESIDE's 3.
+- **The rest of BESIDE's standard gain looks like draw luck, but this is not yet confirmed.** That extra gain is
+  -0.012 (stp vs bes: 13 games where BESIDE is faster, 1 where it is slower). Most of it appears to be draw luck
+  from the post-fetch shuffle: round 1's no-shuffle bracket shrank BESIDE's standard gain from -0.030 to -0.014.
+  The remaining real cases are std 440 (an attack) and 2HG 258 (a mid-turn draw), which only width 2 can see.
+
+**Bracket still owed: round 2's no-shuffle run.** It has the same seeds, all four Five Colour arms and
+`MTG_NO_SEARCH_SHUFFLE=1`, in `build/scratch/fetch-typed2/manifest2_nss.json`. It is queued and was not finished
+when this was written (output `err2_nss` / `t1_2nss.txt`, marker `DONE2`). It is the direct test of the paragraph
+above. Analyse it with:
+`python3 an.py err2_nss t1_2nss.txt fc bes off stp off both off stp bes`
