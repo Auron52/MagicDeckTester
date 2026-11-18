@@ -19345,18 +19345,18 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
 // apply_trailing_activations) call this at the same point -- the SpendRepeatActivations argument for the K-1
 // extras of the same trailing element, with the same trailing list -- so a planned line realises identically in
 // both worlds.
-int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
-                                       const std::vector<Action>& trailing)
+// THE OWED BILL of a trailing pass after the step at index `from - 1`: every LATER trailing step's first
+// activation (its own K-1 extras are best-effort), the same bill LineJointPayOracle prices -- its {T} source set
+// aside (`owed_taps`), its mana cost summed (`owed`). A step whose source is already gone or tapped cannot fire
+// whatever an earlier step does, so it is owed nothing. Returns 1 when something is owed, 0 when nothing is, and
+// -1 when an owed cost has a shape the summed bill cannot express ({X}, twobrid, phyrexian, > 6 hybrids).
+// Shared by RepeatExtrasBesideOwed and TrailingStepOwedHold (both worlds call each at the same point).
+static int TrailingOwedBill(const GameState& state, std::size_t from, const std::vector<Action>& trailing,
+                            ManaCost& owed, std::vector<int>& owed_taps)
 {
-    if (want <= 0 || a.def == nullptr || !RepeatExtrasReserveOn()) { return want; }
-    const Action* base = trailing.data();
-    if (&a < base || &a >= base + trailing.size()) { return want; }
     const int ctl = state.active_player_index;
-    // The owed set: every LATER trailing step's first activation (its own K-1 extras are best-effort too), the
-    // same bill LineJointPayOracle prices -- its {T} source set aside, its mana cost summed. A step whose source
-    // is already gone or tapped cannot fire whatever the extras do, so it is owed nothing.
-    ManaCost owed{};
-    std::vector<int> owed_taps;
+    owed = ManaCost{};
+    owed_taps.clear();
     bool any = false;
     auto add = [&owed](const ManaCost& c) -> bool
     {
@@ -19368,10 +19368,10 @@ int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const
         owed.snow_pips = static_cast<std::uint8_t>(owed.snow_pips + c.snow_pips);
         return true;
     };
-    for (std::size_t i = static_cast<std::size_t>(&a - base) + 1; i < trailing.size(); ++i)
+    for (std::size_t i = from; i < trailing.size(); ++i)
     {
         const Action& o = trailing[i];
-        if (!IsTrailingActivation(o.kind)) { continue; }
+        if (!TurnSolver::IsTrailingActivation(o.kind)) { continue; }
         if (o.kind == Action::Kind::ActivatePermAbility || o.kind == Action::Kind::UntapCreature)
         {
             const bool taps = o.kind == Action::Kind::UntapCreature || PermAbilityTaps(o.ability_mode);
@@ -19387,16 +19387,47 @@ int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const
                 owed_taps.push_back(o.sac_source_id);
             }
             const ManaCost oc = OutletOwnCost(o);
-            if (oc.ManaValue() > 0 && !add(oc)) { return want; }
+            if (oc.ManaValue() > 0 && !add(oc)) { return -1; }
             any = any || taps || oc.ManaValue() > 0;
         }
         else if (o.cost.ManaValue() > 0)
         {
-            if (!add(o.cost)) { return want; }
+            if (!add(o.cost)) { return -1; }
             any = true;
         }
     }
-    if (!any) { return want; }
+    return any ? 1 : 0;
+}
+
+// Can the owed bill still be paid on the scratch board `c`? The owed {T} sources are set aside (a payment that
+// tapped one for mana fails here) and the owed mana is paid as one cost by the real payer.
+static bool OwedBillPayableOn(GameState& c, const ManaCost& owed, const std::vector<int>& owed_taps)
+{
+    const int ctl = c.active_player_index;
+    for (const int id : owed_taps)
+    {
+        for (Permanent& p : c.battlefield)
+        {
+            if (p.card.m_number != id || p.controller_index != ctl) { continue; }
+            if (p.tapped) { return false; }
+            p.tapped = true;
+        }
+    }
+    if (owed.ManaValue() == 0) { return true; }
+    return TapForCostDirect(c, owed, /*for_creature=*/false);
+}
+
+int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
+                                       const std::vector<Action>& trailing)
+{
+    if (want <= 0 || a.def == nullptr || !RepeatExtrasReserveOn()) { return want; }
+    const Action* base = trailing.data();
+    if (&a < base || &a >= base + trailing.size()) { return want; }
+    const int ctl = state.active_player_index;
+    ManaCost owed{};
+    std::vector<int> owed_taps;
+    if (TrailingOwedBill(state, static_cast<std::size_t>(&a - base) + 1, trailing, owed, owed_taps) <= 0)
+    { return want; }
     RevealLogPause quiet;            // a scratch probe: no log line, no chooser, no play event
     TapSpeculationScope speculating;
     // Can the owed set still be paid after `e` extras? Paid on a scratch board by the real repeat payer, then the
@@ -19405,17 +19436,7 @@ int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const
     {
         GameState c = state;
         if (e > 0) { SpendRepeatActivations(c, ctl, src_id, a.ability_mode, *a.def, e); }
-        for (const int id : owed_taps)
-        {
-            for (Permanent& p : c.battlefield)
-            {
-                if (p.card.m_number != id || p.controller_index != ctl) { continue; }
-                if (p.tapped) { return false; }
-                p.tapped = true;
-            }
-        }
-        if (owed.ManaValue() == 0) { return true; }
-        return TapForCostDirect(c, owed, /*for_creature=*/false);
+        return OwedBillPayableOn(c, owed, owed_taps);
     };
     if (owed_ok(want)) { return want; }
     if (!owed_ok(0)) { return want; }   // owed is short anyway: holding the extras back buys nothing
@@ -19426,6 +19447,111 @@ int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const
         if (owed_ok(mid)) { lo = mid; } else { hi = mid - 1; }
     }
     return lo;
+}
+
+// TrailingStepOwedHold: WHY A HOLD, WHY ONLY ON A STRANDING PAYMENT, AND WHY IT IS SOUND AT EVERY BUDGET.
+// Maze's End sweep 61002 gi1 (F2): the plan "put Talon Gates of Madara ({4}), then activate Maze's End ({3},{T})"
+// is jointly payable -- Gond Gate + Manor Gate feed Baldur's Gate's "{2},{T}: Add X" (X = 4 other Gates) for the
+// {4}, then Cliffgate + Golgari Guildgate + the fresh Talon pay the {3} -- but the payer, asked for {4} alone,
+// takes the first payment it finds (four plain {C}/colour taps) and the activation is then 1 short and dropped.
+// The search had scored the line it could not execute. The fix chooses a DIFFERENT LEGAL PAYMENT for the step
+// (the mana-payment exemption: which sources pay, never what the plan does): when, and only when, the usual
+// payment leaves the later owed bill (TrailingOwedBill) unpayable, it looks for the smallest set of the sources
+// that payment tapped whose hold lets the step pay AND the owed bill still pay afterwards (both probed on scratch
+// boards by the real payer and the real step). No hold is installed when the usual payment already works, so a
+// line that executed before executes byte-identically. Nothing reads a budget, a node count or the depth, so the
+// function is the same at --budget-ms 0 as at the shipped budget. LOCKSTEP: both trailing passes call this at
+// the same point with the same list and the same shared probe step (ApplyChannelStepDirect), so the hold is
+// identical in both worlds. Bounded: at most kMaxCand candidate sources and holds of at most kMaxHold of them.
+std::vector<int> TurnSolver::TrailingStepOwedHold(const GameState& state, const Action& a,
+                                                 const std::vector<Action>& trailing,
+                                                 const std::function<bool(GameState&)>& step)
+{
+    std::vector<int> none;
+    const Action* base = trailing.data();
+    if (&a < base || &a >= base + trailing.size()) { return none; }
+    ManaCost owed{};
+    std::vector<int> owed_taps;
+    if (TrailingOwedBill(state, static_cast<std::size_t>(&a - base) + 1, trailing, owed, owed_taps) <= 0)
+    { return none; }
+    const int ctl = state.active_player_index;
+    RevealLogPause quiet;            // scratch probes: no log line, no chooser, no play event
+    TapSpeculationScope speculating;
+    std::vector<int> used;           // mana sources the usual payment tapped, in battlefield order
+    {
+        GameState c = state;
+        if (!step(c)) { return none; }                          // unpayable anyway: a hold only removes sources
+        GameState o = c;
+        if (OwedBillPayableOn(o, owed, owed_taps)) { return none; }   // the usual payment strands nothing
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != ctl || p.tapped) { continue; }
+            for (const Permanent& q : c.battlefield)
+            {
+                if (q.card.m_number != p.card.m_number) { continue; }
+                if (q.tapped) { used.push_back(p.card.m_number); }
+                break;
+            }
+        }
+    }
+    constexpr std::size_t kMaxCand = 8;
+    constexpr std::size_t kMaxHold = 4;
+    if (used.empty() || used.size() > kMaxCand) { return none; }
+    const std::size_t kmax = std::min<std::size_t>({ used.size(), kMaxHold,
+        static_cast<std::size_t>(std::max(1, owed.ManaValue())) + owed_taps.size() });
+    std::vector<std::size_t> idx;
+    for (std::size_t k = 1; k <= kmax; ++k)
+    {
+        idx.assign(k, 0);
+        for (std::size_t j = 0; j < k; ++j) { idx[j] = j; }
+        for (;;)
+        {
+            std::vector<int> combo;
+            for (const std::size_t j : idx) { combo.push_back(used[j]); }
+            GameState c = state;
+            bool paid = false;
+            { PlanSourceReserveScope held(WithPlanReserve(combo)); paid = step(c); }
+            if (paid && OwedBillPayableOn(c, owed, owed_taps)) { return combo; }
+            // next k-combination of [0, used.size()) in lexicographic order
+            std::size_t j = k;
+            while (j > 0 && idx[j - 1] == used.size() - k + (j - 1)) { --j; }
+            if (j == 0) { break; }
+            ++idx[j - 1];
+            for (std::size_t t = j; t < k; ++t) { idx[t] = idx[t - 1] + 1; }
+        }
+    }
+    return none;
+}
+
+// The live plan reserve plus `extra` (the outer list first, then the new ids not already in it) -- the one shape
+// TrailingStepOwedHold probes with and both trailing passes install, so probe and payment hold the same list.
+std::vector<int> TurnSolver::WithPlanReserve(const std::vector<int>& extra)
+{
+    std::vector<int> hold = g_plan_reserved_sources;
+    for (const int n : extra)
+    { if (std::find(hold.begin(), hold.end(), n) == hold.end()) { hold.push_back(n); } }
+    return hold;
+}
+
+// The Channel-kind trailing step (Talon Gates of Madara's {4} put, Transmute, Channel), paid by TapForCostDirect
+// and applied -- the rollout's step itself, and the probe TrailingStepOwedHold runs in BOTH worlds (so the hold
+// decision is one function of the board). Returns whether the cost was paid.
+bool TurnSolver::ApplyChannelStepDirect(GameState& state, const Action& a)
+{
+    const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
+    if (chd && chd->params.hand_put_self_cost.has_value())
+    {
+        if (!HandHoldsName(state.players[state.active_player_index], a.card_name.str())
+            || !TapForCostDirect(state, a.cost, /*for_creature=*/false)) { return false; }
+        ApplyHandPutSelf(state, state.active_player_index, a.hand_index, a.card_name.str());
+        return true;
+    }
+    if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { return false; }
+    if (chd && chd->params.transmute_cost.has_value())
+    { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
+    else
+    { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+    return true;
 }
 
 // See the header. EMPTY means "nothing to add" -- the callers then install no scope at all, which is
@@ -76761,23 +76887,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (a.kind == Action::Kind::Channel)
         {
-            const CardDefinition* chd = CardDatabase::Instance().LookupInterned(a.card_name);
             // Talon Gates of Madara's put: the card must still be in hand BEFORE anything is paid (a
-            // stranded put spends nothing). Executor twin: AIEngine.
-            const bool hand_put = chd && chd->params.hand_put_self_cost.has_value();
-            if (hand_put)
-            {
-                if (HandHoldsName(state.players[state.active_player_index], a.card_name.str())
-                    && TapForCostDirect(state, a.cost, /*for_creature=*/false))
-                { ApplyHandPutSelf(state, state.active_player_index, a.hand_index, a.card_name.str()); }
-            }
-            else if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            {
-                if (chd && chd->params.transmute_cost.has_value())
-                { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
-                else
-                { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
-            }
+            // stranded put spends nothing). Executor twin: AIEngine. The payment holds back whatever the
+            // usual one would take from the pass's LATER owed activations (TrailingStepOwedHold; Maze's
+            // End F2 gi1 -- Talon's {4} fed Baldur's Gate so Maze's End's {3} stays payable). Empty hold =
+            // no scope = the historical payment.
+            std::vector<int> owed_hold = TurnSolver::TrailingStepOwedHold(
+                state, a, trailing_acts,
+                [&a](GameState& s) { return TurnSolver::ApplyChannelStepDirect(s, a); });
+            std::optional<PlanSourceReserveScope> owed_scope;
+            if (!owed_hold.empty()) { owed_scope.emplace(TurnSolver::WithPlanReserve(owed_hold)); }
+            TurnSolver::ApplyChannelStepDirect(state, a);
         }
         else if (a.kind == Action::Kind::ActivateRevealTop)
         {

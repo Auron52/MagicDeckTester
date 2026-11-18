@@ -6,8 +6,10 @@
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/LandPlay.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/EffectHandler.h"
 #include "core/GameEngine.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -245,3 +247,117 @@ TEST_CASE("Maze's End F1 (gi8): the rollout credits an end-step Maze's End win t
     CHECK(s.won_by_effect);
     CHECK(s.turn_number == turn);
 }
+
+// ---- F2 (sweep 61002 gi1): the combined "put Talon + activate Maze's End" plan is EXECUTED -------------------------
+// The T5 board of the sweep game: Talon's {4} paid the usual way (four plain taps) left Maze's End's {3} one short.
+// The owed-aware trailing payment (TurnSolver::TrailingStepOwedHold) pays the {4} with Baldur's Gate's fed mode so
+// the activation is paid out of Cliffgate + Golgari Guildgate + the fresh Talon. Both worlds.
+namespace
+{
+GameState F2Gi1Board(int& maze_out)
+{
+    GameState s = FBase();
+    s.players[0].lands_played_this_turn = 1;
+    FPut(s, "Amulet of Vigor", 1);
+    FPut(s, "Gond Gate", 28);
+    FPut(s, "Manor Gate", 41);
+    FPut(s, "Cliffgate", 16);
+    FPut(s, "Baldur's Gate", 7);
+    FPut(s, "Golgari Guildgate", 27);
+    maze_out = FPut(s, "Maze's End", 43);
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(FCard("Gruul Guildgate", 900 + k)); }
+    s.players[0].hand.push_back(FCard("Talon Gates of Madara", 58));
+    return s;
+}
+TurnSolver::Plan F2Gi1Plan(const GameState& s, int maze)
+{
+    TurnSolver::Plan p;
+    p.land_decided = true;
+    const std::vector<Action> acts = TurnSolver::CollectActionsForTest(s, true);
+    const Action* talon = nullptr;
+    const Action* act = nullptr;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::Channel && a.card_name.str() == "Talon Gates of Madara") { talon = &a; }
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && a.sac_source_id == maze && act == nullptr) { act = &a; }
+    }
+    REQUIRE(talon != nullptr);
+    REQUIRE(act != nullptr);
+    p.actions = { *talon, *act };
+    return p;
+}
+void F2ResolveAll(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
+}
+}   // namespace
+
+TEST_CASE("Maze's End F2 (gi1): Talon's {4} is paid so Maze's End's {3} stays payable (owed-aware trailing payment)")
+{
+    LoadF1Cards();
+    int maze = 0;
+    const GameState s = F2Gi1Board(maze);
+    const TurnSolver::Plan p = F2Gi1Plan(s, maze);
+
+    // The trailing pass holds Maze's End's own {T} source (ActivationTapReserve) around every step; so here.
+    {
+        const PlanSourceReserveScope maze_held(TurnSolver::ActivationTapReserveUnion(s, p.actions));
+        REQUIRE(std::find(g_plan_reserved_sources.begin(), g_plan_reserved_sources.end(), maze)
+                != g_plan_reserved_sources.end());
+        // The usual payment strands the activation: after it, {3} with Maze's End set aside is not payable.
+        {
+            GameState c = s;
+            REQUIRE(TurnSolver::ApplyChannelStepDirect(c, p.actions[0]));
+            for (Permanent& q : c.battlefield) { if (q.card.m_number == maze) { q.tapped = true; } }
+            ManaCost three{}; three.generic = 3;
+            CHECK_FALSE(TapForCostDirect(c, three, false));
+        }
+        // ...and the hold finds a payment that does not.
+        const std::vector<int> hold = TurnSolver::TrailingStepOwedHold(
+            s, p.actions[0], p.actions,
+            [&p](GameState& g) { return TurnSolver::ApplyChannelStepDirect(g, p.actions[0]); });
+        CHECK_FALSE(hold.empty());
+    }
+
+    // Rollout world: the whole plan applies -- Talon put, Maze's End activated (back in hand, a Gate fetched).
+    {
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, /*is_pre_combat=*/true);
+        CHECK(FFind(roll, 58) != nullptr);
+        CHECK(FFind(roll, maze) == nullptr);
+        CHECK(FInHand(roll, maze));
+    }
+    // Executor world (AIEngine::TakeTurn's trailing pass): the same.
+    {
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        GameState ex = s;
+        eng.TakeTurn(ex, true, F2ResolveAll);
+        CHECK(FFind(ex, 58) != nullptr);
+        CHECK(FFind(ex, maze) == nullptr);
+        CHECK(FInHand(ex, maze));
+    }
+}
+
+TEST_CASE("Maze's End F2 (gi1): no hold when the usual payment already leaves the owed activation payable")
+{
+    LoadF1Cards();
+    int maze = 0;
+    GameState s = F2Gi1Board(maze);
+    FPut(s, "Izzet Guildgate", 38);
+    FPut(s, "Dimir Guildgate", 18);
+    const TurnSolver::Plan p = F2Gi1Plan(s, maze);
+    const PlanSourceReserveScope maze_held(TurnSolver::ActivationTapReserveUnion(s, p.actions));
+    const std::vector<int> hold = TurnSolver::TrailingStepOwedHold(
+        s, p.actions[0], p.actions,
+        [&p](GameState& g) { return TurnSolver::ApplyChannelStepDirect(g, p.actions[0]); });
+    CHECK(hold.empty());
+}
+
