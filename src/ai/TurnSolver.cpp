@@ -3944,6 +3944,23 @@ static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSear
 // (Hoisted up here from RolloutNestGuard so the main-phase filter, defined earlier, can read it --
 // see the PLAYOUT carve-out in MainPhaseFilterActive.)
 static thread_local int g_rollout_nest = 0;
+// P5b fold 2 (MTG_FOLD_LAND_ORDER): the lever, and whether it is LIVE for this state's enumeration. Live only on
+// the SEARCH's own enumerations (g_rollout_nest == 0): inside a playout beyond the horizon the twin order is never
+// chosen (the playout does not branch over the first land), so dropping a land-first plan there is not an identity
+// -- it changes the playout policy (held-out A/B, fold everywhere: 2 better / 11 worse, net +9 over 3,400 games, all
+// slower games diverging at turns the fold could only reach inside playouts). FoldPhysicalCards folds the same bit
+// into the enumeration keys whenever the fold applies to the deck, so a search list and a playout list never share
+// an entry.
+static bool FoldLandOrderFlag()
+{
+    // DEFAULT OFF (P5b, 2026-11-18): sound where the search branches, but held-out A/B 3 (search-only form, 2,800 games)
+    // measured 1 better / 4 worse, net +3 -- not the "net <= 0" adoption bar. The USER's call; =1 arms it.
+    static const bool s_flo = EnvOn("MTG_FOLD_LAND_ORDER", false);
+    return heurarm::Flag(heurarm::FOLD_LAND_ORDER, s_flo);
+}
+static bool PlanCacheExactKeyOn();   // defined with FoldPhysicalCards
+static bool FoldLandOrderDeck(const GameState& state)
+{ return state.deck_has_static_land_drops && !state.deck_has_landfall && FoldLandOrderFlag(); }
 
 // GREEDY-WALK BUDGET CHARGING (MTG_SOLVE_CHARGE, default OFF = byte-identical everywhere).
 // SearchBudget counts one unit per simulated turn-step, but the greedy subset walk inside
@@ -102384,7 +102401,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         if (!keep.empty()) { all.swap(keep); }
     }
 
-    // P5b FOLD 2 -- THE EXTRA-DROP LAND ORDER (MTG_FOLD_LAND_ORDER, default ON; Maze's End's Exploration). USER
+    // P5b FOLD 2 -- THE EXTRA-DROP LAND ORDER (MTG_FOLD_LAND_ORDER, DEFAULT OFF -- see FoldLandOrderFlag; Maze's End's Exploration). USER
     // 2026-11-18: "True, the order doesn't matter much here unless the second land is played after other things or
     // we are paying for a cost like Gateway Plaza." After a turn of NOTHING BUT land drops, the site-10 continuation
     // that re-opens the extra drop offers "land Y first, then casts S"; when Y and every land already played COMMUTE
@@ -102401,14 +102418,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // last of them in both lines -- the same board. A land played AFTER casts (land_slot != 0) is never dropped
     // ("unless the second land is played after other things").
     //
-    // KEY-NEUTRAL: it reads only what BuildBreakpointKey / the enumeration memo key already fold -- the battlefield
+    // SEARCH ONLY (g_rollout_nest == 0; see FoldLandOrderFlag), with that context bit folded into the enumeration keys.
+    // Otherwise KEY-NEUTRAL: it reads only what BuildBreakpointKey / the enumeration memo key already fold -- the battlefield
     // in order with entered_this_turn and tapped, the hand's card numbers, the main-1 hand mask (live this turn),
     // spells_cast_this_turn, lands_played_this_turn and the pool -- so two states sharing a key fold alike. Pre-combat
     // only; autonomous only; byte-identical for every deck without static extra land drops or with landfall.
     {
-        static const bool s_flo = EnvOn("MTG_FOLD_LAND_ORDER", true);
-        const bool flo = heurarm::Flag(heurarm::FOLD_LAND_ORDER, s_flo);
-        if (flo && is_pre_combat && state.deck_has_static_land_drops && !state.deck_has_landfall
+        if (FoldLandOrderDeck(state) && g_rollout_nest == 0 && PlanCacheExactKeyOn() && is_pre_combat
             && !s_human_play_lands && !DecisionUnpruned() && ap.lands_played_this_turn >= 1
             && state.spells_cast_this_turn == 0 && state.floating_mana.Total() == 0
             && state.m1start_hand_turn == state.TurnSeq() && all.size() > 1)
@@ -103122,6 +103138,10 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
     if (!PlanCacheExactKeyOn()) { return; }
     std::uint64_t h = 1469598103934665603ull;
     auto mix = [&h](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+    // P5b fold 2: a search enumeration and a playout enumeration of one state differ for this deck (see
+    // FoldLandOrderFlag), so the context is part of the key. Folded only when the fold applies: byte-identical keys
+    // for every other deck.
+    if (FoldLandOrderDeck(state)) { mix(g_rollout_nest == 0 ? 0xF01D5EA1ull : 0xF01D9A70ull); }
     for (const Player& p : state.players)
     {
         mix(0x11B0);
