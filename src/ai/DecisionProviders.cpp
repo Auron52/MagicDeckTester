@@ -69621,7 +69621,8 @@ int MazesEndProvider::EtbTapSubtypeDrawDefault(const GameState& s, int controlle
 // activates Maze's End for a Gate (not the fail-to-find) is TRIED FIRST among its peers: a move-order tier
 // (MoveOrderLess, below wins_this_turn), ORDER only, nothing removed, so a budget reaches it first and an unlimited
 // budget searches exactly the same set. Beyond the horizon nothing is needed: the greedy playout already ranks a
-// new-name fetch at 100 (TapTutorPutEval, v5) in every state (the P1c deferral is deleted, P5c).
+// new-name fetch at 100 (TapTutorPutEval, v5) unless the turn's open land drops are all spoken for by new-name Gates in
+// hand (P5c2, MazeFetchDropsSpoken).
 bool MazesEndProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
                                           const std::vector<int>& sel, bool projected_lethal) const
 {
@@ -69697,6 +69698,29 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     return p;
 }
 
+// P5c2: do the new-name Gates in hand that a land drop may play (distinct names we do not control; Gateway Plaza only
+// when LandPlayOffered would offer it) fill all `drops_open` open land drops? See TapTutorPutEval.
+static bool MazeFetchDropsSpoken(const GameState& s, int me, int drops_open)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const std::string* seen[16];
+    int n = 0;
+    for (const Card& c : pl.hand)
+    {
+        const std::string& nm = c.m_name.str();
+        if (!MazeNameIsGate(nm) || MazeControlsGateNamed(s, me, nm)) { continue; }
+        bool dup = false;
+        for (int i = 0; i < n; ++i) { if (*seen[i] == nm) { dup = true; break; } }
+        if (dup) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && MazeAutonomous()
+            && !MazePlazaPayable(s, me, *d, 0)) { continue; }
+        seen[n++] = &nm;
+        if (n >= drops_open || n == 16) { return true; }
+    }
+    return false;
+}
+
 // Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two
 // damage-equivalents, the same life-equivalence as NoWinLeafProgress) so the greedy walk takes it over leaving
 // the {3} unspent. A duplicate name and the fail-to-find stay 0 (the activation then only moves Maze's End to
@@ -69707,13 +69731,23 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
     if (!heurarm::Flag(heurarm::MAZE_FETCH_EVAL, s_on)) { return 0; }
     if (source.params.alt_win_distinct_named_count <= 0 || target == kTutorDeclineTarget) { return 0; }
     if (!MazeNameIsGate(target) || MazeControlsGateNamed(s, s.active_player_index, target)) { return 0; }
-    // (MTG_MAZE_FETCH_DEFER, P1c, is DELETED -- P5c 2026-11-18. It zeroed this eval while a land drop and a new-name
-    // Gate in hand remained, to keep two "Gate + fetch now" continuations from ranking ahead of the plain land play
-    // the unit "THREE land drops" needs. The rank was never the defect: the wave walker reaches every rank. The line
-    // was unfindable because the continuation AFTER that land play needed the front {Gate, activate} by plan while
-    // the untargeted canon withholds its activation -- two deviations. The engine now opens that compound
-    // (BpWaveWalker::DevSeqCanonDrop), and the fetch keeps its value for banking a Gate in every state (USER ruling
-    // 2-5: "there is value to banking extra lands even if you have a new-name gate in hand").)
+    // P5c2 (2026-11-18): a fetch while EVERY open land drop is spoken for by a new-name Gate in hand scores 0 (the
+    // drops are MazeFetchDropsSpoken). The fetch returns Maze's End to hand, and replaying it needs a land drop the
+    // hand's Gates would otherwise use, so in that state the fetch only reorders a turn whose drops are already full;
+    // with a SPARE drop (more open drops than playable new-name Gates) it keeps its value -- banking a Gate is worth
+    // the {3} even with a new-name Gate in hand (USER ruling 2-5: "there is value to banking extra lands even if you
+    // have a new-name gate in hand").
+    // History. P1c's MTG_MAZE_FETCH_DEFER zeroed the fetch while ANY drop and ANY new-name Gate remained; P5c deleted
+    // it once the engine reached the I3 line by itself (BpWaveWalker::DevSeqCanonDrop). Deleting it outright measured
+    // Maze d5 b20 +12 / +11 over 1,000 held-out games: the eval is the beyond-horizon greedy's ranking, and a
+    // fetch-before-the-Gate playout misreads tails under a finite budget (the worse games diverge at T1-T3, e.g. a
+    // skipped T1 land drop). This spare-drop form measured net -3 vs the deferral over 2,900 searched held-out game
+    // pairs (d5 b20 -1 over 1,000) and net -1 vs the deletion. Evaluation only: the searched walk enumerates every
+    // target whatever its eval, so nothing is unfindable at any budget.
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
+    if (drops_open >= 1 && MazeFetchDropsSpoken(s, me, drops_open)) { return 0; }
     return MazeWeights().fetch;
 }
 
