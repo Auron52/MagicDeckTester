@@ -177,3 +177,8 @@ identity where the search branches, and I kept it as a lever. On budgeted play i
 Possible amendment to try next: instead of deleting the lower-sorted twin, keep the twin the ROOT reaches first
 (order the twins by the root's move order), or demote the twin to a later wave (budget-staged, nothing removed at
 unlimited budget) -- either keeps the earliest route to the board under a binding budget.
+
+## Stage 3 (f8a768133, fold 2 default OFF): verified
+
+`MTG_BUILD_JOBS=12` build; all 3,541 unit cases pass; scenarios 561/561; `--smoke --regression
+--deck=mazesend,mazesend2hg`: ALL 12 keys PASS byte-identical to GT. No GT accept owed.
