@@ -34874,6 +34874,12 @@ static thread_local std::uint64_t g_bp_canon_drop_mask = 0;
 static thread_local int  g_devseq_suppress  = 0;
 static thread_local bool g_devseq_latent_hit = false;
 static thread_local unsigned long long g_devseq_latent_n = 0;   // every latent record, ever (a node's subtree test)
+// ...and every latent record that is NOT a canon-drop record (g_bp_canon_drop_mask): the site-9 re-open, and every
+// INHERITED one (a dirty-node read, a first-pass-only memo hit, a gamelc::SupTag read), which cannot tell where the
+// latent it inherits came from and so counts here conservatively. FullSearchLine's two-pass reads the pair: a first
+// pass whose every latent was a canon drop (latent_n moved, hard_n did not) runs its pass 2 as the hybrid's LAST
+// wave (see DevSeqDeferredP2). A pure count, never reset; read as deltas like g_devseq_latent_n.
+static thread_local unsigned long long g_devseq_hard_n = 0;
 static thread_local int  g_devseq_two_pass = 0;   // inside a two-pass FullSearchLine (a nested one runs plain)
 static thread_local int  g_devseq_latent_min_turn = INT_MAX;   // the earliest turn a latent occurrence was met at
 // MTG_DEV_SEQ_DIRTY_READ (DEFAULT ON; =0 skips the carry-map probe marking): a first-pass node that READS a dirty node's memo
@@ -34904,6 +34910,9 @@ static thread_local std::vector<DvsNodeMeta>* g_devseq_dirty_meta = nullptr;
 // Membership of the same first-pass dirty keys; used to replay provenance on local memo hits.
 using DevSeqDirtyKeys = std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash>;
 static thread_local DevSeqDirtyKeys* g_devseq_dirty_keys = nullptr;
+// ...and those of them whose node met a latent that was not a canon drop (g_devseq_hard_n): a hit on one of THESE is a
+// hard inherited latent, a hit on any other dirty key a canon-drop one (DevSeqDeferredP2). nullptr = every hit is hard.
+static thread_local DevSeqDirtyKeys* g_devseq_dirty_hard_keys = nullptr;
 static thread_local int  g_fsl_root_cut     = 0;   // 0 = none: the root's cutoff is max_turns + 1
 static inline int FslRootCut(int max_turns)
 { return (g_fsl_root_cut > 0 && g_fsl_root_cut < max_turns + 1) ? g_fsl_root_cut : max_turns + 1; }
@@ -34929,6 +34938,9 @@ namespace devseqstats
         else if (two < one) { g_ver_better.fetch_add(1, std::memory_order_relaxed); }
     }
     inline std::atomic<long long> g_carry{0}, g_dirty{0};
+    // DevSeqDeferredP2: probe pass 2s handed to the hybrid; of those, run last / skipped on a spent budget / taken.
+    inline std::atomic<long long> g_cd_p1only{0}, g_cd_def{0}, g_cd_run{0}, g_cd_skip{0}, g_cd_taken{0}, g_cd_u{0};
+    inline void CdDeferred() { if (On()) { g_cd_def.fetch_add(1, std::memory_order_relaxed); } }
     inline void Carry(std::size_t kept, std::size_t dirty)
     { if (On()) { g_carry.fetch_add(static_cast<long long>(kept), std::memory_order_relaxed);
                   g_dirty.fetch_add(static_cast<long long>(dirty / 2), std::memory_order_relaxed); } }
@@ -34991,6 +35003,8 @@ namespace devseqstats
                           << " | dirty nodes kept=" << g_node_kept.load() << " erased=" << g_node_erased.load()
                           << " | m1 applies skipped=" << g_apply_skip.load()
                           << " | clean nodes that read a dirty answer=" << g_clean_read_dirty.load();
+                std::cerr << "\n[dev-seq-cd] p1_canon_drop_only=" << g_cd_p1only.load() << " deferred=" << g_cd_def.load() << " run=" << g_cd_run.load()
+                          << " skipped_spent=" << g_cd_skip.load() << " taken=" << g_cd_taken.load() << " units=" << g_cd_u.load();
                 std::cerr << "\n[dev-seq-p2] budget_exhausted_at_end=" << g_p2_exhausted.load() << " committed_shallower=" << g_p2_shallower.load() << " sites:";
                 for (int i = 0; i < unitsite::kSiteCount; ++i)
                 { const long long v = g_dvs_p2_site[i].load(); if (v) { std::cerr << " " << unitsite::kNames[i] << "=" << v; } }
@@ -60001,7 +60015,8 @@ namespace solvememo
     // the searched-only condemnation filter never fires.
     struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan;
                    uint32_t condemn_drops = 0; uint32_t trunc_delta = 0;
-                   bool dvs_latent = false; };   // MTG_BP_DEV_SEQ: the solve met a latent occurrence
+                   bool dvs_latent = false;      // MTG_BP_DEV_SEQ: the solve met a latent occurrence
+                   bool dvs_hard = false; };     // ...one that was not a canon drop (g_devseq_hard_n)
     // thread_local: the batch runner plays games concurrently; capped so one long decision
     // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
@@ -73419,7 +73434,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (!TurnSolver::IsTrailingActivation(ca.kind)) { continue; }
                 g_bp_canon_drop_mask |= (std::uint64_t{1} << seen_before);
-                g_devseq_latent_hit = true; ++g_devseq_latent_n;
+                g_devseq_latent_hit = true; ++g_devseq_latent_n;   // NOT hard (g_devseq_hard_n)
                 g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
                 break;
             }
@@ -80081,7 +80096,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // never counted (see g_bp_seen_latent), so the numbering stays the executor's.
                 if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0
                     && TurnSolver::PostEntryActivationPending(state, s9_keys))
-                { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n;
+                { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n; ++g_devseq_hard_n;
                   g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 break;
             }
@@ -110495,6 +110510,7 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
     // first-pass tail's cutoff, answer and earliest latent turn, recorded by complete tails of dirty nodes.
     int dvs_mode = 0;
     std::unordered_map<TranspositionTable::Key, int, TranspositionTable::KeyHash> dvs_dirty;   // -> its earliest latent turn
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> dvs_dirty_hard;  // ...not canon-drop only
     struct DvsTailInfo { int cut; int win; int mlt; };   // first-pass cutoff, answer, earliest latent turn inside
     std::unordered_map<TranspositionTable::Key, DvsTailInfo, TranspositionTable::KeyHash> dvs_clean_tail;
     // ...and (node, static plan index) -> a main-1 plan whose APPLY the second pass may skip too (see the m1 loop):
@@ -110511,6 +110527,7 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
         : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                              TranspositionTable::KeyHash>(std::move(o)),
           charged_kb(o.charged_kb), dvs_mode(o.dvs_mode), dvs_dirty(std::move(o.dvs_dirty)),
+          dvs_dirty_hard(std::move(o.dvs_dirty_hard)),
           dvs_clean_tail(std::move(o.dvs_clean_tail)), dvs_apply_skip(std::move(o.dvs_apply_skip))
     { o.charged_kb = 0; }
     FSLineCache& operator=(FSLineCache&& o) noexcept
@@ -110524,6 +110541,7 @@ struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
             o.charged_kb = 0;
             dvs_mode = o.dvs_mode;
             dvs_dirty = std::move(o.dvs_dirty);
+            dvs_dirty_hard = std::move(o.dvs_dirty_hard);
             dvs_clean_tail = std::move(o.dvs_clean_tail);
             dvs_apply_skip = std::move(o.dvs_apply_skip);
         }
@@ -112657,6 +112675,7 @@ static void ReplaySearchedM2Latent(const solvememo::Entry& e, const GameState& s
     if (!e.dvs_latent || g_devseq_suppress <= 0) { return; }
     if (devseqstats::On()) { devseqstats::g_m2_hidden_latent.fetch_add(1, std::memory_order_relaxed); }
     g_devseq_latent_hit = true; ++g_devseq_latent_n;
+    if (e.dvs_hard) { ++g_devseq_hard_n; }   // a canon-drop-only solve passes on its provenance (DevSeqDeferredP2)
     g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
 }
 
@@ -112672,6 +112691,7 @@ static const TurnSolver::SearchLine& LocalFslMemoHit(const FSLineEntry& e,
         && g_devseq_dirty_keys->count(key) != 0)
     {
         g_devseq_latent_hit = true; ++g_devseq_latent_n;
+        if (g_devseq_dirty_hard_keys == nullptr || g_devseq_dirty_hard_keys->count(key) != 0) { ++g_devseq_hard_n; }
         // Tail/node reuse also needs the time of that discovery. A missing time must
         // conservatively disarm the skip, never look like a latent-free subtree.
         g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, earliest_latent);
@@ -112679,7 +112699,8 @@ static const TurnSolver::SearchLine& LocalFslMemoHit(const FSLineEntry& e,
     return e.line;
 }
 static void DvsRecordDirtyKeys(const FSLineCache* lc, const TranspositionTable::Key& key,
-                               const TranspositionTable::Key& key_win, unsigned long long at_entry)
+                               const TranspositionTable::Key& key_win, unsigned long long at_entry,
+                               bool hard = true)
 {
     if (g_devseq_dirty == nullptr || lc == nullptr || g_devseq_latent_n == at_entry) { return; }
     g_devseq_dirty->push_back(key);
@@ -112690,6 +112711,13 @@ static void DvsRecordDirtyKeys(const FSLineCache* lc, const TranspositionTable::
         g_devseq_dirty_keys->insert(key_win);
         g_devseq_dirty_keys->insert(FSProvKey(key));
         g_devseq_dirty_keys->insert(FSOfHintKey(key));
+    }
+    if (hard && g_devseq_dirty_hard_keys != nullptr)   // (DevSeqDeferredP2's provenance)
+    {
+        g_devseq_dirty_hard_keys->insert(key);
+        g_devseq_dirty_hard_keys->insert(key_win);
+        g_devseq_dirty_hard_keys->insert(FSProvKey(key));
+        g_devseq_dirty_hard_keys->insert(FSOfHintKey(key));
     }
 }
 
@@ -116534,6 +116562,9 @@ namespace gamelc
     // counts as meeting a latent occurrence -- its subtree holds one -- so the second pass still runs. Every other
     // answer (a clean first-pass node, any second-pass or one-pass node) is the full tree's and goes under Tag alone.
     inline TranspositionTable::Key SupTag(TranspositionTable::Key k) { Fold(k, 0x6A3E0D5EULL); return k; }
+    // ...and a first-pass answer whose every latent was a CANON DROP (DevSeqDeferredP2's provenance): read by a first
+    // pass alone, like SupTag, but its read is a canon-drop latent rather than a hard one.
+    inline TranspositionTable::Key SupCdTag(TranspositionTable::Key k) { Fold(k, 0x5C3D7A11ULL); return k; }
     struct Reporter
     {
         ~Reporter()
@@ -116643,6 +116674,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
+    const unsigned long long dvs_hard_at_entry = g_devseq_hard_n;       // ...and its non-canon-drop part (DevSeqDeferredP2)
     // MTG_DEV_SEQ_TAIL_SKIP: this node's earliest-latent-turn scope and its completeness watermarks (see DvsDirty).
     const DvsMltFrame dvs_mlt;
     const unsigned long long dvs_trunc0 = g_fs_trunc_events, dvs_binds0 = budgetbind::t_binds;
@@ -116830,18 +116862,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // MTG_DEV_SEQ_DIRTY_READ: ...and makes the reader DIRTY (see DvsDirtyReadOn).
         if (lc->dvs_mode == 1 && !lc->dvs_dirty.empty())
         {
-            bool dvs_read_dirty = false;
+            bool dvs_read_dirty = false, dvs_read_hard = false;
             for (const TranspositionTable::Key* dk : { &key, &key_win })
             {
                 const auto di = lc->dvs_dirty.find(*dk);
                 if (di != lc->dvs_dirty.end())
                 {
+                    dvs_read_hard = dvs_read_hard || lc->dvs_dirty_hard.count(*dk) != 0;
                     dvs_read_mlt = std::min(dvs_read_mlt, di->second);
                     g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, di->second);
                     dvs_read_dirty = true;
                 }
             }
-            if (dvs_read_dirty && DvsDirtyReadOn()) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
+            if (dvs_read_dirty && DvsDirtyReadOn())
+            { g_devseq_latent_hit = true; ++g_devseq_latent_n; if (dvs_read_hard) { ++g_devseq_hard_n; } }
         }
         // P18f LEAF-FREE ANSWERS (see gamelc::LeafFreeOn): a completed no-leaf refutation answers any leaf kind.
         if (gamelc::On() && g_fsline_nest > 0 && g_devseq_suppress == 0 && gamelc::LeafFreeOn())
@@ -116858,18 +116892,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (gamelc::On() && g_fsline_nest > 0)
         {
             const std::uint64_t gsig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
-            // gt 1: MTG_BP_DEV_SEQ's first-pass-only answers (gamelc::SupTag), read by a first pass alone.
-            for (int gt = 0; gt < (g_devseq_suppress > 0 ? 2 : 1) && !gamelc_hit; ++gt)
+            // gt 1: MTG_BP_DEV_SEQ's first-pass-only answers (gamelc::SupTag), read by a first pass alone; gt 2: the
+            // canon-drop-only ones (gamelc::SupCdTag; never stored on a deck whose canon withholds nothing).
+            for (int gt = 0; gt < (g_devseq_suppress > 0 ? 3 : 1) && !gamelc_hit; ++gt)
             {
             auto gtag = [&](const TranspositionTable::Key& k)
-            { const TranspositionTable::Key t = gamelc::Tag(k, state); return gt == 0 ? t : gamelc::SupTag(t); };
+            { const TranspositionTable::Key t = gamelc::Tag(k, state);
+              return gt == 0 ? t : (gt == 1 ? gamelc::SupTag(t) : gamelc::SupCdTag(t)); };
             auto gw = gamelc::t_map.find(gtag(key_win));
             if (gw != gamelc::t_map.end() && gw->second.nowin_bound == std::numeric_limits<int>::max()
                 && (gw->second.order_sig == 0 || gw->second.order_sig == gsig))
             {
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_glc_w; }
-                if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
             }
@@ -116881,7 +116917,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (p17::On()) { ++p17::t_glc_n; }
-                    if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                    if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
@@ -117181,6 +117217,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         FSLineCache* lc; const TranspositionTable::Key& key; const TranspositionTable::Key& key_win;
         unsigned long long at_entry; DvsTailRec& tails; DvsApplyRec& applies; const DvsMltFrame& mlt;
         unsigned long long trunc0, binds0; long long hex0; int cutoff;
+        unsigned long long hard0;   // g_devseq_hard_n at entry: a dirty node whose latents were all canon drops
         bool no_keep = false;   // the node records per-option values (rec_vals): a second pass must re-record them
         ~DvsDirty()
         {
@@ -117191,7 +117228,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && g_devseq_latent_n == at_entry && mlt.Mine() != INT_MAX)
             { devseqstats::g_clean_read_dirty.fetch_add(1, std::memory_order_relaxed); }
             if (g_devseq_dirty == nullptr || lc == nullptr || g_devseq_latent_n == at_entry) { return; }
-            DvsRecordDirtyKeys(lc, key, key_win, at_entry);
+            const bool hard = g_devseq_hard_n != hard0;
+            DvsRecordDirtyKeys(lc, key, key_win, at_entry, hard);
             // One meta entry per key pair, in step (a nested search's own cache: never kept -- not in the carry anyway).
             if (g_devseq_dirty_meta != nullptr && lc->dvs_mode != 1) { g_devseq_dirty_meta->push_back({ 0, false, 0 }); }
             if (lc->dvs_mode == 1)
@@ -117204,6 +117242,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     const auto ins = lc->dvs_dirty.emplace(*dk, m);
                     if (!ins.second) { ins.first->second = std::min(ins.first->second, m); }
+                    if (hard) { lc->dvs_dirty_hard.insert(*dk); }
                 }
                 for (const auto& t : tails)
                 {
@@ -117218,7 +117257,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
         }
-    } _dvs_dirty{ lc, key, key_win, dvs_latent_at_entry, dvs_tails, dvs_applies, dvs_mlt, dvs_trunc0, dvs_binds0, dvs_hex0, cutoff };
+    } _dvs_dirty{ lc, key, key_win, dvs_latent_at_entry, dvs_tails, dvs_applies, dvs_mlt, dvs_trunc0, dvs_binds0, dvs_hex0, cutoff,
+                  dvs_hard_at_entry };
     // "STUCK -- PASS THE TURN" (UnboundedSearchScope / WinlessCertificateActive above). This node
     // sits on the horizon edge, so the only line that can score is one that kills THIS turn; if the
     // provider can PROVE none exists, the whole pre-combat plan space below is answer-preserving
@@ -119911,7 +119951,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // stored under cutoff 4 hid a turn-5 win from an unbounded node). Keep it as what it proved instead:
             // no win within the cutoff.
             const bool win = best.win_turn <= std::min(cutoff, max_turns);
-            const TranspositionTable::Key gk = dvs_sup ? gamelc::SupTag(gamelc::Tag(win ? key_win : key, state))
+            const TranspositionTable::Key gk = dvs_sup ? (g_devseq_hard_n != dvs_hard_at_entry
+                                                              ? gamelc::SupTag(gamelc::Tag(win ? key_win : key, state))
+                                                              : gamelc::SupCdTag(gamelc::Tag(win ? key_win : key, state)))
                                                        : gamelc::Tag(win ? key_win : key, state);
             auto it = gamelc::t_map.find(gk);
             if (it == gamelc::t_map.end())
@@ -120486,7 +120528,7 @@ int DevSeqMemoCarryForTest(bool win, bool replay, bool replay_min, bool searched
     store(c);
     if (cache.find(c) == cache.end()) { return -1; }
     // The first traversal really met a latent occurrence, so C and ancestor A are pass-one-only.
-    g_devseq_latent_hit = true; ++g_devseq_latent_n;
+    g_devseq_latent_hit = true; ++g_devseq_latent_n;   // (unit fixture: no hard_n)
     g_devseq_latent_min_turn = 3;
     DvsRecordDirtyKeys(&cache, c, c, 0);
     store(a); DvsRecordDirtyKeys(&cache, a, a, 0);
@@ -120502,6 +120544,7 @@ int DevSeqMemoCarryForTest(bool win, bool replay, bool replay_min, bool searched
         {
             solvememo::Entry cached_solve;
             cached_solve.dvs_latent = true;   // the first walk's recorded dependency
+            cached_solve.dvs_hard = true;
             GameState m2_state;
             m2_state.turn_number = 3;
             ReplaySearchedM2Latent(cached_solve, m2_state);
@@ -120535,6 +120578,29 @@ static thread_local const GameState* g_current_full_search_root_state = nullptr;
 const GameState* TurnSolver::CurrentFullSearchRootState()
 { return g_current_full_search_root_state; }
 
+// THE CANON-DROP PASS 2 IS THE HYBRID'S LAST WAVE (P5c3, 2026-11-18). A canon-drop record (g_bp_canon_drop_mask) makes
+// an occurrence latent, and a two-pass FullSearchLine whose first pass met one runs its pass 2 for the compound slots
+// DevSeqCanonDrop builds -- one deviation further than either the one-deviation probe or the hybrid's escalation
+// covers. Inside FullSearchLineHybrid that pass 2 ran BETWEEN the leafless probe and the escalation (the heuristic
+// pass that decides every unverified line), on the budget the escalation would have spent: Snow (Frost Augur /
+// Scrying Sheets reveal-top activations are what its canon withholds) met a canon-drop latent at every probe that
+// had one on board, and pass 2 starved the FIT single pass -- g782 @191001 T2: probe ladder 6.8K -> 17.9K units,
+// FIT rollouts 27K -> 4.5K, a different T2 cast and a turn lost; net +2 over 1,900 held-out games, all near-ties.
+// So the hybrid hosts it here: a probe pass 1 whose every latent was a canon drop (g_devseq_hard_n did not move)
+// hands its pass 2 to the host instead of running it, and the hybrid runs it LAST, on what the escalation left
+// (AnytimeStop skips it, exactly as it skips an in-place pass 2 on a spent budget). A PRICE, never a gate: at an
+// unlimited budget it always runs, with the same root cut (pass 1's win turn - 1) and depth, and its line replaces
+// the hybrid's exactly where it would have replaced the probe's (a verified win strictly earlier than pass 1's), so
+// every line the in-place pass 2 could find is still found. It runs on a fresh line memo (pass 1's carry is not held
+// across the escalation: the memo is an optimisation, the tree is the same). A first pass that met a site-9 re-open
+// or an inherited latent runs its pass 2 in place, as before; a FullSearchLine outside a hybrid probe always does.
+struct DevSeqDeferredP2
+{
+    bool armed = false;
+    int  cut2 = 0, c1 = 0, depth = 0, known_miss = 0, win1 = 0;
+};
+static thread_local DevSeqDeferredP2* g_devseq_cd_defer = nullptr;   // set by FullSearchLineHybrid around its probe only
+
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
                                                   int max_turns, bool second_main,
                                                   TranspositionTable* tt, SearchBudget* budget,
@@ -120547,6 +120613,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         { if (old == nullptr) { g_current_full_search_root_state = &s; } }
         ~FullSearchRootScope() { g_current_full_search_root_state = old; }
     } _full_search_root_scope(state);
+    // A hybrid probe's canon-drop pass-2 host (DevSeqDeferredP2) belongs to THIS call only: nothing it calls sees it.
+    DevSeqDeferredP2* const cd_host = g_devseq_cd_defer;
+    g_devseq_cd_defer = nullptr;
     // MTG_BP_DEV_SEQ: THE TWO PASSES -- iterative deepening on the deviation count (see g_devseq_suppress).
     // Pass 1 searches with every compound (deviation-sequence) wave suppressed: the one-deviation tree. Only if it
     // met a latent occurrence (the only thing a compound wave is ever built from, so without one the full tree IS
@@ -120588,8 +120657,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         std::vector<DvsNodeMeta> dirty_meta;   // MTG_DEV_SEQ_TAIL_SKIP (see FslEraseDirty)
         std::vector<DvsNodeMeta>* const meta_prev = g_devseq_dirty_meta;
         DevSeqDirtyKeys dirty_keys;
+        DevSeqDirtyKeys* const dirty_hard_prev = g_devseq_dirty_hard_keys;
+        DevSeqDirtyKeys dirty_hard_keys;   // DevSeqDeferredP2's provenance (see g_devseq_dirty_hard_keys)
         g_devseq_latent_hit = false;
         g_fsl_root_cut      = cut_prev;
+        const unsigned long long hard_n0 = g_devseq_hard_n;
         const int lmt_prev = g_devseq_latent_min_turn;
         g_devseq_latent_min_turn = INT_MAX;
         const long long dsu0 = gamework::t_used;   // MTG_DEV_SEQ_STATS (diagnostic)
@@ -120604,11 +120676,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // MTG_DEV_SEQ_TAIL_SKIP records, and MTG_DEV_SEQ_DIRTY_READ reads the dirty-node map this mode keeps.
             carry.dvs_mode      = (dvs_ts || DvsDirtyReadOn()) ? 1 : 0;
             g_devseq_dirty_keys = &dirty_keys;
+            g_devseq_dirty_hard_keys = &dirty_hard_keys;
             line1 = FullSearchLine(state, depth, max_turns, second_main, tt, budget, &c1);
             carry.dvs_mode      = 0;
             g_devseq_dirty_meta = meta_prev;
             g_devseq_dirty      = dirty_prev;
             g_devseq_dirty_keys = dirty_keys_prev;
+            g_devseq_dirty_hard_keys = dirty_hard_prev;
             g_devseq_lc_handoff = lc_prev;
         }
         const bool met_latent = g_devseq_latent_hit;
@@ -120622,6 +120696,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const int cut2 = std::min(cut_prev > 0 ? cut_prev : max_turns + 1,
                                   (line1.win_turn <= max_turns) ? line1.win_turn - 1 : max_turns + 1);
         devseqstats::Pass1(met_latent);
+        if (devseqstats::On() && met_latent && g_devseq_hard_n == hard_n0) { devseqstats::g_cd_p1only.fetch_add(1, std::memory_order_relaxed); }
         if (!met_latent || cut2 < state.turn_number || AnytimeStop(budget))
         {
             g_fsl_root_cut = cut_prev;
@@ -120629,6 +120704,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (met_latent && cut2 >= state.turn_number) { g_fsl_leafless_miss_depth = 0; }
             if (out_committed_depth != nullptr) { *out_committed_depth = c1; }
             verify(line1);
+            return line1;
+        }
+        // Every latent pass 1 met was a canon drop, and a hybrid probe hosts this call: pass 2 is the hybrid's last
+        // wave (see DevSeqDeferredP2). Pass 1's line stands for now, with no lazy hand-off (as for a skipped pass 2).
+        // Only when the hybrid WILL escalate: a verified or exhaustive pass-1 line ends the decision without one, and
+        // its pass 2 runs here, in place, with pass 1's carried memo (the same rule the hybrid applies to `committed`).
+        const bool p1_settled = state.turn_number + c1 - 1 >= max_turns || line1.win_turn <= state.turn_number + c1 - 1;
+        if (cd_host != nullptr && g_devseq_hard_n == hard_n0 && !p1_settled)
+        {
+            devseqstats::CdDeferred();
+            cd_host->armed = true; cd_host->cut2 = cut2; cd_host->c1 = c1; cd_host->depth = depth;
+            cd_host->known_miss = known_miss; cd_host->win1 = line1.win_turn;
+            g_fsl_root_cut = cut_prev;
+            g_fsl_leafless_miss_depth = 0;
+            if (out_committed_depth != nullptr) { *out_committed_depth = c1; }
             return line1;
         }
         FslEraseDirty(&carry, dirty, dirty_meta, cut2);
@@ -120640,6 +120730,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (devseqstats::On()) { ++g_dvs_in_p2; }
         carry.dvs_mode = DvsTailSkipOn() ? 2 : 0;   // MTG_DEV_SEQ_TAIL_SKIP: read (see DvsTailGate)
         carry.dvs_dirty.clear();
+        carry.dvs_dirty_hard.clear();
         SearchLine line2 = FullSearchLine(state, c1 > 0 ? c1 : depth, max_turns, second_main, tt, budget, &c2);
         carry.dvs_mode = 0;
         if (devseqstats::On())
@@ -122963,6 +123054,41 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     if (eff_beam > 0 && !eff_beam_static) { g_probe_val_recording = true; }
     int committed = depth;
     SearchLine line;
+    // THE CANON-DROP PASS 2, RUN LAST (DevSeqDeferredP2): the probe's pass 2 for canon-drop compounds, on what the
+    // escalation left. Its line replaces the hybrid's where the in-place pass 2 would have replaced the probe's: a win
+    // strictly earlier than pass 1's -- unless the hybrid already holds a verified win at least as early.
+    DevSeqDeferredP2 cd_defer;
+    // Hosted only where an escalation can follow the probe: with no value model the hybrid is the probe alone, and its
+    // pass 2 stays in place (with pass 1's carried memo) -- moving it would reorder nothing.
+    const bool cd_escalates = UseValueModel() && state.m_value_model && !state.m_value_model->empty();
+    auto cd_finish = [&](SearchLine& ln, int& com)
+    {
+        if (!cd_defer.armed) { return; }
+        cd_defer.armed = false;
+        if (AnytimeStop(budget)) { if (devseqstats::On()) { devseqstats::g_cd_skip.fetch_add(1, std::memory_order_relaxed); } return; }
+        struct TwoPassFrame { TwoPassFrame() { ++g_devseq_two_pass; } ~TwoPassFrame() { --g_devseq_two_pass; } } _tpf;
+        const int cut_prev = g_fsl_root_cut;
+        const int miss_prev = g_fsl_leafless_miss_depth;
+        const bool emul_prev = g_fsl_emul_heuristic_commit;
+        const long long u0 = gamework::t_used;
+        g_lazy_known_miss_depth = cd_defer.known_miss;
+        g_fsl_root_cut = cd_defer.cut2;
+        int c2 = 0;
+        SearchLine l2 = FullSearchLine(state, cd_defer.c1 > 0 ? cd_defer.c1 : cd_defer.depth, max_turns, second_main,
+                                       tt, budget, &c2);
+        g_fsl_root_cut = cut_prev;
+        g_fsl_leafless_miss_depth = miss_prev;
+        g_fsl_emul_heuristic_commit = emul_prev;
+        const bool held_verified = ln.win_turn <= max_turns && ln.win_turn <= state.turn_number + com - 1;
+        const bool take = l2.win_turn < cd_defer.win1 && !(held_verified && ln.win_turn <= l2.win_turn);
+        if (devseqstats::On())
+        {
+            devseqstats::g_cd_run.fetch_add(1, std::memory_order_relaxed);
+            devseqstats::g_cd_u.fetch_add(gamework::t_used - u0, std::memory_order_relaxed);
+            if (take) { devseqstats::g_cd_taken.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (take) { ln = std::move(l2); com = c2; }
+    };
     // PATH-TO-TRUST: tell the ladder which depth cancels the escalation, and what a heuristic leaf
     // costs, so its start gate can weigh "reach trust" against "stop short and pay for a redo".
     // Armed for the PROBE only (the escalation's own ladder must not see it -- its passes cancel
@@ -123129,7 +123255,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             if (et_have_incumbent)
             { g_fsl_root_cut = std::min(et_prev_cut > 0 ? et_prev_cut : max_turns + 1,
                                        et_incumbent.win_turn - 1); }
-            line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+            {   // the probe hosts a canon-drop-only pass 2 (DevSeqDeferredP2): run last, below
+                struct CdHostGuard { DevSeqDeferredP2* p; explicit CdHostGuard(DevSeqDeferredP2* h) : p(g_devseq_cd_defer) { g_devseq_cd_defer = h; }
+                                     ~CdHostGuard() { g_devseq_cd_defer = p; } } _cdh(!cd_escalates ? nullptr : &cd_defer);
+                line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+            }
             g_fsl_root_cut = et_prev_cut;
             if (et_have_incumbent && line.win_turn > et_incumbent.win_turn)
             { line = std::move(et_incumbent); }
@@ -123483,7 +123613,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // committing pass: AIEngine's verified-win test (win_turn <= turn + depth - 1) then means "won
             // inside the searched tree" for this line exactly as for the ladder's, instead of crediting a
             // rollout-estimated win beyond a shallow pass's horizon with the leafless probe's depth.
-            const int rep = (fit_gate_ladder && fit_pass_depth > 0) ? fit_pass_depth : committed;
+            int rep = (fit_gate_ladder && fit_pass_depth > 0) ? fit_pass_depth : committed;
+            cd_finish(line, rep);
             if (out_committed_depth) { *out_committed_depth = rep; }
             RecordIdDepth(rep);
             return line;
@@ -124429,6 +124560,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             committed = hcommitted;
         }
     }
+    cd_finish(line, committed);
     if (out_committed_depth) { *out_committed_depth = committed; }
     RecordIdDepth(committed);   // telemetry only (MTG_ROLLOUT_STATS)
     return line;
@@ -124656,6 +124788,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> probe_refuted;
                 const bool latent_prev = g_devseq_latent_hit;
                 const unsigned long long latent_n_prev = g_devseq_latent_n;
+                const unsigned long long hard_n_prev = g_devseq_hard_n;
                 const int latent_min_prev = g_devseq_latent_min_turn;
                 {
                     struct Suppress { Suppress() { ++g_devseq_suppress; }
@@ -124691,6 +124824,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 }
                 g_devseq_latent_hit = latent_prev;
                 g_devseq_latent_n = latent_n_prev;
+                g_devseq_hard_n = hard_n_prev;
                 g_devseq_latent_min_turn = latent_min_prev;
             }
             if (!any_new)
@@ -129409,6 +129543,7 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
     const unsigned long long dvs_lat_before = g_devseq_latent_n;
+    const unsigned long long dvs_hard_before = g_devseq_hard_n;
     const long long dsu0 = gamework::t_used;
     TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth,
                                                         max_turns, budget,
@@ -129441,7 +129576,8 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     cache[k] = solvememo::Entry{ g_decision_epoch, p,
                                  static_cast<uint32_t>(g_condemn_drops - drops_before),
                                  static_cast<uint32_t>(g_fs_trunc_events - trunc_before),
-                                 g_devseq_latent_n != dvs_lat_before };
+                                 g_devseq_latent_n != dvs_lat_before,
+                                 g_devseq_hard_n != dvs_hard_before };
     return p;
 }
 
