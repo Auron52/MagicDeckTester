@@ -70,3 +70,11 @@ The ties are the empty Tooth and Nail and Time Warp at the opponent, the scoring
 - **Open for the USER:** keep or delete P2 (inert on top of P1); full 5g mining (100-150 core-h; recommend after P5/P7); `MTG_UNPRUNED` 100-game oracle on a quiet box or after lazy axis generation.
 - **Stage 6 TODO:** write the bucket discard policy (STATUS_QUO_OK) for the USER.
 - **Shared push:** the `audit_viewer_decisions.py` fix `9ffcb7820` also fixes a bug that is live on origin.
+
+## Scoring fixes DONE and integrated (2026-11-18; wip/tie-scoring -> wip/maze-end 6eb5015ef..efc348d1e)
+- Empty tutor / Tooth and Nail whiff, opponent-aimed Time Warp, and Reveillark (by outcome) all score by the state they produce. A cast that gains nothing scores -2 (below pass).
+- Held-out searched: Jumbo d5 5b/3w, d3 3b/1w; Extra Turns d5 3b/1w; Melira 0/0. At d0, Jumbo improves 0.97 turns per game.
+- All 7 searched slower games recover at d8 b0. Units 3436/3436 on the branch.
+- Integrated build NOT yet built (TurnSolver.cpp auto-merged with F2): build, units and smoke at the shared push.
+- **New C5 (queued with C1-C4):** `BpCandFingerprint` omits evoke / kicked / bestow / adventure / face_down, so an evoke plan and its hard-cast twin can share a breakpoint-cache entry (the same class as the devour_count hole). Fix + A/B.
+- **Open for the USER:** prune the opponent-aimed Time Warp in the Extra Turns provider? It stays searched for the decking line.
