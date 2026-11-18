@@ -4065,3 +4065,17 @@ Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, u
 - claude_sweep recorded at commit dab956a9d (HEAD c881e1f36d77); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->
+## Sweep fixes (F1, 2026-11-18; Stage 5d sweep seed 61001)
+
+Full write-up: `logs/maze/F1-results.md`. Branch `wip/maze-fix`.
+- **gi6 (engine bug, FIXED bd32848c7):** a search-put's draw triggers (Guild Summit, Kili, Puresteel, Vaultborn,
+  Enduring Innocence, ETB self-draws) now wait for the ability's "then shuffle" (CR 603.3; SearchPutTriggerScope).
+- **gi1 (completeness, PARTLY FIXED 8e2d4100e):** Talon's put credits its {C}, so "put Talon + activate Maze's End"
+  is enumerated; plans hold Maze's End's {T} source. OPEN: the payer pays Talon's {4} plain instead of via fed
+  Baldur's Gate, so the combined plan still strands the activation at gi1 T5.
+- **gi2 (completeness, OPEN):** the extra land drop after a same-plan Exploration cast is never re-decided at T2
+  (no site-10 breakpoint in either world). Diagnosis in F1-results.
+- **gi8 (rules-modelling gap, PARTLY MODELLED 8e2d4100e):** Maze's End's activation has no timing restriction. A
+  WINNING off-main activation (our end step after Manabond, the opponent's turn after Burgeoning) is now taken
+  (dominance). DISCLOSURE (USER sign-off pending): a NON-winning off-main activation is not modelled; it needs a
+  searched end-step frame (design in F1-results).
