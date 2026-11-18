@@ -53085,8 +53085,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
-    // Target-player extra turns: both legal recipients are searched. In particular, giving the
-    // passive opponent a turn can deck them before ours, so self-target is not a sound prune.
+    // Target-player extra turns: the ENGINE offers both legal recipients; the provider may only
+    // restrict (DecisionProvider::OffersExtraTurnOpponentTarget -- the Extra Turns provider prunes the
+    // opponent copy, USER 2026-11-18; MTG_UNPRUNED / MTG_UNPRUNE=extraturntarget re-open it).
     // Human play chooses the target at cast time through the ordinary board-click target picker.
     // The opponent's copy is SCORED as what it is for us: nothing. It used to inherit the self cast's eval (the
     // extra turn is OUR turn there), so the greedy walk read "give the opponent a turn" as an extra turn for us and
@@ -53100,6 +53101,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].def->params.extra_turns_on_resolve <= 0
                 || actions[i].def->params.targeting != Targeting::Player
                 || actions[i].player_target != 0) { continue; }
+            if (!DecisionUnpruned(UnprunedGate::ExtraTurnTarget)
+                && !ResolveProvider(state).OffersExtraTurnOpponentTarget(state, *actions[i].def)) { continue; }
             Action v = actions[i];
             v.player_target = 1;
             v.eval = kNoGainCastEval;

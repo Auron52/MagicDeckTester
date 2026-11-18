@@ -2657,6 +2657,20 @@ public:
         return false;
     }
 
+    // OffersExtraTurnOpponentTarget -- whether the AUTONOMOUS search enumerates the OPPONENT-target
+    // variant of a "target player takes an extra turn after this one" spell (extra_turns_on_resolve
+    // with targeting Player: Time Warp, Walk the Aeons). The engine offers both recipients
+    // (Action::player_target, CollectActions' target-player extra-turn pass); this hook only
+    // RESTRICTS that set -- the self cast is always emitted. DEFAULT true (both searched). The
+    // Extra Turns provider prunes the opponent copy (USER 2026-11-18); see its override for the
+    // line that removes. Human play never asks this hook (the target is picked at the cast), and
+    // MTG_UNPRUNED / MTG_UNPRUNE=extraturntarget re-open it.
+    virtual bool OffersExtraTurnOpponentTarget(const GameState& s, const CardDefinition& def) const
+    {
+        (void)s; (void)def;
+        return true;
+    }
+
     // OffersJitteNonCombatModes -- whether the AUTONOMOUS search enumerates an equipment's
     // non-combat charge modes (Umezawa's Jitte -1/-1, gain 2). DEFAULT false, a provider PRUNE (USER
     // doctrine 2026-08-14: "always use it for +2/+2 ... no reason to use any other mode in

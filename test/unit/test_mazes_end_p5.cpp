@@ -260,7 +260,7 @@ TEST_CASE("Maze's End P5 (USER): Heap Gate's Treasure plan only where its mana h
     CHECK(admit2 == std::vector<char>{ 1, 1, 1, 1 });
 }
 
-TEST_CASE("Maze's End P5: the v5 fetch weight and the colour / Talon variants")
+TEST_CASE("Maze's End P5: the v5 fetch weight, P1's one colour and the Talon variant")
 {
     LoadP5Cards();
     const MazesEndProvider prov;
@@ -275,18 +275,14 @@ TEST_CASE("Maze's End P5: the v5 fetch weight and the colour / Talon variants")
         const Arm off(heurarm::MAZE_FETCH_EVAL_V5, 0);
         CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 200);
     }
-    // Colour variant: alternate by source count. Azorius (W/U) is a blue source, no green: G either way.
+    // P1's one colour: Azorius (W/U) is a blue source, no green -> G.
     const CardDefinition& cliff = D("Cliffgate");
     CHECK(prov.LandEntryPinCandidates(s, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Green) });
     GameState g2 = s;
     Put(g2, "Forest", 51);
     Put(g2, "Forest", 52);
-    // P1: green and blue sources -> G. The variant: 2 green > 1 blue -> U.
+    // P1: green and blue sources -> G.
     CHECK(prov.LandEntryPinCandidates(g2, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Green) });
-    {
-        const Arm alt(heurarm::MAZE_COLOUR_ALT, 1);
-        CHECK(prov.LandEntryPinCandidates(g2, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Blue) });
-    }
     // Talon variant: with an Exploration controlled, a land tutor no longer offers Talon Gates.
     GameState t = Base(prov);
     Put(t, "Maze's End", 60);

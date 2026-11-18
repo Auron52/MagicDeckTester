@@ -194,6 +194,7 @@ enum class UnprunedGate
     SeaSin,          // Sea Creatures: Sin's searched counter-harvest subsets restored (SeaCreaturesProvider::CounterHarvestSearchSubsets, USER 2026-11-17)
     SeaGorger,       // Sea Creatures: Trench Gorger's full exile menu restored (SeaCreaturesProvider::RestrictExileLibraryLandsMenu, USER 2026-11-16)
     GorgerZero,      // Trench Gorger: the "search and exile 0" entry restored (DecisionProvider::RestrictExileLibraryLandsMenu's 0/0 prune)
+    ExtraTurnTarget, // Extra Turns: Time Warp's / Walk the Aeons' OPPONENT target restored (DecisionProvider::OffersExtraTurnOpponentTarget, USER 2026-11-18)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -760,6 +761,7 @@ public:
                             int dmg_unit, int& out) const override;
     bool ExtraTurnChainWalkEnabled() const override { return true; }
     bool ExtraTurnPreferMyriadNow(const GameState& state) const override;
+    bool OffersExtraTurnOpponentTarget(const GameState& state, const CardDefinition& def) const override;
     bool ExtraTurnChainFinisherPlanAllowed(const GameState& state, bool casts_emrakul,
                                            bool casts_ulamog, bool casts_turn_spell) const override;
     int WalkBuybackValueBonus(const GameState& state, const CardDefinition& def) const override;

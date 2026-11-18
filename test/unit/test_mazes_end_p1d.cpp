@@ -1,7 +1,8 @@
 // Maze's End deck, P1d (2026-11-18; docs/design/analysis-Maze's End.md "Performance"): the USER-directed
-// provider prunes in MazesEndProvider -- B1 Guild Summit's count menu, P1 one chosen colour, P2 no red in the
-// spendable premise, P3 land-search targets. Each is a flag DEFAULT ON (heurarm slots MAZE_SUMMIT_COUNT,
-// MAZE_ONE_COLOUR, MAZE_SPEND_NEVERCAST, MAZE_LAND_TARGETS, plus the P3 amendment MAZE_TALON_TARGET); each test
+// provider prunes in MazesEndProvider -- B1 Guild Summit's count menu, P1 one chosen colour, P3 land-search
+// targets (P2, no red in the spendable premise, was deleted 2026-11-18 as byte-inert under P1). Each is a flag
+// DEFAULT ON (heurarm slots MAZE_SUMMIT_COUNT, MAZE_ONE_COLOUR, MAZE_LAND_TARGETS, plus the P3 amendment
+// MAZE_TALON_TARGET); each test
 // also pins the flag off and checks the unpruned menu comes back.
 #include <doctest/doctest.h>
 
@@ -139,7 +140,7 @@ TEST_CASE("Maze's End P1d (USER B1): Guild Summit's count menu is {rest-of-line,
     CHECK(prov.EtbChoiceCandidates(one, 0, summit) == std::vector<int>{ 1, 2 });
 }
 
-TEST_CASE("Maze's End P1d (USER P1/P2): a chosen-colour land is offered ONE colour, G before U, never R")
+TEST_CASE("Maze's End P1d (USER P1): a chosen-colour land is offered ONE colour, G before U, never R")
 {
     LoadP1dCards();
     const MazesEndProvider prov;
@@ -168,12 +169,21 @@ TEST_CASE("Maze's End P1d (USER P1/P2): a chosen-colour land is offered ONE colo
     CHECK(prov.LandEntryPinCandidates(f, 0, cliff) == std::vector<int>{ static_cast<int>(Color::Green) });
     // A Gate whose PRINTED colour is G (Manor Gate) cannot choose G: the admitted U.
     CHECK(prov.LandEntryPinCandidates(g, 0, D("Manor Gate")) == std::vector<int>{ static_cast<int>(Color::Blue) });
-    // P1 off: every admitted colour, G/U only (P2: Gates Ablaze is never cast, so red spends nothing).
+    // P1 never picks red (why P2 was redundant): every chosen-colour land in the list still offers G or U, for
+    // every combination of green / blue sources.
+    for (const GameState* st : { &s, &g, &gu, &u })
+    {
+        for (const char* land : { "Black Dragon Gate", "Citadel Gate", "Cliffgate", "Manor Gate", "Sea Gate" })
+        {
+            CAPTURE(land);
+            const std::vector<int> pick = prov.LandEntryPinCandidates(*st, 0, D(land));
+            REQUIRE(pick.size() == 1);
+            CHECK((pick[0] == static_cast<int>(Color::Green) || pick[0] == static_cast<int>(Color::Blue)));
+        }
+    }
+    // P1 off: every admitted colour (Gates Ablaze's {R} admits red since P2's deletion).
     {
         const Arm off(heurarm::MAZE_ONE_COLOUR, 0);
-        CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, cliff))
-              == Sorted({ static_cast<int>(Color::Blue), static_cast<int>(Color::Green) }));
-        const Arm off2(heurarm::MAZE_SPEND_NEVERCAST, 0);
         CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, cliff))
               == Sorted({ static_cast<int>(Color::Blue), static_cast<int>(Color::Green) }));   // Cliffgate's own R excluded
         CHECK(Sorted(prov.LandEntryPinCandidates(g, 0, D("Sea Gate")))
