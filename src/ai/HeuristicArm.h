@@ -984,6 +984,8 @@ enum Slot : int
     SEA_MAIN1_KRAKEN_ONLY,    // MTG_SEA_MAIN1_KRAKEN_ONLY  Sea Creatures main-phase shape (USER 2026-11-17: "Conditional Main 1 on having Spawning Kraken and everything in Main 2 otherwise. Only mana spells that pay this turn and Spawning Kraken are allowed in main 1."): the deck plays a full searched main 2 EVERY turn, and a root main-1 plan that casts anything is admitted only when it casts Spawning Kraken and its other casts are mana spells that pay back this turn (land Auras, an untapped rock making at least its cost). SeaCreaturesProvider::Main1PlanAdmitted. ADOPTED 2026-11-17, DEFAULT ON (A/B: equal quality, std units 0.89x); =0 -> the conditional main 2
     SEA_MAIN1_KRAKEN_ATTACKER,// MTG_SEA_MAIN1_KRAKEN_ATTACKER  refinement of SEA_MAIN1_KRAKEN_ONLY (agent-proposed, measured for the USER): the main-1 Kraken plan is admitted only when a creature of a watched subtype (Kraken / Leviathan / Octopus / Serpent) can attack this turn -- otherwise its main-2 twin is identical. Default OFF; only read under SEA_MAIN1_KRAKEN_ONLY
     SEA_STEAL_CREATURE,       // MTG_SEA_STEAL_CREATURE  Sea Creatures, Kiora Bests the Sea God III (USER 2026-11-17: "The steal should be used on a creature if the opponent has one." / "I mean a land is better than nothing as well, but probably less useful than a creature. I guess a 1/1 is arguable." / "Maybe take a land if we don't yet have 8 mana." / "(or consider it)"): with 8+ mana available and an opposing creature of power >= 2 among the targets, the searched steal list keeps only the creatures (the search still chooses among them); below 8 mana, or with only <= 1-power creatures, lands stay searched beside them. Default ON (USER ruling); =0 -> the root list (sound folds only); MTG_UNPRUNE=sagasteal lifts both
+    CYCLONE_LOUNGE_IDLE,      // MTG_CYCLONE_LOUNGE_IDLE  Cyclone (USER 2026-11-17 "The Xander's Lounge change sounds good."): under MTG_CYCLONE_FETCH_RULE, Xander's Lounge is searched beside the Scalding Tarn pick only when one more mana of the pick's colours is NOT needed this turn (FetchManaNeededThisTurn: the FiveColour RULE 6 solo + sequence test, a hand card's mana cycling cost counted as a use, goldfish_inert cards never cast). Default ON (USER-adopted); =0 -> the Lounge beside every pick
+    FIVECOLOUR_TRIOME_BESIDE, // MTG_FIVECOLOUR_TRIOME_BESIDE  Five Colour (USER 2026-11-17 "On Five Colour we could give it a try."): when RULE 6 ranks an enters-tapped land (Zagoth Triome, Jetmir's Garden) first, the best untapped pick moves to second place and both are searched (width 2, every route: legacy, battlefield, land drop). Default OFF pending the USER; =1 enables
     COUNT
 };
 
@@ -1912,6 +1914,8 @@ inline const char* Name(int slot)
         "MTG_SEA_MAIN1_KRAKEN_ONLY",
         "MTG_SEA_MAIN1_KRAKEN_ATTACKER",
         "MTG_SEA_STEAL_CREATURE",
+        "MTG_CYCLONE_LOUNGE_IDLE",
+        "MTG_FIVECOLOUR_TRIOME_BESIDE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
