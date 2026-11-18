@@ -139,3 +139,6 @@ USER (VERBATIM): "I think its okay not to always fetch. Fetching costs mana and 
 (Sent to P5d: the fetch ranks first when the {3} has no other use this turn; otherwise the ranking compares. The "fetch with idle mana" dominance is measured and offered as a USER-sign-off prune, not shipped.)
 USER (VERBATIM): "Yes, but there is a point at which we don't have enough lands in hand to keep playing them at full rate this or next turn. If that is the case it should win out over other effects."
 (Rule as now stated, sent to P5d: idle mana -> fetch first; lands in hand short of full-rate drops this or next turn -> fetch beats other uses of the mana; otherwise compare. End the turn with Maze's End deployed unless an effect returns it or the activation wins.)
+USER (VERBATIM): "Ideally all of this would be searchable, but I'm getting the impression that you see no choice but to prune heavily?"
+USER (VERBATIM): "We should be pruning the fetches, not just ranking them."
+(Sent to P5d-2: provider prunes (a) idle mana -> fetch forced, target searched, replay if a drop is open; (b) lands short of full rate this/next turn -> no other use of the {3}; (c) no fetch that strands Maze's End in hand at end of turn unless an effect returns it or it wins (own arm, "usually"); (d) otherwise unpruned. Ranking kept for the greedy sites.)
