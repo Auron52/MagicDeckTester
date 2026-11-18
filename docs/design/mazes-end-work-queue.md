@@ -28,6 +28,16 @@ in the order given, then the queue they produce. Owner: the Maze's End coordinat
 - Next: P5b (duplicate-copy fold, Exploration land-order fold, Charm tutor-axis duplicate) once a build slot frees; integrate on wip/maze-shared.
 - DONE: tie-fix audit (ACCEPTED), scoring fixes, V1, F2, F3, F4, P5/P5-2; shared push 7093daceb (CI green).
 
+## Overnight results so far (2026-11-18 ~17:00 UTC)
+- **P6** (wip/maze-p6 `5ac60ceba`, `0d4ebee50`): off-main Maze's End activation. Held-out 70/56, net -15 / 1300 (bank 16/1; respond alone 57/58). Smoke: only mazesend* move, all faster. P6b finishing the mismatch gate, the d8 replays and the accept (its regression run was killed by P5b at 16:33 and is being relaunched).
+- **P5b** (wip/maze-p5b `28ddf156a`, `f8a768133`):
+  - Fold 1 (duplicate hand copies) already exists. The census's 1.79x is mostly battlefield Maze's End copies, which are not interchangeable (fetch order matters).
+  - Fold 2 (Exploration land order, `MTG_FOLD_LAND_ORDER`) is sound but measured worse (2/11 +9; search-only form 1/4 +3); every slower game recovers at d8 b0, so it is a budget effect. It saves ~0.3% units. Default OFF. **USER's rule: decision owed** (amendments: keep the twin the root search reaches first, or demote the twin to a later wave).
+  - Fold 3 (Charm c==0) is not an identity (the hand-demand colour vs the P1 front pick).
+- **P5c** (wip/maze-p5c `8a5ae0c0f`): root cause = the canon continuation skips board activations, so a two-choice winning line was unreachable at any budget. The fix adds a later-wave dev-seq slot. It FAILS the bar (Maze +11, Snow +1). P5c-2 is attributing it (defer deletion vs the new wave); if the defer did real work: the amended fetch valuation (bank only when no new-name Gate can still be played this turn).
+- **P7** (wip/maze-p7): b0 cost is plain branching (dominated plans), not a loop. P5's three "unfinishable" d8 b0 games finish at 2.5-16M units (ceiling now >= 50M). Cast/land dominance fold: fold1 was unsound (a Scrying -> Maze's End line needed the {3}); fold2 + a P6 guard is being measured on top of P6 by P7-2. **Premise for USER sign-off:** a Exploration/Burgeoning/Manabond/Amulet in play is never worse than in hand when main-phase mana is otherwise unspent (off near Heap Gate, Plaza, Summit, an affordable off-main Maze's End).
+- **Cleanup** (wip/maze-cleanup): COLOUR_ALT and P2 deleted, Time Warp opponent-target prune; A/B and regression in progress.
+
 ## P5 DONE (2026-11-18, P5-2 `deadd9566`, cherry-picked as 5404ebef8)
 - Shipped vs pre-P5 engine: 35 better / 14 worse, net -22 turns over 550 held-out games per arm, 18% fewer units at d5 b20. Smoke vs F2: 219/223 byte-identical, only mazesend* move.
 - heapstrict (Treasure at the last chance, never a search option) ON: 6/1, -5. max_lands back to 5 (6 was +16). Talon readings (a)/(b)/(c) all worse (+17/+6/+10): Talon stays always offered.
