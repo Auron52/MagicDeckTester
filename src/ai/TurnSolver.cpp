@@ -59621,6 +59621,30 @@ inline Dumper g_dumper;
 // (the sign bit), whose holder is SMALLER. For sets inside 0..31 that is exactly `mask < best_mask`, so a walk
 // with no index >= 32 is byte-identical; past it the order is a strict total order, independent of visit order.
 // `best_mask == INT_MAX` with an empty best is the attack-only sentinel (any real subset replaces it).
+// TEMPORARY tie census (maze-tie, diagnostic): MTG_TIE_CENSUS=1 prints, at exit, how many greedy walks ran, how
+// many had >= 33 candidates, how many exact-tie comparisons took the canonical branch and how many of those the
+// old aliased `mask < best_mask` would have decided the other way, and how many walks lost the mana cache to the
+// <= 32 gate.
+namespace tiecensus
+{
+inline const bool s_on = EnvOn("MTG_TIE_CENSUS");
+// TEMPORARY bisect switches (same meaning as P1c's P1C_OLD_CANON / P1C_OLD_CACHE): revert the canonical tie-break /
+// the <= 32 mana-cache gate to the pre-0fbee030a behaviour.
+inline const bool s_old_canon = EnvOn("MTG_TIE_OLD_CANON");
+inline const bool s_old_cache = EnvOn("MTG_TIE_OLD_CACHE");
+inline const bool s_trace = EnvOn("MTG_TIE_TRACE");
+inline std::atomic<long long> walks{0}, wide_walks{0}, wide_ties{0}, disagree{0}, cache_gated{0};
+struct Rep
+{
+    ~Rep()
+    {
+        if (!s_on) { return; }
+        std::fprintf(stderr, "[tie-census] walks=%lld wide_walks=%lld wide_ties=%lld disagree=%lld cache_gated=%lld\n",
+                     walks.load(), wide_walks.load(), wide_ties.load(), disagree.load(), cache_gated.load());
+    }
+};
+inline Rep s_rep;
+}
 static bool CanonSubsetMaskLess(const std::vector<int>& a, const std::vector<int>& b, int b_mask)
 {
     if (b.empty() && b_mask == std::numeric_limits<int>::max()) { return true; }
@@ -62124,8 +62148,34 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                  && verified_win != std::binary_search(best_sel.begin(), best_sel.end(), route_win_j))
         { better = verified_win; }                                               // a VERIFIED win dominates a projected one
         else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
-        else if (sel_wide || (!best_sel.empty() && best_sel.back() >= 32))   // either mask aliases
-        { better = CanonSubsetMaskLess(sel, best_sel, best_mask); }
+        else if (!heurarm::Flag(heurarm::TIE_OLD_CANON, tiecensus::s_old_canon) && (sel_wide || (!best_sel.empty() && best_sel.back() >= 32)))   // either mask aliases
+        {
+            better = CanonSubsetMaskLess(sel, best_sel, best_mask);
+            if (tiecensus::s_on)
+            {
+                tiecensus::wide_ties.fetch_add(1, std::memory_order_relaxed);
+                if (better != (mask < best_mask))
+                {
+                    tiecensus::disagree.fetch_add(1, std::memory_order_relaxed);
+                    if (tiecensus::s_trace)
+                    {
+                        auto names = [&](const std::vector<int>& v) {
+                            std::ostringstream o;
+                            for (int j : v)
+                            {
+                                const Action& a = cands[static_cast<std::size_t>(j)];
+                                o << j << ":" << a.card_name << "->" << a.tutor_target << "/k" << static_cast<int>(a.kind)
+                                  << "/m" << static_cast<int>(a.ability_mode) << "/x" << a.chosen_x << "/e" << a.eval << " ";
+                            }
+                            return o.str();
+                        };
+                        std::fprintf(stderr, "[tie-trace] T%d n=%zu value=%g canon_picks=%s | sel={%s} best={%s}\n",
+                                     state.turn_number, cands.size(), static_cast<double>(rank_value),
+                                     better ? "sel" : "best", names(sel).c_str(), names(best_sel).c_str());
+                    }
+                }
+            }
+        }
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
         // The deferred land-Aura payer (MTG_SOLVE_AURA_PAYER_DEFER): asked only now, of a subset that
@@ -63162,7 +63212,14 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
             // The cache key is the int subset mask, which ALIASES once a candidate index reaches 32 (1 << j
             // wraps): two different subsets visited back to back could share a key and the second would inherit
             // the first's verdict. Armed only while every index has its own bit (Maze's End P1b, 2026-11-17).
-            if (call_ok && inert_mask != 0 && cands.size() <= 32)
+            if (tiecensus::s_on)
+            {
+                tiecensus::walks.fetch_add(1, std::memory_order_relaxed);
+                if (cands.size() >= 33) { tiecensus::wide_walks.fetch_add(1, std::memory_order_relaxed); }
+                if (call_ok && inert_mask != 0 && cands.size() > 32)
+                { tiecensus::cache_gated.fetch_add(1, std::memory_order_relaxed); }
+            }
+            if (call_ok && inert_mask != 0 && (cands.size() <= 32 || heurarm::Flag(heurarm::TIE_OLD_CACHE, tiecensus::s_old_cache)))
             {
                 mana_inert_ind_mask = inert_mask;
                 mana_cache_on       = true;

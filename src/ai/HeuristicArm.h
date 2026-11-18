@@ -962,6 +962,8 @@ enum Slot : int
     MAZE_LEAF_PROGRESS,       // MTG_MAZE_LEAF_PROGRESS    Maze's End P1b: the graded no-win leaf subtracts the deck's alternate-win PROGRESS (distinct Gate names controlled, life-equivalent 2 per name, plus Maze's End held and new-name Gates in hand under it) -- MazesEndProvider::NoWinLeafProgress. Evaluation, not a prune. Default ON; =0 -> opponent life alone (every no-win leaf ties)
     MAZE_FETCH_EVAL,          // MTG_MAZE_FETCH_EVAL       Maze's End P1b: a Maze's End activation that fetches a NEW Gate name carries plan eval 200 (MazesEndProvider::TapTutorPutEval), so the greedy walk (beyond-horizon playout / d0 runner) prefers making progress over leaving the {3} idle; a duplicate name or the fail-to-find stays 0. Default ON; =0 -> every fetch 0
     MAZE_FETCH_DEFER,         // MTG_MAZE_FETCH_DEFER      Maze's End P1c: the new-name fetch eval (MAZE_FETCH_EVAL) is 0 while a land drop is open AND a new-name Gate is in hand (read after the plan's own land play) -- the win check runs only at the activation, so activating before the hand's Gates are down spends the check early; the value-ranked breakpoint list (wave-0 width W=2) otherwise put two such dead-end activations ahead of the land play the win needs (unit "THREE land drops"). Evaluation/order only. Default ON; =0 -> the P1b eval in every state
+    TIE_OLD_CANON,            // MTG_TIE_OLD_CANON  TEMPORARY (maze-tie diagnostic): the pre-0fbee030a aliased greedy tie-break past 32 candidates
+    TIE_OLD_CACHE,            // MTG_TIE_OLD_CACHE  TEMPORARY (maze-tie diagnostic): the mana-verdict cache armed past 32 candidates (pre-0fbee030a)
     COUNT
 };
 
@@ -1868,6 +1870,8 @@ inline const char* Name(int slot)
         "MTG_MAZE_LEAF_PROGRESS",
         "MTG_MAZE_FETCH_EVAL",
         "MTG_MAZE_FETCH_DEFER",
+        "MTG_TIE_OLD_CANON",
+        "MTG_TIE_OLD_CACHE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
