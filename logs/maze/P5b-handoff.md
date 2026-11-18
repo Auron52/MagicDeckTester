@@ -9,7 +9,7 @@ Done:
 - Fold 1: no code (the merge exists; residual = Maze's End battlefield copies, order-carrying).
 - Fold 3: no fold (unpinned default != pins.front(); unit test).
 
-RUNNING (queued on the heavy lock at ~16:40 UTC): `flock build/heavy.lock build/scratch/maze/p5b/heavy3.sh` --
+DONE 17:00 UTC: stage 3 ALL PASS (see P5b-results.md). Nothing remains but the USER decisions.
 MTG_BUILD_JOBS=12 build, all units, then `bash test/regression.sh --smoke --regression --deck=mazesend,mazesend2hg`.
 Progress/DONE marker: build/scratch/maze/p5b/heavy3.progress; logs build3.log, units3.log, tiers3.log there.
 Expected: every mazesend key PASSES (fold off == GT). If a key FAILs, the default-OFF claim is wrong: diff the key
