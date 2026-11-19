@@ -5561,6 +5561,19 @@ struct CardDefinition
     // fold's: a param invented tomorrow is NOT audited, and an unaudited card where the fold looks disables it.
     bool hand_gain_audited = false;
     bool upkeep_fold_keeper  = false;
+    // EVERY MANA COST THIS CARD'S `parameters` CARRY, read MECHANICALLY off the raw JSON at load: each string
+    // value made only of mana symbols ({1}{W}, {X}{R}{G}, {B/G}, {S}) under any key -- an activated ability's
+    // (boast's pay_token_cost, a Clue's sac_draw_cost, Kessig Wolf Run's tap_target_pump_cost), a hand
+    // activation's (cycling_cost, channel_cost), a graveyard cast's (flashback_cost, unearth_cost) or an
+    // alternative cost's (evoke_cost, morph_cost) -- plus the integer equip_cost_generic as {N}. Keys naming a
+    // REDUCTION ("reduc...") are skipped. A superset by construction: a param added tomorrow is covered with no
+    // edit here, and a cost string that is not an activation (a kicker, an echo) only makes the one reader see a
+    // POSSIBLE use where there is none. The one reader: TurnSolver::HumanLandManaMayBeUsed (human play's
+    // shock-land default, "could anything still spend this land's mana this turn?"), where a false "yes" costs
+    // 2 life in a goldfish and a false "no" strands a line. Empty for a Register-built definition (no JSON).
+    // Each entry keeps its KEY, so a reader can tell a graveyard-zone cost (flashback_cost, unearth_cost ...)
+    // from one usable in hand or on the battlefield.
+    std::vector<std::pair<std::string, ManaCost>> param_mana_costs;
     // THE SEQUENTIAL-WALK SUPPLY BOUND's card-data premise (TurnSolver.cpp SeqWalkProvablyShort): template,
     // every `parameters` key and every keyword are in the audited set (CardDatabase.cpp, beside the upkeep
     // fold's list), so the bound prices everything this card can do to a payment walk. false for a

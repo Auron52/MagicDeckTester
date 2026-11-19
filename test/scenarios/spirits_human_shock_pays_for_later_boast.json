@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 2,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 2,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": "USER 2026-11-19: 'Otherwise it should be untapped in goldfish.' The control for spirits_human_shock_tapped_when_unusable: the same lone land drop, but the board's other land is a Plains, so Usher of the Fallen's boast {1}{W} -- legal only AFTER it attacks, i.e. later than this pre-combat segment -- is payable with the Grave untapped. The human-play default pays the 2 life (life 18) even though the segment itself casts nothing (the pre-2026-11-19 rule entered it tapped). The boast itself is the human's call (the scenario passes the post-combat main), so only the entry is asserted.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Usher of the Fallen", "sick": false }
+  ],
+  "hand": [ "Watery Grave", "Drogskol Captain" ],
+  "human_lines": [ "land=Watery Grave" ],
+  "expect_active_life": 18
+}

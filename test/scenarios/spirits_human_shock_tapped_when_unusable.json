@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 2,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 2,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": "USER 2026-11-19, Spirits seed 9 T2 (references/Spirits/claude_s9_gi8): 'If there is nothing to play with it, tapped is fine.' Board Unclaimed Territory + Usher of the Fallen; hand Watery Grave and three-drops only. Played in a segment of its own, the Grave enters TAPPED (life stays 20): no hand card is payable off two lands, and the only other use, Usher's boast {1}{W} after combat, cannot be paid either -- Unclaimed Territory's colours pay creature SPELLS only, never a creature's ability, and the Grave makes no {W} (TurnSolver::HumanLandManaMayBeUsed). Control: spirits_human_shock_pays_for_later_boast.",
+  "battlefield": [
+    { "name": "Unclaimed Territory" },
+    { "name": "Usher of the Fallen", "sick": false }
+  ],
+  "hand": [ "Watery Grave", "Drogskol Captain", "Lingering Souls", "Patrician Geist", "Patrician Geist" ],
+  "human_lines": [ "land=Watery Grave" ],
+  "expect_active_life": 20
+}

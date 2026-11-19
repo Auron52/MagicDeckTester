@@ -72,6 +72,8 @@ const char* CardTemplateToString(CardTemplate t)
 // time; populated by LoadFromJson from main. See the header for why this is safe.
 CardDatabase CardDatabase::s_instance;
 
+static ManaCost ManaCostFromString(const std::string& cost_str);   // defined below (LoadFromJson reads it)
+
 void CardDatabase::LoadFromJson(const std::filesystem::path& path)
 {
     // Parsing a card interns its subtypes; re-open the registry for this (single-threaded) load.
@@ -262,6 +264,43 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 }
             }
             def.hand_gain_audited = ok;
+        }
+        // CardDefinition::param_mana_costs -- see the header. Recursive over nested objects / arrays, so a cost
+        // inside a structured param is found too. A string qualifies only when it is ENTIRELY mana symbols, so a
+        // name, a colour list ("W") or a subtype never does.
+        if (entry.contains("parameters") && entry["parameters"].is_object())
+        {
+            auto is_mana_string = [](const std::string& s) -> bool
+            {
+                if (s.size() < 3 || s.front() != '{' || s.back() != '}') { return false; }
+                bool in = false;
+                for (char c : s)
+                {
+                    if (c == '{') { if (in) { return false; } in = true; continue; }
+                    if (c == '}') { if (!in) { return false; } in = false; continue; }
+                    if (!in) { return false; }
+                    if (!((c >= '0' && c <= '9') || c == 'W' || c == 'U' || c == 'B' || c == 'R' || c == 'G'
+                          || c == 'C' || c == 'X' || c == 'S' || c == 'P' || c == '/')) { return false; }
+                }
+                return !in;
+            };
+            std::function<void(const std::string&, const json&)> walk = [&](const std::string& key, const json& v)
+            {
+                if (v.is_object()) { for (auto it = v.begin(); it != v.end(); ++it) { walk(it.key(), it.value()); } }
+                else if (v.is_array()) { for (const json& e : v) { walk(key, e); } }
+                else if (v.is_string() && key.find("reduc") == std::string::npos
+                         && is_mana_string(v.get<std::string>()))
+                { def.param_mana_costs.emplace_back(key, ManaCostFromString(v.get<std::string>())); }
+            };
+            walk(std::string{}, entry["parameters"]);
+            const json& prm = entry["parameters"];
+            if (prm.contains("equip_cost_generic") && prm["equip_cost_generic"].is_number_integer()
+                && prm["equip_cost_generic"].get<int>() > 0)
+            {
+                ManaCost eq;
+                eq.generic = prm["equip_cost_generic"].get<int>();
+                def.param_mana_costs.emplace_back("equip_cost_generic", eq);
+            }
         }
         // THE SEQUENTIAL-WALK SUPPLY BOUND's premises (CardDefinition::walk_bound_audited; the bound and its
         // proof are at TurnSolver.cpp SeqWalkProvablyShort). A WHITELIST of raw keys, like the upkeep fold's:

@@ -813,7 +813,13 @@ listed decision to **"let AI decide"**, in which case `advanceTo` auto-replies t
 AI default, so undo/checkpoints stay 1:1). Only single-int decisions whose answer *is*
 `heuristic_default` are auto-resolvable this way. **Default is surface-on for everything except
 `land_entry`** (shock lands / Frostboil Snarl), which ships default-**off** because the choice is
-repetitive and its heuristic (pay life / reveal only when it benefits you) is usually right. This is
+repetitive and its heuristic (pay life / reveal only when it benefits you) is usually right. For a
+shock land that default is **untapped unless nothing this turn could use the mana** (USER
+2026-11-19: *"If there is nothing to play with it, tapped is fine. Otherwise it should be untapped in
+goldfish."*): `TurnSolver::HumanLandManaMayBeUsed` plays the drop on a copy and asks the shared payer
+whether any nonland hand card, hand activation, graveyard cast or mana-costed permanent ability --
+including one legal only later this turn, such as a boast -- is payable; restricted mana is honoured
+(Unclaimed Territory's colours never pay an ability). Never when the life does not cover it. This is
 a convenience toggle, never an engine-level skip — the audit gate still requires the decision be
 fully wired (all four sites) regardless of the menu default.
 
