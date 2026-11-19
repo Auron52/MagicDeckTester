@@ -71602,8 +71602,7 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     //      mana) paying a cast's coloured pip, at most one per pip and per filter, or a scaled land fed for fewer
     //      than the three sources it takes. When the sources cover the casts' mana value plus that worst-case
     //      waste plus the owed mana plus one Gate per other-tap cost, every order the payer can take leaves the
-    //      owed bill paid: nothing strands. With an other-tap cost, every counted source must be a Gate the cost
-    //      could tap (else the casts could take the Gates and strand it).
+    //      owed bill paid: nothing strands. A line with an other-tap cost always takes the probe (see below).
     static const bool s_gate_verify = EnvOn("MTG_OWED_ACTS_JOINT_GATE_VERIFY");   // diagnostic only
     const char* gated = nullptr;
     int gate_have = -1, gate_need = -1;   // the count gate's numbers (GATE-MISS detail only)
@@ -71624,15 +71623,18 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     {
         int other_taps = 0;
         bool gates_ok = true;
-        std::vector<int> elig;   // battlefield indices an other-tap cost may tap (one subtype in practice)
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::ActivatePermAbility || a.def == nullptr || !is_owed_tap(a.sac_source_id))
             { continue; }
             const std::string& sub = ActivationOtherTapSubtype(*a.def, a.ability_mode);
             if (sub.empty()) { continue; }
-            if (other_taps++ == 0) { elig = ActivationOtherTapEligible(state, ctl, sub, a.sac_source_id); }
-            else { gates_ok = false; }   // two other-tap costs: not modelled here, take the probe
+            // An other-tap cost (Heap Gate's Treasure): NOT modelled -- take the probe. F5 audit 2026-11-18: the
+            // old "every counted source a Gate" rule declined 314 rescuable strands over 950 games (MTG_OWED_ACTS_
+            // JOINT_GATE_VERIFY), every one a Heap Gate Treasure line with coloured casts ({G}{G}{G}{G} +
+            // Heap Gate's {1}, have = need).
+            ++other_taps;
+            gates_ok = false;
         }
         const int pips = casts_bill.white + casts_bill.blue + casts_bill.black + casts_bill.red + casts_bill.green
                        + casts_bill.hybrid_count + casts_bill.colorless;
@@ -71645,8 +71647,6 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
             if (d == nullptr || d->params.produces.empty()) { continue; }
             if (!p.card.IsLand() && !(d->params.mana_rock && !p.card.IsCreature())) { continue; }
             if (d->params.ramp_filter || d->params.filter_no_free_colorless) { continue; }   // no mana unfed
-            if (other_taps > 0 && std::find(elig.begin(), elig.end(), static_cast<int>(i)) == elig.end())
-            { gates_ok = false; break; }
             ++have;
             if (d->params.any_color_filter) { ++n_acf; }
             if (IsScaledManaLand(*d))
@@ -71702,19 +71702,31 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
         if (!stranded) { return why("usual payment strands nothing"); }   // byte-identical
         owedjointstats::Bump(owedjointstats::g_strand);
     }
-    // 2. ...and does ONE joint solve pay the whole line? (Rejects the lines nothing can save.)
+    // 2. ONE joint solve of the whole line (LineJointPrepayCore: it sets aside jb.tap_src, solves, and restores the
+    //    board untouched when the bill cannot be paid -- that is the "nothing can save it" decline). The other-tap
+    //    Gates are found first, on the board as it stands with the owed {T} sources tapped, and set aside with
+    //    them. (There used to be a separate trial solve on a board copy before the core's own identical solve: the
+    //    same payment twice, each with its pay-refine, 37% of a slow d3 game's wall -- s192041 gi40.)
     {
-        GameState j = state;
+        std::vector<char> was_tapped(state.battlefield.size());
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i) { was_tapped[i] = state.battlefield[i].tapped ? 1 : 0; }
         for (const int id : owed_taps)
-        { for (Permanent& p : j.battlefield) { if (p.card.m_number == id && p.controller_index == ctl) { p.tapped = true; } } }
+        { for (Permanent& p : state.battlefield) { if (p.card.m_number == id && p.controller_index == ctl) { p.tapped = true; } } }
         std::vector<int> other;
-        if (!OwedOtherTapsAside(j, acts, owed_taps, &other)) { return why("no Gate for an other-tap"); }
-        TapSpeculationScope speculating;
-        if (!TapForCostDirect(j, jb.bill, /*for_creature=*/false)) { return why("no joint payment"); }
+        const bool aside_ok = OwedOtherTapsAside(state, acts, owed_taps, &other);
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i) { state.battlefield[i].tapped = was_tapped[i] != 0; }
+        if (!aside_ok) { return why("no Gate for an other-tap"); }
         for (const int id : other) { jb.tap_src.push_back(id); }   // the joint solve leaves them up too
     }
     if (gated != nullptr)   // MTG_OWED_ACTS_JOINT_GATE_VERIFY: a gate declined a rescuable strand -- a gate bug
     {
+        {
+            GameState j = state;
+            for (const int id : jb.tap_src)
+            { for (Permanent& p : j.battlefield) { if (p.card.m_number == id && p.controller_index == ctl) { p.tapped = true; } } }
+            TapSpeculationScope speculating;
+            if (!TapForCostDirect(j, jb.bill, /*for_creature=*/false)) { return why("no joint payment"); }
+        }
         std::string line, board;
         for (const Action& a : acts)
         {
@@ -71732,8 +71744,9 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
                      static_cast<int>(state.floating_mana.Total()), line.c_str(), board.c_str());
         return false;
     }
+    if (!LineJointPrepayCore(state, jb, s_trace)) { return why("no joint payment"); }
     owedjointstats::Bump(owedjointstats::g_fired);
-    return LineJointPrepayCore(state, jb, s_trace);
+    return true;
 }
 
 void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
