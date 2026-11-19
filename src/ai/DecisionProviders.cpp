@@ -68048,6 +68048,7 @@ MAZE_P5_LEVER(MazeCastDominanceOn,    MAZE_CAST_DOMINANCE,     "MTG_MAZE_CAST_DO
 MAZE_P5_LEVER(MazeLandDominanceOn,    MAZE_LAND_DOMINANCE,     "MTG_MAZE_LAND_DOMINANCE",     true)    // P7
 MAZE_P5_LEVER(MazeCastDomWindowsOn,   MAZE_CASTDOM_WINDOWS,    "MTG_MAZE_CASTDOM_WINDOWS",    true)    // P7c (a)
 MAZE_P5_LEVER(MazeCastDomPerPlanOn,   MAZE_CASTDOM_PERPLAN,    "MTG_MAZE_CASTDOM_PERPLAN",    true)    // P7c (b)
+MAZE_P5_LEVER(MazeCastDomKeepAOnlyOn, MAZE_CASTDOM_KEEP_A_ONLY,"MTG_MAZE_CASTDOM_KEEP_A_ONLY",true)    // P7c (c)
 #undef MAZE_P5_LEVER
 bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
 
@@ -68864,11 +68865,18 @@ int MazesEndProvider::CastDominanceClass(const GameState&, const CardDefinition&
 //   (3) Gateway Plaza -- P7c (b), same lever: a Plaza in hand, a put window as in (1) (Manabond, or Burgeoning while
 //       the opponent plays lands, controlled / cast by P / held when P opens a breakpoint), and U0 >= its {1}.
 // Every bound only over-counts and every window test only widens, so the error is toward keeping.
-bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) const
+// WHICH FOLD A KEEP BLOCKS (P7c (c), MTG_MAZE_CASTDOM_KEEP_A_ONLY, default ON; =0 -> every keep blocks both): (2) and
+// (3) block fold A only. Fold B drops a land-less P for its twin P' = P + a land with the SAME actions, so P' spends
+// what P spends in the main phase and controls every source P controls plus that land: the untapped sources and
+// unspent mana that bound (2) and (3) are never smaller for P' (a Heap Gate / Plaza P holds in hand, P' holds too
+// unless P' played it -- then it is on the battlefield already, which P's off-main put only reaches later). (1) keeps
+// blocking both (not narrowed here: P6's window turns on the lands in hand, which P and P' differ in).
+int MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) const
 {
     const bool p6       = MazeOffMainRespondLever() || MazeOffMainBankLever();
     const bool per_plan = MazeCastDomPerPlanOn();
-    if (!p6 && !per_plan) { return false; }
+    if (!p6 && !per_plan) { return 0; }
+    const int mana_keep = MazeCastDomKeepAOnlyOn() ? kCastDomKeepA : kCastDomKeepBoth;   // (2), (3)
     const bool windows  = MazeCastDomWindowsOn();
     const int me = s.active_player_index;
     const Player& pl = s.players[static_cast<std::size_t>(me)];
@@ -68903,7 +68911,7 @@ bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) 
     }
     if (!per_plan) { heap = plaza = false; }
     if (!p6) { maze = false; }
-    if (!maze && !heap && !plaza) { return false; }
+    if (!maze && !heap && !plaza) { return 0; }
     int spent = 0;
     bool opens_bp = false;
     for (const Action& a : *v.actions)
@@ -68925,19 +68933,19 @@ bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) 
                  + s.floating_mana.Total() + enter - spent;
     if (maze && u0 - 1 >= 3)
     {
-        if (!windows) { return true; }
+        if (!windows) { return kCastDomKeepBoth; }
         if (put_window && maze_def != nullptr)
         {
             for (const Card& lc : pl.library)
             {
                 const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
-                if (TapTutorPutLibraryCandidate(maze_def->params, ld ? ld->card : lc)) { return true; }
+                if (TapTutorPutLibraryCandidate(maze_def->params, ld ? ld->card : lc)) { return kCastDomKeepBoth; }
             }
         }
     }
-    if (heap && u0 - 1 >= heap_cost) { return true; }
-    if (plaza && put_window && u0 >= plaza_cost) { return true; }
-    return false;
+    if (heap && u0 - 1 >= heap_cost) { return mana_keep; }
+    if (plaza && put_window && u0 >= plaza_cost) { return mana_keep; }
+    return 0;
 }
 
 // Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use

@@ -5000,7 +5000,7 @@ public:
     bool CastDominanceLive(const GameState& s) const override;
     int  CastDominanceClass(const GameState& s, const CardDefinition& d) const override;
     // P7 x P6: keep a plan whose unspent mana could pay an off-main Maze's End activation (premise at the definition).
-    bool CastDominanceKeep(const GameState& s, const PlanView& v) const override;
+    int  CastDominanceKeep(const GameState& s, const PlanView& v) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,

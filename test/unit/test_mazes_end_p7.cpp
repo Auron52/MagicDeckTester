@@ -379,3 +379,66 @@ TEST_CASE("Maze's End P7c (b): Heap Gate and Gateway Plaza are per-plan keeps, n
         CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }));
     }
 }
+
+TEST_CASE("Maze's End P7c (c): the Heap Gate / Gateway Plaza keeps block fold A only; the Maze's End keep blocks both")
+{
+    LoadP7Cards();
+    const MazesEndProvider prov;
+    using PV = DecisionProvider::PlanView;
+    using DP = DecisionProvider;
+    const std::vector<Action> none;
+    const std::string manor = "Manor Gate", no_land;
+    auto no_maze = [](GameState& g)
+    {
+        auto& h = g.players[0].hand;
+        h.erase(std::remove_if(h.begin(), h.end(), [](const Card& c) { return c.m_name.str() == "Maze's End"; }), h.end());
+    };
+    {
+        // An untapped Heap Gate whose Treasure the leftover funds: the keep names fold A only. The land-less pass then
+        // goes to its land twin "Manor Gate" (fold B: same actions, every source the pass holds plus the land), and the
+        // twin itself is kept from fold A.
+        GameState s = T4(prov);
+        no_maze(s);
+        Put(s, "Heap Gate", 40);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }) == DP::kCastDomKeepA);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }) == DP::kCastDomKeepA);
+        std::set<std::string> off_menu, both_menu;
+        {
+            const Arm off(heurarm::MAZE_CAST_DOMINANCE, 0);
+            off_menu = Menu(s);
+        }
+        {
+            const Arm c_off(heurarm::MAZE_CASTDOM_KEEP_A_ONLY, 0);   // the keep blocks both folds (P7c (b) as shipped)
+            CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }) == DP::kCastDomKeepBoth);
+            both_menu = Menu(s);
+        }
+        const std::set<std::string> on_menu = Menu(s);
+        for (const std::string& k : on_menu) { CHECK(both_menu.count(k) == 1); }   // restrict-only vs (b)
+        for (const std::string& k : both_menu) { CHECK(off_menu.count(k) == 1); }
+        REQUIRE(both_menu.count("|") == 1);
+        REQUIRE(both_menu.count("Manor Gate|") == 1);
+        CHECK(on_menu.count("|") == 0);              // fold B: dominated by "Manor Gate|"
+        CHECK(on_menu.count("Manor Gate|") == 1);    // fold A still blocked: its leftover funds the Treasure
+        CHECK(on_menu.size() < both_menu.size());
+    }
+    {
+        // A Gateway Plaza in hand with a Manabond window: fold A only, likewise.
+        GameState s = T4(prov);
+        no_maze(s);
+        s.players[0].hand.push_back(C("Gateway Plaza", 42));
+        Put(s, "Manabond", 43);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }) == DP::kCastDomKeepA);
+        const Arm c_off(heurarm::MAZE_CASTDOM_KEEP_A_ONLY, 0);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }) == DP::kCastDomKeepBoth);
+    }
+    {
+        // The off-main Maze's End keep (P7b guard shape: mana alone) still blocks both folds.
+        const Arm w_off(heurarm::MAZE_CASTDOM_WINDOWS, 0);
+        GameState s = T4(prov);
+        Put(s, "Izzet Guildgate", 20);
+        Put(s, "Dimir Guildgate", 21);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &manor }) == DP::kCastDomKeepBoth);
+        CHECK(prov.CastDominanceKeep(s, PV{ &none, &no_land }) == DP::kCastDomKeepBoth);
+        CHECK(Menu(s).count("|") == 1);
+    }
+}
