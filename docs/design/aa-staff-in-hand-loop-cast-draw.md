@@ -79,3 +79,31 @@ payment-colour change for the whole deck and needs its own A/B.
    from the post-sac frame (`--choices 1,0,0,-1,1,1,0,-1,136,0,2,0 --choices-then-auto`).
 4. It is a BUDGETED play change for the AccomplishedAlchemist deck (more loop variants and kActUntapLoopFunded
    re-plans on any board with a Staff in hand): held-out A/B on the deck, then smoke/regression GT accept.
+
+## Second half (USER 2026-11-19): the SEARCH must find this line without the heuristic
+
+USER: *"I would like to know why we can't find it at any budget. That seems like something we will need to
+fix."* and *"As-in, we should improve the heuristic and the search itself."*
+
+The fix above is the heuristic half: the provider now recognises the in-hand draw engine as a loop target.
+It is not enough by itself. The line is unfindable at `--budget-ms 0` today because the provider's
+restriction is the only route to a multi-untap count, so a loop target the provider does not anticipate is a
+completeness hole at every budget (CLAUDE.md: "everything should be findable at unlimited or large
+budgets"; providers may restrict/order, but a restriction that removes the only winning line is lossy).
+
+Where the search side caps it (to confirm with a census before changing anything):
+* The generic `DecisionProvider::UntapActivationCounts` offers K = 1..min(3, max_affordable), and
+  `max_affordable` ignores the mana a self-funding loop refunds (an untapped Alchemist at X >= the untap
+  cost). So on a self-funding loop the count axis is bounded by the PRE-loop pool, not by what the loop can
+  pay; the provider's `kUntapLoopToNeed` is the only way past that bound.
+* Whether the search can instead reach "untap, untap, cast the Staff from the float with the Alchemist still
+  untapped, untap again" as a SEQUENCE of K=1 activations interleaved with the cast (site-9 continuation,
+  `kActUntapper` re-plan, one-family-per-plan, dedup/fold rules) -- find which rule cuts it.
+
+Target shape (budget-staged, never a gate): the provider's counts stay FIRST (cheap, high-yield wave); the
+rest of the count axis / the interleaved sequence is admitted in a later wave, priced, so a small budget
+spends on the provider's guess and a large budget reaches everything. Acceptance test: with
+`MTG_AA_LOOP_CAST_DRAW=0` (heuristic half OFF), seed 12345681 gi 0 keeping 7 must win T3 at
+`--depth 8 --budget-ms 0`, and the generic route must be covered by a unit test on a non-Staff-hand loop as
+well. Then the usual: held-out A/B on the deck, smoke/regression accept. Scheduled after the Boars keep-table
+adoption (2026-11-19).
