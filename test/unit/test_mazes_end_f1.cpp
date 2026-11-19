@@ -201,6 +201,77 @@ TEST_CASE("Maze's End F1 (gi8): an off-main Maze's End activation that WINS is t
     }
 }
 
+TEST_CASE("Maze's End (USER 2026-11-19, ref s5_gi4): human play is ASKED before the off-main win, over the full menu")
+{
+    LoadF1Cards();
+    const char* gates[] = { "Azorius Guildgate", "Boros Guildgate", "Dimir Guildgate", "Golgari Guildgate",
+                            "Gruul Guildgate", "Izzet Guildgate", "Orzhov Guildgate", "Rakdos Guildgate",
+                            "Selesnya Guildgate" };
+    auto board = [&]() {
+        GameState s = FBase();
+        s.step = Step::End;
+        int num = 700;
+        for (const char* g : gates) { FPut(s, g, num++); }
+        const int maze = FPut(s, "Maze's End", 720);
+        for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(FCard("Forest", 900 + k)); }
+        s.players[0].library.push_back(FCard("Azorius Guildgate", 729));   // a duplicate name: fetchable, not a win
+        s.players[0].library.push_back(FCard("Simic Guildgate", 730));     // the tenth name: the win
+        return std::make_pair(s, maze);
+    };
+    struct Ask { std::string source; std::vector<std::string> names; int dflt; };
+    std::vector<Ask> asks;
+    int reply = -1;
+    DigChooser chooser = [&](const GameState&, int, const std::string& source, const std::vector<Card>& examined,
+                             const std::vector<int>&, int dflt) -> int {
+        Ask a{ source, {}, dflt };
+        for (const Card& c : examined) { a.names.push_back(c.m_name.str()); }
+        asks.push_back(a);
+        return reply;
+    };
+    DigChooser* const saved = g_play_dig_chooser;
+    g_play_dig_chooser = &chooser;
+    MazeHumanDeclinedBoard() = MazeHumanDeclineKey{};
+    {
+        auto [s, maze] = board();                   // DECLINE: nothing happens, and the same board is not re-asked
+        reply = -1;
+        CHECK_FALSE(TryOffMainAltWinActivation(s));
+        CHECK_FALSE(s.won_by_effect);
+        REQUIRE(asks.size() == 1);
+        CHECK(asks[0].source.find("WINS the game") != std::string::npos);
+        // The full menu (both fetchable names, library order), the winning one preselected.
+        REQUIRE(asks[0].names == std::vector<std::string>{ "Azorius Guildgate", "Simic Guildgate" });
+        CHECK(asks[0].dflt == 1);
+        REQUIRE(FFind(s, maze) != nullptr);
+        CHECK_FALSE(FFind(s, maze)->tapped);
+        CHECK_FALSE(TryOffMainAltWinActivation(s));
+        CHECK(asks.size() == 1);                    // declined at this board: not asked again
+        CHECK(MazeOffMainBank(s, "after Manabond's dump") == 0);
+        CHECK(asks.size() == 1);                    // ...nor by the bank that follows it
+    }
+    MazeHumanDeclinedBoard() = MazeHumanDeclineKey{};
+    asks.clear();
+    {
+        auto [s, maze] = board();                   // TAKE the preselected Gate: the win, as the fold took it
+        reply = 1;
+        CHECK(TryOffMainAltWinActivation(s));
+        CHECK(s.won_by_effect);
+        CHECK(FFind(s, 730) != nullptr);
+        CHECK(FInHand(s, maze));
+    }
+    MazeHumanDeclinedBoard() = MazeHumanDeclineKey{};
+    asks.clear();
+    {
+        auto [s, maze] = board();                   // a NON-winning Gate is the player's call too
+        reply = 0;
+        CHECK_FALSE(TryOffMainAltWinActivation(s));
+        CHECK_FALSE(s.won_by_effect);
+        CHECK(FFind(s, 729) != nullptr);
+        CHECK(FInHand(s, maze));
+    }
+    g_play_dig_chooser = saved;
+    MazeHumanDeclinedBoard() = MazeHumanDeclineKey{};
+}
+
 TEST_CASE("Maze's End F1 (gi1): Talon's put credits its own {C}, and a plan holds Maze's End for its activation")
 {
     LoadF1Cards();

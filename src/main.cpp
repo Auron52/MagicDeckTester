@@ -4658,6 +4658,10 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     for (int li : legal) { if (li >= 0 && li < static_cast<int>(examined.size())) { is_legal[li] = true; } }
     DecisionJson d(os, decision_index);
     d.Type("dig").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
+    // The ROLE of a bare-name site (DigRoleScope, core/GameLogger.h): what the frame asks when the source alone
+    // cannot say. Absent for every tagged source, so those frames are byte-identical to before.
+    const std::string role = g_play_dig_role != nullptr ? std::string(g_play_dig_role) : std::string();
+    if (!role.empty()) { d.Str("role", role); }
     d.Array("examined", examined.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
@@ -4678,7 +4682,7 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply 0 to cast Archive Trap for {0} now, during the opponent's turn, or -1 to hold it. "
                "The AI casts it by default.");
     }
-    else if (source.find("(attack dig)") != std::string::npos)
+    else if (source.find("(attack dig)") != std::string::npos || role == "attack_dig")
     {
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
@@ -4874,6 +4878,66 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "so the attacking Plants get Avenger's / Phylath's counters) -- or -1 to keep it. You are "
                "asked again after each crack. Default = keep it (the AI cracks in combat only when its "
                "search committed to it; without that it holds).");
+    }
+    // USER 2026-11-19 ("Message for Manabond makes no sense"): every non-dig reuse below used to fall through to
+    // the generic into-hand dig note (and the viewer's matching "look at the top N" text).
+    else if (source.rfind("Manabond (end step)", 0) == 0)
+    {
+        d.Note("reply 0 for YES: reveal your hand, put ALL its land cards onto the battlefield (the counts are in "
+               "the source), then discard the rest of your hand. Reply -1 for NO: nothing happens. The examined "
+               "card is Manabond itself. Default = the AI's pick.");
+    }
+    else if (source.rfind("Maze's End: activate", 0) == 0)
+    {
+        d.Note("reply an examined index to activate Maze's End now ({3}, {T}, return it to your hand) and put THAT "
+               "Gate from your library onto the battlefield (you win if you then control ten or more Gates with "
+               "different names), or -1 to not activate. The source says when (in response to a trigger that "
+               "will put it back, after an off-main put with no redeploy, or a fetch that wins). Default = the "
+               "AI's pick.");
+    }
+    else if (source == "Burgeoning (opponent played a land)")
+    {
+        d.Note("reply an examined index to put that land card from your hand onto the battlefield, or -1 to put "
+               "nothing. Default = the AI's pick.");
+    }
+    else if (source.find(" or sacrifice it)") != std::string::npos)
+    {
+        d.Note("reply 0 to PAY the cost named in the source and keep the examined permanent, or -1 to SACRIFICE it. "
+               "Default = the AI's pick.");
+    }
+    else if (source.find("(upkeep reveal)") != std::string::npos)
+    {
+        d.Note("reply 0 to reveal the examined top card of your library and put it into your hand, or -1 to leave "
+               "it on top. Default = the AI's pick.");
+    }
+    else if (source.find("(return from graveyard)") != std::string::npos)
+    {
+        d.Note("reply a graveyard index to return that card to your hand. The return is mandatory: -1 takes the "
+               "AI's pick. Default = the AI's pick.");
+    }
+    else if (role == "outlet_haste" || role == "outlet_shrink")
+    {
+        d.Note(role == "outlet_haste"
+               ? "reply an examined index: that creature gains haste until end of turn (the sacrifice is already "
+                 "paid). -1 takes the AI's pick. Default = the AI's pick."
+               : "reply an examined index: that creature gets the outlet's -X/-X until end of turn (the sacrifice is "
+                 "already paid). -1 takes the AI's pick. Default = the AI's pick.");
+    }
+    else if (role == "ice_counter")
+    {
+        d.Note("reply an examined index to put an ice counter on that permanent (it becomes snow). -1 takes the "
+               "AI's pick. Default = the AI's pick.");
+    }
+    else if (role == "impulse_keep")
+    {
+        d.Note("the examined cards were exiled from the top of your library: reply the index of the one you may "
+               "play until the end of your next turn (the other stays exiled). -1 takes the AI's pick. Default = "
+               "the AI's pick.");
+    }
+    else if (role == "reveal_top")
+    {
+        d.Note("reply 0 to reveal the examined top card of your library and put it into your hand, or -1 to leave "
+               "it on top. Default = the AI's pick.");
     }
     else
     {

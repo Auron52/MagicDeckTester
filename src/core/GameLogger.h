@@ -494,6 +494,22 @@ using DigChooser = std::function<int(const GameState& state, int controller, con
                                      const std::vector<Card>& examined,
                                      const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local DigChooser* g_play_dig_chooser;
+// WHAT a dig-chooser frame asks, for the sites whose `source` is a bare card name (USER 2026-11-19: the
+// viewer showed the generic "look at the top N ... the rest go to the bottom" text for prompts that are not
+// digs). The chooser is shared by ~30 different questions and its `source` string is the frame's IDENTITY
+// in reference replay (test/viewer_protocol_check.py frame_ident), so a bare-name site cannot just grow a
+// tag without re-identifying every recorded frame of that kind. A site instead sets this ROLE for the one
+// call (DigRoleScope); WriteDigDecisionJson emits it as `"role"` beside the unchanged source. Viewer /
+// claude-play JSON only: read nowhere in play, so it moves no game.
+inline thread_local const char* g_play_dig_role = nullptr;
+struct DigRoleScope
+{
+    const char* saved;
+    explicit DigRoleScope(const char* role) : saved(g_play_dig_role) { g_play_dig_role = role; }
+    ~DigRoleScope() { g_play_dig_role = saved; }
+    DigRoleScope(const DigRoleScope&) = delete;
+    DigRoleScope& operator=(const DigRoleScope&) = delete;
+};
 
 // ---- Human-play "as this enters, choose a color" chooser (Coldsteel Heart) -----------------
 // CardParams::etb_choose_color. The chooser receives the entering card's name, the colours it may
