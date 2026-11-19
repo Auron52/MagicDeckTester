@@ -1377,21 +1377,26 @@ OVERNIGHT_CASES=(
   "mill 5 4004   5 20"
   "mill 5 5005   5 20"
   "mill2hg 5 4004 5 20"
-  # boars: overnight ENTRY set before its keep table (2026-11-13; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
-  # play rows, boars2hg d5 4x75 b20). Expand to the FULL set just before the keep table is adopted.
+  # boars: the overnight FULL set (2026-11-19, just before its keep-table adoption, accepted with the table
+  # ABSENT first): the angels/pirates/galadriel standard shape -- d0 4x2000, one d3 b10 sanity row, d5 4x1425 b20
+  # (the play setting), boars2hg d5 4x175 b20 (galadriel2hg's full shape). Entered 2026-11-13 at the ENTRY set (d3
+  # 125 b10, d5 4x300 b20, 2hg 4x75 b20). Sized from the 2026-11-19 held-out adoption A/B (PGO, 24 workers busy):
+  # WITH the table d5 b20 costs ~0.27 s/game thread-wall (2hg ~0.70 s), ~1/5 of the table-absent search units, so
+  # the full set projects to ~0.6 worker-h (~1.6% of the 2026-11-12 overnight tier's 37.4 worker-h) -- less than
+  # the ENTRY set cost without the table (~2.1 worker-h).
   "boars      0  4004 2000  0"
   "boars      0  6006 2000  0"
   "boars      0  8008 2000  0"
   "boars      0 10010 2000  0"
-  "boars      3  4004  125 10"
-  "boars      5  4004  300 20"
-  "boars      5  5005  300 20"
-  "boars      5  6006  300 20"
-  "boars      5  7007  300 20"
-  "boars2hg   5  4004   75 20"
-  "boars2hg   5  5005   75 20"
-  "boars2hg   5  6006   75 20"
-  "boars2hg   5  7007   75 20"
+  "boars      3  4004  325 10"
+  "boars      5  4004 1425 20"
+  "boars      5  5005 1425 20"
+  "boars      5  6006 1425 20"
+  "boars      5  7007 1425 20"
+  "boars2hg   5  4004  175 20"
+  "boars2hg   5  5005  175 20"
+  "boars2hg   5  6006  175 20"
+  "boars2hg   5  7007  175 20"
   # sea: overnight ENTRY set before its keep table (2026-11-17; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
   # play rows, sea2hg d5 4x75 b20). Expand to the FULL set just before the keep table is adopted.
   "sea        0  4004 2000  0"
