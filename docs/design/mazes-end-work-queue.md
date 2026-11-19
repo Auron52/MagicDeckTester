@@ -161,3 +161,6 @@ USER (VERBATIM): "And that is fine, because not fetching would be dominated, but
 "I'm heading to bed shortly. If you finish everything else for maze's end feel free to start the mulligan profile overnight."
 So the mulligan profile (`scripts/mullgen.sh run decks/Maze's End`) follows the last fix/accept and the shared push,
 on that frozen commit, alone on the box.
+USER follow-up (VERBATIM): "Naturally, I'm expecting that this means we are matching the references and all other bars. If not, we should focus on doing so first."
+Gate before the mulligan profile: on the pushed tip, every Maze's End reference tied-or-beaten at the shipped d5 b20
+(s3 is still T6 vs the USER's T5 at b20 -- top priority), s2/s7 replay after SHUF, verify_deck green, GT consistent.
