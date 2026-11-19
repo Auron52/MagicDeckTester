@@ -55878,11 +55878,16 @@ bool AaGenericWeatherFlex()
     static const bool s_env = EnvOn("MTG_AA_GENERIC_WEATHER_FLEX");         // DEFAULT OFF (measurement arm)
     return heurarm::Flag(heurarm::AA_GENERIC_WEATHER_FLEX, s_env);
 }
-// MTG_AA_CAST_ORDER_V2 (DEFAULT OFF): the proposed total order (kAaV2List below: casts and board activations) + the same mana ladder + the
-// board-activation order. Overrides MTG_AA_CAST_ORDER and the generic arms while on.
+// MTG_AA_CAST_ORDER_V2 (DEFAULT ON, ADOPTED by the USER 2026-11-19): the total order (kAaV2List below: casts and board
+// activations) + the same mana ladder + the board-activation order. Overrides MTG_AA_CAST_ORDER and the generic arms
+// while on. USER 2026-11-19: "The cast order for Alchemist seems reasonable except that Weather the Storm should remain
+// somewhat flexible so it can go either behind or before the untappers depending on what else is in the line" -- the
+// ladder (AaWeatherFlexActive) is what does that: Weather is the last SETUP cast and the fewest untappers move behind
+// it when the line needs the Alchemist's X. Measured 2026-11-18: net -80 vs generic over 5,000 pairs, every slower game
+// recovers at d8 b0. =0 restores the generic order.
 bool AaCastOrderV2On()
 {
-    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_V2");                // DEFAULT OFF (measurement arm)
+    static const bool s_env = EnvOn("MTG_AA_CAST_ORDER_V2", true);          // DEFAULT ON (USER 2026-11-19)
     return heurarm::Flag(heurarm::AA_CAST_ORDER_V2, s_env);
 }
 
