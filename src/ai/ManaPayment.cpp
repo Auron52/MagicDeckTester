@@ -10782,6 +10782,8 @@ std::atomic<unsigned long long> g_lrk_trial{0}, g_lrk_strand{0}, g_lrk_fired{0};
 // that got as far as the rung's entry and the trials the greedy's own witness settled (`witnessed`, the cheap judge).
 std::atomic<unsigned long long> g_lka_entry{0}, g_lka_filtered{0}, g_lka_trial{0}, g_lka_strand{0}, g_lka_fired{0};
 std::atomic<unsigned long long> g_lka_ns{0}, g_lka_check_bad{0};
+// MTG_LINE_KEEP_ROCK: trials whose rest was judged with the rock being paid for on the board, and those that fired.
+std::atomic<unsigned long long> g_lkr_trial{0}, g_lkr_fired{0};
 struct LineReducerKeepStats
 {
     ~LineReducerKeepStats()
@@ -10793,15 +10795,51 @@ struct LineReducerKeepStats
                      "check_bad=%llu ms=%.1f\n",
                      g_lka_entry.load(), g_lka_trial.load(), g_lka_filtered.load(), g_lka_strand.load(),
                      g_lka_fired.load(), g_lka_check_bad.load(), static_cast<double>(g_lka_ns.load()) / 1e6);
+        std::fprintf(stderr, "[line-keep-rock] rock_trials=%llu rock_fired=%llu\n", g_lkr_trial.load(),
+                     g_lkr_fired.load());
     }
 };
 LineReducerKeepStats g_lrk_stats;
 
 // `bill` payable on a copy of `s` (the complete backtracker; RampLaterPayable's shape with the creature mode exposed).
-bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature)
+// MTG_LINE_KEEP_ROCK: the mana rock this payment is FOR (PayingSpellCard), when it is one that enters untapped --
+// RampLaterPayable's rule -- so the rest of the line is judged on a board that holds it: it resolves before the casts
+// after it, which meet its mana (Dragons s30094937 T4 {Dragonspeaker Shaman + Mind Stone}: the Shaman's generic is the
+// new Mind Stone's {C}). nullptr with the lever off, for a non-rock, and outside a spell payment.
+struct LineKeepRock
+{
+    const CardDefinition* def = nullptr;
+    int                   number = 0;
+};
+LineKeepRock LineKeepRockFor()
+{
+    LineKeepRock r;
+    if (!LineKeepRockOn()) { return r; }
+    const Card* pc = PayingSpellCard();
+    if (pc == nullptr) { return r; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
+    if (d == nullptr || !d->params.mana_rock || d->card.IsCreature() || d->params.enters_tapped) { return r; }
+    r.def = d;
+    r.number = pc->m_number;
+    return r;
+}
+// Put that rock, untapped, on a scratch board (a no-op without one).
+void PutLineKeepRock(GameState& b, const LineKeepRock& rock)
+{
+    if (rock.def == nullptr) { return; }
+    Permanent perm;
+    perm.card             = rock.def->card;
+    perm.card.m_number    = rock.number;
+    perm.controller_index = b.active_player_index;
+    perm.owner_index      = b.active_player_index;
+    b.battlefield.push_back(perm);
+}
+
+bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature, const LineKeepRock& rock = {})
 {
     RampScratch sc(s);
     GameState& c = sc.Board();
+    PutLineKeepRock(c, rock);
     if (!PaymentManaCovers(c, for_creature, bill.ManaValue() - static_cast<int>(c.floating_mana.Total())))
     { return false; }
     ManaPool start = c.floating_mana;
@@ -10904,8 +10942,14 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
                             || (!for_creature && cost_in.ManaValue() >= g_line_noncreature_mv);
     const ManaCost joint = AddManaCosts(cost_in, rest);
     const bool joint_creature = rest_creature || for_creature;   // a necessary-condition bound: the looser mode
-    if (!PaymentManaCovers(state, joint_creature, joint.ManaValue() - floating)) { return none; }
+    // MTG_LINE_KEEP_ROCK: a rock this payment is for is on every board the rest is judged on (it resolves before the
+    // casts after it). The joint bound then also counts its mana -- still a necessary condition (a payment of this bill
+    // off the board plus the rest off what is left and the rock pays the two together off board + rock) -- so the
+    // amount pre-test is left to LineBillPayable's own, on the board with the rock.
+    const LineKeepRock rock = LineKeepRockFor();
+    if (rock.def == nullptr && !PaymentManaCovers(state, joint_creature, joint.ManaValue() - floating)) { return none; }
     (keep_all ? g_lka_trial : g_lrk_trial).fetch_add(1, std::memory_order_relaxed);
+    if (rock.def != nullptr) { g_lkr_trial.fetch_add(1, std::memory_order_relaxed); }
     TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
     RevealLogPause _quiet;
     g_play_tap_pref_chooser = tap_pref;
@@ -10924,6 +10968,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         // re-makes the trial board for the complete judge. MTG_LINE_KEEP_ALL_CHECK=1 runs that judge after a paid
         // witness as well and counts any disagreement (expected 0; printed with MTG_LINE_REDUCER_KEEP_STATS).
         PaymentTapped(state, a.Board(), tapped, nullptr);
+        PutLineKeepRock(a.Board(), rock);   // after the taps are read: the rock is not one of this payment's sources
         static const bool s_check = EnvOn("MTG_LINE_KEEP_ALL_CHECK");
         if (TapForCostSharedDiag(a.Board(), rest, rest_creature, nullptr, honor_legacy_cco))
         {
@@ -10933,7 +10978,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
                 RampScratch c(state);
                 ManaPool av_c = available ? *available : ManaPool{};
                 if (TapForCostSharedDiag(c.Board(), cost_in, for_creature, available ? &av_c : nullptr, honor_legacy_cco)
-                    && !LineBillPayable(c.Board(), rest, rest_creature))
+                    && !LineBillPayable(c.Board(), rest, rest_creature, rock))
                 { g_lka_check_bad.fetch_add(1, std::memory_order_relaxed); }
             }
             return none;
@@ -10942,13 +10987,13 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         ManaPool av_a2 = available ? *available : ManaPool{};
         if (!TapForCostSharedDiag(a2.Board(), cost_in, for_creature, available ? &av_a2 : nullptr, honor_legacy_cco))
         { return none; }
-        if (LineBillPayable(a2.Board(), rest, rest_creature)) { return none; }
+        if (LineBillPayable(a2.Board(), rest, rest_creature, rock)) { return none; }
     }
     else
     {
-        if (LineBillPayable(a.Board(), rest, rest_creature)) { return none; }
+        if (LineBillPayable(a.Board(), rest, rest_creature, rock)) { return none; }
     }
-    if (!LineBillPayable(state, joint, joint_creature)) { return none; }
+    if (!LineBillPayable(state, joint, joint_creature, rock)) { return none; }
     (keep_all ? g_lka_strand : g_lrk_strand).fetch_add(1, std::memory_order_relaxed);
     if (!keep_all) { PaymentTapped(state, a.Board(), tapped, nullptr); }
     // DIAGNOSTIC (print-only / bisection; default off, both inert unless set): MTG_LKA_FIRE_LIMIT=N lets only the first
@@ -10992,8 +11037,9 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             ManaPool av_b = available ? *available : ManaPool{};
             if (!PayHoldingSet(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
             { continue; }
-            if (!LineBillPayable(b.Board(), rest, rest_creature)) { continue; }
+            if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
+            if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             none.held = held;
             return none;
         }
@@ -11013,8 +11059,9 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         ManaPool av_b = available ? *available : ManaPool{};
         if (!MakeLineKeepOption(b.Board(), opt, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
         { continue; }
-        if (!LineBillPayable(b.Board(), rest, rest_creature)) { continue; }
+        if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
         (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
+        if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
         none.opt = opt;
         return none;
     }
