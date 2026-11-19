@@ -862,3 +862,24 @@ Final verification on `79232d09c`: the focused fetch suite passed 9 cases/426 as
 `verify_deck.py decks/Boars/Boars.cod --no-network` reported **GATE PASS**: 19/19 full card coverage; offline card fields pass; all three regression tiers with accepted GT; live viewer decision sweep and all nine GUI decision types pass; zero `[nonconv]` or `[fd-diverge]` across seeds 7001 and 8001, 60 games each; eight play-invariant games/200 decisions passed; external Claude-play sweep has zero unresolved flags; suite membership pass. The online cost audit was intentionally skipped on this repeat run; earlier Boars card-cost audits passed 616/616 (above). The play-invariant driver's repeated-menu rule was aligned with the viewer auditor so a legal zero-cost Lightning Greaves equip cycle is passed after the menu recurs, instead of exhausting the 400-decision cap; a one-game probe at seed 7001 gi0 completed in 25 decisions with no hard flags.
 
 After rebasing onto the shared Merfolk Turns main-phase split (`0c10b683d`), the combined simulator built and a pooled Boars/Merfolk Turns smoke run checked eight rows. All four Boars rows, both searched Merfolk Turns rows, and the Merfolk Turns 2HG row matched their accepted fingerprints. The Merfolk Turns depth-0 row changed 12 games: gi156 improved one turn; gi167, gi440, and gi840 took one extra turn; eight others changed play without changing the win turn. The three slower games all play a second Three Tree City. In the former line, the newly played legendary City supplied mana before the legend rule removed it at combat; `PlayLandFromHand` now checks that state-based action immediately after the land play, as required before priority. gi156 changed its City line and subsequent draws. The other eight changed lines were inspected: four have draw divergence after a changed line, and four have identical draws with the same win turn (some spend the new mana line on earlier spells). The depth-0 Merfolk row was accepted with this correctness reason in the ground-truth provenance; no searched Merfolk row was rebaselined.
+
+## Mulligan profile: generated, validated, shipped DISABLED (2026-11-19)
+
+The exhaustive keep + bottom table WAS generated and passed `mullgen.sh`'s A/B validation. It is shipped
+here quarantined, so the deck's play does not change (USER 2026-11-19: put the Boars profile on the shared
+branch disabled, so that it is obvious it was done).
+
+* Files: `decks/Boars/Boars.keepmodel.exhaustive.profile.DISABLED.json.gz` and
+  `Boars.keepmodel.exhaustive.raw.DISABLED.json.gz`, byte-identical to the `.profile.json.gz` /
+  `.raw.json.gz` of `c474d068b` (branch `adopt/sunday-profiles`, handoff
+  `docs/design/handoff-sunday-profiles-2026-11-16.md`). The renamed names are what keep them inert: the
+  runtime loads only `<stem>.keepmodel.exhaustive.profile.json[.gz]`.
+* Generation: frozen commit `245c26f2a` (the raw meta reads `245c26f2a+dirty`), PGO+LTO, recipe `fast`
+  (R=30), K=18, d1 / b1, play digest `eb58bcf3ec35b9a5`. The decklist is unchanged since then. The screened
+  generation setting is now recorded in `Boars.profile.json` (`value_play`: `expected_buckets` 18,
+  `mull_gen_depth` 1, `mull_gen_budget_ms` 1; generation-only keys, they do not touch play).
+* NOT adopted: `src` has 154 commits since `245c26f2a`. Enabling it is a USER decision and needs: rename to
+  the live names, the keep-table overnight row expansion, a held-out adoption A/B on the current engine, and
+  smoke + regression + overnight GT accepted with the table present.
+* Value leaf: phase A stopped by the USER with 9,942 rows banked (`docs/design/boars-valueleaf-memory-2026-11-17.md`);
+  the deck plays the sampled-gate ladder (`Boars.value.json`, `sampled_gate=3`).
