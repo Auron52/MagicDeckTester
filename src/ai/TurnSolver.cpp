@@ -60704,6 +60704,13 @@ static bool PlayLandByName(GameState& state, const std::string& name, const std:
                            bool allow_shock_pay, const std::string& land_face, int rad_mode,
                            bool from_top);
 static std::string SimulateLandPlay(GameState& state);
+static std::string SimulateLandPlayHeld(GameState& state, int hold);
+// The playout's held drops for `plan` (DecisionProvider::GreedyLandDropsHeld; autonomous only).
+static int GreedyPlanDropsHeld(const GameState& state, const TurnSolver::Plan& plan)
+{
+    if (HumanPlayActive()) { return 0; }
+    return ResolveProvider(state).GreedyLandDropsHeld(state, state.active_player_index, &plan.actions);
+}
 
 // HUMAN PLAY's SHOCK-LAND DEFAULT -- TAPPED ONLY WHEN THE MANA CANNOT POSSIBLY BE NEEDED THIS TURN.
 //
@@ -60838,7 +60845,7 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
     RevealLogPause quiet;
     // An undecided plan's drop is the greedy fallback's (ApplyPlanDirect, pre-combat) -- autonomous
     // only: a human line plays exactly the land it names, never one the human did not choose.
-    if (!plan.land_decided) { if (!HumanPlayActive()) { SimulateLandPlay(base); } return base; }
+    if (!plan.land_decided) { if (!HumanPlayActive()) { SimulateLandPlayHeld(base, GreedyPlanDropsHeld(base, plan)); } return base; }
     if (plan.land_to_play.empty()) { return base; }
     static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
     const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -73669,7 +73676,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (const Action& ra : plan.actions)
                 { if (ra.kind == Action::Kind::ComboRoute) { route_owns_drop = true; break; } }
             }
-            if (!route_owns_drop) { SimulateLandPlay(state); }
+            // Maze's End P5d: a drop held open for the land the plan returns to hand (GreedyLandDropsHeld).
+            if (!route_owns_drop) { SimulateLandPlayHeld(state, GreedyPlanDropsHeld(state, plan)); }
         }
     }
 
@@ -83230,6 +83238,23 @@ static std::string SimulateLandPlay(GameState& state)
         const Player& ap = state.ActivePlayer();
         if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { break; }
         if (SimulateLandPlayOne(state).empty()) { break; }
+    }
+    return first;
+}
+// Maze's End P5d: the greedy drop leaving `hold` open drops for a land the plan returns to hand
+// (DecisionProvider::GreedyLandDropsHeld). hold <= 0 is SimulateLandPlay exactly.
+static std::string SimulateLandPlayHeld(GameState& state, int hold)
+{
+    if (hold <= 0) { return SimulateLandPlay(state); }
+    std::string first;
+    for (int guard = 0; guard < 9; ++guard)
+    {
+        const Player& ap = state.ActivePlayer();
+        if (ap.LandDropsAvailable() - ap.lands_played_this_turn <= hold) { break; }
+        const std::string n = SimulateLandPlayOne(state);
+        if (n.empty()) { break; }
+        if (first.empty()) { first = n; }
+        if (!state.deck_has_static_land_drops) { break; }
     }
     return first;
 }

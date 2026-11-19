@@ -5167,6 +5167,21 @@ public:
     // and Burgeoning's which-land menu to the returned Maze's End. Default false: activate-or-decline searched and
     // every land offered. Never consulted in human play (the person is asked).
     virtual bool OffMainMazeRedeployForced(const GameState&, int /*controller*/) const { return false; }
+
+    // GreedyLandDropsHeld -- how many open land drops the GREEDY land play leaves OPEN for a land the turn will put
+    // back in hand (Maze's End P5d: its fetch returns it to hand and the replay needs a drop). Asked at the two
+    // permitted greedy drop sites only: the beyond-horizon playout's fallback drop (ApplyPlanDirect ->
+    // SimulateLandPlay), where `plan` is the greedy plan about to be applied (chosen before the drop), and the
+    // depth-0 runner's pre-combat drop (AIEngine), where the drop precedes the plan (`plan` == nullptr) and the
+    // held drop is played after the plan's casts if nothing used it. A searched land is never affected. ORDER of
+    // the turn's land plays only; nothing is removed. Default 0 -> byte-identical.
+    virtual int GreedyLandDropsHeld(const GameState&, int /*controller*/, const std::vector<Action>* /*plan*/) const
+    { return 0; }
+
+    // GreedyLandFirst -- a hand index the GREEDY land ranker (GreedyLandRank: the depth-0 runner, the playout's
+    // drop, and the search's last-resort land tiebreak) plays ahead of its four passes, or -1 (the passes decide).
+    // ORDER only. Default -1 -> byte-identical.
+    virtual int GreedyLandFirst(const GameState&, int /*controller*/) const { return -1; }
 };
 
 // ---------------------------------------------------------------------------------------------------

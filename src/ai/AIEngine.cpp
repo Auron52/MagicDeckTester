@@ -4658,7 +4658,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     && !(GreedyHoldLandEnabled()
                          && ResolveProvider(state).HoldFuelWhileComboing(
                                 state, state.active_player_index)))
-                { TryPlayLand(state); }
+                {
+                    // Maze's End P5d (DecisionProvider::GreedyLandDropsHeld): a drop held open for the land the
+                    // plan will return to hand (Maze's End's fetch, then its replay). The plan is solved AFTER this
+                    // drop, so the held drop rides the tutor-deferred replay below: played after the casts if
+                    // nothing (the replay's hand-entry continuation) used it. 0 for every other deck.
+                    const int hold = HumanPlayActive() ? 0
+                        : ResolveProvider(state).GreedyLandDropsHeld(state, state.active_player_index, nullptr);
+                    if (hold > 0) { TryPlayLandKeeping(state, hold); m_tutor_deferred_drop = true; }
+                    else          { TryPlayLand(state); }
+                }
             }
             else
             {
@@ -9279,7 +9288,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             && state.ActivePlayer().lands_played_this_turn
                    < state.ActivePlayer().LandDropsAvailable())
         {
-            TryPlayLand(state);
+            // Maze's End P5d: Maze's End's activation runs in the TRAILING pass, after this replay, so a plan that
+            // fetches keeps one drop open for Maze's End's same-turn replay (DecisionProvider::GreedyLandDropsHeld,
+            // the plan form); the hand-entry continuation plays Maze's End into it. 0 for every other deck.
+            const int hold = HumanPlayActive() ? 0
+                : ResolveProvider(state).GreedyLandDropsHeld(state, state.active_player_index, &plan.actions);
+            if (hold > 0) { TryPlayLandKeeping(state, hold); }
+            else          { TryPlayLand(state); }
             cast_draw_engine = true;
         }
     }
@@ -9916,12 +9931,33 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
 // Land-priority knobs (MTG_LEGACY_STATIC_TAPPED / MTG_LAND_CLOSING_WINDOW): shared readers in
 // EngineFlags.h -- TurnSolver's greedy_land_name mirrors these passes and must read the same flags.
 
+// Maze's End P5d: the greedy drop leaving `hold` open drops (DecisionProvider::GreedyLandDropsHeld), one land at a
+// time. Lockstep twin of the playout's SimulateLandPlayHeld.
+static thread_local bool t_try_land_one_flag = false;   // set: TryPlayLand plays ONE land (no Exploration loop)
+bool AIEngine::TryPlayLandKeeping(GameState& state, int hold)
+{
+    if (hold <= 0) { return TryPlayLand(state); }
+    bool any = false;
+    for (int guard = 0; guard < 9; ++guard)
+    {
+        const Player& lp = state.ActivePlayer();
+        if (lp.LandDropsAvailable() - lp.lands_played_this_turn <= hold) { break; }
+        t_try_land_one_flag = true;
+        const bool played = TryPlayLand(state);
+        t_try_land_one_flag = false;
+        if (!played) { break; }
+        any = true;
+        if (!state.deck_has_static_land_drops) { break; }
+    }
+    return any;
+}
+
 // EXPLORATION (Maze's End I3): the greedy drop takes EVERY open drop (lockstep twin of the rollout's
 // SimulateLandPlay wrapper). Deck-gated: one bool test for every other deck.
 static thread_local bool t_try_land_one = false;
 bool AIEngine::TryPlayLand(GameState& state)
 {
-    if (state.deck_has_static_land_drops && !t_try_land_one)
+    if (state.deck_has_static_land_drops && !t_try_land_one && !t_try_land_one_flag)
     {
         t_try_land_one = true;
         const bool any = TryPlayLand(state);

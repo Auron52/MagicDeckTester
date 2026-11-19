@@ -1,0 +1,293 @@
+diff --git a/src/ai/DecisionProviders.cpp b/src/ai/DecisionProviders.cpp
+index 614c3ca94..171a32878 100644
+--- a/src/ai/DecisionProviders.cpp
++++ b/src/ai/DecisionProviders.cpp
+@@ -20,6 +20,7 @@
+ #include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
+ #include <chrono>
+ #include <thread>
++#include <unordered_set>  // TEMP P5d (a)
+ #include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
+ #include "DecisionProviders.h"
+ 
+@@ -68698,6 +68699,30 @@ static bool MazeManabondOurs(const GameState& s, int me)
+     return false;
+ }
+ 
++// TEMP P5d-3 (eval-axis attribution only)
++// Do the new-name Gates in hand that a land drop may play (distinct names we do not control; Gateway Plaza only when
++// LandPlayOffered would offer it) fill all `drops_open` open land drops? See TapTutorPutEval.
++static bool MazeFetchDropsSpokenTemp(const GameState& s, int me, int drops_open)
++{
++    const Player& pl = s.players[static_cast<std::size_t>(me)];
++    const std::string* seen[16];
++    int n = 0;
++    for (const Card& c : pl.hand)
++    {
++        const std::string& nm = c.m_name.str();
++        if (!MazeNameIsGate(nm) || MazeControlsGateNamed(s, me, nm)) { continue; }
++        bool dup = false;
++        for (int i = 0; i < n; ++i) { if (*seen[i] == nm) { dup = true; break; } }
++        if (dup) { continue; }
++        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
++        if (d != nullptr && d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && MazeAutonomous()
++            && !MazePlazaPayable(s, me, *d, 0)) { continue; }
++        seen[n++] = &nm;
++        if (n >= drops_open || n == 16) { return true; }
++    }
++    return false;
++}
++
+ // P5d: is `a` a Maze's End activation fetching a Gate name `me` does not control (the progress fetch)?
+ static bool MazeNewNameFetch(const GameState& s, int me, const Action& a)
+ {
+@@ -68747,8 +68772,23 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition&
+     const Player& pl = s.players[static_cast<std::size_t>(me)];
+     const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
+     const int full = MazeWeights().fetch;
++    // TEMP P5d-3 eval-axis attribution: each slot moves ONE axis back to the shipped P5c2 (VB) form
++    if (heurarm::Flag(heurarm::P5D_EV_B, false) && drops_open >= 1 && MazeFetchDropsSpokenTemp(s, me, drops_open))
++    { return 0; }
+     if (drops_open <= 0)
+     {
++        if (heurarm::Flag(heurarm::P5D_EV_A, false)) { return full; }
++        // TEMP P5d-3: Amulet of Vigor ours -> Maze's End replayed next turn re-enters UNTAPPED, no activation cycle lost
++        if (heurarm::Flag(heurarm::P5D_EV_AMU1, false) || heurarm::Flag(heurarm::P5D_EV_AMUF, false))
++        {
++            bool amulet = false;
++            for (const Permanent& p : s.battlefield)
++            {
++                if (p.controller_index == me && MazeIsAmuletDef(CardDatabase::Instance().LookupCached(p.card)))
++                { amulet = true; break; }
++            }
++            if (amulet) { return heurarm::Flag(heurarm::P5D_EV_AMUF, false) ? full : 1; }
++        }
+         const int need = source.params.alt_win_distinct_named_count;
+         const bool wins = CountDistinctNamedLandsWithSubtype(s, me, source.params.alt_win_distinct_named_subtype, need)
+                           + 1 >= need;
+@@ -68764,7 +68804,8 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition&
+     // then scores the winning fetch). The I3 three-drop board: Maze's End, two hand Gates, fetch the tenth name.
+     if (MazeFillThenFetchWins(s, me, source, drops_open, target) && !MazeFillThenFetchWins(s, me, source, 0, target))
+     { return 0; }
+-    if (MazeManabondOurs(s, me)) { return kMazeFetchWins; }
++    const int short_v = heurarm::Flag(heurarm::P5D_EV_C2, false) ? full : kMazeFetchWins;   // TEMP
++    if (MazeManabondOurs(s, me)) { return short_v; }
+     int hand_lands = 0;
+     for (const Card& c : pl.hand)
+     {
+@@ -68772,12 +68813,12 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition&
+         if (d != nullptr && d->card.IsLand() && LandPlayOffered(s, me, *d)) { ++hand_lands; }
+     }
+     const int next_drops = 1 + StaticExtraLandDrops(s, me);
+-    if (hand_lands < drops_open + next_drops) { return kMazeFetchWins; }
++    if (hand_lands < drops_open + next_drops) { return short_v; }
+     // Plenty of lands in hand, no Manabond: fetch + replay takes the same names as playing a hand land in that drop and
+     // keeps the land for later, at the cost of {3} -- taken whenever the {3} has nothing else to do (USER: "I don't
+     // think it should be ever worse ... if we have nothing to do with the mana"), outranked by any spell competing for
+     // it ("it can be worse than playing them out").
+-    return 1;
++    return heurarm::Flag(heurarm::P5D_EV_C1, false) ? full : 1;   // TEMP
+ }
+ 
+ // P5d: does filling EVERY open drop with the hand's new-name Gates and then fetching `target` (a new name; empty = any
+@@ -68994,9 +69035,26 @@ static bool MazeHeapTreasureLive(const GameState& s)
+     }
+     return false;
+ }
++// P5d (a) TEMP A/B ONLY: live while we control an untapped Maze's End that can activate (MazeIdleFetchAdmit).
++static bool MazeIdleFetchLive(const GameState& s)
++{
++    static const bool s_env = EnvOn("MTG_P5D_IDLE");
++    if (!heurarm::Flag(heurarm::P5D_IDLE, s_env) || !MazeAutonomous()) { return false; }
++    // TEMP DIAGNOSTIC: MTG_P5D_IDLE_ROOT -- the prune only where g_real_resolution is set (not inside the search)
++    static const bool s_root = EnvOn("MTG_P5D_IDLE_ROOT");
++    if (s_root && !g_real_resolution) { return false; }
++    const int me = s.active_player_index;
++    for (const Permanent& p : s.battlefield)
++    {
++        if (p.controller_index != me || p.tapped) { continue; }
++        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
++        if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value()) { return true; }
++    }
++    return false;
++}
+ bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
+ {
+-    return MazeHeapTreasureLive(s);
++    return MazeHeapTreasureLive(s) || MazeIdleFetchLive(s);
+ }
+ 
+ namespace
+@@ -69131,7 +69189,138 @@ static void MazeHeapTreasureAdmit(const GameState& s, const DecisionProvider& pr
+     }
+ }
+ 
++// P5d (a) -- THE IDLE-MANA FETCH PRUNE (USER 2026-11-18, VERBATIM: "I don't think it should be ever worse (clairvoyance
++// aside) if we have nothing to do with the mana, though."; "Though, if there is idle mana we should use it."; "And that
++// is fine, because not fetching would be dominated, but this would be assuming we can replay it."). A plan P that does
++// not activate Maze's End is REMOVED when the menu also holds "P plus one Maze's End fetch" (same land, the fetch's
++// target any the P3 menu offered) and Maze's End comes back before our next turn in that plan: a land drop is still
++// open after P's land (the same-turn replay), Manabond / Burgeoning will put it back (MazeHandReturnsBeforeNextTurn), or
++// the fetch wins. "The mana has nothing else to do" is read off the menu itself, as Heap Gate's Treasure is: P plus the
++// fetch is on the list exactly when P's spends leave the {3} and Maze's End's own tap unused. The fetch TARGET stays
++// searched (every admitted target's plan is kept), a plan whose mana has another use is untouched, and the list never
++// empties (only a plan with an admitted superset is removed). Never in human play or under the unpruned gate.
++static void MazeIdleFetchAdmit(const GameState& s, const std::vector<DecisionProvider::PlanView>& plans,
++                               std::vector<char>& admit)
++{
++    const int me = s.active_player_index;
++    const Player& pl = s.players[static_cast<std::size_t>(me)];
++    const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
++    const bool returns = MazeHandReturnsBeforeNextTurn(s, me);
++    // TEMP P5d-3 amendment (MTG_P5D_IDLE_MB): Manabond puts Maze's End back only on a "yes", and a yes DISCARDS the rest
++    // of the hand -- so Manabond counts as "comes back" only when P leaves no nonland card in hand. Burgeoning is free.
++    const bool amend_mb = heurarm::Flag(heurarm::P5D_IDLE_MB, false);
++    bool burgeon = false;
++    for (const Permanent& p : s.battlefield)
++    {
++        if (p.controller_index != me) { continue; }
++        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
++        if (d != nullptr && d->params.opponent_land_play_put_land_from_hand) { burgeon = true; }
++    }
++    int hand_nonland = 0;
++    for (const Card& c : pl.hand)
++    {
++        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
++        if (d != nullptr && !d->card.IsLand()) { ++hand_nonland; }
++    }
++    // Playable lands in hand (Gateway Plaza only when its {1} is payable, as LandPlayOffered).
++    int hand_lands = 0;
++    for (const Card& c : pl.hand)
++    {
++        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
++        if (d == nullptr || !d->card.IsLand()) { continue; }
++        if (d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && !MazePlazaPayable(s, me, *d, 0))
++        { continue; }
++        ++hand_lands;
++    }
++    auto is_maze_act = [](const Action& a)
++    {
++        return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
++            && MazeIsMazeDef(a.def);
++    };
++    auto akey = [](const Action& a)
++    {
++        return std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str() + "|"
++             + std::to_string(static_cast<int>(a.ability_mode)) + "|" + a.tutor_target.str() + "|"
++             + std::to_string(a.chosen_x) + "|" + std::to_string(a.sac_source_id) + "|" + std::to_string(a.hand_index);
++    };
++    auto pkey = [](const std::string& land, std::vector<std::string> keys)
++    {
++        std::sort(keys.begin(), keys.end());
++        std::string k = land;
++        for (const std::string& x : keys) { k += '\x1e'; k += x; }
++        return k;
++    };
++    std::unordered_set<std::string> covered;   // (land, actions) a returning fetch extends
++    for (std::size_t i = 0; i < plans.size(); ++i)
++    {
++        if (!admit[i]) { continue; }
++        const Action* fetch = nullptr;
++        int n_maze = 0;
++        std::vector<std::string> rest;
++        for (const Action& a : *plans[i].actions)
++        {
++            if (is_maze_act(a)) { ++n_maze; fetch = &a; continue; }
++            rest.push_back(akey(a));
++        }
++        if (n_maze != 1 || fetch->tutor_target.str() == kTutorDeclineTarget) { continue; }
++        const std::string& t = fetch->tutor_target.str();
++        const CardParams& mp = fetch->def->params;
++        const bool wins_now = MazeNameIsGate(t) && !MazeControlsGateNamed(s, me, t)
++            && CountDistinctNamedLandsWithSubtype(s, me, mp.alt_win_distinct_named_subtype,
++                                                  mp.alt_win_distinct_named_count) + 1
++               >= mp.alt_win_distinct_named_count;
++        // Not when a LATER fetch (after the hand's Gates fill the drops) wins this turn: the activation's win check reads
++        // the Gates in play at that point, and fetching now forfeits it (the I3 three-drop board).
++        if (!wins_now && MazeFillThenFetchWins(s, me, *fetch->def, drops_open, std::string())) { continue; }
++        // "Comes back": the replay drop is left after P's land AND after every other playable land in hand (a later
++        // land drop is what makes "not now" a different turn rather than the same mana idle), or Manabond / Burgeoning
++        // puts Maze's End back, or the fetch wins now.
++        const bool plays = !plans[i].land->empty();
++        const int open_after = drops_open - (plays ? 1 : 0);
++        const int hand_after = std::max(0, hand_lands - (plays ? 1 : 0));
++        bool ret = returns;
++        if (amend_mb && returns && !burgeon)
++        {
++            int cast = 0;
++            for (const Action& a : *plans[i].actions)
++            {
++                if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && !a.def->card.IsLand()) { ++cast; }
++            }
++            ret = hand_nonland - cast <= 0;
++        }
++        const bool back = open_after >= hand_after + 1 || ret || wins_now;
++        if (back) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
++    }
++    if (covered.empty()) { return; }
++    static const bool s_log = EnvOn("MTG_P5D_IDLELOG");   // TEMP DEBUG
++    for (std::size_t i = 0; i < plans.size(); ++i)
++    {
++        if (!admit[i]) { continue; }
++        std::vector<std::string> keys;
++        bool maze = false;
++        for (const Action& a : *plans[i].actions)
++        {
++            if (is_maze_act(a)) { maze = true; break; }
++            keys.push_back(akey(a));
++        }
++        const std::string k = pkey(*plans[i].land, keys);
++        if (!maze && covered.count(k) != 0)
++        {
++            admit[i] = 0;
++            if (s_log)   // TEMP DEBUG
++            {
++                std::string r;
++                for (const Action& a : *plans[i].actions) { r += a.card_name.str(); r += ','; }
++                std::cerr << "[idle-prune] T" << s.turn_number << " real=" << (g_real_resolution ? 1 : 0)
++                          << " drops_open=" << drops_open << " hand_lands=" << hand_lands << " returns=" << returns
++                          << " land=" << *plans[i].land << " acts=" << r << "\n";
++            }
++        }
++    }
++}
++
+ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
+ {
+     if (MazeHeapTreasureLive(s)) { MazeHeapTreasureAdmit(s, *this, plans, admit); }
++    if (MazeIdleFetchLive(s))    { MazeIdleFetchAdmit(s, plans, admit); }
+ }
+diff --git a/src/ai/HeuristicArm.h b/src/ai/HeuristicArm.h
+index ad3e1bed3..2f6130343 100644
+--- a/src/ai/HeuristicArm.h
++++ b/src/ai/HeuristicArm.h
+@@ -1009,6 +1009,14 @@ enum Slot : int
+     ET_OPP_TURN_PRUNE,        // MTG_ET_OPP_TURN_PRUNE     Extra Turns (USER 2026-11-18: "It's silly to give your opponent an extra turn."): Time Warp's / Walk the Aeons' opponent target is not searched (ExtraTurnsProvider::OffersExtraTurnOpponentTarget). Human play unchanged. Default ON; =0 -> both recipients searched
+     MAZE_OFFMAIN_RESPOND,     // MTG_MAZE_OFFMAIN_RESPOND  Maze's End P6 (USER 2026-11-18 ruling 6): an untapped Maze's End is activated IN RESPONSE to a Manabond trigger (on a yes) or a Burgeoning trigger, then redeployed by that trigger (MazesEndProvider::OffMainMazeRedeployForced prunes the activate/decline choice to activate; the Gate fetched stays a searched crossing ordinal). Default ON; =0 -> no off-main response (with MAZE_OFFMAIN_BANK=0: the pre-P6 engine)
+     MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
++    P5D_IDLE,                 // MTG_P5D_IDLE TEMP A/B ONLY (never committed): the idle-mana PRUNE (a)
++    P5D_IDLE_MB,              // MTG_P5D_IDLE_MB TEMP: prune (a) amended -- Manabond "comes back" only when P leaves no nonland card (a yes discards the hand)
++    P5D_EV_A,                 // MTG_P5D_EV_A TEMP: no-drop fetch = full (shipped form)
++    P5D_EV_B,                 // MTG_P5D_EV_B TEMP: hand new-name Gates fill every drop -> 0 (shipped form)
++    P5D_EV_C1,                // MTG_P5D_EV_C1 TEMP: plenty-of-lands tier = full instead of 1
++    P5D_EV_AMU1,              // MTG_P5D_EV_AMU1 TEMP: no-drop fetch = 1 while Amulet of Vigor is ours
++    P5D_EV_AMUF,              // MTG_P5D_EV_AMUF TEMP: no-drop fetch = full while Amulet of Vigor is ours
++    P5D_EV_C2,                // MTG_P5D_EV_C2 TEMP: lands-short / Manabond tier = full instead of 1000
+     COUNT
+ };
+ 
+@@ -1962,6 +1970,14 @@ inline const char* Name(int slot)
+         "MTG_ET_OPP_TURN_PRUNE",
+         "MTG_MAZE_OFFMAIN_RESPOND",
+         "MTG_MAZE_OFFMAIN_BANK",
++        "MTG_P5D_IDLE",
++        "MTG_P5D_IDLE_MB",
++        "MTG_P5D_EV_A",
++        "MTG_P5D_EV_B",
++        "MTG_P5D_EV_C1",
++        "MTG_P5D_EV_AMU1",
++        "MTG_P5D_EV_AMUF",
++        "MTG_P5D_EV_C2",
+     };
+     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
+     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
