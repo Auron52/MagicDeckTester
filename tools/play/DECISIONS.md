@@ -814,6 +814,10 @@ AI default, so undo/checkpoints stay 1:1). Only single-int decisions whose answe
 `heuristic_default` are auto-resolvable this way. **Default is surface-on for everything except
 `land_entry`** (shock lands / Frostboil Snarl), which ships default-**off** because the choice is
 repetitive and its heuristic (pay life / reveal only when it benefits you) is usually right. This is
+Since 2026-11-19 (USER, Spirits seed 9: a main-2 Watery Grave auto-entered tapped and stranded Usher of
+the Fallen's boast) the auto-reply for `land_entry` goes only one way: an "untapped" default (pay / reveal)
+is auto-taken, but an "enter tapped" default is always surfaced. The heuristic says "tapped" when nothing in
+the committed plan needs the mana, and it cannot see a line the user has not queued yet. This is
 a convenience toggle, never an engine-level skip — the audit gate still requires the decision be
 fully wired (all four sites) regardless of the menu default.
 

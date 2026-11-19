@@ -6943,7 +6943,7 @@ function logEvents(dec) { if (dec) logEventList(dec.events); }
 // Only single-int decisions whose answer is exactly `heuristic_default` are auto-resolvable here.
 // `three_tree_city_type` is a source-specific surface setting for `choose_creature_type`.
 const AUTO_RESOLVABLE = {
-  land_entry:      'Shock / reveal lands — pay life (or reveal) vs. enter tapped',
+  land_entry:      'Shock / reveal lands — unchecked: auto pay life (or reveal); still asks when the AI would enter tapped',
   replicate:       'Replicate — how many token copies to make',
   retrace_discard: 'Retrace — which land to discard',
   vial_charge:     'Aether Vial — add a counter',
@@ -7072,6 +7072,12 @@ function autoResolveDecision(dec){
   if (!(surfaceType in AUTO_RESOLVABLE)) return false;
   if (surfaceEnabled(surfaceType)) return false;
   const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
+  // Land entry auto-resolves only toward UNTAPPED. The heuristic's "enter tapped" means "nothing in
+  // the plan you just committed needs this mana" -- it cannot see a line you have not queued yet (USER
+  // 2026-11-19, Spirits seed 9: a main-2 Watery Grave auto-entered tapped and stranded Usher of the
+  // Fallen's boast). Untapped keeps every line tapped has, at the cost of life only, so a "tapped"
+  // default is a real choice and is always asked.
+  if (dec.type==='land_entry' && !def) return false;
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
   // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
   if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
