@@ -1828,3 +1828,40 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   origin -> ./build.sh + mtg-test + smoke (1DB rows will move by the keep table: accept them with the deck filter after
   attribution) -> check_gt_logs -> check_references_safe -> push -> background CI watch. Then viewer audit, Stage 6
   report, leaf_tiebreak --blocks 48, check_references_safe at close, CronDelete 01e1d807.
+
+### CHECKPOINT ~20:15 UTC 2026-11-19 -- keep table GENERATED + VALIDATED; adoption flow in progress
+- mullgen.sh run fast: settings screen PICK d1 b1 (rho 0.9812, fidelity 0.9996, 0.15x play cost), K=11 (both recorded in
+  1 Drop Burn.profile.json value_play; generation-only keys). Gen 17:11 -> 19:10 UTC (PGO, src c4599c921): entries 16559,
+  sub_cells 22864, bottoming_enabled true. VALIDATION PASSED: keep exh vs static -0.1003t (4/4, t -8.4); confounded bottom
+  -0.0354t (5/5, t -9.2). Regression (visibility) net faster 65/64 searched, 193/141 d0. Cost with the table: d5 ~0.34
+  s/game, 2HG ~2.0 s/game (table-absent 6.7 / 26.8).
+- Table copies: logs/1dropburn/keeptable_hold/ (json + journal baks), build/scratch/1db/keeptable_out/ (json + .gz).
+  Table currently OUT of play (moved to build/scratch) for the ENTRY -> FULL step.
+- RUNNING: overnight rows resized to FULL (Midrange Burn shape: d3 4x1000 b10, d5 4x500 b20, 2HG 4x170 b20), table ABSENT:
+  regression.sh --overnight --deck=onedropburn,onedropburn2hg -> logs/1dropburn/overnight_full_absent.log (DONE marker).
+- NEXT: audit + accept that run (--overnight --accept same --deck), commit "ENTRY -> FULL" -> restore the table (live
+  names) -> regression.sh --smoke --overnight + regression, --deck=onedropburn,onedropburn2hg -> keep_adoption_attribution.py
+  per mode/key -> accept -> commit the .gz artifacts + profile.json + GT -> rebase onto origin -> build + mtg-test + PGO + smoke
+  -> push -> CI watch. Then viewer audit, Stage 6 report, leaf_tiebreak --blocks 48, close.
+- ~20:45 UTC: table-absent FULL overnight accepted + committed cc01a9a37 (searched 121 faster / 13 slower vs the 11-17 ENTRY
+  GT: 4 churn, 9 persist = gi259 bottom + order trade-off line changes; d0 1035/141). Table RESTORED (live .json + .gz).
+  RUNNING: regression.sh --smoke --regression --overnight --deck=onedropburn,onedropburn2hg -> logs/1dropburn/adopt_tiers.log.
+  NEXT: keep_adoption_attribution.py smoke/regression/overnight x onedropburn/onedropburn2hg (--run-dir per mode; the pooled
+  run's dirs) -> accept the 3 tiers with the deck filter -> commit artifacts (.gz) + profile.json + GT.
+
+### CHECKPOINT ~21:05 UTC 2026-11-19 (pre-compaction) -- adoption tiers run; attribution RUNNING
+- Pooled --smoke --regression --overnight --deck=onedropburn,onedropburn2hg WITH the table (logs/1dropburn/adopt_tiers.log,
+  makespan 11m25s): all 29 rows moved (expected). Overnight FULL: d3 4/4 faster (-0.003..-0.063), d5 4/4 faster
+  (-0.018..-0.072), 2HG 3/4 faster (-0.12..-0.17; s5005 +0.076), d0 4/4 faster. Smoke all faster. Regression d3/d5 s2002
+  +0.067/+0.073 (75/150 games), d5 s3003 -0.067, 2HG -0.147. Backstops s30161 (overnight, 5 games b0) 3.2 -> 3.8.
+- RUNNING (setsid): keep_adoption_attribution.py {smoke,regression,overnight} x {onedropburn,onedropburn2hg} ->
+  logs/1dropburn/keep_attr.log ("RC <mode> <key> <rc>" lines, final "DONE"); per-run output logs/keep_attr/<mode>_<key>/.
+  It turns the table off by MTG_EXHAUSTIVE_PROFILE=none (no file moves). Must run BEFORE --accept (gt_logs = OLD side).
+- NEXT: every RC 0 (or each unexplained game root-caused) -> regression.sh --smoke --regression --overnight --accept
+  --deck=onedropburn,onedropburn2hg?? NOTE --accept promotes the LAST run per mode: test/logs/<mode> must still be the
+  pooled adoption run (attribution writes to logs/keep_attr, not test/logs) -> check_gt_logs -> commit
+  "1 Drop Burn: ADOPT keep table" with decks/1 Drop Burn/*.keepmodel.exhaustive.{profile,raw}.json.gz (git add -f if
+  ignored; Boars tracks the .gz) + profile.json (value_play K/mull_gen) + GT + ledger -> rebase onto origin -> ./build.sh
+  -> mtg-test -> ./build.sh pgo -> full smoke (byte-identical except upstream's own moves) -> check_gt_logs ->
+  check_references_safe -> push phase-1-2-deck-analyzer (first push this session) -> background gh run watch
+  --interval 60. Then viewer audit, Stage 6 report, leaf_tiebreak --blocks 48, check_references_safe, CronDelete 01e1d807.
