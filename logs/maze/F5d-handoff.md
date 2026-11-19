@@ -90,3 +90,11 @@ A/B is arm-order biased (F5c) -- use separate per-arm batches for wall if it mat
 ONE heavy process at a time; flock /workspaces/MagicDeckTester/build/heavy.lock; MTG_BUILD_JOBS=12; --threads $(nproc);
 MTG_RSS_CAP_GB=20; default cache budget; waiters on PID/DONE, never pgrep -f; no timeouts; push wip/* only; rebase never
 merge; don't touch references/ or the viewer; handoff at ~250K.
+
+## Update after the handoff (F5-4)
+- Gate verify DONE (`gm/r2`, mtg.f5g, 950 games): **GATE-MISS = 0** (r1 had 314). Stats: owing=2744314 bound=203979
+  count=1762126 probe=2697725 strand=327867 fired=96176. Remaining step 1 no longer needs gm.
+- CI: 44465784138 (7e1bdef18) was CANCELLED by the later push, no verdict. Watch 44468086853 (wip/maze-f5,
+  7a59f73dc) and 44468004751 (wip/maze-f5p, uncompiled prune -- red is expected there).
+- build9 DONE (exit 0): `build/Release/mtg` of 7641435f7, copy `build/scratch/maze/f5/mtg.f5h` -- ready for smoke.
+- This update is a LOCAL commit only (not pushed, to avoid cancelling CI again); push it with the next batch.
