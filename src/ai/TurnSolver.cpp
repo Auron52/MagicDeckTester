@@ -33283,7 +33283,9 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state);
 // The search loops' post-apply DEDUP key: BuildDedupKey, land-order canonical under MTG_FOLD_LAND_ORDER_SEEN (P5b-2;
 // defined with BuildDedupKey).
 static TranspositionTable::Key SeenKey(const GameState& state);
+static TranspositionTable::Key SeenKeyGiven(const GameState& state, const TranspositionTable::Key* exact);
 static bool FoldLandOrderSeenLive(const GameState& state);
+static long long FsHexitsNow();   // g_fs_hexits (defined below it; the land-twin census reads it)
 // MTG_PB_FOLD_X_DEBUG: a short description of a post-apply state, for a verify mismatch.
 static std::string PbStateDesc(const GameState& s)
 {
@@ -35710,6 +35712,183 @@ static thread_local int g_fsline_nest = 0;
 inline thread_local unsigned long long g_fs_trunc_events = 0;
 // Leaf rollout TT traffic (SimulateToEnd): lookups and hits (win + bound no-win), per pass deltas.
 inline thread_local long long g_tt_look_n = 0, g_tt_hit_n = 0;
+
+// ---- P5b-3: THE LAND-ORDER FOLD SKIPS ONLY A TWIN WHOSE EVALUATION FINISHED UNCUT -----------------------------
+// P5b-2 (MTG_FOLD_LAND_ORDER_SEEN) put the land-order canonical key (SeenKey) straight into the search loops' dedup
+// sets, so the later of two land-order twins was skipped whatever had happened to the first. Held out it missed the
+// bar by one game, and gi661 (seed 183662, d1 b1) showed why: the twin reached first was evaluated under a budget
+// that CUT its search, and the later twin -- the same board, searched again with the caches the first had warmed --
+// found a strictly better win. A dedup skip assumes the kept twin's value IS the board's value; under an anytime
+// budget a cut evaluation is only a bound, so the repeat look was a free re-search the fold deleted.
+//
+// So the fold now skips a later twin ONLY when an earlier twin's evaluation finished UNCUT. Then its value is the
+// board's value at any larger budget, a later evaluation of the same board can at most tie it (the B&B cutoff only
+// tightens), and the skip removes pure recomputation: an identity at EVERY budget, not only at b0. A cut first
+// twin leaves the later twin searched exactly as with the flag off, and if THAT evaluation finishes uncut it
+// upgrades the entry, so a third twin can be skipped.
+//
+// THE CUT SIGNAL (LandTwinMark) is the watermark the engine's own memo stores already refuse a cut result on (the
+// FS no-win cache, the m1 memo, the game-line cache, DvsTailGate): it is snapshotted when the twin is checked and
+// compared when its evaluation ends. Any of these moving marks the evaluation CUT:
+//   * g_fs_trunc_events -- every truncation the search books: an Overrun()/abandon bail, a pass ceiling, an anytime
+//     wave stop, a beam, a budget-starved memo reuse, a tranche bound refused, a constant-leaf exhaustion;
+//   * budgetbind::t_binds -- every budget test that came back BINDING (Exhausted()/Overrun() true, an enumeration
+//     bound refused for want of budget), counted AT THE TEST, so a cut site that books no truncation (the charged
+//     greedy walk, the equip route) is still seen. Memo replays re-book the binds of the computation they replay;
+//   * g_condemn_drops -- an escalation condemnation drop in the subtree;
+//   * g_sibling_defer_skips -- a line deferred to a sibling's evaluation through a cross-sibling set (below);
+//   * at the close: the per-decision work ceilings (decisionwork::Exceeded / PricedExceeded) and an abandoned game;
+//   * the evaluated line's own `truncated` flag, where the site has one.
+// Over-counting is safe: a false "cut" only leaves the later twin searched, which is the flag-off behaviour. An
+// UNLIMITED budget never binds, so at b0 the fold skips as P5b-2's did (bar beam truncations). All of these are
+// thread_local and advance only on this thread's own deterministic search, so the signal is deterministic and
+// thread-invariant. A first-win horizon exit (g_fs_hexits) is NOT a cut: under iterative deepening it is the pass
+// minimum, a function of the board and the cutoff (the census below counts the skips that rest on one).
+//
+// THE EXACT DEDUP IS UNCHANGED. Each set keeps the exact BuildDedupKey it always held (an exact duplicate is skipped
+// as with the flag off); the land-order twins live beside it in LandTwinSet, consulted only when the exact key is
+// fresh. A window that is never Close()d (the candidate was skipped by a fold, pruned, or returned early) stays
+// CUT: only a site that finished evaluating the candidate may vouch for it.
+// A skip that DEFERS a line to a sibling's evaluation through a set shared across siblings -- the end-of-turn state
+// closure (EotStateSet, handed from an FSLineWin node to every child's tail) and the dominance prune. Inside a twin's
+// window such a skip can rest on a sibling OUTSIDE the window, whose evaluation may have been cut; the twin's own
+// order-twin of that state would not collide with it and would be searched. So it counts as a cut (over-counting
+// the in-window ones, which is safe).
+inline thread_local unsigned long long g_sibling_defer_skips = 0;
+// A WIN served from a memo that a CUT computation stored: the FS line memo (FSLineEntry::cut) and the rollout TT
+// (TranspositionTable::IsCutWin). Both store a win whatever the search met -- a win found is a win -- but a cut
+// search can win LATER than an uncut one would, and the twin's own order-twin state misses that exact-keyed entry
+// and is searched. The stores mark it only with the fold live (LandTwinNodeFrame below / SimulateToEndImpl), so
+// nothing else ever reads or writes it.
+inline thread_local unsigned long long g_lt_cut_reads = 0;
+struct LandTwinMark
+{
+    unsigned long long trunc = 0, binds = 0, drops = 0, defers = 0, cut_reads = 0;
+    long long hexits = 0;
+    void Take()
+    {
+        trunc = g_fs_trunc_events; binds = budgetbind::t_binds; drops = g_condemn_drops;
+        defers = g_sibling_defer_skips; cut_reads = g_lt_cut_reads; hexits = FsHexitsNow();
+    }
+    bool Clean() const
+    {
+        return g_fs_trunc_events == trunc && budgetbind::t_binds == binds && g_condemn_drops == drops
+            && g_sibling_defer_skips == defers && g_lt_cut_reads == cut_reads
+            && !decisionwork::Exceeded() && !decisionwork::PricedExceededQuiet() && !gamework::Abandoned();
+    }
+};
+// The innermost FSLineWin node's entry mark (fold live only), so FSLineStoreWin can say whether the win it stores was
+// found by a search that met a cut (FSLineEntry::cut).
+inline thread_local const LandTwinMark* t_lt_node = nullptr;
+struct LandTwinNodeFrame
+{
+    const LandTwinMark* saved = nullptr;
+    LandTwinMark m;
+    explicit LandTwinNodeFrame(const GameState& s) : saved(t_lt_node)
+    {
+        if (FoldLandOrderSeenLive(s)) { m.Take(); t_lt_node = &m; }
+        else { t_lt_node = nullptr; }
+    }
+    ~LandTwinNodeFrame() { t_lt_node = saved; }
+    LandTwinNodeFrame(const LandTwinNodeFrame&) = delete;
+    LandTwinNodeFrame& operator=(const LandTwinNodeFrame&) = delete;
+};
+namespace landtwin
+{
+// MTG_LAND_TWIN_STATS=1: the census, printed at exit.
+inline std::atomic<long long> g_checked{0};       // exact-fresh candidates checked against the twin map (fold live)
+inline std::atomic<long long> g_skipped{0};       // ...skipped: a twin's evaluation had finished uncut
+inline std::atomic<long long> g_skip_hexit{0};    // ...of which that uncut evaluation ended on a first-win horizon exit
+inline std::atomic<long long> g_cut_searched{0};  // ...a twin had been reached, but every one so far was CUT: searched
+inline std::atomic<long long> g_closed_clean{0};  // windows closed uncut
+inline std::atomic<long long> g_closed_cut{0};    // windows closed cut
+inline std::atomic<long long> g_upgraded{0};      // ...a later twin's uncut close upgraded a cut entry
+inline std::atomic<long long> g_unclosed{0};      // windows never closed (skipped / pruned / returned early)
+inline bool StatsOn() { static const bool v = EnvOn("MTG_LAND_TWIN_STATS"); return v; }
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!StatsOn()) { return; }
+        std::fprintf(stderr, "[land-twin] checked=%lld skipped=%lld (hexit %lld) cut-twin-searched=%lld"
+                             " closed clean=%lld cut=%lld upgraded=%lld unclosed=%lld\n",
+                     g_checked.load(), g_skipped.load(), g_skip_hexit.load(), g_cut_searched.load(),
+                     g_closed_clean.load(), g_closed_cut.load(), g_upgraded.load(), g_unclosed.load());
+    }
+};
+inline Dumper g_dumper;
+}
+struct LandTwinSet
+{
+    // Canonical key -> state: bit 0 = some twin's evaluation finished uncut; bit 1 = that evaluation hit a horizon
+    // exit (census only).
+    std::unordered_map<TranspositionTable::Key, std::uint8_t, TranspositionTable::KeyHash> canon;
+    bool open = false;
+    bool upgrade = false;   // the open window re-searches a twin whose earlier evaluation was cut
+    TranspositionTable::Key open_key{};
+    LandTwinMark mark;
+    ~LandTwinSet() { Drop(); }
+    // A window still open was not vouched for by its site: it stays cut.
+    void Drop()
+    {
+        if (open && landtwin::StatsOn()) { landtwin::g_unclosed.fetch_add(1, std::memory_order_relaxed); }
+        open = false;
+    }
+    // `ck`: the candidate's land-order canonical key (composed exactly as the exact key is). True = an earlier twin
+    // finished uncut, skip this one; false = search it, with a window open on `ck`.
+    bool Check(const TranspositionTable::Key& ck)
+    {
+        Drop();
+        const bool st = landtwin::StatsOn();
+        if (st) { landtwin::g_checked.fetch_add(1, std::memory_order_relaxed); }
+        const auto ins = canon.emplace(ck, std::uint8_t(0));
+        if (!ins.second && (ins.first->second & 1) != 0)
+        {
+            if (st)
+            {
+                landtwin::g_skipped.fetch_add(1, std::memory_order_relaxed);
+                if ((ins.first->second & 2) != 0) { landtwin::g_skip_hexit.fetch_add(1, std::memory_order_relaxed); }
+            }
+            return true;
+        }
+        if (!ins.second && st) { landtwin::g_cut_searched.fetch_add(1, std::memory_order_relaxed); }
+        open = true; open_key = ck; upgrade = !ins.second; mark.Take();
+        return false;
+    }
+    // The site finished evaluating the candidate whose window is open. `line_ok`: the evaluated line was not marked
+    // truncated (sites without one pass true).
+    void Close(bool line_ok = true)
+    {
+        if (!open) { return; }
+        open = false;
+        const bool clean = line_ok && mark.Clean();
+        const bool st = landtwin::StatsOn();
+        if (st) { (clean ? landtwin::g_closed_clean : landtwin::g_closed_cut).fetch_add(1, std::memory_order_relaxed); }
+        if (!clean) { return; }
+        const auto it = canon.find(open_key);
+        if (it == canon.end()) { return; }
+        if (st && upgrade) { landtwin::g_upgraded.fetch_add(1, std::memory_order_relaxed); }
+        it->second = static_cast<std::uint8_t>(1 | (FsHexitsNow() != mark.hexits ? 2 : 0));
+    }
+};
+// The post-apply dedup of the search loops, land-order fold included. `exact` is the candidate's EXACT key as the
+// site has always composed it (BuildDedupKey, an EotHoldFoldKey, a prefix-cached form) and goes into `seen`
+// unchanged; `fold` composes a raw key the same way, for the canonical one. True = a duplicate: skip it.
+template <typename SeenSet, typename FoldFn>
+static bool LandTwinDup(SeenSet& seen, LandTwinSet& tw, const GameState& s, const TranspositionTable::Key& raw,
+                        const TranspositionTable::Key& exact, FoldFn fold)
+{
+    tw.Drop();
+    if (!seen.insert(exact).second) { return true; }
+    if (!FoldLandOrderSeenLive(s)) { return false; }
+    return tw.Check(fold(SeenKeyGiven(s, &raw)));
+}
+template <typename SeenSet>
+static bool LandTwinDup(SeenSet& seen, LandTwinSet& tw, const GameState& s)
+{
+    const TranspositionTable::Key raw = BuildDedupKey(s);
+    return LandTwinDup(seen, tw, s, raw, raw, [](const TranspositionTable::Key& k) { return k; });
+}
 
 // ---- THE ETB-COUNTER FOLD (MTG_ETBC_FOLD, 2026-10-17) --------------------------------------------
 // The searched optional ETB counter axis (AppendSubdecisionAxes, "SEARCHED OPTIONAL ETB COUNTER":
@@ -95225,10 +95404,15 @@ std::vector<TurnSolver::DevSeqStep> TurnSolver::WaveWalkerDevSeqForTest(const Ga
 // The map is built only with the probe on, so this costs nothing in a shipped run.
 template <typename SeenSet, typename SlotMap>
 static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, const GameState& gs,
-                      SeenSet& seen, SlotMap& key_slot)
+                      SeenSet& seen, SlotMap& key_slot, LandTwinSet& twins)
 {
-    const TranspositionTable::Key wk = EotHoldFoldKey(SeenKey(gs), v);   // a kind-4 twin is its own state
-    const bool fresh = seen.insert(wk).second;
+    const TranspositionTable::Key raw = BuildDedupKey(gs);
+    const TranspositionTable::Key wk = EotHoldFoldKey(raw, v);   // a kind-4 twin is its own state
+    // The exact dedup, then the land-order twin of an uncut evaluation (P5b-3; the probe attributes exact ones only).
+    const bool fresh = seen.count(wk) == 0;
+    if (fresh && LandTwinDup(seen, twins, gs, raw, wk, [&](const TranspositionTable::Key& k) { return EotHoldFoldKey(k, v); }))
+    { return true; }
+    if (!fresh) { twins.Drop(); }
     if (BpWaveProbeOn())
     {
         const uint64_t slot_id = (static_cast<uint64_t>(walker.LastBase()) << 8)
@@ -110692,6 +110876,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (cached != nullptr)
         {
             PROF_INC(tt_hits); ++g_tt_hit_n;
+            if (tt->IsCutWin(key)) { ++g_lt_cut_reads; }   // P5b-3: a cut rollout's win (LandTwinMark)
             if (ttprobe::On()) { ttprobe::Add(depth, ttprobe::kWinHit, 0); }
             if (g_fs_sim_trace > 0)
             {
@@ -110855,6 +111040,10 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long binds_at_entry = budgetbind::t_binds;
     const unsigned long long drops_at_entry = g_condemn_drops;
+    // P5b-3: the land-order fold's cut watermark for the win this rollout may store (TranspositionTable::MarkCutWin).
+    const bool lt_live = tt != nullptr && FoldLandOrderSeenLive(state);
+    LandTwinMark lt_mark;
+    if (lt_live) { lt_mark.Take(); }
     // MTG_EXH_LEAF_MEMO (see ExhLeafMemoOn): a spent-budget no-win this pass already computed.
     const bool xm_live = tt != nullptr && nowin_armed && depth >= 1 && ExhLeafMemoOn() && xmmemo::Spent(budget);
     TranspositionTable::Key xm_key{};
@@ -111068,7 +111257,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         }
     }
 
-    if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
+    if (tt != nullptr && result <= max_turns)
+    {
+        PROF_INC(tt_stores); tt->Store(key, result);
+        if (lt_live && result > state_turn_at_entry && !lt_mark.Clean()) { tt->MarkCutWin(key); }   // P5b-3
+    }
     else if (tt != nullptr)
     {
         PROF_INC(tt_nowin);
@@ -111202,6 +111395,10 @@ struct FSLineEntry
     // was searched at the full cutoff) -- the bound is therefore exactly the cutoff it ran under.
     // A WIN carries INT_MAX: valid for every query, i.e. byte-identical to the old behaviour.
     int nowin_bound = std::numeric_limits<int>::max();
+    // P5b-3: a WIN stored by a node whose search met a cut (LandTwinMark), so it may be later than the node's best.
+    // Written and read only with the land-order fold live (LandTwinNodeFrame / g_lt_cut_reads); never read by play.
+    // It sits in the padding after nowin_bound, so sizeof (and every byte budget derived from it) is unchanged.
+    bool cut = false;
     // Order signature of the state the WIN line was computed under (canon mode only; 0 = unset).
     // A SearchLine's actions reference cards by HAND INDEX / battlefield position, so a line is
     // only replayable on a state with the SAME zone ORDER. Ordered keys guaranteed that for free;
@@ -111401,16 +111598,21 @@ static bool FoldLandOrderSeenLive(const GameState& state)
         && !HumanPlayActive() && !DecisionUnpruned();
 }
 static std::atomic<long long> g_flo_seen_canon{0};   // keys built from a re-ordered copy (MTG_FOLD_LAND_ORDER_SEEN)
-static TranspositionTable::Key SeenKey(const GameState& state)
+static TranspositionTable::Key SeenKeyGiven(const GameState& state, const TranspositionTable::Key* exact);
+static TranspositionTable::Key SeenKey(const GameState& state) { return SeenKeyGiven(state, nullptr); }
+// `exact` (optional): BuildDedupKey(state), already computed by the caller -- returned as is wherever the state is
+// already canonical, so the common case builds the key once.
+static TranspositionTable::Key SeenKeyGiven(const GameState& state, const TranspositionTable::Key* exact)
 {
-    if (!FoldLandOrderSeenLive(state)) { return BuildDedupKey(state); }
+    const auto exact_key = [&]() { return exact != nullptr ? *exact : BuildDedupKey(state); };
+    if (!FoldLandOrderSeenLive(state)) { return exact_key(); }
     const int me = state.active_player_index;
     // Positions of our lands that entered this turn, by class. A small board: a flat scan, no allocation unless two
     // lands entered this turn.
     int n_entered = 0;
     for (const Permanent& pm : state.battlefield)
     { if (pm.controller_index == me && pm.entered_this_turn && pm.card.IsLand()) { ++n_entered; } }
-    if (n_entered < 2) { return BuildDedupKey(state); }
+    if (n_entered < 2) { return exact_key(); }
     const DecisionProvider& prov = ResolveProvider(state);
     std::vector<std::pair<int, int>> pos;   // (class, battlefield index)
     pos.reserve(static_cast<std::size_t>(n_entered));
@@ -111435,7 +111637,7 @@ static TranspositionTable::Key SeenKey(const GameState& state)
             { sorted = false; break; }
         }
     }
-    if (sorted) { return BuildDedupKey(state); }
+    if (sorted) { return exact_key(); }
     GameState c = state;
     std::vector<int> cls;
     for (const auto& pc : pos) { if (std::find(cls.begin(), cls.end(), pc.first) == cls.end()) { cls.push_back(pc.first); } }
@@ -111454,6 +111656,24 @@ static TranspositionTable::Key SeenKey(const GameState& state)
     }
     g_flo_seen_canon.fetch_add(1, std::memory_order_relaxed);
     return BuildDedupKey(c);
+}
+unsigned TurnSolver::LandTwinSkipsForTest(const std::vector<GameState>& seq, const std::vector<int>& how)
+{
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen;
+    LandTwinSet tw;
+    unsigned skipped = 0;
+    for (std::size_t i = 0; i < seq.size(); ++i)
+    {
+        if (LandTwinDup(seen, tw, seq[i])) { skipped |= 1u << i; continue; }
+        const int h = i < how.size() ? how[i] : 0;
+        if (h == 1) { ++budgetbind::t_binds; }
+        if (h == 2) { ++g_fs_trunc_events; }
+        if (h == 5) { ++g_lt_cut_reads; }
+        if (h == 6) { ++g_sibling_defer_skips; }
+        if (h == 4) { continue; }
+        tw.Close(h != 3);
+    }
+    return skipped;
 }
 std::uint64_t TurnSolver::LandOrderSeenKeyOf(const GameState& state)
 {
@@ -111794,6 +112014,7 @@ namespace domin
         {
             T().pruned.fetch_add(1, std::memory_order_relaxed);
             out.prune = true;
+            ++g_sibling_defer_skips;   // P5b-3: a twin window that met this is not complete (LandTwinMark)
         }
         return out;
     }
@@ -111982,6 +112203,9 @@ inline void FslPoolRelease(long long kb)
         FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
     }
 }
+static_assert(offsetof(FSLineEntry, cut) < offsetof(FSLineEntry, order_sig)
+              && offsetof(FSLineEntry, order_sig) == offsetof(FSLineEntry, nowin_bound) + 8,
+              "FSLineEntry::cut must live in nowin_bound's padding (P5b-3: byte budgets read sizeof)");
 struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                         TranspositionTable::KeyHash>
 {
@@ -112902,6 +113126,8 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
         && (OfWaveEnabled() || OfWaveProbeOn() || valuearm::t_arm.of_wave > 0))
     { FSLineStoreOfHint(lc, *of_canonical, line, of_units); }
     const std::uint64_t sig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
+    // P5b-3: a win later than this turn, stored by a node that met a cut (only tracked with the land-order fold live).
+    const bool lt_cut = t_lt_node != nullptr && line.win_turn > state.turn_number && !t_lt_node->Clean();
     FSLineCache::iterator it = lc->find(key);
     if (it == lc->end())
     {
@@ -112909,7 +113135,8 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
         const long long kb = FslBytes(line);
         if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
         lc->charged_kb += kb;
-        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
+        lc->emplace(key, FSLineEntry{ .line = line, .nowin_bound = std::numeric_limits<int>::max(), .cut = lt_cut,
+                                      .order_sig = sig });
         if (pastcut::On() && line.win_turn > pastcut::t_node_cutoff)
         { pastcut::g_stores.fetch_add(1, std::memory_order_relaxed); pastcut::t_rec[key] = { lc, pastcut::t_node_cutoff }; }
     }
@@ -112917,7 +113144,8 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
              || (it->second.line.truncated && !line.truncated))   // fill-in: complete line supersedes a truncated one
     {
         const long long oldkb = FslBytes(it->second.line);
-        it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
+        it->second = FSLineEntry{ .line = line, .nowin_bound = std::numeric_limits<int>::max(), .cut = lt_cut,
+                                  .order_sig = sig };
         if (pastcut::On())
         {
             if (line.win_turn > pastcut::t_node_cutoff)
@@ -113560,6 +113788,7 @@ namespace p18
 // the tree's shape. Per-pass deltas, read by the emulated ladder's same-depth comparison.
 inline thread_local long long g_fs_cut_prunes   = 0;
 inline thread_local long long g_fs_hexits       = 0;
+static long long FsHexitsNow() { return g_fs_hexits; }
 inline thread_local long long g_fs_leaf_wt_sum  = 0;
 inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
 namespace p16
@@ -114167,6 +114396,7 @@ static const TurnSolver::SearchLine& LocalFslMemoHit(const FSLineEntry& e,
                                                    const TranspositionTable::Key& key,
                                                    int earliest_latent = 0)
 {
+    if (e.cut) { ++g_lt_cut_reads; }   // P5b-3: a cut search's win (LandTwinMark)
     // A local hit may itself be a pass-one-only answer. Replay the latent observation so
     // every NEW ancestor storing that answer is also removed before the full second pass.
     if (g_devseq_suppress > 0 && g_devseq_dirty_keys != nullptr
@@ -114592,6 +114822,7 @@ struct EotStateSet
             (fresh ? winlesscert::g_dev_distinct
                    : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
         }
+        if (!fresh && collapse) { ++g_sibling_defer_skips; }   // P5b-3: defers to a sibling (LandTwinMark)
         return fresh || !collapse;
     }
 };
@@ -116861,6 +117092,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // EOT and a leaf rollout. The exactness argument does not depend on the plan being a
         // variant -- identical state, identical future, and the first copy was scored first.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> m2_seen_states;
+        LandTwinSet m2_twins;   // P5b-3: the land-order twins beside it (see LandTwinSet)
         // PRE-APPLY STILLBORN SKIP (step 27): main 1's MTG_BP_WAVE_NSKIP rule for main 2's wave-0
         // rank variants. Every rank variant of one base plan at one bp_at walks the identical prefix,
         // so the first one applied measures that breakpoint's continuation count n. A rank >= n
@@ -117363,7 +117595,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 { node_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(q))); }
             }
             {   // post-apply state dedup (see m2_seen_states)
-                const bool fresh = m2_seen_states.insert(SeenKey(s2)).second;
+                const bool fresh = !LandTwinDup(m2_seen_states, m2_twins, s2);   // P5b-3: exact, or an uncut twin
                 if (!fresh)
                 {
                     g_m2_variant_dup_skips.fetch_add(1, std::memory_order_relaxed);
@@ -117401,6 +117633,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // answers first; nothing live = the historical single crossing.
             BoundaryFan fan(s2, /*with_echo=*/true);
             std::optional<GameState> s2_fan;   // a per-pin copy, only when fanning (s2 stays the pre-boundary state)
+            bool m2_lt_ok = true;   // P5b-3: no crossing's line came back truncated
             while (fan.Next())
             {
                 GameState* sxp = &s2;
@@ -117436,6 +117669,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 }
                 TurnSolver::SearchLine sub =
                     FSLineWin(sx, DepthAcrossTurn(sx, depth), max_turns, FsChildCut(sx, cutoff, best.win_turn, max_turns, budget), second_main, tt, lc, budget);
+                m2_lt_ok = m2_lt_ok && !sub.truncated;
                 if (m2t_here)
                 {
                     std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
@@ -117463,6 +117697,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     }
                 }
             }
+            m2_twins.Close(m2_lt_ok);   // P5b-3: this main-2 plan's evaluation (every crossing) ends here
         }
 
         // ---- M2 DEFERRED CONTINUATION WAVES (unconditional since 2026-10-02; see the note above FSLineTail) --
@@ -118157,6 +118392,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     if (p17::On()) { ++p17::t_nodes; }   // MTG_P17_LEDGER (print-only)
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
+    const LandTwinNodeFrame _ltnf(state);   // P5b-3: this node's cut watermark, for FSLineStoreWin (fold live only)
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
     const unsigned long long dvs_hard_at_entry = g_devseq_hard_n;       // ...and its non-canon-drop part (DevSeqDeferredP2)
@@ -119357,6 +119593,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = pre_view.Lazy();   // every lazy entry (put-back clone, look-top variant) is PlanDupSkippable
     for (const TurnSolver::Plan& p : pre) { if (bp_variants_here) { break; } if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    LandTwinSet bp_twins;   // P5b-3: the land-order twins beside it (see LandTwinSet)
     // MTG_COMBAT_PIN_FOLD (see CombatPinFoldOn): this frontier's post-combat states, armed only when
     // it carries a combat-pinned variant. The la_cand loop's twin.
     bool pin_fold_here = false;
@@ -120283,8 +120520,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         (g_rollout_nest > 0 ? bpnode::g_children_rollout
                                             : bpnode::g_children_search).fetch_add(1, std::memory_order_relaxed);
                     }
-                    const TranspositionTable::Key child_key = SeenKey(s3);
-                    if (!bp_seen_states.insert(child_key).second)
+                    const TranspositionTable::Key child_key = BuildDedupKey(s3);
+                    if (LandTwinDup(bp_seen_states, bp_twins, s3, child_key, child_key,
+                                    [](const TranspositionTable::Key& k) { return k; }))   // P5b-3: exact, or an uncut twin
                     {
                         FswDeclinedTrace(state, depth, v, "node-dupe", bp3, s3, -1, best.win_turn);
                         if (s_rollout_stats)
@@ -120335,6 +120573,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             dvs_g.Done(tail, dvs_cut);
                         }
                     }
+                    bp_twins.Close(!tail.truncated);   // P5b-3: this node child's evaluation ends here
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
                     FswDeclinedTrace(state, depth, v, "node-child", bp3, s3, tail.win_turn, best.win_turn);
@@ -120393,8 +120632,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // insert must stay FIRST for a variant plan, or it would see its own key and self-skip).
         if (node_host_here && !bp_variants_here)
         {
-            const TranspositionTable::Key plan_key = SeenKey(s);
-            bp_seen_states.insert(plan_key);
+            const TranspositionTable::Key plan_key = BuildDedupKey(s);
+            // P5b-3: an ordinary plan only RECORDS (never skips), so a twin answer is ignored; its window is opened.
+            (void)LandTwinDup(bp_seen_states, bp_twins, s, plan_key, plan_key, [](const TranspositionTable::Key& k) { return k; });
             if (dupe_trace_pre)
             { pre_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(p))); }
         }
@@ -120402,8 +120642,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
         {
-            const TranspositionTable::Key mk = SeenKey(s);
-            const bool fresh = bp_seen_states.insert(mk).second;
+            const TranspositionTable::Key mk = BuildDedupKey(s);
+            const bool fresh = !LandTwinDup(bp_seen_states, bp_twins, s, mk, mk,
+                                            [](const TranspositionTable::Key& k) { return k; });   // P5b-3: exact, or an uncut twin
             if (etb_fold_expect)
             { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
             if (BpWaveProbeOn() && p.bp_choice < 0)
@@ -120689,6 +120930,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (alt_wins)
             { tail = std::move(tail_rel); chose_release = alt_rec; }
         }
+        bp_twins.Close(!tail.truncated);   // P5b-3: this plan's evaluation ends here (both combat variants)
         // FRESH-SPEND admissibility v2 (MTG_FRESH_SPEND_AXIS): a freshmode variant is admitted
         // ONLY when its simulated line realizes a WIN within the horizon -- a this-turn kill takes
         // the win-floor above (mw136), and a later-turn win competes below by win_turn, which is an
@@ -120934,8 +121176,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
                 // so a wave candidate is also checked against every wave-0 one.
                 {
-                    const TranspositionTable::Key wk = SeenKey(s);
-                    const bool fresh_wk = bp_seen_states.insert(wk).second;
+                    const TranspositionTable::Key wk = BuildDedupKey(s);
+                    const bool fresh_wk = !LandTwinDup(bp_seen_states, bp_twins, s, wk, wk,
+                                                       [](const TranspositionTable::Key& k) { return k; });   // P5b-3
                     if (devseqstats::On())
                     {
                         if (fresh_wk) { dvs_origin.emplace(wk, dvs_slot); }
@@ -121042,6 +121285,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         dvs_g.Done(tail, dvs_cut);
                     }
                 }
+                bp_twins.Close(!tail.truncated);   // P5b-3: this wave variant's evaluation ends here
                 // ...and the tail half of the [fsw-wave] line above (same gate).
                 {
                     static const bool s_fsw_w  = EnvOn("MTG_FSW_TRACE");
@@ -121173,7 +121417,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
                 // and cannot improve on it. Insert-always is safe -- tranche plans are disjoint
                 // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
-                if (!bp_seen_states.insert(SeenKey(s)).second) { return true; }
+                if (LandTwinDup(bp_seen_states, bp_twins, s)) { return true; }   // P5b-3: exact, or an uncut twin
                 if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
                 SimulateCombat(s);
                 if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
@@ -121193,6 +121437,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         dvs_g.Done(tail, dvs_cut);
                     }
                 }
+                bp_twins.Close(!tail.truncated);   // P5b-3: this tranche plan's evaluation ends here
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
                 // took the won_now return above. See the wave-0 comment for the doctrine.
@@ -121454,8 +121699,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc::g_stores.fetch_add(1, std::memory_order_relaxed);
                     if (gamelc::Verify())
                     { gamelc::t_ctx[gk] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<long long>(gamework::Used()) }; }
-                    if (win) { gamelc::t_map.emplace(gk, FSLineEntry{ best, std::numeric_limits<int>::max(),
-                                                                      CanonSimKeyOn() ? FsOrderSig(state) : 0ull }); }
+                    if (win) { gamelc::t_map.emplace(gk, FSLineEntry{ .line = best, .nowin_bound = std::numeric_limits<int>::max(),
+                                                                      .order_sig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull }); }
                     else     // a past-cutoff line is order-exact and unproven: keep only the refutation
                     { gamelc::t_map.emplace(gk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best,
                                                              std::min(cutoff, max_turns + 1) }); }
@@ -128083,6 +128328,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool bp_variants_here = cands.Lazy();   // every lazy entry (put-back clone, look-top variant) is PlanDupSkippable
         for (const Plan& p : candidates) { if (bp_variants_here) { break; } if (PlanDupSkippable(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+        LandTwinSet bp_twins;   // P5b-3: the land-order twins beside it (see LandTwinSet)
         // The bounce fold (see BounceFoldMemo), wherever the post-apply dedup it replaces runs.
         BounceFoldMemo bounce_fold;
         bounce_fold.on     = bp_variants_here && BounceFoldOn();
@@ -128987,7 +129233,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // would defeat its own purpose. (Same reasoning as the dominance prune below.)
                 if (etb_fold_expect)
                 {
-                    const TranspositionTable::Key ek = SeenKey(copy);
+                    const TranspositionTable::Key ek = BuildDedupKey(copy);
                     ((reframe_seen.count(ek) != 0 || bp_seen_states.count(ek) != 0)
                          ? g_put_bounce_verify_ok : g_put_bounce_verify_bad).fetch_add(1, std::memory_order_relaxed);
                 }
@@ -129017,8 +129263,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                     return BuildDedupKey(copy);
                 };
+                // P5b-3: the exact key as always; a land-order twin is a duplicate only of an uncut evaluation.
                 if (bp_variants_here
-                    && !bp_seen_states.insert(EotHoldFoldKey(FoldLandOrderSeenLive(copy) ? SeenKey(copy) : post_apply_key(), plan)).second
+                    && [&] { const TranspositionTable::Key raw = post_apply_key();
+                             return LandTwinDup(bp_seen_states, bp_twins, copy, raw, EotHoldFoldKey(raw, plan),
+                                                [&](const TranspositionTable::Key& k) { return EotHoldFoldKey(k, plan); }); }()
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -129263,7 +129512,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
                 { ++candidates_done; continue; }
                 if (bp_variants_here
-                    && !bp_seen_states.insert(SeenKey(copy)).second
+                    && LandTwinDup(bp_seen_states, bp_twins, copy)   // P5b-3 (see the pre-combat branch)
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -129342,6 +129591,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             leafeval::t_inf = -1;                  // ...and its winning rollout's inf-life stamp
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          cand_cutoff, second_main, tt);
+            bp_twins.Close();   // P5b-3: this candidate's evaluation ends here
             const long long leaf_tb   = leafeval::t_tb;
             const long long leaf_life = leafeval::t_life;
             const int       leaf_inf  = leafeval::t_inf;
@@ -129551,7 +129801,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
-                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot, bp_twins)) { continue; }
                         if (EotHoldTwinInert(v, copy)) { continue; }   // an inert Soulstoke-hold twin
                         _dhs.fresh = true;
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
@@ -129581,7 +129831,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                           continue; }
                         RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
-                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot, bp_twins)) { continue; }
                         _dhs.fresh = true;
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
@@ -129607,6 +129857,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                           ? pass_best_win - 1 : pass_best_win;
                     const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                                        wave_cutoff, second_main, tt);
+                    bp_twins.Close();   // P5b-3: this variant's evaluation ends here
                     // STRICTLY better only. Wave 0's variants share their base plan's `value`, so the
                     // equal-turn value tiebreak the main loop uses would let a deferred rank displace
                     // an equally-good searched line for no measured reason; requiring a strict
@@ -129691,7 +129942,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, true);
                     // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
                     // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
-                    if (!bp_seen_states.insert(EotHoldFoldKey(SeenKey(copy), v)).second) { return true; }
+                    {
+                        const TranspositionTable::Key raw = BuildDedupKey(copy);
+                        if (LandTwinDup(bp_seen_states, bp_twins, copy, raw, EotHoldFoldKey(raw, v),
+                                        [&](const TranspositionTable::Key& k) { return EotHoldFoldKey(k, v); }))
+                        { return true; }
+                    }
                     if (EotHoldTwinInert(v, copy)) { return true; }   // an inert Soulstoke-hold twin
                     { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
@@ -129708,7 +129964,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, false);
                     RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (!bp_seen_states.insert(SeenKey(copy)).second) { return true; }
+                    if (LandTwinDup(bp_seen_states, bp_twins, copy)) { return true; }
                 }
                 if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
                 {
@@ -129727,6 +129983,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                     ? pass_best_win - 1 : pass_best_win;
                 const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                                    gw_cutoff, second_main, tt);
+                bp_twins.Close();   // P5b-3: this tranche plan's evaluation ends here
                 // STRICTLY better only -- same reasoning as the bp wave phase above.
                 if (pass_has_best && win_turn >= pass_best_win) { return true; }
                 if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }

@@ -371,3 +371,43 @@ TEST_CASE("Maze's End P5b-2: the USER's carve-outs keep their order in the key (
         CHECK(TurnSolver::LandOrderSeenKeyOf(ab) != TurnSolver::LandOrderSeenKeyOf(ba));
     }
 }
+
+// ---- P5b-3: the later twin is skipped ONLY when the first one's evaluation finished UNCUT ----------------------
+// A cut evaluation is a bound, not the board's value: the later twin is then searched (the flag-off behaviour), and
+// if ITS evaluation finishes uncut it vouches for the board, so a third twin is skipped. An exact duplicate is
+// skipped as it always was, cut or not.
+TEST_CASE("Maze's End P5b-3: a land-order twin is skipped only after an uncut evaluation")
+{
+    LoadP5bCards();
+    const MazesEndProvider prov;
+    const GameState ab = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+    const GameState ba = Entered(&prov, { { "Boros Guildgate", 3 }, { "Azorius Guildgate", 2 } });
+    {
+        const ArmP5b on(heurarm::FOLD_LAND_ORDER_SEEN, 1);
+        // Uncut first twin: the later one is skipped.
+        CHECK(TurnSolver::LandTwinSkipsForTest({ ab, ba }, { 0, 0 }) == 0b10u);
+        // Every kind of cut leaves the later twin searched: a budget bind, a booked truncation, a truncated line,
+        // a window its site never closed, a cut search's memo win, a line deferred to a sibling.
+        for (int how : { 1, 2, 3, 4, 5, 6 })
+        {
+            CAPTURE(how);
+            CHECK(TurnSolver::LandTwinSkipsForTest({ ab, ba }, { how, 0 }) == 0u);
+        }
+        // A cut first twin, an uncut second: the second upgrades the entry, so a third twin is skipped.
+        const GameState p = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 }, { "Maze's End", 4 } });
+        const GameState q = Entered(&prov, { { "Maze's End", 4 }, { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+        const GameState r = Entered(&prov, { { "Boros Guildgate", 3 }, { "Maze's End", 4 }, { "Azorius Guildgate", 2 } });
+        CHECK(TurnSolver::LandTwinSkipsForTest({ p, q, r }, { 1, 0, 0 }) == 0b100u);
+        CHECK(TurnSolver::LandTwinSkipsForTest({ p, q, r }, { 1, 2, 0 }) == 0u);
+        // An exact duplicate is skipped as it always was, whatever its first evaluation met.
+        CHECK(TurnSolver::LandTwinSkipsForTest({ ab, ab }, { 1, 0 }) == 0b10u);
+        // A state that differs elsewhere is never a twin.
+        GameState x = ba;
+        x.battlefield.back().tapped = false;
+        CHECK(TurnSolver::LandTwinSkipsForTest({ ab, x }, { 0, 0 }) == 0u);
+    }
+    // Flag off: only exact duplicates.
+    const ArmP5b off(heurarm::FOLD_LAND_ORDER_SEEN, 0);
+    CHECK(TurnSolver::LandTwinSkipsForTest({ ab, ba }, { 0, 0 }) == 0u);
+    CHECK(TurnSolver::LandTwinSkipsForTest({ ab, ab }, { 0, 0 }) == 0b10u);
+}
