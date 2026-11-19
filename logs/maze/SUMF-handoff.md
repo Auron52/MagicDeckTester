@@ -96,3 +96,40 @@ MTG_TURN_CENSUS=1 writes a file named `1` into the cwd's repo root: move it out,
 - Machine rules from the brief: one heavy job at a time through `scripts/heavy_run.sh` at full `nproc` threads with
   `export MTG_RSS_CAP_GB=20` and `MTG_BUILD_JOBS=12`; one-thread probes outside the lock; `./build.sh` only; no
   timeouts; waiters on a PID or DONE marker, never `pgrep -f`; scratch under `build/scratch/sumf/`; handoff at ~250K.
+
+---
+## SUMF-2 UPDATE (2026-11-19, supersedes "Remaining, in order" above)
+
+### Done (commit 5ac113fe1 on wip/sumf, pushed)
+- Compile fix: g_stf_* counters were defined ~33K lines after the stats printer that used them.
+- **ROOT CAUSE of the 426 twins = a lockstep BUG**, not just waste: apply_one's noncreature ETB path
+  (TurnSolver.cpp, the FireOwnEtbTriggers call with `lens_imprint_land || etb_choose_color`) passed etb_kx -1 for
+  Guild Summit (an enchantment), so every pinned clone resolved at the UNPINNED count in search while the executor
+  (AIEngine stamps chosen_x > 0 on the stack entry; EffectHandler passes it) tapped the pinned N. The count axis was
+  unfindable at any budget. Fixed; hatch `MTG_SUMMIT_PIN_LOCKSTEP` (DEFAULT ON, heurarm slot) for the A/B only.
+- Fold made breakpoint-aware: a base may reach breakpoints if all come AFTER its Summit resolution
+  (`g_bp_event_epoch`, SpellEffects.h, bumped at the any/latent9/truncasym sites, snapshotted at the resolution).
+  Verify now also compares breakpoint-channel deltas.
+- s3 T4 f0 d5 b20 (1 thread): pre-fix 4,939 (hatch=0+fold=0 reproduces the mtg.base search trace EXACTLY);
+  fix only 6,144; fix+fold 5,839 (132 skips, 128 bp-after; verify 132 ok / 0 MISMATCH). Win T6 in all.
+- Units: all 3,718 cases pass (incl. test_summit_twin_fold).
+- Tiers (chain1, `MTG_PGO=0 regression.sh --both`, rc=1 vs the STALE GT): every non-Maze moved key and every
+  harness "slower" game (6 Maze, 1 Martyr) is byte-identical to the maze-shared peer's 12:51 tier on the pre-change
+  src -> pre-existing, not this change. Vs that pre-change tier, Maze per-game: 0 slower, 4 faster
+  (mazesend_regression_d5_s2002 5.6576 -> 5.6304), d0 untouched, other keys same score with changed digests.
+- Held-out A/B (build/scratch/sumf/ab/, 8,400 jobs, arms base/fix/stf innermost, seeds 221001..224001):
+  d5 x1500: base 5.6053, fix 5.5920 (24/4, net -20), stf 5.5920 (net -20), units/game 126,400 / 128,119 / 126,615.
+  2HG d5 x400: net 0 / 0 (5/4). d3 x400: fix -9, stf -10 (13/3). d0 x500: identical.
+  stf vs fix: units -1.2% (d5), -1.8% (d3), -1.2% (2HG); play net 0 / 0 / -1.
+
+### Running / remaining
+- chain2 (PID file build/scratch/sumf/chain2.pid, log chain2.log, DONE marker line): ref_bench maze_s_end at the
+  shipped policy (refbench2.log; the first run saw n=0 because this worktree had no references/Maze_s_End -- the 11
+  files were COPIED in from the primary checkout, originals untouched; do not commit or delete them here) then d8 b0
+  on every A/B-slower game (ab/d8.json: 11 stf-vs-base pairs + 2HG g273 stf-vs-fix; ab/d8.out).
+- Then: verdict vs the bar; report. Do NOT accept GT, do NOT push the shared branch.
+
+### USER rulings (verbatim, from the SUMF-2 brief)
+- "the top priority are optimizations and fixes"
+- "Wasted work is wasted work regardless of the situation."
+- "Naturally, I'm expecting that this means we are matching the references and all other bars. If not, we should focus on doing so first."
