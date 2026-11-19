@@ -4207,3 +4207,31 @@ Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (cod
     unlimited search does not reproduce. The 9 d0-slower games recover too (d0 g64 is FASTER on P6 at d8).
   - **Accepted** smoke + regression GT scoped `--deck=mazesend,mazesend2hg`: 4 smoke + 6 regression keys moved,
     nothing else; `check_gt_logs` 0 stale.
+
+## References (R1, 2026-11-19): the USER's hand-played games
+
+Full write-up, repros and traces: `logs/maze/R1-results.md` (scratch `build/scratch/maze/r1/`). Binary: the primary
+checkout's `build/Release/mtg` (e682d7942, `HEAD:src` 4cb388bd6) -- the binary the viewer recorded these games on.
+
+**Replay gate (strict).** All 7 references (s12345681, s1-s6) replay: 5 ok, 2 repaired, 0 play-drift / ENUM-GAP /
+BOARD-DIVERGED -- with two checker fixes, neither an engine change:
+- 0b974260a (wip/viewer-maze2): `references/Maze_s_End` resolved to no deck, so every Maze's End reference was a
+  CONTRACT-FAIL replayed by nothing.
+- e62b38895 (wip/maze-r1): s12345681's ENUM-GAP (Guild Summit's recorded target Thran Portal not offered) was the
+  checker's `--tap-pref` reconstruction counting the Gate Summit TAPPED as a payment source, which let the payer
+  spend Thran Portal (1 life) instead of Manor Gate. Effect-tapped targets are now dropped from the pref; inert on
+  every other reference (identical prefs).
+
+**Bench (shipped d5 b20, each reference's exact opening hand).** USER vs search: s12345681 T5/T5, s1 unwon/unwon,
+s2 T5/T5, s3 T6/T6, s4 T5/T5, s5 T5/T5, **s6 T6/T7** (one shortfall). At d5 b100 the search reaches T6 on s6 and
+**beats the USER on s3 (T5)**.
+- **s6 (shortfall, budget).** Diverges at T1: the USER plays Gond Gate, the search Maze's End. No line wins inside
+  the d5 window from T1, so the three tapped-land drops are ranked by their horizon tails (Sea Gate 8, Gond Gate 9,
+  Maze's End 7 at b20). Handed the USER's T1 board, the shipped search wins T6. From T1 it wins T6 at b100, b500 and
+  b2000. Not F6's T5 enumeration gap: from the USER's T5 board the search also wins T6.
+- **s3 (search beats the USER at b100+).** At T5 the USER fetched Planar Nexus; from that board the search wins T5
+  (Gond Gate, Sylvan Scrying -> Gruul Guildgate, Talon Gates put, Maze's End -> Citadel Gate). The search from the
+  USER's T4 frame-0 board does NOT find that T5 even at d2 b0 or d5 b2000, although it finds T5 at d1 from the
+  next frame (after the USER's "Guild Summit + Sylvan Scrying -> Maze's End"). The search evaluates that same plan,
+  but its post-tutor continuation offers only {Maze's End, nothing} and never the following drop, The Black Gate.
+  Summit then draws on The Black Gate's entry, which changes the T5 draw to Gond Gate. Open, see R1-results.
