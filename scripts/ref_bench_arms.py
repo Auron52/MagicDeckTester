@@ -71,6 +71,7 @@ def main():
                  "max_turns": args.max_turns,
                  "force_mulligan": "%d:%s" % (mull.get("count", 0),
                                               ",".join(str(x) for x in (mull.get("bottom") or [])))}
+            j.update(ref_bench.recording_job_fields(g))
             if flags:
                 j["flags"] = flags
             if budget is not None:

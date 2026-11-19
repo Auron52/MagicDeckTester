@@ -119,6 +119,18 @@ def job_name(slug, g):
     return "%s__%s" % (slug, g["name"][:-5] if g["name"].endswith(".json") else g["name"])
 
 
+def recording_job_fields(g):
+    """Batch-job fields that replay a reference under the rules it was recorded with (the manifest
+    twins of viewer_protocol_check.recording_rule_args' --legacy-passive-opponent-lands and
+    --legacy-shared-shuffle-ordinal)."""
+    j = {}
+    if not g["opponent_land_model"]:
+        j["legacy_passive_opponent_lands"] = True
+    if not g["opponent_shuffle_ordinal"]:
+        j["legacy_shared_shuffle_ordinal"] = True
+    return j
+
+
 def run_pooled(entries, args, trace_dir):
     """Run EVERY collected game of EVERY deck as one pooled batch. -> {job_name: win_turn|None|"ERR"}.
 
@@ -141,8 +153,7 @@ def run_pooled(entries, args, trace_dir):
                  "max_turns": args.max_turns,
                  "force_mulligan": "%d:%s" % (mull.get("count", 0),
                                               ",".join(str(x) for x in (mull.get("bottom") or [])))}
-            if not g["opponent_land_model"]:
-                j["legacy_passive_opponent_lands"] = True
+            j.update(recording_job_fields(g))
             if args.depth is not None:
                 # A reference deck may carry an ENABLED value_play lock; an explicit depth must
                 # bypass it, exactly as --depth + --ignore-play-profile did on the CLI.
@@ -312,6 +323,7 @@ def collect_deck(slug, refdir, deck, args):
         games.append({"name": os.path.basename(path), "seed": r["seed"], "gi": r["game_index"],
                       "mull": r.get("mulligan") or {"count": 0, "bottom": []},
                       "opponent_land_model": bool(r.get("opponent_land_model")),
+                      "opponent_shuffle_ordinal": bool(r.get("opponent_shuffle_ordinal")),
                       "human": r["win_turn"] if r.get("won") else None,
                       "want_hand": expected_hand(r)})
     for g in games:                       # a human win beyond the horizon is a loss on this scale

@@ -2898,9 +2898,10 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     // executor with shuffle_salt. Equal by default -> byte-identical / lockstep. See g_shuffle_eval.
     const uint64_t salt = g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt;
     // The opponent's library shuffles on its OWN ordinal and salt (GameState::opponent_search_count),
-    // so its fetch cannot move OUR reshuffles. A legacy replay (opponent_plays_lands false) keeps the
-    // one shared ordinal it was recorded under.
-    if (controller_index != 0 && state.opponent_plays_lands)
+    // so its fetch cannot move OUR reshuffles. A legacy replay (opponent_plays_lands false, or a
+    // reference recorded before this change: legacy_shared_shuffle_ordinal) keeps the one shared
+    // ordinal it was recorded under.
+    if (controller_index != 0 && state.opponent_plays_lands && !state.legacy_shared_shuffle_ordinal)
     {
         const uint64_t seed = SaltSeed(SaltSeed(
             SearchShuffleSeed(state.game_seed, state.opponent_search_count), 0x0990ull), salt);

@@ -469,6 +469,12 @@ def recording_rule_args(ref):
     leftmost land and cracks zero-cost fetches for Mill and other land-observing
     decks. Older references used three fixed placeholder lands and no opponent
     fetch searches; replay them with the old model so their saved lines survive.
+
+    `opponent_shuffle_ordinal` (2026-11-17, 2ad8c3d41): from then on the opponent's library shuffles
+    (its fetch cracks, Mill's Surgical Extraction / Archive Trap) on their own ordinal, so they no
+    longer shift OUR later reshuffles. A recording made before carries no key and was played on the
+    one shared search_count, so it replays with --legacy-shared-shuffle-ordinal (Maze's End s2/s7 and
+    Mill s2/s6 are shuffle-dead without it). Inert on every game whose opponent never shuffles.
     `fetch_on_play` (2026-11-14, USER: "Human play doesn't need to keep the hold, at least by default"):
     from then on a human-play zero-mana one-life fetch's land drop offers each target (resolved ON PLAY)
     and a hold plan (`(hold: crack later)`, the fetch enters uncracked). A `fetch_activation` recording without the
@@ -508,6 +514,8 @@ def recording_rule_args(ref):
         args.append("--legacy-human-fetch-hold")
     if not ref.get("opponent_land_model"):
         args.append("--legacy-passive-opponent-lands")
+    if not ref.get("opponent_shuffle_ordinal"):
+        args.append("--legacy-shared-shuffle-ordinal")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
