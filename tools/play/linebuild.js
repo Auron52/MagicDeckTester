@@ -30,6 +30,22 @@
     const n = decision && decision.me && decision.me.land_drops_left;
     return (typeof n === 'number') ? n : 1;
   }
+  // Extra land drops the QUEUED casts will grant this turn (USER 2026-11-19: "Another annoying thing is that
+  // playing exploration + two lands is not allowed without multiple steps."). The engine stamps
+  // `grants_land_drops` on a hand card that adds drops when it resolves (Exploration's static drop, Explore's
+  // one-shot). Counted once per queued HAND entry of that card, capped by the hand copies queueCard already
+  // enforces. The second land then commits as its own segment (segmentParts cuts at a second land), on the
+  // frame where the granted drop exists.
+  function queuedLandGrants(decision, plan) {
+    const hand = (decision && decision.me && decision.me.hand) || [];
+    let n = 0;
+    (plan || []).forEach(p => {
+      if (!isCastLike(p) || p.kind === 'activate' || p.fromTop) return;
+      const c = hand.find(h => h.name === p.name);
+      if (c && c.grants_land_drops > 0) n += c.grants_land_drops;
+    });
+    return n;
+  }
 
   // Counts of REAL hand copies by name -- excludes staged (exiled-but-playable) cards, which are
   // shown and counted separately (else e.g. 1 hand Mountain + 2 staged Mountains mis-pip as x3).
@@ -284,6 +300,32 @@
     const land = sources.values().next().value;
     return [{ name: land, src: land, kind: 'activate', verb: 'landsearch' },
             Object.assign({}, plan[0], { defer: true }), ...plan.slice(1)];
+  }
+
+  // A LAND QUEUED AFTER CASTS whose mana the line needs (USER 2026-11-19, Maze's End s7_gi6 T2: "Here is
+  // another mana situation": Cliffgate, then Amulet of Vigor -> Simic Guildgate -> Burgeoning off the Gate's
+  // {G}). The engine's validator pays a `landat=<k>` line on the LAND-FIRST board, so a land that only enters
+  // untapped because of something cast before it (Amulet's untap, and in general any land whose entry depends
+  // on the line so far) is priced tapped, and the legal line reads "can't pay". The engine itself reaches the
+  // line in two steps: commit the casts before the land (a land=none plan), then the main phase re-prompts
+  // with the land drop still available and the land enters on the real board. So split the line THERE: the
+  // land and everything after it become the deferred continuation, and each half is validated on the board
+  // it is really played on. Only when the failure is a payment AT OR AFTER the land (a cast before it that
+  // cannot be paid fails identically in both readings -- CheckLine's "before the land" reject), and only on
+  // the first segment's single land with a real action ahead of it. Returns the new plan, or null.
+  function landAfterCastRoute(plan, verdict, reason, failedAction) {
+    if (verdict !== 'illegal' || !/^can't pay\b/i.test(reason || '') || /before the land/i.test(reason || ''))
+      return null;
+    if (!Array.isArray(plan) || plan.length < 2) return null;
+    const seg = segmentParts(plan)[0];
+    const lands = seg.map((p, j) => (p.kind === 'land' ? j : -1)).filter(j => j >= 0);
+    if (lands.length !== 1 || lands[0] === 0 || isDeferred(seg[lands[0]])) return null;
+    const li = lands[0];
+    if (!seg.slice(0, li).some(p => !isPreTap(p))) return null;
+    const failed = String(failedAction || '').replace(/^[a-z_]+=/i, '');
+    if (!failed || !seg.slice(li + 1).some(p => (p.src || p.name) === failed || p.name === failed)) return null;
+    const land = seg[li];
+    return plan.map(p => (p === land ? Object.assign({}, p, { defer: true }) : p));
   }
 
   // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
@@ -821,7 +863,7 @@
         if (karooPositionsOffered(decision, name)) e.karoo = true;   // its queue position is its timing
         return e;
       };
-      if (lands.length < landDropsLeft(decision) && same.length < cap) {
+      if (lands.length < landDropsLeft(decision) + queuedLandGrants(decision, plan) && same.length < cap) {
         plan.push(landEntry());
       } else if (same.length) {
         const cur = same[same.length - 1];
@@ -1132,7 +1174,7 @@
     return null;
   }
 
-  return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
+  return { planLand, planLands, landDropsLeft, queuedLandGrants, handCounts, stagedCounts, castableCount, plannedCount,
            toggleSuspend,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            toggleKicker, toggleFaceDown,
@@ -1141,7 +1183,8 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, repeatBlock, loopBlock, segmentLoopable,
+           segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, landAfterCastRoute, repeatBlock, loopBlock,
+           segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, choicesOf, subOf, digPrompt };

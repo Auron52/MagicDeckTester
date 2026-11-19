@@ -722,6 +722,58 @@ function checkFetchSuspendRoute() {
   return fails;
 }
 
+// A land queued AFTER casts that the rest of the line pays from (USER 2026-11-19, Maze's End s7_gi6 T2:
+// Cliffgate; Amulet of Vigor -> Simic Guildgate -> Burgeoning off the Gate). The validator prices the
+// `landat=1` land as played first (so tapped), and rejects "can't pay {G}". The route splits the line at the
+// land -- the engine's own two-step path (a land=none plan, then the land + Burgeoning on the continuation),
+// both halves of which the binary accepts on that game -- and refuses every shape where a split cannot help.
+function checkLandAfterCastRoute() {
+  const fails = [];
+  const amulet = { name: 'Amulet of Vigor', kind: 'permanent', num: 1 };
+  const gate = { name: 'Simic Guildgate', kind: 'land', num: 53 };
+  const burg = { name: 'Burgeoning', kind: 'permanent', num: 11 };
+  const why = "can't pay {G} for 'Burgeoning' with the mana available this phase";
+  const route = LB.landAfterCastRoute([amulet, gate, burg], 'illegal', why, 'cast=Burgeoning');
+  const want = ['cast=Amulet of Vigor', 'land=Simic Guildgate;cast=Burgeoning'];
+  if (!route || JSON.stringify(LB.encodeSegments(route)) !== JSON.stringify(want))
+    fails.push(`Amulet, Gate, Burgeoning did not split at the land: ${route && JSON.stringify(LB.encodeSegments(route))}`);
+  if (gate.defer) fails.push('the route mutated the queued land instead of copying it');
+  if (LB.landAfterCastRoute([gate, amulet, burg], 'illegal', why, 'cast=Burgeoning') !== null)
+    fails.push('split a land-FIRST line (nothing before the land to commit)');
+  if (LB.landAfterCastRoute([amulet, gate, burg], 'illegal',
+      "can't pay {1} for 'Amulet of Vigor' before the land: `landat=1` plays 'Simic Guildgate' after cast 1",
+      'cast=Amulet of Vigor') !== null)
+    fails.push('split when the cast BEFORE the land is the unpayable one');
+  if (LB.landAfterCastRoute([amulet, burg, gate], 'illegal', why, 'cast=Burgeoning') !== null)
+    fails.push('split when the failing cast is ahead of the land (the land cannot pay it)');
+  if (LB.landAfterCastRoute([amulet, gate, burg], 'illegal', 'invalid target', 'cast=Burgeoning') !== null
+      || LB.landAfterCastRoute([amulet, gate, burg], 'accept', '', '') !== null)
+    fails.push('split a line that did not fail its mana payment');
+  if (LB.landAfterCastRoute([amulet, Object.assign({}, gate, { defer: true }), burg], 'illegal', why,
+      'cast=Burgeoning') !== null)
+    fails.push('re-split a land already deferred');
+  // Item 5 (USER 2026-11-19: "playing exploration + two lands is not allowed without multiple steps"): a
+  // queued Exploration (grants_land_drops 1) makes a second land an ADDITION, and the line commits as the
+  // engine's two segments; without the queued grant the second land still REPLACES the first.
+  const dec = { me: { land_drops_left: 1, hand: [
+    { name: 'Exploration', kind: 'permanent', grants_land_drops: 1 },
+    { name: 'Forest', kind: 'land' }, { name: 'Simic Guildgate', kind: 'land' } ] }, plans: [] };
+  let q = [];
+  q = LB.queueCard(dec, q, 'Exploration', 'permanent');
+  q = LB.queueCard(dec, q, 'Forest', 'land');
+  q = LB.queueCard(dec, q, 'Simic Guildgate', 'land');
+  const qs = LB.encodeSegments(q);
+  if (LB.planLands(q).length !== 2 || qs.length !== 2 || !/cast=Exploration/.test(qs[0]) || !/land(after)?=Forest/.test(qs[0])
+      || qs[1] !== 'land=Simic Guildgate')
+    fails.push(`Exploration + two lands did not queue both lands as two segments: ${JSON.stringify(qs)}`);
+  let r = [];
+  r = LB.queueCard(dec, r, 'Forest', 'land');
+  r = LB.queueCard(dec, r, 'Simic Guildgate', 'land');
+  if (LB.planLands(r).length !== 1 || LB.planLands(r)[0].name !== 'Simic Guildgate')
+    fails.push('without a queued grant the second land no longer replaces the first');
+  return fails;
+}
+
 // The BONUS LAND DROP path (viewer issue #7). A Scale the Heights / Explore grant makes
 // me.land_drops_left > 1, and the engine's Plan still carries ONE land -- so a two-land turn is
 // committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
@@ -1496,6 +1548,10 @@ function main() {
   suspendFails.forEach(m => console.log(`  FAIL  suspend: ${m}`));
   console.log(`Viewer suspend: ${suspendFails.length ? 'WRONG' : 'two copies queue in one line, capped by real hand copies'} ` +
               `(${suspendFails.length} FAIL)`);
+  const landAfterFails = checkLandAfterCastRoute();
+  landAfterFails.forEach(m => console.log(`  FAIL  land after casts: ${m}`));
+  console.log(`Viewer land after casts: ${landAfterFails.length ? 'WRONG' : 'a mid-line land the rest pays from splits into the engine\'s two steps'} ` +
+              `(${landAfterFails.length} FAIL)`);
   const fetchSuspendFails = checkFetchSuspendRoute();
   fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
   console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
@@ -1503,7 +1559,7 @@ function main() {
   return (fail + dimFails.length + repFails.length + digFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + topSpellFails.length + posFails.length + kickFails.length + morphFails.length
-          + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
+          + suspendFails.length + fetchSuspendFails.length + landAfterFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 
 process.exit(main());
