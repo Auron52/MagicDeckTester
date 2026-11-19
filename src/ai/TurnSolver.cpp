@@ -33864,6 +33864,30 @@ bool BpSpeakerGateOn()
     return heurarm::Flag(heurarm::BP_SPEAKER_GATE, on);
 }
 
+// MTG_BP_UNTAP_FLOAT (DEFAULT ON; =0 -> no such key), heurarm BP_UNTAP_FLOAT. Breakpoint SITE 9 for an ACTIVATED
+// UNTAP'S REFUND (2026-11-19; docs/design/aa-staff-in-hand-loop-cast-draw.md, "Second half"). An untapper aimed at a
+// live mana creature that taps for more than the untap costs (Crab Umbra on an Accomplished Alchemist at X >= 4)
+// REFUNDS mana with every activation, and leaves the creature untapped. But a plan applies its casts FIRST and its
+// activations in the trailing pass, so that refund is spendable by nothing in the plan, and -- with the creature
+// untapped again and every other key unchanged -- the delta rule saw no new option, so no continuation ever
+// re-planned onto it. Only a provider-recognised loop NEED (kUntapLoopToNeed + kActUntapLoopFunded) had a route,
+// so a line the provider did not anticipate was unfindable at EVERY budget, --budget-ms 0 included (USER
+// 2026-11-19: "I would like to know why we can't find it at any budget"). Seed 12345681 T3: Brindle Boar
+// sacrificed (X = 4), Umbra on the untapped Alchemist, Staff of Domination in hand -- "untap, untap, cast the Staff
+// off the float with the Alchemist still untapped, loop on" -- found at no budget without the provider's (f) need.
+// THE KEY: the float total beside such a creature (CollectActivationKeys, kActUntapFloat). Present at plan start
+// with the same value -> nothing arms; an untap that refunds -> a NEW value -> site 9 re-plans the rest of the main
+// against the real float, and each further refund re-opens it (MTG_SITE9_REOPEN; the sequences of such
+// re-opens are the wave walker's compound slots, MTG_BP_DEV_SEQ -- a later, priced wave: a finite budget spends on
+// the one-deviation lines first, an unlimited one reaches every sequence). A NEW option, not a heuristic: the
+// search still branches over the whole continuation list. SCOPED BY VALIDITY: only a board with an own activated
+// untapper (Crab Umbra / Staff / Galvanic grant / Seedcradle Witch) aimed at a live mana creature computes it.
+bool BpUntapFloatOn()
+{
+    static const bool on = EnvOn("MTG_BP_UNTAP_FLOAT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::BP_UNTAP_FLOAT, on);
+}
+
 // One ABILITY = one key, so a permanent whose other abilities are unchanged still registers a newly
 // activatable one (the Thallid reaching its third counter). Packed into a scalar rather than kept as
 // a struct so the snapshot is a flat sorted vector that the gate can binary-search. m_number is a
@@ -33905,7 +33929,10 @@ enum : uint64_t {
     kActSelfHaste = 219,
     // Raggadragga (Boars I3b): its cast trigger untapped a TAPPED creature with a mana ability -- new mana the plan
     // was priced without. Board-level, on the Raggadragga, its value GameState::cast_untap_refunds in bits 40+.
-    kActUntapRefund = 220
+    kActUntapRefund = 220,
+    // An activated untap's REFUND (MTG_BP_UNTAP_FLOAT): the float beside a live mana creature an own untapper can
+    // aim at, its value in bits 40+ -- see CollectActivationKeys.
+    kActUntapFloat = 221
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -34241,6 +34268,22 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         {
             out.push_back(ActKey(num, kActUntapLoopFunded)
                           | (static_cast<uint64_t>(std::min(need_mv, 0xFFFF)) << 40));
+        }
+    }
+    // THE ACTIVATED UNTAP'S REFUND (MTG_BP_UNTAP_FLOAT; see BpUntapFloatOn). Mana FLOATING beside a live mana
+    // creature (untapped, able to tap, a positive yield) that an own activated untapper can aim at, valued by the
+    // float total: a plan whose trailing untaps refund mana presents a new value, and site 9 re-plans the rest of
+    // the main on it. Generic over every untapper and every mana creature (not the Alchemist's life-scaled X), and
+    // independent of any provider loop need -- that is what makes the line findable without one.
+    if (state.floating_mana.Total() > 0 && (p.card.IsCreature() || p.is_animated) && !pp.produces.empty()
+        && BpUntapFloatOn() && UntapTargetIsLiveManaCreature(state, p))
+    {
+        std::vector<UntapAbilityRef> frefs;
+        CollectCreatureUntapAbilities(state, ctrl, p, frefs);
+        if (!frefs.empty())
+        {
+            out.push_back(ActKey(num, kActUntapFloat)
+                          | (static_cast<uint64_t>(std::min<int>(static_cast<int>(state.floating_mana.Total()), 0xFFFF)) << 40));
         }
     }
 
@@ -93255,6 +93298,22 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     if ((mask & (1 << 9)) == 0 && TurnSolver::PostEntryBreakpointClassOn() && state.deck_has_cast_target_trigger
         && RaggaUntapPumpAxisWidth(state, p) > 0)
     { mask |= 1 << 9; }
+    // An activated untap aimed at an own MANA creature can refund mana the plan's casts never saw (kActUntapFloat,
+    // MTG_BP_UNTAP_FLOAT): the plan's continuation is where that float is spent. Any board, not only the Alchemist's
+    // (the `alch` clause above). Conservative like the rest: the key's delta is the exact gate.
+    if ((mask & (1 << 9)) == 0 && TurnSolver::PostEntryBreakpointClassOn() && BpUntapFloatOn())
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::ActivateUntap) { continue; }
+            const Permanent* tgt = nullptr;
+            for (const Permanent& q : state.battlefield)
+            { if (q.card.m_number == a.sac_victim_id) { tgt = &q; break; } }
+            if (tgt == nullptr || tgt->controller_index != state.active_player_index || tgt->def_absent) { continue; }
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(tgt->card);
+            if (td != nullptr && !td->params.produces.empty()) { mask |= 1 << 9; break; }
+        }
+    }
     // Pharika can acquire a new physical graveyard target during this plan
     // (Phenax mill, looting, dredge, a resolving spell, or a death). The live
     // activation-key delta is the exact gate; this mask only lets the search

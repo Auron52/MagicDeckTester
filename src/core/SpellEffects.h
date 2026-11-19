@@ -46049,7 +46049,12 @@ inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefiniti
 // goldfish cannot spend is pure cost -- the EldraziFlicker no-sink clause).
 // MTG_AA_LOOP_CAST_DRAW (default ON): the (f) need below -- a draw engine in HAND is a loop payoff. =0 -> no
 // such need (the pre-2026-11-19 behaviour), for A/B only.
-inline bool LoopCastDrawOn() { static const bool v = EnvOn("MTG_AA_LOOP_CAST_DRAW", true); return v; }
+// Routed through heurarm (AA_LOOP_CAST_DRAW) so both arms of its A/B fit ONE pooled batch.
+inline bool LoopCastDrawOn()
+{
+    static const bool v = EnvOn("MTG_AA_LOOP_CAST_DRAW", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::AA_LOOP_CAST_DRAW, v);
+}
 inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
 {
     UntapLoopNeed best;
