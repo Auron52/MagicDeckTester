@@ -1,0 +1,411 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [31, 21] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 51, "name": "Unclaimed Territory" }, { "num": 31, "name": "Millicent, Restless Revenant" }, { "num": 32, "name": "Patrician Geist" }, { "num": 43, "name": "Skyclave Apparition" }, { "num": 28, "name": "Metallic Mimic" }, { "num": 16, "name": "Godless Shrine" }, { "num": 6, "name": "Drogskol Captain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 51, "name": "Unclaimed Territory" }, { "num": 8, "name": "Drogskol Captain" }, { "num": 42, "name": "Shacklegeist" }, { "num": 39, "name": "Secluded Courtyard" }, { "num": 30, "name": "Metallic Mimic" }, { "num": 17, "name": "Godless Shrine" }, { "num": 29, "name": "Metallic Mimic" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 26, "name": "Mausoleum Wanderer" }, { "num": 6, "name": "Drogskol Captain" }, { "num": 54, "name": "Unclaimed Territory" }, { "num": 59, "name": "Watery Grave" }, { "num": 31, "name": "Millicent, Restless Revenant" }, { "num": 13, "name": "Flooded Strand" }, { "num": 21, "name": "Lingering Souls" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 26, "name": "Mausoleum Wanderer", "win_optimal": true }, { "num": 6, "name": "Drogskol Captain", "win_optimal": true }, { "num": 54, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 59, "name": "Watery Grave", "win_optimal": true }, { "num": 31, "name": "Millicent, Restless Revenant", "win_optimal": true }, { "num": 13, "name": "Flooded Strand", "win_optimal": true }, { "num": 21, "name": "Lingering Souls", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 13, "name": "Flooded Strand" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 26, "name": "Mausoleum Wanderer", "win_optimal": true }, { "num": 6, "name": "Drogskol Captain", "win_optimal": true }, { "num": 54, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 59, "name": "Watery Grave", "win_optimal": true }, { "num": 13, "name": "Flooded Strand", "win_optimal": true }, { "num": 21, "name": "Lingering Souls", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 13, "name": "Flooded Strand" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Unclaimed Territory", "cast=Mausoleum Wanderer"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Geist of Saint Traft" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Mausoleum Wanderer"], "actions": [{ "card": "Flooded Strand", "src_num": 13, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Mausoleum Wanderer" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 3, "summary": "land=Watery Grave; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 4, "summary": "land=Flooded Strand; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 5, "summary": "land=Flooded Strand; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 6, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 13, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Watery Grave; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 1,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 6, "cast_order": ["**", "land=Flooded Strand", "cast=Usher of the Fallen"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Usher of the Fallen" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Usher of the Fallen, Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Usher of the Fallen", "Flooded Strand"], "actions": [{ "card": "Usher of the Fallen" }, { "card": "Flooded Strand", "src_num": 13, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Usher of the Fallen"], "actions": [{ "card": "Flooded Strand", "src_num": 13, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Usher of the Fallen" }] },
+    { "index": 5, "summary": "land=Watery Grave; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 6, "summary": "land=Flooded Strand; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 7, "summary": "land=Flooded Strand; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 8, "summary": "land=Flooded Strand; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 9, "summary": "land=Flooded Strand; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 10, "summary": "land=Flooded Strand; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 11, "summary": "land=none; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 12, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 13, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 13, "summary": "land=Watery Grave; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 75,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "land_entry",
+  "source": "Godless Shrine",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Usher of the Fallen entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "sick": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "sick": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Watery Grave", "cast=Geist of Saint Traft"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Aether Vial" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Godless Shrine", "idx": 6, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Watery Grave; cast: Drogskol Captain", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Drogskol Captain"], "actions": [{ "card": "Drogskol Captain" }] },
+    { "index": 1, "summary": "land=Watery Grave; cast: Geist of Saint Traft", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Geist of Saint Traft"], "actions": [{ "card": "Geist of Saint Traft" }] },
+    { "index": 2, "summary": "land=Watery Grave; cast: Aether Vial", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 3, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Watery Grave; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 13,
+  "type": "land_entry",
+  "source": "Watery Grave",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Godless Shrine", "idx": 6, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Geist of Saint Traft entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Watery Grave", "idx": 8, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2), Usher of the Fallen (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Watery Grave", "idx": 8, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Island", "cast=Drogskol Captain"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Island" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Watery Grave", "idx": 8, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Aether Vial, Drogskol Captain", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Aether Vial", "Drogskol Captain"], "cast_order_canonical": ["Aether Vial", "Drogskol Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Drogskol Captain" }] },
+    { "index": 1, "summary": "land=Island; cast: Drogskol Captain, Aether Vial", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drogskol Captain", "Aether Vial"], "cast_order_canonical": ["Drogskol Captain", "Aether Vial"], "actions": [{ "card": "Drogskol Captain" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Island; cast: Drogskol Captain", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drogskol Captain"], "actions": [{ "card": "Drogskol Captain" }] },
+    { "index": 3, "summary": "land=none; cast: Drogskol Captain", "declared_order_payability": "not_verified", "land": null, "casts": ["Drogskol Captain"], "actions": [{ "card": "Drogskol Captain" }] },
+    { "index": 4, "summary": "land=Island; cast: Aether Vial", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 5, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 6, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Drogskol Captain entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Drogskol Captain", "idx": 11, "num": 6, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Island", "idx": 10, "num": 19, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Watery Grave", "idx": 8, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": ["Flooded Strand"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (3), Usher of the Fallen (3), Geist of Saint Traft (3), 4/4 Angel Token (4) — 13 to opponent (14→1)" }, { "turn": 4, "kind": "exile", "text": "4/4 Angel Token -- exiled at end of combat" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Drogskol Captain", "idx": 11, "num": 6, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Geist of Saint Traft", "idx": 9, "num": 14, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Island", "idx": 10, "num": 19, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Watery Grave", "idx": 8, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": ["Flooded Strand"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Drogskol Captain", "idx": 11, "num": 6, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Island", "idx": 10, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Watery Grave", "idx": 8, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 36, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Aether Vial", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Drogskol Captain", "idx": 11, "num": 6, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Godless Shrine", "idx": 6, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Island", "idx": 10, "num": 19, "is_land": true, "taps": "U" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 26, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Plains", "idx": 12, "num": 36, "is_land": true, "taps": "W" }, { "name": "Unclaimed Territory", "idx": 4, "num": 54, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Watery Grave", "idx": 8, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": ["Flooded Strand"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2), Usher of the Fallen (3), Geist of Saint Traft (3), Drogskol Captain (2), 4/4 Angel Token (4) — 14 to opponent (1→-13)" },
+    { "turn": 5, "kind": "exile", "text": "4/4 Angel Token -- exiled at end of combat" }
+  ]
+}
