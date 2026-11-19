@@ -12117,6 +12117,8 @@ static bool SeqWalkUnlockEquip(const GameState& state, const Action& a)
     HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
     return add.Total() > 0;
 }
+static bool SeqWalkTrailingEquip(const GameState& state, const Action& a);   // MTG_SEQ_TRAILING_EQUIP (below)
+static bool SeqTrailingEquipOn();   // MTG_SEQ_TRAILING_EQUIP (below)
 
 // The walk over ONE fixed cast order -- SubsetPayableSequential's body, lifted out so a caller that
 // already holds the order (the EDF provider's ArrangeCastOrder range projection, via
@@ -12643,7 +12645,34 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             fire_unlocks();
         }
     }
-    if (!unlock_acts.empty()) { return false; }   // an unlock the walk could not fire: refused, as before
+    // MTG_SEQ_TRAILING_EQUIP: the trailing equip pass, after every cast. An unlock that never fired joins it when its
+    // host is on the battlefield and no longer locked (hasted otherwise, or tapped); one still locked could not be
+    // paid when it should have fired, and is refused as before.
+    if (!unlock_acts.empty() && !SeqTrailingEquipOn()) { return false; }
+    std::vector<const Action*> trailing;
+    for (const Action& ua : unlock_acts)
+    {
+        const bool eq_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                       [&](const Permanent& p) { return p.card.m_number == ua.sac_source_id; });
+        const bool host_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                         [&](const Permanent& p) { return p.card.m_number == ua.sac_victim_id; });
+        if (!eq_on || !host_on) { return false; }
+        ManaPool add, add_nc;
+        HasteUnlockedManaOf(cp, ua.sac_victim_id, add, add_nc);
+        if (add.Total() > 0) { return false; }   // an unlock the walk could not fire: refused, as before
+        trailing.push_back(&ua);
+    }
+    for (int j : sel)
+    {
+        const Action& ta = cands[static_cast<std::size_t>(j)];
+        if (SeqWalkTrailingEquip(state, ta)) { trailing.push_back(&ta); }
+    }
+    for (const Action* ta : trailing)
+    {
+        const ManaCost ec = EquipActionCostNow(cp, cp.active_player_index, ta->sac_source_id, ta->cost,
+                                               ta->sac_victim_id);
+        if (ec.ManaValue() > 0 && !TapForCostDirect(cp, ec, /*for_creature=*/false)) { return false; }
+    }
     return true;
 }
 
@@ -12676,6 +12705,39 @@ static bool SeqWalkSkipsFreeAttach(const GameState& state, const Action& a)
     return false;
 }
 
+// MTG_SEQ_TRAILING_EQUIP (HeuristicArm slot SEQ_TRAILING_EQUIP; DEFAULT ON, =0 -> refused as an unmodelled kind,
+// as before). A PAID equip that unlocks no mana -- Chariot of Victory ({1}) onto Surrak and Goreclaw, Loxodon
+// Warhammer onto a beater -- is activated by both apply worlds in the trailing equip pass, AFTER the plan's casts,
+// off whatever mana they left. The sequential walk refused every subset holding one ("unmodelled kind"), so a line
+// whose casts pass the walk only in a rescue order was unfindable with its equip at any budget. Jumbo Cactuar
+// s30119376 T5 (ENUM-GAP x19, gate ef-walk-fail): {Tooth and Nail, Surrak, Satyr, Satyr, equip Chariot} on 8 mana
+// -- Surrak first, both Satyrs enter hasted and re-tap the Wild Growth x2 + Overgrowth Forest, Tooth and Nail, and
+// the {1} left pays the equip; the same line WITHOUT the equip was on the menu. So the walk pays such an equip at
+// its end, at the cost EquipActionCostNow reads then (the trailing pass's own price). So is a planned UNLOCK that
+// never fired because its host no longer needed it (an enters-haste watcher hasted it, or it already tapped): the
+// apply leaves it to the same trailing pass. Moving a haste Equipment off a fresh creature whose {T} it enables
+// stays refused (the free-attach rule's carve-out). The walk only prices mana: the equip's host and legality are
+// the enumerator's, as for every cast. docs/design/jumbo-apply-drop-order-2026-11-18.md.
+static bool SeqTrailingEquipOn()
+{
+    static const bool env_on = EnvOn("MTG_SEQ_TRAILING_EQUIP", true);
+    return heurarm::Flag(heurarm::SEQ_TRAILING_EQUIP, env_on);
+}
+static bool SeqWalkTrailingEquip(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::Equip || a.cost.has_x || a.cost.ManaValue() <= 0 || !SeqTrailingEquipOn())
+    { return false; }
+    if (SeqWalkUnlockEquip(state, a)) { return false; }
+    for (const Permanent& eq : state.battlefield)
+    {
+        if (eq.card.m_number != a.sac_source_id || eq.equipped_to == 0) { continue; }
+        for (const Permanent& h : state.battlefield)
+        { if (h.card.m_number == eq.equipped_to) { return h.CanTap(); } }
+        break;
+    }
+    return true;
+}
+
 // True when SubsetPayableSequential refuses `sel` outright -- the "unmodelled kind -> no rescue" exit at
 // the top of its order build (anything but a Vial put, a free attach or a hand cast carrying its def). Must stay in
 // LOCKSTEP with that loop: it is what lets the range rescue skip an arrangement whose walk could never
@@ -12689,6 +12751,7 @@ static bool SubsetHasUnmodelledSeqKind(const GameState& state, const std::vector
         if (a.kind == Action::Kind::ActivateVial) { continue; }
         if (SeqWalkUnlockEquip(state, a)) { continue; }
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }
+        if (SeqWalkTrailingEquip(state, a)) { continue; }
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return true; }
     }
     return false;
@@ -12948,6 +13011,7 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
         if (SeqWalkUnlockEquip(state, a)) { continue; }               // the walk fires it (SeqWalkFixedOrder)
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
+        if (SeqWalkTrailingEquip(state, a)) { continue; }             // paid at the walk's end
         // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
         // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
         // (MTG_EF_SAC, 2026-09-04) and DELETED the same week: it measured inert on both probe
@@ -12993,7 +13057,8 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
         && std::none_of(sel.begin(), sel.end(), [&](int j)
                         { const Action& a = cands[static_cast<std::size_t>(j)];
                           return a.kind == Action::Kind::ActivateVial || IsRevealCostCast(a)
-                                 || SeqWalkUnlockEquip(state, a); }))   // keyed on casts only
+                                 || SeqWalkUnlockEquip(state, a)
+                                 || SeqWalkTrailingEquip(state, a); }))   // keyed on casts only
     {
         const std::vector<int> key(order.begin(), order.end());
         std::vector<int> work = key;   // `order` is thread_local and the tail rewrites its argument
@@ -13182,7 +13247,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
                         { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial
                                  || IsRevealCostCast(cands[static_cast<std::size_t>(j)])
                                  // OrderPaysSequentially is asked the casts only: it would not see the unlock
-                                 || SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); });
+                                 || SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)])
+                                 || SeqWalkTrailingEquip(state, cands[static_cast<std::size_t>(j)]); });
     auto run_walk = [&](const std::vector<int>& ord) -> bool
     {
         if (walk_via_ops) { return TurnSolver::OrderPaysSequentially(state, cands, ord); }
@@ -13367,6 +13433,7 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
         if (SeqWalkUnlockEquip(state, a)) { continue; }               // the walk fires it (SeqWalkFixedOrder)
         if (SeqWalkSkipsFreeAttach(state, a)) { continue; }           // nor does a free attach
+        if (SeqWalkTrailingEquip(state, a)) { continue; }             // paid at the walk's end
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }   // unmodelled
         ord.push_back(j);
     }
@@ -13409,6 +13476,7 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         if (std::find(order.begin(), order.end(), i) != order.end()) { continue; }
         const Action& a = (*use)[static_cast<std::size_t>(i)];
         if (SeqWalkUnlockEquip(state, a)) { sel.push_back(i); any_unlock = true; }
+        else if (SeqWalkTrailingEquip(state, a)) { sel.push_back(i); }   // priced at the walk's end, as the apply pays it
     }
     if (!UnlockOrderHasHaste(*use, order, any_unlock)) { return false; }
     const std::vector<int> none;
