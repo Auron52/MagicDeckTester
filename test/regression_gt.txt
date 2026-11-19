@@ -3,6 +3,16 @@
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
+# accepted-with-regressions (smoke, 2026-11-19): AccomplishedAlchemist MTG_AA_CAST_ORDER_V2 default ON (USER 2026-11-19 adoption; 6b69e003a): Weather the Storm flexible around the untappers; held-out AA A/B net -80; regression slower s2002 gi23 d3/d5 5->6 and s3003 gi20 d5 4->5 are budget churn (recover at 4x/16x: 4,4,4); smoke all AA rows faster; d0 greedy lighter bar 11 slower; only alchemist/alchemist2hg rows changed
+# accepted-with-regressions (regression, 2026-11-19): AccomplishedAlchemist MTG_AA_CAST_ORDER_V2 default ON (USER 2026-11-19 adoption; 6b69e003a): Weather the Storm flexible around the untappers; held-out AA A/B net -80; regression slower s2002 gi23 d3/d5 5->6 and s3003 gi20 d5 4->5 are budget churn (recover at 4x/16x: 4,4,4); smoke all AA rows faster; d0 greedy lighter bar 11 slower; only alchemist/alchemist2hg rows changed
+# accepted-with-regressions (smoke, 2026-11-19): sea-integ-1118 run3 (opponent lands from a pool deck, Sin/Gorger, Sea discard bucket, payable-order walk perf, Jumbo front block) on origin ae2b9f91b; every searched slower game has a verdict (search-shuffle decoupling or b200 recovery): logs/opp-lands/attribution.md, logs/sea-integ/run3-verdicts.md
+# accepted-with-regressions (regression, 2026-11-19): sea-integ-1118 run3 (opponent lands from a pool deck, Sin/Gorger, Sea discard bucket, payable-order walk perf, Jumbo front block) on origin ae2b9f91b; every searched slower game has a verdict (search-shuffle decoupling or b200 recovery): logs/opp-lands/attribution.md, logs/sea-integ/run3-verdicts.md
+# accepted-with-regressions (smoke, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
+# accepted-with-regressions (regression, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
+# accepted-with-regressions (smoke, 2026-11-18): Jumbo MTG_AURA_CEIL_HASTE_UNTAPPER default ON (6e2240a9b): land-Aura ceiling counts same-plan haste-unlocked untappers; held-out Jumbo 640000-644999 7 faster/1 slower net -6, slower gi 641075 recovers at d8 b0; tiers: only Jumbo rows, digest-only (0 slower, 0 faster)
+# accepted-with-regressions (regression, 2026-11-18): Jumbo MTG_AURA_CEIL_HASTE_UNTAPPER default ON (6e2240a9b): land-Aura ceiling counts same-plan haste-unlocked untappers; held-out Jumbo 640000-644999 7 faster/1 slower net -6, slower gi 641075 recovers at d8 b0; tiers: only Jumbo rows, digest-only (0 slower, 0 faster)
+# accepted-with-regressions (smoke, 2026-11-19): Jumbo order levers MTG_PO_UNLOCK_ORDER + MTG_SEQ_TRAILING_EQUIP default ON (+ MTG_AURA_CEIL_HASTE_UNTAPPER), rebased onto sea-integ-1118: held-out 27,000 games Jumbo net -2 (2 faster/0 slower), Angels/Boars/Bruna/Colossus Hammer/Five Colour/Kitty/Martyr 0/0; tiers: only reach decks (Jumbo, Boars, Five Colour, Bruna) moved, searched 0 slower / 1 faster, d0 0 slower
+# accepted-with-regressions (regression, 2026-11-19): Jumbo order levers MTG_PO_UNLOCK_ORDER + MTG_SEQ_TRAILING_EQUIP default ON (+ MTG_AURA_CEIL_HASTE_UNTAPPER), rebased onto sea-integ-1118: held-out 27,000 games Jumbo net -2 (2 faster/0 slower), Angels/Boars/Bruna/Colossus Hammer/Five Colour/Kitty/Martyr 0/0; tiers: only reach decks (Jumbo, Boars, Five Colour, Bruna) moved, searched 0 slower / 1 faster, d0 0 slower
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -216,10 +226,10 @@ vampires_smoke_d0_s1001=4.5450/bc67c1572bbe1b83
 vampires_smoke_d3_s1001=4.2000/5e4dc1394c9a93a5
 vampires_smoke_d5_s1001=4.2229/36c7dc7885a07e73
 vampires2hg_smoke_d5_s1001=4.8600/427eb6a758965cd5
-alchemist_smoke_d0_s1001=6.2390/4241574f79e080b9
-alchemist_smoke_d3_s1001=5.0600/57cfb7e52ee7bd60
-alchemist_smoke_d5_s1001=4.9600/521d16663456e9e5
-alchemist2hg_smoke_d5_s1001=5.1400/701d623781094878
+alchemist_smoke_d0_s1001=6.2230/da3ebeea568ae45b
+alchemist_smoke_d3_s1001=5.0200/dc13a754585a6300
+alchemist_smoke_d5_s1001=4.9400/bf4dcbaa00ebf492
+alchemist2hg_smoke_d5_s1001=5.1400/8dfdf176a8b56b26
 elementals_smoke_d0_s1001=5.5960/c9a78ce3e2e3f6fd
 elementals_smoke_d3_s1001=4.4400/26d17d610e9bc5f0
 elementals_smoke_d5_s1001=4.3360/79f56bdb5319619e
@@ -569,10 +579,10 @@ vampires_regression_d3_s2002=4.2600/d3bfceddf2207af3
 vampires_regression_d5_s2002=4.2050/679b6c92ba1c4188
 vampires_regression_d5_s3003=4.2650/2c4732496196c2aa
 vampires2hg_regression_d5_s2002=4.8600/330a998258a3c943
-alchemist_regression_d0_s2002=6.2120/0fa64b56cc897de9
-alchemist_regression_d3_s2002=4.8800/7ca8606329b0008f
-alchemist_regression_d5_s2002=4.9657/dea54bc822f8163d
-alchemist_regression_d5_s3003=5.0629/e1f5a5c9cc4efee6
+alchemist_regression_d0_s2002=6.1850/af48d6ff270a484b
+alchemist_regression_d3_s2002=4.9000/facd460f97d0724e
+alchemist_regression_d5_s2002=4.9543/d829a1779ee7dd0e
+alchemist_regression_d5_s3003=5.0400/19ef5f1f13434909
 elementals_regression_d0_s2002=5.5970/1685ceae877bb33e
 elementals_regression_d3_s2002=4.3800/fcd127baf81d3bce
 elementals_regression_d5_s2002=4.2800/4548085ee65da630

@@ -38,6 +38,7 @@
     "Stroke of Genius"
   ],
   "env": {
+    "MTG_AA_CAST_ORDER_V2": "0",
     "MTG_AA_GENERIC_WEATHER_FLEX": "1",
     "MTG_AA_COMBO_ROUTE": "0"
   },

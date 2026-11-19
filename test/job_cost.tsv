@@ -1,7 +1,7 @@
 # Per-job work UNITS per game, from the last accepted run of each key (test/lib/job_cost.py).
 # Scheduling only (regression.sh turns it into the job's LPT weight) -- never a result.
 alchemist2hg_smoke_d3_s1001	26439
-alchemist2hg_smoke_d5_s1001	31307
+alchemist2hg_smoke_d5_s1001	32924
 alchemist_overnight_d0_s10010	1
 alchemist_overnight_d0_s4004	1
 alchemist_overnight_d0_s6006	1
@@ -17,15 +17,15 @@ alchemist_overnight_d5_s5005	20952
 alchemist_overnight_d5_s6006	22453
 alchemist_overnight_d5_s7007	25293
 alchemist_regression_d0_s2002	1
-alchemist_regression_d3_s2002	12822
+alchemist_regression_d3_s2002	12897
 alchemist_regression_d3_s3003	14060
-alchemist_regression_d3_s30211	117302
-alchemist_regression_d5_s2002	23621
-alchemist_regression_d5_s3003	19290
-alchemist_regression_d5_s30211	70890
+alchemist_regression_d3_s30211	115280
+alchemist_regression_d5_s2002	23061
+alchemist_regression_d5_s3003	18839
+alchemist_regression_d5_s30211	69674
 alchemist_smoke_d0_s1001	1
-alchemist_smoke_d3_s1001	21693
-alchemist_smoke_d5_s1001	19699
+alchemist_smoke_d3_s1001	23457
+alchemist_smoke_d5_s1001	19557
 angels2hg_overnight_d5_s4004	5087
 angels2hg_overnight_d5_s5005	4887
 angels2hg_overnight_d5_s6006	3983

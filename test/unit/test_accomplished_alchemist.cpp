@@ -3325,6 +3325,15 @@ struct CastOrderArmAa
     ~CastOrderArmAa() { heurarm::t_arm[heurarm::AA_CAST_ORDER] = saved; }
 };
 
+// MTG_AA_CAST_ORDER_V2 is DEFAULT ON (USER 2026-11-19) and takes precedence over every older order arm, so a test of
+// the generic tiers or of an older arm pins it OFF for its whole body.
+struct V2OffAa
+{
+    std::int8_t saved;
+    V2OffAa() : saved(heurarm::t_arm[heurarm::AA_CAST_ORDER_V2]) { heurarm::t_arm[heurarm::AA_CAST_ORDER_V2] = 0; }
+    ~V2OffAa() { heurarm::t_arm[heurarm::AA_CAST_ORDER_V2] = saved; }
+};
+
 const std::vector<std::string>& AaProposedOrder()
 {
     static const std::vector<std::string> v = {
@@ -3359,6 +3368,7 @@ std::vector<std::string> SortedCastsAa(const GameState& s, const std::vector<std
 
 TEST_CASE("Cast order, PROPOSED (MTG_AA_CAST_ORDER=1): one position per card, in the proposed order")
 {
+    const V2OffAa v2off;
     CastOrderArmAa on(1);
     const GameState s = FreshAa();
     const AccomplishedAlchemistProvider& p = AaProv();
@@ -3396,6 +3406,7 @@ TEST_CASE("Cast order, PROPOSED (MTG_AA_CAST_ORDER=1): one position per card, in
 
 TEST_CASE("Cast order, PROPOSED: =0 (and unset) is the generic tiering, byte for byte")
 {
+    const V2OffAa v2off;
     const GameState s = FreshAa();
     const AccomplishedAlchemistProvider& p = AaProv();
     const GenericProvider generic;
@@ -3427,6 +3438,7 @@ TEST_CASE("Cast order, PROPOSED: =0 (and unset) is the generic tiering, byte for
 
 TEST_CASE("Cast order, PROPOSED: the two amendment arms (DEFAULT OFF) move only their own card; inert with the order off")
 {
+    const V2OffAa v2off;
     struct AmendArmAa
     {
         std::int8_t a, w;
@@ -3476,6 +3488,7 @@ TEST_CASE("Cast order, PROPOSED: the two amendment arms (DEFAULT OFF) move only 
 
 TEST_CASE("Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- realised only with the Aura before the Wish")
 {
+    const V2OffAa v2off;
     // A MECHANISM PROBE (ledger, "Proposed cast order (2026-10-21)"). Two untapped Forests, Wild Growth {G} + Living
     // Wish {1}{G} in hand: three mana of cost, and the third is Wild Growth's own extra {G} -- payable ONLY with the
     // Aura cast first, onto a Forest not yet tapped. The plan is enumerated in every arm (the land-Aura bound credit);
@@ -3558,6 +3571,7 @@ struct AaOrderArmsAa
 
 TEST_CASE("Cast order, PROPOSED: WISH_AFTER_LIFE and LIFE_FIRST (DEFAULT OFF) -- the lifegain ahead of the Wish")
 {
+    const V2OffAa v2off;
     GameState g = FreshAa();
     g.m_provider = &AaProv();
     const std::vector<std::string>& base = AaProposedOrder();
@@ -3773,6 +3787,7 @@ std::vector<std::string> MovedAfterAa(std::vector<std::string> v, const std::str
 
 TEST_CASE("Cast order, WISH_LATE (DEFAULT OFF): every card's position, with and without WEATHER_LAST")
 {
+    const V2OffAa v2off;
     GameState g = FreshAa();
     g.m_provider = &AaProv();
     const AccomplishedAlchemistProvider& p = AaProv();
@@ -3829,6 +3844,7 @@ TEST_CASE("Cast order, WISH_LATE (DEFAULT OFF): every card's position, with and 
 
 TEST_CASE("Cast order, WISH_LATE: inert with the order off (=0 and unset)")
 {
+    const V2OffAa v2off;
     const GameState s = FreshAa();
     const AccomplishedAlchemistProvider& p = AaProv();
     const GenericProvider generic;
@@ -3849,6 +3865,7 @@ TEST_CASE("Cast order, WISH_LATE: inert with the order off (=0 and unset)")
 
 TEST_CASE("Cast order, GENERIC_WEATHER_LAST (DEFAULT OFF): the generic tiers with Weather, then Stroke, last")
 {
+    const V2OffAa v2off;
     GameState g = FreshAa();
     g.m_provider = &AaProv();
     const AccomplishedAlchemistProvider& p = AaProv();
@@ -3947,6 +3964,7 @@ TEST_CASE("Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alche
 
 TEST_CASE("Cast order, GENERIC_WEATHER_ONLY_LAST (DEFAULT OFF): the generic tiers with Weather alone last; Stroke stays")
 {
+    const V2OffAa v2off;
     struct GwArmAa
     {
         std::int8_t saved;
