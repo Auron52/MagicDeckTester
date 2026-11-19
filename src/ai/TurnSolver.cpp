@@ -111893,6 +111893,14 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
 //
 // Deck-gated as P5b (static extra land drops, no landfall: Maze's End only); off in human play and under
 // MTG_UNPRUNE. Every other deck, and this deck with the flag off, gets BuildDedupKey exactly.
+//
+// MEASURED (P5b-2, 2026-11-19; logs/maze/P5b2-results.md). Held-out, 2,800 games per deck at P5b's shapes: Maze's End
+// 2 better / 3 worse, net +1; 2HG 4 better / 3 worse, net -1; units -0.8% / -1.4% (d1 -2.3..-2.6%; d5 b20 flat or up,
+// the freed budget spent elsewhere). Every slower game recovers at d8 b0 with the SAME digest on both arms (and 3-9%
+// fewer units there). Root cause of the losses: under a tiny budget (d1 b1/b3) the twin reached first is evaluated
+// TRUNCATED, and the later duplicate -- the same board looked at again, caches warm -- finds a strictly better win
+// (std 183662 gi661 T2: Azorius-first twin 7, Talon-first twin 6 at b1; both 6 at b3). Not net <= 0 on Maze's End,
+// so DEFAULT OFF: the USER's call (=1 arms it).
 static bool FoldLandOrderSeenFlag()
 {
     static const bool env = EnvOn("MTG_FOLD_LAND_ORDER_SEEN", false);
