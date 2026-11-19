@@ -55292,6 +55292,83 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                 kept_est = e;
             }
         }
+        // A SECOND IDENTICAL FETCH SOURCE IS NARROWED, NEVER DROPPED (USER 2026-11-19, Maze's End seed 8 gi7 T5:
+        // "The viewer prevents me from activating multiple maze's end at once"). Two Maze's Ends are two groups of
+        // the same `def`, one member per Gate name (+ the fail-to-find), ~21 wide each. The cover key treats the
+        // second as a duplicate of the first, and the rank-fill then dropped it whole on that frame (87,872
+        // positions against 65,536, kept 24,200), so no line of the menu activated both. Dropping it removes an
+        // ACTION: the second activation. Narrowing its TARGETS does not: every target stays offered on the first
+        // source (identical sources, so a pair {X, Y} needs only one of them in the second group), the targets
+        // left out of the second group are reachable by committing one activation and taking the second on the
+        // re-prompt, and "Play it anyway" pins both groups whole (a pinned card is never narrowed here). So a
+        // dropped repeat of a return-self TapTutorPut source (tap_tutor_put_return_self: Maze's End) comes back
+        // with as many of its members as still fit, best first: the provider's own fetch value (TapTutorPutEval:
+        // a new Gate name), then emitted (library) order, with a name we already control and the fail-to-find
+        // last. Runs only on a frame the valve already narrowed; a frame that fits is untouched.
+        {
+            std::vector<const CardDefinition*> first_src;   // defs whose first source group is kept
+            for (int g : kept)
+            {
+                if (groups[g].empty()) { continue; }
+                const Action& a0 = cands[groups[g].front()];
+                if (a0.kind == Action::Kind::ActivatePermAbility && a0.ability_mode == Action::AbilityMode::TapTutorPut
+                    && a0.def != nullptr && a0.def->params.tap_tutor_put_return_self)
+                { first_src.push_back(a0.def); }
+            }
+            std::unordered_set<std::string> controlled;
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == state.active_player_index) { controlled.insert(p.card.m_name.str()); } }
+            for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+            {
+                std::vector<int>& grp = groups[g];
+                if (grp.size() < 2 || std::find(kept.begin(), kept.end(), g) != kept.end()) { continue; }
+                const Action& a0 = cands[grp.front()];
+                if (a0.kind != Action::Kind::ActivatePermAbility || a0.ability_mode != Action::AbilityMode::TapTutorPut
+                    || a0.def == nullptr || !a0.def->params.tap_tutor_put_return_self) { continue; }
+                if (std::find(first_src.begin(), first_src.end(), a0.def) == first_src.end()) { continue; }
+                bool uniform = true;
+                for (int j : grp)
+                {
+                    const Action& a = cands[j];
+                    if (a.kind != a0.kind || a.ability_mode != a0.ability_mode || a.def != a0.def
+                        || a.sac_source_id != a0.sac_source_id) { uniform = false; break; }
+                }
+                if (!uniform) { continue; }
+                if (viewerplancap::AnyPinned() && viewerplancap::IsPinned(a0.card_name.str())) { continue; }
+                std::vector<int> order = grp;
+                auto late = [&](int j) {
+                    const std::string t = cands[j].tutor_target.str();
+                    return t == kTutorDeclineTarget || controlled.count(t) > 0;
+                };
+                std::stable_sort(order.begin(), order.end(), [&](int x, int y) {
+                    const bool lx = late(x), ly = late(y);
+                    if (lx != ly) { return !lx; }
+                    return cands[x].eval > cands[y].eval;
+                });
+                const std::vector<int> full_grp = grp;
+                std::size_t w = 0;
+                std::pair<double, double> best_e{ 0.0, 0.0 };
+                kept.push_back(g);
+                for (std::size_t n = 1; n <= order.size(); ++n)
+                {
+                    grp.assign(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(n));
+                    const std::pair<double, double> e =
+                        viewerplancap::Estimate(ViewerGroupCosts(cands, groups, kept), num_independent, mb);
+                    if (e.second > pcap || e.first > wcap) { break; }
+                    w = n; best_e = e;
+                }
+                if (w == 0) { kept.pop_back(); grp = full_grp; continue; }   // not even one target fits: dropped
+                grp.assign(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(w));
+                kept_est = best_e;
+                viewerplancap::Trunc& nacc = viewerplancap::Acc();
+                nacc.pooled_groups = std::max(nacc.pooled_groups, 1);
+                if (s_valve_diag)
+                {
+                    std::fprintf(stderr, "[valve] narrowed repeat %s source %d: %zu -> %zu targets, pay=%.6g\n",
+                                 a0.card_name.str().c_str(), a0.sac_source_id, full_grp.size(), w, best_e.second);
+                }
+            }
+        }
         // Per-group ledger: which groups survived, their width, their cheapest member, and whether
         // the pool could pay it. The aggregate counters above cannot show WHY a specific card was
         // dropped, which is what every round of this bug has actually needed.
@@ -134752,20 +134829,53 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     // debits the source's own mana (see PermAbilityTapDebitOf: {T} is part of the cost, so a source
     // that taps for mana cannot fund its own ability), which turns that into a truthful `illegal`.
     std::vector<std::string> line_casts;   // spec.casts MINUS the battlefield activations
-    struct BoardActivation { const Permanent* src; const CardDefinition* def; ManaCost cost; };
+    // `tutor_put`: the ability PUTS a library card onto the battlefield (TapTutorPut: Maze's End's Gate, Seahunter's
+    // Merfolk). The real-payment walk resolves it on its copy, so what enters (a Gate untapped under Gond Gate, one
+    // more Gate for Baldur's Gate's X) funds what the line does after it -- see real_pays.
+    struct BoardActivation { const Permanent* src; const CardDefinition* def; ManaCost cost; bool tutor_put = false; };
     std::vector<BoardActivation> board_acts;   // COSTED "{cost}, {T}" activations named by cast=
+    // The line's own ORDER over `pending` (spec.casts is the click order, hand casts and `act=` activations
+    // interleaved): >= 0 is the k-th hand cast (pending[k]), -(j+1) the j-th board activation. `pending` itself
+    // keeps the hand casts first and the activations last (the permissive reading every walk below assumes); the
+    // real-payment walk ALSO tries this order (real_pays_line), because an activation that puts a land can fund
+    // the casts the human queued after it (USER 2026-11-19, Maze's End s6_gi5 T5).
+    std::vector<int> click_seq;
     {
         std::map<std::string, int> hand_left;
         for (const Card& c : s.ActivePlayer().hand) { ++hand_left[c.m_name.str()]; }
+        std::vector<int> act_used;   // battlefield numbers already named by an earlier activation of this line
+        // A declared `act=` (spec.board_acts) is a BOARD activation even when a same-named card is also in hand: a
+        // Maze's End in hand (the one the first activation returned) beside one on the battlefield made
+        // `act=Maze's End` read as a hand "cast" of the land, priced at its {0}. Legacy `cast=` lines (no act=)
+        // keep the hand-first reading.
+        std::map<std::string, int> act_left;
+        for (const std::string& b : spec.board_acts) { ++act_left[b]; }
         for (const std::string& name : spec.casts)
         {
+            bool declared_act = false;
+            if (auto at = act_left.find(name); at != act_left.end() && at->second > 0)
+            {
+                for (const Permanent& p : s.battlefield)
+                { if (p.controller_index == s.active_player_index && p.card.m_name == name) { declared_act = true; break; } }
+                if (declared_act) { --at->second; }
+            }
             auto it = hand_left.find(name);
-            if (it != hand_left.end() && it->second > 0) { --it->second; line_casts.push_back(name); continue; }
+            if (!declared_act && it != hand_left.end() && it->second > 0)
+            { --it->second; click_seq.push_back(static_cast<int>(line_casts.size())); line_casts.push_back(name); continue; }
+            // Two activations of one NAME are two SOURCES when the board has two (two Maze's Ends: the first
+            // returns itself to hand, so the second cannot be the same land). The first UNUSED copy; with none
+            // left, the first copy (a no-{T} ability activated twice -- Recruitment Officer -- as before).
             const Permanent* on_battlefield = nullptr;
+            const Permanent* first_copy = nullptr;
             for (const Permanent& p : s.battlefield)
-            { if (p.controller_index == s.active_player_index && p.card.m_name == name)
-              { on_battlefield = &p; break; } }
-            if (!on_battlefield) { line_casts.push_back(name); continue; }   // genuinely missing -> reported below
+            {
+                if (p.controller_index != s.active_player_index || p.card.m_name != name) { continue; }
+                if (!first_copy) { first_copy = &p; }
+                if (std::find(act_used.begin(), act_used.end(), p.card.m_number) == act_used.end())
+                { on_battlefield = &p; break; }
+            }
+            if (!on_battlefield) { on_battlefield = first_copy; }
+            if (!on_battlefield) { click_seq.push_back(static_cast<int>(line_casts.size())); line_casts.push_back(name); continue; }   // genuinely missing -> reported below
             // Costed "{cost}, {T}" ability on this source? Modes are probed in the same order as the
             // enumerator's ModeSpec table and the FIRST present one wins. No card carries two of
             // these params today, so the choice is never actually ambiguous; if one ever does, the
@@ -134796,6 +134906,11 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 { Action::AbilityMode::TapTargetPump,  &bd->params.tap_target_pump_cost },
                 // Heap Gate's "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token" (I4).
                 { Action::AbilityMode::TapTreasure,    &bd->params.tap_treasure_cost    },
+                // Maze's End's "{3}, {T}, Return this land to its owner's hand: search for a Gate" (and Seahunter's
+                // {3}, {T} Merfolk put). Without the row its {3} was priced at NOTHING, so "Sylvan Scrying + Archdruid's
+                // Charm + two activations", eleven mana from seven lands, read legal_not_enumerated (F6, USER Maze's
+                // End s6_gi5 T5). The put itself is resolved by real_pays (tutor_put).
+                { Action::AbilityMode::TapTutorPut,    &bd->params.tap_tutor_put_cost   },
             };
             for (const auto& m : modes)
             {
@@ -134806,7 +134921,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 { ac.generic = std::max(0, ac.generic - s.players[s.active_player_index].rad_counters); }
                 if (m.first == Action::AbilityMode::TapBlood)
                 { ac = TapBloodCostNow(s, s.active_player_index, *bd); }
-                if (ac.ManaValue() > 0) { board_acts.push_back({ on_battlefield, bd, ac }); }
+                if (ac.ManaValue() > 0)
+                {
+                    click_seq.push_back(-static_cast<int>(board_acts.size()) - 1);
+                    act_used.push_back(on_battlefield->card.m_number);
+                    board_acts.push_back({ on_battlefield, bd, ac, m.first == Action::AbilityMode::TapTutorPut });
+                }
                 break;
             }
         }
@@ -135060,6 +135180,43 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<int> act_src;   // battlefield number of each board activation, in pending order
         for (const BoardActivation& ba : board_acts) { act_src.push_back(ba.src ? ba.src->card.m_number : 0); }
         std::size_t first_act = pending.size() - board_acts.size();
+        // A TapTutorPut activation's RESOLUTION on the copy (Maze's End: itself to hand, a Gate onto the
+        // battlefield, the shuffle). The put enters by the real route (EnterLand: Gond Gate's untapped Gates,
+        // Amulet's untap), so the mana it adds and the Gate count Baldur's Gate reads are the board's own. WHICH
+        // card is put is the player's choice the line does not carry, so each distinct candidate is tried and the
+        // one leaving the most mana available is kept -- the permissive reading, as everywhere in this validator
+        // (a payable line must never read Illegal). Quiet copies (RevealLogPause above): no chooser, no event.
+        auto resolve_tutor_put = [&](GameState& g, int src_id, const CardDefinition& def)
+        {
+            const int me = g.active_player_index;
+            std::vector<std::string> names;
+            for (const Card& c : g.players[static_cast<std::size_t>(me)].library)
+            {
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                if (!TapTutorPutLibraryCandidate(def.params, cd ? cd->card : c)) { continue; }
+                if (std::find(names.begin(), names.end(), c.m_name.str()) == names.end()) { names.push_back(c.m_name.str()); }
+            }
+            if (names.empty()) { ApplyPermAbility(g, me, src_id, Action::AbilityMode::TapTutorPut); return; }
+            int best_total = -1;
+            GameState best;
+            for (const std::string& nm : names)
+            {
+                GameState t = g;
+                {
+                    const SacNamedPinScope pin(0, &nm);
+                    ApplyPermAbility(t, me, src_id, Action::AbilityMode::TapTutorPut);
+                }
+                const int total = AvailableManaPool(t).Total() + t.floating_mana.Total();
+                if (total > best_total) { best_total = total; best = std::move(t); }
+            }
+            g = std::move(best);
+        };
+        // Every activation's {T} is RESERVED from the start (the flat walks' PermAbilityTapDebitOf twin): a source
+        // that will tap for its own ability cannot also tap for mana toward an earlier step. Before the second
+        // Maze's End of a line existed as its own source this never mattered; now the payer would tap Maze's End
+        // B for {C} toward A's {3} and then "activate" B anyway.
+        for (std::size_t j = 0; j < board_acts.size(); ++j)
+        { if (act_src[j] > 0) { SetPermTapped(cp, cp.active_player_index, act_src[j], true); } }
         for (std::size_t k : order)
         {
             const PendingCast& pc = pending[k];
@@ -135071,6 +135228,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             const bool ok = pc.alt_free || cost.ManaValue() == 0 || TapForCostDirect(cp, cost, for_creature);
             if (!ok) { real_fail_k = k; real_fail_cost = cost; return false; }
             SubManaCost(g_line_unpaid_cost, cost);
+            if (pc.board_act && pc.def && k >= first_act && board_acts[k - first_act].tutor_put
+                && act_src[k - first_act] > 0)
+            { resolve_tutor_put(cp, act_src[k - first_act], *pc.def); }
             if (!pc.def || pc.board_act) { continue; }
             if (pc.rock)
             {
@@ -135131,6 +135291,24 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             { EtbUntapLands(cp, cp.active_player_index, pc.def->params.etb_untap_lands, /*log_ledger=*/false); }
         }
         return true;
+    };
+    // The real payment in pending order (hand casts, then the activations), and then -- only when the human
+    // queued them differently -- in the human's own click order (click_seq). Either paying makes the line
+    // payable. When both refuse, the failure reported is the one in the human's order (what they queued).
+    std::vector<std::size_t> click_order;
+    for (const int c : click_seq)
+    { click_order.push_back(c >= 0 ? static_cast<std::size_t>(c) : pending.size() - board_acts.size() + static_cast<std::size_t>(-c - 1)); }
+    bool click_differs = click_order.size() == pending.size();
+    if (click_differs)
+    {
+        bool same = true;
+        for (std::size_t k = 0; k < click_order.size(); ++k) { if (click_order[k] != k) { same = false; break; } }
+        click_differs = !same;
+    }
+    auto real_pays_line = [&](const std::vector<std::size_t>& order, const std::vector<ManaCost>& costs) -> bool
+    {
+        if (real_pays(order, costs)) { return true; }
+        return click_differs && real_pays(click_order, costs);
     };
     auto real_fail_reason = [&]() -> std::string
     {
@@ -135465,7 +135643,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         }
         std::vector<std::size_t> decl_order(pending.size());
         for (std::size_t k = 0; k < pending.size(); ++k) { decl_order[k] = k; }
-        if (ok && real_pays(decl_order, decl_costs))
+        if (ok && real_pays_line(decl_order, decl_costs))
         {
             out.verdict = V::LegalNotEnumerated;
             out.reason  = "rules-legal in your cast order (the real payment pays every cast in turn), "
@@ -135518,7 +135696,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         if (!real_pays(greedy_order, greedy_costs))
         {
             const std::size_t fk = real_fail_k; const ManaCost fc = real_fail_cost;
-            if (!real_pays(decl, decl_cur)) { real_fail_k = fk; real_fail_cost = fc; real_refused = true; }
+            if (!real_pays_line(decl, decl_cur)) { real_fail_k = fk; real_fail_cost = fc; real_refused = true; }
         }
     }
 
@@ -135915,7 +136093,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::size_t> decl(pending.size());
         std::vector<ManaCost> decl_cur(pending.size());
         for (std::size_t k = 0; k < pending.size(); ++k) { decl[k] = k; decl_cur[k] = cur_cost(pending[k]); }
-        if (sac_wild == 0 && real_pays(decl, decl_cur))
+        if (sac_wild == 0 && real_pays_line(decl, decl_cur))
         {
             out.verdict = V::LegalNotEnumerated;
             out.reason  = "rules-legal in your cast order (the real payment pays every cast in turn), "
