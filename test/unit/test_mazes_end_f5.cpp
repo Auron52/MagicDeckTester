@@ -561,3 +561,47 @@ TEST_CASE("Maze's End F5 prune: the land drop is supply untapped, and Baldur's G
     CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(a, { F5Cast(a, "Sylvan Scrying") }, "Azorius Guildgate"));
     CHECK(TurnSolver::PlanProvablyUnpayableForTest(a, { F5Cast(a, "Sylvan Scrying") }, std::string()));
 }
+
+TEST_CASE("Maze's End F5 prune: a land drop with a PINNED as-enters choice is credited, not placed (Thran Portal)")
+{
+    // AB d3 s202073 gi72 T1: "Thran Portal + Burgeoning" was dropped -- the optimistic board entered the Portal with
+    // the provider's default colour, not the plan's pinned Forest. The plan list's view carries no pin, so such a drop
+    // is credited as any-colour supply.
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    s.players[0].lands_played_this_turn = 0;
+    F5Put(s, "Azorius Guildgate", 740);                         // {W}/{U}: no green on the board
+    s.players[0].hand.push_back(F5Card("Thran Portal", 741));
+    s.players[0].hand.push_back(F5Card("Burgeoning", 742));
+    s.players[0].hand.push_back(F5Card("Gateway Plaza", 743));
+    s.players[0].hand.push_back(F5Card("Gates Ablaze", 744));
+    REQUIRE(prov.PlanListFilterLive(s));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning") }, "Thran Portal"));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning") }, "Gateway Plaza"));
+    // Still a prune: with no land on the board, the credit (2) cannot carry Gates Ablaze's {2}{R}.
+    s.battlefield.clear();
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Gates Ablaze") }, "Thran Portal"));
+}
+
+TEST_CASE("Maze's End F5 prune: under Amulets of Vigor a tapped land drop floats (the multi-Amulet untap)")
+{
+    // Two Amulets untap a tapped-entering Dimir Guildgate twice: it taps for mana twice. Boros + Dimir x2 pay {2}{R}.
+    // (Not Guild Summit: a Gate drop under a draw watcher is never binding.)
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    s.players[0].lands_played_this_turn = 0;
+    F5Put(s, "Boros Guildgate", 750);
+    s.players[0].hand.push_back(F5Card("Dimir Guildgate", 753));
+    s.players[0].hand.push_back(F5Card("Burgeoning", 754));
+    s.players[0].hand.push_back(F5Card("Gates Ablaze", 755));
+    REQUIRE(prov.PlanListFilterLive(s));
+    // No Amulet: Boros + Dimir are two mana, Gates Ablaze's {2}{R} is three -- dropped.
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Gates Ablaze") }, "Dimir Guildgate"));
+    F5Put(s, "Amulet of Vigor", 751);
+    F5Put(s, "Amulet of Vigor", 752);
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Gates Ablaze") }, "Dimir Guildgate"));
+}
