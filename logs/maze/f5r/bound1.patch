@@ -1,0 +1,305 @@
+diff --git a/src/ai/ManaOracle.cpp b/src/ai/ManaOracle.cpp
+index acf5de7d0..9805f215d 100644
+--- a/src/ai/ManaOracle.cpp
++++ b/src/ai/ManaOracle.cpp
+@@ -1765,6 +1765,21 @@ struct PayEnum
+     // `out` they would have gone) instead of being verified at once -- see RefinePaymentImpl.
+     struct Slot { std::vector<Pick> picks; std::size_t pos; };
+     std::vector<Slot>*              defer = nullptr;
++    // THE REFINE'S RELEASE BOUND (RefinePaymentImpl, every face regular): a candidate of `n` taps releases at most
++    // rel_taps - n sources, so a set (and every set grown from it) that cannot reach the best release accepted so
++    // far (*rel_best; -1 = none yet) is not verified. Its fed extensions (ExtendFed) are parked in `defer_fed` the
++    // way `defer` parks the surplus ones, and every recorded result is reported to `on_record` (its index in `out`,
++    // whether it is new, and -- for a repeat -- the option that made it again), so the refine ranks each one as it
++    // appears and the bound tightens during the enumeration.
++    std::vector<Slot>*              defer_fed = nullptr;
++    const int*                      rel_best  = nullptr;
++    int                             rel_taps  = 0;
++    std::unordered_map<std::uint64_t, std::size_t>* rep = nullptr;
++    std::function<void(std::size_t, bool, const PayOption*)> on_record;
++    bool Hopeless(std::size_t more) const
++    {
++        return rel_best != nullptr && *rel_best >= 0 && rel_taps - static_cast<int>(cur.size() + more) < *rel_best;
++    }
+     // SCALED TAP-AHEAD BEFORE A SACRIFICE (see ScaledAheadClasses): classes of untapped scaled dorks whose count
+     // includes the creature this payment's cast is about to sacrifice, each with the face that taps it.
+     std::vector<Pick>               ahead;
+@@ -2040,6 +2055,13 @@ struct PayEnum
+             }
+             out.push_back(std::move(o));
+             if (out.size() >= want) { capped = true; lazy = true; }
++            if (rep != nullptr) { rep->emplace(rkey, out.size() - 1); }
++            if (on_record) { on_record(out.size() - 1, true, nullptr); }
++        }
++        else if (rep != nullptr && on_record)
++        {
++            const auto it = rep->find(rkey);
++            if (it != rep->end()) { on_record(it->second, false, &o); }
+         }
+         return true;
+     }
+@@ -2095,6 +2117,7 @@ struct PayEnum
+                 // The added tap stands in for the unit that floats on, so a ONE-unit face: a second
+                 // multi-unit tap is a deeper superset (see above) -- except in the audit (multi_ok).
+                 if (sc.faces[fi].fed || sc.faces[fi].net < 1 || (sc.faces[fi].net != 1 && !multi_ok)) { continue; }
++                if (Hopeless(1)) { return; }
+                 cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
+                 t_trc_site = 2; Verify(cur); t_trc_site = 0;
+                 cur.pop_back();
+@@ -2175,6 +2198,7 @@ struct PayEnum
+             for (std::size_t fi = 0; fi < sc.faces.size() && !capped; ++fi)
+             {
+                 if (!sc.faces[fi].fed) { continue; }
++                if (Hopeless(1)) { return; }
+                 cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
+                 const int site = t_trc_site; t_trc_site = 1;
+                 const bool vok = Verify(cur);
+@@ -2187,9 +2211,13 @@ struct PayEnum
+ 
+     void Dfs(std::size_t ci, const int col[6], int total)
+     {
+-        if (capped) { return; }
++        if (capped || Hopeless(0)) { return; }
+         if (MaybeCovers(col, total, cost) && Verify(cur))
+-        { ExtendFed(0); ExtendSurplus(); ExtendLineSurplus(); ExtendScaledAhead(); return; }
++        {
++            if (defer_fed != nullptr) { defer_fed->push_back({ cur, out.size() }); } else { ExtendFed(0); }
++            ExtendSurplus(); ExtendLineSurplus(); ExtendScaledAhead();
++            return;
++        }
+         if (ci >= srcs.size()) { return; }
+         if (total + suffix_max[ci] < cost.ManaValue()) { return; }
+         Dfs(ci + 1, col, total);   // skip this class...
+@@ -2631,9 +2659,27 @@ static bool RefineVictimSpentOn()
+     return heurarm::Flag(heurarm::REFINE_VICTIM_SPENT, s_on);
+ }
+ 
++// MTG_PAY_REFINE_BOUND_VERIFY=1 (diagnostic only): every refine the release bound answers is answered again with the
++// fed extensions eager and no bound (the enumeration before the bound), and the two choices compared; mismatches are
++// counted apart by whether either enumeration hit the probe cap. The recompute pays, so the priced meter moves.
++static thread_local bool t_refine_eager_fed = false;   // the verify's recompute
++static thread_local bool t_refine_capped    = false;   // the last RefinePaymentImpl's enumeration hit the probe cap
++static std::atomic<long long> g_rbound_cmp{0}, g_rbound_bad{0}, g_rbound_bad_capped{0}, g_rbound_capped{0};
++struct RefineBoundReport
++{
++    ~RefineBoundReport()
++    {
++        if (g_rbound_cmp.load() == 0) { return; }
++        std::fprintf(stderr, "=== PAY REFINE BOUND VERIFY: compared=%lld mismatched=%lld (with a capped side %lld) capped=%lld ===\n",
++                     g_rbound_cmp.load(), g_rbound_bad.load(), g_rbound_bad_capped.load(), g_rbound_capped.load());
++    }
++};
++static RefineBoundReport g_refine_bound_report;
++
+ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
+                               bool creature_ability, int useful, bool no_trade, PayOption& out)
+ {
++    t_refine_capped = false;
+     const int a = pre.active_player_index;
+     const std::size_t n = pre.battlefield.size();
+     if (post.battlefield.size() != n) { return false; }
+@@ -2704,8 +2750,6 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+     PayEnum pe{ masked, cost, for_creature, srcs, suffix_max, st0, seen, opts };
+     pe.whole_float = true;
+     if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
+-    t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
+-    pe.Dfs(0, col, total);
+     // THE SACRIFICE VICTIM IS NOT A RESOURCE (MTG_REFINE_VICTIM_SPENT, DEFAULT ON; =0 the victim counts like any
+     // source). While this payment's cast sacrifices a creature as an additional cost (g_pay_sac_victim, Natural
+     // Order), that creature leaves as the cost is paid, so leaving it untapped buys nothing -- the reason the payer
+@@ -2733,27 +2777,13 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+             }
+         }
+     }
+-    static const bool s_trc = EnvOn("MTG_PAY_REFINE_TRACE");
+     std::size_t expanded = 0;
+     bool found = false;
+     int  best_rel = -1, best_life = 0, best_energy = 0;
+-    // Order of the eager enumeration: option i of the first pass sits at (i, 1, 0); the j-th superset of the set
+-    // parked at `pos` at (pos, 0, j) -- after the set and its fed extensions, before the next option.
++    // Order of the eager enumeration: option i of the first pass sits at (i, 2, 0); the j-th fed extension of the
++    // set parked at `pos` at (pos, 0, j), its j-th surplus superset at (pos, 1, j) -- after the set, its fed
++    // extensions before its supersets, all before the next option.
+     std::tuple<std::size_t, int, std::size_t> best_at{ 0, 0, 0 };
+-    std::string trc_taps;
+-    if (s_trc)
+-    {
+-        for (const Permanent& p : pre.battlefield)
+-        { if (taps.count(p.card.m_number) != 0) { trc_taps += (trc_taps.empty() ? "" : ", ") + p.card.m_name.str(); } }
+-        trc_taps += " | float " + PoolText(pre.floating_mana, pre.floating_haste_c);
+-    }
+-    struct TrcOut { std::size_t T, nopt, nslot; const std::size_t& nexp; const ManaCost& c; int* rel; bool* f;
+-        const std::string& taps; const PayOption& out;
+-        ~TrcOut() { if (s_trc) { std::lock_guard<std::mutex> lk(g_print_mu);
+-            std::fprintf(stderr, "[refine-trc] T=%zu bill=%s v=%ld/%ld/%ld opts=%zu slots=%zu/%zu found=%d rel=%d taps=[%s] -> %s\n", T,
+-                         c.ToString().c_str(), t_trc_v[0], t_trc_v[1], t_trc_v[2], nopt, nexp, nslot, *f ? 1 : 0, *rel,
+-                         taps.c_str(), *f ? TapsText(out).c_str() : "-"); } } };
+-    TrcOut _trc{ taps.size(), opts.size(), slots.size(), expanded, cost, &best_rel, &found, trc_taps, out };
+     auto consider = [&](const PayOption& o, std::tuple<std::size_t, int, std::size_t> at)
+     {
+         OracleScratch cscr(pre);
+@@ -2798,8 +2828,92 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+         if (no_trade ? !CoversBoards(c, post, true, nullptr) : !ReachesByTapping(c, post)) { return; }
+         found = true; best_rel = rel; best_life = life; best_energy = energy; best_at = at; out = o;
+     };
++    // THE RELEASE BOUND (with the lazy surplus, every face regular). The choice ranks by release first, and a set of n
++    // taps releases at most |taps| - n, so the enumeration ranks each result as it is recorded and stops growing a set
++    // that can no longer reach the best release accepted (PayEnum::Hopeless): a set and every set grown from it.
++    // A paying set's FED extensions (one more converter tap each -- Talon Gates' {1},{T}, Baldur's Gate's {2},{T})
++    // are parked like its surplus supersets and verified after the first pass, each where the eager order puts it:
++    // before the next option, ahead of the set's supersets. A result an extension makes again that the first pass
++    // already recorded LATER in that order takes the extension's place, as the eager enumeration would have recorded
++    // it there first. So the choice is the eager one, out of every payment the enumeration reaches; what changes is
++    // how far the 4,096-probe cap reaches. Maze's End's whole-line bills ({7}{G} over seven Gates, Baldur's Gate's
++    // {2},{T} and Talon Gates' {1},{T} among them): 3,573 of a refine's 4,097 verifies were fed extensions of sets
++    // whose release could not win, and the cap cut the enumeration before a release-2 payment it reached in another
++    // battlefield order. MTG_PAY_REFINE_LAZY=0 -> the eager enumeration.
++    const bool bound = PayRefineLazyOn() && all_regular && !t_refine_eager_fed;
++    std::vector<std::tuple<std::size_t, int, std::size_t>> at_of;   // bound: each recorded option's place
++    std::tuple<std::size_t, int, std::size_t> slot_at{ 0, 0, 0 };
++    bool in_slots = false;
++    std::vector<PayEnum::Slot> fed_slots;
++    std::unordered_map<std::uint64_t, std::size_t> rep;
++    if (bound)
++    {
++        pe.defer_fed = &fed_slots;
++        pe.rel_best  = &best_rel;
++        pe.rel_taps  = static_cast<int>(taps.size());
++        pe.rep       = &rep;
++        pe.on_record = [&](std::size_t idx, bool fresh, const PayOption* again)
++        {
++            if (!in_slots)
++            {
++                if (!fresh) { return; }   // the first pass keeps its own order
++                at_of.push_back({ idx, 2, 0 });
++                consider(opts[idx], at_of[idx]);
++                return;
++            }
++            const auto at = slot_at;
++            ++std::get<2>(slot_at);
++            if (fresh) { at_of.push_back(at); consider(opts[idx], at); return; }
++            // A fed extension's repeat of a result the first pass recorded after it (the eager order recorded the
++            // extension); a surplus superset's repeat keeps the earlier record, as the eager surplus pass did.
++            if (std::get<1>(at) == 0 && at < at_of[idx]) { opts[idx] = *again; at_of[idx] = at; consider(opts[idx], at); }
++        };
++    }
++    t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
++    pe.Dfs(0, col, total);
++    static const bool s_trc = EnvOn("MTG_PAY_REFINE_TRACE");
++    std::string trc_taps;
++    if (s_trc)
++    {
++        for (const Permanent& p : pre.battlefield)
++        { if (taps.count(p.card.m_number) != 0) { trc_taps += (trc_taps.empty() ? "" : ", ") + p.card.m_name.str(); } }
++        trc_taps += " | float " + PoolText(pre.floating_mana, pre.floating_haste_c);
++    }
++    struct TrcOut { std::size_t T, nopt, nslot; const std::size_t& nexp; const ManaCost& c; int* rel; bool* f;
++        const std::string& taps; const PayOption& out;
++        ~TrcOut() { if (s_trc) { std::lock_guard<std::mutex> lk(g_print_mu);
++            std::fprintf(stderr, "[refine-trc] T=%zu bill=%s v=%ld/%ld/%ld opts=%zu slots=%zu/%zu found=%d rel=%d taps=[%s] -> %s\n", T,
++                         c.ToString().c_str(), t_trc_v[0], t_trc_v[1], t_trc_v[2], nopt, nexp, nslot, *f ? 1 : 0, *rel,
++                         taps.c_str(), *f ? TapsText(out).c_str() : "-"); } } };
++    TrcOut _trc{ taps.size(), opts.size(), slots.size(), expanded, cost, &best_rel, &found, trc_taps, out };
++    if (bound)
++    {
++        in_slots = true;
++        for (const PayEnum::Slot& sl : fed_slots)
++        {
++            if (pe.capped) { break; }
++            const int reach = static_cast<int>(taps.size()) - static_cast<int>(sl.picks.size()) - 1;
++            if (found && reach < best_rel) { continue; }
++            ++expanded;
++            pe.cur = sl.picks;
++            slot_at = { sl.pos, 0, 0 };
++            pe.ExtendFed(0);
++        }
++        for (const PayEnum::Slot& sl : slots)
++        {
++            if (pe.capped) { break; }
++            const int reach = static_cast<int>(taps.size()) - static_cast<int>(sl.picks.size()) - 1;
++            if (found && reach < best_rel) { continue; }
++            ++expanded;
++            pe.cur = sl.picks;
++            slot_at = { sl.pos, 1, 0 };
++            pe.ExtendSurplusNow();
++        }
++        t_refine_capped = pe.capped;
++        return found;
++    }
+     const std::size_t first = opts.size();
+-    for (std::size_t i = 0; i < first; ++i) { consider(opts[i], { i, 1, 0 }); }
++    for (std::size_t i = 0; i < first; ++i) { consider(opts[i], { i, 2, 0 }); }
+     for (const PayEnum::Slot& sl : slots)
+     {
+         const int reach = static_cast<int>(taps.size()) - static_cast<int>(sl.picks.size()) - 1;
+@@ -2808,8 +2922,9 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+         pe.cur = sl.picks;
+         const std::size_t from = opts.size();
+         pe.ExtendSurplusNow();
+-        for (std::size_t j = from; j < opts.size(); ++j) { consider(opts[j], { sl.pos, 0, j - from }); }
++        for (std::size_t j = from; j < opts.size(); ++j) { consider(opts[j], { sl.pos, 1, j - from }); }
+     }
++    t_refine_capped = pe.capped;
+     return found;
+ }
+ 
+@@ -2912,6 +3027,32 @@ bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
+ // the priced ceiling read -- depend on which games shared the worker thread (2026-11-04).
+ void ClearRefineMemoPerGame() { t_refine_memo.clear(); }
+ 
++// RefinePaymentImpl under MTG_PAY_REFINE_BOUND_VERIFY (see there).
++static bool RefineImplChecked(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
++                              bool creature_ability, int useful, bool no_trade, PayOption& out)
++{
++    const bool found = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, out);
++    static const bool s_verify = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY");
++    if (!s_verify || t_refine_eager_fed) { return found; }
++    const bool cap1 = t_refine_capped;
++    PayOption o2;
++    t_refine_eager_fed = true;
++    const bool f2 = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
++    t_refine_eager_fed = false;
++    const bool capped = cap1 || t_refine_capped;
++    g_rbound_cmp.fetch_add(1, std::memory_order_relaxed);
++    if (capped) { g_rbound_capped.fetch_add(1, std::memory_order_relaxed); }
++    if (!SameOption(found, out, f2, o2))
++    {
++        g_rbound_bad.fetch_add(1, std::memory_order_relaxed);
++        if (capped) { g_rbound_bad_capped.fetch_add(1, std::memory_order_relaxed); }
++        std::lock_guard<std::mutex> lk(g_print_mu);
++        std::fprintf(stderr, "[pay-refine-bound] MISMATCH%s bill %s: bound %s, eager %s\n", capped ? " (capped)" : "",
++                     cost.ToString().c_str(), found ? TapsText(out).c_str() : "-", f2 ? TapsText(o2).c_str() : "-");
++    }
++    return found;
++}
++
+ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
+                    bool creature_ability, PayOption& out)
+ {
+@@ -2921,7 +3062,7 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost&
+     const int useful = UsefulColorMask(pre, cost);
+     const bool no_trade = pre.deck_has_mana_untapper;
+     if (!PayRefineMemoOn() || t_plan_srcs != nullptr)
+-    { return RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, out); }
++    { return RefineImplChecked(pre, post, cost, for_creature, creature_ability, useful, no_trade, out); }
+     RefineKey k;
+     k.board    = TurnSolver::MidTurnStateKeyOfPayment(pre);
+     k.pay_pre  = PayFieldsDigest(pre);
+@@ -2960,7 +3101,7 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost&
+         if (s_verify)
+         {
+             PayOption o2;
+-            const bool f2 = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
++            const bool f2 = RefineImplChecked(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
+             if (!SameOption(it->second.found, it->second.opt, f2, o2))
+             {
+                 g_rmemo_bad.fetch_add(1, std::memory_order_relaxed);
+@@ -2974,7 +3115,7 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost&
+     }
+     g_rmemo_miss.fetch_add(1, std::memory_order_relaxed);
+     RefineMemoEntry e;
+-    e.found = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, e.opt);
++    e.found = RefineImplChecked(pre, post, cost, for_creature, creature_ability, useful, no_trade, e.opt);
+     if (e.found) { out = e.opt; }
+     const bool found = e.found;
+     // Not inside a MUTED recompute (workctr::StoresAllowed): it stands in for a plan-cache hit that never ran, and an

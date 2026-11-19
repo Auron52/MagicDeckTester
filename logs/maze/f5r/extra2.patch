@@ -1,0 +1,97 @@
+diff --git a/src/ai/HeuristicArm.h b/src/ai/HeuristicArm.h
+index 0cae3b839..2681378b1 100644
+--- a/src/ai/HeuristicArm.h
++++ b/src/ai/HeuristicArm.h
+@@ -713,7 +713,7 @@ enum Slot : int
+     AUTO_LINE_GENERIC,        // MTG_AUTO_LINE_GENERIC  the line-aware GENERIC-pip orders human play has had since 2026-09-10 -- the float drain's surplus-first order (MTG_LINE_SURPLUS_GENERIC), the payment pool's (MTG_PAY_LINE_GENERIC_ORDER) and a choice source's colour (MTG_PAY_LINE_TAP_COLOR) -- in autonomous play and the search too: a generic pip spends the colour most in surplus over what the applying line still owes, not WUBRG. AccomplishedAlchemist held-out gi682 (seed 1030683) T5: {B} floating, the triple-Sprawl Forest's {G}{B}{U}{U} paid Accomplished Alchemist's {3}{G} with both {U} and Crab Umbra's {U} was dropped. A mana-payment choice; not for a line that casts a breakpoint opener (g_line_opens_unseen: TreasureHunt gi96). ADOPTED 2026-10-28, default ON (A/B seed 1080001, 39 decks: 0 slower / 1 faster, work +0.024%); =0 -> WUBRG outside human play
+     PAY_REFINE,               // MTG_PAY_REFINE  after every outermost payment that cost life, energy or a haste-tagged {C} on a noncreature bill, or left mana floating off two or more taps: the cheapest payment of the SAME bill out of the SAME taps (a subset, any faces) that leaves at least what the engine's did -- the sources it gives back can still make every unit the engine's payment floated. Dominating by construction (never a swap, never a guess about the rest of the turn). The mana oracle census (39 decks x 30 games, seed 1100001): every DOMINATED flag taps a subset of the engine's own sources; 1,922 single-payment DOMINATED-LAND (Remote Farm + Plains for Giada's {1}{W}) and 1,042 single-payment DOMINATED-LIFE (Llanowar Wastes' {G} where its {C} pays). DEFAULT ON since 2026-10-29 (the USER's adoption; every held-out slower game recovers at d8 b0 or is clear clairvoyance). =0 -> the payment as made
+     REAL_PAY_SCRIPT,          // MTG_REAL_PAY_SCRIPT  real play only: before the executor applies the chosen plan, the mana oracle realises it (ManaOracle.h PlanPaymentScript); when the search's own apply pays every action on a dominated set of taps, the executor pays with the oracle's script through a SAFE hook (a DROP is never scripted: the search scored the plan by that apply) (an entry used only while it fits, else the engine pays). Not for a line that draws or casts what the plan did not name. =0 -> the engine's own payments
+-    PAY_REFINE_LAZY,          // MTG_PAY_REFINE_LAZY  the refine verifies a paying set's one-more-tap supersets only when they can still release as many sources as the best payment found (every face regular). The choice is the eager enumeration's wherever that one finishes under its 4,096-probe cap (FiveColour's Nicol Bolas over six taps did not: 830 sets + 3,267 supersets); there the lazy one sees more. =0 -> the eager enumeration
++    PAY_REFINE_LAZY,          // MTG_PAY_REFINE_LAZY  the refine verifies a paying set's one-more-tap supersets only when they can still release as many sources as the best payment found (every face regular). The choice is the eager enumeration's wherever that one finishes under its 4,096-probe cap (FiveColour's Nicol Bolas over six taps did not: 830 sets + 3,267 supersets); there the lazy one sees more. Since Maze's End F5R it also parks a paying set's FED extensions (Talon Gates' {1},{T}, Baldur's Gate's {2},{T}) the same way, ranks each result as it is recorded, and stops growing any set that can no longer reach the best release accepted (the release bound). =0 -> the eager enumeration
+     PAY_REFINE_MEMO,          // MTG_PAY_REFINE_MEMO  the refine memoised on (board, both boards' payment fields, bill, payer context, useful colours). Exact by construction; MTG_PAY_REFINE_MEMO_VERIFY=1 recomputes every hit. =0 -> no memo
+     ORACLE_FACE_FOLD,         // MTG_ORACLE_FACE_FOLD  the mana oracle's payment table (BuildSources: the refine, its re-tap check, the census) takes the colours of a source's two interchangeable any-colour land Auras as an unordered pair -- a pair and its swap credit one pool (Brushland under two Fertile Grounds: 75 faces -> 45). Exact: a set holding the swap pays as the set holding the pair, which the enumeration reaches first. =0 -> every ordered pair
+     PAY_REFINE_WILD_OUT,      // MTG_PAY_REFINE_WILD_OUT  the refine answers "nothing" at once when the engine's payment floats more `wild` (an any-colour land Aura's bonus as the payer credits it) than the float before it plus every engine-tapped source's wildest face can make: every acceptance covers the engine's float key by key, and the table's faces take concrete colours (every face regular). EDF seed 1130464 gi463: 136,104 of 248,589 refines. Exact. =0 -> the full search
+diff --git a/test/unit/test_mana_oracle.cpp b/test/unit/test_mana_oracle.cpp
+index b8561d331..f76058a42 100644
+--- a/test/unit/test_mana_oracle.cpp
++++ b/test/unit/test_mana_oracle.cpp
+@@ -1587,3 +1587,79 @@ TEST_CASE("mana oracle: Siege-Gang's shot paid by eating Goblins is among the or
+     const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[4].card.m_number) });
+     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/false, plan));
+ }
++
++// THE REFINE'S RELEASE BOUND (ManaOracle.cpp RefinePaymentImpl; Maze's End F5R). A whole-line {7}{G} over seven Gates --
++// Baldur's Gate's {2},{T}: X of one colour, Talon Gates' {1},{T}: any colour -- that the payer pays with every Gate
++// tapped. Released Gates are worth finding, and the answer must not depend on the battlefield's order: the eager
++// enumeration spent most of its 4,096 probes on Talon / Baldur's fed extensions of sets whose release could not win,
++// and the cap cut it before the release-2 payment in some orders. The release bound parks the fed extensions and
++// stops growing sets that cannot win, so every order reaches the same release.
++namespace
++{
++int RefineRelease(const GameState& pre, const ManaCost& bill, int& eager_rel, bool& paid)
++{
++    GameState post = pre;
++    {
++        heurarm::t_arm[heurarm::PAY_REFINE] = 0;
++        paid = TapForCostShared(post, bill, /*for_creature=*/false, nullptr, /*honor_legacy_cco=*/true);
++        heurarm::t_arm[heurarm::PAY_REFINE] = -1;
++    }
++    if (!paid) { return -1; }
++    auto release = [&](const manaoracle::PayOption& o)
++    {
++        int n = 0;
++        for (const Permanent& p : post.battlefield)
++        {
++            if (!p.tapped) { continue; }
++            bool tapped_by_o = false;
++            for (const TurnSolver::PreTap& t : o.taps) { if (t.num == p.card.m_number) { tapped_by_o = true; } }
++            if (!tapped_by_o) { ++n; }
++        }
++        return n;
++    };
++    manaoracle::PayOption eo;
++    heurarm::t_arm[heurarm::PAY_REFINE_LAZY] = 0;   // the eager enumeration (no release bound)
++    heurarm::t_arm[heurarm::PAY_REFINE_MEMO] = 0;
++    eager_rel = manaoracle::RefinePayment(pre, post, bill, false, false, eo) ? release(eo) : 0;
++    heurarm::t_arm[heurarm::PAY_REFINE_LAZY] = -1;
++    manaoracle::PayOption o;
++    const int rel = manaoracle::RefinePayment(pre, post, bill, false, false, o) ? release(o) : 0;
++    heurarm::t_arm[heurarm::PAY_REFINE_MEMO] = -1;
++    return rel;
++}
++} // namespace
++
++TEST_CASE("pay refine: the release bound finds the same released Gates in every battlefield order (Maze's End F5R)")
++{
++    EnsureOracleCards();
++    const std::vector<std::string> gates = { "Planar Nexus", "Gond Gate", "Boros Guildgate", "Baldur's Gate",
++                                             "Talon Gates of Madara", "Sea Gate", "Citadel Gate" };
++    int first = -2;
++    bool same = true;
++    for (std::size_t r = 0; r < gates.size(); ++r)
++    {
++        std::vector<std::string> order;
++        for (std::size_t k = 0; k < gates.size(); ++k) { order.push_back(gates[(r + k) % gates.size()]); }
++        GameState s = Board(order);
++        for (Permanent& p : s.battlefield)
++        {
++            if (p.card.m_name.str() == "Sea Gate") { p.chosen_color = static_cast<int8_t>(Color::Green); }
++            if (p.card.m_name.str() == "Citadel Gate") { p.chosen_color = static_cast<int8_t>(Color::Black); }
++        }
++        // Every colour useful (the deck's spells span all five), as in the Maze's End games.
++        for (const char* n : { "Guild Summit", "Gates Ablaze", "Sylvan Scrying", "Archdruid's Charm", "Manabond" })
++        {
++            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
++            REQUIRE(d != nullptr);
++            Card c = d->card; c.m_number = 100 + static_cast<int>(s.players[0].library.size());
++            s.players[0].library.push_back(c);
++        }
++        int eager = 0; bool paid = false;
++        const int rel = RefineRelease(s, Cost(7, 0, 0, 0, 0, 1), eager, paid);
++        MESSAGE("rotation ", r, ": paid ", paid, " bound release ", rel, ", eager release ", eager);
++        REQUIRE(paid);
++        CHECK(rel >= eager);
++        if (first == -2) { first = rel; } else if (rel != first) { same = false; }
++    }
++    CHECK(same);
++}

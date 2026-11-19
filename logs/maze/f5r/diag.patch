@@ -1,0 +1,122 @@
+diff --git a/src/ai/ManaOracle.cpp b/src/ai/ManaOracle.cpp
+index acf5de7d0..55bc72a72 100644
+--- a/src/ai/ManaOracle.cpp
++++ b/src/ai/ManaOracle.cpp
+@@ -1727,6 +1727,10 @@ struct Pick { int cls; int face; };
+ // MTG_PAY_REFINE_TRACE: one [refine-trc] line per refine -- the engine's taps, the verifies by origin (the DFS,
+ // ExtendFed, ExtendSurplus), the parked/expanded surplus slots and the choice.
+ thread_local long t_trc_v[3] = {0, 0, 0};
++thread_local long t_f5r_paid = 0;
++thread_local bool t_f5r_full = false;
++thread_local int t_f5r_last_rel = -1;
++thread_local long t_f5r_last_probes = 0;
+ thread_local int  t_trc_site = 0;
+ 
+ // The payment search for ONE set-aside: classes in battlefield order, each tapped 0..n times with a
+@@ -2015,6 +2019,7 @@ struct PayEnum
+         const bool paid = TapForCostShared(sc, cost, for_creature, nullptr, true);
+         t_float_only = false;
+         if (!paid) { return why("the float-only payment failed"); }
++        ++t_f5r_paid;
+         if (left != nullptr) { *left = sf; }
+         sf.white += o.stash.white; sf.blue += o.stash.blue; sf.black += o.stash.black;
+         sf.red += o.stash.red; sf.green += o.stash.green; sf.colorless += o.stash.colorless;
+@@ -2703,9 +2708,33 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+     std::vector<PayEnum::Slot> slots;
+     PayEnum pe{ masked, cost, for_creature, srcs, suffix_max, st0, seen, opts };
+     pe.whole_float = true;
++    { static const int s_cap = EnvInt("MTG_F5R_CAP", 4096); pe.cap = t_f5r_full ? 100000000u : static_cast<std::size_t>(s_cap); }   // F5R DIAG
+     if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
+     t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
++    t_f5r_paid = 0;
+     pe.Dfs(0, col, total);
++    {
++        static const bool s_diag = EnvOn("MTG_F5R_DIAG");
++        if (s_diag && pe.probes >= 1000)
++        {
++            std::string sig = cost.ToString() + " |";
++            for (const SrcClass& sc : srcs)
++            {
++                sig += " [" + sc.name + " x" + std::to_string(sc.nums.size()) + ":";
++                for (const Face& fx : sc.faces)
++                {
++                    PayOption o1; o1.taps.push_back(fx.pt);
++                    sig += " " + TapsText(o1) + (fx.fed ? "(fed)" : "") + "n" + std::to_string(fx.net)
++                         + (fx.regular ? "" : "(irr)");
++                }
++                sig += "]";
++            }
++            static std::mutex mu; static std::set<std::string> printed;
++            std::lock_guard<std::mutex> lk(mu);
++            if (printed.insert(sig).second)
++            { std::fprintf(stderr, "[f5r-table] probes=%zu capped=%d opts=%zu paid=%ld v=%ld/%ld %s\n", pe.probes, pe.capped ? 1 : 0, opts.size(), t_f5r_paid, t_trc_v[0], t_trc_v[1], sig.c_str()); }
++        }
++    }
+     // THE SACRIFICE VICTIM IS NOT A RESOURCE (MTG_REFINE_VICTIM_SPENT, DEFAULT ON; =0 the victim counts like any
+     // source). While this payment's cast sacrifices a creature as an additional cost (g_pay_sac_victim, Natural
+     // Order), that creature leaves as the cost is paid, so leaving it untapped buys nothing -- the reason the payer
+@@ -2810,6 +2839,26 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
+         pe.ExtendSurplusNow();
+         for (std::size_t j = from; j < opts.size(); ++j) { consider(opts[j], { sl.pos, 0, j - from }); }
+     }
++    {
++        static const bool s_diag = EnvOn("MTG_F5R_DIAG");
++        if (s_diag && pe.capped && !t_f5r_full)
++        {
++            const std::size_t pr = pe.probes;
++            t_f5r_full = true;
++            PayOption o2;
++            const long paid0 = t_f5r_paid;
++            const auto t0 = std::chrono::steady_clock::now();
++            const bool f2 = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
++            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
++            t_f5r_full = false;
++            t_f5r_paid = paid0;
++            std::lock_guard<std::mutex> lk(g_print_mu);
++            std::fprintf(stderr, "[f5r-cap] bill=%s T=%zu capped: found=%d rel=%d probes=%zu | full: found=%d rel=%d probes=%ld ms=%.1f same=%d\n",
++                         cost.ToString().c_str(), taps.size(), found ? 1 : 0, best_rel, pr, f2 ? 1 : 0, t_f5r_last_rel, t_f5r_last_probes, ms,
++                         (found == f2 && (!found || TapsText(out) == TapsText(o2))) ? 1 : 0);
++        }
++        if (t_f5r_full) { t_f5r_last_rel = best_rel; t_f5r_last_probes = static_cast<long>(pe.probes); }
++    }
+     return found;
+ }
+ 
+@@ -2973,6 +3022,37 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost&
+         return it->second.found;
+     }
+     g_rmemo_miss.fetch_add(1, std::memory_order_relaxed);
++    {   // F5R DIAG (scratch only): which key part keeps a same-inputs refine from hitting
++        static const bool s_diag = EnvOn("MTG_F5R_DIAG");
++        if (s_diag)
++        {
++            const int a = pre.active_player_index;
++            auto hd = [&](const GameState& g) {
++                std::uint64_t h = 1;
++                for (const Card& c : g.players[a].hand) { h = RefineMix(h, static_cast<std::uint32_t>(c.m_number)); }
++                return h; };
++            std::uint64_t fine[6] = { hd(pre), pre.players[a].library.size(), static_cast<std::uint64_t>(pre.turn_number),
++                                      static_cast<std::uint64_t>(pre.spells_cast_this_turn), 0, 0 };
++            for (const Card& c : pre.players[a].graveyard) { fine[4] = RefineMix(fine[4], static_cast<std::uint32_t>(c.m_number)); }
++            fine[5] = PayContextDigest();
++            const std::uint64_t narrow = RefineMix(RefineMix(RefineMix(RefineMix(1, k.pay_pre), k.pay_post), k.bill),
++                                                   static_cast<std::uint64_t>(k.ctx));
++            struct D { RefineKey k; std::uint64_t f[6]; };
++            static thread_local std::unordered_map<std::uint64_t, D> t_d;
++            static std::atomic<long long> c_hit{0}, c_board{0}, c_payer{0}, c_f[6] = {};
++            static struct R { ~R() { std::fprintf(stderr, "=== F5R DIAG narrow_hits=%lld board_diff=%lld payer_diff=%lld hand=%lld lib=%lld turn=%lld spells=%lld gy=%lld payer=%lld ===\n",
++                c_hit.load(), c_board.load(), c_payer.load(), c_f[0].load(), c_f[1].load(), c_f[2].load(), c_f[3].load(), c_f[4].load(), c_f[5].load()); } } s_r;
++            auto it2 = t_d.find(narrow);
++            if (it2 == t_d.end()) { D d; d.k = k; std::copy(fine, fine + 6, d.f); t_d.emplace(narrow, d); }
++            else
++            {
++                ++c_hit;
++                if (it2->second.k.board != k.board) { ++c_board; }
++                if (it2->second.k.payer != k.payer) { ++c_payer; }
++                for (int i = 0; i < 6; ++i) { if (it2->second.f[i] != fine[i]) { ++c_f[i]; } }
++            }
++        }
++    }
+     RefineMemoEntry e;
+     e.found = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, e.opt);
+     if (e.found) { out = e.opt; }
