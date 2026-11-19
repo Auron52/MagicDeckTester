@@ -32930,6 +32930,10 @@ static bool PbSamePrefix(const GameState& state, const TurnSolver::Plan& a, cons
 // The post-apply key with every tap of our permanents and the floating mana cleared: two states equal under it
 // differ at most in the payment allocation (F4's verify).
 static TranspositionTable::Key BuildDedupKey(const GameState& state);
+// The search loops' post-apply DEDUP key: BuildDedupKey, land-order canonical under MTG_FOLD_LAND_ORDER_SEEN (P5b-2;
+// defined with BuildDedupKey).
+static TranspositionTable::Key SeenKey(const GameState& state);
+static bool FoldLandOrderSeenLive(const GameState& state);
 // MTG_PB_FOLD_X_DEBUG: a short description of a post-apply state, for a verify mismatch.
 static std::string PbStateDesc(const GameState& s)
 {
@@ -93609,7 +93613,7 @@ template <typename SeenSet, typename SlotMap>
 static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, const GameState& gs,
                       SeenSet& seen, SlotMap& key_slot)
 {
-    const TranspositionTable::Key wk = EotHoldFoldKey(BuildDedupKey(gs), v);   // a kind-4 twin is its own state
+    const TranspositionTable::Key wk = EotHoldFoldKey(SeenKey(gs), v);   // a kind-4 twin is its own state
     const bool fresh = seen.insert(wk).second;
     if (BpWaveProbeOn())
     {
@@ -109605,6 +109609,109 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     return k;
 }
 
+// ---- P5b-2: THE LAND-ORDER FOLD AS A FIRST-REACHED DEDUP (MTG_FOLD_LAND_ORDER_SEEN) ----------------------------
+// USER 2026-11-18 (Maze's End): "the order doesn't matter much here unless the second land is played after other
+// things or we are paying for a cost like Gateway Plaza." P5b's fold (MTG_FOLD_LAND_ORDER) acted on the ENUMERATION:
+// it deleted the "land Y first" entries whose signature sorted below a land already played. That kept the SORTED
+// twin, not the one the search reaches first, and deleting entries from a ranked continuation list renumbers every
+// later rank (bp_choice k indexes the list; wave 0 takes ranks < W), so it moved which lines a finite budget
+// searched -- held-out net +3 / 2,800 (1 better / 4 worse), every slower game recovering at d8 b0.
+//
+// This form changes NO list and NO order. Every enumeration, rank, memo key and executor replay is untouched; the
+// fold lives only in the search loops' post-apply DEDUP sets (bp_seen_states, m2_seen_states, the wave and tranche
+// checks), which already skip a candidate whose post-apply state an EARLIER sibling reached. Two lines that play
+// commuting lands in either order reach states that differ ONLY in the battlefield positions of those lands, which
+// the order-exact dedup key (FsOrderSig) tells apart. SeenKey canonicalises exactly that: the positions held by our
+// lands that entered this turn and share one commutation class >= 0 (DecisionProvider::LandEntryOrderClass, read on
+// the post-apply state) are re-filled in card-number order, then keyed with BuildDedupKey. So the twin that the
+// loop reaches FIRST is scored and recorded, and the LATER one is skipped by the existing machinery (a variant;
+// an ordinary plan only records, as before) -- the search order and the budget spent before the duplicate are
+// exactly the flag-off run's.
+//
+// WHY IT IS AN IDENTITY. The key equality is a proof that the two states are the same board up to the order of
+// those positions: every other field (hand, tapped flags, counters, chosen colours, life, library, pins, the turn's
+// counters) is compared exactly. The class rule is the USER's carve-out on top of that: a land whose entry makes a
+// choice or reads the board (an as-enters colour, Gateway Plaza's pay-or-sacrifice, Gond Gate, The Black Gate,
+// Thran Portal) is class -1 and keeps its exact position in the key, as does every land when two Amulets float
+// mana; Guild Summit splits Gates from non-Gates. Nothing names a permanent by its battlefield INDEX in the state
+// (attachments, pairings and every searched pin use card numbers), so the permutation cannot alias two states a
+// field tells apart. The residual is the ENGINE's vector-order tie-breaks (a greedy rollout or a payment choosing
+// between two equally good sources by position), the same residual P5b's fold carried: the skipped twin's own
+// playout might break a tie the other way. The search still branches over every line from the board it kept.
+//
+// Deck-gated as P5b (static extra land drops, no landfall: Maze's End only); off in human play and under
+// MTG_UNPRUNE. Every other deck, and this deck with the flag off, gets BuildDedupKey exactly.
+static bool FoldLandOrderSeenFlag()
+{
+    static const bool env = EnvOn("MTG_FOLD_LAND_ORDER_SEEN", false);
+    return heurarm::Flag(heurarm::FOLD_LAND_ORDER_SEEN, env);
+}
+static bool FoldLandOrderSeenLive(const GameState& state)
+{
+    return state.deck_has_static_land_drops && !state.deck_has_landfall && FoldLandOrderSeenFlag()
+        && !HumanPlayActive() && !DecisionUnpruned();
+}
+static std::atomic<long long> g_flo_seen_canon{0};   // keys built from a re-ordered copy (MTG_FOLD_LAND_ORDER_SEEN)
+static TranspositionTable::Key SeenKey(const GameState& state)
+{
+    if (!FoldLandOrderSeenLive(state)) { return BuildDedupKey(state); }
+    const int me = state.active_player_index;
+    // Positions of our lands that entered this turn, by class. A small board: a flat scan, no allocation unless two
+    // lands entered this turn.
+    int n_entered = 0;
+    for (const Permanent& pm : state.battlefield)
+    { if (pm.controller_index == me && pm.entered_this_turn && pm.card.IsLand()) { ++n_entered; } }
+    if (n_entered < 2) { return BuildDedupKey(state); }
+    const DecisionProvider& prov = ResolveProvider(state);
+    std::vector<std::pair<int, int>> pos;   // (class, battlefield index)
+    pos.reserve(static_cast<std::size_t>(n_entered));
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& pm = state.battlefield[i];
+        if (pm.controller_index != me || !pm.entered_this_turn || !pm.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d == nullptr) { continue; }
+        const int c = prov.LandEntryOrderClass(state, me, *d);
+        if (c >= 0) { pos.emplace_back(c, static_cast<int>(i)); }
+    }
+    // Within each class, is the card-number order already the battlefield order? Then the key is the exact one.
+    bool sorted = true;
+    for (std::size_t a = 0; a < pos.size() && sorted; ++a)
+    {
+        for (std::size_t b = a + 1; b < pos.size(); ++b)
+        {
+            if (pos[a].first != pos[b].first) { continue; }
+            if (state.battlefield[static_cast<std::size_t>(pos[a].second)].card.m_number
+                > state.battlefield[static_cast<std::size_t>(pos[b].second)].card.m_number)
+            { sorted = false; break; }
+        }
+    }
+    if (sorted) { return BuildDedupKey(state); }
+    GameState c = state;
+    std::vector<int> cls;
+    for (const auto& pc : pos) { if (std::find(cls.begin(), cls.end(), pc.first) == cls.end()) { cls.push_back(pc.first); } }
+    for (int k : cls)
+    {
+        std::vector<int> idx;
+        for (const auto& pc : pos) { if (pc.first == k) { idx.push_back(pc.second); } }   // ascending positions
+        std::vector<int> by_num = idx;
+        std::stable_sort(by_num.begin(), by_num.end(), [&](int x, int y)
+        {
+            return state.battlefield[static_cast<std::size_t>(x)].card.m_number
+                 < state.battlefield[static_cast<std::size_t>(y)].card.m_number;
+        });
+        for (std::size_t j = 0; j < idx.size(); ++j)
+        { c.battlefield[static_cast<std::size_t>(idx[j])] = state.battlefield[static_cast<std::size_t>(by_num[j])]; }
+    }
+    g_flo_seen_canon.fetch_add(1, std::memory_order_relaxed);
+    return BuildDedupKey(c);
+}
+std::uint64_t TurnSolver::LandOrderSeenKeyOf(const GameState& state)
+{
+    const TranspositionTable::Key k = SeenKey(state);
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
+}
+
 std::uint64_t TurnSolver::DedupKeyOf(const GameState& state)
 {
     const TranspositionTable::Key k = BuildDedupKey(state);
@@ -115473,7 +115580,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 { node_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(q))); }
             }
             {   // post-apply state dedup (see m2_seen_states)
-                const bool fresh = m2_seen_states.insert(BuildDedupKey(s2)).second;
+                const bool fresh = m2_seen_states.insert(SeenKey(s2)).second;
                 if (!fresh)
                 {
                     g_m2_variant_dup_skips.fetch_add(1, std::memory_order_relaxed);
@@ -118393,7 +118500,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         (g_rollout_nest > 0 ? bpnode::g_children_rollout
                                             : bpnode::g_children_search).fetch_add(1, std::memory_order_relaxed);
                     }
-                    const TranspositionTable::Key child_key = BuildDedupKey(s3);
+                    const TranspositionTable::Key child_key = SeenKey(s3);
                     if (!bp_seen_states.insert(child_key).second)
                     {
                         FswDeclinedTrace(state, depth, v, "node-dupe", bp3, s3, -1, best.win_turn);
@@ -118503,7 +118610,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // insert must stay FIRST for a variant plan, or it would see its own key and self-skip).
         if (node_host_here && !bp_variants_here)
         {
-            const TranspositionTable::Key plan_key = BuildDedupKey(s);
+            const TranspositionTable::Key plan_key = SeenKey(s);
             bp_seen_states.insert(plan_key);
             if (dupe_trace_pre)
             { pre_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(p))); }
@@ -118512,7 +118619,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
         {
-            const TranspositionTable::Key mk = BuildDedupKey(s);
+            const TranspositionTable::Key mk = SeenKey(s);
             const bool fresh = bp_seen_states.insert(mk).second;
             if (etb_fold_expect)
             { (fresh ? g_put_bounce_verify_bad : g_put_bounce_verify_ok).fetch_add(1, std::memory_order_relaxed); }
@@ -119044,7 +119151,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
                 // so a wave candidate is also checked against every wave-0 one.
                 {
-                    const TranspositionTable::Key wk = BuildDedupKey(s);
+                    const TranspositionTable::Key wk = SeenKey(s);
                     const bool fresh_wk = bp_seen_states.insert(wk).second;
                     if (devseqstats::On())
                     {
@@ -119283,7 +119390,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
                 // and cannot improve on it. Insert-always is safe -- tranche plans are disjoint
                 // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
-                if (!bp_seen_states.insert(BuildDedupKey(s)).second) { return true; }
+                if (!bp_seen_states.insert(SeenKey(s)).second) { return true; }
                 if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
                 SimulateCombat(s);
                 if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
@@ -127036,7 +127143,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // would defeat its own purpose. (Same reasoning as the dominance prune below.)
                 if (etb_fold_expect)
                 {
-                    const TranspositionTable::Key ek = BuildDedupKey(copy);
+                    const TranspositionTable::Key ek = SeenKey(copy);
                     ((reframe_seen.count(ek) != 0 || bp_seen_states.count(ek) != 0)
                          ? g_put_bounce_verify_ok : g_put_bounce_verify_bad).fetch_add(1, std::memory_order_relaxed);
                 }
@@ -127067,7 +127174,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     return BuildDedupKey(copy);
                 };
                 if (bp_variants_here
-                    && !bp_seen_states.insert(EotHoldFoldKey(post_apply_key(), plan)).second
+                    && !bp_seen_states.insert(EotHoldFoldKey(FoldLandOrderSeenLive(copy) ? SeenKey(copy) : post_apply_key(), plan)).second
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -127307,7 +127414,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
                 { ++candidates_done; continue; }
                 if (bp_variants_here
-                    && !bp_seen_states.insert(BuildDedupKey(copy)).second
+                    && !bp_seen_states.insert(SeenKey(copy)).second
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
@@ -127735,7 +127842,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, true);
                     // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
                     // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
-                    if (!bp_seen_states.insert(EotHoldFoldKey(BuildDedupKey(copy), v)).second) { return true; }
+                    if (!bp_seen_states.insert(EotHoldFoldKey(SeenKey(copy), v)).second) { return true; }
                     if (EotHoldTwinInert(v, copy)) { return true; }   // an inert Soulstoke-hold twin
                     { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
@@ -127752,7 +127859,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, false);
                     RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
+                    if (!bp_seen_states.insert(SeenKey(copy)).second) { return true; }
                 }
                 if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
                 {
