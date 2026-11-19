@@ -1,0 +1,10 @@
+merfolk-mem 2026-11-19 -- Merfolk Turns 5.5 GB/game RSS
+Cause: legend-keep turn fan (end of AppendSubdecisionAxes) materialised the lazy Prophets champion fan and twinned every clone.
+Fix: twin lazy fans as fans (soulbond-twin shape). Commit on wip/merfolk-mem.
+gi172 s30000172: 5,532,388 kB / 59.6 s -> ~459 MB / 34.9 s, digest ede7df282e23cc5d both, units 3133368 both.
+s30560698 gi560698 (11-17 runaway, 42.8 GB before): 465,120 kB, 8.9 s, won T6 (fix only).
+Split batch, 16 threads: MT 300 games 5,629,932 -> 1,278,200 kB (72.6 -> 54.8 s), digests identical;
+ others (Niv, Hinata, Landfall Elementals, Cyclone, Merfolk, Goblins; 380 games) 1,924,032 -> 1,877,248 kB, digests identical.
+MTG_PB_LAZY_CANDS_VERIFY=1 (28 jobs): 43,885,820 entries, MISMATCH=0; bp verify 116,348 entries, MISMATCH=0.
+Units: 3703/3712; the 9 failures are AA "Cast order" cases, pre-existing at base (fixed by 4884aa67e per coordinator).
+Scratch: /workspaces/MagicDeckTester/build/scratch/claude_merfolk_mem/

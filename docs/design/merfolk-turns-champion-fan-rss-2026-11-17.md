@@ -1,7 +1,7 @@
 # Merfolk Turns: Wanderwine Prophets champion fan drives one game past 40 GB RSS (deferred, 2026-11-17)
 
-**Status:** found, diagnosed to the axis, NOT fixed. It is a run hazard: one game aborts a whole pooled batch on the
-RSS cap.
+**Status:** FIXED 2026-11-19 on `wip/merfolk-mem` (see "Resolution" below). The original diagnosis named the wrong
+materialiser.
 
 ## Repro
 
@@ -48,3 +48,33 @@ build/Release/mtg "decks/Merfolk Turns/Merfolk Turns.cod" --profile "decks/Merfo
 
 No code change. No owner assigned. Merfolk Turns analysis work belongs to the deck's analysis ledger; this note is
 the standalone record.
+
+## Resolution (2026-11-19)
+
+The champion fan has been LAZY since `25e86c28a` (2026-11-14); the combat axis that materialises it before branching is
+off on Merfolk Turns (`MTG_MERFOLK_PROPHETS_SAC_PRUNE`, default on). What materialised it was the **legend-keep turn
+fan**, the last step of `AppendSubdecisionAxes`: whenever any plan was live (two Emperor Mihail II in the deck make it
+live) it called `PbLazyMaterialize` on the whole layout and then appended a twin of every live plan. So each live m1
+enumeration rebuilt the full champion fan and doubled it.
+
+Evidence (seed 30000172 gi172, d5/b20, plain play):
+- `MTG_ENUM_HIWATER_KB=200000`: m1 lists of 136K-705K plans (0.37-2.1 GB each) at turn 8.
+- `perf record -e page-faults` on the Profile build: 70% of first-touch faults in `AppendSubdecisionAxes`'
+  legend-fan push_back/insert (TurnSolver.cpp, the `lk_extra` loop), 20% in its `PbLazyMaterialize`.
+
+Fix: a live lazy fan is twinned AS A FAN (the soulbond decline twins' shape): its prototype is stamped
+`legend_keep_turn = 1` and a twin fan of the same kind, size and pins, carrying `legend_keep_turn = 2` and
+`bp_wave0 = false`, goes in a block at the twins' position. `live_of` reads only `land_to_play`, `actions` and
+`legend_keep_turn`, none of which a fan varies, so a clone is live exactly when its prototype is.
+
+| | before | after |
+|---|---|---|
+| s30000172 gi172 peak RSS | 5,532,388 kB | ~459 MB |
+| s30000172 gi172 wall (alone) | 59.6 s | 34.9 s |
+| s30560698 gi560698 (this doc's repro) | 42.8 GB, aborted | 465 MB, 8.9 s, won T6 |
+| Merfolk Turns 300 games (gi 0-299), 16 threads, process peak | 5,629,932 kB, 72.6 s | 1,278,200 kB, 54.8 s |
+| six other decks (380 games), 16 threads, process peak | 1,924,032 kB | 1,877,248 kB |
+
+Byte-identity: same digest and units on gi172; 90-job pooled batch (Merfolk Turns 300 games, NivMizzetCombo,
+Hinata, Landfall Elementals, Unpredictable Cyclone, Merfolk, Goblins) digest-identical to the HEAD PGO binary;
+`MTG_PB_LAZY_CANDS_VERIFY=1` over 28 jobs compared 43.9M list entries, 0 MISMATCH.
