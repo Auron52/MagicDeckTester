@@ -4,11 +4,17 @@
 // "activate Maze's End, then Sylvan Scrying + the second activation" is payable only if the FIRST {3} leaves
 // Baldur's Gate (fed later at X = 5, after the fetched Gate entered untapped under Gond Gate) and the second Maze's
 // End untapped. The generic ladder ranks both {C}-only sources 5 (spend first), so the first payment ate them and
-// the line was unreachable at every budget. MazesEndProvider::ManaSourceRank pays them last.
+// the line was unreachable at every budget. MazesEndProvider::ManaSourceRank pays Baldur's Gate last WHILE THE LINE
+// STILL OWES {feeder}+1 mana after the payment (F6-3: conditional; an unconditional hold failed d8 b0); the second
+// Maze's End is kept by the plan's own activation-source hold (MTG_ACT_LINE_HOLD, PlanTraits::act_src_nums).
 #include <doctest/doctest.h>
+
+#include <optional>
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"
+#include "ai/PlanContext.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -67,17 +73,51 @@ GameState Board(const DecisionProvider& prov)
     Put(s, "Gruul Guildgate", 60);
     return s;
 }
+
+// The plan {activate Maze's End #43, activate #46} as the apply installs it: both activations' {3} owed, both {T}
+// sources named. `line_casts` = what the line's casts still owe (Sylvan Scrying's {1}{G} in the USER's line).
+PlanTraits TwoActsTraits()
+{
+    PlanTraits t;
+    t.act_mana_total = 6;
+    t.act_src_nums[0] = 43;
+    t.act_src_nums[1] = 46;
+    t.act_src_count = 2;
+    return t;
+}
 }   // namespace
 
-TEST_CASE("Maze's End F6: the first {3} keeps Baldur's Gate and the other Maze's End untapped")
+TEST_CASE("Maze's End F6: the first {3} of a two-activation plan keeps Baldur's Gate and the other Maze's End untapped")
 {
     LoadF6Cards();
     static const MazesEndProvider kProv;
     GameState s = Board(kProv);
     ManaCost three; three.generic = 3;
+    const PlanTraits t = TwoActsTraits();
+    PlanTraitsScope _pts(&t);
+    ActLinePassScope _pass;
+    ActLinePayScope pay(three);
     REQUIRE(TapForCostDirect(s, three, /*for_creature=*/false));
-    CHECK_FALSE(Tapped(s, 7));    // Baldur's Gate: its fed mode is worth X later
-    CHECK_FALSE(Tapped(s, 46));   // Maze's End: its {T} is the second activation
+    pay.Paid();
+    CHECK_FALSE(Tapped(s, 7));    // Baldur's Gate: the line still owes {3}, so its fed mode will be used
+    CHECK_FALSE(Tapped(s, 46));   // Maze's End: its {T} is the second activation (act_src_nums)
+}
+
+TEST_CASE("Maze's End F6: with nothing owed after the payment Baldur's Gate keeps the plain {C}-only rank")
+{
+    LoadF6Cards();
+    static const MazesEndProvider kProv;
+    GameState s = Board(kProv);
+    ManaCost three; three.generic = 3;
+    PlanTraits t;
+    t.act_mana_total = 3;               // the single activation being paid
+    t.act_src_nums[0] = 43;
+    t.act_src_count = 1;
+    PlanTraitsScope _pts(&t);
+    ActLinePassScope _pass;
+    ActLinePayScope pay(three);
+    REQUIRE(TapForCostDirect(s, three, false));
+    CHECK(Tapped(s, 7));          // the fed mode will not be used: spent first, as the base ladder does
 }
 
 TEST_CASE("Maze's End F6: after the fetched Gate enters untapped, Scrying + the second activation still pay")
@@ -86,7 +126,14 @@ TEST_CASE("Maze's End F6: after the fetched Gate enters untapped, Scrying + the 
     static const MazesEndProvider kProv;
     GameState s = Board(kProv);
     ManaCost three; three.generic = 3;
-    REQUIRE(TapForCostDirect(s, three, false));
+    const PlanTraits t = TwoActsTraits();
+    PlanTraitsScope _pts(&t);
+    ActLinePassScope _pass;
+    {
+        ActLinePayScope pay(three);
+        REQUIRE(TapForCostDirect(s, three, false));
+        pay.Paid();
+    }
     Put(s, "Azorius Guildgate", 70);   // Maze's End #43's fetch, untapped under Gond Gate (X -> 5)
     // Sylvan Scrying ({1}{G}) and the second activation's {3}, Maze's End #46 tapping itself: {4}{G} from what
     // the first payment left -- only Baldur's Gate's fed mode (X = 5) makes it.
@@ -140,15 +187,6 @@ GameState S6Board(const DecisionProvider& prov)
     return s;
 }
 
-void DumpS6(const GameState& s, const char* tag)
-{
-    std::string t;
-    for (const Permanent& p : s.battlefield) { if (p.tapped) { t += " #" + std::to_string(p.card.m_number); } }
-    const ManaPool& f = s.floating_mana;
-    MESSAGE(tag << " tapped:" << t << " float W" << f.white << " U" << f.blue << " B" << f.black << " R" << f.red
-                << " G" << f.green << " C" << f.colorless << " wild" << f.wild << " life " << s.players[0].life);
-}
-
 bool TapSelf(GameState& s, int num)
 {
     for (Permanent& p : s.battlefield)
@@ -161,33 +199,39 @@ bool TapSelf(GameState& s, int num)
     return false;
 }
 
-// Activations first, then Scrying. Returns whether Scrying's {1}{G} paid.
-// rank_arm: -1 = the F6 tap order as shipped, 0 = MTG_MAZE_TAP_BALDUR_LAST / MAZE_LAST both off.
-bool S6ActsThenScrying(int fed_float_arm, int* float_after_second = nullptr, int rank_arm = -1)
+// Activations first, then Scrying. Returns whether Scrying's {1}{G} paid. `line` installs the line as the apply does
+// (PlanTraits for the two activations, the line hold for Scrying's {1}{G}); without it the payer sees one bill at a
+// time and Baldur's Gate keeps the plain rank.
+bool S6ActsThenScrying(int fed_float_arm, int* float_after_second = nullptr, bool line = true)
 {
     LoadF6Cards();
     static const MazesEndProvider kProv;
     heurarm::Clear();
     if (fed_float_arm >= 0) { heurarm::t_arm[heurarm::SCALED_FED_FLOAT] = static_cast<std::int8_t>(fed_float_arm); }
-    if (rank_arm >= 0)
-    {
-        heurarm::t_arm[heurarm::MAZE_TAP_BALDUR_LAST] = static_cast<std::int8_t>(rank_arm);
-        heurarm::t_arm[heurarm::MAZE_TAP_MAZE_LAST]   = static_cast<std::int8_t>(rank_arm);
-    }
     GameState s = S6Board(kProv);
     ManaCost three; three.generic = 3;
+    ManaCost scry; scry.generic = 1; scry.green = 1;
+    const PlanTraits t = TwoActsTraits();
+    std::optional<PlanTraitsScope> pts;
+    std::optional<LineUnpaidCostScope> lus;
+    if (line) { pts.emplace(&t); lus.emplace(scry); }
+    ActLinePassScope _pass;
     REQUIRE(TapSelf(s, 43));
-    REQUIRE(TapForCostDirect(s, three, false));
-    DumpS6(s, "after #43");
+    {
+        ActLinePayScope pay(three);
+        REQUIRE(TapForCostDirect(s, three, false));
+        pay.Paid();
+    }
     Put(s, "Azorius Guildgate", 70);   // #43's fetch, untapped under Gond Gate
-    if (!TapSelf(s, 46)) { DumpS6(s, "#46 spent on the first {3}"); heurarm::Clear(); return false; }
-    REQUIRE(TapForCostDirect(s, three, false));
-    DumpS6(s, "after #46");
+    if (!TapSelf(s, 46)) { heurarm::Clear(); return false; }   // #46 was spent on the first {3}
+    {
+        ActLinePayScope pay(three);
+        REQUIRE(TapForCostDirect(s, three, false));
+        pay.Paid();
+    }
     if (float_after_second != nullptr) { *float_after_second = s.floating_mana.Total(); }
     Put(s, "Izzet Guildgate", 71);     // #46's fetch
-    ManaCost scry; scry.generic = 1; scry.green = 1;
     const bool ok = TapForCostDirect(s, scry, false);
-    DumpS6(s, ok ? "Scrying paid" : "Scrying FAILED");
     heurarm::Clear();
     return ok;
 }
@@ -200,11 +244,13 @@ TEST_CASE("Maze's End F6-2: two activations then Sylvan Scrying pay -- the secon
     CHECK(fl == 2);   // X = 5 for {2}: 5 - 2 fed - 1 plain
 }
 
-TEST_CASE("Maze's End F6-2: with MTG_SCALED_FED_FLOAT off the plain {C} tap strands Scrying (the hole it closes)")
+TEST_CASE("Maze's End F6-2: with MTG_SCALED_FED_FLOAT off the fed surplus floats WHITE and strands Scrying (the hole it closes)")
 {
+    // Thran Portal's life cost triggers the pay refine on the second {3}, which re-makes it with Baldur's Gate fed --
+    // in the oracle's WUBRG face order. ScaledFedRecolourAfter re-reads that surplus in the line's colour.
     int fl = -1;
     CHECK_FALSE(S6ActsThenScrying(/*fed_float_arm=*/0, &fl));
-    CHECK(fl == 0);
+    CHECK(fl == 2);
 }
 
 TEST_CASE("Maze's End F6-2: a bill below {feeder}+1 generic is untouched (Scrying off Baldur's Gate floats nothing)")
@@ -219,8 +265,7 @@ TEST_CASE("Maze's End F6-2: a bill below {feeder}+1 generic is untouched (Scryin
     CHECK(s.floating_mana.Total() == 0);
 }
 
-TEST_CASE("Maze's End F6-2: DIAG the s6 line under the F6 ranks off")
+TEST_CASE("Maze's End F6-2: without the line in scope the first {3} spends the second Maze's End (the unheld order)")
 {
-    int fl = -1;
-    MESSAGE("ranks off, fed on: " << S6ActsThenScrying(-1, &fl, 0) << " float " << fl);
+    CHECK_FALSE(S6ActsThenScrying(/*fed_float_arm=*/-1, nullptr, /*line=*/false));
 }

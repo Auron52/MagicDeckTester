@@ -69274,32 +69274,49 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     return p;
 }
 
-// Maze's End F6 (USER rejection s6 gi5 T5, 2026-11-19): THE TAP ORDER OF THE TWO SOURCES WHOSE {T} IS WORTH MORE
-// LATER. Both make only {C}, so the generic ladder ranks them 5 ("least flexible -> spend FIRST") and every generic
-// pip of the turn reaches for them before a Guildgate:
-//   * BALDUR'S GATE: "{2},{T}: Add X mana of any one color, X = the other Gates you control". X grows during the
-//     line (each Maze's End fetch, each Gate land drop, each Charm put adds one), and the fed mode is reached only
-//     through the backtracker, so its {C} face goes first and the fed mode is lost. Board (T5): Baldur's, Gond,
-//     Sea, Simic, Thran, two Maze's End, Sylvan Scrying in hand. Maze's End #43's {3} was paid with Baldur's {C}
-//     + Sea + Simic, so after the fetched Gate entered untapped (Gond Gate) the rest -- Scrying + the second
-//     activation, {1}{G} + {3} -- had 4 mana, not the 5 that Baldur's Gate fed at X = 5 makes. The line
-//     "activate, then Scrying + activate" was unreachable at every budget: payment is not searched, and the
-//     continuation can only spend what the first payment left. Rank 61 (the scaled tier MTG_SCALED_LAND_RANK
-//     gives a board-scaled land, default OFF engine-wide) while ScaledManaNetYield > 0 -- the engine's own
-//     "fed mode live, affordable and better than {C}" test; a dead fed mode keeps the plain rank.
-//   * MAZE'S END: an untapped copy's {T} is its activation (the win engine). A plan that does not name it (a
-//     single activation of the other copy; a cast) tapped it for {C} first, and the bounce's hand-entry
-//     breakpoint then found it tapped: the second activation was gone. Rank 69 (after every other source).
-// ORDER ONLY: TapForCostShared still taps either when the cost cannot be paid otherwise, and the complete
+// Maze's End F6 (USER rejection s6 gi5 T5, 2026-11-19): BALDUR'S GATE IS HELD WHILE ITS FED MODE WILL BE USED.
+// "{2},{T}: Add X mana of any one color, X = the other Gates you control" makes only {C} in its plain face, so the
+// generic ladder ranks it 5 ("least flexible -> spend FIRST") and every generic pip reaches for it before a
+// Guildgate. Board (T5): Baldur's, Gond, Sea, Simic, Thran, two Maze's End, Sylvan Scrying in hand. The plan
+// {ME#43, ME#46} paid #43's {3} with Baldur's {C} + Sea + Simic (fed mode lost at X = 4, before the fetch made it
+// 5), so the continuation -- Scrying + the second activation, {1}{G} + {3} -- had 4 mana, not the 5 Baldur's Gate
+// fed by Thran Portal and the fetched Gate makes. Payment is not searched, so the line was unreachable at every
+// budget.
+// CONDITIONAL (F6-3): rank 61 (the scaled tier) only while (a) the fed mode is live -- ScaledManaNetYield > 0, the
+// engine's own "affordable and better than {C}" test -- and (b) the rest of the line still owes at least
+// {feeder}+1 mana AFTER this payment (LineDemandAfterPayment): the line's later casts plus its pending
+// activations. Without later demand the fed mode is not used, and an UNCONDITIONAL hold (dd0421f20) spent a
+// coloured Gate on a generic pip instead -- 3 slower games that did not recover at d8 b0 (F6 A/B). The plain
+// rank otherwise. The old MAZE'S END hold (rank 69) is gone: holding an untapped Maze's End is right only when the
+// line names its activation, and the plan's own act_src_nums hold (MTG_ACT_LINE_HOLD, ActLineHoldMask) already
+// keeps exactly those sources off a payment; the unconditional rank kept it when the line did not use it (d5
+// g823, d3 g95: Guild Summit slipped a turn -- 16 unrecovered games).
+// ORDER ONLY: TapForCostShared still taps Baldur's Gate when the cost cannot be paid otherwise, and the complete
 // backtracker remains the fallback, so no payable cost becomes unpayable (the ManaSourceRank contract).
-// MTG_MAZE_TAP_BALDUR_LAST / MTG_MAZE_TAP_MAZE_LAST (heurarm slots, both DEFAULT ON; =0 -> the generic rank).
+// MTG_MAZE_TAP_BALDUR_LAST (heurarm slot, DEFAULT ON; =0 -> the generic rank).
+// The line hold (g_line_unpaid_cost) carries the casts only, and still includes the cast being paid; a trailing
+// activation's own payment (g_act_line_current) is not in it unless a joint prepay loaded the activations
+// (g_line_hold_has_acts). Pending activations come from the plan traits net of those paid and the one being paid.
+static int LineDemandAfterPayment()
+{
+    const bool paying_act = g_act_line_current.ManaValue() > 0;
+    int later = g_line_unpaid_cost.ManaValue();
+    if (g_pay_need_live && (!paying_act || g_line_hold_has_acts)) { later -= g_pay_full_mv; }
+    if (later < 0) { later = 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt != nullptr && !g_line_hold_has_acts)   // a joint prepay's hold already carries the activations
+    {
+        later += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue());
+    }
+    return later;
+}
+
 int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
 {
     static const bool s_baldur = EnvOn("MTG_MAZE_TAP_BALDUR_LAST", true);
-    static const bool s_maze   = EnvOn("MTG_MAZE_TAP_MAZE_LAST", true);
     if (IsScaledManaLand(def) && heurarm::Flag(heurarm::MAZE_TAP_BALDUR_LAST, s_baldur)
-        && ScaledManaNetYield(s, def) > 0) { return 61; }
-    if (def.params.tap_tutor_put_return_self && heurarm::Flag(heurarm::MAZE_TAP_MAZE_LAST, s_maze)) { return 69; }
+        && ScaledManaNetYield(s, def) > 0
+        && LineDemandAfterPayment() >= def.params.mana_per_creature_feeder_generic + 1) { return 61; }
     return DeckProvider::ManaSourceRank(s, def);
 }
 

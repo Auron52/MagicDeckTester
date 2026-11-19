@@ -11221,6 +11221,66 @@ void ScaledFedFloatAfter(GameState& state, const ManaCost& cost_in, const PayRef
     if (f.colorless > pre.fm.colorless) { f.colorless -= 1; f.Add(k, gain + 1); }
     else { f.Add(k, gain); }
 }
+
+// THE FED TAP'S COLOUR, WHEN SOMETHING ELSE CHOSE IT (MTG_SCALED_FED_FLOAT). The pay refine (PayRefineAfter: the mana
+// oracle's dominating payment of the same bill) can itself take a board-scaled land's fed face, and the oracle
+// enumerates that face's colours in WUBRG order, so the X units come out WHITE whatever the line needs. Maze's End
+// s6 gi5 T5 (F6-3 unit test): the second Maze's End {3} tapped Baldur's Gate, Thran Portal and the fetched Gate; Thran
+// Portal's life cost triggered the refine, which re-made the payment with Baldur's Gate fed for five WHITE, and
+// Sylvan Scrying's {G} had nothing. The colour of a fed tap is a free choice of the same activation, so when the
+// payment's whole float gain is in that one colour and the bill has no pip of it, the surplus is re-read in the
+// colour ScaledFedFloatAfter would choose (LumpColourOrder: the line's remaining pips, then the hand's). Same taps,
+// same bill, same float total: only the colour moves. One scaled land per payment; refused whenever the float
+// cannot be attributed to the fed tap exactly.
+void ScaledFedRecolourAfter(GameState& state, const ManaCost& cost_in, const PayRefineSnap& pre)
+{
+    if (cost_in.colorless != 0 || cost_in.has_x || cost_in.x_pips != 0 || cost_in.hybrid_count != 0
+        || cost_in.twobrid_count != 0 || cost_in.phyrexian_count != 0 || cost_in.snow_pips != 0)
+    { return; }
+    if (state.battlefield.size() != pre.bf.size() || pre.fcm.Total() != 0 || pre.fbm.Total() != 0 || pre.fhc != 0
+        || state.floating_creature_mana.Total() != 0 || state.floating_bigspell_mana.Total() != 0
+        || state.floating_haste_c != 0 || state.floating_mana.wild != pre.fm.wild
+        || state.floating_mana.wild_phantom != 0 || pre.fm.wild_phantom != 0)
+    { return; }
+    const int me = state.active_player_index;
+    int scaled = -1;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != me || !p.tapped || pre.bf[i].tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return; }
+        if (IsScaledManaLand(*d) && !LandTypeChangedToIsland(state, p))
+        {
+            if (scaled >= 0) { return; }
+            scaled = static_cast<int>(i);
+        }
+    }
+    if (scaled < 0) { return; }
+    const ManaPool& f = state.floating_mana;
+    const int now[6] = { f.white, f.blue, f.black, f.red, f.green, f.colorless };
+    const int was[6] = { pre.fm.white, pre.fm.blue, pre.fm.black, pre.fm.red, pre.fm.green, pre.fm.colorless };
+    int c = -1;
+    for (int k = 0; k < 6; ++k)
+    {
+        if (now[k] < was[k]) { return; }
+        if (now[k] > was[k]) { if (c >= 0) { return; } c = k; }
+    }
+    if (c < 0 || c == 5) { return; }
+    const int pips[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    if (pips[c] != 0) { return; }
+    const Permanent& sp = state.battlefield[static_cast<std::size_t>(scaled)];
+    const int x = ScaledManaCreatureCount(state, &sp);
+    const int gain = now[c] - was[c];
+    if (gain > x) { return; }
+    int order[5];
+    LumpColourOrder(state, ManaCost{}, order);
+    const int k = order[0];
+    if (k == c) { return; }
+    ManaPool& fm = state.floating_mana;
+    fm.Add(static_cast<Color>(c), -gain);
+    fm.Add(static_cast<Color>(k), gain);
+}
 } // namespace
 
 static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -11349,7 +11409,7 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     {
         if (refine) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
         if (exact_float) { ExactLineFloatAfter(state, cost_in, *refine_pre); }
-        if (scaled_fed) { ScaledFedFloatAfter(state, cost_in, *refine_pre); }
+        if (scaled_fed) { ScaledFedRecolourAfter(state, cost_in, *refine_pre); ScaledFedFloatAfter(state, cost_in, *refine_pre); }
     }
     return ok;
 }
