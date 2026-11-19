@@ -70662,6 +70662,236 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
     return true;
 }
 
+// PROVABLY-UNPAYABLE PLANS (MazesEndProvider's plan-list filter, MTG_MAZE_UNPAYABLE_PRUNE; Maze's End F5). USER
+// 2026-11-18, VERBATIM: "Unpayable plans I think we could try. I assume all of the plans die at some point anyway, so
+// the only question is whether we can stop them early when they are causing issues. For simple decks with no rituals
+// or equivalent (cards that add more mana then they cost) like this one it makes sense to drop plans that cannot pay a
+// subset." MTG_LINE_PAY_AUDIT found the enumeration admitting plans the payer then cannot pay (a lone Sylvan Scrying
+// with no green source, Gond Gate's colours over-read; 297 of 331 d0 'unpayable' lines): the apply drops the step,
+// the post-apply state is the smaller subset's, and the search scores (and recurses below) a duplicate.
+// THE TEST is a NECESSARY condition for payability, so a plan it drops has no payment in ANY order:
+//  * THE OPTIMISTIC BOARD. The plan's land drop is put onto the battlefield UNTAPPED whatever its entry rule (Gond
+//    Gate, Amulet of Vigor), so Baldur's Gate's count sees it. Every OTHER land the line itself puts (an extra drop,
+//    Maze's End's fetch, Talon's put, a land tutored onto the battlefield) and every Treasure it makes is credited as
+//    any-colour mana: 2 + our lands + our scaled lands per land (more than any land, Baldur's Gate's X included, can
+//    add), 1 per Treasure; capped, per step, at the rest of the bill (a step's own output never pays its own cost --
+//    the in-sequence reading F6 asked for). An activation's {T} source is set aside; another-Gate tap costs are NOT
+//    (an over-credit). The shipped payer (greedy, then its complete backtracker) pays the summed bill on that board.
+//  * THE BINDING STEPS. A step that can open a mid-line continuation (a tutor, a draw -- Guild Summit's ETB, a Gate
+//    entering under Guild Summit) re-decides the rest of the turn, so steps after it are not binding. With no such
+//    step the WHOLE bill is judged. With some, the plan is dropped only when EVERY such step is unpayable on its own
+//    (whichever the apply reaches first then fails, in any order). A land drop that could itself draw (a Gate under
+//    Guild Summit) leaves nothing binding: kept.
+//  * THE DECK PREMISE (the caller's gate): no card that makes more mana than it costs and no cost reducer, so no step
+//    before another can enlarge the supply beyond the credits above or shrink a cost. Any step kind this does not
+//    price exactly (X, hybrid overflow, convoke, an unknown mana-paying kind) keeps the plan.
+// RESTRICTION only: the search still branches over every admitted plan; the subset the dropped plan would have
+// realised is its own plan on the menu. Inert in human play (ApplyProviderPlanListFilter).
+namespace
+{
+struct UnpayStep { ManaCost cost{}; bool bp = false; int supply = 0; };
+// The plan's steps, or false when one cannot be priced exactly (keep the plan).
+bool UnpayCollect(const GameState& state, const std::vector<Action>& acts, std::vector<UnpayStep>& out,
+                  std::vector<int>& tap_src, bool& land_draws, const std::string& land)
+{
+    const int me = state.active_player_index;
+    int lands = 0, scaled = 0;
+    bool summit = false;   // a Gate (or any land of the named subtype) entering draws a card
+    std::vector<std::string> draw_subs;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (p.card.IsLand()) { ++lands; if (!d->params.mana_per_other_controlled_subtype.empty()) { ++scaled; } }
+        for (const std::string& sub : d->params.draw_on_other_subtype_enter) { draw_subs.push_back(sub); }
+    }
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr)
+        { for (const std::string& sub : a.def->params.draw_on_other_subtype_enter) { draw_subs.push_back(sub); } }
+    }
+    summit = !draw_subs.empty();
+    auto draws_on_enter = [&](const CardDefinition* d)
+    {
+        if (!summit || d == nullptr) { return summit; }   // an unknown land under a draw watcher: assume it draws
+        for (const std::string& sub : draw_subs) { if (CardHasSubtype(d->card, sub)) { return true; } }
+        return false;
+    };
+    const int land_credit = 2 + lands + scaled;
+    land_draws = false;
+    if (!land.empty())
+    {
+        for (const Card& c : state.players[me].hand)
+        {
+            if (c.m_name.str() != land) { continue; }
+            land_draws = draws_on_enter(CardDatabase::Instance().LookupCached(c));
+            break;
+        }
+    }
+    auto ok_cost = [](const ManaCost& c)
+    {
+        return !c.has_x && c.x_pips == 0 && c.twobrid_count == 0 && c.phyrexian_count == 0 && c.snow_pips == 0;
+    };
+    for (const Action& a : acts)
+    {
+        UnpayStep st;
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:
+            {
+                if (a.def == nullptr || a.sacrifice_land || a.convoke_green > 0 || a.convoke_other > 0 || a.ritual_float > 0)
+                { return false; }
+                if (!a.alt_cost && !a.free_cast) { if (!ok_cost(a.cost)) { return false; } st.cost = a.cost; }
+                const CardParams& pp = a.def->params;
+                st.bp = pp.tutor_to_hand || pp.tutor_land_to_battlefield || pp.tutor_nonland_to_hand
+                     || !pp.tutor_types.empty() || !pp.etb_tap_subtype_draw.empty()
+                     || !pp.draw_on_other_subtype_enter.empty();
+                if (pp.tutor_land_to_battlefield) { st.supply += land_credit; }
+                if (a.rock_mana.Total() > 0) { st.supply += static_cast<int>(a.rock_mana.Total()); }
+                break;
+            }
+            case Action::Kind::Channel:
+                if (a.def == nullptr || !a.def->params.hand_put_self_cost.has_value() || !ok_cost(a.cost)) { return false; }
+                st.cost = a.cost;
+                st.supply = land_credit;
+                st.bp = draws_on_enter(a.def);
+                break;
+            case Action::Kind::PlayLand:
+                st.supply = land_credit;
+                st.bp = draws_on_enter(a.def);
+                break;
+            case Action::Kind::ActivatePermAbility:
+            {
+                if (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::PingLoop
+                    || a.ability_mode == Action::AbilityMode::SacNamedTutorPut
+                    || a.ability_mode == Action::AbilityMode::TapTargetPump) { return false; }
+                const ManaCost oc = OutletOwnCost(a);
+                if (!ok_cost(oc)) { return false; }
+                const bool taps = PermAbilityTaps(a.ability_mode);
+                const int reps = (!taps && a.chosen_x > 1) ? a.chosen_x : 1;
+                for (int r = 0; r < reps; ++r) { AddManaCost(st.cost, oc); }
+                if (taps && std::find(tap_src.begin(), tap_src.end(), a.sac_source_id) == tap_src.end())
+                { tap_src.push_back(a.sac_source_id); }
+                if (a.ability_mode == Action::AbilityMode::TapTutorPut || TurnSolver::IsLandSearchActivation(a))
+                { st.supply = land_credit; st.bp = summit; }   // the fetched land (drawing under a watcher)
+                else if (a.ability_mode == Action::AbilityMode::TapTreasure) { st.supply = 1; }
+                break;
+            }
+            case Action::Kind::SacForMana: case Action::Kind::BankManaTap:
+                return false;   // a mana-making step: not this deck's shape
+            default:
+                if (a.cost.ManaValue() > 0 || a.ritual_float > 0) { return false; }
+                break;
+        }
+        out.push_back(st);
+    }
+    return true;
+}
+// Can the optimistic board `base` (land drop placed, {T} sources set aside) pay `bill` with `wild` extra any-colour
+// mana? The shipped payer on a scratch copy, no outer line hold or plan reservation read.
+bool UnpayBoardPays(const GameState& base, const ManaCost& bill, int wild)
+{
+    if (bill.ManaValue() == 0) { return true; }
+    PayScratch ps(base);
+    GameState& t = ps.Board();
+    t.floating_mana.wild += wild;
+    RevealLogPause quiet;
+    LineUnpaidCostScope _luc(ManaCost{});
+    PlanSourceReserveScope _psr({});
+    return TapForCostDirect(t, bill, /*for_creature=*/false);
+}
+bool UnpayBuildBase(const GameState& state, const std::string& land, const std::vector<int>& tap_src, GameState& base)
+{
+    base = state;
+    const int me = base.active_player_index;
+    if (!land.empty())
+    {
+        const std::vector<Card>& hand = base.players[me].hand;
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(hand.size()); ++i) { if (hand[i].m_name.str() == land) { idx = i; break; } }
+        if (idx < 0) { return false; }
+        const Card c = hand[static_cast<std::size_t>(idx)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return false; }
+        base.players[me].hand.erase(base.players[me].hand.begin() + idx);
+        RevealLogPause quiet;
+        EnterLand(base, *d, c.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/false,
+                  LandEntryTap::PreDecidedUntapped);
+    }
+    for (const int id : tap_src)
+    { for (Permanent& p : base.battlefield) { if (p.card.m_number == id && p.controller_index == me) { p.tapped = true; } } }
+    return true;
+}
+bool PlanUnpayableImpl(const GameState& state, const std::vector<Action>& acts, const std::string& land,
+                       std::vector<std::pair<std::string, GameState>>* bases)
+{
+    std::vector<UnpayStep> steps;
+    std::vector<int> tap_src;
+    bool land_draws = false;
+    if (!UnpayCollect(state, acts, steps, tap_src, land_draws, land) || land_draws) { return false; }
+    ManaCost bill{};
+    int supply_total = 0;
+    bool any_bp = false;
+    for (const UnpayStep& st : steps) { AddManaCost(bill, st.cost); supply_total += st.supply; any_bp |= st.bp; }
+    if (bill.ManaValue() == 0) { return false; }
+    // The optimistic base for this (land, set-aside) -- shared by the plans of one list with the same pair.
+    std::string key = land;
+    for (const int id : tap_src) { key += '|'; key += std::to_string(id); }
+    const GameState* base = nullptr;
+    GameState local;
+    if (bases != nullptr)
+    {
+        for (const auto& kv : *bases) { if (kv.first == key) { base = &kv.second; break; } }
+        if (base == nullptr)
+        {
+            bases->emplace_back(key, GameState{});
+            if (!UnpayBuildBase(state, land, tap_src, bases->back().second)) { bases->pop_back(); return false; }
+            base = &bases->back().second;
+        }
+    }
+    else
+    {
+        if (!UnpayBuildBase(state, land, tap_src, local)) { return false; }
+        base = &local;
+    }
+    const int mv = bill.ManaValue();
+    if (!any_bp)
+    {
+        int wild = 0;
+        for (const UnpayStep& st : steps) { wild += std::min(st.supply, mv - st.cost.ManaValue()); }
+        return !UnpayBoardPays(*base, bill, wild);
+    }
+    // Every continuation-opening step alone, with the other steps' supply (any of them may come before it).
+    for (std::size_t i = 0; i < steps.size(); ++i)
+    {
+        if (!steps[i].bp) { continue; }
+        const int own = steps[i].cost.ManaValue();
+        if (own == 0) { return false; }
+        const int wild = std::min(supply_total - steps[i].supply, own);
+        if (UnpayBoardPays(*base, steps[i].cost, wild)) { return false; }
+    }
+    return true;
+}
+}   // namespace
+void TurnSolver::DropProvablyUnpayablePlans(const GameState& state, const std::vector<const std::vector<Action>*>& acts,
+                                            const std::vector<const std::string*>& lands, std::vector<char>& admit)
+{
+    std::vector<std::pair<std::string, GameState>> bases;
+    bases.reserve(8);
+    for (std::size_t i = 0; i < acts.size() && i < admit.size(); ++i)
+    {
+        if (!admit[i] || acts[i] == nullptr || acts[i]->empty()) { continue; }
+        if (bases.size() >= 8) { bases.clear(); }   // the reserve keeps the base pointers stable
+        if (PlanUnpayableImpl(state, *acts[i], lands[i] != nullptr ? *lands[i] : std::string(), &bases)) { admit[i] = 0; }
+    }
+}
+bool TurnSolver::PlanProvablyUnpayableForTest(const GameState& state, const std::vector<Action>& acts,
+                                              const std::string& land)
+{
+    return PlanUnpayableImpl(state, acts, land, nullptr);
+}
+
 void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
 {
     if (q >= plan.actions.size()) { return; }

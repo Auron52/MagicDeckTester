@@ -18,6 +18,7 @@
 #include "core/SpellEffects.h"
 #include "mtg_test_seam.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -423,4 +424,140 @@ TEST_CASE("Maze's End F5 audit oracle: Heap Gate's other-Gate tap is set aside")
     // ...and with a fourth source it is payable (the other Gate set aside, two left for {G} + {1}).
     F5Put(s, "Gruul Guildgate", 4);
     CHECK(LineJointPayOracleForTest(s, { cast, act }, nullptr) == 1);
+}
+
+// ---- The provably-unpayable plan prune (USER 2026-11-18: "drop plans that cannot pay a subset") -------------------
+namespace
+{
+Action F5Cast(const GameState& s, const char* name)
+{
+    Action a;
+    a.kind = Action::Kind::CastFromHand;
+    a.card_name = F5Def(name).card.m_name;
+    a.def = &F5Def(name);
+    a.cost = F5Def(name).card.m_mana_cost;
+    for (int i = 0; i < static_cast<int>(s.players[0].hand.size()); ++i)
+    { if (s.players[0].hand[static_cast<std::size_t>(i)].m_name.str() == name) { a.hand_index = i; break; } }
+    return a;
+}
+std::vector<char> F5Admit(const MazesEndProvider& prov, const GameState& s,
+                          const std::vector<std::pair<std::vector<Action>, std::string>>& plans)
+{
+    std::vector<DecisionProvider::PlanView> v;
+    for (const auto& p : plans) { v.push_back({ &p.first, &p.second }); }
+    std::vector<char> admit(v.size(), 1);
+    prov.PlanListAdmit(s, v, admit);
+    return admit;
+}
+}   // namespace
+
+TEST_CASE("Maze's End F5 prune: a plan whose casts no source can pay is dropped (the lone Sylvan Scrying)")
+{
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    s.players[0].lands_played_this_turn = 0;
+    F5Put(s, "Azorius Guildgate", 700);                 // {W}/{U}
+    s.players[0].hand.push_back(F5Card("Dimir Guildgate", 710));   // the drop: {U}/{B}
+    s.players[0].hand.push_back(F5Card("Sylvan Scrying", 711));
+    s.players[0].hand.push_back(F5Card("Exploration", 712));
+    REQUIRE(prov.PlanListFilterLive(s));
+    const std::string drop = "Dimir Guildgate";
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Sylvan Scrying") }, drop));   // no {G} anywhere
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Exploration") }, drop));
+    const std::vector<char> admit = F5Admit(prov, s, {
+        { {}, drop }, { { F5Cast(s, "Sylvan Scrying") }, drop }, { { F5Cast(s, "Exploration") }, drop } });
+    CHECK(admit == std::vector<char>{ 1, 0, 0 });
+    {   // the lever off: every plan offered
+        const F5Arm off(heurarm::MAZE_UNPAYABLE_PRUNE, 0);
+        CHECK_FALSE(prov.PlanListFilterLive(s));
+        const std::vector<char> all = F5Admit(prov, s, {
+            { {}, drop }, { { F5Cast(s, "Sylvan Scrying") }, drop }, { { F5Cast(s, "Exploration") }, drop } });
+        CHECK(all == std::vector<char>{ 1, 1, 1 });
+    }
+    // A green source makes both payable: kept.
+    F5Put(s, "Simic Guildgate", 701);
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Sylvan Scrying") }, drop));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Exploration") }, drop));
+}
+
+TEST_CASE("Maze's End F5 prune: the deck property -- a net-mana-positive card in our cards turns the prune off")
+{
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    F5Put(s, "Azorius Guildgate", 700);
+    s.players[0].hand.push_back(F5Card("Exploration", 712));
+    CHECK(prov.PlanListFilterLive(s));
+    s.players[0].library.push_back(F5Card("Dark Ritual", 800));   // a ritual anywhere in our cards
+    CHECK_FALSE(prov.PlanListFilterLive(s));                     // (no Heap Gate either: the filter is not live)
+    const std::string none;
+    const std::vector<char> admit = F5Admit(prov, s, { { { F5Cast(s, "Exploration") }, none } });
+    CHECK(admit == std::vector<char>{ 1 });
+}
+
+TEST_CASE("Maze's End F5 prune: the line IN SEQUENCE -- a Gate Maze's End fetches untapped (Gond Gate) is supply")
+{
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    s.players[0].lands_played_this_turn = 1;
+    F5Put(s, "Gond Gate", 700);
+    const int maze = F5Put(s, "Maze's End", 701);
+    F5Put(s, "Simic Guildgate", 702);
+    F5Put(s, "Azorius Guildgate", 703);
+    for (int k = 0; k < 3; ++k) { s.players[0].library.push_back(F5Card("Selesnya Guildgate", 900 + k)); }
+    s.players[0].hand.push_back(F5Card("Exploration", 712));
+    const std::vector<Action> acts = TurnSolver::CollectActionsForTest(s, true);
+    const Action* act = nullptr;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && a.sac_source_id == maze) { act = &a; break; }
+    }
+    REQUIRE(act != nullptr);
+    const std::string none;
+    // {3} + {G} = four mana from three sources besides Maze's End: payable only because the fetched Gate enters
+    // untapped under Gond Gate -- KEPT (pricing the starting board alone would drop a legal line).
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { *act, F5Cast(s, "Exploration") }, none));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { *act }, none));
+    // Its own fetch never pays its own {3}: with one Gate fewer, Maze's End's {3} alone is short -- DROPPED.
+    s.battlefield.erase(std::remove_if(s.battlefield.begin(), s.battlefield.end(),
+                                       [](const Permanent& p) { return p.card.m_number == 703; }),
+                        s.battlefield.end());
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { *act }, none));
+}
+
+TEST_CASE("Maze's End F5 prune: the land drop is supply untapped, and Baldur's Gate counts it")
+{
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();
+    s.m_provider = &prov;
+    s.players[0].lands_played_this_turn = 0;
+    F5Put(s, "Baldur's Gate", 700);
+    F5Put(s, "Simic Guildgate", 701);
+    F5Put(s, "Azorius Guildgate", 702);
+    s.players[0].hand.push_back(F5Card("Dimir Guildgate", 710));   // enters tapped; the optimistic board untaps it
+    for (const char* n : { "Exploration", "Burgeoning", "Manabond", "Amulet of Vigor" })
+    { s.players[0].hand.push_back(F5Card(n, 720 + static_cast<int>(s.players[0].hand.size()))); }
+    const std::vector<Action> line = { F5Cast(s, "Exploration"), F5Cast(s, "Burgeoning"), F5Cast(s, "Manabond"),
+                                       F5Cast(s, "Amulet of Vigor") };   // {G}{G}{G}{1}
+    // With the drop: Baldur's Gate fed {2} by Azorius + Dimir makes {G}{G}{G} (three other Gates), Simic the fourth.
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, line, "Dimir Guildgate"));
+    // Without it: three sources, at most three mana -- DROPPED.
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, line, std::string()));
+    // Amulet of Vigor on board, a tapped-entering Gate as the drop: the drop's mana counts (kept).
+    GameState a = F5Base();
+    a.m_provider = &prov;
+    a.players[0].lands_played_this_turn = 0;
+    F5Put(a, "Amulet of Vigor", 600);
+    F5Put(a, "Simic Guildgate", 701);
+    a.players[0].hand.push_back(F5Card("Azorius Guildgate", 710));
+    a.players[0].hand.push_back(F5Card("Sylvan Scrying", 711));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(a, { F5Cast(a, "Sylvan Scrying") }, "Azorius Guildgate"));
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(a, { F5Cast(a, "Sylvan Scrying") }, std::string()));
 }
