@@ -1,0 +1,329 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 18, "name": "Hallowed Fountain" }, { "num": 38, "name": "Secluded Courtyard" }, { "num": 51, "name": "Unclaimed Territory" }, { "num": 24, "name": "Mausoleum Wanderer" }, { "num": 25, "name": "Mausoleum Wanderer" }, { "num": 43, "name": "Skyclave Apparition" }, { "num": 32, "name": "Patrician Geist" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Unclaimed Territory", "cast=Mausoleum Wanderer"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Patrician Geist" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 18, "name": "Hallowed Fountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Hallowed Fountain; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Hallowed Fountain", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 3, "summary": "land=Hallowed Fountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Hallowed Fountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 18, "name": "Hallowed Fountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 18, "name": "Hallowed Fountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Hallowed Fountain", "cast=Mausoleum Wanderer"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Geist of Saint Traft" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Hallowed Fountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Hallowed Fountain; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Hallowed Fountain", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 2, "summary": "land=none; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": null, "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 3, "summary": "land=Hallowed Fountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Hallowed Fountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "land_entry",
+  "source": "Hallowed Fountain",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Hallowed Fountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Mausoleum Wanderer entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Secluded Courtyard", "cast=Geist of Saint Traft"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Lingering Souls" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Hallowed Fountain", "idx": 6, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Patrician Geist", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Patrician Geist"], "actions": [{ "card": "Patrician Geist" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Geist of Saint Traft", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Geist of Saint Traft"], "actions": [{ "card": "Geist of Saint Traft" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Geist of Saint Traft entered)" }, { "turn": 3, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Geist of Saint Traft entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2), Mausoleum Wanderer (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Secluded Courtyard", "cast=Patrician Geist"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Secluded Courtyard" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Patrician Geist", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Patrician Geist"], "actions": [{ "card": "Patrician Geist" }] },
+    { "index": 1, "summary": "land=none; cast: Patrician Geist", "declared_order_payability": "not_verified", "land": null, "casts": ["Patrician Geist"], "actions": [{ "card": "Patrician Geist" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 3, "summary": "land=none; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": null, "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 5, "summary": "land=none; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": null, "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Patrician Geist entered)" }, { "turn": 4, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Patrician Geist entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Patrician Geist", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 10, "num": 39, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (3), Mausoleum Wanderer (3), Geist of Saint Traft (3), 4/4 Angel Token (4) — 13 to opponent (14→1)" }, { "turn": 4, "kind": "exile", "text": "4/4 Angel Token -- exiled at end of combat" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Patrician Geist", "idx": 11, "num": 32, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 10, "num": 39, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Aether Vial" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Patrician Geist", "idx": 11, "num": 32, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "is_land": true, "taps": "C" }, { "name": "Secluded Courtyard", "idx": 10, "num": 39, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial, Patrician Geist", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial", "Patrician Geist"], "cast_order_canonical": ["Aether Vial", "Patrician Geist"], "actions": [{ "card": "Aether Vial" }, { "card": "Patrician Geist" }] },
+    { "index": 1, "summary": "land=none; cast: Patrician Geist, Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Patrician Geist", "Aether Vial"], "cast_order_canonical": ["Patrician Geist", "Aether Vial"], "actions": [{ "card": "Patrician Geist" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=none; cast: Patrician Geist", "declared_order_payability": "not_verified", "land": null, "casts": ["Patrician Geist"], "actions": [{ "card": "Patrician Geist" }] },
+    { "index": 3, "summary": "land=none; cast: Aether Vial, Skyclave Apparition", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial", "Skyclave Apparition"], "cast_order_canonical": ["Aether Vial", "Skyclave Apparition"], "actions": [{ "card": "Aether Vial" }, { "card": "Skyclave Apparition" }] },
+    { "index": 4, "summary": "land=none; cast: Skyclave Apparition, Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Skyclave Apparition", "Aether Vial"], "cast_order_canonical": ["Skyclave Apparition", "Aether Vial"], "actions": [{ "card": "Skyclave Apparition" }, { "card": "Aether Vial" }] },
+    { "index": 5, "summary": "land=none; cast: Aether Vial, Lingering Souls", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial", "Lingering Souls"], "cast_order_canonical": ["Aether Vial", "Lingering Souls"], "actions": [{ "card": "Aether Vial" }, { "card": "Lingering Souls" }] },
+    { "index": 6, "summary": "land=none; cast: Lingering Souls, Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Lingering Souls", "Aether Vial"], "cast_order_canonical": ["Lingering Souls", "Aether Vial"], "actions": [{ "card": "Lingering Souls" }, { "card": "Aether Vial" }] },
+    { "index": 7, "summary": "land=none; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": null, "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 8, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 9, "summary": "land=none; cast: Lingering Souls, Lingering Souls (flashback)", "declared_order_payability": "known_drops", "land": null, "drops": ["Lingering Souls"], "casts": ["Lingering Souls", "Lingering Souls"], "actions": [{ "card": "Lingering Souls" }, { "card": "Lingering Souls" }] },
+    { "index": 10, "summary": "land=none; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": null, "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Patrician Geist entered)" }, { "turn": 5, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Patrician Geist entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Geist of Saint Traft", "idx": 9, "num": 14, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Hallowed Fountain", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 5, "num": 24, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Mausoleum Wanderer", "idx": 7, "num": 25, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Patrician Geist", "idx": 11, "num": 32, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Patrician Geist", "idx": 12, "num": 33, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 8, "num": 38, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 10, "num": 39, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 4, "num": 51, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (4), Mausoleum Wanderer (4), Geist of Saint Traft (4), Patrician Geist (3), 4/4 Angel Token (4) — 19 to opponent (1→-18)" },
+    { "turn": 5, "kind": "exile", "text": "4/4 Angel Token -- exiled at end of combat" }
+  ]
+}
