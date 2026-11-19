@@ -1,0 +1,323 @@
+{
+  "seed": 5, "game_index": 4, "win_turn": 3, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 12, "name": "Goblin Guide" }, { "num": 51, "name": "Skewer the Critics" }, { "num": 19, "name": "Lava Spike" }, { "num": 57, "name": "Vexing Devil" }, { "num": 1, "name": "Boltwave" }, { "num": 31, "name": "Mountain" }, { "num": 27, "name": "Monastery Swiftspear" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Goblin Guide"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Monastery Swiftspear" }],
+  "events": [{ "turn": 0, "kind": "land", "text": "opponent plays Forest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 12, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Boltwave", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 1, "source": "Goblin Guide (attack)", "cards": [{ "name": "Botanical Sanctum", "disposition": "kept" }] }],
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 12, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Fireblast" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Azorius Chancery" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": null, "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 1, "summary": "land=none; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 2, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Goblin Guide (attack)", "cards": [{ "name": "Lightning Greaves", "disposition": "" }] }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Monastery Swiftspear (1) — 3 to opponent (18→15)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 27, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 12, "cast_order": ["**", "land=Mountain", "cast=Lava Spike", "cast=Skewer the Critics", "cast=Fireblast"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Mountain" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Razorverge Thicket" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 31, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent, Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike", "Monastery Swiftspear"], "casts": ["Fireblast", "Lava Spike", "Monastery Swiftspear"], "cast_order_canonical": ["Fireblast", "Lava Spike", "Monastery Swiftspear"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains), Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Monastery Swiftspear"], "casts": ["Lava Spike", "Fireblast", "Monastery Swiftspear"], "cast_order_canonical": ["Lava Spike", "Fireblast", "Monastery Swiftspear"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Lava Spike → opponent, Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Monastery Swiftspear", "Fireblast"], "cast_order_canonical": ["Lava Spike", "Monastery Swiftspear", "Fireblast"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike"], "casts": ["Monastery Swiftspear", "Fireblast", "Lava Spike"], "cast_order_canonical": ["Monastery Swiftspear", "Fireblast", "Lava Spike"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Monastery Swiftspear, Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Lava Spike", "Fireblast"], "cast_order_canonical": ["Monastery Swiftspear", "Lava Spike", "Fireblast"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Boltwave, Fireblast → opponent (sacrifice two Mountains), Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Monastery Swiftspear"], "casts": ["Boltwave", "Fireblast", "Monastery Swiftspear"], "cast_order_canonical": ["Boltwave", "Fireblast", "Monastery Swiftspear"], "actions": [{ "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Boltwave, Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Monastery Swiftspear", "Fireblast"], "cast_order_canonical": ["Boltwave", "Monastery Swiftspear", "Fireblast"], "actions": [{ "card": "Boltwave" }, { "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Boltwave, Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave", "Monastery Swiftspear"], "casts": ["Fireblast", "Boltwave", "Monastery Swiftspear"], "cast_order_canonical": ["Fireblast", "Boltwave", "Monastery Swiftspear"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Monastery Swiftspear, Boltwave, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Boltwave", "Fireblast"], "cast_order_canonical": ["Monastery Swiftspear", "Boltwave", "Fireblast"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains), Boltwave", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave"], "casts": ["Monastery Swiftspear", "Fireblast", "Boltwave"], "cast_order_canonical": ["Monastery Swiftspear", "Fireblast", "Boltwave"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent, Skewer the Critics → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike", "Skewer the Critics"], "casts": ["Fireblast", "Lava Spike", "Skewer the Critics"], "cast_order_canonical": ["Fireblast", "Lava Spike", "Skewer the Critics"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains), Skewer the Critics → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Lava Spike", "Fireblast", "Skewer the Critics"], "cast_order_canonical": ["Lava Spike", "Fireblast", "Skewer the Critics"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Lava Spike → opponent, Skewer the Critics → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Skewer the Critics", "Fireblast"], "cast_order_canonical": ["Lava Spike", "Skewer the Critics", "Fireblast"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 13, "summary": "land=Mountain; cast: Boltwave, Fireblast → opponent (sacrifice two Mountains), Skewer the Critics → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Boltwave", "Fireblast", "Skewer the Critics"], "cast_order_canonical": ["Boltwave", "Fireblast", "Skewer the Critics"], "actions": [{ "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 14, "summary": "land=Mountain; cast: Boltwave, Skewer the Critics → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Skewer the Critics", "Fireblast"], "cast_order_canonical": ["Boltwave", "Skewer the Critics", "Fireblast"], "actions": [{ "card": "Boltwave" }, { "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 15, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Boltwave, Skewer the Critics → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave", "Skewer the Critics"], "casts": ["Fireblast", "Boltwave", "Skewer the Critics"], "cast_order_canonical": ["Fireblast", "Boltwave", "Skewer the Critics"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 16, "summary": "land=Mountain; cast: Boltwave, Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike"], "casts": ["Boltwave", "Fireblast", "Lava Spike"], "cast_order_canonical": ["Boltwave", "Fireblast", "Lava Spike"], "actions": [{ "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 17, "summary": "land=Mountain; cast: Boltwave, Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Lava Spike", "Fireblast"], "cast_order_canonical": ["Boltwave", "Lava Spike", "Fireblast"], "actions": [{ "card": "Boltwave" }, { "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 18, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Boltwave, Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave", "Lava Spike"], "casts": ["Fireblast", "Boltwave", "Lava Spike"], "cast_order_canonical": ["Fireblast", "Boltwave", "Lava Spike"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 19, "summary": "land=Mountain; cast: Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains), Boltwave", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave"], "casts": ["Lava Spike", "Fireblast", "Boltwave"], "cast_order_canonical": ["Lava Spike", "Fireblast", "Boltwave"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }] },
+    { "index": 20, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Monastery Swiftspear, Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Monastery Swiftspear", "Vexing Devil"], "casts": ["Fireblast", "Monastery Swiftspear", "Vexing Devil"], "cast_order_canonical": ["Fireblast", "Monastery Swiftspear", "Vexing Devil"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }, { "card": "Vexing Devil" }] },
+    { "index": 21, "summary": "land=Mountain; cast: Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains), Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Vexing Devil"], "casts": ["Monastery Swiftspear", "Fireblast", "Vexing Devil"], "cast_order_canonical": ["Monastery Swiftspear", "Fireblast", "Vexing Devil"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 22, "summary": "land=Mountain; cast: Monastery Swiftspear, Vexing Devil, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Vexing Devil", "Fireblast"], "cast_order_canonical": ["Monastery Swiftspear", "Vexing Devil", "Fireblast"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 23, "summary": "land=Mountain; cast: Vexing Devil, Fireblast → opponent (sacrifice two Mountains), Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Monastery Swiftspear"], "casts": ["Vexing Devil", "Fireblast", "Monastery Swiftspear"], "cast_order_canonical": ["Vexing Devil", "Fireblast", "Monastery Swiftspear"], "actions": [{ "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 24, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Skewer the Critics → opponent, Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics", "Vexing Devil"], "casts": ["Fireblast", "Skewer the Critics", "Vexing Devil"], "cast_order_canonical": ["Fireblast", "Skewer the Critics", "Vexing Devil"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 25, "summary": "land=Mountain; cast: Skewer the Critics → opponent, Vexing Devil, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Vexing Devil", "Fireblast"], "cast_order_canonical": ["Skewer the Critics", "Vexing Devil", "Fireblast"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 26, "summary": "land=Mountain; cast: Vexing Devil, Skewer the Critics → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil", "Skewer the Critics", "Fireblast"], "cast_order_canonical": ["Vexing Devil", "Skewer the Critics", "Fireblast"], "actions": [{ "card": "Vexing Devil" }, { "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 27, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent, Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike", "Vexing Devil"], "casts": ["Fireblast", "Lava Spike", "Vexing Devil"], "cast_order_canonical": ["Fireblast", "Lava Spike", "Vexing Devil"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 28, "summary": "land=Mountain; cast: Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains), Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Vexing Devil"], "casts": ["Lava Spike", "Fireblast", "Vexing Devil"], "cast_order_canonical": ["Lava Spike", "Fireblast", "Vexing Devil"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 29, "summary": "land=Mountain; cast: Lava Spike → opponent, Vexing Devil, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Vexing Devil", "Fireblast"], "cast_order_canonical": ["Lava Spike", "Vexing Devil", "Fireblast"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 30, "summary": "land=Mountain; cast: Vexing Devil, Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike"], "casts": ["Vexing Devil", "Fireblast", "Lava Spike"], "cast_order_canonical": ["Vexing Devil", "Fireblast", "Lava Spike"], "actions": [{ "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 31, "summary": "land=Mountain; cast: Boltwave, Fireblast → opponent (sacrifice two Mountains), Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Vexing Devil"], "casts": ["Boltwave", "Fireblast", "Vexing Devil"], "cast_order_canonical": ["Boltwave", "Fireblast", "Vexing Devil"], "actions": [{ "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 32, "summary": "land=Mountain; cast: Boltwave, Vexing Devil, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Vexing Devil", "Fireblast"], "cast_order_canonical": ["Boltwave", "Vexing Devil", "Fireblast"], "actions": [{ "card": "Boltwave" }, { "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 33, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Boltwave, Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave", "Vexing Devil"], "casts": ["Fireblast", "Boltwave", "Vexing Devil"], "cast_order_canonical": ["Fireblast", "Boltwave", "Vexing Devil"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }, { "card": "Vexing Devil" }] },
+    { "index": 34, "summary": "land=Mountain; cast: Vexing Devil, Fireblast → opponent (sacrifice two Mountains), Boltwave", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave"], "casts": ["Vexing Devil", "Fireblast", "Boltwave"], "cast_order_canonical": ["Vexing Devil", "Fireblast", "Boltwave"], "actions": [{ "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }] },
+    { "index": 35, "summary": "land=Mountain; cast: Monastery Swiftspear, Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Vexing Devil"], "cast_order_canonical": ["Monastery Swiftspear", "Vexing Devil"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Vexing Devil" }] },
+    { "index": 36, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Vexing Devil"], "casts": ["Fireblast", "Vexing Devil"], "cast_order_canonical": ["Fireblast", "Vexing Devil"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 37, "summary": "land=Mountain; cast: Vexing Devil, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil", "Fireblast"], "cast_order_canonical": ["Vexing Devil", "Fireblast"], "actions": [{ "card": "Vexing Devil" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 38, "summary": "land=Mountain; cast: Skewer the Critics → opponent, Vexing Devil", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Vexing Devil"], "cast_order_canonical": ["Skewer the Critics", "Vexing Devil"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 39, "summary": "land=Mountain; cast: Vexing Devil, Skewer the Critics → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil", "Skewer the Critics"], "cast_order_canonical": ["Vexing Devil", "Skewer the Critics"], "actions": [{ "card": "Vexing Devil" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 40, "summary": "land=Mountain; cast: Lava Spike → opponent, Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Vexing Devil"], "cast_order_canonical": ["Lava Spike", "Vexing Devil"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Vexing Devil" }] },
+    { "index": 41, "summary": "land=Mountain; cast: Boltwave, Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Vexing Devil"], "cast_order_canonical": ["Boltwave", "Vexing Devil"], "actions": [{ "card": "Boltwave" }, { "card": "Vexing Devil" }] },
+    { "index": 42, "summary": "land=Mountain; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 43, "summary": "land=none; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": null, "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 44, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Monastery Swiftspear", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Monastery Swiftspear"], "casts": ["Fireblast", "Monastery Swiftspear"], "cast_order_canonical": ["Fireblast", "Monastery Swiftspear"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 45, "summary": "land=Mountain; cast: Monastery Swiftspear, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Fireblast"], "cast_order_canonical": ["Monastery Swiftspear", "Fireblast"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 46, "summary": "land=Mountain; cast: Lava Spike → opponent, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Monastery Swiftspear"], "cast_order_canonical": ["Lava Spike", "Monastery Swiftspear"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 47, "summary": "land=Mountain; cast: Monastery Swiftspear, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Lava Spike"], "cast_order_canonical": ["Monastery Swiftspear", "Lava Spike"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 48, "summary": "land=Mountain; cast: Boltwave, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Monastery Swiftspear"], "cast_order_canonical": ["Boltwave", "Monastery Swiftspear"], "actions": [{ "card": "Boltwave" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 49, "summary": "land=Mountain; cast: Monastery Swiftspear, Boltwave", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Boltwave"], "cast_order_canonical": ["Monastery Swiftspear", "Boltwave"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Boltwave" }] },
+    { "index": 50, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Lava Spike"], "casts": ["Fireblast", "Lava Spike"], "cast_order_canonical": ["Fireblast", "Lava Spike"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 51, "summary": "land=Mountain; cast: Lava Spike → opponent, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Fireblast"], "cast_order_canonical": ["Lava Spike", "Fireblast"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 52, "summary": "land=Mountain; cast: Boltwave, Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Fireblast"], "cast_order_canonical": ["Boltwave", "Fireblast"], "actions": [{ "card": "Boltwave" }, { "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 53, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains), Boltwave", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Boltwave"], "casts": ["Fireblast", "Boltwave"], "cast_order_canonical": ["Fireblast", "Boltwave"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }, { "card": "Boltwave" }] },
+    { "index": 54, "summary": "land=Mountain; cast: Lava Spike → opponent, Skewer the Critics → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike", "Skewer the Critics"], "cast_order_canonical": ["Lava Spike", "Skewer the Critics"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 55, "summary": "land=Mountain; cast: Skewer the Critics → opponent, Lava Spike → opponent", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Lava Spike"], "cast_order_canonical": ["Skewer the Critics", "Lava Spike"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 56, "summary": "land=Mountain; cast: Boltwave, Skewer the Critics → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Skewer the Critics"], "cast_order_canonical": ["Boltwave", "Skewer the Critics"], "actions": [{ "card": "Boltwave" }, { "card": "Skewer the Critics", "burn_target": "opponent" }] },
+    { "index": 57, "summary": "land=Mountain; cast: Skewer the Critics → opponent, Boltwave", "declared_order_payability": "known_drops", "land": "Mountain", "drops": ["Skewer the Critics"], "casts": ["Skewer the Critics", "Boltwave"], "cast_order_canonical": ["Skewer the Critics", "Boltwave"], "actions": [{ "card": "Skewer the Critics", "burn_target": "opponent" }, { "card": "Boltwave" }] },
+    { "index": 58, "summary": "land=Mountain; cast: Boltwave, Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave", "Lava Spike"], "cast_order_canonical": ["Boltwave", "Lava Spike"], "actions": [{ "card": "Boltwave" }, { "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 59, "summary": "land=Mountain; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 60, "summary": "land=Mountain; cast: Fireblast → opponent (sacrifice two Mountains)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Fireblast"], "actions": [{ "card": "Fireblast", "burn_target": "opponent" }] },
+    { "index": 61, "summary": "land=none; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 62, "summary": "land=Mountain; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 63, "summary": "land=Mountain; cast: Boltwave", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 64, "summary": "land=none; cast: Lava Spike → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lava Spike"], "actions": [{ "card": "Lava Spike", "burn_target": "opponent" }] },
+    { "index": 65, "summary": "land=none; cast: Boltwave", "declared_order_payability": "not_verified", "land": null, "casts": ["Boltwave"], "actions": [{ "card": "Boltwave" }] },
+    { "index": 66, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 67, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "target",
+  "source": "Lava Spike",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 7, "num": 32, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 19, "name": "Lava Spike", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Skewer the Critics",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Skewer the Critics", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lava Spike"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 1, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 3, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Fireblast",
+  "turn": 3,
+  "per_target_damage": 4, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 1, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 3, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. Each chosen target takes 4 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "type": "sacrifice",
+  "source": "Fireblast (first Mountain)",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 4, "tapped": true, "name": "Mountain", "label": "Mountain" }, { "index": 1, "perm_index": 7, "tapped": true, "name": "Mountain", "label": "Mountain" }],
+  "note": "reply an option index -- the land to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "sacrifice",
+  "source": "Fireblast (second Mountain)",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 6, "num": 27, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 9, "name": "Fireblast", "cost": "{4}{R}{R}", "mv": 6, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Lava Spike", "Skewer the Critics"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 7, "tapped": true, "name": "Mountain", "label": "Mountain" }],
+  "note": "reply an option index -- the land to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Lava Spike: 3 to opponent (15→12)" }, { "turn": 3, "kind": "damage", "text": "🔥 Skewer the Critics: 3 to opponent (12→9)" }, { "turn": 3, "kind": "damage", "text": "🔥 Fireblast: 4 to opponent (9→5)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 5, "num": 27, "is_land": false, "power": 4, "toughness": 5 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Boltwave", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 28, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Fireblast", "Lava Spike", "Mountain", "Mountain", "Skewer the Critics"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Azorius Chancery", "idx": 2, "num": 100024, "is_land": true }, { "name": "Forest", "idx": 0, "num": 100018, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100046, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Monastery Swiftspear (4) — 6 to opponent (5→-1)" }
+  ]
+}
