@@ -70182,6 +70182,9 @@ struct BpPrefixSnap
     bool equip_armed  = false;       // deferred_equip_armed (site 6) -- same role, same reason:
                                      // the resumed tail must re-solve at the SAME site index the
                                      // full apply did, or its ranks index a different list
+    bool put_armed    = false;       // deferred_put_armed (site 10) -- the same role again. Missing until
+                                     // 2026-11-19: a resumed site-10 pass (a put-in-hand / hand-entry
+                                     // tutor, an F7 extra-drop re-arm) re-solved as plain-cantrip site 3
     bool cascade_free = false;       // the cascade one-shot as the prefix left it: apply_one takes it
                                      // at its head, so false at every capture (kept for exactness)
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1, pin_putback = -1;   // scripted-pin state
@@ -70200,6 +70203,19 @@ struct BpPrefixSnap
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
     ManaCost              line_unpaid;               // g_line_unpaid_cost as the prefix left it (MTG_BP_RESUME_LINE_HOLD)
     PlanTraits            cycle_traits;              // original pre-cast context for the trailing searched seed
+    // The apply's MAIN-LEVEL breakpoint ordinal as the prefix left it (main_bp_ord: the segments `sink`'s
+    // top-level records were stamped with). The resumed apply continues the count, so its passes stamp the
+    // NEXT ordinals (Action::rec_bp_ord); restarting at -1 stamped a resumed pass 0 again and the executor
+    // replayed it inside the prefix's first segment, ahead of the prefix's later ones (Maze's End F7-3).
+    int                   main_bp_ord = -1;
+    // The apply's ENTRY-time keys (pre_plan_keys: site 9's post-entry test; pre_plan_acts: MTG_BP_NEW_ONLY's
+    // "the base plan could have carried it"), taken from the state the plan was applied to, not the snapshot.
+    std::vector<std::uint64_t> pre_plan_keys;
+    std::vector<std::uint64_t> pre_plan_acts;
+    // The deferred loop's pass counter (top_reset_passes) as the capturing pass left it -- post-increment, so the
+    // pass that captured is counted. The resumed apply re-enters the loop for that same pass and must stop at the
+    // same runaway guard the full apply stops at; restarting at 0 gave it up to five passes more.
+    int                   passes = 0;
 };
 // The hold a resumed apply runs its continuation under, as last set by the resume branch (this thread).
 // Written there unconditionally (one copy, resume-only), read by nothing but BpResumeLineHoldForTest.
@@ -72527,8 +72543,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               || w0collapse::NobpSite9Watch()
                               || (!plan.bp_all && g_bp_enum_depth == 0 && g_rollout_nest == 0)
                               || pofold::t_base.plan == &plan;   // the playout fold's site-9 test
-    const std::vector<uint64_t> pre_plan_keys = site9_keys_read
-        ? PrePlanSnapshotKeys(pps, state) : std::vector<uint64_t>{};
+    // A RESUMED apply (bp_resume) starts at the snapshot, not at this plan's entry, so its entry-time keys are the
+    // ones the full apply took at ITS entry -- carried in the snapshot (see BpPrefixSnap::pre_plan_keys). Taking
+    // them from the snapshot's state read everything the prefix put out as pre-existing.
+    const std::vector<uint64_t> pre_plan_keys = (bp_resume != nullptr && BpResumeLockstepOn()) ? bp_resume->pre_plan_keys
+        : site9_keys_read ? PrePlanSnapshotKeys(pps, state) : std::vector<uint64_t>{};
 
     // MTG_BP_CANON_AUDIT ONLY -- ASK THE FAN-OUT'S QUESTION AT THE FAN-OUT'S STATE.
     //
@@ -72556,7 +72575,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // MTG_BP_NEW_ONLY input, captured at the same point for the same reason: the activations the
     // base plan could have carried (empty when the lever is off). Bound on every breakpoint scope
     // this apply opens; AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<std::uint64_t> pre_plan_acts = PrePlanAvailKeys(pps, state);
+    // ...and carried across a prefix resume like pre_plan_keys (BpPrefixSnap::pre_plan_acts): Maze's End F7-3, a
+    // resumed pass read the Maze's End the prefix's continuation had PLAYED as a pre-plan activation, so
+    // MTG_BP_NEW_ONLY dropped the activation the full apply's same pass made.
+    const std::vector<std::uint64_t> pre_plan_acts = (bp_resume != nullptr && BpResumeLockstepOn()) ? bp_resume->pre_plan_acts
+                                                                          : PrePlanAvailKeys(pps, state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -80243,6 +80266,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_hand_before     = bp_resume->deferred_hand;
         deferred_trick_armed     = bp_resume->trick_armed;
         deferred_equip_armed     = bp_resume->equip_armed;
+        if (BpResumeLockstepOn()) { deferred_put_armed = bp_resume->put_armed; }   // ...site 10 likewise (see BpPrefixSnap::put_armed)
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
         g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
@@ -80262,6 +80286,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and the put-Karoo bounce pin (re-installed by _spb; a prefix that spent it stays spent).
         if (put_bounce_pin >= 1) { g_scripted_bounce_choice = bp_resume->pin_bounce; }
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
+        // ...and the main-level segment count those records were stamped with, so this apply's passes take
+        // the NEXT ordinals (see BpPrefixSnap::main_bp_ord). Before 2026-11-19 a resume restarted at -1: a
+        // resumed pass after the prefix's own segments (an F7 extra-drop pass, a tutor-to-top or partition
+        // re-arm, a main-level inline breakpoint) was stamped 0 and replayed inside the FIRST segment. Maze's
+        // End d5 g1026: Citadel Gate's record jumped ahead of Golgari Guildgate's and took its drop.
+        if (BpResumeLockstepOn()) { main_bp_ord = bp_resume->main_bp_ord; }   // MTG_BP_RESUME_LOCKSTEP=0: as before
         // ...and the line's unpaid-cost hold as the prefix left it (MTG_BP_RESUME_LINE_HOLD, DEFAULT ON). The
         // entry's LineUnpaidCostScope bound the WHOLE plan's bill, and the prefix casts that would have paid it
         // down are not re-applied here, so without this the continuation pays under a phantom demand for casts
@@ -80787,7 +80817,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_put_armed       = true;   // site 10 -- see deferred_site_index
     }
 
-    int  top_reset_passes = 0;
+    // A prefix resume re-enters the loop at the capturing pass: the guard below increments again, so start one back
+    // (see BpPrefixSnap::passes).
+    int  top_reset_passes = (bp_resume != nullptr && BpResumeLockstepOn()) ? std::max(0, bp_resume->passes - 1) : 0;
     bool top_first_pass   = true;
     // THE PARTITION NEEDS THE LOOP (MTG_BP_PARTITION_CANTRIP). USER 2026-08-29: "We have to
     // re-evaluate at breakpoints anyway?" -- yes, but historically exactly ONCE, and that is
@@ -80820,6 +80852,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->bp_seen      = bp_seen;
             bp_capture->trick_armed  = deferred_trick_armed;
             bp_capture->equip_armed  = deferred_equip_armed;
+            bp_capture->put_armed    = deferred_put_armed;
             bp_capture->cascade_free = cascade_free;
             bp_capture->pin_top      = g_scripted_top_choice;
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
@@ -80839,6 +80872,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
             bp_capture->cycle_traits  = root_cycle_traits;
+            bp_capture->main_bp_ord   = main_bp_ord;
+            bp_capture->pre_plan_keys = pre_plan_keys;
+            bp_capture->pre_plan_acts = pre_plan_acts;
+            bp_capture->passes        = top_reset_passes;
         }
         // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
         // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
@@ -80861,6 +80898,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->bp_seen      = heurarm::Flag(heurarm::BP_NODE_SHADOW, s_bp_node_shadow) ? bp_seen_shadow : bp_seen;
             bp_capture->trick_armed  = deferred_trick_armed;
             bp_capture->equip_armed  = deferred_equip_armed;
+            bp_capture->put_armed    = deferred_put_armed;
             bp_capture->cascade_free = cascade_free;
             bp_capture->pin_top      = g_scripted_top_choice;
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
@@ -80880,6 +80918,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->deferred_hand = deferred_hand_before;
             bp_capture->line_unpaid   = g_line_unpaid_cost;   // MTG_BP_RESUME_LINE_HOLD (restored on resume)
             bp_capture->cycle_traits  = root_cycle_traits;
+            bp_capture->main_bp_ord   = main_bp_ord;
+            bp_capture->pre_plan_keys = pre_plan_keys;
+            bp_capture->pre_plan_acts = pre_plan_acts;
+            bp_capture->passes        = top_reset_passes;
             return;
         }
         deferred_cantrip_resolve = false;
@@ -94625,6 +94667,21 @@ bool TurnSolver::BpResumeLineHoldForTest(const GameState& state, const Plan& pla
         ApplyPlanDirect(whole, v, is_pre_combat);
         *complete_state = std::move(whole);
     }
+    return true;
+}
+
+// See the declaration in TurnSolver.h. The wave loop's plain-variant capture + resume, recording both.
+bool TurnSolver::BpResumeRecordsForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
+                                        std::vector<Action>& full, std::vector<Action>& resumed)
+{
+    full.clear();
+    resumed.clear();
+    GameState s1 = state;
+    BpPrefixSnap snap;
+    ApplyPlanDirect(s1, plan, is_pre_combat, &full, &snap);
+    if (!snap.valid || snap.pending) { return false; }
+    GameState s2 = snap.state;
+    ApplyPlanDirect(s2, plan, is_pre_combat, &resumed, nullptr, &snap);
     return true;
 }
 

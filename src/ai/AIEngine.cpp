@@ -577,7 +577,11 @@ static std::string FdPlanText(const TurnSolver::Plan& p)
     {
         s += " | bp[";
         for (const Action& a : p.breakpoint_actions)
-        { s += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + " "; }
+        {
+            s += "k" + std::to_string(static_cast<int>(a.kind));
+            if (a.rec_bp_ord != 0) { s += "@" + std::to_string(a.rec_bp_ord); }   // its main-level segment
+            s += ":" + a.card_name.str() + " ";
+        }
         s += "]";
     }
     if (p.bp_choice >= 0) { s += " bp_choice=" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
