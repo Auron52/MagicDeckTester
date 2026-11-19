@@ -1027,6 +1027,7 @@ enum Slot : int
     MAZE_UNPAYABLE_PRUNE,     // MTG_MAZE_UNPAYABLE_PRUNE  Maze's End F5 (USER 2026-11-18: "drop plans that cannot pay a subset"): MazesEndProvider's plan-list filter drops a plan no payment order can pay on the optimistic board (TurnSolver::DropProvablyUnpayablePlans), gated on the deck property "no net-mana-positive card, no cost reducer". A RESTRICTION (the subset the plan would realise is its own plan). Default ON; =0 -> every enumerated plan offered, as before
     BP_RESUME_LOCKSTEP,       // MTG_BP_RESUME_LOCKSTEP  a prefix-resumed apply (the wave loop's BpPrefixSnap) carries the full apply's main-level segment count, site-10 arming, entry-time keys (pre_plan_keys / pre_plan_acts) and deferred-loop pass count, so it records and scores exactly what the full apply does (Maze's End F7-3/F7-4). A correctness fix; NOT deck-gated. DEFAULT ON; =0 -> as before (the A/B hatch)
     BP_DROP_REARM,            // MTG_BP_DROP_REARM  a breakpoint continuation that PLAYED a land while a static extra drop (Exploration) is still open, with another land in hand, re-arms site 10 for one more pass of the deferred loop (rollout) and of the executor's no-commit end-of-main re-solve: a continuation carries ONE land, so the second drop after a mid-turn tutor was unfindable at any budget (the USER's Maze's End reference s3 T4: Guild Summit, Sylvan Scrying -> Maze's End, Maze's End, then The Black Gate). A completeness fix; deck-gated (deck_has_static_land_drops). DEFAULT ON; =0 -> as before (the A/B hatch)
+    SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     COUNT
 };
 
@@ -1998,6 +1999,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_UNPAYABLE_PRUNE",
         "MTG_BP_RESUME_LOCKSTEP",
         "MTG_BP_DROP_REARM",
+        "MTG_SUMMIT_TWIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
