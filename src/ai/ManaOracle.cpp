@@ -8,6 +8,7 @@ extern thread_local int g_tapdbg_oracle_apply;   // TEMP DIAG (claude1115)
 #include "ManaPayment.h"
 #include "DecisionProviders.h"   // EquipRouteLinkFrame (the route tape's link audit)
 #include "Combat.h"
+#include "BoardIdentity.h"   // BoardsEqual / BoardHash: the shared outcome boards (BoardPool)
 #include "../cards/CardDatabase.h"
 #include "../core/EnvFlags.h"
 #include "../core/GameLogger.h"
@@ -433,6 +434,7 @@ std::atomic<long long> g_rb_need_plan{0}, g_rb_need_later{0}, g_rb_rescue_tried{
 std::mutex             g_print_mu;
 std::atomic<long long> g_cap_retry{0}, g_cap_retry_ok{0};   // the CAPPED escalation (see its site)
 std::atomic<long long> g_mem_capped{0}, g_hit_only_released{0}, g_front_released{0};   // the board budget (BoardAcct)
+std::atomic<long long> g_board_pooled{0}, g_board_shared{0}, g_board_share_checks{0};   // shared outcome boards (BoardPool)
 std::mutex             g_reason_mu;
 std::map<std::string, long long> g_unmodeled_reasons;
 std::atomic<long long> g_resume_checked{0};   // MTG_ORACLE_RESUME_CHECK: resumed retries checked equal
@@ -498,6 +500,12 @@ struct Reporter
             std::fprintf(stderr, "=== MANA ORACLE board memory: %lld searches capped by MTG_MANA_ORACLE_BOARD_MB, %lld pruned "
                          "frontier boards and %lld hit-only outcome boards given back early ===\n", g_mem_capped.load(),
                          g_front_released.load(), g_hit_only_released.load());
+        }
+        if (g_board_pooled.load() > 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE shared boards: %lld outcome boards held for %lld outcomes (%lld shared); "
+                         "%lld share checks ===\n", g_board_pooled.load(), g_board_pooled.load() + g_board_shared.load(),
+                         g_board_shared.load(), g_board_share_checks.load());
         }
         if (g_cap_retry.load() > 0)
         {
@@ -3456,11 +3464,26 @@ struct BoardAcct
     ~BoardAcct() { t_board_live -= n; }
     void Set(long long v) { t_board_live += v - n; n = v; }
 };
+// ONE HELD BOARD, SHARED BY EVERY OUTCOME THAT ENDS ON IT (2026-11-19; the BoardPool in Realize). Immutable once
+// made; its footprint is counted against the board budget ONCE, however many outcomes hold it.
+struct HeldBoard
+{
+    GameState     st;
+    BoardAcct     acct;
+    std::uint64_t hash = 0;   // boardid::BoardHash(st)
+};
+using BoardRef = std::shared_ptr<const HeldBoard>;
+const GameState& EmptyBoard()
+{
+    static const GameState s;
+    return s;
+}
 struct Outcome
 {
-    GameState                  st;
-    BoardAcct                  acct;        // st + script, counted against the board budget
-    bool                       released = false;   // hit-only: st was given back (a non-Clean outcome; see Realize)
+    BoardRef                   board;       // the end board (shared: Realize's BoardPool); null once released
+    BoardAcct                  acct;        // the script, counted against the board budget (the board counts itself)
+    bool                       released = false;   // hit-only: the board was given back (a non-Clean outcome; see Realize)
+    const GameState& St() const { return board != nullptr ? board->st : EmptyBoard(); }
     std::vector<std::string>   cast_drops;
     std::vector<std::string>   act_drops;
     std::multiset<std::string> left;        // hand cards the line used
@@ -3489,6 +3512,7 @@ struct Outcome
     {
         if (!Full()) { return false; }
         if (released) { return false; }   // only a non-Clean outcome's board is ever released
+        const GameState& st = St();
         if (st.players[static_cast<std::size_t>(st.active_player_index)].life <= 0) { return false; }
         for (const PayOption& p : script) { if (p.fail) { return false; } }
         return true;
@@ -3693,6 +3717,119 @@ struct RealizeCursor
     Realization                         r;                 // the outcomes and notes at the end of the capped pass
 };
 
+// SHARED OUTCOME BOARDS (exact; 2026-11-19, docs/design/mana-oracle-board-memory-2026-11-19.md section 8). A
+// capped Realize holds tens of thousands of outcomes over a few hundred distinct end boards (Maze's End: 34,083
+// outcomes, 346 distinct core boards): the payment scripts differ, the boards they end on mostly do not. Each
+// distinct board is held ONCE, in a per-Realize pool keyed by boardid::BoardHash with the COMPLETE equality
+// boardid::BoardsEqual deciding (never a key: CoreKey ignores the graveyard, exile and more), and every outcome
+// ending on it points at it. The board budget counts it once (HeldBoard::acct), so the budget meters the
+// boards actually held. Boards are immutable once pooled (const), and an outcome's board is the one its own apply
+// produced up to the equality, which compares every member -- so every reader sees exactly what it saw before.
+// MTG_ORACLE_BOARD_SHARE=0 holds every board apart (the old memory shape; the identity A/B).
+// MTG_ORACLE_BOARD_SHARE_CHECK=1 checks every share against the unshared board it replaces with an independent
+// fingerprint (core keys, resources, board text, every zone in order, life, floating mana), and every new board
+// against the whole pool (an equal board in another bucket would mean the hash is inconsistent); it aborts on
+// either, and counts the checks in the summary line.
+bool BoardShareOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_BOARD_SHARE", true);
+    return v;
+}
+bool BoardShareCheck()
+{
+    static const bool v = EnvOn("MTG_ORACLE_BOARD_SHARE_CHECK");
+    return v;
+}
+std::string BoardFingerprint(const GameState& s)
+{
+    std::string f = std::to_string(CoreKey(s, false)) + "/" + std::to_string(CoreKey(s, true)) + "|" + BoardText(s)
+                  + "|" + PoolText(s.floating_mana, 0) + "|t" + std::to_string(s.turn_number) + "a"
+                  + std::to_string(s.active_player_index) + "c" + std::to_string(s.spells_cast_this_turn) + "|";
+    for (const auto& kv : Resources(s, true)) { f += kv.first + "=" + std::to_string(kv.second) + ";"; }
+    auto zone = [&f](const char* tag, const std::vector<Card>& z)
+    { f += tag; for (const Card& c : z) { f += std::to_string(c.m_number) + c.m_name.str() + ","; } };
+    for (const Player& pl : s.players)
+    {
+        f += "|L" + std::to_string(pl.life) + "E" + std::to_string(pl.energy_counters)
+           + "P" + std::to_string(pl.lands_played_this_turn);
+        zone("H", pl.hand);
+        zone("G", pl.graveyard);
+        f += "Y";
+        for (std::size_t i = 0; i < pl.library.size(); ++i) { f += std::to_string(pl.library.RawAt(i).m_number) + ","; }
+    }
+    zone("|X", s.exile);
+    f += "|S" + std::to_string(s.stack.size());
+    for (const Permanent& p : s.battlefield)
+    {
+        f += "|" + std::to_string(p.card.m_number) + (p.tapped ? "T" : "") + "c" + std::to_string(p.controller_index)
+           + "k" + p.counters.KeyFragment();
+    }
+    return f;
+}
+struct BoardPool
+{
+    std::unordered_map<std::uint64_t, std::vector<BoardRef>> by_hash;
+    // A board already held (a resumed pass's outcomes): later equal boards share it.
+    void Adopt(const BoardRef& b)
+    {
+        if (b == nullptr || !BoardShareOn()) { return; }
+        std::vector<BoardRef>& v = by_hash[b->hash];
+        for (const BoardRef& x : v) { if (x == b) { return; } }
+        v.push_back(b);
+    }
+    // The board an outcome holds: the pooled board equal to its own fresh one, or the fresh one, now pooled and
+    // counted. (The fresh board is never moved from, so a holder the caller's test may have kept stays valid.)
+    BoardRef Intern(std::shared_ptr<HeldBoard> fresh)
+    {
+        const GameState& st = fresh->st;
+        if (!BoardShareOn())
+        {
+            fresh->acct.Set(BoardBytes(st));
+            return fresh;
+        }
+        const std::uint64_t h = boardid::BoardHash(st);
+        std::vector<BoardRef>& v = by_hash[h];
+        for (const BoardRef& x : v)
+        {
+            if (!boardid::BoardsEqual(x->st, st)) { continue; }
+            if (BoardShareCheck())
+            {
+                g_board_share_checks.fetch_add(1, std::memory_order_relaxed);
+                if (BoardFingerprint(x->st) != BoardFingerprint(st))
+                {
+                    std::fprintf(stderr, "[mana-oracle] BOARD-SHARE MISMATCH: equal boards fingerprint apart\n  pooled %s\n  "
+                                 "unshared %s\n", BoardFingerprint(x->st).c_str(), BoardFingerprint(st).c_str());
+                    std::abort();
+                }
+            }
+            g_board_shared.fetch_add(1, std::memory_order_relaxed);
+            return x;
+        }
+        if (BoardShareCheck())
+        {
+            g_board_share_checks.fetch_add(1, std::memory_order_relaxed);
+            for (const auto& kv : by_hash)
+            {
+                if (kv.first == h) { continue; }
+                for (const BoardRef& x : kv.second)
+                {
+                    if (boardid::BoardsEqual(x->st, st))
+                    {
+                        std::fprintf(stderr, "[mana-oracle] BOARD-SHARE MISMATCH: equal boards hash apart (%llu vs %llu)\n",
+                                     static_cast<unsigned long long>(kv.first), static_cast<unsigned long long>(h));
+                        std::abort();
+                    }
+                }
+            }
+        }
+        fresh->hash = h;
+        fresh->acct.Set(BoardBytes(st));
+        g_board_pooled.fetch_add(1, std::memory_order_relaxed);
+        v.push_back(fresh);
+        return fresh;
+    }
+};
+
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
 // length k is applied, the frontier boards they reach are Pareto-pruned (same core, dominated
 // resources INCLUDING floating mana -> dropped; under goldfish monotonicity a board with every
@@ -3725,21 +3862,62 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             const std::size_t held = std::max(r.outcomes.size(), pf);
             if (held < static_cast<std::size_t>(s_mem_trace)) { return; }
             std::unordered_set<std::uint64_t> exact, canon;
+            std::unordered_set<const HeldBoard*> held_boards;   // the boards actually held (BoardPool)
             std::size_t clean = 0, rel = 0;
             for (const Outcome& o : r.outcomes)
             {
                 if (o.released) { ++rel; continue; }
-                exact.insert(CoreKey(o.st, false) ^ std::hash<std::string>{}(PoolText(o.st.floating_mana, 0))
-                             ^ (static_cast<std::uint64_t>(o.st.players[o.st.active_player_index].life) << 40));
-                canon.insert(CoreKey(o.st, true));
+                const GameState& st = o.St();
+                exact.insert(CoreKey(st, false) ^ std::hash<std::string>{}(PoolText(st.floating_mana, 0))
+                             ^ (static_cast<std::uint64_t>(st.players[st.active_player_index].life) << 40));
+                canon.insert(CoreKey(st, true));
+                held_boards.insert(o.board.get());
                 clean += o.Clean() ? 1 : 0;
+            }
+            // WHY FINGERPRINT-EQUAL BOARDS ARE NOT EQUAL (diagnostic): for each pair of distinct held boards with one
+            // BoardFingerprint, the first part found to differ (each part is overwritten from the representative in
+            // turn, so the last bucket counts the members of GameState itself).
+            {
+                std::unordered_map<std::string, const GameState*> rep;
+                std::map<std::string, long long> why;
+                for (const HeldBoard* hb : held_boards)
+                {
+                    if (hb == nullptr) { continue; }
+                    auto ins = rep.emplace(BoardFingerprint(hb->st), &hb->st);
+                    if (ins.second) { continue; }
+                    const GameState& a = *ins.first->second;
+                    GameState b = hb->st;
+                    auto nodef = [](std::vector<Permanent> v) { for (Permanent& p : v) { p.card.m_def = nullptr; } return v; };
+                    if (b.battlefield != a.battlefield)
+                    { ++why[nodef(b.battlefield) == nodef(a.battlefield) ? "battlefield(m_def only)" : "battlefield"]; continue; }
+                    bool done = false;
+                    for (std::size_t i = 0; i < b.players.size() && !done; ++i)
+                    {
+                        if (b.players[i] == a.players[i]) { continue; }
+                        Player q = b.players[i];
+                        q.hand = a.players[i].hand; q.library = a.players[i].library; q.graveyard = a.players[i].graveyard;
+                        ++why[q == a.players[i] ? "player zones" : "player other"];
+                        done = true;
+                    }
+                    if (done) { continue; }
+                    if (b.stack != a.stack) { ++why["stack"]; continue; }
+                    if (b.exile != a.exile) { ++why["exile"]; continue; }
+                    if (!(b.pay_ledger == a.pay_ledger)) { ++why["pay_ledger"]; continue; }
+                    ++why["other GameState member"];
+                }
+                std::string w;
+                for (const auto& kv : why) { w += " " + kv.first + "=" + std::to_string(kv.second); }
+                std::lock_guard<std::mutex> lk(g_print_mu);
+                std::fprintf(stderr, "[mana-oracle] MEMWHY fingerprints=%zu held=%zu:%s\n", rep.size(), held_boards.size(),
+                             w.c_str());
             }
             std::lock_guard<std::mutex> lk(g_print_mu);
             std::fprintf(stderr, "[mana-oracle] MEM %s plan={%s} stop=%d hit_only=%d cap=%d outcomes=%zu released=%zu "
                          "peak_fronts=%zu peak_kept=%zu peak_scripts=%zu layers=%zu distinct_core=%zu distinct_canon=%zu "
-                         "clean=%zu capped=%d mem_capped=%d peak_live=%lldMB live_now=%lldMB rss=%lldMB\n",
+                         "held_boards=%zu clean=%zu capped=%d mem_capped=%d peak_live=%lldMB live_now=%lldMB rss=%lldMB\n",
                          Ctx(root, pre).c_str(), PlanText(plan).c_str(), stop ? 1 : 0, hit_only ? 1 : 0, NodeCap(),
-                         r.outcomes.size(), rel, pf, pk, pn, nl, exact.size(), canon.size(), clean, r.capped ? 1 : 0,
+                         r.outcomes.size(), rel, pf, pk, pn, nl, exact.size(), canon.size(), held_boards.size(), clean,
+                         r.capped ? 1 : 0,
                          r.mem_capped ? 1 : 0, pl >> 20, t_board_live >> 20, membudget::CurrentRssBytes() / (1024 * 1024));
         }
     } _mem_trace{ r, root, plan, pre, stop_at_full, hit_only, peak_fronts, peak_next, peak_kept, layers, peak_live };
@@ -3821,6 +3999,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     std::size_t start = 0;
     std::vector<FrontierRec> carried;   // a resumed layer's frontier boards its applied prefix already reached
     RealizeCut cut;
+    BoardPool board_pool;   // the distinct outcome boards held (SHARED OUTCOME BOARDS, above)
     while (resume || !layer.empty())
     {
         std::vector<FrontierRec> fronts;
@@ -3837,6 +4016,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         {
             r = std::move(cursor->r);
             r.capped = false;
+            for (const Outcome& o : r.outcomes) { board_pool.Adopt(o.board); }
             apply_notes.assign(r.unmodeled.begin() + static_cast<std::ptrdiff_t>(cursor->u_apply), r.unmodeled.end());
             r.unmodeled.resize(cursor->cut.u);
             nodes   = cursor->nodes_build;
@@ -4043,7 +4223,10 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                         break;
                     }
                 }
-                o.st = std::move(copy);
+                // The end board, held apart until the outcome is kept (SHARED OUTCOME BOARDS: interned below).
+                std::shared_ptr<HeldBoard> fresh = std::make_shared<HeldBoard>();
+                fresh->st = std::move(copy);
+                o.board = fresh;
                 if (!sweep_taps.empty())
                 {
                     o.sweep_taps = std::move(sweep_taps);
@@ -4054,10 +4237,10 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 // not end the search either: a scripted payment further on may still realise the line.)
                 if (fs_track)
                 {
-                    const KeyedMap ck = KeyedCards(o.st, nullptr);
-                    if (FsRises(ck, *fs_parent_k, &o.st)) { ++t_fs_mono; }
+                    const KeyedMap ck = KeyedCards(o.St(), nullptr);
+                    if (FsRises(ck, *fs_parent_k, &o.St())) { ++t_fs_mono; }
                     if (fs_isbad) { ++t_fs_bad_out; if (!o.unscripted.empty()) { ++t_fs_bad_uns; } }
-                    if (CoreKey(o.st) == CoreKey(*t_fs_goal) && (fs_isbad || FsFails(ck) || FsRises(ck, t_fs_goal_k)))
+                    if (CoreKey(o.St()) == CoreKey(*t_fs_goal) && (fs_isbad || FsFails(ck) || FsRises(ck, t_fs_goal_k)))
                     { ++t_fs_keyviol; }
                 }
                 const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
@@ -4069,11 +4252,13 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 // whose diagnostic prints every outcome's core key.
                 if (hit_only && !full && !o.Clean() && !OrderFoldCheck())
                 {
-                    o.st = GameState();
+                    o.board.reset();
                     o.released = true;
                     g_hit_only_released.fetch_add(1, std::memory_order_relaxed);
                 }
-                o.acct.Set((o.released ? 0 : BoardBytes(o.st)) + ScriptBytes(o.script));
+                else { o.board = board_pool.Intern(std::move(fresh)); }
+                fresh.reset();
+                o.acct.Set(ScriptBytes(o.script));
                 peak_live = std::max(peak_live, t_board_live);
                 r.outcomes.push_back(std::move(o));
                 if (full) { r.hit = static_cast<int>(r.outcomes.size()) - 1; return r; }
@@ -4153,7 +4338,28 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
             }
             if (s_mem_trace > 0)
-            { ++layers; peak_kept = std::max(peak_kept, static_cast<std::size_t>(std::count(keep.begin(), keep.end(), 1))); }
+            {
+                ++layers;
+                const std::size_t kept_n = static_cast<std::size_t>(std::count(keep.begin(), keep.end(), 1));
+                peak_kept = std::max(peak_kept, kept_n);
+                if (kept_n >= static_cast<std::size_t>(s_mem_trace))
+                {
+                    // How many of the kept frontier boards are distinct (BoardsEqual): the sizing data for sharing them.
+                    std::unordered_map<std::uint64_t, std::vector<const GameState*>> d;
+                    std::size_t distinct = 0;
+                    for (std::size_t i = 0; i < fronts.size(); ++i)
+                    {
+                        if (!keep[i]) { continue; }
+                        std::vector<const GameState*>& v = d[boardid::BoardHash(fronts[i].st)];
+                        bool seen = false;
+                        for (const GameState* x : v) { if (boardid::BoardsEqual(*x, fronts[i].st)) { seen = true; break; } }
+                        if (!seen) { v.push_back(&fronts[i].st); ++distinct; }
+                    }
+                    std::lock_guard<std::mutex> lk(g_print_mu);
+                    std::fprintf(stderr, "[mana-oracle] MEMFRONT %s layer=%zu fronts=%zu kept=%zu distinct_kept_boards=%zu\n",
+                                 Ctx(root, pre).c_str(), layers, fronts.size(), kept_n, distinct);
+                }
+            }
         }
         const std::size_t n = fronts.size();
         // THE NEXT LAYER IS BUILT ONLY AS FAR AS THE APPLY CEILING REACHES (memory, 2026-11-05). The layer loop
@@ -4892,7 +5098,7 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
 {
     const int a = root.active_player_index;
     const Library& lib0 = root.players[a].library;
-    const Library& lib1 = o.st.players[a].library;
+    const Library& lib1 = o.St().players[a].library;
     // A cascade / reveal / ripple free cast came from the library's top.
     // Keep that provenance in the hook: a later Creative Technique or tutor
     // shuffle defeats the root/end-library order comparison below. A
@@ -4910,7 +5116,7 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
                 return true;
             }
         }
-        for (const Card& c : o.st.players[a].graveyard)
+        for (const Card& c : o.St().players[a].graveyard)
         {
             if (c.m_number != n) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -4988,7 +5194,7 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
     // card's exactly as a tapped one's is. Shadowborn gate sb-victimclaim-20261110, ENUM-GAP s30028086 T3 {Apostle +
     // Thrumming Stone + Dark Ritual} off two Swamps: the hand Ritual's ripple revealed and cast a library Dark Ritual,
     // and Thrumming Stone's {5} was paid from the float only that hidden Ritual made.
-    for (const Card& c : o.st.players[a].graveyard)
+    for (const Card& c : o.St().players[a].graveyard)
     {
         if (top.count(c.m_number) == 0) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -5009,7 +5215,7 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
         if (what != nullptr)
         {
             std::string nm = "#" + std::to_string(n);
-            for (const Permanent& q : o.st.battlefield) { if (q.card.m_number == n) { nm = q.card.m_name.str() + nm; break; } }
+            for (const Permanent& q : o.St().battlefield) { if (q.card.m_number == n) { nm = q.card.m_name.str() + nm; break; } }
             *what = nm + " (counted by a scaled dork's tap)";
         }
         return true;
@@ -5095,8 +5301,8 @@ TurnSolver::Plan PerformedPlan(const GameState& root, bool pre, const TurnSolver
                                std::vector<TurnSolver::Plan>* chain = nullptr, bool acts_first = false)
 {
     TurnSolver::Plan cur = plan;
-    const std::uint64_t k0 = CoreKey(o.st, /*canonical=*/false);
-    const Res           r0 = Resources(o.st, /*with_float=*/true);
+    const std::uint64_t k0 = CoreKey(o.St(), /*canonical=*/false);
+    const Res           r0 = Resources(o.St(), /*with_float=*/true);
     GameState out;
     for (int pass = acts_first ? 0 : 2; pass < 3; ++pass)
     {
@@ -5216,14 +5422,14 @@ Census RollbackCore(const GameState& root, bool pre, const TurnSolver::Plan& pla
     c.rescued = rb.Full() && Includes(LeftHand(root, rb.st), e_want);
     const Realization all = Realize(root, plan, pre, /*stop_at_full=*/false, {}, /*all_engine=*/true);
     auto sorted = [](std::vector<std::string> v) { std::sort(v.begin(), v.end()); return v; };
-    if (all.outcomes.size() != 1 || all.outcomes[0].st.battlefield.size() != er.st.battlefield.size()
-        || CoreKey(all.outcomes[0].st, /*canonical=*/false) != CoreKey(er.st, /*canonical=*/false)
-        || Resources(all.outcomes[0].st, true) != Resources(er.st, true)
+    if (all.outcomes.size() != 1 || all.outcomes[0].St().battlefield.size() != er.st.battlefield.size()
+        || CoreKey(all.outcomes[0].St(), /*canonical=*/false) != CoreKey(er.st, /*canonical=*/false)
+        || Resources(all.outcomes[0].St(), true) != Resources(er.st, true)
         || sorted(all.outcomes[0].cast_drops) != sorted(er.cast) || sorted(all.outcomes[0].act_drops) != sorted(er.act))
     {
         c.bucket = RB_UNFAITHFUL;
         c.detail = all.outcomes.size() == 1
-            ? "the hooked replay of the engine's own payments ended elsewhere (" + DiffText(er.st, all.outcomes[0].st) + ")"
+            ? "the hooked replay of the engine's own payments ended elsewhere (" + DiffText(er.st, all.outcomes[0].St()) + ")"
             : "the hooked replay of the engine's own payments did not finish (" + std::to_string(all.outcomes.size())
               + " outcomes" + (all.unmodeled.empty() ? "" : ", " + all.unmodeled.front()) + ")";
         return c;
@@ -5429,15 +5635,15 @@ bool RealizationCovers(const Realization& r, const GameState& root, const Engine
     const Res er = Resources(e, /*with_float=*/false);
     for (const Outcome& o : r.outcomes)
     {
-        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
-        if (Covers(Resources(o.st, /*with_float=*/false), er, nullptr)) { return true; }
+        if (!o.Full() || o.line != e_line || CoreKey(o.St()) != ek) { continue; }
+        if (Covers(Resources(o.St(), /*with_float=*/false), er, nullptr)) { return true; }
     }
     if (SelfHasLost(e))
     {
         const bool engine_draw = dmgev::OpponentLostRaw(e);
         for (const Outcome& o : r.outcomes)
         {
-            if (o.Full() && o.line == e_line && SelfHasLost(o.st) && dmgev::OpponentLostRaw(o.st) == engine_draw)
+            if (o.Full() && o.line == e_line && SelfHasLost(o.St()) && dmgev::OpponentLostRaw(o.St()) == engine_draw)
             { return true; }
         }
         return false;
@@ -5450,8 +5656,8 @@ bool RealizationCovers(const Realization& r, const GameState& root, const Engine
     const Res swept_er = Resources(eu, /*with_float=*/false);
     for (const Outcome& o : r.outcomes)
     {
-        if (!o.Full() || o.line != e_line || SelfHasLost(o.st)) { continue; }
-        const GameState ou = UnSwept(o.st, o.sweep_taps, o.presweep_life);
+        if (!o.Full() || o.line != e_line || SelfHasLost(o.St())) { continue; }
+        const GameState ou = UnSwept(o.St(), o.sweep_taps, o.presweep_life);
         if (SelfHasLost(ou) || CoreKey(ou) != euk) { continue; }
         if (Covers(Resources(ou, /*with_float=*/false), swept_er, nullptr)) { return true; }
     }
@@ -5544,7 +5750,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     && a.unscripted == b.unscripted && a.cast_drops == b.cast_drops && a.act_drops == b.act_drops
                     && a.pay_steps == b.pay_steps && a.first_fail == b.first_fail && a.Clean() == b.Clean()
                     && a.scaled_counted == b.scaled_counted && a.top_free_casts == b.top_free_casts
-                    && CoreKey(a.st, /*canonical=*/false) == CoreKey(b.st, /*canonical=*/false);
+                    && CoreKey(a.St(), /*canonical=*/false) == CoreKey(b.St(), /*canonical=*/false);
             }
             if (!same)
             {
@@ -5603,7 +5809,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 std::vector<std::string> v;
                 for (const Outcome& o : x.outcomes)
                 {
-                    if (o.Full() && o.line == e_line && CoreKey(o.st) == ekk) { v.push_back(ScriptText(o.script)); }
+                    if (o.Full() && o.line == e_line && CoreKey(o.St()) == ekk) { v.push_back(ScriptText(o.script)); }
                 }
                 return v;
             };
@@ -5656,7 +5862,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             if (!o.unscripted.empty()) { ++uns; }
             if (!o.Full()) { continue; }
             ++full;
-            if (e_full && CoreKey(o.st) == ekk) { ++ek_n; }
+            if (e_full && CoreKey(o.St()) == ekk) { ++ek_n; }
         }
         std::lock_guard<std::mutex> lk(g_print_mu);
         std::fprintf(stderr, "[mana-oracle] FOLD-STATS %s applies=%lld engine=%s capped=%d layers=%lld fronts=%lld kept=%lld "
@@ -5700,8 +5906,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         for (const EngineReal* s : full_sibs) { sib.emplace_back(CoreKey(s->st), Resources(s->st, false)); }
         auto sib_covers = [&](const Outcome& o)
         {
-            const std::uint64_t k = CoreKey(o.st);
-            const Res orr = Resources(o.st, false);
+            const std::uint64_t k = CoreKey(o.St());
+            const Res orr = Resources(o.St(), false);
             for (const auto& [sk, sr] : sib) { if (sk == k && Covers(sr, orr, nullptr)) { return true; } }
             return false;
         };
@@ -5752,10 +5958,10 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                                    ? t_sib_memo : nullptr;
             auto sib_pay_covers = [&](const Outcome& u)
             {
-                const std::uint64_t k = CoreKey(u.st);
-                const Res ur = Resources(u.st, false);
+                const std::uint64_t k = CoreKey(u.St());
+                const Res ur = Resources(u.St(), false);
                 const OutcomeTest acc = [&](const Outcome& o)
-                { return CoreKey(o.st) == k && Covers(Resources(o.st, false), ur, nullptr); };
+                { return CoreKey(o.St()) == k && Covers(Resources(o.St(), false), ur, nullptr); };
                 for (const TurnSolver::Plan* sp : sib_plans)
                 {
                     SibPayMemo::Entry* const done = memo != nullptr ? &memo->by_plan[sp] : nullptr;
@@ -5771,7 +5977,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     const OutcomeTest rec_acc = [&](const Outcome& o)
                     {
                         // Realize asks only about clean, fully scripted outcomes; `want` is applied here instead.
-                        recs.push_back(SibPayMemo::Rec{ o.left, CoreKey(o.st), Resources(o.st, false) });
+                        recs.push_back(SibPayMemo::Rec{ o.left, CoreKey(o.St()), Resources(o.St(), false) });
                         const SibPayMemo::Rec& x = recs.back();
                         return x.key == k && Includes(x.left, e_want) && Covers(x.res, ur, nullptr);
                     };
@@ -5805,7 +6011,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             if (!sib.empty())
             {
                 why += ", reaching a board the menu's other order of these actions does not ("
-                     + DiffText(full_sibs.front()->st, show->st) + ")";
+                     + DiffText(full_sibs.front()->st, show->St()) + ")";
             }
             Emit(C_APPLY_DROP, root, pre, plan, why + RollbackCensus(root, pre, plan, er_in, e_want));
             return;
@@ -5878,7 +6084,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     for (const std::string& u : x.unmodeled) { t += " unm[" + u + "]"; }
                     for (const Outcome& o : x.outcomes)
                     {
-                        t += " {" + std::to_string(CoreKey(o.st)) + " clean=" + std::to_string(o.Clean() ? 1 : 0)
+                        t += " {" + std::to_string(CoreKey(o.St())) + " clean=" + std::to_string(o.Clean() ? 1 : 0)
                            + " " + ScriptText(o.script) + " u=" + o.unscripted + "}";
                     }
                     return t;
@@ -6005,8 +6211,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     Res best_res;
     for (const Outcome& o : r.outcomes)
     {
-        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
-        const Res orr = Resources(o.st, /*with_float=*/false);
+        if (!o.Full() || o.line != e_line || CoreKey(o.St()) != ek) { continue; }
+        const Res orr = Resources(o.St(), /*with_float=*/false);
         bool strict = false;
         if (Covers(orr, er, &strict))
         {
@@ -6024,8 +6230,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         const bool engine_draw = dmgev::OpponentLostRaw(e);
         for (const Outcome& o : r.outcomes)
         {
-            if (o.Full() && o.line == e_line && SelfHasLost(o.st)
-                && dmgev::OpponentLostRaw(o.st) == engine_draw)
+            if (o.Full() && o.line == e_line && SelfHasLost(o.St())
+                && dmgev::OpponentLostRaw(o.St()) == engine_draw)
             { covered = true; break; }
         }
     }
@@ -6045,8 +6251,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             swept_er = Resources(eu, /*with_float=*/false);
             for (const Outcome& o : r.outcomes)
             {
-                if (!o.Full() || o.line != e_line || SelfHasLost(o.st)) { continue; }
-                const GameState ou = UnSwept(o.st, o.sweep_taps, o.presweep_life);
+                if (!o.Full() || o.line != e_line || SelfHasLost(o.St())) { continue; }
+                const GameState ou = UnSwept(o.St(), o.sweep_taps, o.presweep_life);
                 if (SelfHasLost(ou) || CoreKey(ou) != euk) { continue; }
                 const Res orr = Resources(ou, /*with_float=*/false);
                 bool strict = false;
@@ -6078,7 +6284,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         for (const Outcome& o : r.outcomes)
         {
             if (!o.Full() || o.line == e_line) { continue; }
-            if (o.st.players[static_cast<std::size_t>(o.st.active_player_index)].life < e_life) { continue; }
+            if (o.St().players[static_cast<std::size_t>(o.St().active_player_index)].life < e_life) { continue; }
             Emit(C_CONT_DIFFERS, root, pre, plan,
                  "the realisations on the engine's line do not cover it, and one at least as healthy continued "
                  "with different cards (the engine's continuation solver saw a different board)");
@@ -6089,7 +6295,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         for (const Outcome& o : r.outcomes)
         {
             if (!o.Full() || o.line != e_line) { continue; }
-            why += " -- nearest " + ScriptText(o.script) + ": " + DiffText(e, o.st);
+            why += " -- nearest " + ScriptText(o.script) + ": " + DiffText(e, o.St());
             break;
         }
         if (EnvOn("MTG_ORACLE_GAP_ALL"))   // DIAGNOSTIC: every outcome, not just the first same-line one
@@ -6098,7 +6304,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             for (const Outcome& o : r.outcomes)
             {
                 why += " ## o" + std::to_string(k++) + (o.Full() ? "" : "(partial)")
-                     + (o.line == e_line ? "" : "(other line)") + " " + ScriptText(o.script) + ": " + DiffText(e, o.st);
+                     + (o.line == e_line ? "" : "(other line)") + " " + ScriptText(o.script) + ": " + DiffText(e, o.St());
             }
         }
         Emit(C_ORACLE_GAP, root, pre, plan, why + "; engine ended " + BoardText(e));
@@ -6192,14 +6398,14 @@ GapVerdict JudgeHit(const GameState& state, bool pre, const TurnSolver::Plan& t,
     } _unkeyed;
     // Every hand card the plan names really used (not put back on the library), and every cast really cast (an
     // action can also be skipped silently -- its card no longer in hand -- which no drop sink reports).
-    if (!Includes(UsedFromHand(state, o.st), want)) { return v; }
-    if (o.st.spells_cast_this_turn - state.spells_cast_this_turn < n_casts) { return v; }
-    const auto range = mv.cores.equal_range(CoreKey(o.st));
-    const Res hr = Resources(o.st, /*with_float=*/false);
+    if (!Includes(UsedFromHand(state, o.St()), want)) { return v; }
+    if (o.St().spells_cast_this_turn - state.spells_cast_this_turn < n_casts) { return v; }
+    const auto range = mv.cores.equal_range(CoreKey(o.St()));
+    const Res hr = Resources(o.St(), /*with_float=*/false);
     // The menu reaches this board already, with at least the resources.
     for (auto it = range.first; it != range.second; ++it) { if (Covers(it->second, hr, nullptr)) { return v; } }
     // ...or reaches it with a land Aura on another host and still at least the resources (see IsManaLandAura).
-    if (HasManaLandAura(o.st))
+    if (HasManaLandAura(o.St()))
     {
         if (!mv.hb_built)
         {
@@ -6207,13 +6413,13 @@ GapVerdict JudgeHit(const GameState& state, bool pre, const TurnSolver::Plan& t,
             { mv.hb_cores.emplace(HostBlindCore(*mv.boards[i]), std::make_pair(HostBlindRes(*mv.boards[i]), i)); }
             mv.hb_built = true;
         }
-        const auto hb = mv.hb_cores.equal_range(HostBlindCore(o.st));
-        const Res hbr = HostBlindRes(o.st);
+        const auto hb = mv.hb_cores.equal_range(HostBlindCore(o.St()));
+        const Res hbr = HostBlindRes(o.St());
         for (auto it = hb.first; it != hb.second; ++it)
         {
             if (!Covers(it->second.first, hbr, nullptr)) { continue; }
             g_eg_host_blind.fetch_add(1, std::memory_order_relaxed);
-            EgTrace(state, pre, t, "host-blind: paying it with " + ScriptText(o.script) + " ends " + BoardText(o.st)
+            EgTrace(state, pre, t, "host-blind: paying it with " + ScriptText(o.script) + " ends " + BoardText(o.St())
                                    + "; menu entry #" + std::to_string(it->second.second) + " ends "
                                    + BoardText(*mv.boards[it->second.second]));
             return v;
@@ -6384,9 +6590,9 @@ bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Pla
     const Res eres = Resources(er.st, /*with_float=*/false);
     for (const Outcome& o : r.outcomes)
     {
-        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
+        if (!o.Full() || o.line != e_line || CoreKey(o.St()) != ek) { continue; }
         if (scripted_only && !o.unscripted.empty()) { continue; }
-        if (Covers(Resources(o.st, /*with_float=*/false), eres, nullptr)) { return true; }
+        if (Covers(Resources(o.St(), /*with_float=*/false), eres, nullptr)) { return true; }
     }
     return false;
 }
@@ -6527,12 +6733,12 @@ bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, boo
     {
         if (!o.Clean() || !o.unscripted.empty()) { continue; }
         Outcome real;
-        if (!replay(o.script, real) || real.line != e_line || CoreKey(real.st) != ek) { continue; }
+        if (!replay(o.script, real) || real.line != e_line || CoreKey(real.St()) != ek) { continue; }
         bool strict = false;
-        if (!Covers(Resources(real.st, /*with_float=*/false), eres, &strict) || !strict) { continue; }
+        if (!Covers(Resources(real.St(), /*with_float=*/false), eres, &strict) || !strict) { continue; }
         int untapped = 0;
-        for (const Permanent& p : real.st.battlefield) { if (p.controller_index == a && !p.tapped) { ++untapped; } }
-        const int life = real.st.players[a].life, energy = real.st.players[a].energy_counters;
+        for (const Permanent& p : real.St().battlefield) { if (p.controller_index == a && !p.tapped) { ++untapped; } }
+        const int life = real.St().players[a].life, energy = real.St().players[a].energy_counters;
         if (!found || untapped > best_untapped || (untapped == best_untapped
             && (life > best_life || (life == best_life && energy > best_energy))))
         {
@@ -6580,7 +6786,7 @@ bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, boo
             Outcome real;
             if (replay(script, real))
             {
-                for (const Permanent& q : real.st.battlefield)
+                for (const Permanent& q : real.St().battlefield)
                 { if (q.controller_index == a) { rb += std::to_string(q.card.m_number) + (q.tapped ? "T " : " "); } }
             }
             std::fprintf(stderr, "[rp-atk] engine-apply board: %s| script board: %s| opp %d\n", eb.c_str(), rb.c_str(),

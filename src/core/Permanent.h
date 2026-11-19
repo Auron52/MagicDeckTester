@@ -1,5 +1,6 @@
 #pragma once
 #include "Card.h"
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +12,7 @@ struct Counter
     enum class Type { PlusOnePlusOne, MinusOneMinusOne, Loyalty, Poison, Depletion, Coin };
     Type type;
     int count = 1;
+    bool operator==(const Counter&) const = default;   // (BoardsEqual)
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -125,6 +127,9 @@ struct CounterList
         return first;
     }
     iterator erase(iterator pos) { return erase(pos, pos + 1); }
+    // Complete equality over the LIVE entries [0, m_n) (an entry past m_n is stale after erase; no reader sees it).
+    // The mana oracle shares identical boards (BoardsEqual in ai/ManaOracle.cpp).
+    bool operator==(const CounterList& o) const { return m_n == o.m_n && std::equal(begin(), end(), o.begin()); }
 };
 
 // An overflow must never pass QUIETLY. With canonical storage it cannot happen unless a Counter::Type
@@ -946,6 +951,8 @@ struct Permanent
         }
         return !(entered_this_turn || gained_control_this_turn) || card.HasKeyword(Keyword::Haste);
     }
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const Permanent&) const = default;
 };
 
 inline int Permanent::EffectivePower() const

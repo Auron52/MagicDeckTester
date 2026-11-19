@@ -140,6 +140,8 @@ struct Target
     int  player_index    = -1;
     int  permanent_index = -1;
     int  stack_index = -1;
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const Target&) const = default;
 };
 
 struct StackEntry
@@ -283,6 +285,8 @@ struct StackEntry
                                         // enchant_target above -- the aura/trick precedent:
                                         // m_number, -1 = searched decline, 0 = heuristic.)
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const StackEntry&) const = default;
 };
 
 // MANA-PAYMENT ROLLBACK ledger (MTG_PAY_ROLLBACK; src/ai/PayRollback.h): this turn's committed
@@ -292,7 +296,8 @@ struct StackEntry
 // the untap-effect flag, which the untap effects always set (one store).
 struct PayRollbackLedger
 {
-    struct Entry { int source_num = 0; signed char produced = -1; bool generic = false; };
+    struct Entry { int source_num = 0; signed char produced = -1; bool generic = false;
+                   bool operator==(const Entry&) const = default; };
     static constexpr int kMax = 12;
     Entry       e[kMax];
     signed char n            = 0;
@@ -305,6 +310,8 @@ struct PayRollbackLedger
     void Push(int t, int p, int num, int col, bool gen)
     { Stamp(t, p); if (n < kMax) { e[n].source_num = num; e[n].produced = static_cast<signed char>(col); e[n].generic = gen; ++n; } }
     void NoteUntapEffect(int t, int p) { Stamp(t, p); untap_effect = true; }
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const PayRollbackLedger&) const = default;
 };
 
 struct IncineratorDamageTrigger
@@ -313,6 +320,8 @@ struct IncineratorDamageTrigger
     int controller = 0;
     int damaged_player = 1;
     int amount = 0;
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const IncineratorDamageTrigger&) const = default;
 };
 
 // ---- RIPPLE CHAIN SCRIPT (Thrumming Stone; Shadowborn INT-3, 2026-11-03) -----------------------------
@@ -340,6 +349,8 @@ struct RippleScript
     std::uint16_t free_victim = 0;      // packed 4-bit (rank+1) per free sacrifice ordinal; 0 = unpinned
     bool          pinned      = false;  // a plan pin drives this script (false = the playout policy)
     bool          per_name    = false;  // F1: the reveal budget/caps persist across same-name casts
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const RippleScript&) const = default;
 };
 
 // Plan::attack_put_choice / GameState::scripted_attack_put: the TUCK bit of a positive pin (Ilharg's death "may" for
@@ -730,6 +741,8 @@ struct GameState
                             std::uint8_t gen[kSlots] = {}; std::uint8_t cre[kSlots] = {};
                             std::uint8_t gfund[5] = {}; std::uint8_t cfund[5] = {};
                             std::uint8_t gheld[5] = {}; std::uint8_t gtot = 0xFF;
+        // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+        bool operator==(const PrepayWildTrue&) const = default;
                             std::uint8_t stamp = 0xFF; };
     PrepayWildTrue           prepay_wild_true;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
@@ -1817,6 +1830,8 @@ struct GameState
         std::int8_t  revisable = 0;     // its payment only tapped permanents (so untapping restores it)
         ManaPool     pool_before;       // the combat pool before its payment (LIFO revert)
         ManaCost     cost;              // its bill (re-paid in main when reverted)
+        // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+        bool operator==(const DblCombatRec&) const = default;
     };
     struct DblCombatPay
     {
@@ -1828,6 +1843,8 @@ struct GameState
         std::int32_t last_num    = 0;
         ManaPool     pool;              // the declare-attackers step's own mana (leftover of combat payments)
         std::vector<DblCombatRec> recs; // in payment order (a revert is LIFO)
+        // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+        bool operator==(const DblCombatPay&) const = default;
     };
     std::vector<DblCombatPay> dbl_cp;   // 0 or 1 element
     // Key fold for the live run (-1 = none): two states that differ only in which doublers trail the plan
@@ -2118,6 +2135,7 @@ struct GameState
         if (m1start_hand_turn != TurnSeq() || c.m_number < 0 || c.m_number >= 128) { return false; }
         return (m1start_hand_mask[c.m_number >> 6] >> (c.m_number & 63)) & 1ULL;
     }
+    bool operator==(const GameState&) const = default;
 };
 
 // Can WHERE in a plan the land drop happens change the outcome? When a cast can put a permanent

@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -212,6 +213,13 @@ public:
         return false;
     }
 
+    // Complete equality over the LIVE ids [0, m_count) and the all-nonbasic flag (the mana oracle shares identical
+    // boards; BoardsEqual in ai/ManaOracle.cpp). An id slot past m_count is never read.
+    bool operator==(const SubtypeSet& o) const
+    {
+        return m_count == o.m_count && m_all_nonbasic_land == o.m_all_nonbasic_land
+            && std::equal(m_ids, m_ids + m_count, o.m_ids);
+    }
     void clear() { m_count = 0; m_all_nonbasic_land = false; }
 
     // Append a subtype by name. Interns it (read-only for an already-interned name, so
