@@ -26985,16 +26985,31 @@ inline bool PayWalkBuyback(GameState& state, int controller, const std::string& 
     if (lands.size() < 3 || pin.compare(0, 8, "buyback:") != 0) { return false; }
     int ids[3] = {};
     if (std::sscanf(pin.c_str() + 8, "%d,%d,%d", &ids[0], &ids[1], &ids[2]) != 3) { return false; }
+    // Every pinned Island must be on the board before anything is asked.
+    for (int k = 0; k < 3; ++k)
+    {
+        bool found = false;
+        for (int i : lands) { if (state.battlefield[i].card.m_number == ids[k]) { found = true; break; } }
+        if (!found) { return false; }
+    }
     std::vector<int> chosen;
     for (int k = 0; k < 3; ++k)
     {
-        int idx = -1;
-        for (int i : lands)
-        { if (state.battlefield[i].card.m_number == ids[k]) { idx = i; break; } }
-        if (idx < 0) { return false; }
+        // The pinned Islands still owed, in pin order (battlefield indices). The human may have taken a
+        // later pinned Island at an earlier frame, so this frame's default is the first one STILL here.
+        std::vector<int> rest;
+        for (int j = k; j < 3; ++j)
+        { for (int i : lands) { if (state.battlefield[i].card.m_number == ids[j]) { rest.push_back(i); break; } } }
+        int idx = rest.empty() ? lands.front() : rest.front();
         if (g_play_sacrifice_chooser)
         {
             const int dflt = static_cast<int>(std::find(lands.begin(), lands.end(), idx) - lands.begin());
+            // ONE multi-select in the viewer, not three prompts (USER 2026-11-19, on Fireblast's two
+            // Mountains): the burst disclosure (pick_index / pick_total / burst_default) is what lets the
+            // viewer fold the frames (sacBurstAuto, which links them by the label minus its trailing
+            // "(...)"). The frames stay one int each AND keep their labels -- the reference tools key a
+            // decision on (type, turn, phase, source), so a relabel orphans every recorded pick.
+            const SacBurstScope burst(k, 3, &rest);
             const std::string label = "Walk the Aeons (Island " + std::to_string(k + 1) + " of 3)";
             const int choice = (*g_play_sacrifice_chooser)(state, controller, label, lands, dflt);
             if (choice >= 0 && choice < static_cast<int>(lands.size())) { idx = lands[choice]; }
@@ -27024,13 +27039,29 @@ inline bool PayFireblastAlternative(GameState& state, int controller, const std:
     if (a < 0 || b < 0 || a == b) { return false; }
     if (g_play_sacrifice_chooser)
     {
+        // ONE "pick 2" dialog in the viewer, not two prompts (USER 2026-11-19: "fireblast should have
+        // only one dialog selecting the lands to sacrifice"). The two frames stay (one int each, so
+        // --choices streams and saved references keep their alignment) and so do their LABELS: the
+        // reference tools key a decision on (type, turn, phase, source), so a relabel orphans every
+        // recorded pick (viewer_protocol_check answered them by engine default). The burst disclosure
+        // (pick_index / pick_total / burst_default) is what lets the viewer fold the two frames into a
+        // single multi-select (index.html sacBurstAuto links them by the label minus its "(...)").
         int defidx = static_cast<int>(std::find(lands.begin(), lands.end(), a) - lands.begin());
-        int k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (first Mountain)", lands, defidx);
+        std::vector<int> rest = {a, b};
+        int k = 0;
+        {
+            const SacBurstScope burst(0, 2, &rest);
+            k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (first Mountain)", lands, defidx);
+        }
         if (k >= 0 && k < static_cast<int>(lands.size())) { a = lands[k]; }
         lands.erase(std::find(lands.begin(), lands.end(), a));
         auto it = std::find(lands.begin(), lands.end(), b);
         defidx = it == lands.end() ? 0 : static_cast<int>(it - lands.begin());
-        k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (second Mountain)", lands, defidx);
+        rest = {lands[defidx]};
+        {
+            const SacBurstScope burst(1, 2, &rest);
+            k = (*g_play_sacrifice_chooser)(state, controller, "Fireblast (second Mountain)", lands, defidx);
+        }
         b = k >= 0 && k < static_cast<int>(lands.size()) ? lands[k] : lands[defidx];
     }
     // A player may tap basic Mountains for mana while casting Fireblast, before
