@@ -1,0 +1,417 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [18, 29] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Boltwave" }, { "num": 55, "name": "Sunbaked Canyon" }, { "num": 31, "name": "Mountain" }, { "num": 23, "name": "Lightning Bolt" }, { "num": 47, "name": "Rift Bolt" }, { "num": 19, "name": "Lava Spike" }, { "num": 32, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 10, "name": "Fireblast" }, { "num": 5, "name": "Chain Lightning" }, { "num": 25, "name": "Lightning Bolt" }, { "num": 45, "name": "Needle Drop" }, { "num": 11, "name": "Fireblast" }, { "num": 60, "name": "Vexing Devil" }, { "num": 36, "name": "Mountain" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 18, "name": "Grim Lavamancer" }, { "num": 35, "name": "Mountain" }, { "num": 15, "name": "Goblin Guide" }, { "num": 34, "name": "Mountain" }, { "num": 58, "name": "Vexing Devil" }, { "num": 50, "name": "Rift Bolt" }, { "num": 29, "name": "Monastery Swiftspear" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 18, "name": "Grim Lavamancer", "win_optimal": true }, { "num": 35, "name": "Mountain", "win_optimal": true }, { "num": 15, "name": "Goblin Guide", "win_optimal": true }, { "num": 34, "name": "Mountain", "win_optimal": true }, { "num": 58, "name": "Vexing Devil", "win_optimal": true }, { "num": 50, "name": "Rift Bolt", "win_optimal": true }, { "num": 29, "name": "Monastery Swiftspear", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 50, "name": "Rift Bolt" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 35, "name": "Mountain", "win_optimal": true }, { "num": 15, "name": "Goblin Guide", "win_optimal": true }, { "num": 34, "name": "Mountain", "win_optimal": true }, { "num": 58, "name": "Vexing Devil", "win_optimal": true }, { "num": 50, "name": "Rift Bolt", "win_optimal": true }, { "num": 29, "name": "Monastery Swiftspear", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 50, "name": "Rift Bolt" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Goblin Guide"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 1, "source": "Goblin Guide (attack)", "cards": [{ "name": "Plains", "disposition": "kept" }] }],
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "num": 15, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 0, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [], "library_size": 52, "hand_size": 8, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Vexing Devil", "cast=Grim Lavamancer"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Grim Lavamancer" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 2, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 1, "num": 35, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Grim Lavamancer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 58, "name": "Vexing Devil", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Grim Lavamancer, Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Grim Lavamancer", "Vexing Devil"], "cast_order_canonical": ["Grim Lavamancer", "Vexing Devil"], "actions": [{ "card": "Grim Lavamancer" }, { "card": "Vexing Devil" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Vexing Devil, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vexing Devil", "Rift Bolt"], "actions": [{ "card": "Vexing Devil" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 3, "summary": "land=none; cast: Vexing Devil", "declared_order_payability": "not_verified", "land": null, "casts": ["Vexing Devil"], "actions": [{ "card": "Vexing Devil" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Grim Lavamancer", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Rift Bolt (suspend), Grim Lavamancer", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer" }] },
+    { "index": 6, "summary": "land=none; cast: Grim Lavamancer", "declared_order_payability": "not_verified", "land": null, "casts": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer" }] },
+    { "index": 7, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "damage", "text": "😈 Vexing Devil: the opponent TAKES 4 (18→14) -- Vexing Devil is sacrificed" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 2, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 4, "num": 16, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Vexing Devil"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Goblin Guide (attack)", "cards": [{ "name": "Ajani's Pridemate", "disposition": "" }] }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (14→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 2, "num": 15, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 4, "num": 16, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Vexing Devil"], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100026, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Rift Bolt" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 5, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 50, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Vexing Devil"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 2, "summary": "land=none; cast: Rift Bolt (suspend), Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "suspend", "text": "⌛ Rift Bolt -- suspended (arrives T4)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 5, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Vexing Devil"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 3, "source": "Goblin Guide (attack)", "cards": [{ "name": "Soul Warden", "disposition": "" }] }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Grim Lavamancer (1) — 3 to opponent (12→9)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 15, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 5, "num": 16, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Vexing Devil"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "free_cast",
+  "source": "Rift Bolt (suspend)",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Vexing Devil"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "heuristic_default": 0,
+  "operation": "suspend_cast",
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Rift Bolt",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Vexing Devil"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 4, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Grim Lavamancer (yours)" }, { "kind": "permanent", "index": 7, "label": "4/4 Creature (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Grim Lavamancer (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 4, "label": "4/4 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Lightning Bolt", "gyexile=Grim Lavamancer#16"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Lightning Bolt" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Plains" }, { "turn": 4, "kind": "suspend", "text": "⌛ Rift Bolt -- cast off suspend" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Rift Bolt", "Vexing Devil"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt → opponent, Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: Rift Bolt (suspend), Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Lightning Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=none; cast: Lightning Bolt → opponent, Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 4, "summary": "land=none; cast: Lightning Bolt → opponent, Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 15, "enchant_target_name": "Goblin Guide" }] },
+    { "index": 5, "summary": "land=none; cast: Lightning Bolt → opponent, Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 16, "enchant_target_name": "Grim Lavamancer" }] },
+    { "index": 6, "summary": "land=none; cast: Lightning Bolt → opponent, Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 500000, "enchant_target_name": "4/4 Creature" }] },
+    { "index": 7, "summary": "land=none; cast: Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 8, "summary": "land=none; cast: Rift Bolt (suspend), Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 9, "summary": "land=none; cast: Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 10, "summary": "land=none; cast: Rift Bolt (suspend), Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil" }] },
+    { "index": 11, "summary": "land=none; cast: Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 15, "enchant_target_name": "Goblin Guide" }] },
+    { "index": 12, "summary": "land=none; cast: Rift Bolt (suspend), Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 15, "enchant_target_name": "Goblin Guide" }] },
+    { "index": 13, "summary": "land=none; cast: Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 16, "enchant_target_name": "Grim Lavamancer" }] },
+    { "index": 14, "summary": "land=none; cast: Rift Bolt (suspend), Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 16, "enchant_target_name": "Grim Lavamancer" }] },
+    { "index": 15, "summary": "land=none; cast: Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": [], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 500000, "enchant_target_name": "4/4 Creature" }] },
+    { "index": 16, "summary": "land=none; cast: Rift Bolt (suspend), Grim Lavamancer: exile two cards (2 damage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "activations": ["Grim Lavamancer"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Grim Lavamancer", "src_num": 16, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "verb": "gyexile", "mode": 3, "tutor_target": "Rift Bolt\nVexing Devil", "enchant_target": 500000, "enchant_target_name": "4/4 Creature" }] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Rift Bolt", "Vexing Devil"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 4, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Grim Lavamancer (yours)" }, { "kind": "permanent", "index": 7, "label": "4/4 Creature (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Grim Lavamancer (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 4, "label": "4/4 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "target",
+  "source": "Grim Lavamancer",
+  "turn": 4,
+  "per_target_damage": 2, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt", "Rift Bolt", "Vexing Devil"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "permanent", "index": 7, "label": "4/4 Creature (opponent)" }, { "kind": "permanent", "index": 4, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 6, "label": "Grim Lavamancer (yours)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "4/4 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 2, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Grim Lavamancer (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 4, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 2 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 19,
+  "type": "gy_return_one",
+  "source": "Grim Lavamancer",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt", "Rift Bolt", "Vexing Devil"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "heuristic_default": 1,
+  "alt_text": "",
+  "exile_cost": true,
+  "cost_number": 1,
+  "candidates": [{ "index": 1, "name": "Vexing Devil" }, { "index": 2, "name": "Rift Bolt" }, { "index": 3, "name": "Lightning Bolt" }],
+  "note": "reply with the index (1..n) of a graveyard card to exile as an activation cost; two cards are exiled."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 20,
+  "type": "gy_return_one",
+  "source": "Grim Lavamancer",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 34, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt", "Rift Bolt", "Vexing Devil"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "heuristic_default": 1,
+  "alt_text": "",
+  "exile_cost": true,
+  "cost_number": 2,
+  "candidates": [{ "index": 1, "name": "Rift Bolt" }, { "index": 2, "name": "Lightning Bolt" }],
+  "note": "reply with the index (1..n) of a graveyard card to exile as an activation cost; two cards are exiled."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (6→3)" }, { "turn": 4, "kind": "damage", "text": "Grim Lavamancer: 2 damage to opponent" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 15, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Grim Lavamancer", "idx": 6, "num": 16, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 49, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Plains", "idx": 0, "num": 100026, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100043, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100035, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Archangel of Thune"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (1→-1)" }
+  ]
+}
