@@ -398,11 +398,30 @@ def recorded_tap_prefs(decisions):
     # source that tapped and then LEFT before the closing frame (the Mountain that paid Shard Volley
     # and was then sacrificed to it, burn s21_gi20) is a payment tap the closing frame cannot show.
     between = set()
+    # Sources an EFFECT tapped between the pair, not a payment: a `target` sub-decision whose ability
+    # TAPS its target ("tap (draw a card)" -- Guild Summit's ETB) and whose chosen target is one of OUR
+    # permanents, untapped at that sub-decision. The closing frame shows it tapped exactly like a paid
+    # source, so without this it was pinned as one, and a pin outranks every unpinned source: on
+    # Maze_s_End/claude_s12345681_gi12345680 T3 the human paid Guild Summit with Dimir Guildgate +
+    # Manor Gate + Maze's End and then had Summit tap Thran Portal; the pref {Dimir, Manor, Maze's
+    # End, Thran Portal} let the payer spend Thran Portal (1 life) instead of Manor Gate, so Summit's
+    # recorded target was gone -- an ENUM-GAP that was the checker's, not the engine's (2026-11-19).
+    effect_tapped = set()
     for d in decisions:
         dec = d.get("decision", {})
         if dec.get("type") != "main_phase":
             between |= {p["num"] for p in (dec.get("me") or {}).get("battlefield", [])
                         if isinstance(p.get("num"), int) and p.get("tapped")}
+            if dec.get("type") == "target" and re.match(r"tap(ped)?\b", str(dec.get("loyalty", ""))):
+                untapped_by_idx = {p.get("idx"): p["num"]
+                                   for p in (dec.get("me") or {}).get("battlefield", [])
+                                   if isinstance(p.get("num"), int) and not p.get("tapped")}
+                ch = d.get("chosen")
+                for o in dec.get("options") or []:
+                    if o.get("index") == ch or (isinstance(ch, list) and o.get("index") in ch):
+                        for t in o.get("targets") or []:
+                            if t.get("kind") == "permanent" and t.get("index") in untapped_by_idx:
+                                effect_tapped.add(untapped_by_idx[t["index"]])
             continue
         if prev is not None and _tkey(prev) == _tkey(dec) \
                 and prev.get("phase") == dec.get("phase"):
@@ -444,6 +463,7 @@ def recorded_tap_prefs(decisions):
                 # were in the first frame's HAND qualify, so a land FETCHED tapped from the library
                 # (an ETB state, the case the first-frame restriction exists for) still never pins.
                 nums |= cast_tapped
+                nums -= effect_tapped
                 if nums:
                     ordinal = prev.get("main_ordinal")
                     if not isinstance(ordinal, int):
@@ -452,6 +472,7 @@ def recorded_tap_prefs(decisions):
                     prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
         between = set()
+        effect_tapped = set()
     return prefs
 
 
