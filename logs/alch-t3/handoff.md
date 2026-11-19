@@ -73,3 +73,15 @@ design: `docs/design/aa-staff-in-hand-loop-cast-draw.md` (read the whole doc, in
 ONE heavy job at a time: wrap every build/tier/batch/A-B in `flock /workspaces/MagicDeckTester/build/scratch/BOX.lock`.
 Build only via ./build.sh; no `timeout`, no `cd X && ...`, no `pkill -f`, no `while pgrep -f`; never rebase while a
 build in this tree runs or is queued; never touch references/; subagents do not push the shared branch.
+
+## UPDATE: step1 finished (bin_h1, heuristic half only) -- build/scratch/alch-t3/step1/summary.txt
+- combo_off: 51/51 pass, aa_co_17 offered=1 verified=1 (rule LIFE-GAINED+LOOP-UMBRA+FIN-STAFF-HAND-DIG).
+- aa_* scenarios: all rc=0; aa_staff_in_hand_umbra_loop_seed12345681_t3 = T3.
+- Post-sac hand-off at play settings: T3.
+- **Full game, seed 12345681 gi0 keep 7 at play settings: still avg 4.0000 (T4), NOT T3.** The heuristic fixes the
+  post-sac board but the search does not reach that board on T3 by itself (Living Wish -> Boar, Boar, Umbra, sac
+  ordering earlier in the turn). Next step: hand off at earlier T3 frames (scripts/ref_handoff.py --turn 3 --frame N)
+  to find which decision is missed.
+- **Units: rc=139 (SEGFAULT), 96 failed / 3173 passed.** Possibly an artefact of running the COPIED mtg-test from
+  build/scratch (path-relative resources?), possibly real -- re-run `build/Release/mtg-test` in the worktree
+  (after build2) and compare with origin's failure set before trusting either way. Log: step1/units.txt.
