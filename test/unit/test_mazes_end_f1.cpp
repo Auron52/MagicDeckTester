@@ -626,3 +626,55 @@ TEST_CASE("Maze's End F4 (fd-diverge s7009 gi8): a canon continuation holds no {
         CHECK_MESSAGE(q->tapped == p.tapped, p.card.m_name.str());
     }
 }
+
+TEST_CASE("Maze's End (USER 2026-11-19, F6 s6_gi5 T5): CheckLine prices the {3} and credits the fetched Gate in the line's order")
+{
+    LoadF1Cards();
+    using V = TurnSolver::LineCheck::Verdict;
+    auto board = [&](bool fifth_source) {
+        GameState s = FBase();
+        FPut(s, "Gond Gate", 700);            // Gates enter untapped: each fetched Gate adds one mana
+        FPut(s, "Azorius Guildgate", 701);
+        FPut(s, "Boros Guildgate", 702);
+        FPut(s, "Dimir Guildgate", 703);
+        if (fifth_source) { FPut(s, "Gruul Guildgate", 704); }
+        FPut(s, "Maze's End", 710);
+        FPut(s, "Maze's End", 711);
+        s.players[0].hand.push_back(FCard("Amulet of Vigor", 720));
+        s.players[0].library.push_back(FCard("Simic Guildgate", 730));
+        s.players[0].library.push_back(FCard("Golgari Guildgate", 731));
+        s.players[0].library.push_back(FCard("Izzet Guildgate", 732));
+        return s;
+    };
+    auto line = [](std::vector<std::string> steps) {
+        TurnSolver::LineSpec l;
+        for (const std::string& st : steps)
+        {
+            if (st == "act") { l.casts.push_back("Maze's End"); l.board_acts.push_back("Maze's End"); }
+            else             { l.casts.push_back(st); }
+        }
+        return l;
+    };
+    {
+        // Four other sources, two activations: {3} + {3} from four mana plus the first fetched Gate is one short.
+        // Before the row existed the {3} cost NOTHING and this read legal_not_enumerated.
+        const GameState s = board(false);
+        const auto r = TurnSolver::CheckLine(s, true, line({ "act", "act" }));
+        CHECK(r.verdict == V::Illegal);
+    }
+    {
+        // Five sources, activations FIRST: 3 of 5, the Gate enters untapped (3 left), 3 more, the second Gate
+        // (1 left) pays the Amulet. Payable only because the put is credited and the human's order is walked.
+        const GameState s = board(true);
+        const auto r = TurnSolver::CheckLine(s, true, line({ "act", "act", "Amulet of Vigor" }));
+        CHECK(r.verdict != V::Illegal);
+        INFO(r.reason);
+    }
+    {
+        // Same board, the Amulet FIRST: 4 left, 3 for the first activation (1 + its Gate = 2), the second {3} fails.
+        const GameState s = board(true);
+        const auto r = TurnSolver::CheckLine(s, true, line({ "Amulet of Vigor", "act", "act" }));
+        CHECK(r.verdict == V::Illegal);
+        INFO(r.reason);
+    }
+}

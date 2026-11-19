@@ -4285,6 +4285,17 @@ function handleVerdict(v, line) {
     commitLine();
     return;
   }
+  // A land queued AFTER casts that the rest of the line pays from (Amulet of Vigor, then a Gate, then a
+  // spell off the Gate): the validator prices that land as if it were played first, so split the line at
+  // the land and let each half be checked on the board it is really played on (LB.landAfterCastRoute).
+  const landRoute=LB.landAfterCastRoute(S.plan, v.verdict, v.reason, v.failed_action);
+  if (landRoute) {
+    const land=(landRoute.find(p=>p.kind==='land'&&p.defer)||{}).name||'the land';
+    S.plan=landRoute; hideVerdict(); renderBoard();
+    flashHint(`Playing ${land} as its own step after the spells queued before it, so it enters on that board and pays the rest of the line.`);
+    commitLine();
+    return;
+  }
   // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
   // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
   // picking an ALTERNATE plan from the menu below inherits the skip and auto-passes the rest of THIS

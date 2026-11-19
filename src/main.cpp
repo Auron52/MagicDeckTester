@@ -1646,6 +1646,11 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         // legacy by-name suspend rule uses, so a recorded `cast=Lotus Bloom` line still validates.
         if (d && d->params.suspend_time_counters > 0 && d->card.m_mana_cost.ManaValue() == 0)
         { os << ", \"suspend_only\": true"; }
+        // `grants_land_drops`: extra land drops this card adds once it resolves (Exploration's static drop,
+        // Explore's one-shot). The viewer counts the QUEUED ones so "Exploration, then two lands" queues both
+        // lands in one line (USER 2026-11-19); the second commits as its own segment. Absent when 0.
+        if (d && d->params.static_extra_land_drops + d->params.grants_extra_land_drop > 0)
+        { os << ", \"grants_land_drops\": " << (d->params.static_extra_land_drops + d->params.grants_extra_land_drop); }
         // is_creature lets the GUI offer an Aether Vial deploy (a creature whose MV equals a
         // Vial's charge counters can be put onto the battlefield for free).
         if (d && d->card.IsCreature()) { os << ", \"is_creature\": true"; }
