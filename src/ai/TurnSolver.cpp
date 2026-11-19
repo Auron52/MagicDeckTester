@@ -490,6 +490,13 @@ static std::atomic<long long> g_etbc_verify_ok{0}, g_etbc_verify_bad{0};
 enum : int { kWhyNotApplied = 0, kWhyClean, kWhyPending, kWhyReads, kWhyUnits, kWhyBp, kWhyOther,
              kWhyNoBase, kWhyCount };
 static std::atomic<long long> g_etbc_miss[kWhyCount] = {};
+// The Summit-twin fold (SummitTwinFold, MTG_SUMMIT_TWIN_FOLD): twins declined, verify verdicts, and why a
+// matched twin still applied (the same kWhy* codes).
+static std::atomic<long long> g_stf_folded{0}, g_stf_verify_ok{0}, g_stf_verify_bad{0};
+static std::atomic<long long> g_stf_miss[kWhyCount] = {};   // why a matched twin still applied (stats)
+static std::atomic<long long> g_stf_count_differs{0};       // matched, clean base, but a different count
+static std::atomic<long long> g_stf_twins{0};                // candidates matched to a base
+static std::atomic<long long> g_stf_bp_after{0};             // skips whose base reached breakpoints AFTER its resolution
 static std::atomic<long long> g_axis_sweep_vars{0};
 // Vampires A1: madness-fan variants emitted (MadnessFanFor) -- decline + every cast option of every
 // madness-capable outlet discard. Stage 5f reads the fan's width here; the in-window default counter
@@ -2314,6 +2321,7 @@ namespace
                       << " no_base=" << g_etbc_miss[kWhyNoBase].load() << "\n";
             std::cerr << "[rollout-stats] summit_twin_fold matched=" << g_stf_twins.load()
                       << " skipped=" << g_stf_folded.load()
+                      << " (of which base_bp_after_resolution=" << g_stf_bp_after.load() << ")"
                       << " (verify ok=" << g_stf_verify_ok.load()
                       << " MISMATCH=" << g_stf_verify_bad.load() << ")"
                       << " | applied anyway: count_differs=" << g_stf_count_differs.load()
@@ -35854,11 +35862,12 @@ struct EtbcFold
 // (chosen_x = N + 1; Maze's End: N = 0 and N = all). The count is clamped at resolution to the untapped
 // Gates present then, and WHICH N Gates are tapped follows EtbTapSubtypeOrder from the count alone. So
 // a pinned clone whose count, at its resolution, equals the count the unpinned plan's resolution took
-// IS the unpinned plan: the same Gates tapped, the same cards drawn, the same state. MEASURED
-// (MTG_DUP_DIFF, Maze's End s3 T4 at d5 b20): 426 of the 1,100 candidates scored were exactly that
-// `A+{Guild Summit|k0} B+{Guild Summit|k0|xN}` duplicate -- 280 of them plain plans, which the
-// post-apply dedup never skips (they are not axis variants), so each paid its unit, its apply, its
-// combat and its rollout to re-score a state its unpinned twin had already scored.
+// IS the unpinned plan: the same Gates tapped, the same cards drawn, the same state. MEASURED (MTG_DUP_DIFF,
+// Maze's End s3 T4 frame 0 at d5 b20): with the search honouring the pin (MTG_SUMMIT_PIN_LOCKSTEP, the same day --
+// before it every pinned clone resolved at the unpinned count, 426 of 1,100 candidates pure duplicates), 304 clones
+// match an unpinned twin and 132 of them land on its count. Plain plans are not axis variants, so the post-apply
+// dedup never skipped them: each paid its unit, apply, combat and rollout to re-score its twin's state. Folded: T4
+// cost 6,144 -> 5,839 units, duplicates 298 -> 114, MTG_SUMMIT_TWIN_FOLD_VERIFY 132 ok / 0 MISMATCH.
 //
 // THE FOLD IS EXACT. The twin and its base are the same Plan except for that ONE Guild Summit cast's
 // chosen_x (Plan::operator== with it masked, plus bp_self / bp_wave0 as in EtbcFold). chosen_x on a
@@ -35870,7 +35879,13 @@ struct EtbcFold
 // licenses a skip only when its apply was CLEAN in EtbcFold's sense (its Witness: no budget,
 // decision-work or game-work unit, no breakpoint channel, no truncation, no condemnation drop, no bind,
 // no searched-only suppression -- an apply that is a function of the state and the plan alone) AND ran
-// exactly ONE Guild Summit resolution, unpinned. Only a base applied EARLIER IN THIS SAME PASS licenses
+// exactly ONE Guild Summit resolution, unpinned -- with ONE relaxation: the base may reach breakpoints, provided
+// every breakpoint event of its apply comes AFTER the Summit resolution (g_bp_event_epoch unchanged at the
+// resolution). Then the twin's apply is the same computation through every breakpoint as well, so its breakpoint
+// variants and continuations are its base's, which the walker opens for the base; the skipped twin is recorded as an
+// apply that reached none (128 of the 132 s3 skips). A breakpoint BEFORE the resolution is not folded: a
+// continuation there can change the unpinned count (the rest of the line), so the twin's continuations would differ.
+// Only a base applied EARLIER IN THIS SAME PASS licenses
 // a skip, so the FIRST-REACHED representative is the one kept: a later twin can never displace it
 // (its value is equal, and `plan.value` is in the equality, so the strict tie-break keeps the earlier).
 // What the skip leaves: what EtbcFold's skip leaves for a clean apply (the per-apply resets, the dig
@@ -35891,15 +35906,19 @@ static bool SummitTwinFoldOn()
     static const bool on = EnvOn("MTG_SUMMIT_TWIN_FOLD", true);   // DEFAULT ON (identity fold); =0 is the A/B hatch
     return heurarm::Flag(heurarm::SUMMIT_TWIN_FOLD, on);   // per-job slot: its A/B pools into one batch
 }
+// MTG_SUMMIT_PIN_LOCKSTEP (DEFAULT ON; =0 is the A/B hatch): the search's noncreature ETB path passes Guild Summit's
+// searched count to the resolution (see the FireOwnEtbTriggers call in apply_one's noncreature branch).
+static bool SummitPinLockstepOn()
+{
+    static const bool on = EnvOn("MTG_SUMMIT_PIN_LOCKSTEP", true);
+    return heurarm::Flag(heurarm::SUMMIT_PIN_LOCKSTEP, on);
+}
 static bool SummitTwinFoldVerifyOn()
 {
     static const bool on = EnvOn("MTG_SUMMIT_TWIN_FOLD_VERIFY");   // diagnostic, default off: applies, checks
     return on;
 }
-static std::atomic<long long> g_stf_folded{0}, g_stf_verify_ok{0}, g_stf_verify_bad{0};
-static std::atomic<long long> g_stf_miss[kWhyCount] = {};   // why a matched twin still applied (stats)
-static std::atomic<long long> g_stf_count_differs{0};       // matched, clean base, but a different count
-static std::atomic<long long> g_stf_twins{0};                // candidates matched to a base
+// (the fold's counters g_stf_* are declared beside g_etbc_miss, above the stats printer)
 long long TurnSolver::SummitTwinFoldsForTest() { return g_stf_folded.load(); }
 struct SummitTwinFold
 {
@@ -35912,14 +35931,35 @@ struct SummitTwinFold
     std::vector<char> dug;       // ...and that apply's g_apd_last_dug
     std::vector<int>  avail;     // ...and that resolution's untapped Gates
     std::vector<int>  taken;     // ...and the count it tapped
+    std::vector<char> bp_after;  // ...and it reached breakpoints, every one AFTER that resolution
     std::vector<char> why;       // per base: the Record verdict (kWhy*; stats only)
-    std::unordered_map<int, TranspositionTable::Key> base_key;   // verify only
+    // The breakpoint channel's deltas over one apply (verify: a twin's must equal its base's).
+    struct BpDelta
+    {
+        unsigned long long any = 0, classon = 0, latent9 = 0, truncasym = 0;
+        bool operator==(const BpDelta&) const = default;
+    };
+    std::unordered_map<int, std::pair<TranspositionTable::Key, BpDelta>> base_key;   // verify only
     struct Witness
     {
         EtbcFold::Witness w;
         unsigned long long res = 0;
+        unsigned long long epoch = 0;
         static Witness Take(long long units_now)
-        { Witness x; x.w = EtbcFold::Witness::Take(units_now); x.res = g_summit_tap_resolutions; return x; }
+        {
+            Witness x;
+            x.w = EtbcFold::Witness::Take(units_now);
+            x.res = g_summit_tap_resolutions;
+            x.epoch = g_bp_event_epoch;
+            return x;
+        }
+        // The breakpoint channel's movement from `b` (this witness's start) to now.
+        static BpDelta Since(const Witness& b)
+        {
+            const EtbcFold::Witness a = EtbcFold::Witness::Take(0);
+            return BpDelta{ a.any - b.w.any, a.classon - b.w.classon, a.latent9 - b.w.latent9,
+                            a.truncasym - b.w.truncasym };
+        }
     };
     // The plan's ONE Guild Summit cast (etb_tap_subtype_draw), or -1 (none, or more than one).
     static int SummitAction(const TurnSolver::Plan& p)
@@ -35950,7 +35990,8 @@ struct SummitTwinFold
         if (!any) { return; }
         const std::size_t n = cands.size();
         base_of.assign(n, -1); pin.assign(n, -1); is_base.assign(n, 0); clean.assign(n, 0);
-        dug.assign(n, 0); avail.assign(n, 0); taken.assign(n, 0); why.assign(n, kWhyNotApplied);
+        dug.assign(n, 0); avail.assign(n, 0); taken.assign(n, 0); bp_after.assign(n, 0);
+        why.assign(n, kWhyNotApplied);
         base_key.clear();
         // A plan another fold's memo reads is left alone (EtbcFold's exclusions plus the bounce, dig,
         // put-back and ETB-counter families, whose memos key on the candidate's own apply).
@@ -36006,23 +36047,32 @@ struct SummitTwinFold
     void Record(std::size_t i, const Witness& before, long long units_now, bool pending, KeyFn key_of)
     {
         if (!on || is_base[i] == 0) { return; }
+        clean[i] = 0;
         const Witness after = Witness::Take(units_now);
         const EtbcFold::Witness& a = after.w;
         const EtbcFold::Witness& b = before.w;
+        // The breakpoint channel may move only AFTER the Summit resolution: no breakpoint event between the apply's
+        // start and the resolution (the epoch the resolution snapshotted is the one this witness took). Then the
+        // twin's apply is the same computation through every breakpoint too -- the same state at each, the same
+        // continuations -- so its breakpoint variants are its base's, which the walker opens for the base.
+        const bool bp_moved = a.any != b.any || a.classon != b.classon
+                           || a.latent9 != b.latent9 || a.truncasym != b.truncasym;
+        const bool bp_late  = bp_moved && g_summit_tap_last_bp_epoch == before.epoch;
         why[i] = pending ? kWhyPending
                : g_bp_searchonly_suppressed ? kWhyOther
                : (after.res != before.res + 1 || g_summit_tap_last_pinned) ? kWhyReads
                : (a.units != b.units || a.dw != b.dw || a.gw != b.gw
                   || a.dw_acc != b.dw_acc || a.gc_acc != b.gc_acc) ? kWhyUnits
-               : (a.any != b.any || a.classon != b.classon
-                  || a.latent9 != b.latent9 || a.truncasym != b.truncasym) ? kWhyBp
-               : !(a == b) ? kWhyOther : kWhyClean;
+               : (bp_moved && !bp_late) ? kWhyBp
+               : (a.reads != b.reads || a.trunc != b.trunc || a.drops != b.drops || a.binds != b.binds)
+                   ? kWhyOther : kWhyClean;
         if (why[i] != kWhyClean) { return; }
         clean[i] = 1;
         dug[i] = g_apd_last_dug ? 1 : 0;
         avail[i] = g_summit_tap_last_avail;
         taken[i] = g_summit_tap_last_n;
-        if (verify) { base_key[static_cast<int>(i)] = key_of(); }
+        bp_after[i] = bp_late ? 1 : 0;
+        if (verify) { base_key[static_cast<int>(i)] = { key_of(), Witness::Since(before) }; }
     }
     // The clean base whose apply candidate i's would repeat, or -1.
     int Skip(std::size_t i) const
@@ -36043,12 +36093,14 @@ struct SummitTwinFold
         }
         return b;
     }
-    // Verify mode: the twin's own post-apply key against its base's.
-    void Check(int b, const TranspositionTable::Key& vkey, int turn) const
+    // Verify mode: the twin's own post-apply key, and its breakpoint-channel deltas (`twin_w0` = its apply's start
+    // witness), against its base's.
+    void Check(int b, const TranspositionTable::Key& vkey, int turn, const Witness& twin_w0) const
     {
         const auto it = base_key.find(b);
         if (it == base_key.end()) { return; }
-        if (it->second == vkey) { g_stf_verify_ok.fetch_add(1, std::memory_order_relaxed); return; }
+        if (it->second.first == vkey && it->second.second == Witness::Since(twin_w0))
+        { g_stf_verify_ok.fetch_add(1, std::memory_order_relaxed); return; }
         const long long n = g_stf_verify_bad.fetch_add(1, std::memory_order_relaxed);
         if (n < 5) { std::fprintf(stderr, "[summit-twin-verify] MISMATCH turn=%d base=%d\n", turn, b); }
     }
@@ -73124,7 +73176,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!truncated && !HumanPlayActive() && plan.bp_choice < 0 && !plan.bp_all
             && g_bp_enum_depth == 0 && g_rollout_nest == 0
             && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0)
-        { ++g_bp_truncasym_last; }
+        { ++g_bp_truncasym_last; ++g_bp_event_epoch; }   // (+ the Summit-twin fold's epoch, SpellEffects.h)
         // ...and the playout fold's twin of the same asymmetry (asymmetry 1, pofold): the measured
         // base did not truncate where every variant of it would.
         if (!truncated && pofold::t_base.plan == &plan
@@ -73862,6 +73914,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // global value that the executor's replay reads as well.
         ++g_bp_fired_last;   // any occurrence, any class, any plan (see the declaration)
         ++g_bp_any_last;     // ...and the monotonic twin the NOBP gate reads (see g_bp_any_last)
+        ++g_bp_event_epoch;  // ...and the Summit-twin fold's epoch (SpellEffects.h; never reset)
         // SECTION WINDOW RESET (MTG_BP_HAND_ENTRY; see hand_at_section): this breakpoint is a
         // decision point on the hand as it stands, so everything that entered before it is now
         // accounted for -- whatever its class, masked or not (a masked class is a deliberate
@@ -77557,9 +77610,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // Island to exile (zero declines). Dropping it made rollouts leave
                         // the Island in play and treat the Lens as empty while the real
                         // executor imprinted it, diverging on the very next extra turn.
+                        // ...and Guild Summit's searched Gate COUNT (etb_tap_subtype_draw; chosen_x = N + 1,
+                        // 0 = unpinned, the provider's rest-of-line count at resolution). Before 2026-11-19
+                        // it was dropped here, so every pinned clone resolved at the UNPINNED count in the
+                        // search while the executor (AIEngine stamps chosen_x > 0 on the stack entry,
+                        // EffectHandler passes it on) tapped the pinned N: the count axis (decline / tap
+                        // all) was unfindable at any budget, and each clone re-scored its unpinned twin
+                        // (Maze's End s3 T4: 426 of 1,100 la_cand candidates).
                         FireOwnEtbTriggers(state, state.active_player_index, bi, tutor_target,
                                            (def.params.lens_imprint_land
-                                            || (def.params.etb_choose_color && chosen_x > 0))
+                                            || ((def.params.etb_choose_color
+                                                 || (!def.params.etb_tap_subtype_draw.empty() && SummitPinLockstepOn()))
+                                                && chosen_x > 0))
                                                ? chosen_x : -1);
                         break;
                     }
@@ -80896,7 +80958,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (!s_human_play && plan.bp_choice < 0 && !plan.bp_all
         && g_bp_enum_depth == 0 && g_rollout_nest == 0
         && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
-    { ++g_bp_latent9_last; }
+    { ++g_bp_latent9_last; ++g_bp_event_epoch; }   // (+ the Summit-twin fold's epoch)
     // ...and the playout fold's asymmetry 2 (pofold): a site-9 occurrence a variant would open here.
     // Conservative in the safe direction -- the variant's own gate also needs bp_seen == 0, which
     // this does not ask.
@@ -128269,8 +128331,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     latent9_before = g_bp_latent9_last;
                     if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
                     g_apd_last_dug = stf.dug[static_cast<std::size_t>(sb)] != 0;
+                    // A base whose breakpoints all came after its resolution: the twin is recorded as an apply
+                    // that reached none, so its own breakpoint variants are not opened (they are its base's,
+                    // opened for the base) -- the same identity, one level down.
                     w0len_record(plan);
                     g_stf_folded.fetch_add(1, std::memory_order_relaxed);
+                    if (stf.bp_after[static_cast<std::size_t>(sb)] != 0)
+                    { g_stf_bp_after.fetch_add(1, std::memory_order_relaxed); }
                     ++candidates_done;
                     continue;
                 }
@@ -128404,7 +128471,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
                     stf.Record(cp_i, stf_w0, budget != nullptr ? budget->Used() : 0, false,
                                [&] { return BuildDedupKey(copy); });
-                    if (stf_expect >= 0) { stf.Check(stf_expect, BuildDedupKey(copy), state.turn_number); }
+                    if (stf_expect >= 0) { stf.Check(stf_expect, BuildDedupKey(copy), state.turn_number, stf_w0); }
                     po_record(plan, po_h, copy);
                     po_verify_check(plan, po_expect, copy);
                     // The in-plan probe records only an apply that spent no unit (see BuildInPlanView), with
@@ -128701,7 +128768,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (etbc_expect >= 0) { etbc_fold.Check(etbc_expect, BuildDedupKey(copy), state.turn_number); }
                     stf.Record(cand_index, stf_w0, budget != nullptr ? budget->Used() : 0, false,
                                [&] { return BuildDedupKey(copy); });
-                    if (stf_expect >= 0) { stf.Check(stf_expect, BuildDedupKey(copy), state.turn_number); }
+                    if (stf_expect >= 0) { stf.Check(stf_expect, BuildDedupKey(copy), state.turn_number, stf_w0); }
                     po_record(plan, po_h, copy);
                     po_verify_check(plan, po_expect, copy);
                 }
