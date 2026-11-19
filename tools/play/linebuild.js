@@ -935,11 +935,40 @@
                         modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6,
                         color: 7, pitch: 9.5 };   // pitch: Fury's evoke-exile card, after its `evoke` mode (9)
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
-  function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
+  // REPEATED KEYS (USER 2026-11-19, Maze's End reference 4: "I cannot choose the second search target
+  // if I activate 2 maze's end"). Every dimension key is "<card name> <relation>", so a line that
+  // activates or casts the SAME card twice -- two Maze's End, two Rancors, two copies of one tutor --
+  // carries TWO subs under ONE key, one per action. The walk used to read only the FIRST sub of a key
+  // (subOf = filter()[0]), so the second action's choice was never asked: after the first pick every
+  // remaining variant agreed on that first sub, nextDimension returned null, and stepChoose's
+  // defensive branch committed remaining[0] -- whatever target the engine happened to list second.
+  // It also could not reach every pair: CheckLine's dedup signature SORTS the tokens, so plans that
+  // differ only in which copy gets which target collapse to ONE variant whose sub order is the
+  // representative's, and "first sub = Heap Gate" filtered out every {Heap Gate, X} variant that
+  // happened to list X first.
+  // So a key's subs within one variant are a MULTISET, and the walk CONSUMES them: a pick of `c` for
+  // key K keeps the variants with an unconsumed K-sub equal to `c` and marks that one sub used (on a
+  // shallow COPY -- the caller's full variant list stays pristine for Back/replay). The next question
+  // on K then offers whatever the remaining variants still hold, so {A, B} is reachable as A-then-B
+  // and as B-then-A. For a key that occurs ONCE per variant this is exactly the old behaviour.
+  // A key is asked only while it DISCRIMINATES (some offered choice is missing from some remaining
+  // variant): a single variant holding {Heap Gate, Simic Guildgate} offers two values but has
+  // nothing left to decide, and Maze's End's redundant "searches" sub (same value as its "→" sub)
+  // must not be re-asked once "→" has settled it.
+  function usedOf(v) { return v._usedSubs || []; }
+  function liveSubs(v, key) {
+    const used = usedOf(v);
+    return (v.subs || []).map((s, i) => ({ s, i })).filter(z => z.s.key === key && used.indexOf(z.i) < 0);
+  }
+  function subOf(v, key) { const z = liveSubs(v, key)[0]; return z ? z.s : undefined; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }
+  // Every choice this variant can still answer for `key` ('—' when it has no unconsumed sub there).
+  function choicesOf(v, key) { const z = liveSubs(v, key); return z.length ? z.map(y => y.s.choice) : ['—']; }
 
   // The next dimension to ask about, given the variants still in play: the highest-priority one
-  // that still has MORE THAN ONE distinct choice. null => nothing left to disambiguate.
+  // that still has MORE THAN ONE distinct choice and whose answer narrows the set. null => nothing
+  // left to disambiguate. `dim.nth` / `dim.of` say which occurrence of a repeated key this is
+  // ("Maze's End → (2 of 2)"); `of` is 1 for an ordinary single-occurrence dimension.
   function nextDimension(remaining) {
     const keys = [];
     remaining.forEach(x => (x.subs || []).forEach(s => {
@@ -949,22 +978,45 @@
     for (const k of keys) {
       const seen = [];
       remaining.forEach(x => {
-        const c = choiceOf(x, k.key);
+        const live = liveSubs(x, k.key);
         // `num` (the m_number the choice names, 0 when it names no board object) rides along so the
         // caller can auto-resolve a dragged attach target by IDENTITY -- two same-named creatures
         // produce two choices whose display strings differ only by the engine's " #k" suffix.
-        if (!seen.some(z => z.choice === c)) { const s = subOf(x, k.key); seen.push({ choice: c, card: s ? s.card : '', num: s ? (s.num || 0) : 0 }); }
-        // `suggested` (enchant only): the engine's Aura host ranking picks this host for at least one
-        // remaining variant's plan class (MarkSuggestedAuraHosts). A MARK, never an order: the
-        // choices keep their first-seen order, which reference replays depend on.
-        const s2 = subOf(x, k.key);
-        if (s2 && s2.suggested) { const z = seen.find(z => z.choice === c); if (z) z.suggested = true; }
+        if (!live.length) { if (!seen.some(z => z.choice === '—')) seen.push({ choice: '—', card: '', num: 0 }); return; }
+        live.forEach(({ s }) => {
+          if (!seen.some(z => z.choice === s.choice)) seen.push({ choice: s.choice, card: s.card || '', num: s.num || 0 });
+          // `suggested` (enchant only): the engine's Aura host ranking picks this host for at least one
+          // remaining variant's plan class (MarkSuggestedAuraHosts). A MARK, never an order: the
+          // choices keep their first-seen order, which reference replays depend on.
+          if (s.suggested) { const z = seen.find(z => z.choice === s.choice); if (z) z.suggested = true; }
+        });
       });
-      if (seen.length > 1) return { dim: k, choices: seen };
+      if (seen.length < 2) continue;
+      const narrows = seen.some(c => remaining.some(x => choicesOf(x, k.key).indexOf(c.choice) < 0));
+      if (!narrows) continue;
+      let nth = 1, of = 1;
+      remaining.forEach(x => {
+        const all = (x.subs || []).filter(s => s.key === k.key).length;
+        const used = all - liveSubs(x, k.key).length;
+        if (all > of) of = all;
+        if (used + 1 > nth) nth = used + 1;
+      });
+      return { dim: { key: k.key, kind: k.kind, nth, of }, choices: seen };
     }
     return null;
   }
-  function filterByChoice(remaining, key, choice) { return remaining.filter(x => choiceOf(x, key) === choice); }
+  // Keep the variants that can answer `choice` for `key`, CONSUMING the matched sub (see the
+  // repeated-key note above). Returns shallow copies; never mutates the input variants.
+  function filterByChoice(remaining, key, choice) {
+    const out = [];
+    remaining.forEach(x => {
+      const live = liveSubs(x, key);
+      if (choice === '—') { if (!live.length) out.push(x); return; }
+      const hit = live.find(z => z.s.choice === choice);
+      if (hit) out.push(Object.assign({}, x, { _usedSubs: usedOf(x).concat([hit.i]) }));
+    });
+    return out;
+  }
 
   // How many dimensions REMAIN to be asked (including the current one) -- drives the "step N of M"
   // counter, which is what makes two identical-looking 12-land grids tellable apart.
@@ -979,6 +1031,107 @@
     return n;
   }
 
+  // ---- `dig` frames that are NOT digs -------------------------------------------------------------
+  // The engine's dig chooser (examined cards + legal indices, -1 declines) is reused by ~30 questions that
+  // have nothing to do with looking at the top of the library: Manabond's end-step yes/no, the off-main
+  // Maze's End activation, Burgeoning's put, Emperor Mihail's {1}, Herald's Horn's reveal, ... (USER
+  // 2026-11-19: "Message for Manabond makes no sense: Dig — Manabond (end step): put 3 land(s), discard 4
+  // card(s) / Look at the top 1 cards — put one highlighted card into your hand ..."). The question is read
+  // off the frame's `source` tag, or its `role` for the sites whose source is a bare card name (the source
+  // is the frame's replay identity, so those carry the role beside it -- core/GameLogger.h DigRoleScope).
+  // Returns null for a frame this table does not cover (index.html keeps its own special cases and the
+  // genuine dig wording), else { shape: 'yesno' | 'pick', title, body, yes, no } -- for 'yesno' the reply
+  // is 0 = yes / -1 = no; for 'pick' the tiles are the legal examined cards and `no` labels the -1 button
+  // (a MANDATORY pick's -1 takes the AI's pick, so it is labelled that way, never "take nothing").
+  function digPrompt(d) {
+    const src = String((d && d.source) || '');
+    const role = String((d && d.role) || '');
+    const ex = (d && d.examined) || [];
+    const first = ex[0] ? String(ex[0].name || '') : '';
+    const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    const strip = re => src.replace(re, '').trim();
+    let m;
+    if ((m = src.match(/^Manabond \(end step\): put (\d+) land\(s\), discard (\d+) card\(s\)$/))) {
+      const L = +m[1], D = +m[2];
+      return { shape: 'yesno', title: 'Manabond — your end step',
+               body: `Reveal your hand and put all ${pl(L, 'land card')} from it onto the battlefield, then discard ` +
+                     (D ? `the remaining ${pl(D, 'card')}?` : 'your hand (nothing else is in it)?'),
+               yes: `Yes — put ${pl(L, 'land')} onto the battlefield` + (D ? `, discard ${D}` : ''),
+               no: 'No — keep my hand' };
+    }
+    if ((m = src.match(/^Maze's End: activate (.*) \(search for a Gate\)\?$/))) {
+      const why = m[1];
+      const cost = "{3}, {T}, return Maze's End to your hand: put a Gate from your library onto the battlefield";
+      let title, body;
+      if ((m = why.match(/^in response to (.+)$/))) {
+        title = `Activate Maze's End in response to ${m[1]}?`;
+        body = `${cost}. ${m[1]}'s trigger then puts Maze's End back onto the battlefield. Choose the Gate to fetch, or decline.`;
+      } else if (/WINS the game/.test(why)) {
+        title = "Activate Maze's End now? It can win the game";
+        body = `${cost}, off the main phase. With the preselected Gate you control ten Gates with different names and win. ` +
+               'Choose the Gate to fetch, or decline.';
+      } else if ((m = why.match(/^with no redeploy, (.+)$/))) {
+        title = `Activate Maze's End now (${m[1]})?`;
+        body = `${cost}. Nothing puts Maze's End back this turn: it stays in your hand. Choose the Gate to fetch, or decline.`;
+      } else {
+        title = `Activate Maze's End ${why}?`;
+        body = `${cost}. Choose the Gate to fetch, or decline.`;
+      }
+      return { shape: 'pick', title, body, no: "Don't activate" };
+    }
+    if (src === 'Burgeoning (opponent played a land)')
+      return { shape: 'pick', title: 'Burgeoning — the opponent played a land',
+               body: 'You may put a land card from your hand onto the battlefield.', no: 'Put nothing' };
+    if (/\(Merfolk cast pay \{1\}\)$/.test(src)) {
+      const card = strip(/\s*\(Merfolk cast pay \{1\}\)$/);
+      return { shape: 'yesno', title: `${card} — pay {1}?`,
+               body: `You cast a Merfolk spell${first ? ` (${first})` : ''}. Pay {1} to create a 1/1 blue Merfolk creature token?`,
+               yes: 'Pay {1} — create the token', no: "Don't pay" };
+    }
+    if ((m = src.match(/^(.*) \(pay (.+) or sacrifice it\)$/)))
+      return { shape: 'yesno', title: `${m[1]} — pay ${m[2]} or sacrifice it`,
+               body: `Pay ${m[2]} to keep ${m[1]}, or sacrifice it.`, yes: `Pay ${m[2]}`, no: `Sacrifice ${m[1]}` };
+    if (/\(upkeep reveal\)$/.test(src)) {
+      const card = strip(/\s*\(upkeep reveal\)$/);
+      return { shape: 'yesno', title: `${card} — your upkeep`,
+               body: `The top card of your library${first ? `, ${first},` : ''} is a creature card of the chosen type. ` +
+                     'Reveal it and put it into your hand? No leaves it on top.',
+               yes: 'Reveal it — put it into my hand', no: 'Leave it on top' };
+    }
+    if (/\(return from graveyard\)$/.test(src)) {
+      const card = strip(/\s*\(return from graveyard\)$/);
+      return { shape: 'pick', title: `${card} — return a card from your graveyard`,
+               body: 'Return target card from your graveyard to your hand. The return is mandatory.',
+               no: "Use the AI's pick" };
+    }
+    if ((m = src.match(/^(.*?) — aura swap (\S+) in combat \(on (.*)\): bring in which Aura\?/)))
+      return { shape: 'pick', title: `${m[1]} — aura swap ${m[2]}`,
+               body: `Exchange ${m[1]} with an Aura card in your hand: the chosen Aura enters attached to ${m[3]} ` +
+                     `and ${m[1]} returns to your hand. Highlighted cards are the Auras that can enchant it.`,
+               no: 'No swap' };
+    if (role === 'outlet_haste' || role === 'outlet_shrink')
+      return { shape: 'pick', title: `${src} — choose a creature`,
+               body: role === 'outlet_haste'
+                 ? 'The sacrifice is paid. The creature you choose gains haste until end of turn.'
+                 : `The sacrifice is paid. The creature you choose gets ${src}'s -X/-X until end of turn.`,
+               no: "Use the AI's pick" };
+    if (role === 'ice_counter')
+      return { shape: 'pick', title: `${src} — put an ice counter`,
+               body: 'Choose the permanent to put an ice counter on. Permanents with ice counters on them are snow.',
+               no: "Use the AI's pick" };
+    if (role === 'impulse_keep')
+      return { shape: 'pick', title: `${src} — choose the card you may play`,
+               body: 'These were exiled from the top of your library. Choose one: until the end of your next turn, ' +
+                     'you may play it. The other stays exiled.',
+               no: "Use the AI's pick" };
+    if (role === 'reveal_top')
+      return { shape: 'yesno', title: `${src} — reveal the top card?`,
+               body: `The top card of your library${first ? `, ${first},` : ''} qualifies. Reveal it and put it into ` +
+                     'your hand? No leaves it on top.',
+               yes: 'Reveal it — put it into my hand', no: 'Leave it on top' };
+    return null;
+  }
+
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            toggleSuspend,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
@@ -991,5 +1144,5 @@
            segmentParts, isDeferred, fetchSuspendRoute, fetchAutoRoute, repeatBlock, loopBlock, segmentLoopable,
            untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
-           nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
+           nextDimension, filterByChoice, dimensionsRemaining, choiceOf, choicesOf, subOf, digPrompt };
 });

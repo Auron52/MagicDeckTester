@@ -206,6 +206,18 @@ def _resolve_deck_dir(ref_dir):
     # one; slugs use hyphens by convention, but guessing is what this is replacing.
     if "_" in parts[0]:
         cands.append("/".join([parts[0].replace("_", " ")] + parts[1:]))
+    # ...and the viewer's OWN mapping, inverted. server.js names a reference folder safeStem(deck) --
+    # every character outside [A-Za-z0-9_-] becomes "_" -- so "Maze's End" saves to references/
+    # Maze_s_End, which the space-only fallback above cannot reach ("Maze s End"). Every Maze's End
+    # reference the user recorded was therefore a CONTRACT-FAIL "unknown deck dir" and replayed by
+    # nothing (found 2026-11-19 checking the USER's reference 4). Derived, like everything here: any
+    # decks/ folder whose safeStem is this segment.
+    try:
+        for d in sorted(os.listdir(os.path.join(_REPO_ROOT, "decks"))):
+            if d != parts[0] and re.sub(r"[^A-Za-z0-9_-]+", "_", d) == parts[0]:
+                cands.append("/".join([d] + parts[1:]))
+    except OSError:
+        pass
     for cand in cands:
         cparts = cand.split("/")
         base = "/".join(["decks"] + cparts)
