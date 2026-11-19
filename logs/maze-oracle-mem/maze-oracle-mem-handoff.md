@@ -50,6 +50,39 @@ see base_summary.txt next to this file: gi 0,2,3,4,7,11 died > 8 GB; gi 1 1.97 G
    distinct outcome boards, peak_live, rss.
 
 ## Running at handoff
+- UPDATE: mtg-test on the fix: 3712 cases, 9 FAILED (959 assertions), log $S/units2.log. NOT YET ATTRIBUTED.
+  Most are AccomplishedAlchemist cast-order cases (the primary checkout has another agent's uncommitted edits to
+  test/unit/test_accomplished_alchemist.cpp, so these may fail at HEAD too). Equip host fold / Theft / Attach /
+  INT-9 / SB-order cases may read the oracle (PlanVerdict / CoversEngineOutcome) -- FIRST NEXT STEP: run the HEAD
+  mtg-test (build HEAD 22d11f7b5's mtg-test, or `git stash`-free: a second worktree at 22d11f7b5) under the lock and
+  diff the failing-case lists; any case failing only on the fix is a defect in this change. Failing case lines:
+  - Attach (A): a Theft onto a hand-cast Lizard Blades the plan reconfigures is dropped; its twin realises the same board cheaper
+  - Cast order, GENERIC_WEATHER_LAST (DEFAULT OFF): the generic tiers with Weather, then Stroke, last
+  - Cast order, GENERIC_WEATHER_ONLY_LAST (DEFAULT OFF): the generic tiers with Weather alone last; Stroke stays
+  - Cast order, PROPOSED (MTG_AA_CAST_ORDER=1): one position per card, in the proposed order
+  - Cast order, PROPOSED: =0 (and unset) is the generic tiering, byte for byte
+  - Cast order, PROPOSED: WISH_AFTER_LIFE and LIFE_FIRST (DEFAULT OFF) -- the lifegain ahead of the Wish
+  - Cast order, PROPOSED: an Alchemist turn's two-card bootstrap (Nourish, then the Wish off the Alchemist) survives every arm
+  - Cast order, PROPOSED: the two amendment arms (DEFAULT OFF) move only their own card; inert with the order off
+  - Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- realised only with the Aura before the Wish
+  - Cast order, WISH_LATE (DEFAULT OFF): every card's position, with and without WEATHER_LAST
+  - Cast order, WISH_LATE: inert with the order off (=0 and unset)
+  - Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alchemist turn -- the mechanism probe
+  - Equip host fold / Theft: only mirror images are dropped, every line survives -- Speakers AND Hammers
+  - Equip host fold: the claude-play sweep's seed-2100003 T5 board, autonomous menu before / after
+  - Equip host fold: two identical Speakers -- only mirror images are dropped, every line survives
+  - Hand-piece Thefts: only mirror images of the two copies are dropped; twins realise the same board in BOTH worlds
+  - INT-9 F: the Intent probe state -- searched (INT-8) vs the free-Intent ruling vs every INT-9 prune
+  - INT-9 Jetmir kill: the enumeration collapses to the one verified killing plan
+  - SB order: Ritual-after-Stone is ONE arrangement per line -- the plan count does not grow
+  - SB ritual payoff: a granter that only the ritual's own ripple credit could pay is a phantom, pruned
+  - SB ritual payoff: a sacrifice-six activation the six cannot reach is no sink for a ritual
+  - SB union plan: Ritual, Ritual, Stone, Apostle is one post-combat plan
+  - Sacrifice claims: two sacrifice costs never share the one creature the plan has
+  - Unlanded hand copy: an Equip of a copy the subset never lands is dropped; a strictly cheaper twin stays on the menu
+  - Unlanded hand copy: the greedy walker (Solve) keeps its pick and never takes a dead Equip
+  - Weather flex: the USER's line realised as ONE cast list -- spell, Weather, the Alchemist's six blue for Crab Umbra, then the loop kills (both worlds)
+  - bp continuation cache: an unpinned entry is never served to a combat-swap-pinned state
 - UPDATE: chain2 BUILD SUCCEEDED (build rc=0, $S/build2.log); unit tests + repros were running after it.
 - chain1 ($S/chain1.sh, PID 3104518, holds the box lock): baseline repro, Maze gi 0..41 subset, finishing gi 33/35/41.
   Marker: `done` line in $S/chain1.status; results $S/base/summary.txt, traces $S/base/g*.err.
