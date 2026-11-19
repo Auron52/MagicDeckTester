@@ -179,6 +179,107 @@ function checkDimensionWalk() {
   return fails;
 }
 
+// ---- The SAME card used twice: each occurrence's sub-decision is asked ------------------------
+// USER 2026-11-19 (Maze's End reference s4_gi3, T5): "I cannot choose the second search target if I
+// activate 2 maze's end". Every dimension key is "<card> <relation>", so the two activations carry
+// two subs under ONE key ("Maze's End →"), plus Maze's End's redundant same-valued "searches" sub.
+// The walk used to read only a key's FIRST sub: the first pick settled it, nothing was left to ask,
+// and stepChoose committed whichever variant came first -- the second target was the engine's. And
+// CheckLine's dedup signature is order-INDEPENDENT, so {A, B} survives as ONE variant whose sub
+// order is arbitrary: filtering on "first sub == A" lost every pair the engine listed as (B, A).
+// Shaped like the real --validate-line payload (19 Gates, 190 = C(19,2) + 19 unordered pairs, each
+// once, representative order alternating) so it stays binary-free.
+function checkRepeatedCardDimension() {
+  const GATES = ['Simic Guildgate','Dimir Guildgate','The Black Gate','Heap Gate','Thran Portal',
+                 'Talon Gates of Madara','Basilisk Gate','Gateway Plaza','Sea Gate','Gruul Guildgate',
+                 'Izzet Guildgate','Citadel Gate','Manor Gate','Planar Nexus','Selesnya Guildgate',
+                 'Boros Guildgate','Azorius Guildgate','Golgari Guildgate','Rakdos Guildgate'];
+  const act = g => [{ key: "Maze's End →", choice: g, card: g, kind: 'tutor' },
+                    { key: "Maze's End searches", choice: g, card: g, kind: 'tutor' }];
+  const variants = [];
+  let pi = 0;
+  for (let i = 0; i < GATES.length; i++) for (let j = i; j < GATES.length; j++) {
+    const [a, b] = (pi % 2) ? [GATES[j], GATES[i]] : [GATES[i], GATES[j]];   // collapsed: arbitrary order
+    variants.push({ plan_index: pi++, label: `Maze's End -> ${a}; Maze's End -> ${b}`, subs: act(a).concat(act(b)) });
+  }
+  const fails = [];
+  if (variants.length !== 190) fails.push(`fixture has ${variants.length} variants, expected 190`);
+  if (LB.dimensionsRemaining(variants) !== 2)
+    fails.push(`dimensionsRemaining = ${LB.dimensionsRemaining(variants)}, expected 2 (one target per activation)`);
+  const pairKey = v => v.subs.filter(s => s.key === "Maze's End →").map(s => s.choice).sort().join(' + ');
+  // Every unordered pair must be reachable in BOTH pick orders, and land on exactly its own variant.
+  let unreachable = 0, asked = null;
+  for (const a of GATES) for (const b of GATES) {
+    const first = LB.nextDimension(variants);
+    if (!first || first.dim.key !== "Maze's End →" || first.dim.nth !== 1 || first.dim.of !== 2) {
+      fails.push(`first picker is ${JSON.stringify(first && first.dim)}, expected Maze's End → (1 of 2)`); return fails;
+    }
+    if (first.choices.length !== GATES.length) { fails.push(`first picker offered ${first.choices.length}, expected ${GATES.length}`); return fails; }
+    let rem = LB.filterByChoice(variants, first.dim.key, a);
+    const second = LB.nextDimension(rem);
+    if (!second || second.dim.key !== "Maze's End →" || second.dim.nth !== 2) {
+      fails.push(`after picking ${a}: second picker is ${JSON.stringify(second && second.dim)}, expected Maze's End → (2 of 2)`);
+      return fails;
+    }
+    if (second.choices.length !== GATES.length) asked = `after ${a} the second picker offered ${second.choices.length}, expected ${GATES.length}`;
+    if (!second.choices.some(c => c.choice === b)) { unreachable++; continue; }
+    rem = LB.filterByChoice(rem, second.dim.key, b);
+    if (rem.length !== 1 || LB.nextDimension(rem) !== null || pairKey(rem[0]) !== [a, b].sort().join(' + '))
+      { unreachable++; continue; }
+  }
+  if (asked) fails.push(asked);
+  if (unreachable) fails.push(`${unreachable} of ${GATES.length * GATES.length} ordered target picks did not reach their own pair`);
+  // The walk must never mutate the caller's variants (Back/replay re-filters from the full list).
+  if (variants.some(v => v._usedSubs)) fails.push('filterByChoice mutated the input variants');
+  // One variant holding two DIFFERENT targets has nothing left to decide (it offers two values but
+  // neither narrows anything) -- the redundant "searches" key must not be asked either.
+  if (LB.nextDimension([variants[3]]) !== null) fails.push('a single two-target variant still asks a question');
+  return fails;
+}
+
+// ---- `dig` frames that are not digs get their OWN wording -----------------------------------
+// USER 2026-11-19: "Message for Manabond makes no sense: Dig — Manabond (end step): put 3 land(s), discard
+// 4 card(s) / Look at the top 1 cards — put one highlighted card into your hand ...". The sources below are
+// the engine's own strings (core/SpellEffects.h); every one used to fall through to the generic dig text.
+function checkDigPrompts() {
+  const fails = [];
+  const ex = names => names.map((name, index) => ({ index, legal: true, name }));
+  const want = (d, shape, ...needles) => {
+    const p = LB.digPrompt(d);
+    if (!p) { fails.push(`${d.source}${d.role ? ` [${d.role}]` : ''}: no prompt (generic dig text)`); return; }
+    if (p.shape !== shape) fails.push(`${d.source}: shape ${p.shape}, expected ${shape}`);
+    const text = `${p.title} | ${p.body} | ${p.yes || ''} | ${p.no || ''}`;
+    if (/top \d+ cards?|rest go to the bottom/i.test(text)) fails.push(`${d.source}: still reads as a dig: ${text}`);
+    needles.forEach(n => { if (text.indexOf(n) < 0) fails.push(`${d.source}: "${n}" missing from: ${text}`); });
+  };
+  want({ source: 'Manabond (end step): put 3 land(s), discard 4 card(s)', examined: ex(['Manabond']) }, 'yesno',
+       'Reveal your hand', 'all 3 land cards', 'discard the remaining 4 cards', 'No — keep my hand');
+  want({ source: 'Manabond (end step): put 1 land(s), discard 0 card(s)', examined: ex(['Manabond']) }, 'yesno', '1 land card');
+  want({ source: "Maze's End: activate in response to Manabond (search for a Gate)?", examined: ex(['Heap Gate', 'Sea Gate']) },
+       'pick', 'in response to Manabond', "puts Maze's End back", "Don't activate");
+  want({ source: "Maze's End: activate with no redeploy, after Manabond's dump (search for a Gate)?", examined: ex(['Heap Gate']) },
+       'pick', "after Manabond's dump", 'stays in your hand');
+  want({ source: "Maze's End: activate now, off the main phase -- a fetch here WINS the game (search for a Gate)?",
+         examined: ex(['Cliffgate']) }, 'pick', 'win the game', "Don't activate");
+  want({ source: 'Burgeoning (opponent played a land)', examined: ex(['Gond Gate']) }, 'pick', 'from your hand', 'Put nothing');
+  want({ source: 'Emperor Mihail II (Merfolk cast pay {1})', examined: ex(['Merrow Reejerey']) }, 'yesno', 'Pay {1}', 'Merfolk creature token');
+  want({ source: 'Sea Gate (pay {1} or sacrifice it)', examined: ex(['Sea Gate']) }, 'yesno', 'Pay {1}', 'Sacrifice Sea Gate');
+  want({ source: "Herald's Horn (upkeep reveal)", examined: ex(['Goblin Guide']) }, 'yesno', 'Leave it on top', 'Goblin Guide');
+  want({ source: 'Timeless Witness (return from graveyard)', examined: ex(['Living Wish']) }, 'pick', 'mandatory', "AI's pick");
+  want({ source: 'Arcanum Wings — aura swap {2}{U} in combat (on Bruna): bring in which Aura? (decline = no swap)',
+         examined: ex(['Eel Umbra']) }, 'pick', 'attached to Bruna', 'No swap');
+  want({ source: 'Vitaspore Thallid', role: 'outlet_haste', examined: ex(['Saproling']) }, 'pick', 'gains haste');
+  want({ source: 'Rimefeather Owl', role: 'ice_counter', examined: ex(['Forest']) }, 'pick', 'ice counter');
+  want({ source: 'Tectonic Giant', role: 'impulse_keep', examined: ex(['Mountain', 'Shock']) }, 'pick', 'end of your next turn');
+  want({ source: 'Scrying Sheets', role: 'reveal_top', examined: ex(['Snow-Covered Forest']) }, 'yesno', 'Leave it on top');
+  // A REAL dig keeps the generic dig panel (index.html), and so does a tagged dig the page special-cases.
+  if (LB.digPrompt({ source: 'Acclaimed Contender', examined: ex(['Faerie Guidemother']) }) !== null)
+    fails.push('a genuine ETB dig (bare source, no role) must stay on the generic dig panel');
+  if (LB.digPrompt({ source: 'Skyhunter Strike Force', role: 'attack_dig', examined: ex(['Bonesplitter']) }) !== null)
+    fails.push('the attack dig is a real dig (onto the battlefield): it stays on the dig panel');
+  return fails;
+}
+
 // ---- Natural Order: the SACRIFICE victim is asked, and asked FIRST ---------------------------
 // "As an additional cost to cast this spell, sacrifice a green creature" is a real, irreversible
 // choice, but it rode Action::soulfire_own_targets with no sub -- so the per-victim plans shared a
@@ -1307,6 +1408,14 @@ function main() {
   dimFails.forEach(m => console.log(`  FAIL  choose-picker walk: ${m}`));
   console.log(`Viewer choose-picker: 2-tutor line asks ${dimFails.length ? 'WRONG' : '2 pickers x 12 choices'} ` +
               `(${dimFails.length} FAIL)`);
+  const repFails = checkRepeatedCardDimension();
+  repFails.forEach(m => console.log(`  FAIL  repeated-card walk: ${m}`));
+  console.log(`Viewer repeated-card picker: ${repFails.length ? 'WRONG' : "two Maze's End activations ask BOTH targets, every pair in either order"} ` +
+              `(${repFails.length} FAIL)`);
+  const digFails = checkDigPrompts();
+  digFails.forEach(m => console.log(`  FAIL  dig prompt wording: ${m}`));
+  console.log(`Viewer dig-chooser reuses: ${digFails.length ? 'WRONG' : 'Manabond / Maze\'s End / Burgeoning / pay-or-sac / roles get their own wording'} ` +
+              `(${digFails.length} FAIL)`);
   const landFails = checkBonusLandDrop();
   landFails.forEach(m => console.log(`  FAIL  bonus land drop: ${m}`));
   console.log(`Viewer bonus land drop: ${landFails.length ? 'WRONG' : 'two drops commit as two segments'} ` +
@@ -1391,7 +1500,7 @@ function main() {
   fetchSuspendFails.forEach(m => console.log(`  FAIL  fetch suspend: ${m}`));
   console.log(`Viewer fetch suspend route: ${fetchSuspendFails.length ? 'WRONG' : 'land, crack, suspend become three payable segments'} ` +
               `(${fetchSuspendFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
+  return (fail + dimFails.length + repFails.length + digFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
           + tapFails.length + topFails.length + topSpellFails.length + posFails.length + kickFails.length + morphFails.length
           + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
