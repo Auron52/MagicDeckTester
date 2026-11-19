@@ -206,7 +206,9 @@ TEST_CASE("Maze's End P7d: the fold is an identity fold -- the leafless search a
         const TurnSolver::LastPlyFoldProbe r = TurnSolver::LastPlyFoldProbeForTest(s, 2, max_turns, true);
         CHECK(r.win_off == 5);
         CHECK(r.win_on == r.win_off);
-        CHECK(r.folded >= 1);
+        // No fold count here: once the first T4 line wins at T5, every sibling's T5 node is cut by the incumbent
+        // (turn_number > cutoff) before it reaches the fold, so whether any node folds depends on move order.
+        // The identity is the property; the block below checks that the fold fires and saves leaves.
     }
     {
         // No win within the pass: both arms refute, the fold saves leaves.
