@@ -360,3 +360,76 @@ TEST_CASE("Maze's End F7: two land drops AFTER a mid-turn tutor breakpoint (the 
     GameState c = TutorThenTwoDropsBoard(0);
     CHECK(PlayOut(c) > 5);
 }
+
+// F7-3 (2026-11-19, Maze's End d5 g1026 / 2HG g41 at d8 b0): a PREFIX-RESUMED apply numbered its main-level
+// breakpoint segments from 0 again. The wave loop snapshots a variant at its varied breakpoint and resumes the later
+// ranks from there, restoring the prefix's records but not their segment count, so the resumed pass's records were
+// stamped rec_bp_ord 0 and the executor replayed them inside the prefix's FIRST segment, before the prefix's later
+// ones. With the F7 extra-drop re-arm the varied breakpoint is often a later pass: in g1026 Citadel Gate's record
+// jumped ahead of Golgari Guildgate's and took its drop (T6 -> T7). The board is F7's (two tutors, then two drops
+// after them): its passes are pass 0 (the tutors' deferred re-solve) and the re-armed pass 1, so a variant at
+// occurrence 1 resumes AFTER a recorded segment. Every capture must record exactly what the full apply records.
+// The same test caught the resume's second omission: deferred_put_armed (site 10) was not carried, so a resumed
+// site-10 pass re-solved as site 3 and recorded a different continuation (here: nothing).
+namespace
+{
+Action CastI3(const GameState& s, const char* name)
+{
+    const CardDefinition& d = D(name);
+    Action a;
+    a.kind      = Action::Kind::CastFromHand;
+    a.card_name = name;
+    a.def       = &d;
+    a.cost      = EffectiveSpellCost(d, s, 1);
+    a.card_mv   = d.card.m_mana_cost.ManaValue();
+    return a;
+}
+}   // namespace
+
+TEST_CASE("Maze's End F7-3: a prefix-resumed apply records the main-level segments the full apply records")
+{
+    LoadI3Cards();
+    static const MazesEndProvider kMazeProv;
+    GameState s = TutorThenTwoDropsBoard(1);
+    s.m_provider = &kMazeProv;
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    base.actions = { CastI3(s, "Sylvan Scrying"), CastI3(s, "Sylvan Scrying") };
+    int captures = 0, later_segment = 0;
+    for (int at = 0; at <= 2; ++at)
+    {
+        for (int pre = -1; pre <= 3; ++pre)
+        {
+            if (at == 0 && pre >= 0) { continue; }
+            for (int ch = 0; ch <= 3; ++ch)
+            {
+                TurnSolver::Plan v = base;
+                v.bp_choice = ch;
+                v.bp_at     = at;
+                if (pre >= 0) { v.bp_pre.assign(static_cast<std::size_t>(at), pre); }
+                std::vector<Action> full, resumed;
+                if (!TurnSolver::BpResumeRecordsForTest(s, v, /*is_pre_combat=*/true, full, resumed)) { continue; }
+                ++captures;
+                CAPTURE(at); CAPTURE(pre); CAPTURE(ch);
+                // (kind, card, segment) per top-level record, as one string, so a failure shows both lists.
+                auto text = [](const std::vector<Action>& r)
+                {
+                    std::string t;
+                    for (const Action& a : r)
+                    {
+                        t += std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + "@"
+                           + std::to_string(a.rec_bp_ord) + " ";
+                    }
+                    return t;
+                };
+                CHECK(text(resumed) == text(full));
+                bool resumed_later = false;
+                for (const Action& a : full) { if (a.rec_bp_ord > 0) { resumed_later = true; } }
+                if (resumed_later) { ++later_segment; }
+            }
+        }
+    }
+    // Not vacuous: the board reaches captures, and at least one resumes after a recorded earlier segment.
+    CHECK(captures > 0);
+    CHECK(later_segment > 0);
+}

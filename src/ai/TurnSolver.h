@@ -3285,6 +3285,13 @@ public:
     static bool BpResumeLineHoldForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
                                         ManaCost& at_capture, ManaCost& at_resume,
                                         GameState* complete_state = nullptr, GameState* resumed_state = nullptr);
+    // Prefix-resume RECORDING test hook (Maze's End F7-3): apply the breakpoint variant `plan` (bp_choice >= 0)
+    // recording the committed line with a wave-loop prefix capture into `full`; when the apply captured, resume the
+    // same plan from that snapshot into `resumed`. Returns false when nothing was captured. A resumed apply must
+    // record exactly what the full apply recorded -- each top-level record's main-level ordinal (rec_bp_ord)
+    // included, since the executor replays the committed line segment by segment in that order.
+    static bool BpResumeRecordsForTest(const GameState& state, const Plan& plan, bool is_pre_combat,
+                                       std::vector<Action>& full, std::vector<Action>& resumed);
     // MTG_BP_PO_W0_FOLD test hook (the playout wave-0 identity; see the pofold namespace in
     // TurnSolver.cpp). Applies `base` and then each of `variants` (all carrying bp_base = 0) INSIDE A
     // PLAYOUT, exactly as SolveWithLookahead's candidate loop does: the base apply is measured (its
