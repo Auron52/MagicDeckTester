@@ -2873,6 +2873,11 @@ public:
     // Test seam for MTG_LEAF_GAME_OVER: one LEAFLESS (constant-leaf) FSLineWin of `state` at `depth`, uncut, with the
     // LEAF_GAME_OVER arm pinned to `arm` (0 off, 1 on); returns its win turn. Per-game caches are cleared before and after.
     static int LeaflessFrameWinForTest(const GameState& state, int depth, int max_turns, int arm);
+    // Test seam for the LAST-PLY NO-WIN FOLD (Maze's End P7d; TurnSolver.cpp lastply): one leafless (constant-leaf)
+    // FSLineWin pass at `depth` with the deck's certificate lever (MTG_MAZE_WINLESS_CERT) pinned OFF, then ON (fresh caches each). The fold is an
+    // identity fold: both wins must agree; `folded` counts the nodes the ON pass answered by proof.
+    struct LastPlyFoldProbe { int win_off = 0, win_on = 0; long long leaves_off = 0, leaves_on = 0, folded = 0; };
+    static LastPlyFoldProbe LastPlyFoldProbeForTest(const GameState& state, int depth, int max_turns, bool second_main);
     // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation counts 5
     // odometer visits after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget) and
     // is stored; then it is looked up -- by CacheHitCharge (the real caches) and by pledger::WouldServe / WouldReplay
