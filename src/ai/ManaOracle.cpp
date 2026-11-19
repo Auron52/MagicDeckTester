@@ -5612,17 +5612,33 @@ void EgTrace(const GameState& root, bool pre, const TurnSolver::Plan& t, const s
     std::fprintf(stderr, "[mana-oracle]   enum-gap %s plan={%s}: %s\n", Ctx(root, pre).c_str(), PlanText(t).c_str(),
                  what.c_str());
 }
-MenuView MakeMenuView(const std::vector<std::string>& keys, const std::vector<EngineReal>& real,
-                      const std::vector<TurnSolver::Plan>& observed)
+MenuView MakeMenuViewOf(const std::vector<std::string>& keys, const std::vector<EngineReal>& real)
 {
     MenuView mv;
     mv.on_menu.insert(keys.begin(), keys.end());
-    for (const TurnSolver::Plan& p : observed) { mv.observed.insert(SiblingKey(p)); }
     for (const EngineReal& e : real)
     {
         mv.cores.emplace(CoreKey(e.st), Resources(e.st, /*with_float=*/false));
         mv.boards.push_back(&e.st);
     }
+    return mv;
+}
+MenuView MakeMenuView(const std::vector<std::string>& keys, const std::vector<EngineReal>& real,
+                      const std::vector<TurnSolver::Plan>& observed)
+{
+    MenuView mv = MakeMenuViewOf(keys, real);
+    for (const TurnSolver::Plan& p : observed) { mv.observed.insert(SiblingKey(p)); }
+    return mv;
+}
+// The same from the LAZILY held observe-mode menu (TurnSolver::MainPlanSeq). SiblingKey reads only land_decided,
+// land_to_play and the actions, and no fan varies any of them, so every entry of a fan has its prototype's key:
+// one key per fan is the same set.
+MenuView MakeMenuView(const std::vector<std::string>& keys, const std::vector<EngineReal>& real,
+                      const TurnSolver::MainPlanSeq& observed)
+{
+    MenuView mv = MakeMenuViewOf(keys, real);
+    for (std::size_t i = 0, n = observed.size(); i < n; i = observed.FanEnd(i))
+    { mv.observed.insert(SiblingKey(observed.Shared(i))); }
     return mv;
 }
 
@@ -6182,11 +6198,14 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // The same enumeration with every mana gate in observe mode is "every plan the non-mana rules
     // allow"; what it holds that the menu does not was refused on mana. Each is realised (every order,
     // every payment): one that pays in full is an option the search never had (EnumGapPlan).
-    std::vector<TurnSolver::Plan> observed;
+    // HELD LAZILY (TurnSolver::MainPlanSeq): with every mana gate open, a fanned axis multiplies plans the menu never
+    // offered -- the Wanderwine Prophets champion fan took Merfolk Turns seed 30000013 gi13 past 10 GB here
+    // (docs/design/merfolk-oracle-observe-enum-rss-2026-11-19.md). The loop below reads it in the same order.
+    TurnSolver::MainPlanSeq observed;
     bool observed_axis_capped = false;
     {
         t_gate_observe = true;
-        try { observed = TurnSolver::EnumerateMainPlans(state, is_pre_combat); }
+        try { observed = TurnSolver::EnumerateMainPlansSeq(state, is_pre_combat); }
         catch (const ObservedAxisCap&) { observed_axis_capped = true; }
         t_gate_observe = false;
     }
@@ -6204,8 +6223,13 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     const MenuView mv = MakeMenuView(keys, real, observed);
     std::set<std::string> done;
     int checked = 0;
-    for (const TurnSolver::Plan& p : observed)
+    // Position by position, as the materialised list was read -- but one entry per fan: the rest of a fan share its
+    // SiblingKey (MakeMenuView), so the first is the only one that can pass the `done` test below; the others were
+    // skipped there before any counter or verdict.
+    TurnSolver::Plan obs_syn;
+    for (std::size_t oi = 0, on = observed.size(); oi < on; oi = observed.FanEnd(oi))
     {
+        const TurnSolver::Plan& p = observed.At(oi, obs_syn);
         const std::string k = SiblingKey(p);
         if (mv.on_menu.count(k) != 0 || !done.insert(k).second) { continue; }
         g_gate_rejects.fetch_add(1, std::memory_order_relaxed);

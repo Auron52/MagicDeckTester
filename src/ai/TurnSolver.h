@@ -2913,6 +2913,42 @@ public:
     // like the search; ApplyPlan runs the canonical execution order (land, casts, Land's
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
+    // THE SAME MENU, HELD LAZILY (MTG_PB_LAZY_CANDS). Position i holds exactly the plan EnumerateMainPlans'
+    // vector holds at i, but a fanned sub-decision axis (put-back, Ponder order, look-top pins, the Prophets
+    // champion / sacrifice pins) stays ONE prototype per fan instead of one Plan per entry. The mana oracle's
+    // ENUM-GAP pass reads its observe-mode menu this way: with every mana gate open, a Merfolk Turns board's
+    // Wanderwine Prophets champion fan multiplied the materialised list past 10 GB (seed 30000013 gi13,
+    // docs/design/merfolk-oracle-observe-enum-rss-2026-11-19.md). Human play keeps the whole list (its menu
+    // edits read every plan).
+    class MainPlanSeq
+    {
+    public:
+        MainPlanSeq();
+        ~MainPlanSeq();
+        MainPlanSeq(MainPlanSeq&&) noexcept;
+        MainPlanSeq& operator=(MainPlanSeq&&) noexcept;
+        MainPlanSeq(const MainPlanSeq&) = delete;
+        MainPlanSeq& operator=(const MainPlanSeq&) = delete;
+        std::size_t size() const;
+        bool empty() const { return size() == 0; }
+        // Entry i: a reference into the sequence, or (a synthesised entry) into `storage`.
+        const Plan& At(std::size_t i, Plan& storage) const;
+        // Entry i, or its fan's prototype when it is synthesised: for a reader of fields a fan entry shares
+        // with its prototype (actions, land_to_play, land_decided -- every field but the one the fan varies).
+        const Plan& Shared(std::size_t i) const;
+        // One past the last position of entry i's fan (a synthesised entry), else i + 1. Positions
+        // [i, FanEnd(i)) differ from entry i only in the field their fan varies (putback_choice, ponder_choice,
+        // look_top_pins, champion_pins, prophets_sac_choice), so a consumer keyed on the shared fields may
+        // read entry i alone.
+        std::size_t FanEnd(std::size_t i) const;
+        // The plans held as real entries (diagnostic: the list without the synthesised fan entries).
+        std::size_t RealSize() const;
+        struct Impl;
+    private:
+        std::unique_ptr<Impl> m_impl;
+        friend class TurnSolver;
+    };
+    static MainPlanSeq EnumerateMainPlansSeq(const GameState& state, bool is_pre_combat);
     // The untap loop's KILL plans when the float already pays the cheapest this-turn kill (the chunk-C2b
     // kill fold's list, shared with BpDeriveContinuationList); empty otherwise. The AccomplishedAlchemist
     // COMBO OFF route plays its finisher off this list (DecisionProviders.cpp, aaroute).
