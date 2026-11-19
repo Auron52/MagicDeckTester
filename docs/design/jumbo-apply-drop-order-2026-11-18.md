@@ -181,9 +181,9 @@ share of a search that fails.
 1000 games). The ENUMERATION site is ~80% of it (UnlockOrderSearchTree 11.5% of all on-arm CPU; the apply site's
 UnlockPayableOrder 2.1%). That site ran 411k searches, of which only 3.5% found an order, taking 8.5M steps (60%
 of them failing), 4.8M snapshot copies and 2.7M swaps. Average n there is 3.4. Timing over 300 games: successful
-steps 55%, snapshots 17%, failing steps 14%, setup and overhead ~14%. Failures land mostly at the LAST cast, so
-the tree is explored nearly in full to depth n-1. The cost is PROVING INFEASIBILITY, and it lives in the
-successful intermediate payments. Top extra symbols: TapForCost* ~14%, memmove 8.7%, GameState
+steps 55%, snapshots 17%, failing steps 14%, setup and overhead ~14%. (An earlier reading here said failures land
+mostly at the last cast; the 2026-11-19 counters below show they do not.) The cost is PROVING INFEASIBILITY, and
+it lives in the successful intermediate payments. Top extra symbols: TapForCost* ~14%, memmove 8.7%, GameState
 copy/assign/move ~10%, SeqWalkFixedOrder self 5%.
 
 **Tried and not shipped:**
@@ -201,14 +201,43 @@ copy/assign/move ~10%, SeqWalkFixedOrder self 5%.
   line-keep rung, LineReducerCredit), so adding x changes how every prefix is paid. A greedy payer with more
   sources is also not provably monotone.
 
-**Open (exact candidates, not attempted):**
-* (a) A SOUND per-node necessary bound inside the tree: remaining mana producible (board + the remaining casts'
-  unlocks) against remaining cost. It needs an upper bound on producible mana that is provable for every mana
-  mechanic (land Auras, untappers, Treasures, life-gain mana, reducers), and the root attempt shows how easily the
-  tight form goes unsound. Any version must pass `MTG_UO_DFS_VERIFY` with 0 violations.
-* (b) Transposition of identical prefix states: AB and BA reaching the same board, unpaid cost and unlocks share a
-  subtree. It needs a complete, cheap GameState equality (none exists) and saves mostly leaf steps.
-* (c) Cheaper snapshots (field-subset copies): only with a proof of which fields the walk reads.
+**Exact candidates measured 2026-11-19 (`wip/jumbo-perf2`; none shipped).** USER, on the three options: *"For 4 I
+would like to start with c and then decide if we want to take either of the other options."* Before building
+either open candidate, its CEILING was measured with temporary counters (`MTG_UO_STATS`, kept out of the tree as
+`logs/jumbo-perf2/uo-stats-tp-bound-measurement.patch` in that worktree). Enumeration site, Jumbo 300 games
+(gi 660000-660299, lever on, release build), 180k searches (the fold's given leaf included), 12.6% found:
+* **The failure profile, corrected.** 3.34M steps, 2.01M of them failing (60%), but only 256k of those fail at the
+  LAST cast. By depth (0 = first cast): 98k / 554k / 736k / 493k / 124k / 9k. So the tree is not walked "nearly in
+  full to n-1": most dead branches die one or two casts in, and the expensive part is the 1.33M SUCCESSFUL steps
+  (each ~6x a failing one, which mostly stops at the payer's own `UntappedManaUpperBound` gate).
+* **(b) Transposition of identical prefix states -- ceiling ~6% of steps.** An approximate state signature
+  (battlefield in vector order with number / tapped / haste / sickness / aura host, the three floating pools, the
+  line's unpaid cost, the pending unlocks, exile, tokens, life, zone sizes) over the class MULTISET of the prefix:
+  62k repeats among 988k interior nodes, whose subtrees hold 197k steps (5.9%). That is an UPPER bound -- an exact
+  version needs a complete GameState equality, which does not exist (a defaulted `operator==` would have to reach
+  Player, Card, Permanent, Library, StackEntry, PayRollbackLedger ...), and it pays a stored board per interior
+  node. Transpositions are rare because AB and BA push their joined permanents in a different order and the payer
+  taps differently. Not worth building.
+* **(a) A per-node necessary bound -- ceiling ~13% of tree time.** At each node with two or more casts left:
+  supply = the three floating pools + `UntappedManaUpperBound` (the payer's own sound over-count) + one best-land
+  tap per pending unlock; each remaining cast's gain = its land-Aura bonus x (1 + untappers that could re-tap the
+  host) + one best-land tap (Aura bonuses included) for a mana dork or a tutored untapper host; the node is dead
+  if some cast still costs more than supply + every other cast's net-positive gain, or if the remaining total
+  exceeds supply + every gain. 145k of 1.07M nodes pruned (9.8k of them roots, 5.5% of searches), 671k steps
+  skipped (20%), but only 167k of them successful steps (12.6% of those); 0 subtrees that would have paid. Weighted
+  by step cost that is ~13% of the tree, ~1.3% of Jumbo's game CPU: x1.20 -> ~x1.185 at best. Shipping it needs
+  a gain term that is provably an upper bound for EVERY mechanism the walk models (rituals, ETB untaps, Lens,
+  Treasures, land-puts, scaled lands, land-tap bonuses, cost reducers and taxes, the Fireblast/convoke/emerge
+  cost paths, the unlocks), with "not provable" for anything outside a whitelist. The 2026-11-18 root-bound
+  attempt shows how easily the tight form goes unsound. Too much soundness surface for ~1.3%.
+* **(c) Field-subset snapshots.** Not built: snapshots are 17% of the tree (~1.7% of game CPU), and skipping a
+  field (the libraries are most of the bytes) needs a proof that no function reachable from the walk's step
+  writes it (TapForCostShared and everything under it). No such proof is cheap, and a VERIFY compare costs as much
+  as the copy it would save.
+* **Where the rest of the lever's x1.20 is.** On the on arm, the enumeration tree is ~9.6% of game CPU and the apply
+  site ~2.1%: deleting both outright would leave ~x1.06, the play change itself (more lines found, so other
+  searches). So the exact headroom left in the walk is a few points at most. What remains is the USER's call:
+  price the walks against the decision budget (below), or accept x1.20.
 * USER option (not exact, a play change): price the walks against the decision budget
   (`TurnSolver::DecisionBudget()`, as the equip route does). It is inert at unlimited budget but moves budgeted
   play, so it needs its own A/B.
