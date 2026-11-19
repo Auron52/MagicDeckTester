@@ -102,3 +102,55 @@ It must be exact: consumers read the full board and `o.script`, so the test has 
 - **mana_clean:** Maze's End now runs to completion instead of aborting at the RSS cap. Its plans that used to be
   uncomputable now report CAPPED (memory budget), so the deck fails the gate honestly on those plans rather than
   not finishing. Merfolk Turns still aborts on gi 13 (section 4) until the enumeration defect is fixed.
+
+## 7. Integration with the Goblins goal fold (branch `wip/maze-oracle-mem2`)
+
+The fix was validated on an old base. The shared branch then gained the goal fold (`MTG_ORACLE_GOAL_FOLD`, default
+ON) and the `MTG_ORACLE_FOLD_STATS` diagnostic in the same `Realize`, so the fix was re-landed on top of them.
+
+**How the two compose, exactly.**
+- The online prune never erases a frontier. It marks it `pdrop` and gives back its board and script. Every
+  index-parallel vector (`fs_fk`, `fs_fbad`, `fs_ftbad`) is pushed in the same capture block as `fronts`, so the
+  indices stay aligned. `goal_cands_scripted` is a field of the frontier record, computed at capture before
+  `admit`.
+- The kept set is ParetoKeep's (`keep[i] == 0` exactly when `pdrop`). The goal fold's skip runs only on kept
+  frontiers, after `keep`, as before. It reads only kept boards, and those are never released.
+- The goal fold is off for a hit-only realisation (`goal_k` is null there). So its readers (`RealizationCovers`,
+  the check's `on_key`) never see a released outcome board.
+- The FOLD_STATS per-layer block now reads `pkey` and `pres` in place of the removed `keys` and `res`. It skips a
+  released frontier before reading the board. That frontier's `fs_fbad` and `fs_ftbad` are never read, because
+  only kept frontiers are expanded.
+- The board budget's retry skip (`!r.mem_capped`) is inside the goal fold's `realize_main` escalation.
+- **Memory hygiene added during the integration:** `realize_main` frees the previous pass's realisation (the folded
+  one, before a redo) before it realises again. `MTG_ORACLE_GOAL_FOLD_CHECK` keeps only the folded pass's on-key
+  scripts and its CAPPED bit, not the whole realisation. So a stale realisation's boards do not count against the
+  budget of the pass that replaces it.
+
+**Verification.** All runs were on fb9cb5e03 + this fix, under one box-lock hold: Maze 23 threads, Goblins 8,
+units 1.
+- Units: 3717/3717 pass, both plain and with `MTG_ORACLE_PARETO_ONLINE_CHECK=1` plus `MTG_ORACLE_GOAL_FOLD_CHECK=1`.
+- **Maze's End gi 0-199**, oracle 2, Pareto check on:
+  - 0 mismatches.
+  - 200/200 digests identical to the validated run (section 3).
+  - Peak RSS 22.8 GB at 23 threads.
+  - 617 memory-budget stops (560 before), with 107.5M applies against 96.6M.
+  - The goal fold was active on 26,824 plans.
+  - Both runs are dominated by the 600 s wall backstop (4,204 and 4,389 CAPPED-DECISION). That backstop moves
+    with timing, so the counts are not comparable one for one.
+- **Goblins 42-game pool**, with both checks on:
+  - 0 Pareto mismatches and 0 goal-fold mismatches (719 plans checked).
+  - Digests identical to the goal-fold-only run.
+  - Every flag line that differs from that run's check arm is on a plan the board budget capped (31 such plans).
+- **Goblins 42-game pool**, plain (the goal-fold-only run's config):
+  - 18 memory-budget CAPPED, where that run had 0. These are seeds 30133979 T6 and 30131479 T3. That run had
+    finished them under the 400,000-apply retry.
+  - The DOMINATED-LAND witnesses on those plans change, because the search behind them is partial.
+  - Two APPLY-DROP lines on 30131075 T2 m2 are missing. That decision hit the 600 s **wall** backstop here (the
+    game ran 604 s against 453 s). The cause is contention: this run shared a saturated SMT box with the Maze pool,
+    where the reference ran nearly alone. Maze's total CPU is unchanged (41,395 against 41,224 user-s).
+  - Applies 14.9M against 17.6M; peak RSS 4.7 GB at 8 threads.
+- Smoke: ALL PASS, 0 configs changed.
+
+**Open question for the owner of the gate.** The 768 MB budget now caps Goblins plans that the retry used to
+finish. A board-sharing lever (section 5) would remove most of those stops. So would a larger budget, if thread
+counts allow it.
