@@ -94686,6 +94686,23 @@ static bool EchoUncoveredPending(const GameState& state)
 {
     return EchoAxisLiveHere(state) && PendingEchoObligations(state) > EchoPinCount(state.scripted_echo);
 }
+std::uint64_t RfxCycleStateKey(const GameState& state);   // below Site9ChainRepeats (dmgrx::CycleFold)
+// THE FANS' BACKSTOP POLL (runaway fix 2026-11-19). The reflection fans below apply a plan (and its combat) once per
+// probe and charge nothing, so a fan that grows cannot be seen by the budget and never read the per-game stop flag:
+// Stuffy Doll held-out d3 gi8 under MTG_UNPRUNE=redirectwindow,gchost ran 21.7 min to 8 GB with MTG_MAX_GAME_WALL_SEC=60
+// armed. Every kRfxFanPollStride probes the fan now reads the two signals whose answer is DISCARDED work -- the
+// per-game stop (gamework::Poll: a wall / unit ceiling made the game void) and the decision's Overrun (the pass rolls
+// back and iterative deepening commits the deepest COMPLETED pass) -- and stops expanding. Never the unit budget's
+// Exhausted(): that one is anytime, so cutting on it would change what a budgeted search scores. Inert where neither
+// is armed (no wall deadline, unlimited budget: DecisionBudget() is nullptr), and a fan under the stride reads
+// nothing, so every ordinary enumeration (and its cache entry) is unchanged.
+static constexpr std::size_t kRfxFanPollStride = 64;
+static bool RfxFanShouldStop()
+{
+    if (gamework::Poll()) { return true; }
+    SearchBudget* const d = TurnSolver::DecisionBudget();
+    return d != nullptr && d->Overrun();
+}
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all, bool idle_pass = false,
                                   PbLazyLayout* pb_lazy = nullptr)
@@ -100823,11 +100840,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             expanded.reserve(all.size());
             std::reverse(all.begin(), all.end());
             std::vector<TurnSolver::Plan> work = std::move(all);
+            std::size_t fan_probes = 0;   // the backstop poll stride (RfxFanShouldStop)
             while (!work.empty())
             {
                 TurnSolver::Plan p = std::move(work.back()); work.pop_back();
                 if (!plan_may_choose(p)) { expanded.push_back(std::move(p)); continue; }
                 const std::size_t n_main = dmgrx::MainPinCount(p.reflect_targets);
+                std::size_t probe_repeat = static_cast<std::size_t>(-1);
                 // One probe of the plan's main-phase apply: `nx` = the legal list at the first unpinned main-phase
                 // ordinal (empty: none), `fr` = the front at that ordinal and every later one. Returns whether the
                 // opponent lost in this main phase.
@@ -100844,11 +100863,27 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     GameState copy = state;
                     RevealLogPause quiet;
                     dmgrx::TargetProbeScope probing(probe, q.reflect_targets, g_apd_depth);
+                    dmgrx::CycleFold cyc;
+                    cyc.state = &copy;
+                    cyc.state_key = &RfxCycleStateKey;
+                    const dmgrx::CycleFoldScope cyc_scope(dmgrx::CycleFoldOn() ? &cyc : nullptr);
                     ApplyPlanDirect(copy, q, is_pre_combat);
+                    probe_repeat = cyc.repeat_at;
                     return OpponentHasLost(copy);
                 };
                 std::vector<int> next, fronts;
                 const bool front_kills = run_probe(p, n_main, next, &fronts);
+                // THE ZERO-PROGRESS CYCLE FOLD (dmgrx::CycleFold, the proof): the plan's PINNED choices return to a
+                // configuration of an earlier choice, so the shorter plan without that cycle (which this fan also
+                // offers) reaches the same outcome. Dropped, not kept and not expanded.
+                if (probe_repeat <= n_main) { continue; }
+                if (++fan_probes % kRfxFanPollStride == 0 && RfxFanShouldStop())
+                {
+                    // Discarded work (see RfxFanShouldStop): keep what is fully pinned; never return an empty list.
+                    if (expanded.empty()) { expanded.push_back(std::move(p)); }
+                    work.clear();
+                    break;
+                }
                 // SOUND DOMINANCE FOLD (step 9c; the combat fan's below): a main-phase line that KILLS cannot be
                 // improved, so the remaining choices are pinned to it instead of fanned -- every FRONT, else the
                 // opponent's FACE wherever legal (else the front), one choice at a time. Without it a sweeper over a
@@ -101047,6 +101082,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             expanded.reserve(all.size());
             std::reverse(all.begin(), all.end());
             std::vector<TurnSolver::Plan> work = std::move(all);
+            std::size_t fan_probes = 0;   // the backstop poll stride (RfxFanShouldStop)
             while (!work.empty())
             {
                 TurnSolver::Plan p = std::move(work.back()); work.pop_back();
@@ -101054,6 +101090,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const std::vector<int> combat_pins = dmgrx::CombatPinsOf(p.reflect_targets);
                 // The step-9c hold codes lead the suffix and take no choice ordinal.
                 const std::size_t n_combat = combat_pins.size() - dmgrx::LeadingAttackHolds(combat_pins);
+                std::size_t probe_repeat = static_cast<std::size_t>(-1);
                 // One probe: the plan's apply + this turn's combat; `nx` = the legal list at the first unpinned
                 // combat ordinal (empty: none), `fr` = the list front at that ordinal and every later one (what the
                 // unpinned choices took). Returns whether the opponent lost in that combat.
@@ -101073,11 +101110,24 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (OpponentHasLost(copy)) { return false; }
                     dmgrx::CombatProbeScope probing(probe, copy, g_apd_depth);
                     const EotHoldCombatScope _eh(q);
+                    dmgrx::CycleFold cyc;
+                    cyc.state = &copy;
+                    cyc.state_key = &RfxCycleStateKey;
+                    const dmgrx::CycleFoldScope cyc_scope(dmgrx::CycleFoldOn() ? &cyc : nullptr);
                     SimulateCombat(copy);
+                    probe_repeat = cyc.repeat_at;
                     return OpponentHasLost(copy);
                 };
                 std::vector<int> next, fronts;
                 const bool front_kills = run_probe(p, n_combat, next, &fronts);
+                // THE ZERO-PROGRESS CYCLE FOLD (the main fan's, above): a pinned combat cycle -> the plan is dropped.
+                if (probe_repeat <= n_combat) { continue; }
+                if (++fan_probes % kRfxFanPollStride == 0 && RfxFanShouldStop())
+                {
+                    if (expanded.empty()) { expanded.push_back(std::move(p)); }
+                    work.clear();
+                    break;
+                }
                 // SOUND DOMINANCE FOLD (step 9c, design section 14): a combat line that KILLS this turn cannot be
                 // improved (the goldfish objective is the win turn), so once one is found the remaining combat choices
                 // are pinned to it and not fanned; the plan carries every pin, so both worlds replay it. Two cheap
@@ -109563,6 +109613,37 @@ bool TurnSolver::Site9ChainRepeats(std::vector<std::uint64_t>& chain, const Game
     for (const std::uint64_t x : chain) { if (x == h) { return true; } }
     chain.push_back(h);
     return false;
+}
+
+// The zero-progress cycle fold's configuration key (dmgrx::CycleFold, DamageReflection.h, where the proof is): the
+// engine's full mid-turn identity, built exactly as Site9ChainRepeats builds it (work-muted, no pin witness counted),
+// on a copy whose INDESTRUCTIBLE creatures carry no marked damage (inert for the rest of the turn; the proof's (2)).
+std::uint64_t RfxCycleStateKey(const GameState& state)
+{
+    const GameState* use = &state;
+    std::optional<GameState> norm;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.damage == 0 || !q.HasKeyword(Keyword::Indestructible)) { continue; }
+        if (!norm) { norm.emplace(state); use = &*norm; }
+        norm->battlefield[i].damage = 0;
+    }
+    const unsigned long long cp_reads0 = combatpin::t_reads;
+    const bool sv = t_bpkey_payment_key;
+    t_bpkey_payment_key = true;
+    // The reflection PIN STREAM is not part of the configuration (the proof's (1): it is the plan's remaining
+    // choices, which is exactly what the fold compares across). BuildBreakpointKey folds the installed pins and
+    // their CURSOR, which advances at every choice, so with them folded no configuration could ever recur.
+    const std::vector<int>* const pins0 = dmgrx::t_pins;
+    dmgrx::t_pins = nullptr;
+    ++workctr::t_mute;
+    const TranspositionTable::Key k = BuildBreakpointKey(*use, /*is_pre_combat=*/true);
+    --workctr::t_mute;
+    dmgrx::t_pins = pins0;
+    t_bpkey_payment_key = sv;
+    combatpin::t_reads = cp_reads0;
+    return k.h1 ^ (k.h2 * 0x9E3779B97F4A7C15ULL);
 }
 
 std::vector<TurnSolver::Plan> TurnSolver::IdlePassWithAxes(const GameState& state)

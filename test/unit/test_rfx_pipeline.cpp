@@ -3121,3 +3121,50 @@ TEST_CASE("rfx step 9f: the Shaman pull is asked ONCE per damage chain (a Doll +
         CHECK(s.players[1].life == 18);
     }
 }
+
+
+std::uint64_t RfxCycleStateKey(const GameState& state);   // TurnSolver.cpp (dmgrx::CycleFold's configuration key)
+
+TEST_CASE("rfx runaway fix: the zero-progress CYCLE FOLD -- an indestructible Nemesis aimed at a Nomads en-Kor whose "
+          "shield returns the point is a cycle; a pinned cycle is reported, a face pick is not")
+{
+    // Generic provider: every rider window admitted (the MTG_UNPRUNE=redirectwindow shape). The Nemesis is the one
+    // sink reflector, so each Nomads' shield list is the F4 singleton {all onto the Nemesis}: no ordinal. The
+    // Nemesis's "any other target" list is {opponent, Nomads A, Nomads B} (our face: F1).
+    auto run = [](const std::vector<int>& pins, std::size_t& calls) {
+        GameState s = ArmedState();
+        s.players[1].life = 20;
+        PutRfx(s, "Screaming Nemesis", 3301).temp_indestructible = true;
+        PutRfx(s, "Nomads en-Kor", 3302);
+        PutRfx(s, "Nomads en-Kor", 3303);
+        std::size_t seen_calls = 0;
+        dmgrx::TargetProbe probe = [&](const std::vector<int>&) { ++seen_calls; };
+        dmgrx::CycleFold cyc;
+        cyc.state = &s;
+        cyc.state_key = &RfxCycleStateKey;
+        {
+            dmgrx::PinScope pin_scope(pins);
+            dmgrx::TargetProbeScope probing(probe, pins, 0);
+            const dmgrx::CycleFoldScope cyc_scope(&cyc);
+            dmgrx::DealDamageBatch(s, ReflectionBatch(s, 3301, 1));
+        }
+        calls = seen_calls;
+        CHECK(cyc.calls == seen_calls);   // the fold's ordinal is the fan's
+        return std::make_pair(cyc.repeat_at, s.players[1].life);
+    };
+    const std::size_t none = static_cast<std::size_t>(-1);
+    std::size_t calls = 0;
+    {
+        // Nomads A, then Nomads B: back to the first choice's configuration at choice 1 (the Nemesis's marked damage
+        // differs and is inert -- it is indestructible). Then the face: 1 to the opponent.
+        const auto [rep, life] = run({ 3302, 3303, dmgrx::PlayerId(1) }, calls);
+        CHECK(rep == 1);
+        CHECK(life == 19);
+    }
+    {
+        const auto [rep, life] = run({ dmgrx::PlayerId(1) }, calls);   // straight to the face: no cycle
+        CHECK(rep == none);
+        CHECK(life == 19);
+        CHECK(calls == 1);
+    }
+}

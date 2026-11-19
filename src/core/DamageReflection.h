@@ -626,6 +626,8 @@ struct PullChainScope
 // Returns true when it added a pull or a shield to `b`.
 inline bool AnyRedirector(const GameState& s);
 inline void AddRedirectRider(GameState& s, Batch& b);
+// The zero-progress cycle fold's per-drain reset (defined with dmgrx::CycleFold, below).
+inline void CycleFoldNewDrain(const GameState& s);
 
 // THE entry point: one damage event. See the header note for the steps.
 inline BatchResult DealDamageBatchCore(GameState& s, const Batch& b);
@@ -659,6 +661,7 @@ inline BatchResult DealDamageBatchCore(GameState& s, const Batch& b)
     std::swap(saved, t_frame);   // a different state's open frame (none today) is restored below
     t_frame.state = &s;
     t_frame.depth = 1;
+    CycleFoldNewDrain(s);
     const BatchResult r = ApplyOne(s, b);
     Drain(s, 0);
     std::swap(saved, t_frame);
@@ -938,6 +941,97 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
 // pre-check counts it as a chooser on the battlefield or in the plan, beside DefReflectsWithChoice.
 inline bool DefOffersShieldChoice(const CardDefinition& d) { return d.params.redirect_shield || d.params.redirect_pull_cost.has_value(); }
 
+// ---- THE ZERO-PROGRESS CYCLE FOLD (SOUND identity fold; runaway fix 2026-11-19) -------------------------------
+// WHAT IT CURES. With the step-9b window prune lifted (MTG_UNPRUNE=redirectwindow) an en-Kor's {0} shields ride a
+// reflection's event, so a Screaming Nemesis made indestructible (Loran's Escape) can aim its "any other target"
+// at a Nomads en-Kor whose shield (F4: the indestructible Nemesis is the one sink) puts the point straight back on
+// the Nemesis, which reflects again: a cycle that changes nothing but the Nemesis's marked damage. Each step is a
+// CHOICE (face, either Nomads, a Spirit, Mogg Maniac), so the fans of AppendSubdecisionAxes enumerated every word
+// over {Nomads A, Nomads B} up to the no-progress cut (64): ~2^64 plans for one combat (Stuffy Doll held-out d3
+// gi8: 8 GB in 21.7 min, never finishing). The line length was bounded; the WIDTH was not.
+// THE FOLD. While a fan probes a plan (t_probe set for the probing state), every reflection-target choice made by
+// the top-level drain records its CONFIGURATION: the full mid-turn state key (TurnSolver's own BuildBreakpointKey,
+// work-muted, with the marked damage of every INDESTRUCTIBLE creature zeroed -- see the proof), the pending
+// trigger stack, the trigger being resolved and its legal list. When a configuration recurs at choice j after
+// choice i of the same drain, the plan's choices i..j-1 are a cycle; if all of them are PINNED (j <= the plan's
+// pinned count) the fan DROPS the plan.
+// PROOF (identity, not dominance). (1) The continuation of a drain from a choice is a function of exactly what the
+// key holds: ResolveTrig's batch is built from the trigger and the pick, ApplyOne / SbaPass / the riders read the
+// state, Drain pops the stack; the only other inputs are the pin stream (the plan's remaining pins) and Drain's
+// two safety counters, which are not game state (design section 3: they can only cut a sequence that can never
+// kill, and the stack they drop is not a legal game outcome). (2) Marked damage on an indestructible creature is
+// inert for the rest of the turn: it cannot destroy it (CR 702.12b), "until end of turn" indestructibility and the
+// damage both end in the same cleanup step (CR 514.2), and every engine reader of marked damage in this pipeline
+// (SBA lethality, ShieldOptions' sink / room, LethalToughness's doomed test) treats an indestructible creature
+// the same at every damage value. (3) So for a plan L whose pinned choices i..j-1 return to the configuration of
+// choice i, the plan L' that takes L's choices from j onward AT i reaches the same configurations and the same
+// end state (up to that inert damage); L' is offered by the fan (at i the legal list is the one at j) and is
+// strictly shorter, so by induction a cycle-free plan with L's outcome is always kept. Nothing is lost at any
+// budget, and the fan is bounded by the number of cycle-free words.
+// Scope: autonomous fans only (never human play, where the fans do not run); the executor and the rollout never
+// see it (they only replay plans the fan kept). MTG_RFX_CYCLE_FOLD=0 disables it (A/B lever; DEFAULT ON).
+inline bool CycleFoldOn() { static const bool on = EnvOn("MTG_RFX_CYCLE_FOLD", true); return on; }
+struct CycleFold
+{
+    const GameState* state = nullptr;                    // the probing copy
+    std::uint64_t (*state_key)(const GameState&) = nullptr;   // TurnSolver::RfxCycleStateKey
+    std::size_t calls = 0;                               // probe callbacks so far = the fan's next ordinal
+    std::vector<std::pair<std::uint64_t, std::size_t>> seen;   // (configuration, ordinal), this drain
+    std::size_t repeat_at = static_cast<std::size_t>(-1);    // the ordinal j of the first recurrence (-1: none)
+};
+inline thread_local CycleFold* t_cycle = nullptr;
+struct CycleFoldScope
+{
+    CycleFold* saved = t_cycle;
+    explicit CycleFoldScope(CycleFold* c) { t_cycle = c; }
+    ~CycleFoldScope() { t_cycle = saved; }
+    CycleFoldScope(const CycleFoldScope&) = delete;
+    CycleFoldScope& operator=(const CycleFoldScope&) = delete;
+};
+// A top-level drain on the probing state starts a new cycle record (a configuration of an earlier drain has a
+// different continuation: the rest of the plan after that drain).
+inline void CycleFoldNewDrain(const GameState& s)
+{
+    if (t_cycle != nullptr && t_cycle->state == &s) { t_cycle->seen.clear(); }
+}
+inline std::uint64_t CycleMix(std::uint64_t h, std::uint64_t v)
+{
+    h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+    return h;
+}
+inline std::uint64_t CycleTrigKey(std::uint64_t h, const PendingTrig& t)
+{
+    h = CycleMix(h, static_cast<std::uint64_t>(t.kind));
+    h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(t.src.card.m_number)));
+    h = CycleMix(h, static_cast<std::uint64_t>(t.src.card.m_name_hash));
+    h = CycleMix(h, static_cast<std::uint64_t>(t.src.controller) * 2 + (t.src.is_creature ? 1u : 0u));
+    h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(t.self_number)));
+    h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(t.amount)));
+    h = CycleMix(h, static_cast<std::uint64_t>(t.lock_life ? 1u : 0u));
+    h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(t.fixed_player)));
+    h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(t.aura_host)));
+    return h;
+}
+// Called by ResolveTrig just before a reflection-target CHOICE (legal.size() > 1) of the top-level drain.
+inline void CycleFoldNote(const GameState& s, const PendingTrig& t, const std::vector<int>& legal)
+{
+    CycleFold* c = t_cycle;
+    if (c == nullptr || c->state != &s || t_probe == nullptr || t_frame.depth != 1 || c->state_key == nullptr
+        || c->repeat_at != static_cast<std::size_t>(-1))
+    { return; }
+    std::uint64_t h = c->state_key(s);
+    h = CycleTrigKey(h, t);
+    h = CycleMix(h, 0x57AC0000ULL + t_frame.stack.size());
+    for (const PendingTrig& q : t_frame.stack) { h = CycleTrigKey(h, q); }
+    h = CycleMix(h, 0x1E6A0000ULL + legal.size());
+    for (int id : legal) { h = CycleMix(h, static_cast<std::uint64_t>(static_cast<std::uint32_t>(id))); }
+    for (const auto& [k, ord] : c->seen)
+    {
+        if (k == h) { c->repeat_at = c->calls; (void)ord; return; }
+    }
+    c->seen.push_back({ h, c->calls });
+}
+
 // ONE searched choice on the pin stream (a list of more than one option): takes the next ordinal, reports the
 // list to the fan's probe, and returns the plan's pin for that ordinal when it is legal, else the FRONT (the
 // permitted one-shot policy; see the axis note above). Shared by the reflection targets and the en-Kor shields.
@@ -945,7 +1039,7 @@ inline int PinnedChoice(const std::vector<int>& legal)
 {
     int pick = legal.front();
     const std::size_t ordinal = t_pin_cursor++;
-    if (t_probe) { (*t_probe)(legal); }
+    if (t_probe) { (*t_probe)(legal); if (t_cycle != nullptr) { ++t_cycle->calls; } }
     if (t_pins && ordinal < t_pins_n)   // the main-phase prefix only (never the combat suffix)
     {
         const int pin = (*t_pins)[ordinal];
@@ -988,6 +1082,7 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
     int pick = legal.front();
     if (legal.size() > 1)   // a CHOICE: searched (the pin), probed (the fan), or asked (the viewer)
     {
+        if (t_cycle != nullptr) { CycleFoldNote(s, t, legal); }   // the zero-progress cycle fold (fan probes only)
         pick = PinnedChoice(legal);
         if (g_play_target_chooser)
         {
@@ -1107,6 +1202,7 @@ inline void CombatDamageDealt(GameState& s, const std::vector<int>& nums, const 
         { probing.emplace(*t_combat_probe.probe, pins, t_combat_probe.depth); }
         // Several GC'd attackers raise their GC triggers together: their order is searched where it can matter
         // (step 9f), on the combat pin stream, before any of them resolves.
+        CycleFoldNewDrain(s);
         OrderSimultaneousTriggers(s, raised);
         for (std::size_t i = raised.size(); i-- > 0; ) { t_frame.stack.push_back(std::move(raised[i])); }
         Drain(s, 0);
