@@ -102211,7 +102211,7 @@ namespace bpshapes
 {
 inline bool On() { static const bool on = EnvOn("MTG_BP_WAVE_SHAPES"); return on; }
 inline std::mutex g_mx;
-inline std::map<std::string, long long> g_turn, g_slot, g_base, g_cont, g_rank, g_opener, g_fresh;
+inline std::map<std::string, long long> g_turn, g_slot, g_base, g_cont, g_rank, g_opener, g_fresh, g_node;
 inline std::string ActName(const Action& a)
 {
     std::string n = a.card_name.str();
@@ -102234,8 +102234,67 @@ inline void Note(const GameState& node, int depth, const TurnSolver::Plan& v, co
     std::string cont = "[";
     for (const std::string& x : cn) { cont += x; cont += ","; }
     cont += "]";
+    // The node's position class at the last ply (depth 1): what a this-turn win would need (Maze's End sizing).
+    std::string ncls;
+    if (depth == 1)
+    {
+        const int me = node.active_player_index;
+        const Player& pl = node.players[static_cast<std::size_t>(me)];
+        const int g = CountDistinctNamedLandsWithSubtype(node, me, "Gate", 99);
+        auto has_gate_name = [&](const std::string& n)
+        {
+            for (const Permanent& q : node.battlefield)
+            { if (q.controller_index == me && q.card.m_name.str() == n) { return true; } }
+            return false;
+        };
+        std::set<std::string> hnew;
+        int expl = 0, tut = 0, charm = 0, hl = 0;
+        char S = '-', M = '-', B = '-', A = '-', ME = '-';
+        for (const Card& c : pl.hand)
+        {
+            const std::string n = c.m_name.str();
+            if (c.IsLand())
+            {
+                ++hl;
+                bool gate = false;
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                for (const auto& st : (cd ? cd->card : c).m_subtypes) { if (st == "Gate") { gate = true; } }
+                if (gate && !has_gate_name(n)) { hnew.insert(n); }
+                if (n == "Maze's End") { ME = 'h'; }
+                continue;
+            }
+            if (n == "Exploration") { ++expl; }
+            else if (n == "Sylvan Scrying") { ++tut; }
+            else if (n == "Archdruid's Charm") { ++charm; }
+            else if (n == "Guild Summit") { S = 'h'; }
+            else if (n == "Manabond") { M = 'h'; }
+            else if (n == "Burgeoning") { B = 'h'; }
+            else if (n == "Amulet of Vigor") { A = 'h'; }
+        }
+        int expl_bf = 0;
+        for (const Permanent& q : node.battlefield)
+        {
+            if (q.controller_index != me) { continue; }
+            const std::string n = q.card.m_name.str();
+            if (n == "Exploration") { ++expl_bf; }
+            else if (n == "Guild Summit") { S = 'b'; }
+            else if (n == "Manabond") { M = 'b'; }
+            else if (n == "Burgeoning") { B = 'b'; }
+            else if (n == "Amulet of Vigor") { A = 'b'; }
+            else if (n == "Maze's End") { ME = 'b'; }
+        }
+        const int drops = std::max(0, pl.LandDropsAvailable() + expl_bf - pl.lands_played_this_turn) + expl;
+        const int pool = static_cast<int>(hnew.size()) + tut + charm + (A != '-' ? drops : 0);
+        const int add = std::min(drops + charm, pool);
+        const bool giveup = S != '-' || M != '-' || B != '-';
+        const bool fail = ME == '-' && tut == 0 && charm == 0 ? true : (g + add + 1 < 10);
+        ncls = td + std::string(giveup ? " GIVEUP" : (fail ? " NOWIN" : " open")) + " G=" + std::to_string(g)
+             + " add<=" + std::to_string(add) + " S" + S + " M" + M + " B" + B + " A" + A + " ME" + ME
+             + " hl=" + std::to_string(hl);
+    }
     std::lock_guard<std::mutex> lk(g_mx);
     ++g_turn[td];
+    if (!ncls.empty()) { ++g_node[ncls]; ++g_node[ncls.substr(0, ncls.find(" G="))]; }
     ++g_slot[td + " " + base + " @" + std::to_string(v.bp_at)];
     ++g_base[td + " " + base];
     ++g_cont[td + " " + cont];
@@ -102263,6 +102322,7 @@ struct Printer
         if (!On()) { return; }
         Dump("turn", g_turn, 64);
         Dump("fresh", g_fresh, 64);
+        Dump("node", g_node, 80);
         Dump("rank", g_rank, 120);
         Dump("base", g_base, 60);
         Dump("slot", g_slot, 60);
