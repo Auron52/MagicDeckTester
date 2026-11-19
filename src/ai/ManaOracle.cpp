@@ -382,6 +382,11 @@ std::atomic<long long> g_hit_only_drop_cut{0};   // hit-only frontiers below an 
 // The GOAL FOLD (MTG_ORACLE_GOAL_FOLD, see Realize): kept frontiers not expanded; plans whose folded realisation was
 // set aside because it did not cover the engine's board (the plan was realised again in full).
 std::atomic<long long> g_goal_folded{0}, g_goal_fold_plans{0}, g_goal_fold_redo{0}, g_goal_fold_checked{0};
+// THE EAT-ORDER FOLD (see its block above Realize): plans it applied to, frontier tables it restricted, plans realised
+// again without it, plans its check mode realised both ways, and mismatches; the test hook that runs the check.
+std::atomic<long long> g_eat_cut{0}, g_eat_plans{0}, g_eat_redo{0}, g_eat_checked{0}, g_eat_mismatch{0};
+std::atomic<bool>      g_eat_check_test{false};
+std::atomic<int>       g_eat_fold_test{-1};   // SetEatOrderFoldForTest: -1 = MTG_ORACLE_EAT_ORDER_FOLD, else 0 / 1
 // MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
 // payments; the other orders of a drop).
 std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
@@ -461,6 +466,12 @@ struct Reporter
             std::fprintf(stderr, "=== MANA ORACLE goal fold: %lld plans, %lld frontiers not expanded, %lld plans realised "
                                  "again in full, %lld checked ===\n", g_goal_fold_plans.load(), g_goal_folded.load(),
                          g_goal_fold_redo.load(), g_goal_fold_checked.load());
+        }
+        if (g_eat_plans.load() != 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE eat-order fold: %lld plans, %lld frontier tables restricted, %lld plans "
+                                 "realised again without it, %lld checked, %lld mismatched ===\n", g_eat_plans.load(),
+                         g_eat_cut.load(), g_eat_redo.load(), g_eat_checked.load(), g_eat_mismatch.load());
         }
         if (g_route_macros.load() != 0)
         {
@@ -1426,6 +1437,34 @@ bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
 // MTG_LINE_*_KEEP) read the same tables in play and must not move.
 // Set by PlanPaymentScript (real play's payment script): Realize's table then holds no body.
 thread_local bool t_no_fodder = false;
+// THE EAT-ORDER FOLD's restriction of one frontier's table (Realize, around that frontier's MinimalPayments only): the
+// sorted FNV hashes of the fodder classes (FodderKey) the table must not offer, and whether it left one out.
+thread_local const std::vector<std::uint64_t>* t_eat_forbid = nullptr;
+thread_local bool t_eat_forbid_hit = false;
+std::uint64_t Fnv64(const std::string& s)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    for (const unsigned char c : s) { h = (h ^ c) * 1099511628211ULL; }
+    return h;
+}
+// One fodder class of a frontier's table, as BuildSources made it (recorded through t_eat_table_out).
+struct EatClass
+{
+    std::uint64_t    key = 0;          // Fnv64(FodderKey)
+    bool             swappable = false;
+    std::vector<int> nums;             // its copies in the table
+};
+
+bool EatBodySwappable(const GameState& s, const Permanent& p)
+{
+    if (!p.card.IsCreature() || KeyedApart(s, p) || !AttachedKey(s, p).empty() || p.paired_with != 0) { return false; }
+    const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return p.is_token; }   // a generated vanilla token (CreateTokens' prototype)
+    if (IsSacManaOutlet(d->params) || IsPaySacSource(*d)) { return false; }
+    return d->eat_body_audited;
+}
+
+thread_local std::vector<EatClass>* t_eat_table_out = nullptr;   // Realize: record this frontier's fodder classes
 // MTG_ORACLE_FOLD_STATS=1 (DIAGNOSTIC, default off; prints only): per audited plan, how much of the plan's own
 // realisation could a goal fold or a symmetry fold remove -- the sizing data for docs/design/goblins-oracle-eat-fold.
 bool FoldStatsOn()
@@ -1531,6 +1570,27 @@ std::string FodderKey(const GameState& s, const Permanent& p)
     k += p.temp_haste ? "|h" : "|-";
     if (KeyedApart(s, p)) { k += "|plan#" + std::to_string(p.card.m_number); }
     return k;
+}
+
+// Is `p` a body the payer's fodder_ok would eat through outlet `so` for this payment? (BuildSources' fodder classes
+// and the eat-order fold's own table read this one test, so the two cannot drift.)
+bool FodderBodyOk(const GameState& state, const Permanent& p, bool for_creature, int sac_victim, const SacPayOutlet& so,
+                  const CardDefinition** def_out)
+{
+    if (p.controller_index != state.active_player_index) { return false; }
+    const int num = p.card.m_number;
+    if ((sac_victim != 0 && num == sac_victim) || (num != 0 && (num == g_pay_sac_spare[0] || num == g_pay_sac_spare[1])))
+    { return false; }
+    const CardDefinition* real_def = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+    if (!IsSacPayFodder(p, real_def, so)) { return false; }
+    if (real_def != nullptr && real_def->params.creature_mana_only && !for_creature) { return false; }
+    if (!p.tapped)
+    {
+        const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
+        if (!o.free_faces.empty() || !o.fed_faces.empty()) { return false; }   // the payer taps it instead
+    }
+    if (def_out != nullptr) { *def_out = real_def; }
+    return true;
 }
 
 std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, std::vector<std::string>* unmodeled,
@@ -1743,21 +1803,27 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         std::vector<bool>     fod_outlet;
         for (const Permanent& p : state.battlefield)
         {
-            if (p.controller_index != a) { continue; }
+            const CardDefinition* real_def = nullptr;
+            if (!FodderBodyOk(state, p, for_creature, sac_victim, so, &real_def)) { continue; }
             const int num = p.card.m_number;
-            if ((sac_victim != 0 && num == sac_victim) || (num != 0 && (num == g_pay_sac_spare[0] || num == g_pay_sac_spare[1])))
-            { continue; }
-            const CardDefinition* real_def = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
-            if (!IsSacPayFodder(p, real_def, so)) { continue; }
-            if (real_def != nullptr && real_def->params.creature_mana_only && !for_creature) { continue; }
-            if (!p.tapped)
-            {
-                const HumanPreTapOffer o = HumanPreTapOfferFor(state, p);
-                if (!o.free_faces.empty() || !o.fed_faces.empty()) { continue; }   // the payer taps it instead
-            }
             const std::string key = FodderKey(state, p);
+            // THE EAT-ORDER FOLD (Realize sets both pointers around one frontier's table only): record the class as
+            // the table holds it, and leave out a class the window's canonical order forbids.
+            const std::uint64_t kh = (t_eat_forbid != nullptr || t_eat_table_out != nullptr) ? Fnv64(key) : 0;
+            auto record = [&]
+            {
+                if (t_eat_table_out == nullptr) { return; }
+                for (EatClass& c : *t_eat_table_out) { if (c.key == kh) { c.nums.push_back(num); return; } }
+                EatClass c;
+                c.key = kh;
+                c.swappable = EatBodySwappable(state, p);
+                c.nums.push_back(num);
+                t_eat_table_out->push_back(std::move(c));
+            };
+            if (t_eat_forbid != nullptr && std::binary_search(t_eat_forbid->begin(), t_eat_forbid->end(), kh))
+            { t_eat_forbid_hit = true; record(); continue; }
             auto it = fodder_at.find(key);
-            if (it != fodder_at.end()) { fod[it->second].nums.push_back(num); continue; }
+            if (it != fodder_at.end()) { fod[it->second].nums.push_back(num); record(); continue; }
             SrcClass sc;
             sc.name = p.card.m_name.str();
             sc.nums.push_back(num);
@@ -1777,6 +1843,7 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
             fodder_at[key] = fod.size();
             fod.push_back(sc);
             fod_outlet.push_back(real_def != nullptr && IsSacManaOutlet(real_def->params));
+            record();
         }
         // An OUTLET eaten through itself ("Sacrifice a Goblin" names Skirk too) ends the outlet: its class goes last,
         // so Build eats every other body of a set first -- the payer's own order (SacExpendabilityRank: the outlet
@@ -3240,6 +3307,163 @@ struct RealizeCursor
     Realization                         r;                 // the outcomes and notes at the end of the capped pass
 };
 
+// ---- THE EAT-ORDER FOLD (MTG_ORACLE_EAT_ORDER_FOLD, DEFAULT ON; docs/design/goblins-oracle-eat-order-fold-2026-11-19.md)
+//
+// WHAT IT REMOVES. On a board paid by eating bodies through a §2b outlet (Skirk Prospector), every payment of a plan
+// branches over which bodies it eats, and a line that eats the same bodies in a different ORDER -- token then
+// Piledriver for the first two payments, or Piledriver then token -- is enumerated once per order. The goal fold
+// removes eats of bodies the engine's line keeps; what is left is the order in which the payments eat the bodies the
+// line does eat (Goblins s30131075 T2 m2: 446 plans, 14.1M applies with the goal fold).
+//
+// THE EXCHANGE. A WINDOW is a run of consecutive payments of one realisation such that between any two of them
+// nothing can tell which AUDITED bodies are alive -- only how many. Inside a window, take a line that eats a body of
+// fodder class D at payment j and a body of class C at a later payment j1, where C still had an uneaten copy at j.
+// Eating one more C at j and one fewer at j1, and one more D at j1 and one fewer at j, is the same line with the
+// two bodies exchanged: both payments make the same mana (one {R} per body through the same outlet), every event
+// between them cannot tell the two bodies apart, and from j1 on the two boards hold the same bodies up to WHICH
+// copy of a class is where -- copies of one FodderKey class are interchangeable (the canonical CoreKey and the
+// resources forget which copy; everything that names a permanent by number is keyed apart in its own class:
+// KeyedApart). So in each window there is a CANONICAL order: no payment eats a class C after an earlier payment of
+// the window ate a class ranked above C while C still had an uneaten copy (rank = the FNV hash of the class key, a
+// fixed total order). Repeated exchanges reach it (each one raises sum(rank x payment) and the space is finite), so
+// every line the full search reaches has a canonical twin with the same end board, line and resources. The fold
+// keeps, per frontier, the classes the canonical order forbids from now on (PayOption::eat_forbid, carried by the
+// script) and leaves them out of that frontier's payment table: exactly the non-canonical lines are not built.
+//
+// WHAT CAN TELL TWO BODIES APART, and what closes a window (Eat*Ok below; CardDefinition::eat_*_audited):
+//  - only AUDITED bodies are exchanged (eat_body_audited: no static, no mana / {T} ability, no death / leave
+//    trigger, nothing attached, not paired, not named by the plan -- KeyedApart -- and not the outlet itself);
+//    every other class is never forbidden and never forbids (its eats stay where they are);
+//  - the gap after a payment must be the resolution of an audited ITEM (eat_item_audited: a spell, or a damage
+//    outlet's activation whose baked victim is still alive -- a missing token victim is re-picked off the live
+//    board), with every permanent of ours on the board eat_perm_audited (no watcher of other deaths, no enter or
+//    cast watcher), no continuation applied (cont_sig: a continuation is solved on the board), no batch / tap-ahead
+//    / cast-sacrifice payment, and a burn item only while the opponent has no creature or planeswalker to target;
+//  - the plan has no action without a coloured payment (a free action -- Vial, Krenko's {T}, a {0} activation --
+//    would sit unseen between two payments): EatPlanOk;
+//  - the deck premises of the goal fold (GoalFoldAdmissible: no graveyard reader, no untapper, no copy / rename).
+// THE FRONTIER PRUNE. A frontier with a non-empty forbidden set is merged only with an IDENTICAL one (same core, same
+// forbidden set, same resources): a frontier that covers it strictly may have a different history in the window,
+// and the canonical twin of a line through that one can change its history, so dominance is not sound there. With
+// an empty forbidden set no exchange can reach before the frontier, and the prune is the usual one.
+// SIDE CHANNELS (AuditPlan): a restricted frontier must have goal_cands_scripted (no unscripted outcome can hide
+// below it); a folded realisation that does not cover the engine's board, or that would report a DOMINATED-* (whose
+// text names one outcome's script), is realised again without the fold and judged on that.
+// MTG_ORACLE_EAT_ORDER_FOLD_CHECK=1 (abort) / =2 (count) realises every folded plan without the fold too: a mismatch
+// unless both cover alike, the on-key outcomes cover each other's resources, and the unfolded one has no unscripted
+// outcome.
+bool OracleEatOrderFoldOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_EAT_ORDER_FOLD", true);   // DEFAULT ON; =0 -> every eat order built
+    return v;
+}
+thread_local bool      t_eat_fold = false;   // AuditPlan: the complete side's own realisation may fold
+thread_local long long t_eat_cut  = 0;       // frontiers the current realisation restricted
+// Every action makes a coloured payment (so no action can sit unseen between two payments), or is a land drop of
+// an audited land.
+bool EatPlanOk(const TurnSolver::Plan& plan)
+{
+    auto coloured = [](const ManaCost& c) { return c.white + c.blue + c.black + c.red + c.green > 0; };
+    for (const Action& a : plan.actions)
+    {
+        switch (a.kind)
+        {
+        case Action::Kind::PlayLand:
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+            if (d == nullptr || !d->eat_perm_audited) { return false; }
+            break;
+        }
+        case Action::Kind::CastFromHand:
+            if (a.free_cast || a.alt_cost || a.evoke || !coloured(a.cost)) { return false; }
+            break;
+        case Action::Kind::SacCreatureOutlet:
+            if (!coloured(a.cost) || a.sac_count > 1 || a.sac_victim_id == 0) { return false; }
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+// May the window go on past the payment frontier `f` makes? (Its item resolves before the next payment.)
+bool EatGapOk(const FrontierRec& f)
+{
+    if (f.batch || f.tapahead > 0 || f.cont_sig != 0 || f.sac_victim != 0 || f.dbl_combat_hold != 0) { return false; }
+    const GameState& s = f.st;
+    const int a = s.active_player_index;
+    const CardDatabase& db = CardDatabase::Instance();
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != a) { continue; }
+        const CardDefinition* d = p.def_absent ? nullptr : db.LookupCached(p.card);
+        if (d == nullptr) { if (!p.is_token || !p.card.IsCreature()) { return false; } continue; }
+        if (!d->eat_perm_audited) { return false; }
+    }
+    auto opp_targets = [&]
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index == a) { continue; }
+            if (p.card.IsCreature() || p.card.HasType(CardType::Planeswalker)) { return true; }
+        }
+        return false;
+    };
+    if (f.sac_spare_source != 0)   // an activated outlet's payment (PaySacSpareScope)
+    {
+        if (f.has_spell || f.sac_spare_victim == 0) { return false; }
+        const Permanent* src = nullptr;
+        bool victim = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number == f.sac_spare_source) { src = &p; }
+            if (p.card.m_number == f.sac_spare_victim && p.controller_index == a) { victim = true; }
+        }
+        if (src == nullptr || !victim) { return false; }
+        const CardDefinition* d = src->def_absent ? nullptr : db.LookupCached(src->card);
+        // A damage outlet: its payload is face damage (ApplySacCreatureOutlet), nothing else.
+        return d != nullptr && d->eat_item_audited && d->params.sac_outlet_damage > 0
+            && d->params.sac_outlet_add_mana_color.empty() && !d->params.sac_outlet_add_mana_any_color
+            && d->params.sac_outlet_creates_tokens == 0;
+    }
+    if (!f.has_spell) { return false; }
+    const CardDefinition* d = db.LookupCached(f.spell);
+    if (d == nullptr || !d->eat_item_audited) { return false; }
+    if (d->params.damage > 0 && opp_targets()) { return false; }
+    return true;
+}
+
+// The classes the canonical order forbids after `o` is paid at a frontier whose table is `tab`: every exchanged class
+// ranked below the highest exchanged class `o` eats, of which `o` left a copy uneaten. `ok` = false when an eaten body
+// is not in the table (never expected; the window is then closed).
+std::vector<std::uint64_t> EatNewForbid(const std::vector<EatClass>& tab, const PayOption& o, bool& ok)
+{
+    ok = true;
+    std::vector<int> eaten(tab.size(), 0);
+    for (const TurnSolver::PreTap& t : o.taps)
+    {
+        if (!t.sac_fodder) { continue; }
+        bool found = false;
+        for (std::size_t c = 0; c < tab.size() && !found; ++c)
+        {
+            if (std::find(tab[c].nums.begin(), tab[c].nums.end(), t.num) != tab[c].nums.end()) { ++eaten[c]; found = true; }
+        }
+        if (!found) { ok = false; return {}; }
+    }
+    bool any = false;
+    std::uint64_t top = 0;
+    for (std::size_t c = 0; c < tab.size(); ++c)
+    { if (eaten[c] > 0 && tab[c].swappable) { top = any ? std::max(top, tab[c].key) : tab[c].key; any = true; } }
+    std::vector<std::uint64_t> out;
+    if (!any) { return out; }
+    for (std::size_t c = 0; c < tab.size(); ++c)
+    {
+        if (tab[c].swappable && tab[c].key < top && static_cast<int>(tab[c].nums.size()) > eaten[c]) { out.push_back(tab[c].key); }
+    }
+    return out;
+}
+
 // Apply `plan` to a copy of `root` once per payment script, LAYERED by payment index: every script of
 // length k is applied, the frontier boards they reach are Pareto-pruned (same core, dominated
 // resources INCLUDING floating mana -> dropped; under goldfish monotonicity a board with every
@@ -3262,11 +3486,14 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     int nodes = 0;
     // The goal fold applies to the complete side's own realisation only (AuditPlan sets t_goal_k around it).
     const KeyedMap* const goal_k = (stop_at_full || hit_only || !prefix.empty() || all_engine) ? nullptr : t_goal_k;
+    // ...and so does the eat-order fold (AuditPlan sets t_eat_fold around it; THE EAT-ORDER FOLD above).
+    const bool eat_fold = !(stop_at_full || hit_only || !prefix.empty() || all_engine) && t_eat_fold && EatPlanOk(plan);
     struct GoalHide   // a realisation nested inside this one's applies is not the one the target belongs to
     {
         const KeyedMap* saved = t_goal_k;
-        GoalHide() { t_goal_k = nullptr; }
-        ~GoalHide() { t_goal_k = saved; }
+        bool            saved_eat = t_eat_fold;
+        GoalHide() { t_goal_k = nullptr; t_eat_fold = false; }
+        ~GoalHide() { t_goal_k = saved; t_eat_fold = saved_eat; }
     } _goal_hide;
     // MTG_ORACLE_FOLD_STATS (diagnostic): each script's parent frontier and whether a frontier on its path already had
     // fewer keyed copies of some card than the engine's end board (FsFails) -- the subtree a goal fold would skip.
@@ -3309,8 +3536,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     const int act = root.active_player_index;
     // THE GOAL FOLD'S UNSCRIPTED GUARD: the root permanents the unscripted-tap check below reads (untapped, a mana
     // source now, not the plan's own) -- a frontier is folded only once its script has tapped every one of them.
+    // (The eat-order fold reads the same guard: a frontier's table is restricted only where it holds.)
     std::vector<int> goal_cands;
-    if (goal_k != nullptr)
+    if (goal_k != nullptr || eat_fold)
     {
         for (const Permanent& p0 : root.battlefield)
         {
@@ -3458,7 +3686,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.line_opens_unseen = h.f_line_opens_unseen;
                     fr.line_has_acts = h.f_line_has_acts;
                     fr.batch        = h.f_batch;
-                    if (goal_k != nullptr)
+                    if (goal_k != nullptr || eat_fold)
                     {
                         fr.goal_cands_scripted = true;
                         const auto tb = h.tapped_by_script.begin();
@@ -3600,6 +3828,25 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                         + (fronts[i].line_has_acts ? "a" : "c"));
                 }
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
+                // THE EAT-ORDER FOLD: a frontier whose window forbids some class is merged only with an identical one
+                // (same core, same forbidden set, same resources) -- see THE EAT-ORDER FOLD for why dominance is not
+                // sound there.
+                if (eat_fold)
+                {
+                    const std::vector<PayOption>& sc = fronts[i].script;
+                    if (!sc.empty() && sc.back().eat_live && sc.back().eat_cont_sig == fronts[i].cont_sig
+                        && !sc.back().eat_forbid.empty())
+                    {
+                        std::uint64_t h = 0x6561745F666F6C64ULL;
+                        for (const std::uint64_t x : sc.back().eat_forbid) { h = (h ^ x) * 0x100000001b3ULL; }
+                        for (const auto& kv : res[i])
+                        {
+                            h = (h ^ Fnv64(kv.first)) * 0x100000001b3ULL;
+                            h = (h ^ static_cast<std::uint64_t>(static_cast<std::int64_t>(kv.second))) * 0x100000001b3ULL;
+                        }
+                        keys[i] ^= h * 0xD6E8FEB86659FD93ULL;
+                    }
+                }
             }
             keep = ParetoKeep(keys, res);
             if (FoldStatsOn())
@@ -3716,6 +3963,26 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::optional<PaySacSpareScope> _spare;
             if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
             { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }
+            // THE EAT-ORDER FOLD at this frontier: the window it is in (its script's last payment says whether the
+            // window went on past it, and under which continuation signature), the classes that window forbids here
+            // (restricted only under the unscripted guard), and whether the window goes on past THIS payment.
+            const bool eat_live = eat_fold && !f.script.empty() && f.script.back().eat_live
+                               && f.script.back().eat_cont_sig == f.cont_sig;
+            static const std::vector<std::uint64_t> kNoForbid;
+            const std::vector<std::uint64_t>& eat_in = eat_live ? f.script.back().eat_forbid : kNoForbid;
+            const bool eat_restrict = eat_live && !eat_in.empty() && f.goal_cands_scripted && f.tapahead == 0 && !f.batch;
+            const bool eat_gap = eat_fold && EatGapOk(f);
+            std::vector<EatClass> eat_tab;
+            struct EatTableScope
+            {
+                const std::vector<std::uint64_t>* sf = t_eat_forbid;
+                std::vector<EatClass>* st = t_eat_table_out;
+                EatTableScope(const std::vector<std::uint64_t>* f, std::vector<EatClass>* t)
+                { t_eat_forbid = f; t_eat_table_out = t; t_eat_forbid_hit = false; }
+                ~EatTableScope() { t_eat_forbid = sf; t_eat_table_out = st; }
+            };
+            std::optional<EatTableScope> _eat_scope;
+            if (eat_restrict || eat_gap) { _eat_scope.emplace(eat_restrict ? &eat_in : nullptr, eat_gap ? &eat_tab : nullptr); }
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
@@ -3723,6 +3990,15 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                                   f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
                                   f.sac_victim, want, f.batch ? 0 : line_surplus,
                                   /*sac_fodder=*/!t_no_fodder);   // the checks' table (OracleSacFodderOn)
+            const bool eat_hit = _eat_scope.has_value() && t_eat_forbid_hit;
+            _eat_scope.reset();
+            if (eat_restrict && eat_hit)
+            {
+                ++t_eat_cut;
+                g_eat_cut.fetch_add(1, std::memory_order_relaxed);
+                // Every payment left is non-canonical: each line through it has a canonical twin elsewhere.
+                if (opts.empty()) { continue; }
+            }
             if (f.batch)
             {
                 PayOption skip;
@@ -3776,6 +4052,24 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 std::vector<PayOption> s = f.script;
                 o.what = f.batch ? std::string("batch ") + f.cost.ToString()
                     : (f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString());
+                // THE EAT-ORDER FOLD: the window state after this payment (THE EAT-ORDER FOLD above).
+                o.eat_live = false;
+                o.eat_cont_sig = 0;
+                o.eat_forbid.clear();
+                if (eat_gap && !o.fail && !o.batch_skip)
+                {
+                    bool ok = true;
+                    std::vector<std::uint64_t> add = EatNewForbid(eat_tab, o, ok);
+                    if (ok)
+                    {
+                        o.eat_live = true;
+                        o.eat_cont_sig = f.cont_sig;
+                        o.eat_forbid = eat_in;
+                        o.eat_forbid.insert(o.eat_forbid.end(), add.begin(), add.end());
+                        std::sort(o.eat_forbid.begin(), o.eat_forbid.end());
+                        o.eat_forbid.erase(std::unique(o.eat_forbid.begin(), o.eat_forbid.end()), o.eat_forbid.end());
+                    }
+                }
                 s.push_back(std::move(o));
                 next.push_back(std::move(s));
             }
@@ -4944,6 +5238,40 @@ bool RealizationCovers(const Realization& r, const GameState& root, const Engine
     return false;
 }
 
+// Would AuditPlan's engine-full branch report a DOMINATED-* on `r` -- an outcome on the engine's line and key (or, the
+// sweep undone, on its unswept key) that covers the engine's board STRICTLY? Exactly that branch's `best` test: its
+// first strict cover always sets `best`. The eat-order fold realises such a plan again without the fold (AuditPlan).
+bool RealizationDominates(const Realization& r, const GameState& root, const EngineReal& er_in)
+{
+    const GameState& e = er_in.st;
+    const std::string e_line = LineKey(root, e);
+    const std::uint64_t ek = CoreKey(e);
+    const Res er = Resources(e, /*with_float=*/false);
+    bool covered = false;
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
+        bool strict = false;
+        if (Covers(Resources(o.st, /*with_float=*/false), er, &strict)) { covered = true; if (strict) { return true; } }
+    }
+    if (covered || SelfHasLost(e)) { return false; }
+    bool any = !er_in.sweep_taps.empty();
+    for (const Outcome& o : r.outcomes) { if (!o.sweep_taps.empty()) { any = true; break; } }
+    if (!any) { return false; }
+    const GameState eu = UnSwept(e, er_in.sweep_taps, er_in.presweep_life);
+    const std::uint64_t euk = CoreKey(eu);
+    const Res swept_er = Resources(eu, /*with_float=*/false);
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Full() || o.line != e_line || SelfHasLost(o.st)) { continue; }
+        const GameState ou = UnSwept(o.st, o.sweep_taps, o.presweep_life);
+        if (SelfHasLost(ou) || CoreKey(ou) != euk) { continue; }
+        bool strict = false;
+        if (Covers(Resources(ou, /*with_float=*/false), swept_er, &strict) && strict) { return true; }
+    }
+    return false;
+}
+
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs,
                const std::vector<const TurnSolver::Plan*>& sib_plans)
@@ -4999,11 +5327,14 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     int cap_used = NodeCap();
     Realization r;
     // The complete side's own realisation under `goal` (the goal fold's target, or none), with its escalation.
-    const auto realize_main = [&](const KeyedMap* goal)
+    const auto realize_main = [&](const KeyedMap* goal, bool eat = false)
     {
     const KeyedMap* const saved_goal = t_goal_k;
+    const bool saved_eat = t_eat_fold;
     t_goal_k      = goal;
     t_goal_folded = 0;
+    t_eat_fold    = eat;
+    t_eat_cut     = 0;
     RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
     cap_used = NodeCap();
     r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
@@ -5045,6 +5376,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         if (!r.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
     }
     t_goal_k = saved_goal;
+    t_eat_fold = saved_eat;
     };
     // THE GOAL FOLD (MTG_ORACLE_GOAL_FOLD, DEFAULT ON; docs/design/goblins-oracle-eat-fold-2026-11-19.md). When the
     // engine realised the whole plan, its verdict (cover, domination) reads only outcomes whose canonical CoreKey is
@@ -5062,9 +5394,82 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     // a plan is realised again in full and judged on that. The apply notes of the frontiers not expanded feed
     // only the UNMODELED census on a covered plan (not a flag), and a capped plan may now conclude.
     KeyedMap goal_k;
-    const bool goal_fold = OracleGoalFoldOn() && e_full && GoalFoldAdmissible(root, e);
+    const bool fold_admissible = e_full && GoalFoldAdmissible(root, e);
+    const bool goal_fold = OracleGoalFoldOn() && fold_admissible;
     if (goal_fold) { goal_k = KeyedCards(e, nullptr); }
-    realize_main(goal_fold ? &goal_k : nullptr);
+    const KeyedMap* const goal_ptr = goal_fold ? &goal_k : nullptr;
+    // THE EAT-ORDER FOLD (MTG_ORACLE_EAT_ORDER_FOLD, DEFAULT ON; see its block above Realize): on the goal fold's
+    // premises, independently of whether the goal fold itself is on. Its verdict is used only when the folded
+    // realisation covers the engine's board and reports no DOMINATED-* (that text names one outcome's script, and
+    // the fold keeps a different representative of an order class); otherwise the plan is realised again without it.
+    const int eat_test = g_eat_fold_test.load(std::memory_order_relaxed);
+    const bool eat_fold = (eat_test >= 0 ? eat_test != 0 : OracleEatOrderFoldOn()) && fold_admissible;
+    realize_main(goal_ptr, eat_fold);
+    if (eat_fold)
+    {
+        g_eat_plans.fetch_add(1, std::memory_order_relaxed);
+        if (t_eat_cut > 0)
+        {
+            // MTG_ORACLE_EAT_ORDER_FOLD_CHECK: 1 = abort on a mismatch, 2 = print and count it (a pooled batch runs on).
+            static const int s_eat_check = std::max(0, EnvInt("MTG_ORACLE_EAT_ORDER_FOLD_CHECK", 0));
+            const bool check = s_eat_check > 0 || g_eat_check_test.load(std::memory_order_relaxed);
+            const bool covers = RealizationCovers(r, root, er_in);
+            if (!covers || RealizationDominates(r, root, er_in))
+            {
+                g_eat_redo.fetch_add(1, std::memory_order_relaxed);
+                realize_main(goal_ptr, false);
+            }
+            else if (check)
+            {
+                // MTG_ORACLE_EAT_ORDER_FOLD_CHECK=1|2 (diagnostic, default off): realise the plan without the fold too;
+                // a MISMATCH unless both cover alike, neither reports a DOMINATED-*, their outcomes on the engine's key
+                // cover each other's resources, and the unfolded one has no unscripted outcome. The unfolded one is judged.
+                const Realization folded = r;
+                realize_main(goal_ptr, false);
+                if (!r.capped && !folded.capped)
+                {
+                    const std::string e_line = LineKey(root, e);
+                    const std::uint64_t ekk = CoreKey(e);
+                    auto on_key = [&](const Realization& x)
+                    {
+                        std::vector<Res> v;
+                        for (const Outcome& o : x.outcomes)
+                        {
+                            if (o.Full() && o.line == e_line && CoreKey(o.st) == ekk) { v.push_back(Resources(o.st, false)); }
+                        }
+                        return v;
+                    };
+                    auto covered_by = [](const std::vector<Res>& a, const std::vector<Res>& b)
+                    {
+                        for (const Res& x : a)
+                        {
+                            bool hit = false;
+                            for (const Res& y : b) { if (Covers(y, x, nullptr)) { hit = true; break; } }
+                            if (!hit) { return false; }
+                        }
+                        return true;
+                    };
+                    bool uns = false;
+                    for (const Outcome& o : r.outcomes) { if (!o.unscripted.empty()) { uns = true; break; } }
+                    const std::vector<Res> fk = on_key(folded), uk = on_key(r);
+                    const bool same = !uns && RealizationCovers(r, root, er_in) && !RealizationDominates(r, root, er_in)
+                                   && covered_by(uk, fk) && covered_by(fk, uk);
+                    g_eat_checked.fetch_add(1, std::memory_order_relaxed);
+                    if (!same)
+                    {
+                        g_eat_mismatch.fetch_add(1, std::memory_order_relaxed);
+                        std::lock_guard<std::mutex> lk(g_print_mu);
+                        std::fprintf(stderr, "[mana-oracle] EAT-ORDER-FOLD-CHECK MISMATCH %s plan={%s}: unscripted=%d covers=%d "
+                                     "dominates=%d on-key unfolded %zu folded %zu (unfolded covered by folded %d, folded by "
+                                     "unfolded %d)\n", Ctx(root, pre).c_str(), PlanText(plan).c_str(), uns ? 1 : 0,
+                                     RealizationCovers(r, root, er_in) ? 1 : 0, RealizationDominates(r, root, er_in) ? 1 : 0,
+                                     uk.size(), fk.size(), covered_by(uk, fk) ? 1 : 0, covered_by(fk, uk) ? 1 : 0);
+                        if (s_eat_check == 1) { std::abort(); }
+                    }
+                }
+            }
+        }
+    }
     if (goal_fold)
     {
         g_goal_fold_plans.fetch_add(1, std::memory_order_relaxed);
@@ -5077,7 +5482,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         // full realisation covers too, holds the same outcomes on the engine's key in the same order, and has no
         // unscripted outcome anywhere; the full realisation is the one judged (so the flags are the unfolded ones).
         static const bool s_gf_check = EnvOn("MTG_ORACLE_GOAL_FOLD_CHECK");
-        if (s_gf_check && t_goal_folded > 0)
+        if (s_gf_check && t_goal_folded > 0 && t_eat_cut == 0)   // (an eat-folded one has its own check, above)
         {
             const Realization folded = r;
             const bool folded_capped = r.capped;
@@ -5878,6 +6283,12 @@ std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const Tur
 
 long long GoalFoldedFrontiers() { return g_goal_folded.load(); }
 long long GoalFoldRedos() { return g_goal_fold_redo.load(); }
+long long EatOrderFoldCuts() { return g_eat_cut.load(); }
+long long EatOrderFoldRedos() { return g_eat_redo.load(); }
+long long EatOrderFoldChecked() { return g_eat_checked.load(); }
+long long EatOrderFoldMismatches() { return g_eat_mismatch.load(); }
+void SetEatOrderFoldCheckForTest(bool on) { g_eat_check_test.store(on); }
+void SetEatOrderFoldForTest(int on) { g_eat_fold_test.store(on); }
 
 // ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
 }   // namespace manaoracle

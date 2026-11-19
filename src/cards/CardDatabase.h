@@ -5566,6 +5566,20 @@ struct CardDefinition
     // fold's list), so the bound prices everything this card can do to a payment walk. false for a
     // Register-built definition (no JSON to audit) -- such a card sends the subset to the real walk.
     bool walk_bound_audited = false;
+    // THE MANA ORACLE'S EAT-ORDER FOLD premises (ManaOracle.cpp, "THE EAT-ORDER FOLD"; the per-key audit is in
+    // CardDatabase.cpp beside the other whitelists). Derived at load from the RAW JSON -- template, every
+    // `parameters` key and every keyword on an audited list -- so a param invented tomorrow is NOT audited and an
+    // unaudited card where the fold looks turns it off there. false for a Register-built definition (no JSON).
+    //   eat_body_audited -- as a permanent, nothing about it is read while a main phase's payments are made, so
+    //     whether THIS body or another such body is alive between two payments cannot change anything but the
+    //     count of bodies (no static, no death / leave / enter trigger, no mana ability, no {T} ability).
+    //   eat_item_audited -- cast as a spell between two payments, its resolution (and its enter triggers) reads
+    //     nothing about which such bodies are alive.
+    //   eat_perm_audited -- on the battlefield beside them, it has no trigger or static that reads which bodies
+    //     are alive or which of them died (a count of bodies is equal on both sides of the fold, so it is allowed).
+    bool eat_body_audited = false;
+    bool eat_item_audited = false;
+    bool eat_perm_audited = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

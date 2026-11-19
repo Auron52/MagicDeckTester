@@ -1617,3 +1617,64 @@ TEST_CASE("mana oracle: the goal fold skips frontiers that ate a body the engine
     CHECK(manaoracle::GoalFoldRedos() == redo0);
     for (const std::string& c : got) { CHECK_MESSAGE(c.rfind("DOMINATED", 0) == 0, "unexpected flag ", c); }
 }
+
+// ---- THE EAT-ORDER FOLD (MTG_ORACLE_EAT_ORDER_FOLD; docs/design/goblins-oracle-eat-order-fold-2026-11-19.md) -----------
+// Three Siege-Gang shots, every {1}{R} paid by eating Goblins through Skirk: the three payments eat the same bodies in
+// every order. The shots' gaps hold nothing that can tell two audited bodies apart (a damage outlet's activation with
+// its baked victim alive, an audited board), so the window spans all three payments and the fold builds only the
+// canonical order. The verdict must be the unfolded one, and the check mode (both realisations, compared) must agree.
+TEST_CASE("mana oracle: the eat-order fold builds one order of the same eaten bodies (three Siege-Gang shots)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Mountain", "Skirk Prospector", "Siege-Gang Commander", "Goblin Lackey", "Goblin Piledriver",
+                          "Goblin Lackey", "Goblin King", "Goblin Matron", "Goblin Chieftain", "Goblin Piledriver",
+                          "Muxus, Goblin Grandee", "Goblin Lackey" });
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;
+    s.deck_has_upkeep_reanimate  = false;
+    s.deck_gy_readers            = 0;      // the folds' deck premises (GoalFoldAdmissible): stamped decks only
+    s.deck_has_mana_untapper     = false;
+    s.deck_has_tap_steal         = false;
+    s.deck_has_transform         = false;
+    s.battlefield[0].tapped = true;   // no land up: only bodies can pay
+    s.battlefield[3].tapped = true;
+    s.battlefield[9].tapped = true;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    // The card data the fold audits: Lackey / Piledriver / Matron / Muxus are exchangeable bodies; King and Chieftain
+    // (lords) and Skirk (the outlet) are not; Siege-Gang's activation is an audited item.
+    const CardDatabase& db = CardDatabase::Instance();
+    CHECK(db.Lookup("Goblin Lackey")->eat_body_audited);
+    CHECK(db.Lookup("Goblin Piledriver")->eat_body_audited);
+    CHECK(db.Lookup("Goblin Matron")->eat_body_audited);
+    CHECK(db.Lookup("Muxus, Goblin Grandee")->eat_body_audited);
+    CHECK_FALSE(db.Lookup("Goblin King")->eat_body_audited);
+    CHECK_FALSE(db.Lookup("Goblin Chieftain")->eat_body_audited);
+    CHECK_FALSE(db.Lookup("Skirk Prospector")->eat_body_audited);
+    CHECK_FALSE(db.Lookup("Pashalik Mons")->eat_perm_audited);       // watches other Goblins' deaths
+    CHECK_FALSE(db.Lookup("Rundvelt Hordemaster")->eat_perm_audited);
+    CHECK_FALSE(db.Lookup("Goblin Matron")->eat_item_audited);       // its tutor reads the board
+    CHECK(db.Lookup("Siege-Gang Commander")->eat_item_audited);
+    CHECK(db.Lookup("Mogg War Marshal")->eat_perm_audited);          // a self-only death trigger
+    CHECK_FALSE(db.Lookup("Mogg War Marshal")->eat_body_audited);
+    const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[6].card.m_number),
+                                           SiegeGangShot(s, s.battlefield[8].card.m_number),
+                                           SiegeGangShot(s, s.battlefield[7].card.m_number) });
+    manaoracle::SetEatOrderFoldForTest(0);
+    const std::vector<std::string> off = manaoracle::PlanVerdict(s, /*pre=*/false, plan, { plan });
+    const long long cut0 = manaoracle::EatOrderFoldCuts(), redo0 = manaoracle::EatOrderFoldRedos();
+    const long long chk0 = manaoracle::EatOrderFoldChecked(), mis0 = manaoracle::EatOrderFoldMismatches();
+    manaoracle::SetEatOrderFoldForTest(1);
+    const std::vector<std::string> on = manaoracle::PlanVerdict(s, /*pre=*/false, plan, { plan });
+    manaoracle::SetEatOrderFoldCheckForTest(true);
+    const std::vector<std::string> checked = manaoracle::PlanVerdict(s, /*pre=*/false, plan, { plan });
+    manaoracle::SetEatOrderFoldCheckForTest(false);
+    manaoracle::SetEatOrderFoldForTest(-1);
+    CHECK(manaoracle::EatOrderFoldCuts() > cut0);
+    CHECK(on == off);
+    CHECK(checked == off);
+    CHECK(manaoracle::EatOrderFoldMismatches() == mis0);
+    // The folded verdict was used (covered, nothing strictly better) or set aside for the unfolded one.
+    CHECK(manaoracle::EatOrderFoldChecked() + manaoracle::EatOrderFoldRedos() > chk0 + redo0);
+}

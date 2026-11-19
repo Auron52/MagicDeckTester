@@ -324,6 +324,99 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             }
             def.walk_bound_audited = ok;
         }
+        // THE MANA ORACLE'S EAT-ORDER FOLD premises (CardDefinition::eat_*_audited; the fold and its exchange
+        // argument are at ManaOracle.cpp "THE EAT-ORDER FOLD"). WHITELISTS of raw keys, like the folds above: a
+        // param invented tomorrow is NOT audited, and an unaudited card where the fold looks closes the window there.
+        // Audited 2026-11-19 card by card for the Goblins list against cards.json and the engine's readers. The fold
+        // exchanges WHICH of two audited bodies is eaten at which of two payments of one main phase, so between those
+        // payments one side has body X alive and the other body Y; everything below may exist on the board or
+        // resolve in that span only if it cannot tell X from Y (the NUMBER of bodies is equal on both sides).
+        {
+            // A BODY (eat_body_audited). Its static abilities would make its presence readable, so a lord / a haste
+            // grant / a cost reducer / a mana ability / a {T} ability / any death or leave trigger is OUT.
+            static const char* const kEatBodyParams[] = {
+                // combat-only triggers: no attack and no combat damage happen inside a main phase
+                "subtypes_affected", "attack_pump_power_per_other_matching", "combat_damage_puts_subtype_from_hand",
+                "attack_self_pump_per_other_subtype", "attack_self_pump_power", "attack_self_pump_tough",
+                // ENTER triggers: spent before the body can be eaten (it is fodder only once on the battlefield)
+                "etb_self_creates_tokens", "etb_created_token_power", "etb_created_token_toughness",
+                "etb_created_token_subtypes", "etb_reveal_count", "etb_reveal_put_subtypes",
+                "etb_reveal_put_creatures_only", "etb_reveal_put_max_mv", "etb_damage_each_opponent", "etb_damage_any",
+                "tutor_to_hand", "tutor_types", "tutor_shuffle_after",
+                // Siege-Gang's activated outlet: inert unless a plan action activates it, and an activation names its
+                // source by number (Realize's plan_srcs -> KeyedApart -> its own class, never exchanged). Not a §2b
+                // mana outlet (no sac_outlet_add_mana_*), so it never pays for anything.
+                "sac_creature_outlet", "sac_creature_cost", "sac_creature_requires_subtype", "sac_outlet_damage",
+                "targeting",
+                // upkeep (echo) and from-hand (channel) only
+                "echo_cost", "channel_cost", "channel_damage",
+            };
+            // An ITEM (eat_item_audited): a spell cast in that span. Its resolution and enter triggers must read
+            // nothing about the bodies. Lords and haste grants START to apply at the same moment on both sides and
+            // read nothing (no audited event reads power, toughness or haste; a lord entering never lowers a
+            // toughness); a Goblin cost reducer changes later bills identically on both sides; tokens are vanilla
+            // and numbered off the shared counter; Chainwhirler's ping and a burn spell hit the opponent (the fold
+            // requires the opponent to control no creature or planeswalker when a burn spell is the item).
+            static const char* const kEatItemParams[] = {
+                "subtypes_affected", "power_bonus", "tough_bonus", "lord_excludes_self", "grants_haste",
+                "reduces_spell_subtype",
+                "attack_pump_power_per_other_matching", "combat_damage_puts_subtype_from_hand",
+                "attack_self_pump_per_other_subtype", "attack_self_pump_power", "attack_self_pump_tough",
+                "etb_self_creates_tokens", "etb_created_token_power", "etb_created_token_toughness",
+                "etb_created_token_subtypes", "etb_damage_each_opponent",
+                "sac_creature_outlet", "sac_creature_cost", "sac_creature_requires_subtype", "sac_outlet_damage",
+                "sac_outlet_add_mana_color", "sac_outlet_add_mana_amount",
+                "targeting", "damage", "echo_cost", "channel_cost", "channel_damage",
+            };
+            // A PERMANENT beside the bodies (eat_perm_audited): everything above, plus mana sources whose output is a
+            // COUNT (Three Tree City), Aether Vial's upkeep charge, Krenko's {T} (only a TapForTokens action uses it,
+            // and Realize admits no plan with such a free action), and a SELF-only death trigger (Mogg War Marshal:
+            // dies_watch_subtype absent = its own death only, SpellEffects.h pays_for) -- such a body is never
+            // exchanged, so it dies at the same payment on both sides. A watcher of OTHER deaths (Pashalik Mons,
+            // Rundvelt Hordemaster: dies_watch_subtype) is out.
+            static const char* const kEatPermExtra[] = {
+                "produces", "colored_creature_only", "choose_type_on_enter", "mana_per_creature_subtype",
+                "mana_per_creature_feeder_generic", "upkeep_adds_charge",
+                "tap_creates_tokens_per_controlled_subtype", "tap_created_token_power", "tap_created_token_toughness",
+                "tap_created_token_subtypes",
+                "dies_watch_includes_self", "dies_trigger_creates_tokens", "dies_token_power", "dies_token_toughness",
+                "dies_token_subtypes",
+                "etb_reveal_count", "etb_reveal_put_subtypes", "etb_reveal_put_creatures_only", "etb_reveal_put_max_mv",
+                "etb_damage_any", "tutor_to_hand", "tutor_types", "tutor_shuffle_after",
+            };
+            static const char* const kEatKeywords[] = {
+                "Flying", "Trample", "Vigilance", "Double strike", "First strike", "First Strike", "Haste", "Menace",
+                "Reach",
+            };
+            static const char* const kEatBodyTemplates[] = { "custom", "vanilla_creature" };
+            static const char* const kEatItemTemplates[] = { "custom", "vanilla_creature", "lord_effect", "direct_damage" };
+            static const char* const kEatPermTemplates[] = { "custom", "vanilla_creature", "lord_effect", "basic_land" };
+            auto in = [](const auto& arr, const std::string& k)
+            { for (const char* a : arr) { if (k == a) { return true; } } return false; };
+            const std::string tmpl = entry.value("template", std::string("custom"));
+            bool kw_ok = true;
+            if (entry.contains("keywords") && entry["keywords"].is_array())
+            {
+                for (const json& kw : entry["keywords"])
+                { if (!kw.is_string() || !in(kEatKeywords, kw.get<std::string>())) { kw_ok = false; break; } }
+            }
+            bool body = kw_ok && in(kEatBodyTemplates, tmpl) && def.card.IsCreature();
+            bool item = kw_ok && in(kEatItemTemplates, tmpl);
+            bool perm = kw_ok && in(kEatPermTemplates, tmpl);
+            if (entry.contains("parameters") && entry["parameters"].is_object())
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                {
+                    const std::string& k = it.key();
+                    if (!in(kEatBodyParams, k)) { body = false; }
+                    if (!in(kEatItemParams, k)) { item = false; }
+                    if (!in(kEatBodyParams, k) && !in(kEatItemParams, k) && !in(kEatPermExtra, k)) { perm = false; }
+                }
+            }
+            def.eat_body_audited = body;
+            def.eat_item_audited = item;
+            def.eat_perm_audited = perm;
+        }
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name

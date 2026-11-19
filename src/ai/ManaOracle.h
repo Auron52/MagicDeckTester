@@ -76,6 +76,14 @@ namespace manaoracle
         bool     engine = false;
         bool     batch_skip = false; // leave a possible joint prepay to the ordered cast payments
         std::string what;        // display only: the bill this option paid ("{1}{U}", "tap-ahead")
+        // THE EAT-ORDER FOLD's window state AFTER this payment (Realize only; ManaOracle.cpp, "THE EAT-ORDER FOLD"):
+        // `eat_live` = the next payment is in the same window, `eat_forbid` = the fodder classes (FNV hashes of
+        // their FodderKey, sorted) no later payment of that window may eat, `eat_cont_sig` = the continuation
+        // signature the window was opened under (a continuation applied before the next payment closes it).
+        // Never read by a payment: the hook serves `taps` / `stash` only.
+        bool                       eat_live = false;
+        std::uint64_t              eat_cont_sig = 0;
+        std::vector<std::uint64_t> eat_forbid;
     };
 
     // The payment script for ONE oracle apply. Consulted by TapForCostShared for the OUTERMOST payment
@@ -424,6 +432,18 @@ namespace manaoracle
     // and plans whose folded realisation did not cover the engine's board (realised again in full). For the tests.
     long long GoalFoldedFrontiers();
     long long GoalFoldRedos();
+    // THE EAT-ORDER FOLD's running counts (MTG_ORACLE_EAT_ORDER_FOLD, AuditPlan; ManaOracle.cpp, "THE EAT-ORDER
+    // FOLD"): frontiers whose payment table it restricted; plans realised again without it (a folded realisation that
+    // did not cover, or that would report a DOMINATED-* verdict); plans the check mode realised both ways, and the
+    // ones whose two realisations disagreed. SetEatOrderFoldCheckForTest(true) runs the check mode on every folded
+    // plan and COUNTS a mismatch instead of aborting. For the tests.
+    long long EatOrderFoldCuts();
+    long long EatOrderFoldRedos();
+    long long EatOrderFoldChecked();
+    long long EatOrderFoldMismatches();
+    void SetEatOrderFoldCheckForTest(bool on);
+    // -1 = as MTG_ORACLE_EAT_ORDER_FOLD says (the default), 0 = off, 1 = on. For the tests.
+    void SetEatOrderFoldForTest(int on);
 
     // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
     // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a
