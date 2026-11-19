@@ -2967,6 +2967,8 @@ public:
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
     // Build the real dynamic replay script while applying a fixed plan, for executor parity tests.
     static void ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool is_pre_combat);
+    // How many candidates the SUMMIT-TWIN FOLD has declined in this process (TurnSolver.cpp SummitTwinFold).
+    static long long SummitTwinFoldsForTest();
     // The rollout's staged-card re-lay at an executor pass head (TurnSolver.cpp MergeStagedToHandEnd,
     // lockstep #5): staged hand cards move to the END, order kept. Public only so a unit test can hold
     // it to the executor's layout (AIEngine.h MergeStagedIntoHand); the engine calls the static.
