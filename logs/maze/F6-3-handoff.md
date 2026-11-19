@@ -99,3 +99,21 @@ gbd0 (236001), mtd5 Merfolk Turns d5 b20 x300 (237001), mtd0 (238001). Repro of 
 - PID 1589489 named in the F6-2 handoff's correction was ANOTHER agent's build (p5d4, output `p5d4/build10.log`); F6-2's own
   build3 (PID 1600482, still queued) was cancelled by F6-3 and replaced by go.sh.
 - `f63/rb/references/Maze_s_End/` holds COPIES of the primary checkout's references (originals untouched).
+
+## UPDATE 20:14 UTC: THE CHAIN FINISHED (`f63/chain.DONE` rc=0) -- results, not yet acted on
+Net turns vs base (negative = better; from `f63/ab/summary.txt`):
+| shape | fed | cond | both |
+|---|---|---|---|
+| mzd5 (600) | -15 (18/3) | +0 (2/2) | -16 (20/4) |
+| mzd3 (300) | -11 (13/2) | +0 (2/2) | -12 (15/3) |
+| mzd0 (600) | -19 (25/6) | -6 (8/2) | -25 (36/11) |
+| mzhg (600) | -14 (17/3) | -1 (2/1) | -16 (18/2) |
+| Goblins d5/d0, Merfolk Turns d5/d0 | 0 / 0 / 0 / 0 (0 better / 0 worse each) | - | - |
+mazesend: fed -45, cond -6, both -53; mazesend2hg: fed -14, cond -1, both -16. Units/game at d5: base 130,880, both 129,397.
+d8 b0 (`f63/ab/d8.out`): fed 14 slower -> 0 unrecovered; cond 7 -> 0; **both 20 -> 0 unrecovered**. `both` PASSES the A/B bar.
+ref_bench (`f63/refbench.out`): 0/11 short, search 5.727 vs USER 5.818 avg, 1 faster than the USER; s6 = USER 6, search 6 (tie).
+**units rc=1: ONE failure** -- `test/unit/test_mazes_end_f1.cpp:320/326`, "Maze's End F2 (gi1): Talon's {4} is paid so Maze's
+End's {3} stays payable": the test expects the {3} UNPAYABLE (CHECK_FALSE) and it now pays, so the hold is empty. Probably the
+fed float / recolour adding mana -- check whether the test's premise still holds (likely a test update, but verify it is not a
+regression), then fix before the accept. Wall: read `f63/ab/wall.txt`. Still owed: the s6 `--validate-line` verdicts (step 3),
+then step 4 (smoke + regression + scoped accept + check_gt_logs) and step 5.
