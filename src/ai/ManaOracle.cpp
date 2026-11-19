@@ -1417,6 +1417,15 @@ bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
 // MTG_LINE_*_KEEP) read the same tables in play and must not move.
 // Set by PlanPaymentScript (real play's payment script): Realize's table then holds no body.
 thread_local bool t_no_fodder = false;
+// MTG_ORACLE_FOLD_STATS=1 (DIAGNOSTIC, default off; prints only): per audited plan, how much of the plan's own
+// realisation could a goal fold or a symmetry fold remove -- the sizing data for docs/design/goblins-oracle-eat-fold.
+bool FoldStatsOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_FOLD_STATS");
+    return v;
+}
+thread_local const GameState* t_fs_goal = nullptr;   // the engine's end board (FoldStatsOn, e_full plans only)
+thread_local long long t_fs_kept = 0, t_fs_gy_out = 0, t_fs_sym_dup = 0, t_fs_layers = 0, t_fs_fronts = 0;
 struct NoFodderScope
 {
     bool saved;
@@ -3446,6 +3455,39 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
             keep = ParetoKeep(keys, res);
+            if (FoldStatsOn())
+            {
+                ++t_fs_layers;
+                t_fs_fronts += static_cast<long long>(fronts.size());
+                std::unordered_set<std::uint64_t> sym;
+                for (std::size_t i = 0; i < fronts.size(); ++i)
+                {
+                    if (!keep[i]) { continue; }
+                    ++t_fs_kept;
+                    std::string rs;
+                    for (const auto& kv : res[i]) { rs += kv.first + "=" + std::to_string(kv.second) + ";"; }
+                    const std::uint64_t sk = (keys[i] ^ CoreKey(fronts[i].st, /*canonical=*/false))
+                                           ^ CoreKey(fronts[i].st, /*canonical=*/true) ^ std::hash<std::string>{}(rs);
+                    if (!sym.insert(sk).second) { ++t_fs_sym_dup; }
+                    if (t_fs_goal != nullptr)
+                    {
+                        std::multiset<int> g;
+                        for (const Player& pl : t_fs_goal->players) { for (const Card& c : pl.graveyard) { g.insert(c.m_number); } }
+                        bool out = false;
+                        for (const Player& pl : fronts[i].st.players)
+                        {
+                            for (const Card& c : pl.graveyard)
+                            {
+                                auto it = g.find(c.m_number);
+                                if (it == g.end()) { out = true; break; }
+                                g.erase(it);
+                            }
+                            if (out) { break; }
+                        }
+                        if (out) { ++t_fs_gy_out; }
+                    }
+                }
+            }
         }
         const std::size_t n = fronts.size();
         // THE NEXT LAYER IS BUILT ONLY AS FAR AS THE APPLY CEILING REACHES (memory, 2026-11-05). The layer loop
@@ -4675,6 +4717,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
     const long long main_a0 = t_dec_applies;
     struct MainCost { const long long& a0; bool done = false; void Stop() { if (!done) { g_cost_main.fetch_add(t_dec_applies - a0); done = true; } } ~MainCost() { Stop(); } } _main_cost{ main_a0 };
+    t_fs_goal = (FoldStatsOn() && e_full) ? &e : nullptr;
+    t_fs_kept = t_fs_gy_out = t_fs_sym_dup = t_fs_layers = t_fs_fronts = 0;
     Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
     // under a 400000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
@@ -4737,6 +4781,25 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         if (!r.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
     }
     _main_cost.Stop();
+    if (FoldStatsOn())
+    {
+        long long full = 0, ek_n = 0, uns = 0;
+        const std::uint64_t ekk = e_full ? CoreKey(e) : 0;
+        for (const Outcome& o : r.outcomes)
+        {
+            if (!o.unscripted.empty()) { ++uns; }
+            if (!o.Full()) { continue; }
+            ++full;
+            if (e_full && CoreKey(o.st) == ekk) { ++ek_n; }
+        }
+        std::lock_guard<std::mutex> lk(g_print_mu);
+        std::fprintf(stderr, "[mana-oracle] FOLD-STATS %s applies=%lld engine=%s capped=%d layers=%lld fronts=%lld kept=%lld "
+                     "gy_out=%lld sym_dup=%lld outcomes=%zu full=%lld ek=%lld unscripted=%lld unmodeled=%zu plan={%s}\n",
+                     Ctx(root, pre).c_str(), t_dec_applies - main_a0, e_full ? "full" : "drop", r.capped ? 1 : 0,
+                     t_fs_layers, t_fs_fronts, t_fs_kept, t_fs_gy_out, t_fs_sym_dup, r.outcomes.size(), full, ek_n, uns,
+                     r.unmodeled.size(), PlanText(plan).c_str());
+        t_fs_goal = nullptr;
+    }
     for (const std::string& u : r.unmodeled) { NoteUnmodeled(u); }
     if (r.capped)
     {
