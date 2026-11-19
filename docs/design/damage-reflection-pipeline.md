@@ -2207,3 +2207,10 @@ Where the code departs from the sections above, and why. Each entry names the sy
   runner never takes. D d3 gi105 (5 -> 6) diverges at its T3 land play, long before any sweeper: a search divergence from D's changed main-1 menu, not this shape.
   At d3 b10, D casts a main-1 sweeper on 222 turns of 500 games and every one is lethal in that main (A: 0).
 
+* **Verification (runaway + split-lethal commits).** Unit 3666/3666, scenarios 584/584. ONE pooled smoke + regression
+  (MTG_PGO=0, `build/scratch/stuffy/runaway2/tiers-batch.log`) vs the 11-18 combined batch: 592 of 599 job digests
+  identical; the 7 moved are all Stuffy (stuffy d0/d3/d5, stuffy2hg d5). Per game: d0 s2002 3 faster / 0 slower
+  (the Orchard fix; d0 has no budget, so the charge is inert there); 3 slower budgeted games (smoke d3 s1001 gi32,
+  regression d5 s2002 gi4, stuffy2hg regression d5 s2002 gi4, each 4 -> 5): each repros at turn 4 with
+  `MTG_RFX_FAN_CHARGE=0` and with the charge ON at 2x budget, and is unchanged by the Orchard legacy arm -> charge
+  starvation, as in the held-out A/B. Smoke/regression GT for those 7 keys is owed an accept (not done here).
