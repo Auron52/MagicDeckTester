@@ -74,6 +74,9 @@ twin is skipped only after an uncut evaluation"` is at test/unit/test_mazes_end_
 
 ## Running job
 
+**UPDATE: the build FINISHED `exit 0`, with no errors (Release binary at e2b2516ee). Step 1 is done; start at step 2/3.**
+
+
 The Release build is queued under the heavy lock (several other sessions' heavy jobs were ahead of it):
 - `heavy_run.sh ./build.sh` PID **1722181**, wrapper shell 1722180;
 - log: `build/scratch/maze/p5b3/build1.log`;
