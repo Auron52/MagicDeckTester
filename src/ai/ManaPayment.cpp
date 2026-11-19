@@ -220,6 +220,61 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
     for (int i = 0; i < 6; ++i) { D[i] += pips[i] * kNdScale / n; }
 }
 
+// HUMAN PLAY: THE REST OF THE TURN'S GRAVEYARD CASTS ARE PAYMENT DEMAND (MTG_HUMAN_GY_DEMAND, default ON; =0
+// restores the hand-only demand). USER 2026-11-19, Spirits seed 9 T4 (references/Spirits/claude_s9_gi8): Plains,
+// Secluded Courtyard, Unclaimed Territory, Watery Grave and Patrician Geist on the board, Lingering Souls {2}{W}
+// cast as ONE segment, its flashback ({1}{B}, {B} under the Geist) as the next. The payer took Plains + Territory
+// + Watery Grave and left the Courtyard, whose colours pay creature spells and creature abilities only -- so the
+// flashback's {B} had no legal source, and the user had to tap the Territory and the Courtyard by hand ("I had to
+// manual tap in reference 9, which is a bit of a pain"). Every human demand scan read the HAND alone, and a
+// flashback is not in the hand: the Souls being paid is on its way to the graveyard. So, in human play, the
+// demand also counts (a) each graveyard card castable now by flashback / retrace (GraveyardCastSpellCost --
+// Patrician Geist's reduction included), and (b) the flashback of the spell being paid, when it is a hand cast
+// of a flashback card (PayingSpellCard; a payment of the flashback itself is told apart by its cost, which is
+// the graveyard cost -- and that copy is then skipped in (a), so a payment never demands its own pips).
+// UNCAPPED by mana value: the hand scan's `castable` cap is read MID-payment (the sources this payment already
+// tapped are gone from the supply while its whole cost is still subtracted), and on the seed 9 board it read 0
+// with Plains tapped for Souls' {W}, which dropped the {B} flashback the fix is for. Coloured pips only, split NONCREATURE / creature
+// (the restricted-mana scans care which). HUMAN PLAY ONLY, by the callers: the autonomous search plans the
+// whole turn as one plan, whose own graveyard casts the line holds already see; a human builds the turn as
+// separate segments, and this payment cannot see the next one (the FilterCFirst / MTG_HUMAN_TAP_DEMAND
+// precedent). Ordering only at every caller: a payable cost is never refused.
+static bool HumanGyDemandOn()
+{
+    static const bool on = EnvOn("MTG_HUMAN_GY_DEMAND", true);   // DEFAULT ON; =0 restores the hand-only demand
+    return on;
+}
+bool HumanGyDemandEnabled() { return HumanGyDemandOn(); }
+
+void HumanGraveyardCastDemand(const GameState& state, int active, const ManaCost& paying,
+                              int* nc_pips, int* cre_pips)
+{
+    const Card* pc = PayingSpellCard();
+    const CardDefinition* paid = pc != nullptr ? CardDatabase::Instance().LookupCached(*pc) : nullptr;
+    const auto same_cost = [](const ManaCost& a, const ManaCost& b) {
+        return a.generic == b.generic && a.white == b.white && a.blue == b.blue && a.black == b.black
+            && a.red == b.red && a.green == b.green && a.colorless == b.colorless;
+    };
+    const auto add = [&](const CardDefinition& d, const ManaCost& m) {
+        int* out = d.card.IsCreature() ? cre_pips : nc_pips;
+        out[0] += m.white; out[1] += m.blue; out[2] += m.black; out[3] += m.red; out[4] += m.green;
+    };
+    bool self_skipped = false;
+    if (paid != nullptr && paid->params.flashback_cost.has_value())
+    {
+        const ManaCost fb = GraveyardCastSpellCost(*paid, state);
+        if (!same_cost(fb, paying)) { add(*paid, fb); self_skipped = true; }   // (b): a HAND cast of it
+    }
+    for (const Card& gc : state.players[static_cast<std::size_t>(active)].graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+        if (d == nullptr || !(d->params.flashback_cost.has_value() || d->params.retrace)) { continue; }
+        const ManaCost m = GraveyardCastSpellCost(*d, state);
+        if (!self_skipped && d == paid && same_cost(m, paying)) { self_skipped = true; continue; }   // it IS this payment
+        add(*d, m);
+    }
+}
+
 // CCO HAND DEMAND (MTG_CCO_HAND_DEMAND; CcoHandDemandOn in EngineFlags.h). Once per payment that reaches a WIDE
 // colored_creature_only candidate: `nc_live` = a noncreature nonland card in HAND (castable with what the board
 // has left after this payment -- the ComputeNeedsDemandSupply cap) carries a coloured pip, i.e. the unrestricted
@@ -302,6 +357,20 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
             continue;
         }
         for (int ci = 0; ci < 5; ++ci) { cre[ci] += pips[ci]; }
+    }
+    // HUMAN PLAY: the turn's graveyard casts too (HumanGraveyardCastDemand, MTG_HUMAN_GY_DEMAND) -- the Spirits
+    // seed 9 T4 flashback {B} that the Courtyard cannot pay makes the noncreature demand live, so the Courtyard
+    // takes the narrow rung and pays Souls' generic while Watery Grave stays up for the {B}.
+    if (HumanPlayActive() && HumanGyDemandOn())
+    {
+        int gnc[5] = { 0, 0, 0, 0, 0 };
+        int gcr[5] = { 0, 0, 0, 0, 0 };
+        HumanGraveyardCastDemand(state, active, cost, gnc, gcr);
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (gnc[ci] > 0) { nc_live = true; nc_need[ci] = std::max(nc_need[ci], gnc[ci]); }
+            cre[ci] += gcr[ci];
+        }
     }
     for (int ci = 0; ci < 5; ++ci)
     {
@@ -2597,6 +2666,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     hp_demand[static_cast<int>(Color::Black)] += m.black;
                     hp_demand[static_cast<int>(Color::Red)]   += m.red;
                     hp_demand[static_cast<int>(Color::Green)] += m.green;
+                }
+                // ...and the turn's graveyard casts, the flashback of the spell being paid included
+                // (HumanGraveyardCastDemand, MTG_HUMAN_GY_DEMAND): uncapped, like the hand above.
+                if (HumanGyDemandOn())
+                {
+                    int gnc[5] = { 0, 0, 0, 0, 0 };
+                    int gcr[5] = { 0, 0, 0, 0, 0 };
+                    HumanGraveyardCastDemand(state, active, cost_in, gnc, gcr);
+                    for (int ci = 0; ci < 5; ++ci) { hp_demand[ci] += gnc[ci] + gcr[ci]; }
                 }
             }
             int ff_i = -1, ff_rank = 1 << 30;   // best kind-2 filter candidate (FeedFilterFirstOn reroute)

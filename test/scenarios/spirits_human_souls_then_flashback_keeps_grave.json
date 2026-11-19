@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 15,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": "USER 2026-11-19, Spirits seed 9 T4 (references/Spirits/claude_s9_gi8, 'I had to manual tap in reference 9'). Board Secluded Courtyard, Unclaimed Territory, Watery Grave, Patrician Geist (graveyard spells cost {1} less), Usher of the Fallen; the drop is Plains. The human casts Lingering Souls {2}{W} as ONE segment and flashes it back ({B} under the Geist) as the NEXT. Both restricted lands make only {C} for a noncreature spell, so the {B} can only come off Watery Grave. Before the fix the payer paid Souls with Plains + Territory + Grave and the flashback dropped (the next menu still offered it, labelled known_drops). Now the human-play demand counts the paid spell's own flashback (MTG_HUMAN_GY_DEMAND): the Courtyard takes the narrow rung, Souls is paid Plains + Territory + Courtyard, and the flashback is paid by the Grave -- four Spirit tokens, nothing dropped.",
+  "battlefield": [
+    { "name": "Secluded Courtyard" },
+    { "name": "Unclaimed Territory" },
+    { "name": "Watery Grave" },
+    { "name": "Patrician Geist", "sick": false },
+    { "name": "Usher of the Fallen", "sick": false }
+  ],
+  "hand": [ "Plains", "Lingering Souls", "Drogskol Captain", "Patrician Geist" ],
+  "human_lines": [ "land=Plains;cast=Lingering Souls", "retrace=Lingering Souls" ],
+  "expect_dropped": [],
+  "expect_exile_contains": [ "Lingering Souls" ]
+}

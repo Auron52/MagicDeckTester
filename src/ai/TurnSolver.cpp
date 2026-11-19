@@ -66727,6 +66727,42 @@ int TurnSolver::HumanPrepayDemandHolds(const GameState& state, const std::vector
         dem[static_cast<int>(Color::Red)]   += m.red;
         dem[static_cast<int>(Color::Green)] += m.green;
     }
+    // ...and the turn's GRAVEYARD casts (MTG_HUMAN_GY_DEMAND; HumanGraveyardCastDemand in ManaPayment.cpp has
+    // the Spirits seed 9 story): every flashback / retrace card in the graveyard this line does not cast from
+    // there, plus the flashback of every flashback card this line casts from HAND and does not flash back in
+    // the same line -- the human's next segment is exactly where those go.
+    if (HumanGyDemandEnabled())
+    {
+        std::vector<char> gy_used(acts.size(), 0);
+        auto line_flashes = [&](const InternedName& name) -> bool
+        {
+            for (std::size_t k = 0; k < acts.size(); ++k)
+            {
+                if (gy_used[k] != 0 || acts[k].kind != Action::Kind::CastFromGraveyard || acts[k].card_name != name)
+                { continue; }
+                gy_used[k] = 1;
+                return true;
+            }
+            return false;
+        };
+        auto add = [&dem](const ManaCost& m)
+        { dem[0] += m.white; dem[1] += m.blue; dem[2] += m.black; dem[3] += m.red; dem[4] += m.green; };
+        for (const Card& gc : state.players[active].graveyard)
+        {
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+            if (gd == nullptr || !(gd->params.flashback_cost.has_value() || gd->params.retrace)) { continue; }
+            if (line_flashes(gc.m_name)) { continue; }
+            add(GraveyardCastSpellCost(*gd, state));
+        }
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* hd = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            if (hd == nullptr || !hd->params.flashback_cost.has_value()) { continue; }
+            if (line_flashes(a.card_name)) { continue; }
+            add(GraveyardCastSpellCost(*hd, state));
+        }
+    }
     if (dem[0] + dem[1] + dem[2] + dem[3] + dem[4] == 0) { return 0; }
     // The candidate sources: the same set the MTG_HUMAN_TAP_DEMAND supply scan counts (own untapped
     // lands, mana dorks, mana rocks), minus a dork that cannot tap this turn (holding it saves nothing).

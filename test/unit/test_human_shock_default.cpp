@@ -1,11 +1,18 @@
-// HUMAN PLAY's SHOCK-LAND DEFAULT (USER 2026-11-19, Spirits seed 9).
+// HUMAN PLAY's SHOCK-LAND DEFAULT and the GRAVEYARD-CAST PAYMENT DEMAND (USER 2026-11-19, Spirits seed 9).
 //
 // A. TurnSolver::HumanLandManaMayBeUsed -- the viewer's "let AI decide" land_entry default pays a shock
 //    land's life unless NOTHING this turn could use the land's mana: "If there is nothing to play with it,
 //    tapped is fine. Otherwise it should be untapped in goldfish." Pure (no HumanPlayActive read), so it is
 //    driven directly; the end-to-end apply is test/scenarios/spirits_human_shock_*.json (MTG_HUMAN_PLAY).
+// B. HumanGraveyardCastDemand -- a human segment's payment counts the paid spell's own flashback (and the
+//    graveyard's flashback / retrace cards) as demand, so Lingering Souls is not paid with the Watery Grave
+//    the flashback's {B} needs (references/Spirits/claude_s9_gi8 T4, "I had to manual tap in reference 9").
+//    The payer reads it only under HumanPlayActive(), which a unit test cannot switch on; here the demand
+//    itself, and the board fact the fix relies on (after Souls is paid WITHOUT the Grave, the flashback is
+//    payable; paid WITH it, it is not). The end-to-end apply: spirits_human_souls_then_flashback_keeps_grave.
 #include <doctest/doctest.h>
 
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -84,6 +91,13 @@ TurnSolver::Plan LandPlan(const std::string& land)
     p.land_decided = true;
     p.land_to_play = land;
     return p;
+}
+
+bool UntappedNamed(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_name.str() == name) { return !p.tapped; } }
+    return false;
 }
 
 }  // namespace
@@ -174,4 +188,75 @@ TEST_CASE("param_mana_costs is read mechanically off the raw JSON")
     CHECK(boast);
     CHECK(flashback);
     CHECK(DefHsd("Watery Grave").param_mana_costs.empty());
+}
+
+TEST_CASE("human graveyard demand: seed 9 T4 -- the paid Souls' own flashback is demand for {B}")
+{
+    // Board Plains, Secluded Courtyard, Unclaimed Territory, Watery Grave, Patrician Geist (graveyard
+    // spells cost {1} less); Lingering Souls {2}{W} is being paid from hand.
+    GameState s = FreshHsd(4);
+    PutHsd(s, "Plains", 36);
+    PutHsd(s, "Secluded Courtyard", 40);
+    PutHsd(s, "Unclaimed Territory", 54);
+    PutHsd(s, "Watery Grave", 59);
+    PutHsd(s, "Patrician Geist", 33);
+    HandHsd(s, "Lingering Souls", 23);
+    const CardDefinition& souls = DefHsd("Lingering Souls");
+    {
+        SpellSubtypePayScope paying(&souls.card);
+        int nc[5] = { 0, 0, 0, 0, 0 }, cr[5] = { 0, 0, 0, 0, 0 };
+        HumanGraveyardCastDemand(s, 0, souls.card.m_mana_cost, nc, cr);
+        CHECK(nc[2] == 1);                               // {B}: the flashback, Geist-reduced
+        CHECK(nc[0] + nc[1] + nc[3] + nc[4] == 0);
+        CHECK(cr[0] + cr[1] + cr[2] + cr[3] + cr[4] == 0);
+    }
+    // Paying the FLASHBACK itself (its graveyard cost) demands nothing of its own.
+    s.players[0].hand.clear();
+    GraveHsd(s, "Lingering Souls", 23);
+    {
+        SpellSubtypePayScope paying(&souls.card);
+        int nc[5] = { 0, 0, 0, 0, 0 }, cr[5] = { 0, 0, 0, 0, 0 };
+        HumanGraveyardCastDemand(s, 0, GraveyardCastSpellCost(souls, s), nc, cr);
+        CHECK(nc[0] + nc[1] + nc[2] + nc[3] + nc[4] == 0);
+    }
+    // ...and a graveyard flashback card is demand for any OTHER payment.
+    {
+        int nc[5] = { 0, 0, 0, 0, 0 }, cr[5] = { 0, 0, 0, 0, 0 };
+        HumanGraveyardCastDemand(s, 0, DefHsd("Drogskol Captain").card.m_mana_cost, nc, cr);
+        CHECK(nc[2] == 1);
+    }
+}
+
+TEST_CASE("human graveyard demand: seed 9 T4 board -- which payment keeps the flashback payable")
+{
+    // The fact the fix stands on: Souls paid with Plains + Territory + Courtyard leaves the Grave and the
+    // flashback {B} is payable; paid with Plains + Territory + Grave (the pre-fix payment) it is not, because
+    // the Courtyard makes only {C} for a noncreature spell.
+    auto board = []
+    {
+        GameState s = FreshHsd(4);
+        PutHsd(s, "Plains", 36);
+        PutHsd(s, "Secluded Courtyard", 40);
+        PutHsd(s, "Unclaimed Territory", 54);
+        PutHsd(s, "Watery Grave", 59);
+        PutHsd(s, "Patrician Geist", 33);
+        GraveHsd(s, "Lingering Souls", 23);
+        return s;
+    };
+    const ManaCost fb = GraveyardCastSpellCost(DefHsd("Lingering Souls"), board());
+    CHECK(fb.ManaValue() == 1);
+    CHECK(fb.black == 1);
+    {
+        GameState s = board();
+        for (Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() != "Watery Grave" && p.card.IsLand()) { p.tapped = true; } }
+        REQUIRE(UntappedNamed(s, "Watery Grave"));
+        CHECK(TapForCostShared(s, fb, /*for_creature=*/false, nullptr, false));
+    }
+    {
+        GameState s = board();
+        for (Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() != "Secluded Courtyard" && p.card.IsLand()) { p.tapped = true; } }
+        CHECK_FALSE(TapForCostShared(s, fb, /*for_creature=*/false, nullptr, false));
+    }
 }
