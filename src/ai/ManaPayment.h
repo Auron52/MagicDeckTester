@@ -420,6 +420,11 @@ int  SacFodderBodies(const Action& a, const CardParams& op);
 // yet and the payer would eat through it (the LiveSacPayOutlet gates: lever on, not human play, no
 // fodder-free scope, no death that pays). nullptr otherwise.
 const CardDefinition* PlanSacOutletDef(const GameState& state, const std::vector<Action>& acts);
+// The enumeration's FODDER WALK GATE (EnumeratePlansCore, a plan the board provably cannot pay without eating): does
+// SOME order of the casts `order` (indices into `acts`) pay under the apply's own decider -- the board alone, then
+// the fodder walk (PoSacFodderWalk), then the unlock-order fallback? true when not judged (fewer than 2 or more than
+// 7 casts, no fodder model): only a subset the apply provably cannot realise in full is refused.
+bool SacFodderSubsetOrderPays(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order);
 // Both forms END with ApplyAttachSpellDependencyOrder (below), so every cast-order sort site in both
 // apply worlds realises the attach-spell dependency whatever rank, arrangement or payable rescue
 // produced the order.

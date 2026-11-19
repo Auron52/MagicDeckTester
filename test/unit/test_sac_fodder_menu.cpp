@@ -476,3 +476,39 @@ TEST_CASE("Sac fodder menu: a body-eating land-Aura host never folds away the bo
     const std::set<int> h = hosts(TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true));
     CHECK(h == std::set<int>{ 1, 34 });
 }
+
+// THE FODDER WALK GATE (Goblins s30125009 T1 m1, mana oracle PHANTOM). Empty board, the Mountain just played; hand
+// Goblin Lackey x2, Skirk Prospector. The aggregate credit reads {Lackey, Skirk, Lackey} as 1 + 2 = 3 against 3, but no
+// order pays it: the Mountain pays Skirk, Skirk eats itself for one Lackey and the second Lackey has no source (an
+// outlet's own body goes last). The plan the apply realises in full -- {Skirk, Lackey}, Skirk eaten for the Lackey --
+// stays on the menu.
+TEST_CASE("Sac fodder menu: the fodder walk gate refuses a body-eating plan no order pays, keeps the one that pays")
+{
+    LoadSfm();
+    const GoblinsProvider prov;
+    GameState s;
+    s.active_player_index        = 0;
+    s.turn_number                = 1;
+    s.phase                      = Phase::PreCombatMain;
+    s.players[0].life            = 20;
+    s.players[1].life            = 20;
+    s.m_provider                 = &prov;
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;
+    s.deck_has_upkeep_reanimate  = false;
+    s.players[0].lands_played_this_turn = 1;
+    PutSfm(s, "Mountain", 36);
+    s.players[0].hand.push_back(CardSfm("Goblin Lackey", 10));
+    s.players[0].hand.push_back(CardSfm("Skirk Prospector", 57));
+    s.players[0].hand.push_back(CardSfm("Goblin Lackey", 11));
+    for (int i = 0; i < 20; ++i) { s.players[0].library.push_back(CardSfm("Mountain", 100 + i)); }
+    SacFodderMenuArm arm(1);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    CHECK(FindPlan(plans, { "Goblin Lackey", "Skirk Prospector", "Goblin Lackey" }) == nullptr);
+    const TurnSolver::Plan* both = FindPlan(plans, { "Skirk Prospector", "Goblin Lackey" });
+    REQUIRE(both != nullptr);
+    CHECK(both->sacfod_admit);
+    GameState t = s;
+    TurnSolver::ApplyPlan(t, *both, /*is_pre_combat=*/true);
+    CHECK(t.players[0].hand.size() == 1);   // one Lackey left: Skirk and the other Lackey were cast
+}
