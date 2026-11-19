@@ -1962,6 +1962,9 @@ static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
 // back (their partial result discarded). Pure loss -- the pass-cost predictor's miss, and the
 // direct target of a node-aware pass-cost estimate (node passes overshoot: the [bp-node] doc).
 static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_starts{0};
+// Start-gate TRIALS (MTG_ID_GATE_TRIAL): passes the estimate refused that were started under the gate's allowance,
+// and how many of them ran into it (rolled back) and what those spent.
+static std::atomic<long long> g_idgate_trials{0}, g_idgate_trial_aborts{0}, g_idgate_trial_abort_units{0};
 // LAZY LEAF telemetry (same MTG_ROLLOUT_STATS gate; see LazyLeafOn far below for the mechanism).
 // A HIT is a pass whose leaf work was skipped outright because the leafless probe already proved an
 // in-window win; a MISS is a probe that found nothing and therefore cost one extra interior walk.
@@ -3002,6 +3005,9 @@ namespace
                           << " rescuable=" << g_idwaste_rescuable.load()
                           << " waste_units=" << iw
                           << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
+                          << " gate_trials=" << g_idgate_trials.load()
+                          << " trial_aborts=" << g_idgate_trial_aborts.load()
+                          << " trial_abort_units=" << g_idgate_trial_abort_units.load()
                           << "\n";
             }
             // LAZY LEAF (see LazyLeafOn): one probe per DECISION. hit = a decision whose entire
@@ -119778,6 +119784,56 @@ namespace
     // Bootstrap growth ratio used for pass 1's estimate, before two completed
     // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
     constexpr double kDefaultGrowth = 6.0;
+    // MTG_IDG_CENSUS (PRINT-ONLY, default 0): one "[idg]" line per consultation of FullSearchLine's ladder start gate
+    // at a top-level decision -- the gate's estimate against what the pass then really cost. =1 records admitted
+    // passes' actual cost and the refusals with the budget left; =2 additionally runs every REFUSED pass as a shadow
+    // TRIAL on a COPY of the decision budget, armed to abort at the gate's own allowance (alpha x remaining), so the
+    // census says what a perfect-information gate would have admitted. The shadow writes only into this decision's
+    // caches, after which the ladder commits the prior pass exactly as it would have; its play effect is checked by
+    // digest, not assumed.
+    namespace idgcensus
+    {
+        inline int Mode() { static const int v = EnvInt("MTG_IDG_CENSUS", 0); return v; }
+        struct Rec
+        {
+            bool on = false; int k = 0; int boot = 0; long long c1 = 0, c0 = 0; double est = 0, rem = 0, alpha = 0;
+            long long lim = 0, used = 0; int fit = 0; int pw = 0; int p18 = 0; int vl = 0;
+            long long sh = -1; int sht = -1; int shw = -1;
+        };
+        inline void Emit(const Rec& r, const GameState& s, bool sm, int depth, long long act, int st, int w)
+        {
+            char ln[512];
+            const int n = std::snprintf(ln, sizeof ln,
+                "[idg] j=%s s=%llu T%d sm=%d D=%d k=%d b=%d c1=%lld c0=%lld est=%.0f rem=%.0f lim=%lld a=%.2f fit=%d"
+                " act=%lld st=%d pw=%d w=%d p18=%d vl=%d sh=%lld sht=%d shw=%d\n",
+                heurarm::t_job_name ? heurarm::t_job_name : "-", static_cast<unsigned long long>(s.game_seed),
+                s.turn_number, sm ? 1 : 0, depth, r.k, r.boot, r.c1, r.c0, r.est, r.rem, r.lim, r.alpha, r.fit,
+                act, st, r.pw, w, r.p18, r.vl, r.sh, r.sht, r.shw);
+            if (n > 0) { std::fwrite(ln, 1, static_cast<std::size_t>(std::min<int>(n, sizeof ln - 1)), stderr); }
+        }
+    }
+    // THE START GATE'S TRIAL (MTG_ID_GATE_TRIAL / heurarm ID_GATE_TRIAL; DEFAULT ON, =0 -> refuse on the estimate).
+    // The gate below predicts pass k's cost as c_{k-1} x growth and refuses the pass when that exceeds alpha x what is
+    // left. The prediction is often far off -- with one completed pass it is c_1 x kDefaultGrowth (6.0), and a pass
+    // whose predecessor left its memos warm, or that meets an early cutoff, costs a fraction of c_1 (Maze's End s3 T4
+    // at d5 b20: pass 1 5,103 units, estimate 30,618 > 1.1 x 12,897 remaining, refused; the pass really costs 735 and
+    // finds T5 -- the decision committed T6 with 72% of its budget unspent). So a refused pass is STARTED as a TRIAL:
+    // its overrun ceiling is the gate's own allowance (alpha x remaining after the passes so far), and a trial that runs
+    // into it is rolled back through the ladder's ordinary abort path (the prior pass commits; a strictly better win
+    // the trial had already proven is kept, as for any aborted pass). A pass is therefore refused only when it really
+    // does not fit, which is the question the estimate was standing in for.
+    //   * RE-PRICE, NEVER REMOVE: at an unlimited budget the gate never refuses, so the trial never arms (inert); below
+    //     that a larger budget gives every trial a larger ceiling, so it completes every pass a smaller one completed.
+    //   * Nothing is refused that the estimate admitted: an admitted pass keeps the proportional ceiling as before.
+    //   * Deterministic and thread-invariant: work units only.
+    //   * The cost is the trials that do not fit (bounded by the allowance), which is the census's to report.
+    //   * Scope: the ROLLOUT-leaf ladder (no value model driving: the heuristic ladder, the hybrid's escalation).
+    //     docs/design/id-start-gate-trial.md has the census and the A/B.
+    inline bool IdGateTrialOn()
+    {
+        static const bool s_env = EnvOn("MTG_ID_GATE_TRIAL", true);   // DEFAULT ON; =0 disables
+        return heurarm::Flag(heurarm::ID_GATE_TRIAL, s_env);
+    }
     // PRICED START GATE, the one rule (FullSearchLine's ladder AND FIT's climb under fit_gate "ladder" call this, so the
     // climb is admitted by exactly the ladder's priced test): true = the next pass may START. pr_prev / pr_prev2 = the
     // priced work (workctr::t_priced) of the last two completed passes. Only consulted while the priced ceiling is armed
@@ -121583,6 +121639,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (kn.rx2) { p18_cK_add = p18_su[static_cast<std::size_t>(p18_K)]; }
         }
     }
+    // MTG_IDG_CENSUS (print-only; see idgcensus): the top-level decision's gate consultations.
+    const bool idg_top = idgcensus::Mode() > 0 && g_fsline_nest == 0 && g_rollout_nest == 0;
+    idgcensus::Rec idg{};
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
     long long lad_ttlook_sum = 0, lad_tthit_sum = 0, lad_ttlook_last = 0, lad_tthit_last = 0;
     for (int pass_depth = (p18_K > 0 ? p18_K : (depth >= 1 ? 1 : depth));
@@ -121617,6 +121676,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             { line = pr; committed_depth = pass_depth; prev_line = line; prev_committed = pass_depth; break; }
             continue;
         }
+        long long idg_trial_allow = 0;   // > 0: this pass is a start-gate TRIAL with this many units of allowance
         // Start gate: skip (and commit the prior pass) when the next pass clearly
         // won't fit. Keyed on the running work-unit count, never the clock, so a
         // deeper search makes the same skip decision and can never come out worse.
@@ -121631,6 +121691,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
+            bool other_refused = false;   // a refusal by a gate other than the estimate (no trial for those)
             // PATH-TO-TRUST override (see kTrustPathSlack). Only when the value leaf is driving, a
             // trust depth is known, and this pass is still on the way to it: ask whether the WHOLE
             // path pass_depth..trust fits the remaining budget PLUS the escalation it would cancel.
@@ -121660,14 +121721,48 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 const double lpu   = static_cast<double>(std::max<long long>(0, g_probe_leaves[pass_depth - 1]))
                                    / static_cast<double>(c_prev);
                 const double est_h = estimate * (1.0 + g_single_reserve_R * lpu);
-                if (est_h > kStartGateAlpha * (remaining - estimate)) { fits = false; g_sres_refused.fetch_add(1, std::memory_order_relaxed); }
+                if (est_h > kStartGateAlpha * (remaining - estimate)) { fits = false; other_refused = true; g_sres_refused.fetch_add(1, std::memory_order_relaxed); }
             }
             // PRICED START GATE (decisionwork::PricedGateOn; only while the priced decision ceiling is armed): the same
             // estimate-and-skip in the priced currency. A pass whose projected priced cost does not fit what is left of
             // the decision's priced allowance is not STARTED -- the prior pass commits now -- instead of being started,
             // tripping the ceiling near its end and rolling back (measured: goblins 2hg gi30 X=10 spent the full 23.6 s
             // priced and then discarded a 69k-unit pass). Turn-complete: it never cuts a pass, it declines to begin one.
-            if (fits && !PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { fits = false; }
+            if (fits && !PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { fits = false; other_refused = true; }
+            // THE TRIAL (see IdGateTrialOn): the estimate refused the pass; start it under the gate's own allowance.
+            const bool est_refused = !fits && !other_refused;
+            // The gate's own allowance for this pass: what `fits` compared the estimate against.
+            const double gate_allow = (g_reserve_value_pass ? 0.5 : 1.0) * gate_alpha * std::max(0.0, remaining);
+            // Rollout-leaf ladders only (the heuristic ladder and the hybrid's escalation): a pass there is all-or-nothing
+            // and its refusal leaves budget unspent (census, smoke: median 50-59% of the budget left). A value-leaf or
+            // leafless probe (vl_active) is out of scope: its relaxed gate refuses only with ~nothing left, a leafless
+            // pass already stops at exhaustion, and what it leaves funds the pass that follows it (FIT / escalation).
+            if (est_refused && !vl_active && IdGateTrialOn() && gate_allow >= 1.0)
+            {
+                idg_trial_allow = static_cast<long long>(gate_allow);
+                fits = true;
+            }
+            if (idg_top)
+            {
+                idg = idgcensus::Rec{};
+                idg.on = true; idg.k = pass_depth; idg.boot = (have_prev2 && c_prev2 > 0) ? 0 : 1;
+                idg.c1 = c_prev; idg.c0 = have_prev2 ? c_prev2 : -1; idg.est = estimate; idg.rem = remaining;
+                idg.alpha = gate_alpha; idg.lim = budget->Limit(); idg.used = budget->Used();
+                idg.fit = idg_trial_allow > 0 ? 2 : (fits ? 1 : 0);   // 2 = refused by the estimate, run as a trial
+                idg.pw = prev_line.win_turn; idg.p18 = p18_K > 0 ? 1 : 0;
+                idg.vl = (vl_active ? (vl_constant ? 2 : 1) : 0) + (g_force_heuristic_leaf ? 4 : 0);   // shape: 0 rollout | 1 model | 2 leafless (+4 escalation)
+                if (!fits && idgcensus::Mode() >= 2)
+                {
+                    // Shadow TRIAL (print-only): the refused pass on a copy of the decision budget, aborting at the
+                    // gate's own allowance -- i.e. the pass a perfect-information gate would admit or refuse.
+                    SearchBudget bc = *budget;
+                    bc.SetOverrunLimit(SearchBudget::SatAdd(bc.Used(), static_cast<long long>(gate_allow)));
+                    const long long u0 = bc.Used();
+                    const SearchLine sh = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &line_cache, &bc);
+                    idg.sh = bc.Used() - u0; idg.sht = bc.OverrunQuiet() ? 1 : 0; idg.shw = sh.win_turn;
+                }
+                if (!fits) { idgcensus::Emit(idg, state, second_main, depth, -1, -1, -1); idg.on = false; }
+            }
             if (!fits) { break; }
         }
 
@@ -121699,6 +121794,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 kOverrunBeta * static_cast<double>(budget->Limit()));
             budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
         }
+        if (idg_trial_allow > 0)
+        {
+            // A start-gate TRIAL never runs past the gate's own allowance (and never loosens a tighter ceiling).
+            const long long tl = SearchBudget::SatAdd(used_before, idg_trial_allow);
+            const long long cur = budget->OverrunLimit();
+            budget->SetOverrunLimit(cur > 0 ? std::min(cur, tl) : tl);
+            if (s_rollout_stats) { g_idgate_trials.fetch_add(1, std::memory_order_relaxed); }
+        }
         if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
         OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic; see g_oo_vals)
         _oop.Begin(tt, budget);
@@ -121725,6 +121828,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // turn in it was genuinely proven before the guard fired and is kept; anything else
             // rolls back to the last completed pass exactly as before.
             const bool rescued = s_id_anytime && attempt.win_turn < prev_line.win_turn;
+            if (s_rollout_stats && idg_trial_allow > 0)
+            {
+                g_idgate_trial_aborts.fetch_add(1, std::memory_order_relaxed);
+                g_idgate_trial_abort_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+            }
             if (s_rollout_stats)
             {
                 g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
@@ -121741,6 +121849,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
             { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, budget->Used() - used_before, p16::t_leaf_units - p16_leaf0,
                        rescued ? 2 : 1, attempt.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
+            if (idg.on && idg.k == pass_depth)
+            { idgcensus::Emit(idg, state, second_main, depth, budget->Used() - used_before, rescued ? 2 : 1, attempt.win_turn); idg.on = false; }
             if (rescued) { line = attempt;    committed_depth = pass_depth; escstats::t_esc_rescued_main = true; }
             else         { line = prev_line;  committed_depth = prev_committed; }
             if (p18_K > 0) { p16::Rec('X', pass_depth, 0, 0, rescued ? 2 : 1, line.win_turn, 0); }   // sampled gate: nothing below to roll back to
@@ -121805,6 +121915,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
         TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
               state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
+        if (idg.on && idg.k == pass_depth)
+        { idgcensus::Emit(idg, state, second_main, depth, cost, 0, line.win_turn); idg.on = false; }
         if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
         { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, cost, p16::t_leaf_units - p16_leaf0, 0, line.win_turn,
                    g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
