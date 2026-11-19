@@ -1,18 +1,20 @@
-# Regression ground truth -- commit 4e794535b  date 2026-11-18
+# Regression ground truth -- commit 4ea2268d8  date 2026-11-19
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # accepted-with-regressions (smoke, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
 # accepted-with-regressions (regression, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
+# accepted-with-regressions (smoke, 2026-11-19): P5c/P5c2/P5c3 (wip/maze-p5c): canon-drop compounds + VB fetch amendment + canon-drop pass 2 last in the hybrid; every slower smoke/regression game recovers at d8 b0 (mazesend smoke g25 g28, 2hg g25 g28, reg s2002 g183, s3003 g25, martyr s2002 g149); held-out A/B net Maze -17/4600, Snow -6, Cyclone -1, Hydras/Melira/Landfall/Niv/Alchemist/Martyr 0
+# accepted-with-regressions (regression, 2026-11-19): P5c/P5c2/P5c3 (wip/maze-p5c): canon-drop compounds + VB fetch amendment + canon-drop pass 2 last in the hybrid; every slower smoke/regression game recovers at d8 b0 (mazesend smoke g25 g28, 2hg g25 g28, reg s2002 g183, s3003 g25, martyr s2002 g149); held-out A/B net Maze -17/4600, Snow -6, Cyclone -1, Hydras/Melira/Landfall/Niv/Alchemist/Martyr 0
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
 mazesend_smoke_d0_s1001=6.8980/0e18e01b1a7b6894
 mazesend_smoke_d3_s1001=5.3000/666da95aa8393d6b
-mazesend_smoke_d5_s1001=5.7348/8f298414aafcb060
-mazesend2hg_smoke_d5_s1001=5.5333/c5915d59e78955e4
+mazesend_smoke_d5_s1001=5.7348/59f5ca6231b9acb8
+mazesend2hg_smoke_d5_s1001=5.6000/695941c9cae99f9c
 mill_smoke_d0_s1001=6.2200/13d7cf7dcd8b5017
 mill_smoke_d3_s1001=4.6000/e3c08d7c641b8c4d
 mill_smoke_d5_s1001=4.6000/1a3c154de8cd6ddf
@@ -35,8 +37,8 @@ morph_smoke_d5_s1001=4.0600/da2bc0dbb8829578
 morph2hg_smoke_d5_s1001=4.4000/0ea5be07c85ad9c9
 hydras_smoke_d0_s1001=5.8480/5d9f3d2d7f427362
 hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
-hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
-hydras2hg_smoke_d5_s1001=5.7600/1ce793e3f20afacf
+hydras_smoke_d5_s1001=5.4500/0554d6552fb64fb2
+hydras2hg_smoke_d5_s1001=5.7600/e5de2158051f99dc
 extraturns_smoke_d0_s1001=5.5720/54c012a28e7e62c6
 extraturns_smoke_d3_s1001=4.7200/81d43754c9fca2be
 extraturns_smoke_d5_s1001=4.6900/3a28f2fe6595ed24
@@ -86,9 +88,9 @@ hinata_smoke_d0_s1001=6.7420/c93fb8c65738f78f
 hinata_smoke_d3_s1001=5.5400/1cb4d932aaaeb578
 hinata_smoke_d5_s1001=5.4800/8304deb09041cb20
 cyclone_smoke_d0_s1001=8.3160/312fbfeef3957ba9
-cyclone_smoke_d3_s1001=4.8800/67e6edb6a97d5a0c
-cyclone_smoke_d5_s1001=4.7400/ce35ea11f311e453
-cyclone2hg_smoke_d3_s1001=4.8600/7f57efec31d41ba7
+cyclone_smoke_d3_s1001=4.8800/665d060f7a6d14e8
+cyclone_smoke_d5_s1001=4.7400/997950edf5bdfd33
+cyclone2hg_smoke_d3_s1001=4.8600/1f1a8d1af62c80b9
 shadowborn_smoke_d0_s1001=7.3850/77575f7df7255656
 shadowborn_smoke_d3_s1001=5.0000/9e3b52ff67b25d5a
 shadowborn_smoke_d5_s1001=4.7900/79346ed471920ae1
@@ -199,7 +201,7 @@ edf_smoke_d3_s1001=4.0000/e8da459a417633e4
 edf_smoke_d5_s1001=4.1100/bde3523548455051
 snow_smoke_d0_s1001=6.1300/21f0ecd840191c37
 snow_smoke_d3_s1001=5.7600/7111b7b791c8444d
-snow_smoke_d5_s1001=5.7440/366e4993de7ae8ba
+snow_smoke_d5_s1001=5.7440/2524ef3a0eb8442b
 landfall_smoke_d0_s1001=7.3620/126526156bf43b9b
 landfall_smoke_d3_s1001=6.0400/58324bd991e0aabe
 landfall_smoke_d5_s1001=5.7300/675b9ea67d7fc91c
@@ -243,12 +245,12 @@ merfolkturns2hg_smoke_d3_s1001=6.0000/03f13d2a2fafa76b
 
 # --- regression ---
 mazesend_regression_d0_s2002=6.8960/3306b69cf1751a23
-mazesend_regression_d3_s2002=5.7333/3ed1321abddd7f81
-mazesend_regression_d5_s2002=5.6902/162469aaebd5315e
-mazesend_regression_d5_s3003=5.7000/a3f9f19bd0a6b72a
+mazesend_regression_d3_s2002=5.7333/e7169b5615a8dfbd
+mazesend_regression_d5_s2002=5.6630/094a5ff7ce7db9a7
+mazesend_regression_d5_s3003=5.6867/2b1829a19cdb20ed
 mazesend_regression_d3_s30121=5.0000/e841b401e3cde60a
 mazesend_regression_d5_s30121=5.0000/e841b401e3cde60a
-mazesend_regression_d3_s30081=5.0000/156b855f42039436
+mazesend_regression_d3_s30081=4.0000/45f4e930daab007c
 mazesend_regression_d5_s30081=5.0000/156b855f42039436
 mill_regression_d0_s2002=6.1500/c1adfc38ed56a735
 mill_regression_d3_s2002=4.8000/12d1bfcfba6d9410
@@ -285,9 +287,9 @@ morph_regression_d3_s30001=4.0000/4b3fce1ed24ff2fd
 morph_regression_d5_s30001=4.0000/4b3fce1ed24ff2fd
 hydras_regression_d0_s2002=5.7910/1ac2cf1f8c4b5d43
 hydras_regression_d3_s2002=5.3867/8dc8d0544f203e7e
-hydras_regression_d5_s2002=5.3800/31887c6e8c570301
-hydras_regression_d5_s3003=5.4467/adec1b931b30140b
-hydras2hg_regression_d5_s2002=5.7200/207967a401162c3c
+hydras_regression_d5_s2002=5.3800/19623a99c171aacd
+hydras_regression_d5_s3003=5.4467/145d41be90ccca2c
+hydras2hg_regression_d5_s2002=5.7200/871779bf1d552703
 hydras_regression_d3_s30001=5.2000/d0379efd243cf008
 hydras_regression_d5_s30001=5.2000/d0379efd243cf008
 extraturns_regression_d0_s2002=5.5680/c62c3b9c62ef94e3
@@ -430,7 +432,7 @@ gods2hg_regression_d5_s2002=5.8000/1b32073cb18dd82d
 cyclone_regression_d0_s2002=8.3570/9d74b2f650c212ac
 cyclone_regression_d3_s2002=4.8000/a87a5060fb163e3b
 cyclone_regression_d3_s3003=4.9067/421a96a611116808
-cyclone_regression_d5_s2002=4.7533/322eb2a41a09645e
+cyclone_regression_d5_s2002=4.7533/1057d19db7cf04e5
 cyclone_regression_d5_s3003=4.7133/1df071d40682370a
 shadowborn_regression_d0_s2002=7.3530/46c6573d949b4cd3
 shadowborn_regression_d3_s2002=4.7733/654499ea76578a5b
@@ -495,8 +497,8 @@ lhc_regression_d5_s2002=4.6260/d56bb518fe3e4318
 lhc_regression_d5_s3003=4.5880/85d48671fd6f1130
 melira_regression_d0_s2002=6.2340/58004df7bd29cf27
 melira_regression_d3_s2002=4.8000/c3b243f4b4381e0e
-melira_regression_d5_s2002=4.6533/afcd0b08fc40c1fc
-melira_regression_d5_s3003=4.6000/a3fc78d519f6baf4
+melira_regression_d5_s2002=4.6533/0abf1f3c59800d55
+melira_regression_d5_s3003=4.6000/d40143b8bbd0900e
 angels_regression_d0_s2002=5.2530/c75747feb668552f
 angels_regression_d3_s2002=4.6400/b4d482b57d051bf0
 angels_regression_d5_s2002=4.6000/1492fef454d74dad
@@ -546,12 +548,12 @@ edf_regression_d5_s2002=4.0533/5691a2f80beed216
 edf_regression_d5_s3003=4.1267/dac2becaa4db1c4e
 snow_regression_d0_s2002=6.1590/4729d53eed51ad52
 snow_regression_d3_s2002=5.6800/b24ce18174b0650a
-snow_regression_d5_s2002=5.6333/4535caa9b35c110d
-snow_regression_d5_s3003=5.7000/4a580268629dcee8
+snow_regression_d5_s2002=5.6333/6d53990289fe941d
+snow_regression_d5_s3003=5.7000/cacebb8dfb603721
 landfall_regression_d0_s2002=7.3970/e09e1e88ebca719b
 landfall_regression_d3_s2002=5.8800/089e6deca47f86f2
-landfall_regression_d5_s2002=5.6133/2231f7b652fdd198
-landfall_regression_d5_s3003=5.7067/db94f1df9d20182b
+landfall_regression_d5_s2002=5.6133/cf858934966f2295
+landfall_regression_d5_s3003=5.7067/b1a1ca1989af37c6
 galadriel_regression_d0_s2002=6.9500/2eadad5edfde174a
 galadriel_regression_d3_s2002=4.6600/af12284a075c743f
 galadriel_regression_d5_s2002=4.8650/d65904c10079eae7
@@ -559,9 +561,9 @@ galadriel_regression_d5_s3003=4.9600/7da7da17e1467e3e
 galadriel2hg_regression_d5_s2002=4.8133/090af53c805cdee1
 niv_regression_d0_s2002=6.0520/26283cb621bb3415
 niv_regression_d3_s2002=4.4400/1be6b51aeeacfd11
-niv_regression_d5_s2002=4.4800/5b5ae2c3ca13d100
+niv_regression_d5_s2002=4.4800/71a98405e8089ebe
 niv_regression_d5_s3003=4.4933/3888743d90e6a1b3
-niv2hg_regression_d5_s2002=4.4400/96cd06a8eb61b674
+niv2hg_regression_d5_s2002=4.4400/b2f71e63a4b10e49
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d
@@ -574,7 +576,7 @@ vampires2hg_regression_d5_s2002=4.8700/e57b21e353998fab
 alchemist_regression_d0_s2002=6.2140/b957490aa228b69d
 alchemist_regression_d3_s2002=4.8800/390b3d57c1b5c6c7
 alchemist_regression_d5_s2002=4.9657/4c9677a2d0322eee
-alchemist_regression_d5_s3003=5.0629/8de3b459961c6d1d
+alchemist_regression_d5_s3003=5.0629/25e27fe9db75f0bb
 elementals_regression_d0_s2002=5.6140/fbcdca90e269bc73
 elementals_regression_d3_s2002=4.3600/3d10fef88dc4b932
 elementals_regression_d5_s2002=4.2867/395327a9b6e0c15f
@@ -595,7 +597,7 @@ merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
 martyr_regression_d0_s2002=5.8580/8f240d01f05526fd
 martyr_regression_d3_s2002=5.2000/44ffd827f3296ef1
-martyr_regression_d5_s2002=5.1800/97eb71b0930aefa9
+martyr_regression_d5_s2002=5.1867/f6936902c58b894e
 martyr_regression_d5_s3003=5.0600/8718770d28de6c15
 martyr2hg_regression_d5_s2002=5.2933/473bef39ea151b28
 redelem_regression_d0_s2002=4.7530/e56dbe87174a445f
