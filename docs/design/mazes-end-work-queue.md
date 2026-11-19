@@ -156,3 +156,8 @@ USER (VERBATIM): "And that is fine, because not fetching would be dominated, but
 - Q6 (a second heavy job during d8 tails): "Yes, that seems fine."
   (Implemented as `scripts/heavy_run.sh`: hands the lock on after 10 x 30 s of load < nproc/4 with MemAvailable >= 13 GB; at most one released tail.)
 - Q8 (order of the viewer build in the heavy queue): "I'll leave the order up to you."
+
+## USER 2026-11-19 ~12:10 UTC (VERBATIM)
+"I'm heading to bed shortly. If you finish everything else for maze's end feel free to start the mulligan profile overnight."
+So the mulligan profile (`scripts/mullgen.sh run decks/Maze's End`) follows the last fix/accept and the shared push,
+on that frozen commit, alone on the box.
