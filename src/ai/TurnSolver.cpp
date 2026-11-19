@@ -70094,23 +70094,53 @@ int LineReducerCredit(const GameState& state, const std::vector<Action>& acts)
 }
 // MTG_LINE_KEEP_ALL: the rung reaches the line without a reducer credit -- a line of two or more held casts (one cast
 // owes no rest; an activation-only rest is the hold's own business).
+// MTG_LINE_KEEP_ROCK: ...or, with KEEP_ALL off, a line of two or more held casts one of which is a mana rock that
+// enters untapped (Mind Stone, Sol Ring, a Signet: LineCastIsRock, the rock RampLaterPayable credits). Such a line never
+// gets the whole-turn joint prepay (BatchPrepayMainCasts declines a producer cast, PP_PRODUCER), so the per-cast greedy
+// pays it with no joint allocation -- the case the rung exists for. A pure colour converter (Arcum's Astrolabe: no
+// free mode, `filter_no_free_colorless`) adds no amount and does not decline the prepay, so it does not bind the line.
+static bool LineCastIsRock(const Action& a)
+{
+    if (!LineCastHeld(a)) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    return d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped
+        && !(d->params.any_color_filter && d->params.filter_no_free_colorless);
+}
 bool LineKeepBound(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
-    if (sel.size() < 2 || !LineKeepAllOn()) { return false; }
+    if (sel.size() < 2) { return false; }
+    const bool all = LineKeepAllOn();
+    if (!all && !LineKeepRockOn()) { return false; }
     int held = 0;
-    for (int j : sel) { if (LineCastHeld(cands[j]) && ++held >= 2) { return true; } }
+    bool rock = all;
+    for (int j : sel)
+    {
+        if (!LineCastHeld(cands[j])) { continue; }
+        ++held;
+        rock = rock || LineCastIsRock(cands[j]);
+        if (held >= 2 && rock) { return true; }
+    }
     return false;
 }
 bool LineKeepBound(const std::vector<Action>& acts)
 {
-    if (acts.size() < 2 || !LineKeepAllOn()) { return false; }
+    if (acts.size() < 2) { return false; }
+    const bool all = LineKeepAllOn();
+    if (!all && !LineKeepRockOn()) { return false; }
     int held = 0;
-    for (const Action& a : acts) { if (LineCastHeld(a) && ++held >= 2) { return true; } }
+    bool rock = all;
+    for (const Action& a : acts)
+    {
+        if (!LineCastHeld(a)) { continue; }
+        ++held;
+        rock = rock || LineCastIsRock(a);
+        if (held >= 2 && rock) { return true; }
+    }
     return false;
 }
 int LineNoncreatureMv(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
-    if (!LineReducerKeepOn() && !LineKeepAllOn()) { return 0; }
+    if (!LineReducerKeepOn() && !LineKeepAllOn() && !LineKeepRockOn()) { return 0; }
     int mv = 0;
     for (int j : sel)
     {
