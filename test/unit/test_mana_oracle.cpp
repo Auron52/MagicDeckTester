@@ -1587,3 +1587,79 @@ TEST_CASE("mana oracle: Siege-Gang's shot paid by eating Goblins is among the or
     const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[4].card.m_number) });
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/false, plan));
 }
+
+// THE REFINE'S RELEASE BOUND (ManaOracle.cpp RefinePaymentImpl; Maze's End F5R). A whole-line {7}{G} over seven Gates --
+// Baldur's Gate's {2},{T}: X of one colour, Talon Gates' {1},{T}: any colour -- that the payer pays with every Gate
+// tapped. The eager enumeration spends most of its 4,096 probes on Talon / Baldur's fed extensions of sets whose release
+// cannot win, so the cap cuts it. The release bound parks those extensions and stops growing sets that cannot win:
+// where the eager enumeration finishes it returns the same option, and where it was capped the bound reaches at least
+// as far. Measured on 708,515 game refines (MTG_PAY_REFINE_BOUND_VERIFY): 227 differed, each one an eager refine
+// that was capped with nothing found and a bound refine that found a release.
+// This board does NOT become order-free: the payer's own taps differ by order (six or seven Gates), and in several
+// orders BOTH enumerations still reach the cap before any release (the paying sets here all need a fed converter, so
+// no best is known for the bound to prune against). It pins "never worse than eager" in every order.
+namespace
+{
+int RefineRelease(const GameState& pre, const ManaCost& bill, int& eager_rel, bool& paid)
+{
+    GameState post = pre;
+    {
+        heurarm::t_arm[heurarm::PAY_REFINE] = 0;
+        paid = TapForCostShared(post, bill, /*for_creature=*/false, nullptr, /*honor_legacy_cco=*/true);
+        heurarm::t_arm[heurarm::PAY_REFINE] = -1;
+    }
+    if (!paid) { return -1; }
+    auto release = [&](const manaoracle::PayOption& o)
+    {
+        int n = 0;
+        for (const Permanent& p : post.battlefield)
+        {
+            if (!p.tapped) { continue; }
+            bool tapped_by_o = false;
+            for (const TurnSolver::PreTap& t : o.taps) { if (t.num == p.card.m_number) { tapped_by_o = true; } }
+            if (!tapped_by_o) { ++n; }
+        }
+        return n;
+    };
+    manaoracle::PayOption eo;
+    heurarm::t_arm[heurarm::PAY_REFINE_LAZY] = 0;   // the eager enumeration (no release bound)
+    heurarm::t_arm[heurarm::PAY_REFINE_MEMO] = 0;
+    eager_rel = manaoracle::RefinePayment(pre, post, bill, false, false, eo) ? release(eo) : 0;
+    heurarm::t_arm[heurarm::PAY_REFINE_LAZY] = -1;
+    manaoracle::PayOption o;
+    const int rel = manaoracle::RefinePayment(pre, post, bill, false, false, o) ? release(o) : 0;
+    heurarm::t_arm[heurarm::PAY_REFINE_MEMO] = -1;
+    return rel;
+}
+} // namespace
+
+TEST_CASE("pay refine: the release bound never releases fewer Gates than the eager enumeration, in any battlefield order (Maze's End F5R)")
+{
+    EnsureOracleCards();
+    const std::vector<std::string> gates = { "Planar Nexus", "Gond Gate", "Boros Guildgate", "Baldur's Gate",
+                                             "Talon Gates of Madara", "Sea Gate", "Citadel Gate" };
+    for (std::size_t r = 0; r < gates.size(); ++r)
+    {
+        std::vector<std::string> order;
+        for (std::size_t k = 0; k < gates.size(); ++k) { order.push_back(gates[(r + k) % gates.size()]); }
+        GameState s = Board(order);
+        for (Permanent& p : s.battlefield)
+        {
+            if (p.card.m_name.str() == "Sea Gate") { p.chosen_color = static_cast<int8_t>(Color::Green); }
+            if (p.card.m_name.str() == "Citadel Gate") { p.chosen_color = static_cast<int8_t>(Color::Black); }
+        }
+        // Every colour useful (the deck's spells span all five), as in the Maze's End games.
+        for (const char* n : { "Guild Summit", "Gates Ablaze", "Sylvan Scrying", "Archdruid's Charm", "Manabond" })
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+            REQUIRE(d != nullptr);
+            Card c = d->card; c.m_number = 100 + static_cast<int>(s.players[0].library.size());
+            s.players[0].library.push_back(c);
+        }
+        int eager = 0; bool paid = false;
+        const int rel = RefineRelease(s, Cost(7, 0, 0, 0, 0, 1), eager, paid);
+        MESSAGE("rotation ", r, ": paid ", paid, " bound release ", rel, ", eager release ", eager);
+        REQUIRE(paid);
+        CHECK(rel >= eager);
+    }
+}
