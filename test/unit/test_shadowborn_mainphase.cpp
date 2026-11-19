@@ -612,6 +612,38 @@ TEST_CASE("SB order: Apostle precedes Ritual with Stone and two Intents when pay
     CHECK(SbArranged(short_mana, short_line) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
 }
 
+// MTG_SB_APOSTLE_FODDER_CLAIMS: Culling the Weak is a sacrifice claim on the Apostle bodies exactly as an Intent is,
+// so {Intent, Culling, Ritual, Apostle} under a visible Stone casts the Apostle (and its ripple) before the Ritual's.
+// Gate claude-queue-20261119g2 s30114160 T5 (board Lake + Stone + two Swamps): the Ritual-first order dropped Intent.
+TEST_CASE("SB order: Culling counts as a sacrifice claim for Apostle-before-Ritual")
+{
+    ArmM arm;
+    arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 1)
+       .Set(heurarm::SB_APOSTLE_FODDER_CLAIMS, 1);
+    GameState s = BaseM(3);
+    s.battlefield.push_back(PermM(kStoneM, 50));
+    std::vector<Action> acts = { SbCastA(s, kIntentM, 60), SbCastA(s, kCullM, 61), SbCastA(s, kRitM, 62),
+                                 SbCastA(s, kApM, 63) };
+    acts[0].trick_hand_target = kApM;   // the SAC-ANY-CREATURE post-pass's hand victim
+    acts[1].trick_hand_target = kApM;
+    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kApM, kRitM, kCullM, kIntentM });
+    {
+        ArmM off; off.Set(heurarm::SB_APOSTLE_FODDER_CLAIMS, 0);   // Intents only: one claim, no move
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kCullM, kIntentM });
+    }
+    {
+        // One claim (Culling alone) is not "two or more": the Ritual keeps its rank-1 slot.
+        const std::vector<Action> one = { acts[1], acts[2], acts[3] };
+        CHECK(SbArranged(s, one) == std::vector<std::string>{ kRitM, kApM, kCullM });
+    }
+    GameState without_stone = BaseM(3);
+    std::vector<Action> plain = { SbCastA(without_stone, kIntentM, 60), SbCastA(without_stone, kCullM, 61),
+                                  SbCastA(without_stone, kRitM, 62), SbCastA(without_stone, kApM, 63) };
+    plain[0].trick_hand_target = kApM;
+    plain[1].trick_hand_target = kApM;
+    CHECK(SbArranged(without_stone, plain) == std::vector<std::string>{ kRitM, kApM, kCullM, kIntentM });
+}
+
 TEST_CASE("SB order: Ritual goes after the Stone when that order pays, else before it")
 {
     ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_RITUAL_AFTER_STONE, 1);

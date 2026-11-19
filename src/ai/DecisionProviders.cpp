@@ -67198,6 +67198,17 @@ static bool SbApostleBeforeRitualIntentOn()
     static const bool on = EnvOn("MTG_SB_APOSTLE_BEFORE_RITUAL_INTENT", true);
     return heurarm::Flag(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, on);
 }
+// MTG_SB_APOSTLE_FODDER_CLAIMS (heurarm SB_APOSTLE_FODDER_CLAIMS, DEFAULT ON): the rule above counts every creature-
+// sacrifice cast of the line (Culling the Weak as well as Diabolic Intent). Its reason holds for any two claims on the
+// Apostle bodies: a plain Ritual cast first with Thrumming Stone out ripples the top four onto the bottom, and the
+// Apostle's own ripple then digs past the copies that would feed the second sacrifice (gate claude-queue-20261119g2,
+// s30114160 T5 {Ritual, Apostle, Culling, Intent}: 44 APPLY-DROP-ORDER, Intent dropped with no victim left).
+// docs/design/shadowborn-apostle-fodder-claims-2026-11-19.md
+static bool SbApostleFodderClaimsOn()
+{
+    static const bool on = EnvOn("MTG_SB_APOSTLE_FODDER_CLAIMS", true);
+    return heurarm::Flag(heurarm::SB_APOSTLE_FODDER_CLAIMS, on);
+}
 // A plain-ritual cast (rank 1: Dark Ritual -- a mana ritual with no creature-sacrifice cost) / a ripple granter cast.
 static const CardDefinition* SbCastDef(const Action& a)
 {
@@ -67245,7 +67256,8 @@ void ShadowbornProvider::ArrangeCastOrder(const GameState& s, const std::vector<
         }
         if (stone)
         {
-            int ritual = -1, apostle = -1, intents = 0;
+            int ritual = -1, apostle = -1, intents = 0;   // intents: the line's sacrifice claims (see claims_all)
+            const bool claims_all = SbApostleFodderClaimsOn();
             for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
             {
                 const CardDefinition* d = SbCastDef(actions[static_cast<std::size_t>(order[static_cast<std::size_t>(pos)])]);
@@ -67253,7 +67265,7 @@ void ShadowbornProvider::ArrangeCastOrder(const GameState& s, const std::vector<
                 if (d->params.ritual_floating_mana > 0 && !d->params.sac_additional_creature && ritual < 0)
                 { ritual = pos; }
                 if (SbIsSacNamedCreature(d) && apostle < 0) { apostle = pos; }
-                if (d->params.tutor_to_hand && d->params.sac_additional_creature) { ++intents; }
+                if (d->params.sac_additional_creature && (claims_all || d->params.tutor_to_hand)) { ++intents; }
             }
             if (intents >= 2 && ritual >= 0 && apostle > ritual)
             {
