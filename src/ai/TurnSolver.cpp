@@ -113107,7 +113107,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false; double pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false, llw = false, lrf = false, pkt = false, plx = false, pzb = false, pms = false; double pzc = 0.01, pal = 0.1; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -113132,8 +113132,13 @@ namespace p18
             // and S2..S5, held out on H1/H2 (S5 0.959x heur CPU, 2 earlier / 0 later; H2 56 decks x 200 0.954x, 2 / 1).
             o.llw = o.lrf = o.llr = o.pkt = o.plx = o.pzb = true; o.pal = 1.0;
         }
-        else if (valuearm::t_deck_sampled_gate == 2)
+        else if (valuearm::t_deck_sampled_gate == 2 || valuearm::t_deck_sampled_gate == 5)
         {
+            // Mode 5 (RESEARCH, 2026-11-19; not adopted): mode 4's win-triggered lookahead, and on a miss mode 2's
+            // PRICED SAMPLED gate instead of the whole heuristic ladder (_pms) -- passes below the priced committing
+            // depth K leafless, rollouts at K only (USER 2026-11-19: "I want to actually skip some of the rollouts we
+            // don't need"). Mode 2's cold-price losses predate P18j's isolation / refund / priced caps.
+            if (valuearm::t_deck_sampled_gate == 5) { o.llw = o.lrf = o.llr = o.pkt = o.plx = o.pzb = o.pms = true; o.pal = 1.0; }
             o.z = 0.0;   // the measured H7 shape; earlier `_pzn` arm names accidentally parsed as `_pz0`
             o.b1 = o.b2 = o.b3 = true;
             o.b3r = 3.0;
@@ -122988,7 +122993,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                   static_cast<double>(z) / static_cast<double>(r0.win_turn - state.turn_number + 1),
                                   r0.win_turn); }
             else if (p18_lrf && !unl && budget != nullptr) { p18_refund(u0); }
-            p18_ll_done = true; p18_K = 0; p18_wb = 0;
+            // A miss hands the decision to the ordinary ladder from pass 1 -- or, under _pms (mode 5), to the priced
+            // sampled gate below (p18_K stays 1).
+            if (p18_done || !kn.pms) { p18_ll_done = true; p18_K = 0; p18_wb = 0; }
         }
         if (kn.ll && !kn.verify && !p18_llw)   // (an `_pllw` key also contains `_pll`)
         {
