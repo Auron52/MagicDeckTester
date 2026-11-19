@@ -69,3 +69,5 @@ no pgrep -f. Earlier handoffs: `logs/viewer-maze2-handoff.md` (root causes of it
    (baseline build/scratch/viewer-maze2/vpc_base2.log: 4 ok, 2 repaired, 1 ENUM-GAP s12345681 = R1's, pre-existing).
    Expect s5_gi4 "repaired" same T5 win; new ref claude_s7_gi6 now exists (committed f5e05fb17 by parent) -- check it.
 6. Squash/clean commit message, push wip/viewer-maze2, `gh run watch <id> --interval 60 --exit-status` in background, report.
+
+## UPDATE: build2 landed BUILD EXIT 0 (whole tree incl. 41cd55dc8 + 4d0b3d090 compiled, no errors). Start at step 2 (units).
