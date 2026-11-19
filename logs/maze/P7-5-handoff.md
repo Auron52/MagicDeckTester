@@ -52,6 +52,17 @@ diagnostic commit below, once chain10 builds it.
    it: NOWIN = cut, GIVEUP = not cut. If GIVEUP dominates (Summit is in 30042's hand from T2), the bound needs a Summit
    draw term (draws <= entries + untapped Gates at Summit's ETB, each draw worth <= 1 entry) -- validate soundness with a
    census that flags any d1 node the bound called NOWIN that then found a win (must be 0) before shipping.
+   **shp2 RESULT (chain10 done; `mtg.p7h` = 7eaf3a12f built, exit 0): the naive bound cuts NOTHING in 30042 --
+   100% of the 7.92M T6 d1 applies are GIVEUP, every top row with Guild Summit ON THE BATTLEFIELD (`Sb`).** Typical
+   rows: G = 4-6 distinct Gates, add <= 0-3, hl = 0 lands in hand, Burgeoning often in hand (`Bh`), Manabond absent.
+   Without the Summit give-up most of these rows would be NOWIN (e.g. G=5 add<=3: 5+3+1 < 10). So the fold needs a
+   SUMMIT-AWARE bound. Sketch (to be proved properly before building): Summit draws one card per Gate ENTRY, a drawn
+   card is either a land (needs a drop) or an enabler (Exploration +1 drop, Charm +1 put), so with D <= entries the
+   new Gates obey 2*new <= drops0 + hl + tutors + D and D <= new, i.e. new <= drops0 + hl + tutors (+ Summit's ETB
+   taps when Summit is cast this turn); a Manabond reachable by draw (in library) breaks it via the end-step dump and
+   must be handled (or give up only when Manabond can be drawn AND cast AND a dump could add Gates). Burgeoning is
+   over-conservative as a give-up for a THIS-TURN win (it puts only on the opponent's land play, outside this turn)
+   -- drop it from the give-up list. Validate with a census flagging any NOWIN d1 node that then wins (must be 0).
 3. Handoff item 4 of P7-4 (per-node playout cost: profile the greedy subset walk) still open.
 
 ## USER rulings (verbatim)
