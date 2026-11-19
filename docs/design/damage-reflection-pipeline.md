@@ -2156,3 +2156,34 @@ Where the code departs from the sections above, and why. Each entry names the sy
   (0.96x, noise). Reference replay `viewer_protocol_check.py --strict`: 878 refs, 336 ok / 541 repaired / 1 beaten,
   0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail, rc 0 (no Stuffy or Shaman
   refs exist yet). Static viewer audit (`audit_viewer_decisions.py --no-sweep`): rc 0, Stuffy expects `dig`.
+
+### 14.x The runaway fix: zero-progress cycle fold, fan poll, fan charge (2026-11-19)
+* **What grew.** Held-out d3 gi8 (seed 500008) with `MTG_UNPRUNE=redirectwindow,gchost`: an indestructible Screaming
+  Nemesis (Loran's Escape) aims its "any other target" at a Nomads en-Kor; with the window prune lifted the Nomads'
+  {0} shield rides the event and F4 leaves "onto the Nemesis" as its only option, so the point comes straight back and
+  the Nemesis reflects again. Each line is bounded (the 64-resolution no-progress cut works per line), but every step
+  is a CHOICE, so the combat fan enumerated every word over {Nomads A, Nomads B} up to that cut: WIDTH, not length.
+  Shield redirects do NOT escape the cap or the no-progress rule (every cycle contains a counted resolution).
+* **Fix 1: the zero-progress CYCLE FOLD** (`dmgrx::CycleFold`, sound identity fold, default ON, `MTG_RFX_CYCLE_FOLD=0`
+  is the lever; proof in the code comment). A fan probe records each reflection choice's configuration (the mid-turn
+  state key with indestructible creatures' marked damage zeroed and the PIN STREAM excluded, plus the resolving
+  trigger, the pending stack and the legal list); a plan whose pinned choices return to an earlier configuration is
+  dropped (the shorter cycle-free plan is in the same fan). First attempt never fired: `BuildBreakpointKey` folds the
+  installed reflection pins and their cursor, which advances at every choice; `RfxCycleStateKey` now builds the key
+  with `dmgrx::t_pins` cleared. Repro after: both lifts and all three lifts, at b10 and at budget 0: 0.33-0.67 s,
+  38-40 MB RSS (before: 2 GB in ~4 min / 8 GB in 21.7 min). Default (pruned) play on the repro: game log identical.
+* **Fix 2: the fans' backstop poll** (every 64 probes: `gamework::Poll()` or the decision's `Overrun()`; on stop keep
+  the pinned plans). It did not stop the budgeted runaway because the fans charged nothing, so `Overrun()` (which reads
+  units used) could never move -- hence fix 3.
+* **Fix 3: the fans' charge** (`MTG_RFX_FAN_CHARGE`, heurarm, default ON): one unit per probe to the decision budget,
+  census site `rfx_fan`. A re-pricing; inert at budget 0. Held-out A/B (one pooled batch, base 500000, seed = base+off,
+  game_index = off, per-job flags, MTG_PGO=0), ON vs OFF:
+  | cell | games | won ON/OFF | avg win | faster/slower | paired pen ± se | units | cpu |
+  |---|---|---|---|---|---|---|---|
+  | Stuffy d3 b10 | 1500 | 1488/1488 | 4.5403 / 4.5383 | 0/3 | +0.0020 ± 0.0012 | 1.092x | 0.952x |
+  | Stuffy d5 b20 | 3500 | 3480/3480 | 4.5264 / 4.5244 | 0/7 | +0.0020 ± 0.0008 | 1.125x | 0.943x |
+  | Minotaur d3 b10 | 2500 | identical digest | 4.8599 | 0/0 | 0 | 1.000x | 0.959x |
+  | Minotaur d5 b20 | 2500 | identical digest | 4.8511 | 0/0 | 0 | 1.000x | 0.978x |
+  Minotaur never reaches a fan in goldfish (byte-identical). All 10 slower Stuffy games were repro'd one at a time
+  (turn and units match the batch) and every one wins its OFF turn again with the charge ON at 2x budget (d3 b20 /
+  d5 b40): budget starvation (the charged units leave less for the rest of the decision), not a lost line.

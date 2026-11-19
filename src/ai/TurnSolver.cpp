@@ -1520,6 +1520,7 @@ enum Site
     kMeterRolloutStep,     // SimulateToEnd step with budget == nullptr, billed to the meter
     kMeterGreedyWalk,      // EnumeratePlans' subset walk with no budget, billed to the meter
     kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
+    kRfxFan,               // the damage-reflection fans (AppendSubdecisionAxes): one unit per probe (MTG_RFX_FAN_CHARGE)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1527,7 +1528,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk", "cache_hit"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -94697,6 +94698,22 @@ std::uint64_t RfxCycleStateKey(const GameState& state);   // below Site9ChainRep
 // is armed (no wall deadline, unlimited budget: DecisionBudget() is nullptr), and a fan under the stride reads
 // nothing, so every ordinary enumeration (and its cache entry) is unchanged.
 static constexpr std::size_t kRfxFanPollStride = 64;
+// THE FANS' CHARGE (MTG_RFX_FAN_CHARGE, heurarm, DEFAULT ON; 2026-11-19). Each probe applies a plan (and, in the
+// combat fan, simulates its combat) -- a playout step's worth of work -- so it is billed ONE unit to the decision
+// budget (site rfx_fan), as every other in-window sub-search is. This is what lets the poll above see a growing fan:
+// Overrun() reads the units used, and an uncharged fan never moved them. A pure re-pricing: at an unlimited budget
+// DecisionBudget() is nullptr and nothing is charged (the fold, not the budget, bounds the fan there), and at a
+// finite one the fan's own output is unchanged -- what moves is how much budget is left for the rest of the
+// decision, so budgeted play on reflection decks (Stuffy Doll, Minotaur's Boros Reckoner) moves; measured as a play
+// change (docs/design/damage-reflection-pipeline.md section 14).
+static void RfxFanChargeProbe()
+{
+    static const bool env = EnvOn("MTG_RFX_FAN_CHARGE", true);
+    if (!heurarm::Flag(heurarm::RFX_FAN_CHARGE, env)) { return; }
+    SearchBudget* const d = TurnSolver::DecisionBudget();
+    if (d == nullptr) { if (cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }
+    ConsumeAt(d, unitsite::kRfxFan);
+}
 static bool RfxFanShouldStop()
 {
     if (gamework::Poll()) { return true; }
@@ -100854,6 +100871,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                      std::vector<int>* fr) {
                     nx.clear();
                     if (fr) { fr->clear(); }
+                    RfxFanChargeProbe();
                     std::size_t ordinal = 0;
                     dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
                         if (ordinal == pinned) { nx = legal; }
@@ -101098,6 +101116,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                      std::vector<int>* fr) {
                     nx.clear();
                     if (fr) { fr->clear(); }
+                    RfxFanChargeProbe();
                     std::size_t ordinal = 0;
                     dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) {
                         if (ordinal == pinned) { nx = legal; }
@@ -136904,6 +136923,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_meter_rollout_step, MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterRolloutStep]))   \
     X(u_meter_greedy_walk,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterGreedyWalk]))    \
     X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
+    X(u_rfx_fan,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRfxFan]))               \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
