@@ -2280,21 +2280,27 @@ OVERNIGHT_CASES=(
   "midrangeburn2hg  5  5005  170 20"
   "midrangeburn2hg  5  6006  170 20"
   "midrangeburn2hg  5  7007  170 20"
-  # 1 Drop Burn: pre-keep-table overnight ENTRY set (Hinata's shape); the FULL set lands with the keep table.
+  # 1 Drop Burn: the overnight FULL set (2026-11-19, just before its keep-table adoption, accepted with the table
+  # ABSENT first): Midrange Burn's shape at the same play budgets -- d0 4x2000, d3 4x1000 b10, d5 4x500 b20, 2HG
+  # 4x170 b20. Entered 2026-11-17 at the ENTRY set (d3 4x400, d5 4x300, 2HG 2x100). Sized from the post-table
+  # regression rows (mullgen validation, PGO): d3 ~0.21 s/game, d5 ~0.34 s/game, 2HG ~2.0 s/game thread-wall,
+  # ~1/15-1/20 of the table-absent cost, so the full set projects to ~0.8 worker-h.
   "onedropburn      0  4004 2000 0"
   "onedropburn      0  6006 2000 0"
   "onedropburn      0  8008 2000 0"
   "onedropburn      0 10010 2000 0"
-  "onedropburn      3  4004  400 10"
-  "onedropburn      3  5005  400 10"
-  "onedropburn      3  6006  400 10"
-  "onedropburn      3  7007  400 10"
-  "onedropburn      5  4004  300 20"
-  "onedropburn      5  5005  300 20"
-  "onedropburn      5  6006  300 20"
-  "onedropburn      5  7007  300 20"
-  "onedropburn2hg   5  4004  100 20"
-  "onedropburn2hg   5  5005  100 20"
+  "onedropburn      3  4004 1000 10"
+  "onedropburn      3  5005 1000 10"
+  "onedropburn      3  6006 1000 10"
+  "onedropburn      3  7007 1000 10"
+  "onedropburn      5  4004  500 20"
+  "onedropburn      5  5005  500 20"
+  "onedropburn      5  6006  500 20"
+  "onedropburn      5  7007  500 20"
+  "onedropburn2hg   5  4004  170 20"
+  "onedropburn2hg   5  5005  170 20"
+  "onedropburn2hg   5  6006  170 20"
+  "onedropburn2hg   5  7007  170 20"
   # Modern RW Burn: pre-keep-table overnight ENTRY set.
   "modernrwburn     0  4004 2000 0"
   "modernrwburn     0  6006 2000 0"
