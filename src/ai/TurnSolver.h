@@ -3466,6 +3466,21 @@ public:
     // exceeds the 64-bit mask). `out` must hold 64 entries.
     static int HumanPrepayDemandHolds(const GameState& state, const std::vector<Action>& acts,
                                       std::uint64_t* out);
+    // HUMAN PLAY's SHOCK-LAND DEFAULT (USER 2026-11-19): may anything still spend the mana of the land
+    // `plan` plays (plan.land_to_play, or the land its fetch brings in) THIS turn? Plays the drop on a
+    // copy with the life paid, then asks whether any USE -- a nonland hand card, a hand activation
+    // (cycling ...), a graveyard cast (flashback / retrace / a Lurrus permission / unearth / eternalize), or a
+    // mana-costed ability of a permanent we control, including one whose timing is not met YET (boast
+    // before combat) -- can be paid there by the shared payer. True = pay the life (enter untapped);
+    // false only when nothing could use the mana (or the life would not cover the payment). Pure: reads
+    // no human-play gate, so callers gate it (ApplyPlanDirect / WithPlanLandDrop, human play only).
+    static bool HumanLandManaMayBeUsed(const GameState& state, const Plan& plan);
+    // The whole human-play rule at one place, for the three sites that play a human plan's land drop (the
+    // land-first drop, a land positioned later in a "**" sequence, and WithPlanLandDrop's preview):
+    // pay when a later step of the line spends mana (`spends_after` -- the caller's historical
+    // test), when the human manually taps this land, or when HumanLandManaMayBeUsed says it may be used.
+    static bool HumanLandShockPay(const GameState& state, const Plan& plan, bool spends_after,
+                                  bool tapped_by_human);
     // A CAST ORDER'S PAYABILITY, AS THE APPLY WORLDS REALISE IT -- the projection a provider's
     // ArrangeCastOrder uses when an order may only move "when the line is otherwise unpayable" (the
     // EDF land-Aura range, MTG_EDF_AURA_RANGE). Both work on a scratch copy; `state` is untouched.

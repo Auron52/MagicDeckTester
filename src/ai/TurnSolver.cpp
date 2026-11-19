@@ -60298,6 +60298,121 @@ static bool PlayLandByName(GameState& state, const std::string& name, const std:
                            bool from_top);
 static std::string SimulateLandPlay(GameState& state);
 
+// HUMAN PLAY's SHOCK-LAND DEFAULT -- TAPPED ONLY WHEN THE MANA CANNOT POSSIBLY BE NEEDED THIS TURN.
+//
+// USER 2026-11-19 (Spirits seed 9, a T2 Watery Grave the viewer entered tapped): *"If there is nothing to
+// play with it, tapped is fine. Otherwise it should be untapped in goldfish."*, *"The engine makes smart
+// decisions about tapping lands that can't possibly be needed, but doesn't go beyond that."* The previous
+// rule (since aa8582ca3, 2026-06-30) paid only when the human's CURRENT plan segment spent mana, so a land
+// played in a segment of its own ("land=Watery Grave; cast: (nothing)") entered tapped even when a later
+// segment of the same turn -- a boast after combat, a flashback, a cycle -- wanted it. The asymmetry decides
+// the direction of every doubt: an untapped land costs 2 life in a goldfish, a tapped one can strand a line.
+// So a USE is anything the rest of the turn could spend mana on, read off the card data, not off the plan:
+//   * a nonland hand card (its live cost, EffectiveSpellCost), and every mana cost its params carry (a hand
+//     activation -- cycling, channel -- or an alternative cost; CardDefinition::param_mana_costs);
+//   * a graveyard cast: flashback / retrace (GraveyardCastSpellCost, Patrician Geist included), an open cast
+//     permission (Lurrus, GyCastOptionsNow), unearth / eternalize;
+//   * a mana-costed ability of a permanent we control, WHATEVER ITS TIMING -- a boast is legal only after
+//     attacking, which a pre-combat land drop precedes (param_mana_costs, EffectiveActivationCost).
+// A use counts only if the SHARED PAYER can pay it on the board with this land in, untapped (the drop played
+// on a copy, life paid). That is the engine's own payment legality, restricted mana included: Unclaimed
+// Territory's colours pay a creature SPELL only, so a boast's {W} cannot come from it, while Secluded
+// Courtyard's can (colored_creature_ability_ok, under CreatureAbilityPayScope). Supply the payer cannot see
+// this early is answered "in doubt, a use": an uncracked fetchland, a free mana source in hand, a convoke
+// card. The life guard: never pay when the life would not cover the payment (LandWouldEnterTapped refuses it
+// too). The autonomous engine always pays and never calls this.
+// A param_mana_costs key whose cost is paid while the card is IN THE GRAVEYARD (flashback, unearth,
+// eternalize): not a use while it is in hand or on the battlefield; the graveyard loop reads them by name.
+// (The gy_* keys are NOT this: gy_return_cost / gy_play_cost / gy_exile_grow_cost are abilities of a
+// battlefield source that reach INTO a graveyard.)
+static bool GraveyardZoneCostKey(const std::string& key)
+{
+    return key == "flashback_cost" || key == "unearth_cost" || key == "eternalize_cost";
+}
+
+bool TurnSolver::HumanLandManaMayBeUsed(const GameState& state, const Plan& plan)
+{
+    if (plan.land_to_play.empty()) { return false; }
+    const int me = state.active_player_index;
+    {
+        const std::string& entering = plan.fetch_target.empty() ? plan.land_to_play : plan.fetch_target;
+        const CardDefinition* ed = CardDatabase::Instance().Lookup(entering);
+        if (ed != nullptr && ed->params.etb_pay_life_to_untap > 0
+            && state.players[static_cast<std::size_t>(me)].life <= ed->params.etb_pay_life_to_untap)
+        { return false; }
+    }
+    GameState hyp = state;
+    {
+        RevealLogPause quiet;
+        if (!PlayLandByName(hyp, plan.land_to_play, plan.fetch_target, /*allow_shock_pay=*/true,
+                            plan.land_face, plan.rad_mode, plan.land_from_top))
+        { return true; }   // a drop this cannot model: in doubt, a use
+    }
+    auto payable = [&hyp](ManaCost c, bool for_creature, const Card* ability_src) -> bool
+    {
+        if (c.has_x) { c.generic += 1; }      // an X of 0 spends nothing beyond the fixed part
+        if (c.ManaValue() <= 0) { return false; }   // needs no mana: not a use of this land
+        GameState g = hyp;
+        RevealLogPause quiet;
+        std::optional<CreatureAbilityPayScope> ability_scope;
+        if (ability_src != nullptr) { ability_scope.emplace(ability_src); }
+        return TapForCostShared(g, c, for_creature, nullptr, /*honor_legacy_cco=*/false);
+    };
+    const Player& hp = hyp.players[static_cast<std::size_t>(me)];
+    for (const Card& c : hp.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return true; }
+        if (!d->card.IsLand())
+        {
+            const ManaCost& printed = d->card.m_mana_cost;
+            // Supply this check does not model: a free mana source in hand, a convoke cast.
+            if (printed.ManaValue() == 0 && !printed.has_x && (d->params.mana_rock || !d->params.produces.empty()))
+            { return true; }
+            if (d->params.convoke && printed.ManaValue() > 0) { return true; }
+            if (payable(EffectiveSpellCost(*d, hyp), d->card.IsCreature(), nullptr)) { return true; }
+        }
+        for (const auto& [key, pc] : d->param_mana_costs)
+        {
+            if (GraveyardZoneCostKey(key)) { continue; }   // a flashback cost is not payable from the hand
+            if (payable(pc, d->card.IsCreature(), nullptr)) { return true; }
+        }
+    }
+    for (const Card& c : hp.graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        const bool cre = d->card.IsCreature();
+        if ((d->params.flashback_cost.has_value() || d->params.retrace)
+            && payable(GraveyardCastSpellCost(*d, hyp), cre, nullptr)) { return true; }
+        for (const std::optional<ManaCost>* gc : { &d->params.unearth_cost, &d->params.eternalize_cost })
+        { if (gc->has_value() && payable(gc->value(), cre, nullptr)) { return true; } }
+    }
+    for (const GyCastOption& o : GyCastOptionsNow(hyp, me))
+    { if (payable(GraveyardCastSpellCost(*o.def, hyp), o.def->card.IsCreature(), nullptr)) { return true; } }
+    for (const Permanent& p : hyp.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (!p.tapped && !d->params.fetch_land_types.empty()) { return true; }   // a crack can add a land
+        const bool creature = p.card.IsCreature() || p.is_animated;
+        for (const auto& [key, pc] : d->param_mana_costs)
+        {
+            if (GraveyardZoneCostKey(key)) { continue; }
+            if (payable(EffectiveActivationCost(hyp, me, p.card, pc), /*for_creature=*/false,
+                        creature ? &p.card : nullptr)) { return true; }
+        }
+    }
+    return false;
+}
+
+bool TurnSolver::HumanLandShockPay(const GameState& state, const Plan& plan, bool spends_after,
+                                   bool tapped_by_human)
+{
+    return spends_after || tapped_by_human || HumanLandManaMayBeUsed(state, plan);
+}
+
 // THE PLAN'S OWN LAND DROP, played on a copy the way ApplyPlanDirect will play it. Both timing passes
 // judge a plan BEFORE it is applied, so `state` does not yet hold the land the plan plays first -- and
 // that land's mana is exactly what can pay the swap in combat. Bruna seed 11 T4 (USER 2026-10-08):
@@ -60330,13 +60445,15 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
     bool allow_shock_pay = true;
     if (HumanPlayActive())
     {
-        allow_shock_pay = false;
+        // The human-play rule (TurnSolver::HumanLandShockPay), the same call ApplyPlanDirect's drop makes.
+        bool spends = false;
         for (const Action& a : plan.actions)
         {
             if (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
                 || a.kind == Action::Kind::DigDraw)
-            { allow_shock_pay = true; break; }
+            { spends = true; break; }
         }
+        allow_shock_pay = TurnSolver::HumanLandShockPay(base, plan, spends, /*tapped_by_human=*/false);
     }
     PlayLandByName(base, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face, plan.rad_mode,
                    plan.land_from_top);
@@ -72223,16 +72340,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // human rule below, widened to activations and read from the land's own position: the steps
         // before the land cannot spend it, so they never buy the 2 life. (Review 2026-10-22: counting
         // only casts left a Temple Garden tapped under a later Bonesplitter equip.)
-        human_land_shock_pay = false;
+        // ...and since USER 2026-11-19 also when anything ELSE this turn could use the mana
+        // (TurnSolver::HumanLandShockPay / HumanLandManaMayBeUsed, judged on the board at the apply's start).
+        bool spends_after = false, tapped_by_human = false;
         for (std::size_t i = 0; i < plan.actions.size(); ++i)
         {
             const Action& a = plan.actions[i];
             const int si = i < plan.human_seq_len
                 ? static_cast<int>(i) + (static_cast<int>(i) >= L ? 1 : 0) : INT_MAX;
-            if (si > L && HumanStepSpendsMana(a)) { human_land_shock_pay = true; break; }
+            if (si > L && HumanStepSpendsMana(a)) { spends_after = true; break; }
         }
         for (const TurnSolver::PreTap& t : plan.human_pre_taps)
-        { if (t.position > L && t.name == plan.land_to_play) { human_land_shock_pay = true; } }
+        { if (t.position > L && t.name == plan.land_to_play) { tapped_by_human = true; } }
+        human_land_shock_pay = TurnSolver::HumanLandShockPay(state, plan, spends_after, tapped_by_human);
     }
 
     // DIAGNOSTIC (MTG_LINE_ORDER_TRACE, default OFF, zero cost when off): one line per action the
@@ -72374,10 +72494,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // you 2 life for mana you never tap, so enter it tapped. Conservative (pays
                     // whenever ANY mana-costing action is present) so a needed colour is never
                     // starved. Gated on s_human_play -> autonomous byte-identical.
+                    //
+                    // USER 2026-11-19: the plan-only test above left a land played in a segment of its own
+                    // tapped while a later segment (a boast after combat, a flashback) wanted it. Human play
+                    // now pays unless NOTHING this turn could use the mana -- TurnSolver::HumanLandShockPay,
+                    // the one rule all three human drop sites share (HumanLandManaMayBeUsed has the detail).
                     bool allow_shock_pay = true;
                     if (s_human_play)
                     {
-                        allow_shock_pay = false;
+                        bool spends = false, tapped_by_human = false;
                         for (const Action& a : plan.actions)
                         {
                             // A "**" line counts every paid step (HumanStepSpendsMana -- a superset of
@@ -72387,13 +72512,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                          : (a.kind == Action::Kind::CastFromHand
                                             || a.kind == Action::Kind::CastFromGraveyard
                                             || a.kind == Action::Kind::DigDraw))
-                            { allow_shock_pay = true; break; }
+                            { spends = true; break; }
                         }
                         if (human_v2)
                         {
                             for (const TurnSolver::PreTap& t : plan.human_pre_taps)
-                            { if (t.name == plan.land_to_play) { allow_shock_pay = true; } }
+                            { if (t.name == plan.land_to_play) { tapped_by_human = true; } }
                         }
+                        allow_shock_pay = TurnSolver::HumanLandShockPay(state, plan, spends, tapped_by_human);
                     }
                     // Pin the land's ETB scry/surveil disposition when this plan variant carries one
                     // (searched, not narrowed -- see Plan::scry_choice). Consumed by the first look.
