@@ -1,0 +1,267 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 3, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 47, "name": "Rift Bolt" }, { "num": 12, "name": "Goblin Guide" }, { "num": 27, "name": "Monastery Swiftspear" }, { "num": 31, "name": "Mountain" }, { "num": 5, "name": "Chain Lightning" }, { "num": 13, "name": "Goblin Guide" }, { "num": 32, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Goblin Guide"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Lightning Bolt" }],
+  "events": [{ "turn": 0, "kind": "land", "text": "opponent plays Reflecting Pool" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 12, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 13, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 1, "source": "Goblin Guide (attack)", "cards": [{ "name": "Varchild's War-Riders", "disposition": "" }] }],
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 3, "num": 12, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 31, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 13, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Goblin Guide", "cast=Monastery Swiftspear"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Misty Rainforest" }, { "turn": 1, "kind": "fetch", "text": "opponent cracks Misty Rainforest for Breeding Pool" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 13, "name": "Goblin Guide", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Monastery Swiftspear", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 51, "hand_size": 6, "graveyard": ["Misty Rainforest"] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Guide, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide", "Monastery Swiftspear"], "cast_order_canonical": ["Goblin Guide", "Monastery Swiftspear"], "actions": [{ "card": "Goblin Guide" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Monastery Swiftspear, Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Goblin Guide"], "cast_order_canonical": ["Monastery Swiftspear", "Goblin Guide"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Goblin Guide" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Chain Lightning → opponent, Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Goblin Guide"], "cast_order_canonical": ["Chain Lightning", "Goblin Guide"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Goblin Guide" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Goblin Guide, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide", "Lightning Bolt"], "cast_order_canonical": ["Goblin Guide", "Lightning Bolt"], "actions": [{ "card": "Goblin Guide" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Rift Bolt (suspend), Goblin Guide", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Goblin Guide"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Goblin Guide" }] },
+    { "index": 6, "summary": "land=none; cast: Goblin Guide", "declared_order_payability": "not_verified", "land": null, "casts": ["Goblin Guide"], "actions": [{ "card": "Goblin Guide" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Chain Lightning → opponent, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Monastery Swiftspear"], "cast_order_canonical": ["Chain Lightning", "Monastery Swiftspear"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Monastery Swiftspear, Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Chain Lightning"], "cast_order_canonical": ["Monastery Swiftspear", "Chain Lightning"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Lightning Bolt → opponent, Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt", "Monastery Swiftspear"], "cast_order_canonical": ["Lightning Bolt", "Monastery Swiftspear"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Monastery Swiftspear, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear", "Lightning Bolt"], "cast_order_canonical": ["Monastery Swiftspear", "Lightning Bolt"], "actions": [{ "card": "Monastery Swiftspear" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Chain Lightning → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Lightning Bolt"], "cast_order_canonical": ["Chain Lightning", "Lightning Bolt"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 13, "summary": "land=Mountain; cast: Rift Bolt (suspend), Monastery Swiftspear", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Monastery Swiftspear"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Monastery Swiftspear" }] },
+    { "index": 14, "summary": "land=none; cast: Monastery Swiftspear", "declared_order_payability": "not_verified", "land": null, "casts": ["Monastery Swiftspear"], "actions": [{ "card": "Monastery Swiftspear" }] },
+    { "index": 15, "summary": "land=Mountain; cast: Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 16, "summary": "land=Mountain; cast: Rift Bolt (suspend), Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Chain Lightning"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 17, "summary": "land=Mountain; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 18, "summary": "land=Mountain; cast: Rift Bolt (suspend), Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Lightning Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 19, "summary": "land=none; cast: Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Chain Lightning"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 20, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 21, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 24, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 6, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 7, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 51, "hand_size": 6, "graveyard": ["Misty Rainforest"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Goblin Guide (attack)", "cards": [{ "name": "Temple Garden", "disposition": "kept" }] }, { "turn": 2, "source": "Goblin Guide (attack)", "cards": [{ "name": "Defense of the Heart", "disposition": "" }] }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Goblin Guide (2), Monastery Swiftspear (1) — 5 to opponent (17→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 4, "num": 12, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 6, "num": 13, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 7, "num": 27, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Lightning Bolt", "cast=Lightning Bolt", "cast=Chain Lightning"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Lightning Bolt" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays City of Brass" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 8, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 6, "num": 32, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "is_land": true }, { "name": "City of Brass", "idx": 3, "num": 100023, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Chain Lightning → opponent, Lightning Bolt → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Lightning Bolt", "Lightning Bolt"], "cast_order_canonical": ["Chain Lightning", "Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Chain Lightning → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Lightning Bolt"], "cast_order_canonical": ["Chain Lightning", "Lightning Bolt"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Chain Lightning → opponent, Lightning Bolt → opponent, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning", "Lightning Bolt", "Rift Bolt"], "cast_order_canonical": ["Chain Lightning", "Lightning Bolt"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Lightning Bolt → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt", "Lightning Bolt"], "cast_order_canonical": ["Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Lightning Bolt → opponent, Lightning Bolt → opponent, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt", "Lightning Bolt", "Rift Bolt"], "cast_order_canonical": ["Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 5, "summary": "land=none; cast: Chain Lightning → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Chain Lightning", "Lightning Bolt"], "cast_order_canonical": ["Chain Lightning", "Lightning Bolt"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 6, "summary": "land=none; cast: Lightning Bolt → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt", "Lightning Bolt"], "cast_order_canonical": ["Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Chain Lightning"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Rift Bolt (suspend), Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Chain Lightning"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Rift Bolt (suspend), Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt", "Lightning Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 12, "summary": "land=none; cast: Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Chain Lightning"], "actions": [{ "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 13, "summary": "land=none; cast: Rift Bolt (suspend), Chain Lightning → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Chain Lightning"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Chain Lightning", "burn_target": "opponent" }] },
+    { "index": 14, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 15, "summary": "land=none; cast: Rift Bolt (suspend), Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Lightning Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 16, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 8, "num": 27, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 23, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 3} },
+  "opponent": { "life": 12, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "is_land": true }, { "name": "City of Brass", "idx": 3, "num": 100023, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 1, "label": "3/3 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 7, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 8, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "3/3 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 3, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 8, "num": 27, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 2} },
+  "opponent": { "life": 9, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "is_land": true }, { "name": "City of Brass", "idx": 3, "num": 100023, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 1, "label": "3/3 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 7, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 8, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "3/3 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 3, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Chain Lightning",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 8, "num": 27, "is_land": false, "power": 3, "toughness": 4 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Chain Lightning", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt", "Lightning Bolt"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 1} },
+  "opponent": { "life": 6, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "is_land": true }, { "name": "City of Brass", "idx": 3, "num": 100023, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 1, "label": "3/3 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 7, "label": "Goblin Guide (yours)" }, { "kind": "permanent", "index": 8, "label": "Monastery Swiftspear (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "3/3 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 3, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Goblin Guide (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "Monastery Swiftspear (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (12→9)" }, { "turn": 3, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (9→6)" }, { "turn": 3, "kind": "damage", "text": "🔥 Chain Lightning: 3 to opponent (6→3)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 5, "num": 12, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Goblin Guide", "idx": 7, "num": 13, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Monastery Swiftspear", "idx": 8, "num": 27, "is_land": false, "power": 4, "toughness": 5 }, { "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 47, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Chain Lightning", "Lightning Bolt", "Lightning Bolt"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "3/3 Creature", "idx": 1, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Breeding Pool", "idx": 2, "num": 100038, "is_land": true }, { "name": "City of Brass", "idx": 3, "num": 100023, "is_land": true }, { "name": "Reflecting Pool", "idx": 0, "num": 100015, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Misty Rainforest"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Guide (2), Goblin Guide (2), Monastery Swiftspear (4) — 8 to opponent (3→-5)" }
+  ]
+}
