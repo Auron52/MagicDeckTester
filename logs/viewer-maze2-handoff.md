@@ -45,7 +45,7 @@ origin/phase-1-2-deck-analyzer f1342be37). Subagent rule: push wip/* only, never
   `tools/play/DECISIONS.md` rows.
 
 ## Remaining, in order
-1. Build result. QUEUED (not yet started) behind other agents on build/heavy.lock: flock PID **1156905** (parent bash 1156904),
+1. Build result: DONE, `BUILD EXIT 0`, no compile errors (build/Release/mtg + mtg-test, from cf9c9b1ec's tree). Was QUEUED behind other agents on build/heavy.lock: flock PID **1156905** (parent bash 1156904),
    log `/workspaces/MagicDeckTester/build/scratch/viewer-maze2/build1.log`, DONE marker = the line `BUILD EXIT <rc>`
    appended to that log (wait: `until grep -q "BUILD EXIT" <log>; do sleep 30; done`, or `kill -0 1156905`). If the
    session that launched it died, the flock may be gone: re-run
