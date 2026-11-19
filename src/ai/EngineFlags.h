@@ -519,6 +519,20 @@ inline bool LineKeepAllOn()
     return heurarm::Flag(heurarm::LINE_KEEP_ALL, env_on);
 }
 
+// MTG_LINE_KEEP_ROCK (DEFAULT OFF until measured; =0 byte-identical) -- the line-keep rung (LineReducerKeepHold,
+// ManaPayment.cpp) on every applying line of two or more held casts that casts a MANA ROCK, and, on every line the rung
+// reaches, the rest judged with the rock being paid for on the board (RampLaterPayable's rule: it enters untapped and the
+// later casts meet its mana). A rock in the line declines the whole-turn joint prepay (PP_PRODUCER, BatchPrepayMainCasts),
+// so these are exactly the multi-cast lines the per-cast greedy pays with no joint allocation. Mana-clean gate
+// claude-queue-20261119g2: Stuffy Doll s30003847 T4 {Guilty Conscience + Mind Stone + Loran's Escape} -- Mind Stone's {2}
+// took Boros Garrison's {R}{W} and Loran's Escape's {W} met two Mind Stones. docs/design/rock-in-plan-2026-11-19.md.
+// Read PER CALL (heurarm slot LINE_KEEP_ROCK), seeded where the reducer credit is.
+inline bool LineKeepRockOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_ROCK", false);
+    return heurarm::Flag(heurarm::LINE_KEEP_ROCK, env_on);
+}
+
 // MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
 // also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
 // filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +

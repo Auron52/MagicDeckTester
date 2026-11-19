@@ -1074,6 +1074,7 @@ enum Slot : int
     S9_MANA_ABILITY_SKIP,     // MTG_S9_MANA_ABILITY_SKIP  site 9 (post-entry re-plan, and its after-deferred twin) is NOT opened by a creature sac outlet whose activation is a MANA ability (sac_outlet_add_mana_amount > 0: Skirk Prospector "Sacrifice a Goblin: Add {R}"). USER 2026-11-21: "the Skirk Prospector ability shouldn't be messing us up in terms of cost because it is a mana ability and should not be part of the search." A pure mana ability (the enumerator's MTG_SAC_OUTLET_PAY suppression predicate: payer live, !SacOutletEatHasValue) is keyed as its own kind and a NEW one opens site 9 only where its mana can buy something the fodder-free pool cannot (S9SacManaDemand: hand's summed flat cost not payable, an X card, or a mana-priced activation live); where a death pays (Rundvelt's impulse, Pashalik) it keys site 9 as before. Sound fold: ON opens a strict subset of =0's sites. The r1 form (skip every mana outlet) lost Goblins 2HG gi242/79/200 at d8 b0. Default ON; =0 -> the outlet keys site 9 like any activation
     CB_BROWBEAT_M2_RESTRICT,  // MTG_CB_BROWBEAT_M2_RESTRICT  Creature Burn: Browbeat no longer opens a FULL searched post-combat main on EVERY turn (GoldFishRunner::DeckUsesSecondMain, which reads THIS slot too -- one half alone deletes the main-2 Browbeat); CreatureBurnProvider::RestrictedSecondMainLive opens the post-combat main (full menu) only on turns a Browbeat is in hand post-combat and castable there. Designed as an identity fold, MEASURED NOT ONE 2026-11-21 (net +9 / +22 turns at d3 b10 / d5 b20; d5 b0 win turns differ; STATUS at the definition, DecisionProviders.cpp). Default OFF (= the every-turn main 2, byte-identical to before); =1 -> the per-turn gate (A/B hatch)
     PD_CASTLESS_LINE_NO_HOLD, // MTG_PD_CASTLESS_LINE_NO_HOLD  Prevent Damage: the Earthquake/Spellshock-in-hand red hold stands down while the current plan names no mana cast and opens nothing unseen (an activation-only line: no step of it can spend the held red; s6006 gi47 T7). Default ON; =0 holds on every armed bill
+    LINE_KEEP_ROCK,           // MTG_LINE_KEEP_ROCK  the line-keep rung (LineReducerKeepHold, ManaPayment.cpp) on every applying line of two or more held casts that CASTS A MANA ROCK (the lines the joint prepay declines with PP_PRODUCER, so the per-cast greedy pays them with no joint allocation), and the rung's rest judged with the rock being paid for on the board (it enters untapped; the later casts meet its mana). Stuffy Doll s30003847 T4 {Guilty Conscience + Mind Stone + Loran's Escape}: Mind Stone's {2} took Boros Garrison's {R}{W} and Loran's Escape's {W} met two Mind Stones. =0 -> byte-identical
     COUNT
 };
 
@@ -2092,6 +2093,7 @@ inline const char* Name(int slot)
         "MTG_S9_MANA_ABILITY_SKIP",
         "MTG_CB_BROWBEAT_M2_RESTRICT",
         "MTG_PD_CASTLESS_LINE_NO_HOLD",
+        "MTG_LINE_KEEP_ROCK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
