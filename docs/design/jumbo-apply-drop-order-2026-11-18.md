@@ -140,16 +140,76 @@ Lever-off identity: `MTG_PO_UNLOCK_ORDER=0 MTG_SEQ_TRAILING_EQUIP=0 bash test/re
 (231 passed, 0 play changes vs committed GT). Smoke/regression GT with the levers ON is not accepted yet (Jumbo rows
 move: digest-only and two faster games).
 
-### CPU of the unlock-order search (open)
+### CPU of the unlock-order search
 
-The search's walks are not charged to the budget (units x0.994), so its cost is pure extra CPU: Jumbo x1.445 at the
-same play (x1.64 before the class fold). Counted over 1000 Jumbo games: 517k searches, 5.4M walks, 36k orders found
-(7%); by order length n = 2..8: 167k / 176k / 101k / 55k / 16k / 2.1k / 50, so n = 5..7 carry most of the walks.
-Tried and dropped: an order-free necessary bound (SpwfProvablySupplyShort on a board with every line haste
-pre-granted). The generous version was sound (0 violations in verify mode) but caught only 16% of searches (-3% CPU);
-a tighter one (only real haste grants) caught 18% and was UNSOUND (40 violations), so neither ships.
-Options for the USER: (a) keep as is (x1.45 CPU on Jumbo only; other decks within noise); (b) re-price the walks
-against the decision budget (`TurnSolver::DecisionBudget()`, as the equip route does -- inert at unlimited budget,
-but it moves budgeted play and needs its own A/B); (c) a resumable prefix-sharing walk (DFS over orders with the
-scratch board copied per depth) to cut the per-walk cost.
+The search's walks are not charged to the budget (units x0.995), so its cost is pure extra CPU. Counted over 1000
+Jumbo games before any of the work below: 517k searches, 5.4M walks, 36k orders found (7%); by order length
+n = 2..8: 167k / 176k / 101k / 55k / 16k / 2.1k / 50.
+
+**Shipped (both exact, both default ON; `wip/jumbo-perf` 68a4f528b, d9dfa1b7e):**
+* `MTG_UO_DFS` -- the orders are walked as ONE prefix-sharing tree over class sequences
+  (`UnlockOrderDfs` / `UnlockOrderDfsRec`): SeqWalkFixedOrder does its setup once, each distinct prefix is paid
+  once, and a node with two or more live children snapshots (GameState, `g_line_unpaid_cost`, pending unlocks),
+  with the last child taking the snapshot by swap. Exact because a walk is a pure function of the board after the
+  prefix, the line's unpaid cost and the pending unlocks, while its set-level setup reads only the cast multiset.
+  (A same-line cost reducer's credit is order-sensitive, so those lines keep the old search, as do n > 7.) The
+  visit is lexicographic with the old ranking (fewest inversions, ties to the earlier candidate) plus
+  inversion-floor pruning, so the apply site returns the same order. The enumeration site stops at the first
+  payer.
+* `MTG_UO_FOLD` -- in the unlock-order domain the enumeration site's verdict is an OR (the given order, the ETB
+  order, or any other class order), so the given order becomes a leaf of the same tree, visited first: one setup,
+  its prefixes shared. The ETB order is then walked unless it is the tree's own realisation of its class sequence.
+  The OrderPaysSequentially memo route keeps the old sequence.
+* Diagnostic: `MTG_UO_DFS_VERIFY=1` runs old and new side by side. Verify set (Jumbo 1000 + Angels / Boars /
+  Bruna / Five Colour 200 each): **0 mismatches** over 580k+ searches (tree) and 400k+ sites (fold).
+
+**Pooled digest A/B** (seed = 30000000+gi, game_index = gi, play settings; Jumbo gi 650000-652999, 1000 games each
+for the others; new = d9dfa1b7e, old = 2f67da724; CPU = summed per-job cpu):
+
+| deck | differing games (on / off) | CPU new on/off | CPU old on/off | new-on / old-on |
+|---|---|---|---|---|
+| Jumbo Cactuar (3000) | 0 / 0 | **x1.201** | x1.447 | x0.831 |
+| Angels (1000) | 0 / 0 | x1.013 | x1.009 | x0.996 |
+| Boars (1000) | 0 / 0 | x1.037 | x1.035 | x0.986 |
+| Bruna (1000) | 0 / 0 | x1.020 | x1.016 | x0.991 |
+| Five Colour (1000) | 0 / 0 | x1.017 | x1.017 | x0.951 |
+
+`MTG_UO_DFS` alone measured Jumbo x1.208; the fold adds only ~0.7 points. The given walk turned out to be a small
+share of a search that fails.
+
+**Where the remaining cost is** (Profile build, Jumbo 256 games, lever on vs off, plus temporary counters over
+1000 games). The ENUMERATION site is ~80% of it (UnlockOrderSearchTree 11.5% of all on-arm CPU; the apply site's
+UnlockPayableOrder 2.1%). That site ran 411k searches, of which only 3.5% found an order, taking 8.5M steps (60%
+of them failing), 4.8M snapshot copies and 2.7M swaps. Average n there is 3.4. Timing over 300 games: successful
+steps 55%, snapshots 17%, failing steps 14%, setup and overhead ~14%. Failures land mostly at the LAST cast, so
+the tree is explored nearly in full to depth n-1. The cost is PROVING INFEASIBILITY, and it lives in the
+successful intermediate payments. Top extra symbols: TapForCost* ~14%, memmove 8.7%, GameState
+copy/assign/move ~10%, SeqWalkFixedOrder self 5%.
+
+**Tried and not shipped:**
+* An order-free necessary bound at the root (SpwfProvablySupplyShort on a board with every line haste
+  pre-granted). Sound (0 violations) but caught only 16% of searches (-3% CPU). The tighter form (real haste
+  grants only) was UNSOUND (40 violations).
+* An exact-id memo of the enumeration verdict in the paymemo scope: 0 hits over 415k searches.
+* A canonical (copy-fold) repeat probe. 59% of searches repeat up to renaming hand copies, but the payer reads
+  card numbers asymmetrically (ManaPayment.cpp `m_number` range checks and number bitmasks), so the fold is not
+  provably exact: 680 disagreements over 80k in a cross-scope cache. Rejected.
+* Skipping the restore after an atomic payment failure: it saves mostly the cheap swaps, because failures are at
+  the leaves.
+* Subset monotonicity ("S unpayable in every order, so S + x is too, for a non-mana x"): NOT exact for this walk.
+  The payer is a heuristic tapper whose context is set-level (`g_line_unpaid_cost` = the whole line's cost, the
+  line-keep rung, LineReducerCredit), so adding x changes how every prefix is paid. A greedy payer with more
+  sources is also not provably monotone.
+
+**Open (exact candidates, not attempted):**
+* (a) A SOUND per-node necessary bound inside the tree: remaining mana producible (board + the remaining casts'
+  unlocks) against remaining cost. It needs an upper bound on producible mana that is provable for every mana
+  mechanic (land Auras, untappers, Treasures, life-gain mana, reducers), and the root attempt shows how easily the
+  tight form goes unsound. Any version must pass `MTG_UO_DFS_VERIFY` with 0 violations.
+* (b) Transposition of identical prefix states: AB and BA reaching the same board, unpaid cost and unlocks share a
+  subtree. It needs a complete, cheap GameState equality (none exists) and saves mostly leaf steps.
+* (c) Cheaper snapshots (field-subset copies): only with a proof of which fields the walk reads.
+* USER option (not exact, a play change): price the walks against the decision budget
+  (`TurnSolver::DecisionBudget()`, as the equip route does). It is inert at unlimited budget but moves budgeted
+  play, so it needs its own A/B.
 
