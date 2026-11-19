@@ -1865,3 +1865,4 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   -> mtg-test -> ./build.sh pgo -> full smoke (byte-identical except upstream's own moves) -> check_gt_logs ->
   check_references_safe -> push phase-1-2-deck-analyzer (first push this session) -> background gh run watch
   --interval 60. Then viewer audit, Stage 6 report, leaf_tiebreak --blocks 48, check_references_safe, CronDelete 01e1d807.
+- (21:08) attribution early results: RC smoke onedropburn 0;RC smoke onedropburn2hg 0;RC regression onedropburn 0;RC regression onedropburn2hg 0;RC overnight onedropburn 1; -- an rc 1 needs root-causing (read logs/keep_attr/<mode>_<key>/ and the tail of keep_attr.log) before accepting.
