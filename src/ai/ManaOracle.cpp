@@ -3098,7 +3098,10 @@ namespace
 // count and every verdict are a function of the game alone, on every machine and at every thread count), and a
 // Realize that finds the thread's total past MTG_MANA_ORACLE_BOARD_MB stops as CAPPED, named as the memory
 // budget, exactly as the apply ceiling stops it; its escalation is skipped (the same boards would stop it again).
-// Default 768 MB per thread: 32 workers x 768 MB stays under a 40 GB cap beside the engine's own ~5 GB.
+// Default 768 MB per thread: 32 workers x 768 MB (24 GB) stays under a 40 GB cap beside the engine's own ~5 GB.
+// Measured 2026-11-19: Maze's End gi 0-199, 32 threads, MTG_RSS_CAP_GB=40, oracle 2 -- all 200 games finished,
+// peak RSS 27.4 GB (560 searches stopped by this budget); a single game holding one capped search peaks at
+// ~1.1-1.6 GB RSS (the estimate undercounts the heap by roughly a third). Lower it before raising the worker count.
 // 0 = unbounded. Checker-only: play never reads it.
 thread_local long long t_board_live = 0;   // bytes of oracle boards alive on this thread (BoardAcct)
 long long BoardBudgetBytes()
