@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "Seed 12345681 gi 0, T3 (USER 2026-11-19: 'A T3 win is possible and we fail to reach it'; reference",
+    "claude_s12345681_gi12345680, win_turn 3). Living Wish fetched Brindle Boar, the Boar was cast and SACRIFICED",
+    "(life_gained_this_turn 4), Crab Umbra is on the untapped Alchemist, every land and the Arbor Elf are spent, the",
+    "float is empty; hand Forest (drop used) + Staff of Domination; the Stroke of Genius is 17 cards down. Casting the",
+    "Staff off the Alchemist's own tap leaves 1 floating and the Umbra unpayable, so the go-off is: Umbra loop until the",
+    "float pays the Staff's {3} (Alchemist left untapped), cast the Staff, loop again with its draws to the Stroke,",
+    "Stroke at the opponent. Before MTG_AA_LOOP_CAST_DRAW the rule table had no row for it (FIN-STAFF-DIG needed the",
+    "Staff on the battlefield) and ComputeUntapLoopNeed had no need (so no loop was offered): no button, no route,",
+    "and the search played the turn out at every budget. Rule LIFE-GAINED+LOOP-UMBRA+FIN-STAFF-HAND-DIG."
+  ],
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 3,
+  "on_the_play": false,
+  "active_life": 24,
+  "opponent_life": 20,
+  "opponent_library_size": 51,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "life_gained_this_turn": 4,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Arbor Elf",
+      "tapped": true
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Staff of Domination"
+  ],
+  "library_top": [
+    "Feed the Clan",
+    "Crab Umbra",
+    "Forest",
+    "Utopia Sprawl",
+    "Nourish",
+    "Forest",
+    "Elvish Harbinger",
+    "Arbor Elf",
+    "Elvish Harbinger",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Elvish Harbinger",
+    "Nourish",
+    "Seedcradle Witch",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 50,
+  "depth": 3,
+  "budget_ms": 20,
+  "expect_combo_off": true,
+  "combo_off_rule_probe": true,
+  "expect_history_contains": [
+    "Staff of Domination",
+    "Stroke of Genius"
+  ]
+}

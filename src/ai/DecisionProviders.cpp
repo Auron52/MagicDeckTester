@@ -57166,11 +57166,26 @@ bool AccomplishedAlchemistProvider::ComboOffPossible(const GameState& s, int c, 
                     for (const FinOpt& F : fins)
                     {
                         if (F.wishes_used + L.wishes_used > wishes) { continue; }
-                        if (std::string(F.name) == "FIN-STAFF-DIG" && !staff_bf && !L.staff) { continue; }
-                        if (F.need_mv > bank) { continue; }
+                        long long f_need = F.need_mv, f_bank = bank;
+                        std::string f_name = F.name;
+                        if (f_name == "FIN-STAFF-DIG" && !staff_bf && !L.staff)
+                        {
+                            // FIN-STAFF-HAND-DIG (MTG_AA_LOOP_CAST_DRAW): the Staff is in HAND and another untapper
+                            // runs the loop -- the loop banks the Staff's {3}, the Staff is cast off the float with
+                            // the Alchemist still untapped, then its draws dig (ComputeUntapLoopNeed (f)). Seed
+                            // 12345681 T3: Boar sacrificed, Umbra on the Alchemist at X = 4, Staff in hand -- the
+                            // rule refused it, so neither the button nor the search's route ever saw that board.
+                            // Once the Staff is down its {2},{T}: gain 1 life raises X for every later iteration, so
+                            // the bank does not bind (as for a gain-capable Staff above).
+                            if (!LoopCastDrawOn() || staff_h == nullptr) { continue; }
+                            f_need += EffectiveSpellCost(*staff_h, s, 1).ManaValue();
+                            if (staff_h->params.tap_lifegain_cost.has_value()) { f_bank = 1LL << 40; }
+                            f_name = "FIN-STAFF-HAND-DIG";
+                        }
+                        if (f_need > f_bank) { continue; }
                         const char* life_name = mask != 0 ? "LIFE-HAND"
                                               : (X >= c_steady + 1 ? "LIFE-GAINED" : "LIFE-STAFF");
-                        if (rule) { *rule = std::string(life_name) + "+" + L.name + "+" + F.name; }
+                        if (rule) { *rule = std::string(life_name) + "+" + L.name + "+" + f_name; }
                         return true;
                     }
                 }

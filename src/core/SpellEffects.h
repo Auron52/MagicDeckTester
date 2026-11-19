@@ -45876,6 +45876,11 @@ enum UntapLoopPayoff : int
     kLoopPayCastDrain = 5,   // a drain creature in HAND (Scholar of Athreos): cast it, then drain to lethal
     kLoopPayWishDrain = 6,   // Living Wish in hand + a drain creature in the SIDEBOARD: wish, cast, drain
     kLoopPayCastPump  = 7,   // a team pump creature in HAND (Ezuri): cast it, then pump to lethal
+    // A DRAW ENGINE in HAND (Staff of Domination, "{5},{T}: Draw a card" + "{1}: Untap this artifact") and a
+    // payoff card in the LIBRARY (MTG_AA_LOOP_CAST_DRAW, default ON; see LoopCastDrawOn). The loop funds the
+    // engine's CAST only (`cost` = the cast, `chain` = the whole cast + dig); the continuation casts it, and the
+    // re-opened site 9 (the cast untapper's kActUntapper re-plan) then sees kLoopPayDraw off the same loop.
+    kLoopPayCastDraw  = 8,
 };
 struct UntapLoopNeed
 {
@@ -45887,6 +45892,8 @@ struct UntapLoopNeed
     ManaCost pre[2];        // chained payoffs: the setup casts, in order (the wish, then the creature)
     int      n_pre  = 0;
     InternedName card;      // chained payoffs: the creature the setup casts (the wish's target)
+    ManaCost chain;         // kLoopPayCastDraw: the WHOLE chain (cast + the draws to the payoff) -- what the
+                            // "does the board already fund it?" test prices; `cost` is only what the loop funds
 };
 
 // The continuation's KILL FOLD (BpDeriveContinuationList): while non-zero, CollectActions keeps only the
@@ -46040,6 +46047,9 @@ inline bool UntapLoopPayoffCard(const GameState& s, int ctrl, const CardDefiniti
 // via Living Wish, Ezuri from hand -- a setup cast whose own ability the re-opened site 9 activates), then a
 // draw to a chained payoff card. payoff == kLoopPayNone -> nothing to buy, so no loop (unbounded mana a
 // goldfish cannot spend is pure cost -- the EldraziFlicker no-sink clause).
+// MTG_AA_LOOP_CAST_DRAW (default ON): the (f) need below -- a draw engine in HAND is a loop payoff. =0 -> no
+// such need (the pre-2026-11-19 behaviour), for A/B only.
+inline bool LoopCastDrawOn() { static const bool v = EnvOn("MTG_AA_LOOP_CAST_DRAW", true); return v; }
 inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
 {
     UntapLoopNeed best;
@@ -46193,8 +46203,55 @@ inline UntapLoopNeed ComputeUntapLoopNeed(const GameState& s, int ctrl)
         }
     }
     if (best.payoff != kLoopPayNone) { return best; }
+    // (f) A DRAW ENGINE STILL IN HAND (MTG_AA_LOOP_CAST_DRAW). (d) needs the Staff of Domination already on the
+    // battlefield, so with the Staff in HAND and no kill in hand there was NO need at all -- no loop offered, no
+    // Combo Off route link -- although the line is the deck's ordinary go-off: loop until the float pays the
+    // Staff's cast, cast it, then loop again with its draws to the Stroke. Seed 12345681 T3 (USER 2026-11-19:
+    // "A T3 win is possible and we fail to reach it"): Brindle Boar sacrificed (X = 4), Crab Umbra on the
+    // Alchemist, Staff in hand, Stroke 17 cards down. Casting the Staff off the board's own mana taps the
+    // Alchemist for it and strands the loop (4 - 3 = 1 floating, Umbra's {2}{U} unpayable), so the cast must be
+    // paid out of the loop's float with the Alchemist left untapped -- exactly what funding `cost` = the cast
+    // does (the loop stops on an untapped Alchemist). The draws are NOT pre-funded here: once the Staff is in
+    // play the need is (d), and the loop the re-opened site 9 runs funds them with the Staff's own {2},{T} gain
+    // raising X, which this loop cannot use yet. Sound: one more searched variant (the loop) and one more
+    // kill-fold target (the engine's cast); nothing is removed. A chained pass digs to a chained payoff the same
+    // way (d)'s second pass does, after it.
+    auto cast_draw_engine = [&](bool chained_pass)
+    {
+        if (!LoopCastDrawOn()) { return; }
+        for (const Card& h : me.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d == nullptr || d->card.IsLand() || !d->params.tap_draw_cost.has_value()
+                || !d->params.self_untap_cost.has_value()) { continue; }
+            const auto& lib = me.library;
+            int k = 0;
+            for (std::size_t i = 0; i + 1 < lib.size(); ++i)   // never the last card (as (d))
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lib[i]);
+                if (ld && UntapLoopPayoffCard(s, ctrl, *ld, chained_pass)) { k = static_cast<int>(i) + 1; break; }
+            }
+            if (k <= 0) { continue; }
+            Card probe = d->card;
+            const ManaCost pre   = EffectiveSpellCost(*d, s, 1);
+            const ManaCost draw  = EffectiveActivationCost(s, ctrl, probe, *d->params.tap_draw_cost);
+            const ManaCost untap = EffectiveActivationCost(s, ctrl, probe, *d->params.self_untap_cost);
+            ManaCost chain = pre;
+            SumManaCostInto(chain, draw);                       // it enters untapped: no {1} before the first
+            for (int i = 1; i < k; ++i) { SumManaCostInto(chain, draw); SumManaCostInto(chain, untap); }
+            best = UntapLoopNeed{};
+            best.payoff = kLoopPayCastDraw; best.cost = pre; best.count = k;
+            best.n_pre = 1; best.pre[0] = pre;
+            best.card = d->card.m_name;
+            best.chain = chain;
+            return;   // one engine suffices: every copy is the same cast and the same dig
+        }
+    };
+    cast_draw_engine(false);
     if (best.payoff != kLoopPayNone) { return best; }
     draw_to_find(true);
+    if (best.payoff != kLoopPayNone) { return best; }
+    cast_draw_engine(true);
     return best;
 }
 
@@ -46464,7 +46521,9 @@ inline bool UntapLoopWorthOffering(const GameState& s, int ctrl, int shape, int 
         const bool pump = need.payoff == kLoopPayPump || need.payoff == kLoopPayCastPump;
         ManaPool have = pump ? TeamPumpPayersPool(s) : AvailableManaPool(s, nullptr);
         if (!pump) { have.AddPool(s.floating_mana); }
-        buys = !have.CanPay(need.cost);   // the board already funds it: no loop needed
+        // A draw engine's CAST alone is usually payable off the board, but the dig after it is not: price the
+        // whole chain (kLoopPayCastDraw), or the loop that keeps the Alchemist untapped for it is never offered.
+        buys = !have.CanPay(need.payoff == kLoopPayCastDraw ? need.chain : need.cost);   // the board already funds it
     }
     if (!buys) { return false; }
     // HUMAN PLAY gets no projection: a loop offered on life the human has not gained yet would be a silent
@@ -46698,7 +46757,8 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
     if (g_play_event_sink && !g_tap_speculating && done > 0)
     {
         static const char* const kPayoff[] = { "combat", "Stroke of Genius", "the drain", "the team pump", "the draws",
-                                               "a drain creature", "a wished drain creature", "a team pump creature" };
+                                               "a drain creature", "a wished drain creature", "a team pump creature",
+                                               "a draw engine's cast" };
         // ...and WHICH colours (the loop picks each tap's colour itself -- UntapPreTapColour -- so the
         // player cannot otherwise see that, e.g., the float is {G}x53 + {U}x1; sweep seed 80019).
         const ManaPool& fl = state.floating_mana;
@@ -46712,7 +46772,7 @@ inline int ApplyUntapLoop(GameState& state, int ctrl, int shape, int source_id, 
                       "untap loop x" + std::to_string(done) + " -- floating "
                       + std::to_string(state.floating_mana.Total()) + " mana"
                       + (cols.empty() ? std::string() : " (" + cols + ")") + " for "
-                      + kPayoff[std::clamp(need.payoff, 0, 7)]);
+                      + kPayoff[std::clamp(need.payoff, 0, 8)]);
     }
     return done;
 }

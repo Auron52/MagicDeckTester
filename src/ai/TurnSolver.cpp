@@ -41687,6 +41687,7 @@ static bool UntapLoopKillAction(const GameState& state, const Action& a, int pay
         case kLoopPayCastDrain:
         case kLoopPayCastPump:
         case kLoopPayWishDrain:
+        case kLoopPayCastDraw:   // the draw engine's cast; its draws are the re-opened site 9's kLoopPayDraw
         {
             if (a.kind != Action::Kind::CastFromHand) { return false; }
             const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
@@ -132404,7 +132405,8 @@ static std::vector<TurnSolver::Plan> UntapLoopKillPlansFor(const GameState& stat
     if (state.floating_mana.Total() > 0
         && UntapLoopNeedFunded(state, state.active_player_index, nullptr, &kn)
         && (kn.payoff == kLoopPayStroke || kn.payoff == kLoopPayDrain || kn.payoff == kLoopPayPump
-            || kn.payoff == kLoopPayCastDrain || kn.payoff == kLoopPayWishDrain || kn.payoff == kLoopPayCastPump))
+            || kn.payoff == kLoopPayCastDrain || kn.payoff == kLoopPayWishDrain || kn.payoff == kLoopPayCastPump
+            || kn.payoff == kLoopPayCastDraw))
     {
         struct KillScope
         {
