@@ -4517,10 +4517,14 @@ function sameNameMultiset(a,b){
 // Falling back to a prompt IS today's behaviour, so the degradation can never be worse than not
 // having tried. (Two identically-named tokens are matched by name alone -- they are fungible to
 // the engine for the same reason: it cannot tell them apart either.)
+// The frames of ONE burst are linked by their source label minus a trailing "(...)": Fireblast labels
+// its two frames "(first Mountain)" / "(second Mountain)" and Walk the Aeons "(Island k of 3)". The
+// engine KEEPS those per-frame labels because the reference tools key a decision on its source.
+function sacBurstSource(s){ return String(s||'').replace(/\s*\([^()]*\)\s*$/,''); }
 function sacBurstAuto(d){
   const q=S.sacBurst;
   if (!q) return false;
-  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || turnKey(d)!==q.turn
+  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || sacBurstSource(d.source)!==q.source || turnKey(d)!==q.turn
       || !q.want.length) { S.sacBurst=null; return false; }
   const got=(d.options||[]).map(o=>o.name);
   if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
@@ -5741,9 +5745,15 @@ function promptPanelHtml(d, dec){
       const picked=(d.options||[]).filter(o=>S.boardSel&&S.boardSel.has('m:'+o.perm_index));
       const forced=sacBurstForced(d);
       const list=picked.map(o=>esc(o.name)).join(' + ')||`(pick ${need})`;
-      return `<h3>Sacrifice ${need} ${noun}s — ${esc(d.source||'')}</h3>`+
-        `<div class="sub">${esc(d.source||'This ability')} was activated <b>${+d.pick_total}</b> times, so it eats `+
-        `<b>${+d.pick_total}</b> ${noun}s in all`+
+      // A land-sacrifice COST (Fireblast's two Mountains, Walk the Aeons' three Islands) is one payment, not
+      // an outlet activated several times -- say so, and title it by the card, not the per-frame label.
+      const isCost=/^(Fireblast|Walk the Aeons) \(/.test(d.source||'');
+      const card=isCost?sacBurstSource(d.source):(d.source||'');
+      return `<h3>Sacrifice ${need} ${noun}s — ${esc(card)}</h3>`+
+        (isCost
+          ? `<div class="sub">${esc(card)}’s cost sacrifices <b>${+d.pick_total}</b> ${noun}s`
+          : `<div class="sub">${esc(d.source||'This ability')} was activated <b>${+d.pick_total}</b> times, so it eats `+
+            `<b>${+d.pick_total}</b> ${noun}s in all`)+
         ((+d.pick_index||0)>0?` (${+d.pick_index} already taken)`:'')+`. `+
         (forced
           ? `You have exactly ${need} left — <b>all of them are sacrificed</b>, there is nothing to choose. `+
@@ -6892,9 +6902,9 @@ function commitBoardSel(d, dec){
       // Each queued pick carries its IDENTITY, not just its name: same-name bodies differ when some are
       // summoning sick (Shadowborn s4 gi3: a name-only replay sacrificed the attack-ready Apostles).
       const rest=picked.slice(1).map(o=>({ name:o.name, num:+o.num||0, sick:!!o.sick, tapped:!!o.tapped }));
-      S.sacBurst = rest.length ? { source:d.source, turn:turnKey(d), want:rest, expect } : null;
+      S.sacBurst = rest.length ? { source:sacBurstSource(d.source), turn:turnKey(d), want:rest, expect } : null;
       return pushChoice(d, picked[0].index,
-        `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
+        `${sacBurstSource(d.source)||d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
         + (sacBurstForced(d)?' (forced — every creature)':''));
     }
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);

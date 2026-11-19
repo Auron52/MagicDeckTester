@@ -1763,3 +1763,20 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   only (gyExilePick2 / gyExileBurstAuto in index.html). Frame counts unchanged -> references keep alignment.
 - NEXT: Release build (Fireblast fix) -> unit tests -> commit -> push + CI watch -> USER: "continue on to the mulligan
   profile": bash scripts/mullgen.sh run "decks/1 Drop Burn" fast (builds PGO first).
+
+### CHECKPOINT ~08:35 UTC 2026-11-19 -- session restarted; Fireblast labels restored, rebuild owed
+- Session restart killed the build + viewer; viewer restarted from the primary checkout (backup dir set); timer
+  01e1d807 survived. Release build with the burst fix landed 08:09 UTC (rc=0).
+- viewer_protocol_check --only 1_Drop_Burn,Midrange_Burn: 19 refs, 13 ok / 6 repaired / 0 drift -- the "repaired"
+  were the RELABEL ("Fireblast (sacrifice two Mountains)"): the reference tools key a decision on (type, turn, phase,
+  source), so a new label orphans the recorded picks (answered by engine default). FIXED (uncommitted, NOT yet built):
+  SpellEffects.h restores the per-frame labels "Fireblast (first|second Mountain)" / "Walk the Aeons (Island k of 3)"
+  and keeps SacBurstScope; index.html links a burst's frames by sacBurstSource() (label minus trailing "(...)") and
+  gives land-cost bursts cost wording; DECISIONS.md updated.
+- RUNNING at compaction: mtg-test + viewer_client_check.js on the 08:09 binary (logs/1dropburn/unit_fireblast.log,
+  logs/1dropburn/viewer_client.log).
+- NEXT: when those finish -> ./build.sh (restored labels) -> mtg-test -> viewer_protocol_check --only
+  1_Drop_Burn,Midrange_Burn (expect 0 repaired from Fireblast) -> commit SpellEffects.h + index.html + DECISIONS.md ->
+  check_references_safe -> push phase-1-2-deck-analyzer (first push this session) -> background CI watch ->
+  bash scripts/mullgen.sh run "decks/1 Drop Burn" fast (USER: "continue on to the mulligan profile"; builds PGO first).
+  Still owed after: viewer audit, Stage 6 report, leaf_tiebreak --blocks 48.
