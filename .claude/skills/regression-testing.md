@@ -687,6 +687,43 @@ Paired seeds mean the only difference between arms is the change itself, so even
 ~0.01-turn deltas are signal, not noise — the suite compares the same seed on both
 arms by construction.
 
+### Measuring WALL in a pooled A/B (2026-11-19)
+
+A game's `ms=` (and `cpu=`) in a pooled batch is **not a property of the game**: it depends on how
+loaded the box is while it runs. On this 16-core / 32-thread laptop part the same deterministic game
+(Maze's End d3 s192014 gi13: same digest, same units) costs **12.1 s alone and ~24 s inside a
+saturated pool**. Play and units do not move with order or concurrency; only the wall reading does.
+There is no cross-game cache behind it: two identical copies back to back on ONE thread read 0.997.
+
+So **whichever arm systematically runs later reads faster**. Measured with IDENTICAL arms (150 games,
+one binary, `scripts/ab_wall.py`):
+
+| manifest shape | B/A ms |
+|---|---|
+| arms innermost, `same_seed_inflight: 1`, A always first | **0.844** (replicate 0.840) |
+| same, arm order alternated per seed, BALANCED ratio | 0.947 |
+| arms innermost, `same_seed_inflight: 0` | **1.004** |
+| one job per arm (arm-major, `deck_compare.py`'s shape) | 0.966 |
+
+`same_seed_inflight: 1` serialises a seed's copies, so the second copy of a long game starts when the
+first ends, in the draining tail, at up to 2x speed. That is how Maze's End F5 read a "+35-43%" joint-pay
+cost that flipped to "-9%" when the arm order was swapped.
+
+**Rules for a wall comparison:**
+* Put the arms innermost AND let a seed's arms run **side by side**: `same_seed_inflight` 0, or at
+  least the number of arms. Use 1 only where the seeds are memory-heavy (deep, hard seeds holding GBs);
+  then alternate the arm order per seed and read the BALANCED column, which cancels the order effect
+  only in expectation (0.947 above, not 1.000).
+* Alternate or rotate the arm order per seed anyway (`deck_avg_arms.py` and `ref_bench_arms.py` do).
+* Read the result with `scripts/ab_wall.py <manifest> <stdout>`: naive vs order-split vs BALANCED, for
+  `ms`, `cpu` and `units`, with warnings for serialised pairs and for pairs whose arms differ in
+  depth/budget/weight/profile (the LPT sort, not the manifest, then decides which arm starts first; a
+  budget ladder is arm-major by construction).
+* `deck_compare.py`'s per-arm ms/game is a sizing aid, never a wall A/B (arm-major, last arm favoured).
+* Never compare wall across two batches run at different times, or with another heavy job on the box
+  (`heavy_run.sh` can admit a second job during your tail); compare `units` across runs. `cpu=` removes
+  descheduling but not SMT or clock contention.
+
 ---
 
 ## Adding a deck to the suite
