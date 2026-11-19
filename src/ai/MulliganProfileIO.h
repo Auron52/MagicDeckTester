@@ -1309,6 +1309,11 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
     {
         if (profile.value_play.leaf == "none" && profile.value_play.commit != "model")
         { profile.value_model = MidGameEvaluator::Constant(); profile.value_trust_depth = 0; }
+        // value_play.ladder "sparse" (the SPARSE HEURISTIC LADDER) plays the rollout ladder with the sampled gate, which
+        // acts only with NO value model attached (TurnSolver's p18_on: !vl_active): a learned model the same file
+        // carries is set aside, exactly as if the deck shipped a play-settings-only sidecar.
+        else if (profile.value_play.ladder == "sparse")
+        { profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0; }
     };
 
     auto load_from = [&](const std::filesystem::path& p)
