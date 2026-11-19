@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/LandPlay.h"
+#include "ai/ManaOracle.h"
 #include "ai/ManaPayment.h"
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
@@ -781,6 +782,57 @@ TEST_CASE("Autonomous Vial plans expose the returned Prophets' second champion c
     CHECK(third_b);
     CHECK(third_decline);
     CHECK(replayed);
+}
+
+// The mana oracle's observe-mode menu is read through TurnSolver::MainPlanSeq (the champion fan held lazily):
+// Merfolk Turns seed 30000013 gi13 materialised it past 10 GB. The sequence must be EnumerateMainPlans' list at
+// every position, and a fan run must share the fields the oracle keys on (SiblingKey: land and actions).
+TEST_CASE("The lazily held main menu is EnumerateMainPlans' list, entry for entry, mana gates open or not")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state = NestedProphetsSetup();
+    state.m_provider = &provider;
+    // The deck loader clears these for Merfolk Turns; left at their defaults, the dredge axis would
+    // materialise every list (it does not skip a fan entry).
+    state.deck_has_dredge = false;
+    state.deck_has_turn_gods = false;
+    state.deck_has_ondemand_sac = false;
+    AddPermanent(state, "Aether Vial", 606);
+    state.battlefield.back().charge_counters = 6;
+    const CardDefinition* prophets = CardDatabase::Instance().Lookup("Wanderwine Prophets");
+    REQUIRE(prophets != nullptr);
+    Card d = prophets->card;
+    d.m_number = 604;
+    state.players[0].hand.push_back(d);
+    for (const bool observe : { false, true })
+    {
+        CAPTURE(observe);
+        manaoracle::t_gate_observe = observe;
+        const std::vector<TurnSolver::Plan> full = TurnSolver::EnumerateMainPlans(state, false);
+        const TurnSolver::MainPlanSeq seq = TurnSolver::EnumerateMainPlansSeq(state, false);
+        manaoracle::t_gate_observe = false;
+        REQUIRE(seq.size() == full.size());
+        CHECK(seq.RealSize() < seq.size());   // the champion fan is held lazily, not materialised
+        TurnSolver::Plan syn;
+        std::size_t runs = 0;
+        for (std::size_t i = 0; i < seq.size(); i = seq.FanEnd(i))
+        {
+            ++runs;
+            const std::size_t end = seq.FanEnd(i);
+            REQUIRE(end > i);
+            REQUIRE(end <= seq.size());
+            for (std::size_t j = i; j < end; ++j)
+            {
+                CAPTURE(j);
+                CHECK(seq.At(j, syn) == full[j]);
+                CHECK(full[j].actions == seq.Shared(i).actions);
+                CHECK(full[j].land_to_play == seq.Shared(i).land_to_play);
+                CHECK(full[j].land_decided == seq.Shared(i).land_decided);
+            }
+        }
+        CHECK(runs < seq.size());
+    }
 }
 
 TEST_CASE("Two new Prophets preserve the choice of an initially unlinked return")

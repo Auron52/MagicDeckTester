@@ -127983,23 +127983,94 @@ static void AppendDoublerUndoPlans(const GameState& state, bool is_pre_combat, s
 // Thin public wrappers around the file-static enumeration + application the solver
 // uses internally, so an external decision provider gets the exact same legal plans
 // and identical execution. See TurnSolver.h.
+//
+// The BASE enumeration of a main-phase menu, shared by EnumerateMainPlans and EnumerateMainPlansSeq. `pb_lazy`
+// (EnumerateMainPlansSeq only): the fanned axes stay lazy (PbLazyLayout).
+static std::vector<TurnSolver::Plan> MainPlansBase(const GameState& state, bool is_pre_combat, PbLazyLayout* pb_lazy)
+{
+    playtiming::Scope tm_base(&playtiming::T().enum_base);
+    // VIEWER PLAN-SPACE VALVE bookkeeping (EngineFlags.h): clear the accumulator around the
+    // BASE enumeration only, then latch it. The combo-off trial apply in EnumerateMainPlans runs whole
+    // go-offs that enumerate again, and a truncation inside one of those is not a statement about the
+    // menu this frame is offering.
+    viewerplancap::Acc() = viewerplancap::Trunc{};
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat, pb_lazy);
+    viewerplancap::Last() = viewerplancap::Acc();
+    return plans;
+}
+
+// The lazily held menu (TurnSolver.h): the real entries and the fan layout, read as one list.
+struct TurnSolver::MainPlanSeq::Impl
+{
+    std::vector<TurnSolver::Plan> real;
+    PbLazyLayout lz;
+};
+TurnSolver::MainPlanSeq::MainPlanSeq() : m_impl(std::make_unique<Impl>()) {}
+TurnSolver::MainPlanSeq::~MainPlanSeq() = default;
+TurnSolver::MainPlanSeq::MainPlanSeq(MainPlanSeq&&) noexcept = default;
+TurnSolver::MainPlanSeq& TurnSolver::MainPlanSeq::operator=(MainPlanSeq&&) noexcept = default;
+std::size_t TurnSolver::MainPlanSeq::size() const
+{
+    if (!m_impl) { return 0; }
+    return m_impl->real.size() + (m_impl->lz.active ? m_impl->lz.P : 0);
+}
+std::size_t TurnSolver::MainPlanSeq::RealSize() const { return m_impl ? m_impl->real.size() : 0; }
+const TurnSolver::Plan& TurnSolver::MainPlanSeq::At(std::size_t i, Plan& storage) const
+{
+    if (!m_impl->lz.active) { return m_impl->real[i]; }
+    std::size_t li = 0;
+    if (m_impl->lz.Synth(i, li, storage)) { return storage; }
+    return m_impl->real[li];
+}
+const TurnSolver::Plan& TurnSolver::MainPlanSeq::Shared(std::size_t i) const
+{
+    const PbLazyLayout& lz = m_impl->lz;
+    if (!lz.active) { return m_impl->real[i]; }
+    std::size_t li = 0, f = 0;
+    int k = 0;
+    if (lz.Locate(i, li, f, k)) { return lz.protos[f]; }
+    return m_impl->real[li];
+}
+std::size_t TurnSolver::MainPlanSeq::FanEnd(std::size_t i) const
+{
+    const PbLazyLayout& lz = m_impl->lz;
+    if (!lz.active) { return i + 1; }
+    std::size_t li = 0, f = 0;
+    int k = 0;
+    if (!lz.Locate(i, li, f, k)) { return i + 1; }
+    return i + static_cast<std::size_t>(lz.fan_n[f] - k) + 1;   // entries k..fan_n[f] of fan f
+}
+
+// EnumerateMainPlans' list, lazily. EXACT because every edit EnumerateMainPlans makes after its base
+// enumeration is HUMAN-PLAY-only (the burn-pin / land-slot drops, COMBO OFF, OrderHumanCycleSeedPlans,
+// AppendDoublerUndoPlans) or a diagnostic (MTG_DEVOUR_TRACE): outside those the list IS the base enumeration,
+// and EnumeratePlansWithLand's lazy layout synthesises exactly the materialised list at every index
+// (MTG_PB_LAZY_CANDS_VERIFY). Any of them live -> the whole list, from EnumerateMainPlans itself.
+// KEEP IN STEP: a new non-human edit in EnumerateMainPlans must be applied here too (or force the whole list).
+TurnSolver::MainPlanSeq TurnSolver::EnumerateMainPlansSeq(const GameState& state, bool is_pre_combat)
+{
+    MainPlanSeq seq;
+    static const bool s_devour_menu_trace = EnvOn("MTG_DEVOUR_TRACE");
+    if (HumanPlayActive() || s_devour_menu_trace || !PbLazyCandsOn())
+    {
+        seq.m_impl->real = EnumerateMainPlans(state, is_pre_combat);
+        return seq;
+    }
+    playtiming::Scope tm_enum(&playtiming::T().enum_total);
+    if (playtiming::On()) { ++playtiming::T().frames; }
+    seq.m_impl->real = MainPlansBase(state, is_pre_combat, &seq.m_impl->lz);
+    return seq;
+}
+
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& state,
                                                              bool is_pre_combat)
 {
     // MTG_PLAY_STEP_TIMING (diagnostic, default off -- one branch when off). See EngineFlags.h.
     playtiming::Scope tm_enum(&playtiming::T().enum_total);
     if (playtiming::On()) { ++playtiming::T().frames; }
-    std::vector<Plan> plans;
-    {
-        playtiming::Scope tm_base(&playtiming::T().enum_base);
-        // VIEWER PLAN-SPACE VALVE bookkeeping (EngineFlags.h): clear the accumulator around the
-        // BASE enumeration only, then latch it. The combo-off trial apply below runs whole go-offs
-        // that enumerate again, and a truncation inside one of those is not a statement about the
-        // menu this frame is offering.
-        viewerplancap::Acc() = viewerplancap::Trunc{};
-        plans = EnumeratePlansWithLand(state, is_pre_combat);
-        viewerplancap::Last() = viewerplancap::Acc();
-    }
+    // KEEP IN STEP with EnumerateMainPlansSeq: every edit below the base enumeration is human-play-only or a
+    // diagnostic, which is what lets that function hand the base list back lazily.
+    std::vector<Plan> plans = MainPlansBase(state, is_pre_combat, nullptr);
     // A searched cast order can put a pinned burn spell before the creature it
     // targets from this same hand. That order cannot resolve: the target is not
     // on the battlefield yet, even though the reverse order is a legal plan.
