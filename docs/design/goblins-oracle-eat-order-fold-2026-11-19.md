@@ -1,6 +1,6 @@
 # Goblins mana oracle: the eat-ORDER fold (2026-11-19)
 
-Branch `wip/gob-eat-order` (base `86ec7c2f4`, which holds the goal fold). Follows
+Branch `wip/gob-eat-order` (rebased onto `93634781f`, which holds the goal fold; src tree identical to the measured one). Follows
 `goblins-oracle-eat-fold-2026-11-19.md` (MTG_ORACLE_GOAL_FOLD) and `goblins-sac-mana-oracle-2026-11-18.md`.
 Analysis-only: the oracle never feeds play.
 
@@ -85,4 +85,44 @@ each other both ways, or an unscripted outcome in the unfolded one. The unfolded
 
 ## 3. Measurements
 
-(see below)
+Scratch: `build/scratch/claude_gob_order/` (chain scripts in `logs/gob-eat-order/`). Pool = the same 42 Goblins
+games as the goal-fold doc (12 heavy seeds + gi 130000-130029), `MTG_MANA_ORACLE=2 MTG_MANA_ORACLE_COST_TRACE=1`.
+
+**Exactness.** Check mode (`MTG_ORACLE_EAT_ORDER_FOLD_CHECK=2`, fold on, 29 threads): 4499 eat-folded plans, 52281
+frontier tables restricted, 329 plans checked, **0 mismatched**; 24 realised again without the fold. Its flag lines
+are identical to the goal-fold-only check run (`claude_gob_fold/check2.flags`, 0 lines differ) and differ from the
+goal-fold-only run `on2` only by 3 APPLY-DROP lines of s30131075, which the check run did not reach (414
+CAPPED-DECISION, all s30131075). Units 3718/3718 (incl. the new fold test).
+
+**Off vs on** (one pooled batch per arm, run concurrently at 16 threads each, same binary):
+
+| | fold OFF | fold ON |
+|---|---|---|
+| applies | 17,587,961 | 20,048,993 (+14%) |
+| oracle ms | 1,177,382 | 1,301,259 (+11%) |
+| CAPPED | 0 | 0 |
+| CAPPED-DECISION | 288 (all s30131075) | 230 (all s30131075) |
+| flag lines (342 each) | | 0 lines differ |
+| play (.wins per game, 42) | | identical |
+
+Per plan (933 plans outside the decision-budget cut): the fold cut more than 20% off only 14 plans (82,563 applies
+saved), while exactly 24 plans cost more than 1.5x as much, up to ~2.2x (+2,333,343 applies). Those 24 are the plans realised again without the
+fold (a non-covering or DOMINATED-* verdict needs the unfolded realisation, so the folded attempt is pure overhead):
+13 on s30131075, 8 on s30133979 (T6 m2 Muxus plans, DOMINATED-LAND), 3 on s30132895. s30133979 rose 4.96M -> 6.81M.
+
+**s30131075 T2 m2, unbounded probe** (`MTG_MANA_ORACLE_ONLY_MENU=446`, ceiling 1200 priced s): 446 plans, all
+finished, 0 capped, 6 APPLY-DROP as before; **13.54M applies, 902 s** oracle (goal fold only: 14.58M / 963 s; same
+plans 14.12M -> 13.08M, -7%). The budget covers ~6.6M, so the decision is **still not gate-tractable**: it needs
+~2.05x the 600-priced-s budget (was ~2.2x). Within the shipped budget the fold audited 58 more of its plans
+(CAPPED-DECISION 288 -> 230).
+
+**Why it barely bites.** 98.7% of the decision's applies are in plans that cast Goblin Matron (152 plans, 13.39M of
+13.54M; the 146 Matron-free plans cost 0.15M). Matron's tutor ranks the board, so it closes the eat window, and the
+eat orders on either side of it are not exchanged. Within the remaining windows the restriction saves little because
+the frontier prune already merged most order pairs one apply later.
+
+**Verdict / recommendation (not adopted by this agent).** The fold is exact but net-negative on this pool (+14%
+applies) and leaves s30131075 at ~2x the budget. Do not integrate it default ON as is. The cost to remove is the
+redo, and the remaining work is Matron's: the next exact shape to look for is an argument that Matron's tutor pick is
+invariant across the eat orders the window would exchange (or a narrower window that closes only when the pick can
+differ). Raising the decision budget remains a USER decision.

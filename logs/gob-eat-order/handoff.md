@@ -79,3 +79,8 @@ MACHINE RULES (strict):
 CONTEXT BUDGET: when your context passes ~250K tokens, finish the current step, commit, write logs/gob-eat-order/handoff.md (done with hashes; remaining in order; these instructions verbatim; running jobs with PIDs/markers; measurements), and stop with a short report naming it. Normally stop between 250K and 350K; NEVER exceed 400K (the previous agent reached 424K; do not repeat that).
 
 FINAL REPORT: commits, the exactness argument per card, the check-mode result, the off/on table (applies, oracle ms, CAPPED, CAPPED-DECISION, flag-line diff), 131075's new cost vs the 600-s budget, units/smoke results.
+
+## Update (successor agent, 2026-11-19 15:40 UTC)
+Steps 1-5 done: rebased onto 93634781f (src tree identical, f9057297), chain 2 = off/on arms + smoke (ALL PASS, 0
+configs changed). Measurements in the design doc section 3. Verdict: exact (0 mismatches, flags/play identical) but
+net-negative (+14% applies, the 24 redo plans); 131075 still ~2x the budget, 98.7% of it in Matron plans.
