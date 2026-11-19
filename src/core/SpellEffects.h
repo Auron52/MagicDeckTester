@@ -8896,6 +8896,16 @@ inline thread_local int g_etb_counter_pin = -1;
 // (the ETB-counter fold, TurnSolver.cpp EtbcFold). Counted only where the pin is actually asked --
 // a caller-owned payer scope (g_etb_optional_payer) bypasses it, and so does the presence gate.
 inline thread_local unsigned long long g_etb_counter_pin_reads = 0;
+// Guild Summit's "tap any number of untapped Gates" resolution (etb_tap_subtype_draw), published for
+// the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold). `resolutions` is monotonic, read as a delta
+// around an apply; the other three describe the LAST resolution on this thread: the untapped Gates it
+// saw (`avail`), the count it tapped (`n`, after the clamp) and whether a searched pin (etb_kx >= 1)
+// decided it. WHICH Gates follows EtbTapSubtypeOrder from the count alone, so (state, n) is the whole
+// outcome. Written on every resolution; read only by that fold.
+inline thread_local unsigned long long g_summit_tap_resolutions = 0;
+inline thread_local int  g_summit_tap_last_avail  = 0;
+inline thread_local int  g_summit_tap_last_n      = 0;
+inline thread_local bool g_summit_tap_last_pinned = false;
 struct ScriptedEtbCounter
 {
     explicit ScriptedEtbCounter(int k) : saved(g_etb_counter_pin) { g_etb_counter_pin = k; }
@@ -13814,6 +13824,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                                                     /*kind=*/5, avail, n, 0);
             if (h >= 0 && h <= avail) { n = h; }
         }
+        // THE SUMMIT-TWIN FOLD's witness (TurnSolver.cpp SummitTwinFold): what THIS resolution decided.
+        ++g_summit_tap_resolutions;
+        g_summit_tap_last_avail  = avail;
+        g_summit_tap_last_n      = n;
+        g_summit_tap_last_pinned = etb_kx >= 1;
         std::vector<int> tap_numbers;   // card numbers, in tap order
         for (int k = 0; k < n; ++k)
         {
