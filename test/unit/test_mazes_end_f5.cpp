@@ -630,39 +630,53 @@ bool F5Has(const std::vector<std::string>& m, const std::string& k) { return std
 
 TEST_CASE("Maze's End F5 prune x P7 fold: a subset is never folded into an unpayable superset")
 {
+    // A REAL dropped plan (MTG_UNPAYABLE_PRUNE_HAZARD_TRACE, prune A/B d3/d5 games, 2026-11-19): T4, board Cliffgate x2 +
+    // Burgeoning, hand Burgeoning + Exploration; the prune dropped {Burgeoning, Exploration} and kept {Burgeoning}. Each
+    // Cliffgate makes {R} or its LOCKED colour; one chose G, the other U, so there is one green source and {G}{G} is
+    // unpayable -- but the enumerator's flat pool reads Cliffgate's printed produces (all five) and offers the pair.
     LoadF5Cards();
     const MazesEndProvider prov;
     GameState s = F5Base();          // the land drop is spent: no land plans
+    s.turn_number = 4;
     s.m_provider = &prov;
-    F5Put(s, "Forest", 720);                 // the only {G}
-    F5Put(s, "Azorius Guildgate", 721);      // {W}/{U}: two mana, one green
+    F5Put(s, "Cliffgate", 720);
+    F5Put(s, "Cliffgate", 721);
+    s.battlefield[0].chosen_color = static_cast<std::int8_t>(Color::Green);   // the only {G}
+    s.battlefield[1].chosen_color = static_cast<std::int8_t>(Color::Blue);
+    F5Put(s, "Burgeoning", 724);
     s.players[0].hand.push_back(F5Card("Burgeoning", 722));
-    s.players[0].hand.push_back(F5Card("Manabond", 723));
+    s.players[0].hand.push_back(F5Card("Exploration", 723));
     for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(F5Card(k % 2 ? "Izzet Guildgate" : "Forest", 730 + k)); }
     REQUIRE(prov.PlanListFilterLive(s));
     REQUIRE(prov.CastDominanceLive(s));
     // {G}{G} with one green source: the two-cast plan is provably unpayable, each single cast is not.
-    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning"), F5Cast(s, "Manabond") }, ""));
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning"), F5Cast(s, "Exploration") }, ""));
     CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning") }, ""));
-    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Manabond") }, ""));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Exploration") }, ""));
 
     std::vector<std::string> no_prune;
     {
         const F5Arm off(heurarm::MAZE_UNPAYABLE_PRUNE, 0);
         no_prune = F5Menu(s);
     }
-    // The hazard is real on this board: without the prune the enumeration offers the unpayable superset, and the
-    // fold drops each single cast for it.
-    const bool super = F5Has(no_prune, "|Burgeoning,Manabond,") || F5Has(no_prune, "|Manabond,Burgeoning,");
+    // The hazard is real on this board: without the prune the enumeration offers the unpayable superset, and fold A
+    // drops the payable {Burgeoning} for it (the menu is [{Burgeoning, Exploration}, {Exploration}]) -- the line
+    // Burgeoning would be lost. ({Exploration} is not its twin's P under the fold's order, so it survives either way.)
+    std::string shown;
+    for (const std::string& k : no_prune) { shown += "[" + k + "] "; }
+    INFO("menu without the prune: " << shown);
+    const bool super = F5Has(no_prune, "|Burgeoning,Exploration,") || F5Has(no_prune, "|Exploration,Burgeoning,");
     REQUIRE(super);
     CHECK_FALSE(F5Has(no_prune, "|Burgeoning,"));
-    CHECK_FALSE(F5Has(no_prune, "|Manabond,"));
     // With the prune (default ON): the superset is gone BEFORE the fold, so both single casts survive it.
     const std::vector<std::string> menu = F5Menu(s);
-    CHECK_FALSE(F5Has(menu, "|Burgeoning,Manabond,"));
-    CHECK_FALSE(F5Has(menu, "|Manabond,Burgeoning,"));
+    std::string shown2;
+    for (const std::string& k : menu) { shown2 += "[" + k + "] "; }
+    INFO("menu with the prune: " << shown2);
+    CHECK_FALSE(F5Has(menu, "|Burgeoning,Exploration,"));
+    CHECK_FALSE(F5Has(menu, "|Exploration,Burgeoning,"));
     CHECK(F5Has(menu, "|Burgeoning,"));
-    CHECK(F5Has(menu, "|Manabond,"));
+    CHECK(F5Has(menu, "|Exploration,"));
     // ... and the fold still works on the payable menu: the pass is dominated by a single cast.
     CHECK_FALSE(F5Has(menu, "|"));
 }
