@@ -68783,6 +68783,7 @@ MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_L
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
 MAZE_P5_LEVER(MazeTalonEffectiveOn,   MAZE_TALON_EFFECTIVE,    "MTG_MAZE_TALON_EFFECTIVE",    false)   // A/B variant
+MAZE_P5_LEVER(MazeUnpayablePruneOn,   MAZE_UNPAYABLE_PRUNE,    "MTG_MAZE_UNPAYABLE_PRUNE",    true)    // F5 (USER)
 MAZE_P5_LEVER(MazeCastDominanceOn,    MAZE_CAST_DOMINANCE,     "MTG_MAZE_CAST_DOMINANCE",     true)    // P7
 MAZE_P5_LEVER(MazeLandDominanceOn,    MAZE_LAND_DOMINANCE,     "MTG_MAZE_LAND_DOMINANCE",     true)    // P7
 #undef MAZE_P5_LEVER
@@ -69641,7 +69642,63 @@ bool MazesEndProvider::CastDominanceKeep(const GameState& s, const PlanView& v) 
 
 // Heap Gate's Treasure (MTG_MAZE_HEAP_TREASURE; USER: "It is also worth it when we have literally nothing else to use
 // the mana for. In fact, this is the main use-case."). Live while we control an untapped Treasure-making Gate.
+namespace
+{
+// THE DECK PROPERTY behind the provably-unpayable prune (USER 2026-11-18: "For simple decks with no rituals or
+// equivalent (cards that add more mana then they cost) like this one"): no nonland card of ours -- hand, library,
+// battlefield (tokens excluded), graveyard -- makes mana (a dork, a rock, a ritual, a sac-for-mana outlet) or
+// reduces a cost. Lands are the board supply the payer reads; the lands and Treasures a line itself makes are credited
+// by TurnSolver::DropProvablyUnpayablePlans. False (prune off) the moment the list includes one.
+bool MazeNoNetManaPositiveCards(const GameState& s, int me)
+{
+    auto positive = [](const Card& c)
+    {
+        if (c.IsLand()) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return true; }   // unknown: assume the worst
+        const CardParams& pp = d->params;
+        return d->tmpl == CardTemplate::ManaDork || pp.mana_rock || pp.ritual_floating_mana > 0
+            || !pp.sac_outlet_add_mana_color.empty() || pp.sac_outlet_add_mana_any_color
+            || !pp.reduces_spell_color.empty() || !pp.reduces_spell_subtype.empty()
+            || !pp.reduces_subtype_colored_subtype.empty() || pp.hinata_cost_reducer
+            || pp.reduces_graveyard_cast_generic > 0 || pp.reduces_creature_activation > 0;
+    };
+    // The verdict depends only on the cards we own, so it is memoised per thread on the multiset of their numbers.
+    std::uint64_t fp = 1469598103934665603ull;
+    std::size_t n = 0;
+    auto mix = [&](const Card& c) { fp += static_cast<std::uint64_t>(c.m_number) * 0x9E3779B97F4A7C15ull; ++n; };
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    for (const Card& c : pl.hand)      { mix(c); }
+    for (const Card& c : pl.library)   { mix(c); }
+    for (const Card& c : pl.graveyard) { mix(c); }
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == me && !p.is_token) { mix(p.card); } }
+    fp ^= n;
+    static thread_local std::uint64_t t_fp = 0;
+    static thread_local bool t_ok = false;
+    if (fp == t_fp) { return t_ok; }
+    bool ok = true;
+    for (const Card& c : pl.hand)      { if (ok && positive(c)) { ok = false; } }
+    for (const Card& c : pl.library)   { if (ok && positive(c)) { ok = false; } }
+    for (const Card& c : pl.graveyard) { if (ok && positive(c)) { ok = false; } }
+    for (const Permanent& p : s.battlefield)
+    { if (ok && p.controller_index == me && !p.is_token && positive(p.card)) { ok = false; } }
+    t_fp = fp;
+    t_ok = ok;
+    return ok;
+}
+bool MazeUnpayablePruneLive(const GameState& s)
+{
+    return MazeUnpayablePruneOn() && MazeAutonomous() && MazeNoNetManaPositiveCards(s, s.active_player_index);
+}
+}   // namespace
+
 bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
+{
+    return MazeUnpayablePruneLive(s) || MazeHeapFilterLive(s);
+}
+
+// Heap Gate's half of the plan-list filter (P5).
+bool MazesEndProvider::MazeHeapFilterLive(const GameState& s) const
 {
     if (!MazeHeapTreasureOn() || !MazeAutonomous()) { return false; }
     // Live whenever a Treasure-tap land (Heap Gate) can be tapped by SOME plan on this menu: one untapped on our
@@ -69730,6 +69787,17 @@ bool MazeTreasureBinds(const GameState& s, int me, const DecisionProvider& prov)
 // pruned it) keeps the Treasure plan -- the error is always toward admitting.
 void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
 {
+    // FIRST the provably-unpayable prune (F5, USER), so the Heap rule's evidence below is a plan that really plays.
+    if (MazeUnpayablePruneLive(s))
+    {
+        std::vector<const std::vector<Action>*> acts;
+        std::vector<const std::string*> lands;
+        acts.reserve(plans.size());
+        lands.reserve(plans.size());
+        for (const PlanView& v : plans) { acts.push_back(v.actions); lands.push_back(v.land); }
+        TurnSolver::DropProvablyUnpayablePlans(s, acts, lands, admit);
+    }
+    if (!MazeHeapFilterLive(s)) { return; }
     auto is_treasure = [](const Action& a)
     { return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure; };
     auto spends = [](const Action& a)
@@ -69763,6 +69831,7 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
     std::vector<std::size_t> with_t;
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
+        if (!admit[i]) { continue; }   // dropped above: not evidence, nothing to drop
         bool t = false;
         std::vector<std::string> keys;
         for (const Action& a : *plans[i].actions)
