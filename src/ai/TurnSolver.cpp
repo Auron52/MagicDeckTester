@@ -115504,6 +115504,62 @@ namespace inwin
 }
 static void InWinCacheClear() { inwin::Clear(); }
 
+// ---------------------------------------------------------------------------- LAST-PLY NO-WIN FOLD
+// (Maze's End P7d, 2026-11-19.) 30042 gi1 at d5 b0: 96.5% of 8.2M breakpoint-wave applies sat at the LAST ply (T6 d1)
+// of the leafless ladder pass. A full-line node with one ply left whose next turn is a CONSTANT leaf (FsNextLeafConstant:
+// the no-leaf stand-in or a forced constant leaf -- the lazy-leaf probe, a P16/P18 leafless pass, an emulated ladder's
+// warm-up) scores every line max_turns+1 unless it wins THIS turn, so every continuation that cannot win is pure
+// duplicate work there. The deck's provider may PROVE that no line of the node wins this turn
+// (DecisionProvider::LastPlyNoWinProof, a sound bound); the node then answers the complete no-win it would have
+// computed. An IDENTITY FOLD: the answer is the one the search returns (a complete refutation is not truncated, and a
+// no-win line is never committed), so it is default ON and needs no quality A/B -- what it changes is work only.
+// It is NOT unbudgeted-only: it applies wherever the next leaf is constant, at every budget (a deck whose budgeted
+// ladder is leafless -- a no-leaf sidecar, value_play.sampled_gate, rollout_from -- folds there too). Not at a pass
+// ROOT (its plans are its caller's), inside a rollout or the cast-sequence solver, or for a deck with extra turns (the
+// next turn may be searched). The proof is the deck's WINLESS CERTIFICATE (DecisionProvider::ProvenWinlessThisTurn,
+// the one PROOF hook; MTG_WINLESS_CERT gates every consumer). MTG_LASTPLY_NOWIN_FOLD=0 -> the node is searched.
+// MTG_LASTPLY_NOWIN_CENSUS=1 (diagnostic): NEVER cuts; searches every eligible node, tallies the proof's verdicts and
+// the units under each, and counts a proof whose node then found a win (UNSOUND -- must read 0); =2 also prints each
+// unsound node. Printed at exit.
+namespace lastply
+{
+inline int CensusEnv() { static const int v = EnvInt("MTG_LASTPLY_NOWIN_CENSUS", 0); return v; }
+inline int Census() { return heurarm::Flag(heurarm::LASTPLY_NOWIN_CENSUS, CensusEnv() > 0) ? std::max(1, CensusEnv()) : 0; }
+inline thread_local bool t_inner = false;   // census: the node is being searched for its tally (no re-entry)
+inline std::atomic<long long> g_fold{0};
+// Census: [0] proof, [1..2] the provider's decline codes -1 / -2 (Maze's End: Guild Summit, bound open), [3] any other
+// decline (Maze's End -3: a card outside the reviewed list; a provider with no codes). n = nodes, u = units under them.
+inline std::atomic<long long> g_n[4], g_u[4], g_unsound{0}, g_win[4];
+inline int Slot(int v) { return v > 0 ? 0 : v == -1 ? 1 : v == -2 ? 2 : 3; }
+struct Printer
+{
+    ~Printer()
+    {
+        const long long f = g_fold.load();
+        long long un = 0, uu = 0;
+        for (int i = 0; i < 4; ++i) { un += g_n[i].load(); uu += g_u[i].load(); }
+        if (f > 0) { std::fprintf(stderr, "[lastply] folded=%lld\n", f); }
+        if (un == 0) { return; }
+        static const char* const kName[4] = { "PROOF", "CODE-1", "CODE-2", "OTHER" };
+        for (int i = 0; i < 4; ++i)
+        {
+            std::fprintf(stderr, "[lastply] census %-6s nodes=%lld (%.1f%%) units=%lld (%.1f%%) won=%lld\n", kName[i],
+                         g_n[i].load(), un ? 100.0 * g_n[i].load() / un : 0.0, g_u[i].load(),
+                         uu ? 100.0 * g_u[i].load() / uu : 0.0, g_win[i].load());
+        }
+        std::fprintf(stderr, "[lastply] census UNSOUND=%lld (a proof whose node won; must be 0)\n", g_unsound.load());
+    }
+};
+inline Printer g_printer;
+}   // namespace lastply
+static bool LastPlyFoldHere(const GameState& s)
+{
+    static const bool s_on = EnvOn("MTG_LASTPLY_NOWIN_FOLD", true);
+    return !lastply::t_inner && !s.deck_has_extra_turn && g_fsline_nest > 0 && g_cs_solver_nest == 0
+        && g_rollout_nest == 0 && heurarm::Flag(heurarm::LASTPLY_NOWIN_FOLD, s_on) && winlesscert::Enabled()
+        && FsNextLeafConstant(s) && !OpponentHasLost(s);
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
@@ -115649,6 +115705,49 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         g_fs_leaf_wt_sum += w;
         return { w, {} };
+    }
+
+    // LAST-PLY NO-WIN FOLD (see lastply above): one ply left, a constant next leaf, and the provider proves this turn
+    // cannot win -> the complete no-win the node would compute.
+    if (depth == 1 && LastPlyFoldHere(state))
+    {
+        CertClearVerdictCode();
+        const bool proven = ResolveProvider(state).ProvenWinlessThisTurn(state, state.active_player_index);
+        const int proof = proven ? 1 : std::min(0, CertLastVerdictCode());
+        if (lastply::Census() > 0)
+        {
+            const int sl = lastply::Slot(proof);
+            const long long u0 = gamework::t_used;
+            TurnSolver::SearchLine r;
+            {
+                struct Inner { bool p; Inner() : p(lastply::t_inner) { lastply::t_inner = true; } ~Inner() { lastply::t_inner = p; } } _in;
+                r = FSLineWin(state, depth, max_turns, cutoff, second_main, tt, lc, budget);
+            }
+            lastply::g_n[sl].fetch_add(1, std::memory_order_relaxed);
+            lastply::g_u[sl].fetch_add(gamework::t_used - u0, std::memory_order_relaxed);
+            if (r.win_turn <= max_turns)
+            {
+                lastply::g_win[sl].fetch_add(1, std::memory_order_relaxed);
+                if (proof > 0)
+                {
+                    const long long n = lastply::g_unsound.fetch_add(1, std::memory_order_relaxed);
+                    if (lastply::Census() >= 2 && n < 20)
+                    {
+                        std::string h, b;
+                        for (const Card& c : state.ActivePlayer().hand) { h += " " + c.m_name.str(); }
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.controller_index == state.active_player_index) { b += " " + q.card.m_name.str() + (q.tapped ? "(T)" : ""); } }
+                        std::fprintf(stderr, "[lastply] UNSOUND T%d win=%d | hand:%s | bf:%s\n", state.turn_number, r.win_turn, h.c_str(), b.c_str());
+                    }
+                }
+            }
+            return r;
+        }
+        if (proof > 0)
+        {
+            lastply::g_fold.fetch_add(1, std::memory_order_relaxed);
+            return { max_turns + 1, {} };
+        }
     }
 
     // Interior-node memo: a transposed re-entry at this (state, depth) returns the
@@ -137462,6 +137561,31 @@ std::uint64_t TurnSolver::PerGameCacheDigestForTest()
     mix(static_cast<std::uint64_t>(gamework::t_used)); mix(static_cast<std::uint64_t>(workctr::t_priced));
     mix(static_cast<std::uint64_t>(g_single_R_n)); mix(g_emul_key.size());
     return h;
+}
+
+// Test seam for the LAST-PLY NO-WIN FOLD (see lastply): the leafless pass with the proof lever pinned OFF, then ON.
+TurnSolver::LastPlyFoldProbe TurnSolver::LastPlyFoldProbeForTest(const GameState& state, int depth, int max_turns,
+                                                                bool second_main)
+{
+    LastPlyFoldProbe r;
+    auto pass = [&](int arm, long long& leaves) -> int
+    {
+        ClearPerGameCaches();
+        const std::int8_t prev = heurarm::t_arm[heurarm::MAZE_WINLESS_CERT];
+        heurarm::t_arm[heurarm::MAZE_WINLESS_CERT] = static_cast<std::int8_t>(arm);
+        ForceConstantLeafGuard _c(true);
+        FSLineCache c;
+        const long long l0 = g_fs_leaf_evals, f0 = lastply::g_fold.load();
+        const int w = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, nullptr, &c, nullptr).win_turn;
+        leaves = g_fs_leaf_evals - l0;
+        if (arm == 1) { r.folded = lastply::g_fold.load() - f0; }
+        heurarm::t_arm[heurarm::MAZE_WINLESS_CERT] = prev;
+        return w;
+    };
+    r.win_off = pass(0, r.leaves_off);
+    r.win_on  = pass(1, r.leaves_on);
+    ClearPerGameCaches();
+    return r;
 }
 
 // Test seam for MTG_LEAFLESS_READS_LEAFED (see gamelc::LeaflessReadsLeafed): one rollout pass at `depth` fills the

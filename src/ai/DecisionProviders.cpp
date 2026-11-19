@@ -68048,6 +68048,7 @@ MAZE_P5_LEVER(MazeLandDominanceOn,    MAZE_LAND_DOMINANCE,     "MTG_MAZE_LAND_DO
 MAZE_P5_LEVER(MazeCastDomWindowsOn,   MAZE_CASTDOM_WINDOWS,    "MTG_MAZE_CASTDOM_WINDOWS",    true)    // P7c (a)
 MAZE_P5_LEVER(MazeCastDomPerPlanOn,   MAZE_CASTDOM_PERPLAN,    "MTG_MAZE_CASTDOM_PERPLAN",    true)    // P7c (b)
 MAZE_P5_LEVER(MazeCastDomKeepAOnlyOn, MAZE_CASTDOM_KEEP_A_ONLY,"MTG_MAZE_CASTDOM_KEEP_A_ONLY",true)    // P7c (c)
+MAZE_P5_LEVER(MazeWinlessCertOn,     MAZE_WINLESS_CERT,       "MTG_MAZE_WINLESS_CERT",       true)    // P7d
 #undef MAZE_P5_LEVER
 bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
 
@@ -68672,6 +68673,110 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     if (held) { p += w.held; }
     p += static_cast<long long>(hand_new) * w.hand_new;
     return p;
+}
+
+// Maze's End P7d: THE WINLESS CERTIFICATE (MTG_MAZE_WINLESS_CERT, default ON; DecisionProvider::ProvenWinlessThisTurn --
+// a PROOF, its contract one-sided). The only win
+// this list has is Maze's End's: an activation resolves with ten or more Gates with different names (the fetched
+// one included). Let D be the distinct Gate names we control; nothing here removes a name we keep (Gateway Plaza's
+// sacrifice only lowers D), and every way D rises is ONE Gate entering per event, so D at any resolution is at
+// most G0 (now) plus the Gate entries before it. Two bounds on those entries, each over EVERY line from `s`:
+//  (P) PERMISSIONS (no Manabond reachable). A non-fetch entry needs a permission: a land drop still open
+//      (LandDropsAvailable - played; Exploration on the battlefield is already in it), one per Exploration in hand
+//      (cast, its extra drop), Archdruid's Charm in hand, Talon Gates of Madara's {4} put (in hand, or tutored to hand
+//      by a Sylvan Scrying while one is in the library), one per Burgeoning controlled or in hand (the passive
+//      opponent plays at most one land a turn, so one put per copy -- the crossing is inside this node). A fetch
+//      needs Maze's End untapped on the battlefield: one already there, or one that ENTERED -- which spent a
+//      permission and added no name itself. So D <= G0 + P + (the Maze's Ends on the battlefield).
+//  (C) CARDS (any line, Manabond included). A Gate that enters comes from the hand (a drop, Manabond's dump, a
+//      Burgeoning put, Talon's put) or from the library (Archdruid's Charm, a Maze's End fetch). New names from the
+//      hand <= the distinct new-name Gates in hand now + the Sylvan Scryings in hand (one land each; nothing else
+//      puts a card in hand this turn without Guild Summit); from the library <= Charms in hand + fetches. Fetches
+//      <= (the Maze's Ends on the battlefield) + Maze's End re-entries, and a re-entry can activate this turn only
+//      UNTAPPED, i.e. under an Amulet of Vigor (controlled, or in hand for {1}); each re-entry spends a drop,
+//      a Charm, a Burgeoning put, or rides a Manabond trigger (each puts every Maze's End in hand: at most 4).
+// Proof: min(P, C) + G0 < 10. GIVES UP (0 / reason) with a Guild Summit controlled or in hand: its draws put
+// unknown library cards in hand -- Explorations, Manabonds -- and neither bound survives that. With nothing in the
+// list that untaps a land after it enters but Amulet (on entry), no draw but Summit's, and no other off-main put,
+// both bounds hold through our end step and the opponent's turn (MTG_MAZE_OFFMAIN_RESPOND / _BANK lines included:
+// each of their activations is a fetch above). Those facts are about THIS LIST, so the proof first checks that every
+// card we hold, control or can search for is one of its cards (an edited list gets no proof until this is reviewed).
+// Reason codes (the fold's census): -1 Guild Summit, -2 bound open, -3 a card outside the reviewed list.
+static bool MazeLastPlyKnownCard(const std::string& n)
+{
+    static const std::unordered_set<std::string> k = {
+        "Maze's End", "Exploration", "Burgeoning", "Sylvan Scrying", "Amulet of Vigor", "Manabond", "Guild Summit",
+        "Gates Ablaze", "Archdruid's Charm", "Azorius Guildgate", "Rakdos Guildgate", "Selesnya Guildgate",
+        "Simic Guildgate", "Gruul Guildgate", "Golgari Guildgate", "Dimir Guildgate", "Orzhov Guildgate",
+        "Boros Guildgate", "Izzet Guildgate", "Thran Portal", "Sea Gate", "Manor Gate", "Heap Gate", "Gond Gate",
+        "Cliffgate", "Black Dragon Gate", "Baldur's Gate", "Citadel Gate", "Basilisk Gate", "Gateway Plaza",
+        "Planar Nexus", "Talon Gates of Madara", "The Black Gate", "Treasure" };
+    return k.count(n) != 0;
+}
+static thread_local int g_cert_verdict = 0;
+int CertLastVerdictCode()   { return g_cert_verdict; }
+void CertClearVerdictCode() { g_cert_verdict = 0; }
+bool MazesEndProvider::ProvenWinlessThisTurn(const GameState& s, int controller) const
+{
+    if (controller != s.active_player_index || !MazeWinlessCertOn()) { return false; }
+    g_cert_verdict = MazeWinlessBound(s);
+    return g_cert_verdict > 0;
+}
+int MazesEndProvider::MazeWinlessBound(const GameState& s)
+{
+    static const CardDefinition* maze = CardDatabase::Instance().Lookup("Maze's End");
+    if (maze == nullptr || maze->params.alt_win_distinct_named_count <= 0) { return 0; }
+    const int need = maze->params.alt_win_distinct_named_count;
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    for (const Card& c : pl.library) { if (!MazeLastPlyKnownCard(c.m_name.str())) { return -3; } }
+    for (const Card& c : pl.hand) { if (!MazeLastPlyKnownCard(c.m_name.str())) { return -3; } }
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && !MazeLastPlyKnownCard(q.card.m_name.str())) { return -3; } }
+    const int g0 = CountDistinctNamedLandsWithSubtype(s, me, maze->params.alt_win_distinct_named_subtype, need);
+    if (g0 >= need) { return 0; }
+    int me_bf = 0, amulet = 0, burg = 0, manabond = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        const std::string& n = q.card.m_name.str();
+        if (n == "Guild Summit") { return -1; }
+        if (q.card.m_name == maze->card.m_name) { ++me_bf; }
+        else if (n == "Amulet of Vigor") { ++amulet; }
+        else if (n == "Burgeoning") { ++burg; }
+        else if (n == "Manabond") { ++manabond; }
+    }
+    int expl = 0, charm = 0, talon = 0, scry = 0;
+    std::vector<const std::string*> new_names;
+    for (const Card& c : pl.hand)
+    {
+        const std::string& n = c.m_name.str();
+        if (n == "Guild Summit") { return -1; }
+        if (n == "Exploration") { ++expl; }
+        else if (n == "Archdruid's Charm") { ++charm; }
+        else if (n == "Sylvan Scrying") { ++scry; }
+        else if (n == "Amulet of Vigor") { ++amulet; }
+        else if (n == "Burgeoning") { ++burg; }
+        else if (n == "Manabond") { ++manabond; }
+        if (n == "Talon Gates of Madara") { ++talon; }
+        if (!c.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!MazeDefIsGate(d) || MazeControlsGateNamed(s, me, n)) { continue; }
+        bool dup = false;
+        for (const std::string* x : new_names) { if (*x == n) { dup = true; break; } }
+        if (!dup) { new_names.push_back(&n); }
+    }
+    if (scry > 0 && talon == 0)
+    {
+        for (const Card& c : pl.library) { if (c.m_name.str() == "Talon Gates of Madara") { ++talon; break; } }
+    }
+    const int drops = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn) + expl;
+    // (C): the cards that can enter.
+    const int reentries = amulet > 0 ? drops + charm + burg + 4 * manabond : 0;
+    const int bound_c = static_cast<int>(new_names.size()) + scry + charm + me_bf + reentries;
+    // (P): the permissions (only without a Manabond: its dump needs none).
+    const int bound_p = manabond > 0 ? need : drops + charm + talon + burg + me_bf;
+    return g0 + std::min(bound_c, bound_p) < need ? 1 : -2;
 }
 
 // Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two

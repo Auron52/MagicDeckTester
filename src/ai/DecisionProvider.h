@@ -1628,7 +1628,10 @@ public:
     // Callers must apply it ONLY where the search is UNBOUNDED (the offline label ladder, the
     // unbounded depth-matrix cells). Pruning consumes no work units, so under a real budget it
     // would change what fits in that budget and therefore change play; see TurnSolver's
-    // WinlessCertificateActive.
+    // WinlessCertificateActive. ONE consumer applies it at every budget: the LAST-PLY NO-WIN FOLD (TurnSolver.cpp
+    // lastply, Maze's End P7d), at a node whose next turn is a CONSTANT leaf -- there the node's answer is exactly
+    // "a this-turn win or nothing", so the certificate returns the answer the search would, and under a budget it
+    // only re-prices work (the USER's 2026-10-14 rule: no unbudgeted-only changes; nothing becomes unfindable).
     //
     // Deliberately NOT implemented generically: a sound generic bound has to prove "nothing else
     // in this deck can move the opponent's life total or library", and CardParams carries 419
