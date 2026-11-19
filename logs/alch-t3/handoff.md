@@ -85,3 +85,7 @@ build in this tree runs or is queued; never touch references/; subagents do not 
 - **Units: rc=139 (SEGFAULT), 96 failed / 3173 passed.** Possibly an artefact of running the COPIED mtg-test from
   build/scratch (path-relative resources?), possibly real -- re-run `build/Release/mtg-test` in the worktree
   (after build2) and compare with origin's failure set before trusting either way. Log: step1/units.txt.
+
+## UPDATE: build2 finished rc=0 (search half 3b17a2a16 compiles; build/Release/{mtg,mtg-test} in the worktree).
+No queued or running alch-t3 jobs remain. Next: `flock /workspaces/MagicDeckTester/build/scratch/BOX.lock bash
+/workspaces/MagicDeckTester/build/scratch/alch-t3/chain2.sh` (step 2 of "Remaining").
