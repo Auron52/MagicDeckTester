@@ -144,6 +144,34 @@ Exactness checks:
 - Full unit suite 3713/3713 (a new case: two Siege-Gang shots paid by eating; the fold engages, no redo, the verdict
   is clean).
 
+Smoke (`MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke` from the worktree, Release): ALL PASS, 231 passed,
+configs changed 0 -- play byte-identical, as it must be (the oracle never feeds play).
+
 ## 5. Is Goblins gate-tractable?
 
-TBD.
+Not yet, and the remaining blocker is one decision.
+- **CAPPED (9 in the gate, all s30132663):** gone. That game's plans conclude under 1.05M applies (from 9.7M with 14
+  plans at the 400000 retry cap), and its 48 gate CAPPED-DECISION came from the same T3 m2 work, now ~9x smaller.
+- **CAPPED-DECISION (431 in the gate, s30131075 T2 m2):** still capped. Probe with the fold and no decision budget
+  (`MTG_MANA_ORACLE_DECISION_S=0`, one game): all 446 plans conclude (6 APPLY-DROP, nothing CAPPED) in 14.1M applies,
+  game wall 965 s; the 600-priced-s budget covers ~6.6M, so the decision needs ~2.1x the budget (it needed ~5x
+  without the fold: 91 of 446 plans fit). Its plans cast Bolt / King / Matron / Chieftain and shoot Siege-Gang off a
+  board with every land tapped, so every payment eats; after the fold what remains is the eat ORDER (which payment
+  eats which of the bodies the engine's line also eats) and the token-count variants -- distinct frontiers the
+  oracle cannot merge without per-card semantics (tokens are created by Siege-Gang / Krenko / Mogg War Marshal /
+  Pashalik, so a token count is not monotone the way a card count is).
+- Options for the user (not taken here): raise the per-decision budget for this deck (the Gods precedent raised
+  300 -> 600 s on measured need; ~1300 s would clear this one), or a further exact fold of the eat order, which needs
+  a commutation argument per payment (two payment orders that eat the same bodies reach the same board only if no
+  action between them reads the board -- King, Chieftain and Matron do), so it is not a quick win.
+- The issue classes other than CAPPED are unchanged by this work (ENUM-GAP 1859 etc. in the gate are engine
+  findings the fold does not touch).
+
+## 6. Files
+
+- `src/ai/ManaOracle.cpp`: `KeyedCards` / `KeyedShort`, `GoalFoldAdmissible`, `RealizationCovers`, the fold in
+  `Realize` (the kept-frontier loop; `goal_cands`), AuditPlan's `realize_main` + fallback + CHECK; the diagnostic
+  FOLD-STATS block (default off).
+- `src/ai/ManaOracle.h`: `Hook::f_tapped_n`; `GoalFoldedFrontiers()` / `GoalFoldRedos()` for the tests.
+- `src/ai/ManaPayment.cpp`: the frontier capture records `f_tapped_n` (oracle hook only).
+- `test/unit/test_mana_oracle.cpp`: "the goal fold skips frontiers that ate a body the engine's line keeps".
