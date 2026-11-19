@@ -27,3 +27,30 @@ TEST_CASE("sampled_gate: the sidecar loader reads value_play.sampled_gate (end t
     std::error_code ec;
     fs::remove_all(dir, ec);
 }
+
+TEST_CASE("sparse heuristic ladder: value_play.ladder \"sparse\" parses and sets any learned model aside")
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "mdt_unit_sparse_ladder";
+    fs::create_directories(dir);
+    auto load = [&](const char* json) -> MulliganProfile
+    {
+        { std::ofstream(dir / "sp.value.json") << json; }
+        MulliganProfile prof;
+        AttachValueSidecar(prof, dir / "sp.profile.json");
+        return prof;
+    };
+    // A minimal learned model: one coefficient makes EvalModelFromJsonObj non-empty.
+    const MulliganProfile learned = load(R"({"coefs":{"intercept_dummy":0,"turn":1},"value_play":{}})");
+    const MulliganProfile sparse  = load(R"({"coefs":{"intercept_dummy":0,"turn":1},"value_play":{"ladder":"sparse"}})");
+    CHECK(sparse.value_play.ladder == "sparse");
+    CHECK(sparse.value_model.empty());               // no model attached: the sampled gate acts (p18_on needs !vl_active)
+    CHECK(!sparse.value_model.constant);
+    CHECK(sparse.value_trust_depth == 0);
+    CHECK(sparse.value_play.sampled_gate == 0);      // the mode is resolved per decision (AIEngine DeckShapeScope)
+    const MulliganProfile none = load(R"({"value_play":{"ladder":"sparse","leaf":"none"}})");
+    CHECK(none.value_model.constant);                // leaf none still wins: the constant no-leaf stand-in
+    CHECK(!learned.value_model.empty());            // the fixture IS a learned model without "sparse"
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+}

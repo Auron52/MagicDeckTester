@@ -3228,7 +3228,10 @@ struct DeckShapeScope
         valuearm::t_deck_fit_lazy_r = p.value_play.fit_lazy_r;
         valuearm::t_deck_fit_gate_ladder = valuearm::FitGateCode(p.value_play.fit_gate);
         valuearm::t_deck_rollout_from = p.value_play.rollout_from;
-        valuearm::t_deck_sampled_gate = p.value_play.sampled_gate;
+        // value_play.ladder "sparse" = the SPARSE HEURISTIC LADDER (sampled gate 4, docs/design/sparse-heuristic-ladder.md);
+        // an explicit sampled_gate (the P18 research modes 1-3, and mode 3 shipped on Boars / Morph / Spirits) still wins.
+        valuearm::t_deck_sampled_gate = (p.value_play.sampled_gate == 0 && p.value_play.ladder == "sparse") ? 4
+                                      : p.value_play.sampled_gate;
         valuearm::t_deck_key       = p.value_source;
         valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
         valuearm::t_deck_emul_r     = &p.value_play.emul_r;
