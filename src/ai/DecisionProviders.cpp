@@ -69274,6 +69274,35 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     return p;
 }
 
+// Maze's End F6 (USER rejection s6 gi5 T5, 2026-11-19): THE TAP ORDER OF THE TWO SOURCES WHOSE {T} IS WORTH MORE
+// LATER. Both make only {C}, so the generic ladder ranks them 5 ("least flexible -> spend FIRST") and every generic
+// pip of the turn reaches for them before a Guildgate:
+//   * BALDUR'S GATE: "{2},{T}: Add X mana of any one color, X = the other Gates you control". X grows during the
+//     line (each Maze's End fetch, each Gate land drop, each Charm put adds one), and the fed mode is reached only
+//     through the backtracker, so its {C} face goes first and the fed mode is lost. Board (T5): Baldur's, Gond,
+//     Sea, Simic, Thran, two Maze's End, Sylvan Scrying in hand. Maze's End #43's {3} was paid with Baldur's {C}
+//     + Sea + Simic, so after the fetched Gate entered untapped (Gond Gate) the rest -- Scrying + the second
+//     activation, {1}{G} + {3} -- had 4 mana, not the 5 that Baldur's Gate fed at X = 5 makes. The line
+//     "activate, then Scrying + activate" was unreachable at every budget: payment is not searched, and the
+//     continuation can only spend what the first payment left. Rank 61 (the scaled tier MTG_SCALED_LAND_RANK
+//     gives a board-scaled land, default OFF engine-wide) while ScaledManaNetYield > 0 -- the engine's own
+//     "fed mode live, affordable and better than {C}" test; a dead fed mode keeps the plain rank.
+//   * MAZE'S END: an untapped copy's {T} is its activation (the win engine). A plan that does not name it (a
+//     single activation of the other copy; a cast) tapped it for {C} first, and the bounce's hand-entry
+//     breakpoint then found it tapped: the second activation was gone. Rank 69 (after every other source).
+// ORDER ONLY: TapForCostShared still taps either when the cost cannot be paid otherwise, and the complete
+// backtracker remains the fallback, so no payable cost becomes unpayable (the ManaSourceRank contract).
+// MTG_MAZE_TAP_BALDUR_LAST / MTG_MAZE_TAP_MAZE_LAST (heurarm slots, both DEFAULT ON; =0 -> the generic rank).
+int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool s_baldur = EnvOn("MTG_MAZE_TAP_BALDUR_LAST", true);
+    static const bool s_maze   = EnvOn("MTG_MAZE_TAP_MAZE_LAST", true);
+    if (IsScaledManaLand(def) && heurarm::Flag(heurarm::MAZE_TAP_BALDUR_LAST, s_baldur)
+        && ScaledManaNetYield(s, def) > 0) { return 61; }
+    if (def.params.tap_tutor_put_return_self && heurarm::Flag(heurarm::MAZE_TAP_MAZE_LAST, s_maze)) { return 69; }
+    return DeckProvider::ManaSourceRank(s, def);
+}
+
 // Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two
 // damage-equivalents, the same life-equivalence as NoWinLeafProgress) so the greedy walk takes it over leaving
 // the {3} unspent. A duplicate name and the fail-to-find stay 0 (the activation then only moves Maze's End to

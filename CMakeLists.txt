@@ -618,6 +618,7 @@ add_executable(mtg-test
     test/unit/test_mazes_end_p5.cpp
     test/unit/test_mazes_end_f1.cpp
     test/unit/test_mazes_end_p6.cpp
+    test/unit/test_mazes_end_f6.cpp
     test/unit/test_greedy_tie_scoring.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
