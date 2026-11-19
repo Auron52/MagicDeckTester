@@ -103102,7 +103102,7 @@ static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Pl
     {
         q.actions.clear();
         q.value = -1; q.land_tie_key = -1; q.wins_this_turn = false; q.would_drop.clear();
-        q.searched_order = false; q.move_front = false;
+        q.searched_order = false; q.move_tier = 0;
         if (clear_land) { q.land_to_play.clear(); q.land_decided = false; }
         return q;
     };
