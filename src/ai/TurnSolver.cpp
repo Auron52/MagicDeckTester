@@ -12149,10 +12149,145 @@ static int ApexPairGateCredit(const GameState* state, const Action& a)
     return 0;
 }
 
+// MTG_UO_DFS (DEFAULT ON; =0 -> the order-by-order walk, as before) -- the unlock-order search's orders walked as
+// ONE TREE over class sequences (UnlockOrderSearch, MTG_PO_UNLOCK_ORDER). The search used to walk every candidate
+// order from the top: a fresh board copy, the walk's set-level setup, and every cast of the order re-paid, though
+// most of its orders share a prefix with one already walked (Jumbo Cactuar, 1000 games: 5.4M walks over 517k
+// searches; the payment of those casts was most of the lever's x1.4 CPU). Here SeqWalkFixedOrder does its setup
+// once and this recursion pays each distinct prefix ONCE, resuming each child from its parent's board (one
+// snapshot per node with two or more live children; the last child takes the snapshot by swap).
+// EXACT, not a narrowing: the walk is a pure function of the board after the prefix, the line's still-unpaid cost
+// (g_line_unpaid_cost) and the unlocks still pending, and those three are what a node saves; its set-level setup
+// (the walk total, the line-keep rung's inputs, the breakpoint-opener scope) reads the cast multiset only, which
+// every order of the search shares (the one order-sensitive input, a same-line cost reducer's credit, keeps the
+// old search: UnlockOrderDfsEligible). So every order gets the verdict its own walk would give, and the tree
+// visits orders in the old candidate list's order (lexicographic over class ids) with the old ranking -- the
+// fewest inversions against the given order, ties to the earlier candidate -- so `nearest` returns the same
+// order: a subtree whose inversion floor (the prefix's inversions plus each placed cast's inversions with every
+// unplaced one) cannot beat the best found is not walked. The ENUMERATION site only asks whether some order
+// pays (it discards the order), so it stops at the first. MTG_UO_DFS_VERIFY=1 runs both and reports any
+// difference (diagnostic only). docs/design/jumbo-apply-drop-order-2026-11-18.md, "CPU of the unlock-order
+// search".
+struct UnlockOrderDfs
+{
+    const std::vector<int>* order = nullptr;   // the given cast order (cand indices)
+    std::vector<int>        cls;               // class of each given position: the position of its first equal
+    std::vector<int>        tail_classes;      // tail_classes[k]: distinct classes among positions k..n-1
+    bool                    nearest = true;    // the nearest paying order (apply site), else any (enumeration)
+    bool                    found = false;
+    int                     best_inv = 0;
+    std::vector<int>        best;              // the paying order found (cand indices)
+    std::vector<int>        trial;
+    std::vector<char>       placed;            // per given position
+};
+// The snapshot boards of UnlockOrderDfsRec: one per tree depth, warm per thread, nesting-safe (PayScratch's
+// pattern; std::deque so growing never moves a board an outer frame holds).
+struct UoDfsSnap
+{
+    UoDfsSnap()
+    {
+        static thread_local std::deque<GameState> pool;
+        static thread_local std::size_t           depth = 0;
+        while (pool.size() <= depth) { pool.emplace_back(); }
+        board = &pool[depth];
+        m_depth = &depth;
+        ++depth;
+    }
+    ~UoDfsSnap() { --(*m_depth); }
+    UoDfsSnap(const UoDfsSnap&)            = delete;
+    UoDfsSnap& operator=(const UoDfsSnap&) = delete;
+    GameState*          board = nullptr;
+    ManaCost            unpaid{};
+    std::vector<Action> unlocks;
+private:
+    std::size_t* m_depth = nullptr;
+};
+// One node: `depth` casts placed (d.placed / d.trial), `cp` the board after them, `lb` their inversion floor.
+// True once the search is over (any-mode found).
+template <class Step, class Finish>
+static bool UnlockOrderDfsRec(UnlockOrderDfs& d, GameState& cp, std::vector<Action>& unlock_acts, Step& step,
+                              Finish& finish, int depth, int lb)
+{
+    const int n = static_cast<int>(d.cls.size());
+    int cpos[8], clb[8], k = 0;
+    for (int c = 0; c < n; ++c)
+    {
+        if (d.cls[static_cast<std::size_t>(c)] != c) { continue; }   // class ids: each class's first position
+        int p = -1;   // the class's next cast in its given relative order (the old realise())
+        for (int q = c; q < n; ++q)
+        { if (d.cls[static_cast<std::size_t>(q)] == c && !d.placed[static_cast<std::size_t>(q)]) { p = q; break; } }
+        if (p < 0) { continue; }
+        int add = 0;   // unplaced casts given before p: each lands after p, an inversion of every completion
+        for (int q = 0; q < p; ++q) { if (!d.placed[static_cast<std::size_t>(q)]) { ++add; } }
+        cpos[k] = p; clb[k] = lb + add; ++k;
+    }
+    // A child is live when its subtree holds a candidate that can still win: not only the given order (a prefix
+    // of it -- floor 0 -- whose remaining casts are one class), and, for `nearest`, under the best inversions.
+    auto live = [&](int i)
+    {
+        if (clb[i] == 0 && d.tail_classes[static_cast<std::size_t>(depth + 1)] < 2) { return false; }
+        return !(d.found && clb[i] >= d.best_inv);
+    };
+    std::optional<UoDfsSnap> snap;
+    bool dirty = false;   // `cp` holds a child's board, not this node's
+    for (int i = 0; i < k; ++i)
+    {
+        if (!live(i)) { continue; }
+        bool later = false;
+        for (int i2 = i + 1; i2 < k && !later; ++i2) { later = live(i2); }
+        if (!dirty)
+        {
+            if (later)
+            {
+                snap.emplace();
+                *snap->board = cp; snap->unpaid = g_line_unpaid_cost; snap->unlocks = unlock_acts;
+            }
+        }
+        else
+        {
+            if (!snap) { break; }   // no live sibling was left when the board was spent (liveness only falls)
+            if (later) { cp = *snap->board; g_line_unpaid_cost = snap->unpaid; unlock_acts = snap->unlocks; }
+            else
+            {
+                std::swap(cp, *snap->board); g_line_unpaid_cost = snap->unpaid; unlock_acts.swap(snap->unlocks);
+                snap.reset();
+            }
+        }
+        dirty = true;
+        const int p = cpos[i];
+        const int j = (*d.order)[static_cast<std::size_t>(p)];
+        d.placed[static_cast<std::size_t>(p)] = 1;
+        d.trial[static_cast<std::size_t>(depth)] = j;
+        bool stop = false;
+        if (step(j))
+        {
+            if (depth + 1 < n) { stop = UnlockOrderDfsRec(d, cp, unlock_acts, step, finish, depth + 1, clb[i]); }
+            else if (finish())
+            {
+                d.found = true; d.best_inv = clb[i]; d.best = d.trial;
+                stop = !d.nearest;
+            }
+        }
+        d.placed[static_cast<std::size_t>(p)] = 0;
+        if (stop) { return true; }
+    }
+    return false;
+}
+template <class Step, class Finish>
+static bool UnlockOrderDfsRun(UnlockOrderDfs& d, GameState& cp, std::vector<Action>& unlock_acts, Step& step,
+                              Finish& finish)
+{
+    const std::size_t n = d.cls.size();
+    d.found = false; d.best_inv = 0; d.best.clear();
+    d.trial.assign(n, -1);
+    d.placed.assign(n, 0);
+    (void)UnlockOrderDfsRec(d, cp, unlock_acts, step, finish, 0, 0);
+    return d.found;
+}
 static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
                               const std::vector<int>& sel, const std::vector<int>& ord,
                               const std::vector<int>& seq_rv_charged, int* fail_at = nullptr,
-                              bool vial_in_order = false)
+                              bool vial_in_order = false, UnlockOrderDfs* dfs = nullptr)
 {
     if (fail_at != nullptr) { *fail_at = -1; }
     int walk_pos = -1;   // index into `ord` of the cast being paid (reported through fail_at)
@@ -12246,7 +12381,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
     };
     fire_unlocks();
     std::size_t vial_pos = 0;
-    for (int j : ord)
+    // One cast of the walk: pay cast j on `cp` and resolve its mana-relevant effects. False = this order fails
+    // here. Lifted into a lambda so the unlock-order search (`dfs`, see UnlockOrderDfsRun) can resume a shared
+    // prefix's board instead of re-walking it; the plain walk below calls it once per cast of `ord`, as before.
+    auto step = [&](int j) -> bool
     {
         if (vial_in_order)
         {
@@ -12644,36 +12782,43 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             }
             fire_unlocks();
         }
-    }
-    // MTG_SEQ_TRAILING_EQUIP: the trailing equip pass, after every cast. An unlock that never fired joins it when its
-    // host is on the battlefield and no longer locked (hasted otherwise, or tapped); one still locked could not be
-    // paid when it should have fired, and is refused as before.
-    if (!unlock_acts.empty() && !SeqTrailingEquipOn()) { return false; }
-    std::vector<const Action*> trailing;
-    for (const Action& ua : unlock_acts)
+        return true;
+    };
+    auto finish = [&]() -> bool
     {
-        const bool eq_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
-                                       [&](const Permanent& p) { return p.card.m_number == ua.sac_source_id; });
-        const bool host_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
-                                         [&](const Permanent& p) { return p.card.m_number == ua.sac_victim_id; });
-        if (!eq_on || !host_on) { return false; }
-        ManaPool add, add_nc;
-        HasteUnlockedManaOf(cp, ua.sac_victim_id, add, add_nc);
-        if (add.Total() > 0) { return false; }   // an unlock the walk could not fire: refused, as before
-        trailing.push_back(&ua);
-    }
-    for (int j : sel)
-    {
-        const Action& ta = cands[static_cast<std::size_t>(j)];
-        if (SeqWalkTrailingEquip(state, ta)) { trailing.push_back(&ta); }
-    }
-    for (const Action* ta : trailing)
-    {
-        const ManaCost ec = EquipActionCostNow(cp, cp.active_player_index, ta->sac_source_id, ta->cost,
-                                               ta->sac_victim_id);
-        if (ec.ManaValue() > 0 && !TapForCostDirect(cp, ec, /*for_creature=*/false)) { return false; }
-    }
-    return true;
+        // MTG_SEQ_TRAILING_EQUIP: the trailing equip pass, after every cast. An unlock that never fired joins it
+        // when its host is on the battlefield and no longer locked (hasted otherwise, or tapped); one still locked
+        // could not be paid when it should have fired, and is refused as before.
+        if (!unlock_acts.empty() && !SeqTrailingEquipOn()) { return false; }
+        std::vector<const Action*> trailing;
+        for (const Action& ua : unlock_acts)
+        {
+            const bool eq_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                           [&](const Permanent& p) { return p.card.m_number == ua.sac_source_id; });
+            const bool host_on = std::any_of(cp.battlefield.begin(), cp.battlefield.end(),
+                                             [&](const Permanent& p) { return p.card.m_number == ua.sac_victim_id; });
+            if (!eq_on || !host_on) { return false; }
+            ManaPool add, add_nc;
+            HasteUnlockedManaOf(cp, ua.sac_victim_id, add, add_nc);
+            if (add.Total() > 0) { return false; }   // an unlock the walk could not fire: refused, as before
+            trailing.push_back(&ua);
+        }
+        for (int j : sel)
+        {
+            const Action& ta = cands[static_cast<std::size_t>(j)];
+            if (SeqWalkTrailingEquip(state, ta)) { trailing.push_back(&ta); }
+        }
+        for (const Action* ta : trailing)
+        {
+            const ManaCost ec = EquipActionCostNow(cp, cp.active_player_index, ta->sac_source_id, ta->cost,
+                                                   ta->sac_victim_id);
+            if (ec.ManaValue() > 0 && !TapForCostDirect(cp, ec, /*for_creature=*/false)) { return false; }
+        }
+        return true;
+    };
+    if (dfs != nullptr) { return UnlockOrderDfsRun(*dfs, cp, unlock_acts, step, finish); }
+    for (int j : ord) { if (!step(j)) { return false; } }
+    return finish();
 }
 
 // MTG_SEQ_FREE_ATTACH (DEFAULT ON; =0 -> refused as an unmodelled kind, as before). A FREE attach --
@@ -13122,8 +13267,9 @@ static bool UnlockOrderSameCast(const Action& x, const Action& y)
 // pays replaces `order`. Orders are taken over classes of indistinguishable casts (UnlockOrderSameCast), so two
 // Voyaging Satyrs are one order, not two. Up to 7 casts: all of them; beyond, every single move (the decider's
 // neighbourhood). A failing walk's prefix (in class space) prunes every order that shares it.
-static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& sel,
-                              std::vector<int>& order, const std::vector<int>& charged)
+static bool UnlockOrderSearchByOrder(const GameState& state, const std::vector<Action>& acts,
+                                     const std::vector<int>& sel, std::vector<int>& order,
+                                     const std::vector<int>& charged)
 {
     const int n = static_cast<int>(order.size());
     if (n < 2) { return false; }
@@ -13215,6 +13361,91 @@ static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>&
     return false;
 }
 
+static bool UoDfsOn()
+{
+    static const bool on = EnvOn("MTG_UO_DFS", true);
+    return on;
+}
+static bool UoDfsVerifyOn()
+{
+    static const bool on = EnvOn("MTG_UO_DFS_VERIFY");
+    return on;
+}
+// The tree walk's one order-sensitive setup input: a same-line cost reducer's credit (LineReducerCredit, whose
+// counts keep the order they were read in). Such a line keeps the order-by-order search.
+static bool UnlockOrderDfsEligible(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    if (order.size() < 2 || order.size() > 7) { return false; }   // beyond 7: the single-move neighbourhood
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (ActionGyCastReducerAmount(a) > 0) { return false; }
+        const CardDefinition* d = a.def;
+        if (d != nullptr && (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type
+                             || !d->params.reduces_spell_color.empty())) { return false; }
+    }
+    return true;
+}
+// MTG_UO_DFS: UnlockOrderSearchByOrder's answer by one tree walk (see UnlockOrderDfs). `nearest` false: only
+// whether some order pays matters (the enumeration site), and `order` is left as given.
+static bool UnlockOrderSearchTree(const GameState& state, const std::vector<Action>& acts,
+                                  const std::vector<int>& sel, std::vector<int>& order,
+                                  const std::vector<int>& charged, bool nearest)
+{
+    const int n = static_cast<int>(order.size());
+    UnlockOrderDfs d;
+    d.order = &order;
+    d.nearest = nearest;
+    d.cls.resize(static_cast<std::size_t>(n));
+    for (int k = 0; k < n; ++k)
+    {
+        d.cls[static_cast<std::size_t>(k)] = k;
+        for (int e = 0; e < k; ++e)
+        {
+            if (UnlockOrderSameCast(acts[static_cast<std::size_t>(order[static_cast<std::size_t>(e)])],
+                                    acts[static_cast<std::size_t>(order[static_cast<std::size_t>(k)])]))
+            { d.cls[static_cast<std::size_t>(k)] = d.cls[static_cast<std::size_t>(e)]; break; }
+        }
+    }
+    d.tail_classes.assign(static_cast<std::size_t>(n) + 1, 0);
+    for (int k = n - 1; k >= 0; --k)
+    {
+        bool fresh = true;   // the first of its class from position k on
+        for (int q = k + 1; q < n && fresh; ++q) { fresh = d.cls[static_cast<std::size_t>(q)] != d.cls[static_cast<std::size_t>(k)]; }
+        d.tail_classes[static_cast<std::size_t>(k)] = d.tail_classes[static_cast<std::size_t>(k) + 1] + (fresh ? 1 : 0);
+    }
+    if (d.tail_classes[0] < 2) { return false; }   // one class: no other order exists
+    if (!SeqWalkFixedOrder(state, acts, sel, order, charged, nullptr, false, &d)) { return false; }
+    if (nearest) { order = d.best; }
+    return true;
+}
+static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& sel,
+                              std::vector<int>& order, const std::vector<int>& charged, bool nearest)
+{
+    if (!UoDfsOn() || !UnlockOrderDfsEligible(acts, order))
+    { return UnlockOrderSearchByOrder(state, acts, sel, order, charged); }
+    if (!UoDfsVerifyOn()) { return UnlockOrderSearchTree(state, acts, sel, order, charged, nearest); }
+    std::vector<int> o_old = order, o_new = order;
+    const bool r_old = UnlockOrderSearchByOrder(state, acts, sel, o_old, charged);
+    const bool r_new = UnlockOrderSearchTree(state, acts, sel, o_new, charged, nearest);
+    static std::atomic<long long> s_n{0}, s_bad{0};
+    const long long nn = ++s_n;
+    if (r_old != r_new || (nearest && o_old != o_new))
+    {
+        ++s_bad;
+        std::fprintf(stderr, "[uo-dfs-verify] MISMATCH n=%zu nearest=%d old=%d new=%d old_order:", order.size(),
+                     nearest ? 1 : 0, r_old ? 1 : 0, r_new ? 1 : 0);
+        for (int j : o_old) { std::fprintf(stderr, " %d", j); }
+        std::fprintf(stderr, " new_order:");
+        for (int j : o_new) { std::fprintf(stderr, " %d", j); }
+        std::fprintf(stderr, "\n");
+    }
+    if (nn % 20000 == 0)
+    { std::fprintf(stderr, "[uo-dfs-verify] searches=%lld mismatches=%lld\n", nn, s_bad.load()); }
+    if (nearest) { order = o_old; }
+    return r_old;
+}
+
 static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, std::vector<int>& order)
 {
@@ -13294,7 +13525,7 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         if (UnlockOrderHasHaste(cands, order, any_unlock))
         {
             std::vector<int> uo = order;
-            if (UnlockOrderSearch(state, cands, sel, uo, seq_rv_charged)) { return true; }
+            if (UnlockOrderSearch(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false)) { return true; }
         }
     }
     // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
@@ -13481,7 +13712,7 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
     if (!UnlockOrderHasHaste(*use, order, any_unlock)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
-    return UnlockOrderSearch(state, *use, sel, order, none);
+    return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
