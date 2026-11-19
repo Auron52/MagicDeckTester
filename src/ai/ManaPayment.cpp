@@ -7837,6 +7837,70 @@ static bool PayableCastOrderCoreImpl(const GameState& state, const std::vector<A
     return false;
 }
 
+// MTG_SAC_FODDER_MENU: the fodder model of the payable-order walk for the casts `order` of `acts` (PoSacFodder):
+// beside a LIVE outlet, the plan's own bodies (none -> no model); with none live, the outlet the plan itself puts in
+// -- looked up among every action of `acts` (the apply's plan) or, `order_only`, among the ordered ones (the
+// enumeration's subset, whose `acts` are the whole candidate list). false = no model (lever off, no outlet, no
+// fodder-free scope, human play): the walk then judges without fodder, as before.
+static bool BuildPoSacFodder(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order,
+                             bool order_only, PoSacFodder& sf)
+{
+    sf = PoSacFodder{};
+    if (g_pay_fodder_off || !state.deck_has_sac_mana_outlet || !SacFodderMenuOn()) { return false; }
+    bool sf_on = false;
+    const int active = state.active_player_index;
+    const SacPayOutlet live = LiveSacPayOutlet(state, active);
+    if (live.valid())
+    {
+        // Beside a live outlet only the plan's OWN bodies are new supply (the board's are in the pool):
+        // with none, nothing changes here.
+        int b = 0;
+        for (int i : order) { b += SacFodderBodies(acts[i], live.def->params); }
+        if (b > 0)
+        {
+            sf.op = &live.def->params; sf.start_live = true; sf_on = true;
+            sf.board_bodies = SacPayFodderCount(state, active, live) + SacPayPlanFodderCount(state, active, live);
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.pay_sac_eaten || p.def_absent) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d != nullptr && IsSacManaOutlet(d->params))
+                {
+                    ++sf.board_outlets;
+                    if (PoOutletBodyIsFodder(d, live.def->params)) { ++sf.board_fodder_outlets; }
+                }
+            }
+        }
+    }
+    else
+    {
+        const CardDefinition* od = nullptr;
+        if (!order_only) { od = PlanSacOutletDef(state, acts); }
+        else
+        {
+            thread_local std::vector<Action> sub;   // PlanSacOutletDef reads only the ordered actions' kinds and defs
+            sub.clear();
+            for (int i : order) { sub.push_back(acts[static_cast<std::size_t>(i)]); }
+            od = PlanSacOutletDef(state, sub);
+        }
+        if (od != nullptr)
+        {
+            SacPayOutlet hyp; hyp.def = od; hyp.source_id = -1;
+            sf.op = &od->params;
+            sf.board_bodies = SacPayFodderCount(state, active, hyp) + SacPayPlanFodderCount(state, active, hyp);
+            sf_on = true;
+        }
+    }
+    if (sf_on) { sf.per = std::max(1, sf.op->sac_outlet_add_mana_amount); }
+    return sf_on;
+}
+struct PoSacScope
+{
+    const PoSacFodder* prev_sf; bool prev_force;
+    PoSacScope(const PoSacFodder* p, bool f) : prev_sf(t_po_sacfod), prev_force(t_po_force) { t_po_sacfod = p; t_po_force = f; }
+    ~PoSacScope() { t_po_sacfod = prev_sf; t_po_force = prev_force; }
+};
+
 // THE ORDER-LEVEL HALF OF "FODDER IS THE LAST SOURCE" (MTG_SAC_OUTLET_PAY; the payment-level half is the
 // fodder-last block in TapForCostSharedImpl). Both apply worlds realise a plan's casts in the order this
 // decider returns: the given order when it projects payable, else the nearest payable permutation. With a
@@ -7861,48 +7925,7 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // is first judged without it, and only when no order pays from the board alone is the walk shown the
     // bodies. Inert (no context) with the lever off, no outlet anywhere, or in human play.
     PoSacFodder sf;
-    bool sf_on = false;
-    if (!g_pay_fodder_off && order.size() >= 2 && site == 0 && state.deck_has_sac_mana_outlet && SacFodderMenuOn())
-    {
-        const int active = state.active_player_index;
-        const SacPayOutlet live = LiveSacPayOutlet(state, active);
-        if (live.valid())
-        {
-            // Beside a live outlet only the plan's OWN bodies are new supply (the board's are in the pool):
-            // with none, nothing changes here.
-            int b = 0;
-            for (int i : order) { b += SacFodderBodies(acts[i], live.def->params); }
-            if (b > 0)
-            {
-                sf.op = &live.def->params; sf.start_live = true; sf_on = true;
-                sf.board_bodies = SacPayFodderCount(state, active, live) + SacPayPlanFodderCount(state, active, live);
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != active || p.pay_sac_eaten || p.def_absent) { continue; }
-                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                    if (d != nullptr && IsSacManaOutlet(d->params))
-                    {
-                        ++sf.board_outlets;
-                        if (PoOutletBodyIsFodder(d, live.def->params)) { ++sf.board_fodder_outlets; }
-                    }
-                }
-            }
-        }
-        else if (const CardDefinition* od = PlanSacOutletDef(state, acts))
-        {
-            SacPayOutlet hyp; hyp.def = od; hyp.source_id = -1;
-            sf.op = &od->params;
-            sf.board_bodies = SacPayFodderCount(state, active, hyp) + SacPayPlanFodderCount(state, active, hyp);
-            sf_on = true;
-        }
-        if (sf_on) { sf.per = std::max(1, sf.op->sac_outlet_add_mana_amount); }
-    }
-    struct PoSacScope
-    {
-        const PoSacFodder* prev_sf; bool prev_force;
-        PoSacScope(const PoSacFodder* p, bool f) : prev_sf(t_po_sacfod), prev_force(t_po_force) { t_po_sacfod = p; t_po_force = f; }
-        ~PoSacScope() { t_po_sacfod = prev_sf; t_po_force = prev_force; }
-    };
+    const bool sf_on = order.size() >= 2 && site == 0 && BuildPoSacFodder(state, acts, order, /*order_only=*/false, sf);
     if (!g_pay_fodder_off && order.size() >= 2 && LiveSacPayOutlet(state, state.active_player_index).valid())
     {
         std::vector<int> nf = order;
@@ -7947,6 +7970,41 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
             && TurnSolver::OrderPaysSequentially(state, acts, alt))
         { order.swap(alt); }
     }
+}
+
+// MTG_SAC_FODDER_MENU, the enumeration's FODDER WALK GATE (ManaPayment.h). The apply's own decider, asked for
+// every order: the casts `order` of `acts` are judged first on the board alone, then with the fodder walk -- exactly
+// PayableCastOrderCore's site-0 passes and its unlock-order fallback, with nothing moved. Judged only where that
+// decider is exhaustive (2..7 casts: every permutation) and models every action (casts and puts); anything else
+// returns true (not judged -- never refused).
+bool SacFodderSubsetOrderPays(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    if (order.size() < 2 || order.size() > 7) { return true; }
+    PoSacFodder sf;
+    if (!BuildPoSacFodder(state, acts, order, /*order_only=*/true, sf)) { return true; }
+    // The decider declines (returns false without judging) on a dynamic discount: not judged here either.
+    if (PayableOrderDynamicDeclineOn() && PoDynamicDiscount(state, acts, order)) { return true; }
+    {
+        std::vector<int> nf = order;
+        bool found;
+        if (sf.start_live)
+        {
+            const PayFodderOffScope _fo;
+            const PoSacScope _sc(nullptr, true);
+            found = PayableCastOrderCoreImpl(state, acts, nf, nullptr, 0, /*site=*/0);
+        }
+        else
+        {
+            const PoSacScope _sc(nullptr, true);
+            found = PayableCastOrderCoreImpl(state, acts, nf, nullptr, 0, /*site=*/0);
+        }
+        if (found) { return true; }
+    }
+    const PoSacScope _sc(&sf, false);
+    std::vector<int> o = order;
+    if (PayableCastOrderCoreImpl(state, acts, o, nullptr, 0, /*site=*/0)) { return true; }
+    o = order;
+    return TurnSolver::UnlockPayableOrder(state, acts, o);
 }
 
 // Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which

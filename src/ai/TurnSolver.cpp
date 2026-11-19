@@ -90819,6 +90819,38 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // source kept is offered by this walk. Not asked by Solve::consider -- see the helper.
         if (sac_mana_held_scope && !keep_lethal && SubsetSpendsUnneededSacForMana(state, cands, sel))
         { _ct.label = "sac-unneeded"; return; }
+        // MTG_SAC_FODDER_MENU, THE FODDER WALK GATE. The fodder credit above is an aggregate: it counts every body
+        // the subset can bring and lets each pay, but the payer eats a body only while an outlet is on the
+        // battlefield and the outlet's OWN body goes last -- once it is eaten nothing more can be. So on an empty
+        // board {Mountain; Goblin Lackey, Skirk Prospector, Goblin Lackey} reads 1 + 2 = 3 against 3, and no order
+        // pays it (the Mountain pays Skirk, Skirk eats itself for one Lackey, the second has no source): the apply
+        // drops casts and realises a smaller plan the menu already holds (mana oracle PHANTOM, Goblins gate slice
+        // 83 -> 319 distinct decisions with the lever on). A plan the board provably cannot pay without eating
+        // (sacfod_admit) is therefore asked the apply's OWN decider -- every order, board alone, then the fodder
+        // walk (SacFodderSubsetOrderPays) -- and refused only when no order pays: a plan the apply cannot realise
+        // in full at ANY budget. Not judged (kept) for a subset holding an action the decider does not order.
+        // The oracle's observe mode skips it, like every mana gate, so ENUM-GAP audits it.
+        // MTG_SAC_FODDER_WALK_GATE=0 (diagnostic; DEFAULT ON under the lever) keeps every credited plan.
+        if (sacfod_admit && !manaoracle::t_gate_observe)
+        {
+            static const bool s_sacfod_walk_gate = EnvOn("MTG_SAC_FODDER_WALK_GATE", true);
+            if (s_sacfod_walk_gate)
+            {
+                thread_local std::vector<int> sf_ord;
+                sf_ord.clear();
+                bool judged = true;
+                for (int j : sel)
+                {
+                    const Action& c = cands[static_cast<std::size_t>(j)];
+                    if (c.kind == Action::Kind::PlayLand) { continue; }
+                    if ((c.kind == Action::Kind::CastFromHand && !c.sacrifice_land)
+                        || c.kind == Action::Kind::ActivateVial || c.kind == Action::Kind::BronzePut)
+                    { sf_ord.push_back(j); continue; }
+                    judged = false; break;
+                }
+                if (judged && !SacFodderSubsetOrderPays(state, cands, sf_ord)) { _ct.label = "sacfod-walk"; return; }
+            }
+        }
         _ct.label = "OFFERED";
         {
             static const int s_dbg_multi_off = EnvInt("MTG_DBG_MULTI", 0);
