@@ -68783,10 +68783,18 @@ bool MazeNoNetManaPositiveCards(const GameState& s, int me)
             || !pp.reduces_subtype_colored_subtype.empty() || pp.hinata_cost_reducer
             || pp.reduces_graveyard_cast_generic > 0 || pp.reduces_creature_activation > 0;
     };
-    // The verdict depends only on the cards we own, so it is memoised per thread on the multiset of their numbers.
+    // The verdict depends only on the cards we own, so it is memoised per thread on the multiset of their (number,
+    // interned name) pairs -- the name pointer too, so two fixtures (or games) reusing card numbers never share it.
     std::uint64_t fp = 1469598103934665603ull;
     std::size_t n = 0;
-    auto mix = [&](const Card& c) { fp += static_cast<std::uint64_t>(c.m_number) * 0x9E3779B97F4A7C15ull; ++n; };
+    auto mix = [&](const Card& c)
+    {
+        const std::uint64_t name = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&c.m_name.str()));
+        std::uint64_t h = (static_cast<std::uint64_t>(c.m_number) * 0x9E3779B97F4A7C15ull) ^ (name * 0xC2B2AE3D27D4EB4Full);
+        h ^= h >> 29;
+        fp += h;
+        ++n;
+    };
     const Player& pl = s.players[static_cast<std::size_t>(me)];
     for (const Card& c : pl.hand)      { mix(c); }
     for (const Card& c : pl.library)   { mix(c); }
