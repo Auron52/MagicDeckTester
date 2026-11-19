@@ -6408,6 +6408,52 @@
      "seed": 30115000,
      "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 55,
+      "APPLY-DROP-ORDER": 38,
+      "CAPPED-DECISION": 27868,
+      "CONTINUATION-DIFFERS": 701,
+      "DECISION-COST": 1,
+      "DOMINATED-CREATURE": 222,
+      "DOMINATED-LAND": 143322,
+      "DROP-COVERED": 302,
+      "ENUM-GAP": 73,
+      "ORACLE-GAP": 66,
+      "PHANTOM": 8625
+     },
+     "commit": "036e50afaf0420e5071219e4e904f337c82d5ffe",
+     "date": "2026-11-19T07:11:11Z",
+     "decisions": 35663,
+     "deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+     "deck_sha": "d4bb1e60e05f9036b3482f46e5ee6d4f230c0479",
+     "game_index": 120000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 28322,
+     "life_breakpoints": [],
+     "ms_off": 1046127,
+     "ms_on": 6495770,
+     "report": "logs/mana_clean/claude-queue-20261119c/report.md",
+     "run": "claude-queue-20261119c",
+     "seed": 30120000,
+     "src": "b3acc4dad01f9d8737268986cc577b2689c445fd",
+     "verdict": "issues"
     }
    ]
   },
@@ -14215,6 +14261,50 @@
      "run": "claude-regate-20261118",
      "seed": 30090000,
      "src": "7e6befeadf4be8c12cfab187e4dd663f2b5a30f3",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 234,
+      "APPLY-DROP-ORDER": 21,
+      "CONTINUATION-DIFFERS": 103,
+      "DOMINATED-LAND": 15264,
+      "DOMINATED-LIFE": 337,
+      "DROP-COVERED": 29976,
+      "ENUM-GAP": 31,
+      "HIDDEN-INFO": 1,
+      "PHANTOM": 3064
+     },
+     "commit": "036e50afaf0420e5071219e4e904f337c82d5ffe",
+     "date": "2026-11-19T07:11:11Z",
+     "decisions": 35445,
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 95000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 286,
+     "life_breakpoints": [],
+     "ms_off": 986576,
+     "ms_on": 1452438,
+     "report": "logs/mana_clean/claude-queue-20261119c/report.md",
+     "run": "claude-queue-20261119c",
+     "seed": 30095000,
+     "src": "b3acc4dad01f9d8737268986cc577b2689c445fd",
      "verdict": "issues"
     }
    ]
