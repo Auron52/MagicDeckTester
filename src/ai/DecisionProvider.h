@@ -5082,10 +5082,14 @@ public:
     virtual bool CastDominanceLive(const GameState&) const { return false; }
     virtual int  CastDominanceClass(const GameState&, const CardDefinition&) const { return 0; }
     // CastDominanceKeep -- asked for each plan the fold would otherwise be free to drop (it passed the candidate
-    // tests); true KEEPS it: the provider knows a use for the mana that plan leaves unspent which its dominating
-    // sibling (which spends more) might not afford (Maze's End P7 x P6: an off-main Maze's End activation). Restrict-
-    // only in the safe direction (it can only keep). Default false.
-    virtual bool CastDominanceKeep(const GameState&, const PlanView&) const { return false; }
+    // tests); a nonzero mask KEEPS it from the named fold(s): the provider knows a use for the mana that plan leaves
+    // unspent which its dominating sibling might not afford (Maze's End P7 x P6: an off-main Maze's End activation).
+    // kCastDomKeepA blocks fold A (the sibling spends more: one more cast); kCastDomKeepB blocks fold B (the sibling
+    // plays a land and spends the same -- it holds every source P holds plus the land, so a use bounded only by
+    // unspent mana and untapped sources needs no B block; Maze's End P7c (c)). Restrict-only in the safe direction
+    // (it can only keep). Default 0.
+    enum : int { kCastDomKeepA = 1, kCastDomKeepB = 2, kCastDomKeepBoth = 3 };
+    virtual int CastDominanceKeep(const GameState&, const PlanView&) const { return 0; }
     virtual void PlanListAdmit(const GameState&, const std::vector<PlanView>& /*plans*/,
                                std::vector<char>& /*admit*/) const {}
 

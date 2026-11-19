@@ -1014,6 +1014,7 @@ enum Slot : int
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
     MAZE_CASTDOM_WINDOWS,     // MTG_MAZE_CASTDOM_WINDOWS  Maze's End P7c (a): the fold's off-main Maze's End keep (MazesEndProvider::CastDominanceKeep) needs a P6 WINDOW -- a Manabond, or a Burgeoning while the opponent plays lands, controlled or cast by the plan (held, when the plan opens a breakpoint) -- and a fetchable Gate in the library; every other off-main point shows the last main's board, where the activation is already a searched plan action. Default ON (sound); =0 -> the P7b guard (mana alone)
     MAZE_CASTDOM_PERPLAN,     // MTG_MAZE_CASTDOM_PERPLAN  Maze's End P7c (b): Heap Gate's last-chance Treasure and Gateway Plaza's off-main {1} are PER-PLAN keeps of the fold (MazesEndProvider::CastDominanceKeep) instead of switching the fold off whenever a Heap Gate is untapped / in hand or a Plaza is in hand (CastDominanceLive). Default ON (sound); =0 -> the blanket switch-off
+    MAZE_CASTDOM_KEEP_A_ONLY, // MTG_MAZE_CASTDOM_KEEP_A_ONLY Maze's End P7c (c): the Heap Gate / Gateway Plaza per-plan keeps (MazesEndProvider::CastDominanceKeep) block only fold A (the sibling with one more cast); fold B's twin (the same plan plus a land) holds every mana source the plan holds plus the land, so it affords the same off-main Treasure / {1}. The off-main Maze's End keep still blocks both. Default ON (sound); =0 -> those keeps block both folds
     COUNT
 };
 
@@ -1972,6 +1973,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_LAND_DOMINANCE",
         "MTG_MAZE_CASTDOM_WINDOWS",
         "MTG_MAZE_CASTDOM_PERPLAN",
+        "MTG_MAZE_CASTDOM_KEEP_A_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

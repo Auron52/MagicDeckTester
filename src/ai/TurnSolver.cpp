@@ -101605,6 +101605,76 @@ static std::string VampDumpAction(const Action& a)
     if (a.equiv_tag) { s += " e" + std::to_string(a.equiv_tag) + "." + std::to_string(a.equiv_ord); }
     return s;
 }
+// ---------------------------------------------------------------------------- MTG_BP_WAVE_SHAPES (DIAGNOSTIC)
+// Maze's End P7d (2026-11-19): WHICH CHOICE FANS OUT a subtree's interior breakpoint waves. Every wave apply (one
+// fs_bp_wave unit) is tallied by node turn and depth, by its SLOT (base plan: land + casts/activations, and the
+// breakpoint occurrence bp_at), by its rank (bp_choice) and by the continuation the apply took (the breakpoint
+// actions, as a sorted name multiset). Printed at exit, top rows per table. Print-only; off = nothing runs.
+// Not free (a string key per apply), so never read a unit count or a timing off a run with it on.
+namespace bpshapes
+{
+inline bool On() { static const bool on = EnvOn("MTG_BP_WAVE_SHAPES"); return on; }
+inline std::mutex g_mx;
+inline std::map<std::string, long long> g_turn, g_slot, g_base, g_cont, g_rank, g_opener, g_fresh;
+inline std::string ActName(const Action& a)
+{
+    std::string n = a.card_name.str();
+    if (!a.tutor_target.str().empty()) { n += ">" + a.tutor_target.str(); }
+    if (!a.land_fetch_target.str().empty()) { n += ">" + a.land_fetch_target.str(); }
+    if (a.kind != Action::Kind::CastFromHand) { n = "k" + std::to_string(static_cast<int>(a.kind)) + ":" + n; }
+    return n;
+}
+inline void Note(const GameState& node, int depth, const TurnSolver::Plan& v, const std::vector<Action>& bp)
+{
+    const std::string td = "T" + std::to_string(node.turn_number) + " d" + std::to_string(depth);
+    std::string base = "land=" + (v.land_to_play.empty() ? std::string("-") : v.land_to_play) + " [";
+    for (const Action& a : v.actions) { base += ActName(a); base += ","; }
+    base += "]";
+    if (!v.fetch_target.empty()) { base += " fetch=" + v.fetch_target; }
+    if (v.crossing_land_choice >= 0) { base += " xl=" + std::to_string(v.crossing_land_choice); }
+    std::vector<std::string> cn;
+    for (const Action& a : bp) { cn.push_back(ActName(a)); }
+    std::sort(cn.begin(), cn.end());
+    std::string cont = "[";
+    for (const std::string& x : cn) { cont += x; cont += ","; }
+    cont += "]";
+    std::lock_guard<std::mutex> lk(g_mx);
+    ++g_turn[td];
+    ++g_slot[td + " " + base + " @" + std::to_string(v.bp_at)];
+    ++g_base[td + " " + base];
+    ++g_cont[td + " " + cont];
+    ++g_rank[td + " rank" + std::to_string(std::min(v.bp_choice, 30)) + " at" + std::to_string(std::min(v.bp_at, 9))];
+}
+inline void NoteFresh(const GameState& node, int depth, bool fresh)
+{
+    std::lock_guard<std::mutex> lk(g_mx);
+    ++g_fresh["T" + std::to_string(node.turn_number) + " d" + std::to_string(depth) + (fresh ? " fresh" : " dup-state")];
+}
+struct Printer
+{
+    static void Dump(const char* name, const std::map<std::string, long long>& m, std::size_t top)
+    {
+        std::vector<std::pair<long long, std::string>> v;
+        long long tot = 0;
+        for (const auto& kv : m) { v.emplace_back(kv.second, kv.first); tot += kv.second; }
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        std::fprintf(stderr, "[bp-shapes] == %s: %zu keys, %lld applies\n", name, v.size(), tot);
+        for (std::size_t i = 0; i < v.size() && i < top; ++i)
+        { std::fprintf(stderr, "[bp-shapes] %s %12lld  %s\n", name, v[i].first, v[i].second.c_str()); }
+    }
+    ~Printer()
+    {
+        if (!On()) { return; }
+        Dump("turn", g_turn, 64);
+        Dump("fresh", g_fresh, 64);
+        Dump("rank", g_rank, 120);
+        Dump("base", g_base, 60);
+        Dump("slot", g_slot, 60);
+        Dump("cont", g_cont, 80);
+    }
+};
+inline Printer g_printer;
+}   // namespace bpshapes
 // ---------------------------------------------------------------------------- CAST / LAND DOMINANCE FOLD
 // (Maze's End P7, 2026-11-18; USER: "It would be nice if there was no extra branching given how easy the mana is
 // in this list", "We'll need more effective prunes to be applied".) A provider that DECLARES a dominance premise
@@ -101628,9 +101698,11 @@ static std::string VampDumpAction(const Action& a)
 //      the list holds the same plan plus a land (same actions, same order, every non-land field equal). With no
 //      tutor, draw or activation in P, the land P holds can only be played later by a breakpoint continuation (an
 //      Exploration drop) -- which P' reproduces by playing that land first -- or not at all.
-//  KEEP: a candidate the provider KEEPS (DecisionProvider::CastDominanceKeep) is never dropped -- its unspent mana
-//      has an off-main use (Maze's End: P6's off-main Maze's End activation in a Manabond / Burgeoning window, Heap
-//      Gate's last-chance Treasure, Gateway Plaza's off-main {1}; MazesEndProvider::CastDominanceKeep).
+//  KEEP: a candidate the provider KEEPS (DecisionProvider::CastDominanceKeep) is not dropped by the fold(s) its mask
+//      names -- its unspent mana has an off-main use (Maze's End: P6's off-main Maze's End activation in a Manabond /
+//      Burgeoning window, blocking both folds; Heap Gate's last-chance Treasure and Gateway Plaza's off-main {1},
+//      blocking fold A only -- fold B's twin holds every source P holds plus the land; MazesEndProvider::
+//      CastDominanceKeep).
 // Sound dominance under the provider's premise, so it ships ON; the error is always toward KEEPING a plan (a
 // mismatch in any field keeps P). Dominance is a strict-superset order, so the maximal plans are always kept and
 // the list never empties. MTG_CAST_DOM_STATS=1 prints the fold's counters at exit (diagnostic only).
@@ -101683,11 +101755,13 @@ static void CastDominanceFold(const GameState& state, std::vector<TurnSolver::Pl
         b_cand[i] = (!veto[i] && p.land_to_play.empty() && all_b) ? 1 : 0;
         // The provider's per-plan keep (DecisionProvider::CastDominanceKeep): the mana this plan leaves unspent has a
         // use off the main phase that a sibling spending more might not afford (Maze's End P6's off-main activation).
-        if ((a_cand[i] || b_cand[i])
-            && prov.CastDominanceKeep(state, DecisionProvider::PlanView{ &p.actions, &p.land_to_play }))
+        // The mask names the fold(s) it blocks (kCastDomKeepA / kCastDomKeepB, Maze's End P7c (c)).
+        if (a_cand[i] || b_cand[i])
         {
-            a_cand[i] = b_cand[i] = 0;
-            if (castdom::StatsOn()) { castdom::g_keep_mana.fetch_add(1, std::memory_order_relaxed); }
+            const int keep = prov.CastDominanceKeep(state, DecisionProvider::PlanView{ &p.actions, &p.land_to_play });
+            if (keep & DecisionProvider::kCastDomKeepA) { a_cand[i] = 0; }
+            if (keep & DecisionProvider::kCastDomKeepB) { b_cand[i] = 0; }
+            if (keep != 0 && castdom::StatsOn()) { castdom::g_keep_mana.fetch_add(1, std::memory_order_relaxed); }
         }
     }
     bool any_b = false, any_a = false;
@@ -118131,6 +118205,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
                 }
                 else { ApplyPlanDirect(s, v, true, &bp); }
+                if (bpshapes::On()) { bpshapes::Note(state, depth, v, bp); }   // MTG_BP_WAVE_SHAPES (diagnostic)
                 // Past the end of the list: the continuation fell back to greedy, so this variant is
                 // a copy of its own base plan (already scored) and the slot retires. The apply's
                 // breakpoint COUNT is reported alongside so nested indices open their own slots.
@@ -118202,6 +118277,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         }
                         else { wave_key_slot.emplace(wk, slot_id); }
                     }
+                    if (bpshapes::On()) { bpshapes::NoteFresh(state, depth, fresh_wk); }   // MTG_BP_WAVE_SHAPES
                     if (!fresh_wk) { continue; }
                 }
                 _dhs.fresh = true;
