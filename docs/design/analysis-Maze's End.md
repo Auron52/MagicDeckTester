@@ -4369,3 +4369,21 @@ With the prune, both single casts survive. So the order is load-bearing, and the
 - PASS: mismatch (seeds 7001/8001 x 60, both arms), play_invariants, viewer, viewer_wiring, coverage, claude_sweep,
   suite.
 - FAIL: regression_tiers only ("overnight: no GT"). This predates F5 and waits for the periodic overnight run.
+
+**F5p tiers and accept (2026-11-19).** wip/maze-f5p-r is the prune rebased onto the F5 accept 9d82aa3f1. Src is
+identical to b2. Scoped `--both --deck=mazesend,mazesend2hg`, since the prune is Maze-only (`MazesEndProvider`,
+deck-property gated).
+- Searched: slower 1, faster 2, d0 unchanged, so Maze net -1.
+- The slower game is reg d5 s2002 gi51 (T5 -> T6). It recovers at d8 b0: T5 = T5, the same digest.
+- Mechanism (`MTG_BOTTOM_TRIAL_TRACE`): the games diverge at the mulligan BOTTOM choice. Maze has no keep table, so
+  each candidate bottom is scored by a full playout. The prune arm's trial for candidate 49 won T5, base's did not,
+  and that bound picked the bottom. The real game with that bottom wins T6. This is a trial-vs-real-game mismatch
+  of the playout bottoming, not a drop of a payable plan. Base's real game also wins T5 although no base trial
+  reached T5.
+- Accepted smoke + regression: 3 keys moved (smoke d5, reg d5 s2002 / s3003). `check_gt_logs`: 1301 consistent.
+
+**ref_bench (d5 b20 shipped, 11 references), on mtg.f5h (F5) and mtg.b2 (prune): identical.**
+- 10/11 tie the USER. **s6 is short by one turn: T7 vs the USER's T6.**
+- This is pre-existing on this lineage: R1 measured s6 at T7 on F5's base, e682d7942. The work queue notes s6 is
+  knife-edge (the pass-2 start gate) and wins T6 at b20 on 7626b6105.
+- So the reference bar must be re-benched on the INTEGRATED shared tip.
