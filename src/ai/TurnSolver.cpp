@@ -87725,7 +87725,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 // Before the credit: is the board provably short without eating (Plan::sacfod_admit)?
                 sacfod_admit = SacFodderBoardShort(cands, sel, static_cast<int>((credited ? eff : pool).Total()),
                                                    combined.ManaValue());
-                CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true;
+                // THE CREDIT ONLY WHERE IT IS NEEDED. A subset the board already pays -- the flat count and colour
+                // test on the un-credited pool, the big-only / subtype-only splits, and colour presence -- is
+                // offered without the fodder credit, exactly as with the lever off: crediting it admits nothing,
+                // but the credit's wild / outlet-colour mana then widened every later colour gate and the tag
+                // (sacfod_credit) un-folded its land-Aura hosts, so plans the lever-off menu already held came
+                // back re-shaped (Fungus A/B: digest-only 50 -> 19, slower 3 -> 1 with only this change). Only a
+                // subset some gate refuses without the fodder is credited -- and then it is asked the apply's own
+                // decider below (the fodder walk gate), so every credited plan is one the apply realises.
+                bool sacfod_needed = sacfod_admit;
+                if (!sacfod_needed)
+                {
+                    const ManaPool& p0    = credited ? eff    : pool;
+                    const ManaPool& p0_nc = credited ? eff_nc : pool_noncreature;
+                    sacfod_needed = !(p0.CanPay(combined) && p0_nc.CanPay(noncreature_combined))
+                                 || (big_only.live && !BigOnlySubsetPayable(big_only, cands, sel, p0, p0_nc))
+                                 || (sub_only.live && !SubtypeOnlySubsetPayable(sub_only, cands, sel, p0, p0_nc))
+                                 || !SubsetPayable(have_colors, cands, sel);
+                }
+                if (sacfod_needed || !SacFodderNeededOnlyOn())
+                { CreditSacFodderMenu(sacfod, bodies, eff, eff_nc); credited = true; sacfod_credited = true; }
             }
         }
         if (enumstats::Enabled()) { enumstats::g_e_rules.fetch_add(1, std::memory_order_relaxed); }
@@ -88663,7 +88682,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // in full at ANY budget. Not judged (kept) for a subset holding an action the decider does not order.
         // The oracle's observe mode skips it, like every mana gate, so ENUM-GAP audits it.
         // MTG_SAC_FODDER_WALK_GATE=0 (diagnostic; DEFAULT ON under the lever) keeps every credited plan.
-        if (sacfod_admit && !manaoracle::t_gate_observe)
+        if ((sacfod_admit || (sacfod_credited && SacFodderNeededOnlyOn())) && !manaoracle::t_gate_observe)
         {
             static const bool s_sacfod_walk_gate = EnvOn("MTG_SAC_FODDER_WALK_GATE", true);
             if (s_sacfod_walk_gate)
@@ -88681,6 +88700,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                     judged = false; break;
                 }
                 if (judged && !SacFodderSubsetOrderPays(state, cands, sf_ord)) { _ct.label = "sacfod-walk"; return; }
+            }
+        }
+        {   // TEMP DIAGNOSTIC (sacfodder-fix2): one line per OFFERED fodder-credited plan
+            static const bool s_sfm_dump = EnvOn("MTG_SFM_DUMP");
+            if (s_sfm_dump && sacfod_credited)
+            {
+                std::string nm, bd;
+                for (int j : sel) { nm += cands[static_cast<std::size_t>(j)].card_name.str(); nm += ","; }
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index || p.card.IsLand()) { continue; }
+                    bd += p.card.m_name.str(); bd += ",";
+                }
+                std::fprintf(stderr, "[sfm] T%d live=%d admit=%d pool=%d need=%d plan=[%s] board=[%s]\n", state.turn_number,
+                             sacfod.outlet_live ? 1 : 0, sacfod_admit ? 1 : 0, pool.Total(), combined.ManaValue(),
+                             nm.c_str(), bd.c_str());
             }
         }
         _ct.label = "OFFERED";
