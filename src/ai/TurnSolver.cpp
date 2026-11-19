@@ -115713,7 +115713,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         CertClearVerdictCode();
         const bool proven = ResolveProvider(state).ProvenWinlessThisTurn(state, state.active_player_index);
-        const int proof = proven ? 1 : std::min(0, CertLastVerdictCode());
+        const int vcode = CertLastVerdictCode();
+        const int proof = proven ? 1 : std::min(0, vcode);
         if (lastply::Census() > 0)
         {
             const int sl = lastply::Slot(proof);
@@ -115737,7 +115738,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         for (const Card& c : state.ActivePlayer().hand) { h += " " + c.m_name.str(); }
                         for (const Permanent& q : state.battlefield)
                         { if (q.controller_index == state.active_player_index) { b += " " + q.card.m_name.str() + (q.tapped ? "(T)" : ""); } }
-                        std::fprintf(stderr, "[lastply] UNSOUND T%d win=%d | hand:%s | bf:%s\n", state.turn_number, r.win_turn, h.c_str(), b.c_str());
+                        std::string l;
+                        for (const Card& c : state.ActivePlayer().library) { l += " " + c.m_name.str(); }
+                        std::fprintf(stderr, "[lastply] UNSOUND T%d win=%d vcode=%d phase=%d played=%d drops=%d | hand:%s | bf:%s | lib:%s\n",
+                                     state.turn_number, r.win_turn, vcode, static_cast<int>(state.phase),
+                                     state.ActivePlayer().lands_played_this_turn, state.ActivePlayer().LandDropsAvailable(),
+                                     h.c_str(), b.c_str(), l.c_str());
                     }
                 }
             }

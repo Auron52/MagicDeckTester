@@ -68755,7 +68755,8 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
         std::vector<const std::string*> pool;
         auto add = [&](const Card& c)
         {
-            if (!c.IsLand()) { return; }
+            // By DEFINITION: a hand / library Card instance carries no type bits in play (Card::IsLand() reads false
+            // there -- measured 2026-11-19, it made this bound 0 and the fold unsound), so never test the instance.
             const std::string& n = c.m_name.str();
             if (!MazeDefIsGate(CardDatabase::Instance().LookupCached(c)) || MazeControlsGateNamed(s, me, n)) { return; }
             for (const std::string* x : pool) { if (*x == n) { return; } }
@@ -68763,7 +68764,7 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
         };
         for (const Card& c : pl.hand) { add(c); }
         for (const Card& c : pl.library) { add(c); }
-        if (g0 + static_cast<int>(pool.size()) < need) { return 1; }
+        if (g0 + static_cast<int>(pool.size()) < need) { return 2; }   // proof codes: 1 (P)/(C), 2 (N), 3 (S)
     }
     // (S): a Guild Summit controlled or in hand -- count the entry sources (above), or give up (-1).
     {
@@ -68796,7 +68797,7 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
             if (mb > 0) { return -1; }
             const int drops0 = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn);
             const int bound_s = mz + drops0 + ex + bg + burg_bf + ch + tl;
-            return g0 + bound_s < need ? 1 : -1;
+            return g0 + bound_s < need ? 3 : -1;
         }
     }
     int me_bf = 0, amulet = 0, burg = 0, manabond = 0;
@@ -68821,8 +68822,7 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
         else if (n == "Burgeoning") { ++burg; }
         else if (n == "Manabond") { ++manabond; }
         if (n == "Talon Gates of Madara") { ++talon; }
-        if (!c.IsLand()) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);   // by definition (see (N) above)
         if (!MazeDefIsGate(d) || MazeControlsGateNamed(s, me, n)) { continue; }
         bool dup = false;
         for (const std::string* x : new_names) { if (*x == n) { dup = true; break; } }
