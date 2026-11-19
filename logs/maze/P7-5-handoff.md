@@ -28,8 +28,13 @@ diagnostic commit below, once chain10 builds it.
   `shp2/` = 30042 gi1 d5 b0 abandon 20M with `MTG_BP_WAVE_SHAPES=1`. Log `chain10.log`, marker `chain10.DONE`.
   Read `grep '\[bp-shapes\] node' shp2/run.err`.
 
+## d8c VERDICT (landed 05:4x UTC): BOTH SLOWER GAMES RECOVER
+- d1b1 gi118: d8 b0 both arms T7, same digest 79807fdd66207090 (base 327K units, keepA 282K) -> base's b1 T6 beat its
+  own d8 b0.
+- d5b20 gi528: d8 b0 both arms T6, same digest e4f6fdfc7a5f1b4f (base 920K, keepA 730K) -> keepA recovers to base's T6.
+
 ## Remaining, in order
-1. d8c verdict. If both recover: `tools/chain11.sh` (smoke + regression on the (c) binary; needs clean src and
+1. d8c recovered (above), so: `tools/chain11.sh` (smoke + regression on the (c) binary; needs clean src and
    build/Release == mtg.p7h), accept `--deck=mazesend` (both tiers), check_gt_logs, push wip/maze-p7, CI watch
    (`--interval 60`). (c) is then integrable.
 2. Turn-2 fan-out (30042 gi1, `shp1/run.err`, MTG_BP_WAVE_SHAPES): **96.5% of the 8.2M wave applies are at T6 d1 --
