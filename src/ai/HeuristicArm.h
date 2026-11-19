@@ -1021,6 +1021,8 @@ enum Slot : int
     STUFFY_LETHAL_ORCHARD_LEGACY,// MTG_STUFFY_LETHAL_ORCHARD_LEGACY  MEASUREMENT arm for the Stuffy Doll split-lethal fix (2026-11-19): StuffyDollProvider::ExtraLethalDamage counted one extra creature (Chain Reaction's X) and one extra Shaman pull target per UNTAPPED Forbidden Orchard of ours, but the engine makes Orchard Spirits at turn start / on the Orchard's play (SpawnForbiddenOrchardTokensTurnStart, LandPlay's on-play spawn), never at a tap, so the Spirit is already counted in the board's creatures. DEFAULT OFF (the fixed projection); =1 restores the over-count (with MTG_RFX_FAN_CHARGE=0 too: the f53235400 play)
     STUFFY_ESCAPE_SCRY_PRUNE, // MTG_STUFFY_ESCAPE_SCRY_PRUNE  Stuffy Doll arm P (2026-11-19, USER 11-17 ~21:35 "perhaps even not castable. It is essentially a Scry 1" / 11-19 ~06:20 "the purpose of that card in the deck is primarily for indestructible and the combo, not for incidental scry 1"): StuffyDollProvider::CollectedActionAllowed refuses a Loran's Escape cast whose grant cannot matter this turn (StuffyEscapeCastIsScryOnly: not our creature, already indestructible, or no damage source this turn). LOSSY (the scry-only line becomes unfindable), DEFAULT OFF, A/B arm only
     STUFFY_ESCAPE_SCRY_LAST,  // MTG_STUFFY_ESCAPE_SCRY_LAST  Stuffy Doll arm W (2026-11-19): the same scry-only Loran's Escape plans stay on the menu but are MOVE-ORDERED LAST among their wins tier (StuffyDollProvider::PlanMoveOrderBack, MoveOrderLess's provider tier = -1). ORDER only: nothing refused at any budget; a budget reaches real lines first; a scry line wins only when strictly better. Inert at d0 (the runner never move-orders). DEFAULT OFF, A/B arm
+    AA_LOOP_CAST_DRAW,        // MTG_AA_LOOP_CAST_DRAW  AccomplishedAlchemist (2026-11-19, seed 12345681 T3): a draw engine in HAND (Staff of Domination) is an untap-loop payoff -- ComputeUntapLoopNeed (f) kLoopPayCastDraw (the loop banks the engine's cast with the Alchemist left untapped) and the Combo Off rule row FIN-STAFF-HAND-DIG. The provider (heuristic) half of docs/design/aa-staff-in-hand-loop-cast-draw.md. DEFAULT ON; =0 -> no such need (the pre-2026-11-19 provider)
+    BP_UNTAP_FLOAT,           // MTG_BP_UNTAP_FLOAT  breakpoint SITE 9 for an activated untap's REFUND (2026-11-19, the search half of docs/design/aa-staff-in-hand-loop-cast-draw.md): mana FLOATING beside a live mana creature an own activated untapper can aim at is an activation key (kActUntapFloat, valued by the float), so a plan whose trailing untaps refund mana -- which none of its casts, applied first, could spend -- re-plans the rest of the main phase onto it, and each further refund re-opens (MTG_SITE9_REOPEN, deviation sequences MTG_BP_DEV_SEQ). Completeness: 'untap, untap, cast the Staff off the float' was unfindable at every budget unless the provider recognised a loop need. DEFAULT ON; =0 -> no such key
     COUNT
 };
 
@@ -1986,6 +1988,8 @@ inline const char* Name(int slot)
         "MTG_STUFFY_LETHAL_ORCHARD_LEGACY",
         "MTG_STUFFY_ESCAPE_SCRY_PRUNE",
         "MTG_STUFFY_ESCAPE_SCRY_LAST",
+        "MTG_AA_LOOP_CAST_DRAW",
+        "MTG_BP_UNTAP_FLOAT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

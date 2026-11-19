@@ -4404,3 +4404,100 @@ TEST_CASE("Weather flex: the Alchemist's six float the colour of the untapper th
     REQUIRE(n > 0);
     CHECK(best == 2);
 }
+
+// ---- THE ACTIVATED UNTAP'S REFUND (MTG_BP_UNTAP_FLOAT; 2026-11-19, docs/design/aa-staff-in-hand-loop-cast-draw.md) ----
+// A GENERIC self-funding untap (no provider loop need, GenericProvider): Crab Umbra on an Alchemist at X = 4 nets
+// +1 per activation, but every cast of a plan is applied BEFORE its trailing activations, so the mana an untap
+// refunds was spendable by nothing -- and with no new activation key the site-9 delta rule never re-planned
+// onto it. The refund float is that key now: "untap once, then cast a 5-drop off the float + a fresh Alchemist
+// tap" is a searched line where the pre-loop pool (4) pays no 5-drop at all.
+namespace
+{
+struct UntapFloatArmAa
+{
+    std::int8_t prev;
+    explicit UntapFloatArmAa(bool on) : prev(heurarm::t_arm[heurarm::BP_UNTAP_FLOAT])
+    { heurarm::t_arm[heurarm::BP_UNTAP_FLOAT] = on ? 1 : 0; }
+    ~UntapFloatArmAa() { heurarm::t_arm[heurarm::BP_UNTAP_FLOAT] = prev; }
+};
+
+GameState UntapFloatBoardAa(int* alch_out, int* umbra_out)
+{
+    GameState s = FreshAa();
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 4;   // X = 4 against {2}{U}: +1 per activation
+    HandAa(s, "Kalonian Hydra");              // {3}{G}{G} -- one more than the pre-loop pool
+    s.m_provider = nullptr;                   // GenericProvider: no loop need, no kUntapLoopToNeed
+    if (alch_out)  { *alch_out = alch; }
+    if (umbra_out) { *umbra_out = umbra; }
+    return s;
+}
+
+bool HasPermanentAa(const GameState& s, const std::string& name)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return true; } }
+    return false;
+}
+
+// Does any site-9 continuation of the single-untap base plan cast the Hydra in BOTH worlds?
+bool UntapThenHydraBothAa(const GameState& s)
+{
+    for (const TurnSolver::Plan& base : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* a = OnlyActionAa(base, Action::Kind::ActivateUntap);
+        if (a == nullptr || a->chosen_x != 1 || base.bp_choice >= 0) { continue; }
+        for (int k = 0; k < 16; ++k)
+        {
+            TurnSolver::Plan p = base;
+            p.bp_choice = k;
+            p.bp_at     = 0;
+            const auto both = BothWorldsAa(s, p);
+            if (HasPermanentAa(both.first, "Kalonian Hydra") && HasPermanentAa(both.second, "Kalonian Hydra"))
+            { return true; }
+        }
+    }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Untap refund float: an activated untap's net mana is a NEW site-9 key (generic, no loop need)")
+{
+    int alch = 0, umbra = 0;
+    const GameState s = UntapFloatBoardAa(&alch, &umbra);
+    CHECK(ComputeUntapLoopNeed(s, 0).payoff == kLoopPayNone);
+    const std::vector<uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState t = s;
+    REQUIRE(ApplyActivatedUntap(t, 0, kUntapEnchanted, umbra, alch, 1) == 1);
+    CHECK(t.floating_mana.Total() == 1);
+    CHECK_FALSE(ByNumAa(t, alch)->tapped);
+    {
+        UntapFloatArmAa on(true);
+        CHECK(TurnSolver::PostEntryActivationPending(t, pre));             // the refund: re-plan
+        const std::vector<uint64_t> pre1 = TurnSolver::SnapshotActivatableAbilities(t);
+        CHECK_FALSE(TurnSolver::PostEntryActivationPending(t, pre1));      // the same float: nothing new
+        GameState u = t;
+        REQUIRE(ApplyActivatedUntap(u, 0, kUntapEnchanted, umbra, alch, 1) == 1);
+        CHECK(TurnSolver::PostEntryActivationPending(u, pre1));            // a further refund: re-plan again
+        GameState v = t;
+        MutAa(v, alch)->tapped = true;
+        CHECK_FALSE(TurnSolver::PostEntryActivationPending(v, pre));       // tapped: no live loop to refund
+    }
+    {
+        UntapFloatArmAa off(false);
+        CHECK_FALSE(TurnSolver::PostEntryActivationPending(t, pre));       // =0: the pre-2026-11-19 gate
+    }
+}
+
+TEST_CASE("Untap refund float: untap once, then the continuation casts a 5-drop off the float -- both worlds")
+{
+    const GameState s = UntapFloatBoardAa(nullptr, nullptr);
+    {
+        UntapFloatArmAa on(true);
+        CHECK(UntapThenHydraBothAa(s));
+    }
+    {
+        UntapFloatArmAa off(false);
+        CHECK_FALSE(UntapThenHydraBothAa(s));   // the hole: no continuation, so the refund was never spendable
+    }
+}

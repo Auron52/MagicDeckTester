@@ -107,3 +107,40 @@ spends on the provider's guess and a large budget reaches everything. Acceptance
 `--depth 8 --budget-ms 0`, and the generic route must be covered by a unit test on a non-Staff-hand loop as
 well. Then the usual: held-out A/B on the deck, smoke/regression accept. Scheduled after the Boars keep-table
 adoption (2026-11-19).
+
+### Census (2026-11-19, heuristic OFF: `MTG_AA_LOOP_CAST_DRAW=0`, post-sac hand-off, `--depth 8 --budget-ms 0`)
+
+Instrumented with `MTG_FS_ROOT_DUMP=3 MTG_SITE9_TRACE=3` on the hand-off
+(`--choices 1,0,0,-1,1,1,0,-1,136,0,2,0 --choices-then-auto`). The root scans exactly three plans:
+`{Staff of Domination}` (+ its site-9 variants, whose continuation list is EMPTY: the Alchemist is tapped
+and 1 floats), `{Crab Umbra(x1)}` with **no site-9 variant at all**, and the T4 line. Heuristic ON, the
+same hand-off wins T3.
+
+* **Count axis:** the generic `UntapActivationCounts` gives K = 1 only (`max_affordable` = 4 div 3 = 1;
+  the refund is not counted). Not the decisive cut: any K ends the main phase with the refund floating.
+* **The decisive cut is the site-9 DELTA RULE.** A plan applies its casts first and its activations in
+  the trailing pass, so the mana an untap refunds is spendable by nothing in that plan. After
+  `Umbra x1` the Alchemist is untapped again (kActLifeYield unchanged), kActUntapper is unchanged, and
+  kActUntapLoopFunded exists only for a provider-recognised loop NEED -- so
+  `PostEntryActivationPending` is false, no continuation opens, and the float dies with the phase. The
+  only route to "untap, untap, cast the Staff off the float" was the provider's `kUntapLoopToNeed`.
+
+### The search half (MTG_BP_UNTAP_FLOAT, default ON; heurarm BP_UNTAP_FLOAT)
+
+* `kActUntapFloat` (TurnSolver.cpp `CollectActivationKeys`): mana FLOATING beside a live mana creature
+  that an own activated untapper can aim at, valued by the float total. An untap that refunds mana
+  presents a new value, so site 9 re-plans the rest of the main against the real float; each further
+  refund re-opens it (MTG_SITE9_REOPEN). Generic: any untapper (Umbra / Staff / Galvanic / Witch), any
+  mana creature, no provider need.
+* `PlanOpensBreakpoint` marks site 9 for any plan holding an `ActivateUntap` aimed at an own mana creature
+  (the old mark covered only the Alchemist's life-scaled X).
+* Budget-staged, not a gate: the provider's counts and the one-deviation continuations come first; a
+  line needing different continuations at several re-opens is a compound slot of the wave walker
+  (MTG_BP_DEV_SEQ: wave = deviation count, priced), so a finite budget spends on the provider's guess
+  first and an unlimited one reaches every sequence. The count axis is unchanged: K = n untaps is
+  reachable as n K=1 re-opens.
+* `MTG_AA_LOOP_CAST_DRAW` now reads through heurarm (slot AA_LOOP_CAST_DRAW) so both halves A/B in one
+  pooled batch.
+* Unit tests (test_accomplished_alchemist.cpp, "Untap refund float"): the key on a GenericProvider board
+  (Alchemist X = 4 + Umbra, Kalonian Hydra in hand, no loop need), and the both-worlds line "untap once,
+  then the continuation casts the 5-drop off the float" -- absent with the lever at 0.
