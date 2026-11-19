@@ -860,7 +860,7 @@ martyr_smoke_d0_s1001	1
 martyr_smoke_d3_s1001	11784
 martyr_smoke_d5_s1001	18321
 mazesend2hg_smoke_d3_s1001	184070
-mazesend2hg_smoke_d5_s1001	123324
+mazesend2hg_smoke_d5_s1001	133206
 mazesend_regression_d0_s2002	1
 mazesend_regression_d3_s2002	45702
 mazesend_regression_d3_s30081	7574
@@ -870,8 +870,8 @@ mazesend_regression_d5_s3003	163805
 mazesend_regression_d5_s30081	3012
 mazesend_regression_d5_s30121	5801
 mazesend_smoke_d0_s1001	1
-mazesend_smoke_d3_s1001	35042
-mazesend_smoke_d5_s1001	111848
+mazesend_smoke_d3_s1001	34178
+mazesend_smoke_d5_s1001	113839
 melira2hg_smoke_d3_s1001	30735
 melira2hg_smoke_d5_s1001	147990
 melira_overnight_d0_s10010	1

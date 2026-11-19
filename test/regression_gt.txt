@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 947a3796f  date 2026-11-18
+# Regression ground truth -- commit ca0a10718  date 2026-11-19
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -7,14 +7,15 @@
 # accepted-with-regressions (regression, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
 # accepted-with-regressions (smoke, 2026-11-18): P7 fold3 (fold2 + P6 off-main mana guard) rebased onto e682d7942: only mazesend* move, each reproducing the P7b accepted aggregate+digest (82eeffb80) byte-for-byte; every other key unchanged; every searched-slower game vs the P6 GT has identical d8 b0 digests fold-off vs fold3; held-out A/B net -11/650; see logs/maze/P7-results.md s7-8
 # accepted-with-regressions (regression, 2026-11-18): P7 fold3 (fold2 + P6 off-main mana guard) rebased onto e682d7942: only mazesend* move, each reproducing the P7b accepted aggregate+digest (82eeffb80) byte-for-byte; every other key unchanged; every searched-slower game vs the P6 GT has identical d8 b0 digests fold-off vs fold3; held-out A/B net -11/650; see logs/maze/P7-results.md s7-8
+# accepted-with-regressions (smoke, 2026-11-19): P7c (a) P6-window guard + (b) per-plan Heap Gate / Gateway Plaza keeps (fc204f2f8): only mazesend* move, 0 searched slower / 2 faster; held-out A/B net 0/650 with both slower games identical at d8 b0; see logs/maze/P7-results.md s10
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
 mazesend_smoke_d0_s1001=6.8980/0e18e01b1a7b6894
 mazesend_smoke_d3_s1001=5.3000/5c70708f7b830cdc
-mazesend_smoke_d5_s1001=5.7348/6bce5a984bc53b65
-mazesend2hg_smoke_d5_s1001=5.5333/97dccd64d503786a
+mazesend_smoke_d5_s1001=5.7197/030c2d4525fef227
+mazesend2hg_smoke_d5_s1001=5.5333/31d11211661866f0
 mill_smoke_d0_s1001=6.2200/13d7cf7dcd8b5017
 mill_smoke_d3_s1001=4.6000/e3c08d7c641b8c4d
 mill_smoke_d5_s1001=4.6000/1a3c154de8cd6ddf
