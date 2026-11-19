@@ -4207,3 +4207,38 @@ Full write-up: `logs/maze/P6-results.md`. Branch `wip/maze-p6`, `5ac60ceba` (cod
     unlimited search does not reproduce. The 9 d0-slower games recover too (d0 g64 is FASTER on P6 at d8).
   - **Accepted** smoke + regression GT scoped `--deck=mazesend,mazesend2hg`: 4 smoke + 6 regression keys moved,
     nothing else; `check_gt_logs` 0 stale.
+
+## F6 (2026-11-19): Baldur's Gate's conditional hold + the fed float (USER rejection s6 gi5 T5)
+
+Handoffs: `logs/maze/F6-handoff.md`, `F6-2-handoff.md`, `F6-3-handoff.md`. USER: *"Mana difficulties:
+logs/play/rejections/Maze_s_End_cod_s6_gi5_t5.json In theory this is workable due to lands coming into play untapped."*
+- **Fed float** (`MTG_SCALED_FED_FLOAT`, DEFAULT ON; ManaPayment.cpp `ScaledFedFloatAfter`, `ScaledFedRecolourAfter`):
+  after a payment that tapped a board-scaled land (Baldur's Gate, Three Tree City) for plain {C} beside >= {feeder}
+  other generic, make the same taps with the land in its fed mode and float the surplus (a dominance: same sources,
+  every pip paid, strictly more mana). The recolour re-reads the fed colour after the pay refine (ManaOracle
+  RefinePayment re-made it in WUBRG face order and floated W, stranding Sylvan Scrying's {G}).
+- **Conditional Baldur's Gate hold** (`MTG_MAZE_TAP_BALDUR_LAST`, DEFAULT ON; `MazesEndProvider::ManaSourceRank`):
+  rank 61 only while its fed mode gains AND the line still owes >= {feeder}+1 after this payment (later casts +
+  pending activations); otherwise the generic rank. F6's unconditional Maze's End rank 69 is DELETED: the existing
+  `MTG_ACT_LINE_HOLD` source hold already holds an activating Maze's End.
+- **Held-out A/B** (10,800 games, arms innermost and order-rotated, MTG_PGO=0; Maze's End d5 b20 x600 231001+, d3 b10
+  x300 232001+, 2HG d5 b20 x600 234001+, d0 x600 233001+; Goblins d5 b60 / d0 x300 235001+/236001+; Merfolk Turns
+  d5 b20 / d0 x300 237001+/238001+). Net turns vs base (both levers off):
+
+  | deck | fed | cond | both (shipped) |
+  |---|---|---|---|
+  | mazesend (d5 / d3 / d0) | -15 / -11 / -19 = **-45** | 0 / 0 / -6 = **-6** | -16 / -12 / -25 = **-53** |
+  | mazesend2hg | **-14** (17/3) | **-1** (2/1) | **-16** (18/2) |
+  | goblins, merfolkturns (fed only) | 0, digest-identical | -- | -- |
+
+  Units (order-balanced): both 0.991, fed 0.995, cond 1.000; wall 0.995 / 0.998 / 1.009.
+- **Every slower game recovers at d8 b0** (none abandoned): fed 14/14 (2 faster than base at d8), cond 7/7, both 20/20 (2HG g54 faster at d8).
+- **ref_bench** (11 references, d5 b20): 0/11 short; s6 gi5 T6 = T6; s9 gi8 search T5 vs USER T6. The s6 USER line
+  validates as `legal_not_enumerated` in both orders (reordered `ME#43, ME#46, Scrying` and the queued `Scrying, ME#46,
+  ME#46`): it pays, but the search does not enumerate it (open items below).
+- Unit `Maze's End F2 (gi1)` re-pinned: its "usual payment strands the activation" precondition holds only with the
+  fed float off; with it on, the usual payment already leaves Maze's End's {3} payable.
+- **Open (not fixed here):** CheckLine prices TapTutorPut at 0 on this branch (V3's viewer-maze2 fixes it); the
+  `{ME#43}` single-activation root still pays #43 with Baldur's {C} + ME#46 (no later demand named), so the s6 line is
+  reached only through the `{ME,ME}` root and the fed float; the `{Scrying, ME}` second link needs F5's owed-acts joint
+  prepay.
