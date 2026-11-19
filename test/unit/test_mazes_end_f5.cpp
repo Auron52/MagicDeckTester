@@ -605,3 +605,64 @@ TEST_CASE("Maze's End F5 prune: under Amulets of Vigor a tapped land drop floats
     F5Put(s, "Amulet of Vigor", 752);
     CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Gates Ablaze") }, "Dimir Guildgate"));
 }
+
+// ---- The prune x P7's cast-dominance fold (EnumeratePlansWithLandUncached runs the plan-list filter FIRST) ---------
+// Fold A drops a plan P for its twin P' = P + one more cast-dominant cast (Burgeoning / Manabond / Exploration /
+// Amulet). If P' were provably unpayable and the prune ran AFTER the fold, the fold would drop P for P', the prune would
+// then drop P', and the line P would be lost. The filter (and so the prune) runs before the fold, so the fold never
+// keys on an unpayable twin.
+namespace
+{
+std::vector<std::string> F5Menu(const GameState& s)
+{
+    std::vector<std::string> out;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (p.bp_choice >= 0) { continue; }
+        std::string k = p.land_to_play + "|";
+        for (const Action& a : p.actions) { k += a.card_name.str() + ","; }
+        out.push_back(k);
+    }
+    return out;
+}
+bool F5Has(const std::vector<std::string>& m, const std::string& k) { return std::find(m.begin(), m.end(), k) != m.end(); }
+}   // namespace
+
+TEST_CASE("Maze's End F5 prune x P7 fold: a subset is never folded into an unpayable superset")
+{
+    LoadF5Cards();
+    const MazesEndProvider prov;
+    GameState s = F5Base();          // the land drop is spent: no land plans
+    s.m_provider = &prov;
+    F5Put(s, "Forest", 720);                 // the only {G}
+    F5Put(s, "Azorius Guildgate", 721);      // {W}/{U}: two mana, one green
+    s.players[0].hand.push_back(F5Card("Burgeoning", 722));
+    s.players[0].hand.push_back(F5Card("Manabond", 723));
+    for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(F5Card(k % 2 ? "Izzet Guildgate" : "Forest", 730 + k)); }
+    REQUIRE(prov.PlanListFilterLive(s));
+    REQUIRE(prov.CastDominanceLive(s));
+    // {G}{G} with one green source: the two-cast plan is provably unpayable, each single cast is not.
+    CHECK(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning"), F5Cast(s, "Manabond") }, ""));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Burgeoning") }, ""));
+    CHECK_FALSE(TurnSolver::PlanProvablyUnpayableForTest(s, { F5Cast(s, "Manabond") }, ""));
+
+    std::vector<std::string> no_prune;
+    {
+        const F5Arm off(heurarm::MAZE_UNPAYABLE_PRUNE, 0);
+        no_prune = F5Menu(s);
+    }
+    // The hazard is real on this board: without the prune the enumeration offers the unpayable superset, and the
+    // fold drops each single cast for it.
+    const bool super = F5Has(no_prune, "|Burgeoning,Manabond,") || F5Has(no_prune, "|Manabond,Burgeoning,");
+    REQUIRE(super);
+    CHECK_FALSE(F5Has(no_prune, "|Burgeoning,"));
+    CHECK_FALSE(F5Has(no_prune, "|Manabond,"));
+    // With the prune (default ON): the superset is gone BEFORE the fold, so both single casts survive it.
+    const std::vector<std::string> menu = F5Menu(s);
+    CHECK_FALSE(F5Has(menu, "|Burgeoning,Manabond,"));
+    CHECK_FALSE(F5Has(menu, "|Manabond,Burgeoning,"));
+    CHECK(F5Has(menu, "|Burgeoning,"));
+    CHECK(F5Has(menu, "|Manabond,"));
+    // ... and the fold still works on the payable menu: the pass is dominated by a single cast.
+    CHECK_FALSE(F5Has(menu, "|"));
+}
