@@ -69990,6 +69990,10 @@ struct BpPrefixSnap
     // "the base plan could have carried it"), taken from the state the plan was applied to, not the snapshot.
     std::vector<std::uint64_t> pre_plan_keys;
     std::vector<std::uint64_t> pre_plan_acts;
+    // The deferred loop's pass counter (top_reset_passes) as the capturing pass left it -- post-increment, so the
+    // pass that captured is counted. The resumed apply re-enters the loop for that same pass and must stop at the
+    // same runaway guard the full apply stops at; restarting at 0 gave it up to five passes more.
+    int                   passes = 0;
 };
 // The hold a resumed apply runs its continuation under, as last set by the resume branch (this thread).
 // Written there unconditionally (one copy, resume-only), read by nothing but BpResumeLineHoldForTest.
@@ -79937,7 +79941,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_put_armed       = true;   // site 10 -- see deferred_site_index
     }
 
-    int  top_reset_passes = 0;
+    // A prefix resume re-enters the loop at the capturing pass: the guard below increments again, so start one back
+    // (see BpPrefixSnap::passes).
+    int  top_reset_passes = bp_resume != nullptr ? std::max(0, bp_resume->passes - 1) : 0;
     bool top_first_pass   = true;
     // THE PARTITION NEEDS THE LOOP (MTG_BP_PARTITION_CANTRIP). USER 2026-08-29: "We have to
     // re-evaluate at breakpoints anyway?" -- yes, but historically exactly ONCE, and that is
@@ -79993,6 +79999,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->main_bp_ord   = main_bp_ord;
             bp_capture->pre_plan_keys = pre_plan_keys;
             bp_capture->pre_plan_acts = pre_plan_acts;
+            bp_capture->passes        = top_reset_passes;
         }
         // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
         // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
@@ -80038,6 +80045,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->main_bp_ord   = main_bp_ord;
             bp_capture->pre_plan_keys = pre_plan_keys;
             bp_capture->pre_plan_acts = pre_plan_acts;
+            bp_capture->passes        = top_reset_passes;
             return;
         }
         deferred_cantrip_resolve = false;
