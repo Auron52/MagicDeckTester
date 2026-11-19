@@ -10798,6 +10798,10 @@ std::atomic<unsigned long long> g_lka_entry{0}, g_lka_filtered{0}, g_lka_trial{0
 std::atomic<unsigned long long> g_lka_ns{0}, g_lka_check_bad{0};
 // MTG_LINE_KEEP_ROCK: trials whose rest was judged with the rock being paid for on the board, and those that fired.
 std::atomic<unsigned long long> g_lkr_trial{0}, g_lkr_fired{0};
+// MTG_LINE_REDUCER_KEEP_STATS (print-only): where the rung's time goes, by the point a call returned -- 0 a pre-test
+// or the witness, 1 the complete judge (rest payable), 2 the joint unpayable, 3 a strand no repair keeps, 4 fired --
+// and whether a rock was credited (+5).
+std::atomic<unsigned long long> g_lk_ph_n[10]{}, g_lk_ph_ns[10]{};
 struct LineReducerKeepStats
 {
     ~LineReducerKeepStats()
@@ -10811,6 +10815,15 @@ struct LineReducerKeepStats
                      g_lka_fired.load(), g_lka_check_bad.load(), static_cast<double>(g_lka_ns.load()) / 1e6);
         std::fprintf(stderr, "[line-keep-rock] rock_trials=%llu rock_fired=%llu\n", g_lkr_trial.load(),
                      g_lkr_fired.load());
+        static const char* const ph[5] = {"filtered", "rest-payable", "joint-unpayable", "strand-nofire", "fired"};
+        for (int r = 0; r < 2; ++r)
+        {
+            for (int k = 0; k < 5; ++k)
+            {
+                std::fprintf(stderr, "[line-keep-phase] %s %-15s n=%llu ms=%.1f\n", r ? "rock " : "other", ph[k],
+                             g_lk_ph_n[r * 5 + k].load(), static_cast<double>(g_lk_ph_ns[r * 5 + k].load()) / 1e6);
+            }
+        }
     }
 };
 LineReducerKeepStats g_lrk_stats;
@@ -10939,6 +10952,18 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     } _clock{s_stats && keep_all, s_stats && keep_all ? std::chrono::steady_clock::now()
                                                        : std::chrono::steady_clock::time_point{}};
     if (keep_all) { g_lka_entry.fetch_add(1, std::memory_order_relaxed); }
+    struct PhaseClock
+    {
+        bool on; int phase = 0; bool rock = false; std::chrono::steady_clock::time_point t0;
+        ~PhaseClock()
+        {
+            if (!on) { return; }
+            const int k = (rock ? 5 : 0) + phase;
+            g_lk_ph_n[k].fetch_add(1, std::memory_order_relaxed);
+            g_lk_ph_ns[k].fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+        }
+    } _ph{s_stats, 0, false, s_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}};
     // The hold must evidently carry this payment (LineRestAfter's test): an activation's payment is not in it.
     const ManaCost& lu = g_line_unpaid_cost;
     if (lu.ManaValue() < cost_in.ManaValue() || lu.white < cost_in.white || lu.blue < cost_in.blue
@@ -10961,7 +10986,79 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // off the board plus the rest off what is left and the rock pays the two together off board + rock) -- so the
     // amount pre-test is left to LineBillPayable's own, on the board with the rock.
     const LineKeepRock rock = LineKeepRockFor();
-    if (rock.def == nullptr && !PaymentManaCovers(state, joint_creature, joint.ManaValue() - floating)) { return none; }
+    _ph.rock = rock.def != nullptr;
+    // The rock cannot pay ITSELF: a repair pays this bill off the board and only the rest off what is left plus the
+    // rock. For a rock whose mana is colourless only (Mind Stone {C}, Sol Ring {C}{C}; not a Signet, whose filter makes
+    // colours), the rock's Y mana can meet only the rest's {C} pips and generic, so the board alone must pay this bill
+    // plus the rest net of Y of those -- {C} pips first, then generic (taking the stricter pip first can only ask the
+    // board for less: a source that met an extra {C} pip meets the generic it leaves). That is a NECESSARY condition
+    // of every repair (PayHoldingSet / the table option pay this bill on the board, then LineBillPayable the rest with
+    // the rock), and tighter than the joint on board + rock, which lets the rock pay its own cost: on Stuffy Doll
+    // that looser joint passed ~227k strands per 400 games that no repair could keep, each running the whole
+    // hold-out and table search (57% of the rung's time). Exact: the repairs found, and so play, are unchanged.
+    // Y = produces_amount: the engine models no mana doubler. NOT on a board with an untapped generic-fed converter
+    // (ramp_filter: Ferrous Lake, a Signet; any_color_filter: Capital City, Arcum's Astrolabe): the rock's {C} feeds
+    // its {1} and comes out coloured, so it can meet a coloured pip of the rest (Niv-Mizzet Combo; a first cut without
+    // this guard lost 261 of 68,607 repairs on the probe). A hybrid-fed filter land (is_filter) takes a coloured pip.
+    // NOR with a sacrifice-for-mana source on the board (Generator Servant's {C}{C}, a sac outlet's fodder, an
+    // on-demand crack): the repair's option table pays the bill with that mana, which the backtracker judging the
+    // joint does not tap -- Niv-Mizzet Combo, Sol Ring {1} paid by a Servant crack with {U}{U}{U} left for Saprazzan
+    // Skerry and Cascade Bluffs (MTG_LKR_TIGHT_CHECK: 40 of 40 refusals that a repair kept, before this guard). The
+    // loose joint passed there only by the rock's slack.
+    ManaCost joint_t = joint;
+    bool tight = false;
+    auto generic_fed_converter_up = [&]()
+    {
+        if (state.deck_has_ondemand_sac) { return true; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr) { continue; }
+            if (pd->params.sac_for_mana_amount > 0 || pd->params.sac_outlet_add_mana_amount > 0) { return true; }
+            if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter)) { return true; }
+        }
+        return false;
+    };
+    if (rock.def != nullptr && !rock.def->params.ramp_filter && !rock.def->params.produces.empty()
+        && std::all_of(rock.def->params.produces.begin(), rock.def->params.produces.end(),
+                       [](Color c) { return c == Color::Colorless; })
+        && !generic_fed_converter_up())
+    {
+        ManaCost rest_t = rest;
+        int y = std::max(1, rock.def->params.produces_amount);
+        const int c = std::min(y, rest_t.colorless);
+        rest_t.colorless -= c;
+        y -= c;
+        rest_t.generic -= std::min(y, rest_t.generic);
+        joint_t = AddManaCosts(cost_in, rest_t);
+        tight = true;
+    }
+    // DIAGNOSTIC (print-only, default off): MTG_LKR_TIGHT_CHECK=1 runs the loose path after a tight refusal and prints
+    // any repair the tight test would have refused (expected none).
+    static const bool s_tcheck = EnvOn("MTG_LKR_TIGHT_CHECK");
+    bool tight_refused = false;
+    if ((rock.def == nullptr || tight) && !PaymentManaCovers(state, joint_creature, joint_t.ManaValue() - floating))
+    {
+        if (!(tight && s_tcheck)) { return none; }
+        tight_refused = true;
+    }
+    auto tight_dump = [&](const char* how)
+    {
+        static std::atomic<int> s_n{0};
+        if (!tight_refused || s_n.fetch_add(1) >= 40) { return; }
+        std::fprintf(stderr, "[lkr-tight-bad] %s rock=%s T%d cost g%d W%d U%d B%d R%d G%d C%d rest g%d W%d U%d B%d R%d G%d "
+                     "C%d fc=%d rc=%d jc=%d float=%d board:", how, rock.def->card.m_name.str().c_str(), state.turn_number,
+                     cost_in.generic, cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green,
+                     cost_in.colorless, rest.generic, rest.white, rest.blue, rest.black, rest.red, rest.green,
+                     rest.colorless, for_creature ? 1 : 0, rest_creature ? 1 : 0, joint_creature ? 1 : 0, floating);
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            std::fprintf(stderr, " %s#%d%s", p.card.m_name.str().c_str(), p.card.m_number, p.tapped ? "T" : "");
+        }
+        std::fprintf(stderr, "\n");
+    };
     (keep_all ? g_lka_trial : g_lrk_trial).fetch_add(1, std::memory_order_relaxed);
     if (rock.def != nullptr) { g_lkr_trial.fetch_add(1, std::memory_order_relaxed); }
     TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
@@ -10997,6 +11094,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             }
             return none;
         }
+        _ph.phase = 1;
         RampScratch a2(state);
         ManaPool av_a2 = available ? *available : ManaPool{};
         if (!TapForCostSharedDiag(a2.Board(), cost_in, for_creature, available ? &av_a2 : nullptr, honor_legacy_cco))
@@ -11005,9 +11103,18 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     }
     else
     {
+        _ph.phase = 1;
         if (LineBillPayable(a.Board(), rest, rest_creature, rock)) { return none; }
     }
-    if (!LineBillPayable(state, joint, joint_creature, rock)) { return none; }
+    _ph.phase = 2;
+    bool joint_ok = tight ? LineBillPayable(state, joint_t, joint_creature) : LineBillPayable(state, joint, joint_creature, rock);
+    if (!joint_ok && tight && s_tcheck)
+    {
+        tight_refused = true;
+        joint_ok = LineBillPayable(state, joint, joint_creature, rock);
+    }
+    if (!joint_ok) { return none; }
+    _ph.phase = 3;
     (keep_all ? g_lka_strand : g_lrk_strand).fetch_add(1, std::memory_order_relaxed);
     if (!keep_all) { PaymentTapped(state, a.Board(), tapped, nullptr); }
     // DIAGNOSTIC (print-only / bisection; default off, both inert unless set): MTG_LKA_FIRE_LIMIT=N lets only the first
@@ -11054,6 +11161,8 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
+            _ph.phase = 4;
+            tight_dump("held");
             none.held = held;
             return none;
         }
@@ -11076,8 +11185,31 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
         (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
         if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
+        _ph.phase = 4;
+        tight_dump("table");
         none.opt = opt;
         return none;
+    }
+    // MTG_LINE_REDUCER_KEEP_STATS (print-only): a sample of the strands no repair keeps, with a rock credited.
+    if (s_stats && rock.def != nullptr)
+    {
+        static std::atomic<int> s_nf{0};
+        if (s_nf.fetch_add(1) < 30)
+        {
+            std::fprintf(stderr, "[lkr-nofire] rock=%s tight=%d T%d cost g%d W%d U%d B%d R%d G%d C%d rest g%d W%d U%d B%d "
+                         "R%d G%d C%d fc=%d rc=%d float=%d taps:", rock.def->card.m_name.str().c_str(), tight ? 1 : 0,
+                         state.turn_number, cost_in.generic, cost_in.white, cost_in.blue, cost_in.black, cost_in.red,
+                         cost_in.green, cost_in.colorless, rest.generic, rest.white, rest.blue, rest.black, rest.red,
+                         rest.green, rest.colorless, for_creature ? 1 : 0, rest_creature ? 1 : 0, floating);
+            for (int n : tapped) { std::fprintf(stderr, " #%d", n); }
+            std::fprintf(stderr, " board:");
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                std::fprintf(stderr, " %s#%d%s", p.card.m_name.str().c_str(), p.card.m_number, p.tapped ? "T" : "");
+            }
+            std::fprintf(stderr, "\n");
+        }
     }
     return none;
 }
