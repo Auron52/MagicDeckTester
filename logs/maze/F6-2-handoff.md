@@ -55,7 +55,9 @@ Scope: Three Tree City decks (Goblins, Merfolk Turns) move too -- included in th
 
 ## RUNNING
 - build3 of the F6-2 tree: `heavy_run.sh ... ./build.sh` PID **1589489**, log `build/scratch/maze/f62/build3.log`
-  (DONE = a `build rc=N` line). A waiter (harness task bjz9kl1j5) runs `mtg-test -tc="*F6*" -s` after it.
+  (DONE = a `build rc=N` line). CAUTION 14:50 UTC: the harness wrapper that would append `build rc=` exited (code 144) while
+  heavy_run PID 1589489 was still queued on the heavy lock, so that line may NEVER appear: judge the build by PID 1589489
+  exiting + `build/Release/mtg-test` mtime + build3.log ending `>>> done`. Waiter bjz9kl1j5 keys on that line and may hang.
 - NOT yet launched: `build/scratch/maze/f62/chain.sh` (copies build/Release/mtg -> f62/mtg.f62, runs the pooled A/B
   `f62/ab/manifest.json` (10,800 jobs, from `mkab3.py`), writes `f62/ab/run.out`, `f62/ab/summary.txt`, then d8 b0 of every
   slower game of arms fboth/fbal/fnone -> `f62/ab/d8.out`; status lines `f62/chain.status`; DONE marker `f62/chain.DONE`).
