@@ -1,0 +1,69 @@
+commit 7e1bdef18f7e34feacb8ead07123b241d9f1380d
+Author: dtippett-bot <dtippett@agentmail.to>
+Date:   Thu Nov 19 05:31:31 2026 +0000
+
+    WIP Maze's End F5: MTG_OWED_JOINT_REFINE cost experiment lever (USER decision pending) + F5c handoff
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/src/ai/HeuristicArm.h b/src/ai/HeuristicArm.h
+index 0cae3b839..742bba49c 100644
+--- a/src/ai/HeuristicArm.h
++++ b/src/ai/HeuristicArm.h
+@@ -1011,6 +1011,7 @@ enum Slot : int
+     MAZE_OFFMAIN_RESPOND,     // MTG_MAZE_OFFMAIN_RESPOND  Maze's End P6 (USER 2026-11-18 ruling 6): an untapped Maze's End is activated IN RESPONSE to a Manabond trigger (on a yes) or a Burgeoning trigger, then redeployed by that trigger (MazesEndProvider::OffMainMazeRedeployForced prunes the activate/decline choice to activate; the Gate fetched stays a searched crossing ordinal). Default ON; =0 -> no off-main response (with MAZE_OFFMAIN_BANK=0: the pre-P6 engine)
+     MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
+     OWED_ACTS_JOINT_PAY,      // MTG_OWED_ACTS_JOINT_PAY   Maze's End F5: when the usual payment of a plan's casts would leave its TRAILING activations' mana unpayable (MTG_LINE_PAY_AUDIT's joint=YES class) and one joint solve pays the whole line, the line is paid jointly (TurnSolver::OwedActsJointPrepay -> LineJointPrepayCore), both worlds. A completeness fix (the mana-payment exemption), engine-wide. Default ON; =0 -> the casts-only payment
++    OWED_JOINT_REFINE,        // MTG_OWED_JOINT_REFINE     Maze's End F5 COST EXPERIMENT (USER decision pending, MTG_PAY_REFINE is a USER adoption): =0 -> the owed-activations joint solve (OwedActsJointPrepay's LineJointPrepayCore) pays WITHOUT the pay-refine; its refine of a whole-line bill is the joint's wall tail. Default ON (refined, as every payment)
+     COUNT
+ };
+ 
+@@ -1966,6 +1967,7 @@ inline const char* Name(int slot)
+         "MTG_MAZE_OFFMAIN_RESPOND",
+         "MTG_MAZE_OFFMAIN_BANK",
+         "MTG_OWED_ACTS_JOINT_PAY",
++        "MTG_OWED_JOINT_REFINE",
+     };
+     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
+     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
+diff --git a/src/ai/TurnSolver.cpp b/src/ai/TurnSolver.cpp
+index 264dda549..56989a49c 100644
+--- a/src/ai/TurnSolver.cpp
++++ b/src/ai/TurnSolver.cpp
+@@ -70285,7 +70285,7 @@ static bool BuildLineJointBill(const std::vector<Action>& acts, LineJointBill& j
+ // could later pay a coloured pip) -- and put the activations' share into the line hold (g_line_hold_has_acts), so
+ // the line-aware float orders see what the rest of the line owes. false with `state` untouched when the board
+ // cannot pay the bill jointly.
+-static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool trace)
++static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool trace, bool no_refine = false)
+ {
+     const ManaCost& bill = jb.bill;
+     if (bill.ManaValue() == 0) { return false; }
+@@ -70296,7 +70296,15 @@ static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool
+         for (Permanent& p : state.battlefield)
+         { if (p.card.m_number == id && p.controller_index == me && !p.tapped) { p.tapped = true; } }
+     }
+-    if (!TapForCostDirect(state, bill, /*for_creature=*/false))
++    bool paid_ok;
++    {
++        // MTG_OWED_JOINT_REFINE=0 (cost experiment, owed-activations route only): the solve without the pay-refine.
++        const std::int8_t saved_refine = heurarm::t_arm[heurarm::PAY_REFINE];
++        if (no_refine) { heurarm::t_arm[heurarm::PAY_REFINE] = 0; }
++        paid_ok = TapForCostDirect(state, bill, /*for_creature=*/false);
++        heurarm::t_arm[heurarm::PAY_REFINE] = saved_refine;
++    }
++    if (!paid_ok)
+     {
+         if (trace) { std::fprintf(stderr, "[joint-pay] the board cannot pay the bill jointly\n"); }
+         state = saved;
+@@ -70657,7 +70665,9 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
+                      static_cast<int>(state.floating_mana.Total()), line.c_str(), board.c_str());
+         return false;
+     }
+-    if (!LineJointPrepayCore(state, jb, s_trace)) { return why("no joint payment"); }
++    static const bool s_refine = EnvOn("MTG_OWED_JOINT_REFINE", true);
++    const bool no_refine = !heurarm::Flag(heurarm::OWED_JOINT_REFINE, s_refine);
++    if (!LineJointPrepayCore(state, jb, s_trace, no_refine)) { return why("no joint payment"); }
+     owedjointstats::Bump(owedjointstats::g_fired);
+     return true;
+ }
