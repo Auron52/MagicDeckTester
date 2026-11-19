@@ -4937,7 +4937,10 @@ class MazesEndProvider : public DeckProvider
 {
 public:
     CertStance Certificate() const override
-    { return { CertState::NotAssessed, "NOT ASSESSED. A sound certificate must prove no line reaches ten Gate names this turn: count distinct Gate names reachable through land drops (Exploration/Burgeoning extra drops), Maze's End bounce-replay-activate loops (Amulet untaps), Guild Summit/tutor digs and the mana for each {3} activation." }; }
+    { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below (P7d: a bound on the distinct Gate names reachable this turn; gives up with Guild Summit's draws)" }; }
+    // P7d: the winless certificate (MTG_MAZE_WINLESS_CERT); MazeWinlessBound is its census-visible verdict.
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+    static int MazeWinlessBound(const GameState& s);
     const char* Name() const override { return "MazesEnd"; }
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
     int TutorSearchWidth() const override { return 64; }
@@ -5864,6 +5867,11 @@ void EdfCertNoteResidual();
 // implement the certificate cannot leave a stale answer behind.
 bool EdfCertLastDeclineWasGoOff();
 void EdfCertClearGoOffFlag();
+// The LAST ProvenWinlessThisTurn call's verdict CODE, for the last-ply fold's census (MTG_LASTPLY_NOWIN_CENSUS;
+// diagnostic): > 0 proof, 0 no code, < 0 a provider's decline reason (Maze's End: -1 Guild Summit, -2 bound open,
+// -3 a card outside the reviewed list). Cleared by the caller first; a provider that does not set it leaves 0.
+int CertLastVerdictCode();
+void CertClearVerdictCode();
 
 // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF, default ON; USER 2026-09-08 "no extra mains to search"):
 // after a main's casts have been applied, if the board now holds a live self-funding blink loop

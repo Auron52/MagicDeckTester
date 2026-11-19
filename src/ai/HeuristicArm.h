@@ -1015,6 +1015,9 @@ enum Slot : int
     MAZE_CASTDOM_WINDOWS,     // MTG_MAZE_CASTDOM_WINDOWS  Maze's End P7c (a): the fold's off-main Maze's End keep (MazesEndProvider::CastDominanceKeep) needs a P6 WINDOW -- a Manabond, or a Burgeoning while the opponent plays lands, controlled or cast by the plan (held, when the plan opens a breakpoint) -- and a fetchable Gate in the library; every other off-main point shows the last main's board, where the activation is already a searched plan action. Default ON (sound); =0 -> the P7b guard (mana alone)
     MAZE_CASTDOM_PERPLAN,     // MTG_MAZE_CASTDOM_PERPLAN  Maze's End P7c (b): Heap Gate's last-chance Treasure and Gateway Plaza's off-main {1} are PER-PLAN keeps of the fold (MazesEndProvider::CastDominanceKeep) instead of switching the fold off whenever a Heap Gate is untapped / in hand or a Plaza is in hand (CastDominanceLive). Default ON (sound); =0 -> the blanket switch-off
     MAZE_CASTDOM_KEEP_A_ONLY, // MTG_MAZE_CASTDOM_KEEP_A_ONLY Maze's End P7c (c): the Heap Gate / Gateway Plaza per-plan keeps (MazesEndProvider::CastDominanceKeep) block only fold A (the sibling with one more cast); fold B's twin (the same plan plus a land) holds every mana source the plan holds plus the land, so it affords the same off-main Treasure / {1}. The off-main Maze's End keep still blocks both. Default ON (sound); =0 -> those keeps block both folds
+    MAZE_WINLESS_CERT,        // MTG_MAZE_WINLESS_CERT     Maze's End P7d: the deck's WINLESS CERTIFICATE (MazesEndProvider::ProvenWinlessThisTurn, Certificate() Implemented): a bound on the distinct Gate names reachable this turn (land drops + Exploration / Archdruid's Charm / Talon Gates / Burgeoning permissions, or the cards that can enter) below ten proves no line wins this turn. Gives up with a Guild Summit reachable (draws) or a card outside the reviewed list. Consumed by the last-ply fold (LASTPLY_NOWIN_FOLD) and the label-scope / unbudgeted certificate sites. Default ON (a proof); =0 -> no certificate (the NotAssessed provider)
+    LASTPLY_NOWIN_FOLD,       // MTG_LASTPLY_NOWIN_FOLD    The LAST-PLY NO-WIN FOLD (TurnSolver.cpp lastply): a non-root full-line node with one ply left and a CONSTANT next leaf answers no-win when the provider's winless certificate fires (every line there scores max_turns+1 unless it wins this turn). An identity fold at every budget where the leaf is constant. Default ON; =0 -> the node is searched
+    LASTPLY_NOWIN_CENSUS,     // MTG_LASTPLY_NOWIN_CENSUS  DIAGNOSTIC (default off): the last-ply fold NEVER cuts; it searches every eligible node and tallies the certificate's verdicts, the units under each, and any proven node that then won (UNSOUND, must be 0). =2 (env) also prints each unsound node. A slot so one pooled batch can carry a census arm beside a fold arm
     COUNT
 };
 
@@ -1974,6 +1977,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_CASTDOM_WINDOWS",
         "MTG_MAZE_CASTDOM_PERPLAN",
         "MTG_MAZE_CASTDOM_KEEP_A_ONLY",
+        "MTG_MAZE_WINLESS_CERT",
+        "MTG_LASTPLY_NOWIN_FOLD",
+        "MTG_LASTPLY_NOWIN_CENSUS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
