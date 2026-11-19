@@ -119,3 +119,12 @@ results are in F/unit.log and F/tiers.log, with F/chain2.DONE when it finishes.
 
 Reference bench (`scripts/ref_bench.py --deck maze_s_end`, mtg.f7r, committed policy = d5 b20): 11/11
 tied, 0 short. s3 records win_turn 6 and the search ties it. See logs/maze/F7-2-s3.md.
+
+## Chain outcome (the parent killed chain2 at the tiers stage: "superseded (rec_bp_ord defect)")
+- Rebuilt binary: F/mtg.f7r (rebased tree). Full unit suite on it: 3714 passed, 0 failed.
+- d8 b0 recovery (F/d8/run.out; strip the `D8_` prefix before anab.py): 2 of 10 slower games do NOT recover --
+  d5 g1026 (seed 211001+1026): off T6, f7 T7 at d8 b0; 2HG g41 (seed 212001+41): off T6, f7 T7 at d8 b0
+  (the 2HG game also ran 120 s, 44,513 units). Recovered: g506 6->5, g889 6->5, g1244 6->5; the rest equal.
+  Since these are worse at unlimited budget, they are a real defect (a scored-vs-executed mismatch is the
+  first suspect: e.g. the rec_bp_ord segment replay the parent flagged), not budget churn. Not yet root-caused.
+- Tiers: not run.
