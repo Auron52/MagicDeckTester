@@ -5805,6 +5805,13 @@ bool SacFodderMenuOn()
     static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
     return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
 }
+bool SacFodderNeededOnlyOn()
+{
+    // MTG_SAC_FODDER_NEEDED_ONLY (DEFAULT ON; read only under MTG_SAC_FODDER_MENU): EnumeratePlansCore credits the
+    // plan-made fodder only to a subset a mana gate refuses without it, and walk-gates every credited subset.
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_NEEDED_ONLY", true);
+    return heurarm::Flag(heurarm::SAC_FODDER_NEEDED_ONLY, env_on);
+}
 
 bool SacFodderPutKind(const Action& a)
 {
