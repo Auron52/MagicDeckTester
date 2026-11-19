@@ -2170,10 +2170,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 
 
 GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index,
-                                    bool legacy_passive_opponent_lands)
+                                    bool legacy_passive_opponent_lands,
+                                    bool legacy_shared_shuffle_ordinal)
 {
     GameState state;
     state.game_seed = seed; // Trait stamps must see the same opponent list that Deal selects.
+    // Before anything can shuffle: a replay of a reference recorded on the shared opponent shuffle
+    // ordinal (no `opponent_shuffle_ordinal` stamp; see GameState::legacy_shared_shuffle_ordinal).
+    state.legacy_shared_shuffle_ordinal = legacy_shared_shuffle_ordinal;
 
     // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
     // players, because 2HG starts both teams at 30; our own total is inert for a goldfish (the
