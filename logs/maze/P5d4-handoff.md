@@ -28,3 +28,13 @@ P5d-3 scratch `build/scratch/maze/p5d/` (= `$S`).
 1. rc -> recovery table; blind-attribute any not recovered. 2. commit clean candidate, squash P5d commits, smoke + regression,
 accept `--deck=mazesend,mazesend2hg`, check_gt_logs, push wip/maze-p5d. 3. ledger P5d section + TapTutorPutEval comment numbers.
 4. Report: C2 (lands-short tier 100 instead of the USER's 1000 "win out") measures -6 better overall but is the USER's call.
+
+## Update 2026-11-19 ~22:40 UTC
+- Squashed: P5d = `2b72ec017` (tag `p5d4-pre-squash` = the unsquashed chain, identical tree). Clean binary `$P4/mtg.p5`
+  == ac fixidle (d0: fix) on 500 identity games.
+- rc (d8 b0): 120/132 candidate-slower games recover (d0 37/37, d3 11/11, d1b3 8/9, d1b1 7/9, d5 41/48, 2HG 16/18).
+- bl (blind, cand vs ship, salts 1-4, d8 b0): 10 of the 12 clairvoyance (cand <= ship blind). PERSIST blind: d5 g231 (+2:
+  7/7 9/7 6/7 8/7) and d5 g320 (+4: 8/7 6/6 6/6 9/6). g231: P5d-3 b3 had u = idle = 28 = ship 28 blind -> the Amulet tier.
+- Running chain (`$P4/run_chain.sh`): units -> `regression.sh --both` (markers `$P4/tiers/units.done`, `both.done`); then
+  bl2 (`$P4/bl2/done`: fix-only blind on g231/g320, u2/u2idle on g320) then blw (`$P4/blw/done`: sample-wide blind
+  fixB/candB/shipB at blind_salt 1, compare with abb u2B/idleB).
