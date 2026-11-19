@@ -106,3 +106,38 @@ the bugs. But all three are pre-existing omissions, not Maze-specific.
 - F7's brief (verbatim): "a budget may re-price work, it may not make a line unfindable"; fix "as a searched
   capability at every budget (no default-off lever; no greedy pick in the search window)"; "P5b's fold is a USER
   decision, so propose, don't ship".
+
+## UPDATE: try3 chain FINISHED (H/DONE = OK) right after the handoff was written
+- **Units:** `Maze's End F7*` passed, including the new F7-3 resume test. The full suite returned `unit rc=0`.
+- **d8 b0 recovery: all 10 recovered** (H/gate.txt; off -> f7):
+  - better: g506 6->5, g889 6->5, g1244 6->5
+  - tie: g11 6, g645 6, g673 5, g675 5, g1430 5, **g1026 6** (was 7), **2HG g41 6** (was 7)
+- **Held-out A/B** (one pool, arms innermost; gate PASS). No new slower game at d8 (b2 empty or passed).
+
+  | row | games | off avg | f7 avg | better / worse | net | units/game (off -> f7) |
+  |---|---|---|---|---|---|---|
+  | d5 b20 | 1500 | 5.6613 | 5.5920 | 107 / 6 | -104 | 135,810 -> 132,974 |
+  | 2HG d5 b20 | 400 | 5.5425 | 5.4875 | 22 / 0 | -22 | 114,180 -> 114,075 |
+  | d3 b10 | 400 | 5.6550 | 5.6075 | 19 / 0 | -19 | 76,339 -> 74,838 |
+  | d0 | 500 | 6.9840 | 6.9840 | 0 / 0 | 0 | 0 -> 0 |
+
+- **Tiers** (H/tiers.log; `tiers rc=1`, REGRESSION DETECTED; 357 passed, 11 failed): **NOT ACCEPTED**, because OTHER
+  decks moved.
+  - The other decks moved DIGEST ONLY, with an unchanged aggregate:
+    - snow smoke d3/d5, snow regression d5 s2002/s3003
+    - niv smoke d3/d5, niv2hg smoke d5, niv regression d5 s3003
+    - martyr smoke d3/d5
+    - cyclone regression d5 s2002
+    - edf regression d3 s2002
+    - landfall regression d5 s2002
+  - This is the expected footprint of the general resume fixes (try2/try3).
+  - mazesend: smoke d5 5.7500 -> 5.6818; regression d5 s2002 5.6902 -> 5.6033; regression d5 s3003 5.6933 -> 5.5933.
+    The other mazesend keys and mazesend2hg moved digest only.
+  - The audit counts searched slower=2 (both mazesend: regression d5 s2002 gi16 5->6 and gi120 5->6), faster=31, and
+    play-changed=114.
+- **Still owed:**
+  - the d8 b0 check of mazesend_regression_d5_s2002 gi16/gi120 (seed 2002+gi);
+  - the d8 b0 check of the other decks' play-changed games, which is needed for the accept call. Accepting those
+    decks needs the parent/USER, since they moved;
+  - the ref_bench at d5 b20 on H/mtg.f73;
+  - commit/push and the GT accept, after that decision.
