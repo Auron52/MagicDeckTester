@@ -98,3 +98,9 @@ merge; don't touch references/ or the viewer; handoff at ~250K.
   7a59f73dc) and 44468004751 (wip/maze-f5p, uncompiled prune -- red is expected there).
 - build9 DONE (exit 0): `build/Release/mtg` of 7641435f7, copy `build/scratch/maze/f5/mtg.f5h` -- ready for smoke.
 - This update is a LOCAL commit only (not pushed, to avoid cancelling CI again); push it with the next batch.
+- **d8 b0 DONE (`build/scratch/maze/f5/d8/{new,old}.out`): EVERY slower game RECOVERS.**
+  Joint (fix vs base, mtg.f5g): d5 g164 T6=T6, g193 T5=T5, g173 T6=T6 (same digest); d0 g297 / g306 / g473 T6=T6
+  (identical digests). Heap fix (new mtg.f5g joint off vs old mtg.f5d): d3 g47 T6=T6, d3 g110 T4=T4.
+  So both F5 changes pass the per-deck bar (joint aggregate net -21, heap fix 0). d8 wall note: fix arm slower on the
+  d0 games (g297 156 s vs 111 s, g306 202 s vs 152 s, units equal) -- same order-bias caveat; see cold/ for wall.
+  Remaining: cold/ (PID 1234667), then smoke (step 2).
