@@ -1018,6 +1018,7 @@ enum Slot : int
     SEQ_TRAILING_EQUIP,       // MTG_SEQ_TRAILING_EQUIP  the enumeration's sequential walk (SeqWalkFixedOrder; SubsetPayableSequential, OrderPaysSequentially) prices a PAID equip that unlocks no mana -- and a planned unlock its host no longer needed (Surrak hasted it) -- at its end, as both apply worlds pay it in the trailing equip pass, instead of refusing the subset as an unmodelled kind. Jumbo Cactuar s30119376 T5 {Tooth and Nail, Surrak, Satyr x2, equip Chariot} (ENUM-GAP x19, ef-walk-fail) was unfindable at any budget while the same line without the equip was offered. A completeness fix of the walk. DEFAULT ON; =0 -> refused as before. docs/design/jumbo-apply-drop-order-2026-11-18.md
     MAZE_CAST_DOMINANCE,      // MTG_MAZE_CAST_DOMINANCE   Maze's End P7: the engine's CAST / LAND DOMINANCE FOLD is live (MazesEndProvider::CastDominanceLive): a plan is dropped for its twin plus one more cast of Exploration / Burgeoning / Manabond / Amulet of Vigor (same land, same other actions, same pins), and a land-less plan of only such casts (Amulet aside) for its twin plus a land. Premise: unspent main-phase mana has no other use -- not live with an untapped Treasure-making Gate controlled or one in hand, or a Gateway Plaza in hand; Guild Summit vetoes. Default ON (sound dominance); =0 -> no fold
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
+    SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     COUNT
 };
@@ -1981,6 +1982,7 @@ inline const char* Name(int slot)
         "MTG_SEQ_TRAILING_EQUIP",
         "MTG_MAZE_CAST_DOMINANCE",
         "MTG_MAZE_LAND_DOMINANCE",
+        "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

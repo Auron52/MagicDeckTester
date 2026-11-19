@@ -8906,6 +8906,12 @@ inline thread_local unsigned long long g_summit_tap_resolutions = 0;
 inline thread_local int  g_summit_tap_last_avail  = 0;
 inline thread_local int  g_summit_tap_last_n      = 0;
 inline thread_local bool g_summit_tap_last_pinned = false;
+// ...and WHEN, in breakpoint terms: TurnSolver bumps g_bp_event_epoch (monotonic, never reset) at every
+// breakpoint-channel event of an apply (an occurrence, a site-9 latent occurrence, a truncation asymmetry), and the
+// resolution snapshots it. An apply whose epoch at its Summit resolution still equals its value at the apply's start
+// reached every breakpoint AFTER the count was decided (the fold's breakpoint-after-resolution case).
+inline thread_local unsigned long long g_bp_event_epoch = 0;
+inline thread_local unsigned long long g_summit_tap_last_bp_epoch = 0;
 struct ScriptedEtbCounter
 {
     explicit ScriptedEtbCounter(int k) : saved(g_etb_counter_pin) { g_etb_counter_pin = k; }
@@ -13829,6 +13835,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         g_summit_tap_last_avail  = avail;
         g_summit_tap_last_n      = n;
         g_summit_tap_last_pinned = etb_kx >= 1;
+        g_summit_tap_last_bp_epoch = g_bp_event_epoch;
         std::vector<int> tap_numbers;   // card numbers, in tap order
         for (int k = 0; k < n; ++k)
         {
