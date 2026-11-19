@@ -468,6 +468,17 @@ Resolved / non-play findings:
   +/- 0.0002 (1 game moved of 11010), cost/trigger worst-vs-base +0.0000 (0 moved). No ranking can pay: axis CLOSED.
 - NEXT: rebase onto origin, rebuild, smoke + check_gt_logs, push, re-run the viewer audit, Stage 6 report.
 
+### CHECKPOINT ~02:25 UTC 2026-11-19 -- rebased onto origin (377 upstream commits), building
+- Rebased the 14 local commits onto origin f1342be37 + fb70e908f (now HEAD a635f60e8). Conflicts resolved:
+  cards.json / scryfall_reference.json (both sides appended: origin's entries + Needle Drop / Vexing Devil);
+  HeuristicArm.h (both sides' slots; the duplicated ONEDROPBURN/MIDRANGE enum lines removed in a635f60e8 -- the
+  intermediate commits d4ae8e063..9b8d25e8f do not compile on their own); GoldFishRunner.cpp (both statements kept);
+  regression_gt.txt / job_cost.tsv per key (origin's values; keys only we added or only we changed kept);
+  suite_cost.json origin's Hinata row; burn .wins ours (re-accepted below).
+- RUNNING: ./build.sh (logs/1dropburn/build_rebase.log, DONE marker). NEXT: full smoke (byte-identity after the
+  rebase) -> re-accept the four burn decks' smoke+regression -> check_gt_logs -> push -> CI watch (background) ->
+  viewer audit -> Stage 6 report -> leaf_tiebreak --blocks 48.
+
 ## Last verification (2026-11-19)
 
 `verify_deck.py decks/1 Drop Burn/1 Drop Burn.cod --write-ledger` -> **FAIL**
@@ -1734,3 +1745,21 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
 - claude_sweep recorded at commit 41be66453 (HEAD 539ca5729320); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->
+
+### CHECKPOINT ~05:45 UTC 2026-11-19 -- rebase verified, burn GT re-accepted, user references benched
+- Rebased build (Release, 04:11 UTC) rc=0; unit tests pass. Full smoke: 229/235 byte-identical; the 6 moved rows are
+  all burn (origin had already moved burn GT upstream, e.g. d66b5c307 rollout burn kills, 83d5587a7 opponent land
+  block). Burn smoke + regression re-accepted (--deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg):
+  every aggregate faster or equal. Searched slower=2, ONE game (Midrange Burn seed 2052 gi50, d3+d5, 6->7, also 7 at
+  d8 b0): our draws and line are identical through T3; the opponent's land sequence differs from T4 (83d5587a7) and the
+  old opponent lost 1 life of its own between T4 and T5 -- an upstream opponent-model change, not a play regression.
+  check_gt_logs: consistent.
+- Viewer restarted from the primary checkout (MDT_REFERENCE_BACKUP_DIR set) on the new viewer code.
+- USER references: 9 saved (s1-s7, s9, s10; seed 8 was never saved), committed b666fe13d, all on
+  origin/references-autosave. ref_bench: search 3.333 = human 3.333, 0/9 short.
+- USER viewer asks (2026-11-19): Fireblast's two-Mountain sacrifice and Grim Lavamancer's two-card graveyard exile
+  each get ONE multi-select dialog. Fireblast (and Walk the Aeons' three Islands): SacBurstScope disclosure + one
+  source label in PayFireblastAlternative / PayWalkBuyback (SpellEffects.h; needs the rebuild). Lavamancer: viewer
+  only (gyExilePick2 / gyExileBurstAuto in index.html). Frame counts unchanged -> references keep alignment.
+- NEXT: Release build (Fireblast fix) -> unit tests -> commit -> push + CI watch -> USER: "continue on to the mulligan
+  profile": bash scripts/mullgen.sh run "decks/1 Drop Burn" fast (builds PGO first).
