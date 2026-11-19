@@ -75,3 +75,47 @@ Stages (F/chain2.stage): rebuild the rebased tree -> `F/mtg.f7r` (log F/build_r.
 - s3 still ends T6 at the shipped d5 b20 (T5 from b100 up): a budget/settings question for the USER, as R1 said of s6.
 - MTG_BP_DROP_REARM is default ON (a completeness fix, clean win: better and not more expensive). The hatch can be
   deleted once accepted.
+
+## F7-2 result (2026-11-19): ACCEPT BLOCKED. Two slower games do NOT recover at d8 b0
+d8 b0 recovery batch (`F/d8/run.out`, mtg.f7, the arms differ only in MTG_BP_DROP_REARM; loss=9):
+| game | off | f7 | verdict |
+|---|---|---|---|
+| d5 g11 | 6 | 6 | recovers (tie) |
+| d5 g506 | 6 | 5 | better |
+| d5 g645 | 6 | 6 | recovers |
+| d5 g673 | 5 | 5 | recovers |
+| d5 g675 | 5 | 5 | recovers |
+| d5 g889 | 6 | 5 | better |
+| d5 g1026 | 6 | **7** | **NOT RECOVERED** |
+| d5 g1244 | 6 | 5 | better |
+| d5 g1430 | 5 | 5 | recovers |
+| 2HG g41 | 6 | **7** | **NOT RECOVERED** (also 120-311 s wall on 44K units) |
+
+ROOT CAUSE (lever flip plus MTG_FD_TRACE on single-game repros under `F/rc/`). It is a plan/executor
+divergence introduced by the fix, not draws. In BOTH arms the T1 committed line is `win=6 verified=1
+searched_depth=6`. With the fix on, that line carries the F7 re-armed passes, and the executor does not
+realise it.
+- g1026 T6 plan: `bp[Exploration, Golgari Guildgate, Exploration, Citadel Gate, Maze's End(k30)]` (record
+  order = rollout apply order). The executor's per-ordinal replay plays `ord0 = Exploration, Citadel Gate,
+  Maze's End`, then `ord1 = Golgari Guildgate, Exploration`. Citadel takes the drop Exploration #1 opened,
+  so Golgari has no drop left. It is discarded at cleanup, one Gate name is short, and the game ends T7.
+- 2HG g41 T6: the same shape. The trailing `k4:Maze's End, k30:Maze's End` records replay inside ord0,
+  ahead of segments 1 and 2.
+- Mechanism: `bp_sink_pop` stamps rec_bp_ord only on records appended while a main-level segment is
+  OPEN. The records the rollout appends after the re-armed passes (the last continuation's land and
+  activations) keep the default 0, so `replay_segment` puts them in the FIRST segment. The handoff's
+  claim "committed lines need nothing; the catch-all replays every ordinal" is therefore false once the
+  loop runs more than one pass. Next step: print rec_bp_ord in FdPlanText to find the append site, stamp
+  those records with the ordinal of the pass that made them (the DigDraw site already does `main_bp_ord +
+  1`), rebuild, re-run `F/d8/manifest.json` and the held-out A/B.
+- Repro: `mtg.f7 "decks/Maze's End/Maze's End.cod" --profile ... --seed 212027 --game-index 1026 --games 1
+  --depth 8 --budget-ms 0 --ignore-play-profile --threads 1` with MTG_FD_TRACE=1 (MTG_BP_DROP_REARM=0 -> 6).
+  For g41, use the 1-job batch `F/rc/g41.json`.
+
+Unit suite (rebased mtg-test): 3714 test cases, 0 failed.
+
+Per the brief, NO accept was made. chain2 (flock 1334989) was left running into units + tiers; its
+results are in F/unit.log and F/tiers.log, with F/chain2.DONE when it finishes.
+
+Reference bench (`scripts/ref_bench.py --deck maze_s_end`, mtg.f7r, committed policy = d5 b20): 11/11
+tied, 0 short. s3 records win_turn 6 and the search ties it. See logs/maze/F7-2-s3.md.
