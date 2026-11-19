@@ -1813,3 +1813,18 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   keep table adopted, Boars GT rows only; Spirits references). Rebasing onto it, then (setsid chain
   logs/1dropburn/rebase3_chain.log): ./build.sh -> mtg-test -> ./build.sh pgo -> smoke on PGO (byte-identical to
   Release) -> push -> mullgen reuses the stamped PGO build.
+
+### CHECKPOINT ~17:05 UTC 2026-11-19 -- third rebase verified; push DEFERRED; mulligan generation RUNNING
+- Rebased onto origin c3a93af4c-era tip (HeuristicArm slots: upstream's two STUFFY_ESCAPE_SCRY_* then ours). ./build.sh
+  rc 0, mtg-test 3732/3732, ./build.sh pgo rc 0 (SRC_TREE c4599c921 = HEAD:src), full smoke on PGO 235/235 byte-identical
+  (0 slower/faster/play-changed). check_gt_logs 1343 consistent; check_references_safe OK. Backup:
+  origin/backup/1db-20261119.
+- Origin moved ~17 MORE commits during that smoke (mana-oracle goal fold default ON "exact"; AA cast order v2 default ON +
+  GT). Another rebase = ~3 h rebuild+smoke before generation could start, and it can race again. DECISION: generate now on
+  this smoke-verified tree; push AFTER the generation (one rebase + rebuild + smoke then). Not pushed yet this session.
+- RUNNING (setsid): bash scripts/mullgen.sh run "decks/1 Drop Burn" fast -> logs/1dropburn/mullgen_run.log ("MULLGEN rc="
+  marker), engine output logs/1_Drop_Burn_mullgen/ (settings.log, gen.log, VALIDATION.txt). mullgen.sh pid 92712.
+- NEXT when it lands: read VALIDATION.txt -> commit the keep table (+raw.json.gz, profile.json setting) -> rebase onto
+  origin -> ./build.sh + mtg-test + smoke (1DB rows will move by the keep table: accept them with the deck filter after
+  attribution) -> check_gt_logs -> check_references_safe -> push -> background CI watch. Then viewer audit, Stage 6
+  report, leaf_tiebreak --blocks 48, check_references_safe at close, CronDelete 01e1d807.
