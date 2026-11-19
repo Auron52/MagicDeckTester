@@ -7313,7 +7313,11 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
         if (found) { order.swap(nf); return; }
     }
     const PoSacScope _sc(sf_on ? &sf : nullptr, false);
-    (void)PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site);
+    // MTG_PO_UNLOCK_ORDER: nothing above moved the order, and a same-line haste may unlock a mana creature whose
+    // mana this decider's walk cannot see -- price the orders with the enumeration's walk (TurnSolver.cpp,
+    // UnlockOrderSearch). The enumeration site runs the same search inside SubsetPayableSequentialTail.
+    if (!PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site) && site == 0)
+    { (void)TurnSolver::UnlockPayableOrder(state, acts, order); }
 }
 
 // Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which

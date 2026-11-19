@@ -946,3 +946,52 @@ TEST_CASE("Jumbo Cactuar enumerates a Greaves-hasted fresh Satyr re-tapping a ne
         CHECK_FALSE(HasPlanWith(plans, line, true));
     }
 }
+
+// MTG_PO_UNLOCK_ORDER (mana-clean gate claude-regate-20261118, APPLY-DROP-ORDER s30115214 T3 m1): Forest + Wild Growth
+// and Lightning Greaves on the board, the plan {Green Sun's Zenith -> Arbor Elf, Wild Growth -> the Forest, equip
+// Greaves -> the fetched Elf}. The rank order casts Wild Growth first and GSZ ({1}{G}) is left one short. GSZ first
+// pays off the Forest's {G}{G}; the Elf enters, Greaves (equip {0}) hastes it, and its re-tap of the Forest pays Wild
+// Growth. The payable-order decider's walk knows no unlock, so only the unlock-order domain finds that order.
+TEST_CASE("Jumbo Cactuar realises GSZ -> Arbor Elf before Wild Growth when the Greaves-hasted Elf pays it")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Lightning Greaves", 37);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+
+    Action tutor = JumboCast(s, "Green Sun's Zenith", 90, 0, "Arbor Elf");
+    tutor.chosen_x = 1;
+    tutor.cost.generic += 1;
+    tutor.hand_index = 0;
+    Action aura = JumboCast(s, "Wild Growth", 58, 10);
+    aura.hand_index = 1;
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = "Lightning Greaves";
+    equip.def = CardDatabase::Instance().Lookup("Lightning Greaves");
+    REQUIRE(equip.def != nullptr);
+    equip.sac_source_id = 37;
+    equip.sac_victim_id = 1;   // the library copy GSZ puts
+    const std::vector<Action> acts{tutor, aura, equip};
+    {
+        JumboArm on; on.Set(heurarm::PO_UNLOCK_ORDER, 1);
+        std::vector<int> order{1, 0};
+        ApplyPayableCastOrder(s, acts, order);
+        CHECK(order == std::vector<int>{0, 1});
+    }
+    {
+        JumboArm off; off.Set(heurarm::PO_UNLOCK_ORDER, 0);
+        std::vector<int> order{1, 0};
+        ApplyPayableCastOrder(s, acts, order);
+        CHECK(order == std::vector<int>{1, 0});
+    }
+}
