@@ -573,6 +573,8 @@ private:
     // Play a land from hand -- or from the library top under a play-from-top permanent (Courser of
     // Kruphix; GreedyLandChoice) -- if a land drop is available.
     bool TryPlayLand(GameState& state);
+    // ...leaving `hold` open drops (Maze's End P5d, DecisionProvider::GreedyLandDropsHeld); one land per drop.
+    bool TryPlayLandKeeping(GameState& state, int hold);
 
     // Play a specific land (by name) from hand. Used by the land search in TakeTurn
     // to apply a chosen candidate to the real state or a search copy. fetch_target names

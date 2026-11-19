@@ -270,12 +270,24 @@ TEST_CASE("Maze's End P5: the v5 fetch weight, P1's one colour and the Talon var
     s.players[0].library.push_back(C("Guild Summit", 100));
     s.players[0].library.push_back(C("Sylvan Scrying", 101));
     Put(s, "Azorius Guildgate", 50);
-    // v5: a new-name fetch scores 100 (no land drop open).
+    // P5d: with NO land drop open the fetch strands Maze's End in hand (it re-enters tapped next turn): 0...
     s.players[0].lands_played_this_turn = 1;
-    CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 100);
-    {
+    CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 0);
+    {   // ...unless Manabond puts it back at our end step: then the v5 weight, 100 (200 with v5 off).
+        GameState m = s;
+        Put(m, "Manabond", 49);
+        CHECK(prov.TapTutorPutEval(m, D("Maze's End"), "Simic Guildgate") == 100);
         const Arm off(heurarm::MAZE_FETCH_EVAL_V5, 0);
-        CHECK(prov.TapTutorPutEval(s, D("Maze's End"), "Simic Guildgate") == 200);
+        CHECK(prov.TapTutorPutEval(m, D("Maze's End"), "Simic Guildgate") == 200);
+    }
+    {   // A drop open and the hand's lands short of this turn's plus next turn's drops: the fetch outranks spells.
+        GameState o = s;
+        o.players[0].lands_played_this_turn = 0;
+        CHECK(prov.TapTutorPutEval(o, D("Maze's End"), "Simic Guildgate") == 1000);
+        // Plenty of lands in hand (one per drop this turn and next): 1, taken only when the {3} is idle.
+        o.players[0].hand.push_back(C("Boros Guildgate", 102));
+        o.players[0].hand.push_back(C("Dimir Guildgate", 103));
+        CHECK(prov.TapTutorPutEval(o, D("Maze's End"), "Simic Guildgate") == 1);
     }
     // P1's one colour: Azorius (W/U) is a blue source, no green -> G.
     const CardDefinition& cliff = D("Cliffgate");

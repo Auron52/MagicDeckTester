@@ -436,6 +436,13 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
         }
     }
 
+    // The deck's own first pick (DecisionProvider::GreedyLandFirst; Maze's End P5d: Maze's End back onto the
+    // battlefield). -1 for every other deck.
+    {
+        const int first = ResolveProvider(state).GreedyLandFirst(state, state.active_player_index);
+        if (first >= 0 && first < n) { return GreedyLandPick{ first, false }; }
+    }
+
     // A Karoo bounce land with no other land in play must return ITSELF (the bounce is mandatory) --
     // net no land in play and a wasted drop, never the right play. Skip it below until another land
     // is down (matches SimulateLandPlay and the searched land drop).

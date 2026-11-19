@@ -5074,6 +5074,13 @@ public:
     int  CastDominanceClass(const GameState& s, const CardDefinition& d) const override;
     // P7 x P6: keep a plan whose unspent mana could pay an off-main Maze's End activation (premise at the definition).
     bool CastDominanceKeep(const GameState& s, const PlanView& v) const override;
+    // P5d (USER 2026-11-18): the playout's fetch-then-replay turn -- one land drop held for Maze's End's replay, Maze's
+    // End replayed first, and a fetch that leaves a drop for the replay ordered first among equal plans (premises at
+    // TapTutorPutEval).
+    int GreedyLandDropsHeld(const GameState& s, int controller, const std::vector<Action>* plan) const override;
+    int GreedyLandFirst(const GameState& s, int controller) const override;
+    int LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
+                       bool provider_hold) const override;
 };
 
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,

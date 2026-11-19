@@ -21,6 +21,7 @@
 #include <chrono>
 #include <thread>
 #include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
+#include <unordered_set>  // MazeIdleFetchAdmit (Maze's End P5d prune)
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -69067,6 +69068,7 @@ MAZE_P5_LEVER(MazePlazaPayOn,         MAZE_PLAZA_PAY,          "MTG_MAZE_PLAZA_P
 MAZE_P5_LEVER(MazeHeapTreasureOn,     MAZE_HEAP_TREASURE,      "MTG_MAZE_HEAP_TREASURE",      true)
 MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
+MAZE_P5_LEVER(MazeIdleFetchOn,        MAZE_IDLE_FETCH,         "MTG_MAZE_IDLE_FETCH",         true)   // P5d
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
@@ -69623,9 +69625,9 @@ int MazesEndProvider::EtbTapSubtypeDrawDefault(const GameState& s, int controlle
 // left to play this turn -- no open land drop after the plan's own land, or no land card in hand -- a plan that
 // activates Maze's End for a Gate (not the fail-to-find) is TRIED FIRST among its peers: a move-order tier
 // (MoveOrderLess, below wins_this_turn), ORDER only, nothing removed, so a budget reaches it first and an unlimited
-// budget searches exactly the same set. Beyond the horizon nothing is needed: the greedy playout already ranks a
-// new-name fetch at 100 (TapTutorPutEval, v5) unless the turn's open land drops are all spoken for by new-name Gates in
-// hand (P5c2, MazeFetchDropsSpoken).
+// budget searches exactly the same set. Beyond the horizon nothing is needed: the greedy playout ranks the fetch itself
+// (TapTutorPutEval, P5d: 0 with no drop open for the same-turn replay unless Manabond / Burgeoning puts Maze's End back,
+// Amulet of Vigor untaps its replay, or the fetch wins; 1000 when the hand's lands run short of full-rate drops or Manabond is ours; 1 otherwise).
 bool MazesEndProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
                                           const std::vector<int>& sel, bool projected_lethal) const
 {
@@ -69664,6 +69666,9 @@ static MazeProgressWeights MazeWeights()
 // (battlefield or hand -- the activation returns it to hand, so both are "the engine is ours") 500,000, and each
 // distinct Gate name in hand that we do not control yet (next turn's land drop adds it) 100,000, at most four.
 // The library is deliberately NOT read (a per-leaf scan of ~40 cards on every graded leaf, and it rarely binds).
+static bool MazeHandReturnsBeforeNextTurn(const GameState& s, int me);
+static bool MazeFillThenFetchWins(const GameState& s, int me, const CardDefinition& maze, int drops_open,
+                                  const std::string& target);
 long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
 {
     static const bool s_on = EnvOn("MTG_MAZE_LEAF_PROGRESS", true);   // DEFAULT ON; =0 -> opponent life alone
@@ -69701,57 +69706,264 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
     return p;
 }
 
-// P5c2: do the new-name Gates in hand that a land drop may play (distinct names we do not control; Gateway Plaza only
-// when LandPlayOffered would offer it) fill all `drops_open` open land drops? See TapTutorPutEval.
-static bool MazeFetchDropsSpoken(const GameState& s, int me, int drops_open)
+// P5d: does something of ours put a Maze's End held in hand back onto the battlefield before our next turn? Manabond
+// (our end step: the hand's lands go in) and Burgeoning (the opponent's land play puts a land from our hand). USER
+// 2026-11-18: "If the maze's end is getting dropped by some effect then that would be okay."
+static bool MazeHandReturnsBeforeNextTurn(const GameState& s, int me)
 {
-    const Player& pl = s.players[static_cast<std::size_t>(me)];
-    const std::string* seen[16];
-    int n = 0;
-    for (const Card& c : pl.hand)
+    for (const Permanent& p : s.battlefield)
     {
-        const std::string& nm = c.m_name.str();
-        if (!MazeNameIsGate(nm) || MazeControlsGateNamed(s, me, nm)) { continue; }
-        bool dup = false;
-        for (int i = 0; i < n; ++i) { if (*seen[i] == nm) { dup = true; break; } }
-        if (dup) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && MazeAutonomous()
-            && !MazePlazaPayable(s, me, *d, 0)) { continue; }
-        seen[n++] = &nm;
-        if (n >= drops_open || n == 16) { return true; }
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && (d->params.endstep_may_dump_hand_lands_discard_hand
+                             || d->params.opponent_land_play_put_land_from_hand)) { return true; }
+    }
+    return false;
+}
+// P5d-4: Amulet of Vigor ours -- a Maze's End replayed from hand re-enters untapped (TapTutorPutEval's no-drop tier).
+static bool MazeAmuletOurs(const GameState& s, int me)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && MazeIsAmuletDef(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+static bool MazeManabondOurs(const GameState& s, int me)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.endstep_may_dump_hand_lands_discard_hand) { return true; }
     }
     return false;
 }
 
-// Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two
-// damage-equivalents, the same life-equivalence as NoWinLeafProgress) so the greedy walk takes it over leaving
-// the {3} unspent. A duplicate name and the fail-to-find stay 0 (the activation then only moves Maze's End to
-// hand). Evaluation only: the searched walk enumerates every target whatever its eval.
+// P5d: is `a` a Maze's End activation fetching a Gate name `me` does not control (the progress fetch)?
+static bool MazeNewNameFetch(const GameState& s, int me, const Action& a)
+{
+    if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TapTutorPut
+        || !MazeIsMazeDef(a.def)) { return false; }
+    const std::string& t = a.tutor_target.str();
+    return t != kTutorDeclineTarget && MazeNameIsGate(t) && !MazeControlsGateNamed(s, me, t);
+}
+
+// P5d (USER 2026-11-18, VERBATIM -- "there is value to banking extra lands even if you have a new-name gate in hand";
+// "Say you have 2 in hand, maze's end and exploration in play and 3 colourless. It seems like you are suggesting that
+// the right play is to use the 2 from hand rather than take advantage of the 3 we have to preserve one for next turn.
+// To me, that seems incorrect."; "you usually do not want to pass the turn without Maze's End on the field because you
+// might need it next turn and you definitely need it to win the game."; "If the maze's end is getting dropped by some
+// effect then that would be okay."; "I think its okay not to always fetch. Fetching costs mana and if we have a lot of
+// land in hand (and no manabond to drop them) it can be worse than playing them out. I don't think it should be ever
+// worse (clairvoyance aside) if we have nothing to do with the mana, though.").
+//
+// The playout's turn with an untapped Maze's End is FETCH, then REPLAY Maze's End with an open land drop, the hand's
+// Gates filling the other drops (GreedyLandDropsHeld holds the drop, GreedyLandFirst replays Maze's End into it). The
+// fetch's value under that shape (TapTutorPutEval):
+//  * NO open drop: the fetch sends Maze's End to hand and it re-enters tapped next turn -- an activation cycle, and
+//    next turn's win (it needs Maze's End on the battlefield), lost. 0 unless the fetch WINS now, Manabond /
+//    Burgeoning puts Maze's End back before our next turn, or Amulet of Vigor is ours (P5d-4: next turn's replay
+//    re-enters UNTAPPED and activates at once, so no activation cycle is lost -- the 0 rested on "enters tapped").
+//  * lands SHORT of full rate -- the hand's playable lands cannot fill this turn's open drops plus next turn's, or
+//    Manabond is ours (the hand's lands go in at the end step and fill no drop): the fetch adds a Gate the hand cannot,
+//    and outranks every spell its {3} would pay for (kMazeFetchWins).
+//  * plenty of lands, no Manabond: fetch + replay takes the same names as playing a hand land in that drop and keeps
+//    the land for later, at the cost of {3} -- 1: taken whenever the {3} has nothing else to do, outranked by any
+//    spell competing for the mana.
+// Evaluation only: the searched walk enumerates every target whatever its eval, so nothing is unfindable at any budget.
+// History: P1c's MTG_MAZE_FETCH_DEFER (0 while any drop and any new-name Gate remained) and P5c2's spare-drop form (0
+// while the hand's new-name Gates filled every drop) both rested on "the fetch only reorders a turn whose drops are
+// full". That is wrong twice over: drops recur every turn while the hand's Gates are finite, so a fetch that keeps a
+// hand Gate turns otherwise-idle {3} into a Gate without spending a card; and Maze's End enters tapped, so sending it to
+// hand without a same-turn replay costs an activation cycle. Deleting the defer outright (fetch 100 everywhere)
+// measured Maze d5 b20 +11 / 1,000 held-out games because the playout then fetched AFTER filling every drop with hand
+// Gates (the greedy drop runs before the plan's activations) and stranded Maze's End in hand, misreading tails.
+static constexpr int kMazeFetchWins = 1000;
 int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const
 {
     static const bool s_on = EnvOn("MTG_MAZE_FETCH_EVAL", true);   // DEFAULT ON; =0 -> every fetch 0
     if (!heurarm::Flag(heurarm::MAZE_FETCH_EVAL, s_on)) { return 0; }
     if (source.params.alt_win_distinct_named_count <= 0 || target == kTutorDeclineTarget) { return 0; }
-    if (!MazeNameIsGate(target) || MazeControlsGateNamed(s, s.active_player_index, target)) { return 0; }
-    // P5c2 (2026-11-18): a fetch while EVERY open land drop is spoken for by a new-name Gate in hand scores 0 (the
-    // drops are MazeFetchDropsSpoken). The fetch returns Maze's End to hand, and replaying it needs a land drop the
-    // hand's Gates would otherwise use, so in that state the fetch only reorders a turn whose drops are already full;
-    // with a SPARE drop (more open drops than playable new-name Gates) it keeps its value -- banking a Gate is worth
-    // the {3} even with a new-name Gate in hand (USER ruling 2-5: "there is value to banking extra lands even if you
-    // have a new-name gate in hand").
-    // History. P1c's MTG_MAZE_FETCH_DEFER zeroed the fetch while ANY drop and ANY new-name Gate remained; P5c deleted
-    // it once the engine reached the I3 line by itself (BpWaveWalker::DevSeqCanonDrop). Deleting it outright measured
-    // Maze d5 b20 +12 / +11 over 1,000 held-out games: the eval is the beyond-horizon greedy's ranking, and a
-    // fetch-before-the-Gate playout misreads tails under a finite budget (the worse games diverge at T1-T3, e.g. a
-    // skipped T1 land drop). This spare-drop form measured net -3 vs the deferral over 2,900 searched held-out game
-    // pairs (d5 b20 -1 over 1,000) and net -1 vs the deletion. Evaluation only: the searched walk enumerates every
-    // target whatever its eval, so nothing is unfindable at any budget.
     const int me = s.active_player_index;
+    if (!MazeNameIsGate(target) || MazeControlsGateNamed(s, me, target)) { return 0; }
     const Player& pl = s.players[static_cast<std::size_t>(me)];
     const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
-    if (drops_open >= 1 && MazeFetchDropsSpoken(s, me, drops_open)) { return 0; }
-    return MazeWeights().fetch;
+    const int full = MazeWeights().fetch;
+    if (drops_open <= 0)
+    {
+        const int need = source.params.alt_win_distinct_named_count;
+        const bool wins = CountDistinctNamedLandsWithSubtype(s, me, source.params.alt_win_distinct_named_subtype, need)
+                          + 1 >= need;
+        return (wins || MazeHandReturnsBeforeNextTurn(s, me) || MazeAmuletOurs(s, me)) ? full : 0;
+    }
+    // Lands SHORT of full rate (USER: "there is a point at which we don't have enough lands in hand to keep playing
+    // them at full rate this or next turn. If that is the case it should win out over other effects."): the hand's
+    // playable lands cannot fill this turn's open drops plus next turn's -- or Manabond is ours, which puts the hand's
+    // lands in at the end step so they fill no drop. Then the fetch outranks every spell its {3} would pay for
+    // (kFetchWins: above any subset of 100-per-card casts the {3} could fund).
+    // Filling the open drops with the hand's new-name Gates FIRST and then fetching wins this turn: the fetch now (before
+    // the drops) sends Maze's End to hand and forfeits that win -- 0 until the drops are filled (the no-drop branch above
+    // then scores the winning fetch). The I3 three-drop board: Maze's End, two hand Gates, fetch the tenth name.
+    if (MazeFillThenFetchWins(s, me, source, drops_open, target) && !MazeFillThenFetchWins(s, me, source, 0, target))
+    { return 0; }
+    if (MazeManabondOurs(s, me)) { return kMazeFetchWins; }
+    int hand_lands = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand() && LandPlayOffered(s, me, *d)) { ++hand_lands; }
+    }
+    const int next_drops = 1 + StaticExtraLandDrops(s, me);
+    if (hand_lands < drops_open + next_drops) { return kMazeFetchWins; }
+    // Plenty of lands in hand, no Manabond: fetch + replay takes the same names as playing a hand land in that drop and
+    // keeps the land for later, at the cost of {3} -- taken whenever the {3} has nothing else to do (USER: "I don't
+    // think it should be ever worse ... if we have nothing to do with the mana"), outranked by any spell competing for
+    // it ("it can be worse than playing them out").
+    return 1;
+}
+
+// P5d: does filling EVERY open drop with the hand's new-name Gates and then fetching `target` (a new name; empty = any
+// new-name Gate in the library) WIN this turn? Then no drop is held for the replay: the replay is moot and holding the
+// drop costs the win's last name (the I3 three-drop board: Maze's End, two hand Gates, fetch the tenth name).
+static bool MazeFillThenFetchWins(const GameState& s, int me, const CardDefinition& maze, int drops_open,
+                                  const std::string& target)
+{
+    const int need = maze.params.alt_win_distinct_named_count;
+    const int have = CountDistinctNamedLandsWithSubtype(s, me, maze.params.alt_win_distinct_named_subtype, need);
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    std::vector<std::string> hand_new;
+    for (const Card& c : pl.hand)
+    {
+        const std::string& nm = c.m_name.str();
+        if (!MazeNameIsGate(nm) || MazeControlsGateNamed(s, me, nm)) { continue; }
+        if (std::find(hand_new.begin(), hand_new.end(), nm) != hand_new.end()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && MazeAutonomous()
+            && !MazePlazaPayable(s, me, *d, 0)) { continue; }   // LandPlayOffered's Gateway Plaza rule
+        hand_new.push_back(nm);
+    }
+    const int played = std::min(static_cast<int>(hand_new.size()), std::max(0, drops_open));
+    bool fetch_new = false;
+    if (!target.empty())
+    {
+        fetch_new = MazeNameIsGate(target) && !MazeControlsGateNamed(s, me, target)
+            && (std::find(hand_new.begin(), hand_new.begin() + played, target) == hand_new.begin() + played);
+    }
+    else
+    {
+        for (const Card& c : pl.library)
+        {
+            const std::string& nm = c.m_name.str();
+            if (MazeNameIsGate(nm) && !MazeControlsGateNamed(s, me, nm)
+                && std::find(hand_new.begin(), hand_new.begin() + played, nm) == hand_new.begin() + played)
+            { fetch_new = true; break; }
+        }
+    }
+    return have + played + (fetch_new ? 1 : 0) >= need;
+}
+
+// P5d: the playout holds ONE open drop for Maze's End's replay when the turn fetches (see TapTutorPutEval). `plan` (the
+// beyond-horizon playout) holds only when the plan fetches a new name; nullptr (the depth-0 runner, drop before the
+// plan) holds when an untapped Maze's End could pay its {3} from the other untapped lands and a new name is in the
+// library -- the executor plays the held drop after the casts if the plan did not fetch.
+int MazesEndProvider::GreedyLandDropsHeld(const GameState& s, int controller, const std::vector<Action>* plan) const
+{
+    if (!MazeAutonomous() || controller != s.active_player_index) { return 0; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    if (pl.LandDropsAvailable() - pl.lands_played_this_turn <= 0) { return 0; }
+    bool land_in_hand = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { land_in_hand = true; break; }
+    }
+    if (!land_in_hand) { return 0; }
+    const CardDefinition* maze = nullptr;
+    int maze_num = -1;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value()) { maze = d; maze_num = p.card.m_number; break; }
+    }
+    if (maze == nullptr) { return 0; }
+    const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
+    if (plan != nullptr)
+    {
+        for (const Action& a : *plan)
+        {
+            if (!MazeNewNameFetch(s, controller, a)) { continue; }
+            return MazeFillThenFetchWins(s, controller, *maze, drops_open, a.tutor_target.str()) ? 0 : 1;
+        }
+        return 0;
+    }
+    if (MazeFillThenFetchWins(s, controller, *maze, drops_open, std::string())) { return 0; }
+    int other = s.floating_mana.Total();
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped || !p.card.IsLand() || p.card.m_number == maze_num) { continue; }
+        ++other;
+    }
+    if (other < maze->params.tap_tutor_put_cost->ManaValue()) { return 0; }
+    for (const Card& c : pl.library)
+    {
+        const std::string& nm = c.m_name.str();
+        if (MazeNameIsGate(nm) && !MazeControlsGateNamed(s, controller, nm)) { return 1; }
+    }
+    return 0;
+}
+
+// P5d: the greedy land ranker plays a Maze's End from hand FIRST while none is on the battlefield and three other lands
+// could pay its {3} next turn -- the replay after its fetch, and the USER's "you usually do not want to pass the turn
+// without Maze's End on the field". Earlier the deck's colours come first (the four passes).
+int MazesEndProvider::GreedyLandFirst(const GameState& s, int controller) const
+{
+    // Not while Manabond / Burgeoning will put Maze's End back before our next turn (USER: "If the maze's end is getting
+    // dropped by some effect then that would be okay."): the drop then goes to a land that adds a name (seed 204238 d0:
+    // Maze's End first displaced Planar Nexus, the tenth name, with Burgeoning out -- a T6 win became a decking loss).
+    if (!MazeAutonomous() || MazeHandReturnsBeforeNextTurn(s, controller)) { return -1; }
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        if (MazeIsMazeDef(CardDatabase::Instance().LookupCached(p.card))) { return -1; }
+        ++lands;
+    }
+    if (lands < 3) { return -1; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        if (MazeIsMazeDef(CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]))) { return i; }
+    }
+    return -1;
+}
+
+// P5d: among EQUAL plans (EnumeratePlansWithLand's last keys), a plan that fetches a new name AND leaves a land drop
+// open for Maze's End's replay sorts first (0); otherwise the generic develop-first rule (land 1, no land 2). ORDER
+// only: a strictly better plan still wins.
+int MazesEndProvider::LandPlanTieKey(const GameState& s, const std::vector<Action>& acts, bool plays_land,
+                                     bool provider_hold) const
+{
+    (void)provider_hold;
+    if (!MazeAutonomous()) { return -1; }
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const int open_after = pl.LandDropsAvailable() - pl.lands_played_this_turn - (plays_land ? 1 : 0);
+    if (open_after >= 1)
+    {
+        // Not when filling every open drop and then fetching WINS this turn (MazeFillThenFetchWins): the replay is moot
+        // and the develop-first order reaches the win (the I3 three-drop board).
+        const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
+        for (const Action& a : acts)
+        {
+            if (!MazeNewNameFetch(s, me, a)) { continue; }
+            if (!MazeFillThenFetchWins(s, me, *a.def, drops_open, a.tutor_target.str())) { return 0; }
+            break;
+        }
+    }
+    return plays_land ? 1 : 2;
 }
 
 // ---- P5 (USER 2026-11-18) ------------------------------------------------------------------------------------
@@ -69988,11 +70200,6 @@ bool MazeUnpayablePruneLive(const GameState& s)
 }
 }   // namespace
 
-bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
-{
-    return MazeUnpayablePruneLive(s) || MazeHeapFilterLive(s);
-}
-
 // Heap Gate's half of the plan-list filter (P5).
 bool MazesEndProvider::MazeHeapFilterLive(const GameState& s) const
 {
@@ -70017,6 +70224,23 @@ bool MazesEndProvider::MazeHeapFilterLive(const GameState& s) const
     for (const Card& c : pl.hand)    { if (treasure_land(c)) { return true; } }
     for (const Card& c : pl.library) { if (treasure_land(c)) { return true; } }
     return false;
+}
+// P5d (a): live while we control an untapped Maze's End that can activate (MazeIdleFetchAdmit).
+static bool MazeIdleFetchLive(const GameState& s)
+{
+    if (!MazeIdleFetchOn() || !MazeAutonomous()) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value()) { return true; }
+    }
+    return false;
+}
+bool MazesEndProvider::PlanListFilterLive(const GameState& s) const
+{
+    return MazeUnpayablePruneLive(s) || MazeHeapFilterLive(s) || MazeIdleFetchLive(s);
 }
 
 namespace
@@ -70081,19 +70305,9 @@ bool MazeTreasureBinds(const GameState& s, int me, const DecisionProvider& prov)
 // still branches over every admitted plan, the Treasure-free plans are never touched; in the leftover rule a plain superset always stays.
 // Equality on actions = kind, name, mode, target, X, source and hand index; a missing superset (another filter
 // pruned it) keeps the Treasure plan -- the error is always toward admitting.
-void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
+static void MazeHeapTreasureAdmit(const GameState& s, const DecisionProvider& prov,
+                                  const std::vector<DecisionProvider::PlanView>& plans, std::vector<char>& admit)
 {
-    // FIRST the provably-unpayable prune (F5, USER), so the Heap rule's evidence below is a plan that really plays.
-    if (MazeUnpayablePruneLive(s))
-    {
-        std::vector<const std::vector<Action>*> acts;
-        std::vector<const std::string*> lands;
-        acts.reserve(plans.size());
-        lands.reserve(plans.size());
-        for (const PlanView& v : plans) { acts.push_back(v.actions); lands.push_back(v.land); }
-        TurnSolver::DropProvablyUnpayablePlans(s, acts, lands, admit);
-    }
-    if (!MazeHeapFilterLive(s)) { return; }
     auto is_treasure = [](const Action& a)
     { return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTreasure; };
     auto spends = [](const Action& a)
@@ -70155,7 +70369,7 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
         return;
     }
     if (spend_keys.empty()) { return; }
-    if (MazeTreasureBinds(s, s.active_player_index, *this)) { return; }
+    if (MazeTreasureBinds(s, s.active_player_index, prov)) { return; }
     for (std::size_t i : with_t)
     {
         std::vector<std::string> rest;
@@ -70168,4 +70382,113 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
             if (plain.count(pkey(*plans[i].land, std::move(plus))) != 0) { admit[i] = 0; break; }
         }
     }
+}
+
+// P5d (a) -- THE IDLE-MANA FETCH PRUNE (USER 2026-11-18, VERBATIM: "I don't think it should be ever worse (clairvoyance
+// aside) if we have nothing to do with the mana, though."; "Though, if there is idle mana we should use it."; "And that
+// is fine, because not fetching would be dominated, but this would be assuming we can replay it."). A plan P that does
+// not activate Maze's End is REMOVED when the menu also holds "P plus one Maze's End fetch" (same land, the fetch's
+// target any the P3 menu offered) and Maze's End comes back before our next turn in that plan: a land drop is still
+// open after P's land and after every other playable land in hand (the same-turn replay), Manabond / Burgeoning will put
+// it back (MazeHandReturnsBeforeNextTurn), or the fetch wins. "The mana has nothing else to do" is read off the menu
+// itself, as Heap Gate's Treasure is: P plus the fetch is on the list exactly when P's spends leave the {3} and Maze's
+// End's own tap unused. The fetch TARGET stays searched (every admitted target's plan is kept), a plan whose mana has
+// another use is untouched, and the list never empties (only a plan with an admitted superset is removed). Never in
+// human play or under the unpruned gate (TurnSolver's PlanListFilterLive call site).
+// Measured (P5d-3/P5d-4, logs/maze/P5d4-handoff.md and the ledger's P5d section): its clairvoyant losses are all
+// clairvoyance -- with the library order unseen by the search (blind_salt) it is net <= 0 on every Maze key.
+static void MazeIdleFetchAdmit(const GameState& s, const std::vector<DecisionProvider::PlanView>& plans,
+                               std::vector<char>& admit)
+{
+    const int me = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const int drops_open = pl.LandDropsAvailable() - pl.lands_played_this_turn;
+    const bool returns = MazeHandReturnsBeforeNextTurn(s, me);
+    // Playable lands in hand (Gateway Plaza only when its {1} is payable, as LandPlayOffered).
+    int hand_lands = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        if (d->params.etb_sacrifice_unless_pay.has_value() && MazePlazaPayOn() && !MazePlazaPayable(s, me, *d, 0))
+        { continue; }
+        ++hand_lands;
+    }
+    auto is_maze_act = [](const Action& a)
+    {
+        return a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapTutorPut
+            && MazeIsMazeDef(a.def);
+    };
+    auto akey = [](const Action& a)
+    {
+        return std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str() + "|"
+             + std::to_string(static_cast<int>(a.ability_mode)) + "|" + a.tutor_target.str() + "|"
+             + std::to_string(a.chosen_x) + "|" + std::to_string(a.sac_source_id) + "|" + std::to_string(a.hand_index);
+    };
+    auto pkey = [](const std::string& land, std::vector<std::string> keys)
+    {
+        std::sort(keys.begin(), keys.end());
+        std::string k = land;
+        for (const std::string& x : keys) { k += '\x1e'; k += x; }
+        return k;
+    };
+    std::unordered_set<std::string> covered;   // (land, actions) a returning fetch extends
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        if (!admit[i]) { continue; }
+        const Action* fetch = nullptr;
+        int n_maze = 0;
+        std::vector<std::string> rest;
+        for (const Action& a : *plans[i].actions)
+        {
+            if (is_maze_act(a)) { ++n_maze; fetch = &a; continue; }
+            rest.push_back(akey(a));
+        }
+        if (n_maze != 1 || fetch->tutor_target.str() == kTutorDeclineTarget) { continue; }
+        const std::string& t = fetch->tutor_target.str();
+        const CardParams& mp = fetch->def->params;
+        const bool wins_now = MazeNameIsGate(t) && !MazeControlsGateNamed(s, me, t)
+            && CountDistinctNamedLandsWithSubtype(s, me, mp.alt_win_distinct_named_subtype,
+                                                  mp.alt_win_distinct_named_count) + 1
+               >= mp.alt_win_distinct_named_count;
+        // Not when a LATER fetch (after the hand's Gates fill the drops) wins this turn: the activation's win check reads
+        // the Gates in play at that point, and fetching now forfeits it (the I3 three-drop board).
+        if (!wins_now && MazeFillThenFetchWins(s, me, *fetch->def, drops_open, std::string())) { continue; }
+        // "Comes back": the replay drop is left after P's land AND after every other playable land in hand (a later
+        // land drop is what makes "not now" a different turn rather than the same mana idle), or Manabond / Burgeoning
+        // puts Maze's End back, or the fetch wins now.
+        const bool plays = !plans[i].land->empty();
+        const int open_after = drops_open - (plays ? 1 : 0);
+        const int hand_after = std::max(0, hand_lands - (plays ? 1 : 0));
+        if (open_after >= hand_after + 1 || returns || wins_now) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
+    }
+    if (covered.empty()) { return; }
+    for (std::size_t i = 0; i < plans.size(); ++i)
+    {
+        if (!admit[i]) { continue; }
+        std::vector<std::string> keys;
+        bool maze = false;
+        for (const Action& a : *plans[i].actions)
+        {
+            if (is_maze_act(a)) { maze = true; break; }
+            keys.push_back(akey(a));
+        }
+        if (!maze && covered.count(pkey(*plans[i].land, keys)) != 0) { admit[i] = 0; }
+    }
+}
+
+void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const
+{
+    // FIRST the provably-unpayable prune (F5, USER), so the Heap rule's evidence below is a plan that really plays.
+    if (MazeUnpayablePruneLive(s))
+    {
+        std::vector<const std::vector<Action>*> acts;
+        std::vector<const std::string*> lands;
+        acts.reserve(plans.size());
+        lands.reserve(plans.size());
+        for (const PlanView& v : plans) { acts.push_back(v.actions); lands.push_back(v.land); }
+        TurnSolver::DropProvablyUnpayablePlans(s, acts, lands, admit);
+    }
+    if (MazeHeapFilterLive(s)) { MazeHeapTreasureAdmit(s, *this, plans, admit); }
+    if (MazeIdleFetchLive(s))  { MazeIdleFetchAdmit(s, plans, admit); }
 }
