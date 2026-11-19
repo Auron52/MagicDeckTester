@@ -1,18 +1,20 @@
-# Regression ground truth -- commit 4e794535b  date 2026-11-18
+# Regression ground truth -- commit 45d476494  date 2026-11-19
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # accepted-with-regressions (smoke, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
 # accepted-with-regressions (regression, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
+# accepted-with-regressions (smoke, 2026-11-19): F5 joint mana payment (MTG_OWED_ACTS_JOINT_PAY) + heapstrict leak fix: every slower game recovers at d8 b0 (12/13 equal; smoke d0 gi234 abandons on both arms at 50M units and recovers at d8 b2000 T5=T5); held-out A/B net <= 0 on every moved deck (kithkin -5, selesnyav2 -2, others 0)
+# accepted-with-regressions (regression, 2026-11-19): F5 joint mana payment (MTG_OWED_ACTS_JOINT_PAY) + heapstrict leak fix: every slower game recovers at d8 b0 (12/13 equal; smoke d0 gi234 abandons on both arms at 50M units and recovers at d8 b2000 T5=T5); held-out A/B net <= 0 on every moved deck (kithkin -5, selesnyav2 -2, others 0)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mazesend_smoke_d0_s1001=6.8980/0e18e01b1a7b6894
-mazesend_smoke_d3_s1001=5.3000/666da95aa8393d6b
-mazesend_smoke_d5_s1001=5.7348/8f298414aafcb060
-mazesend2hg_smoke_d5_s1001=5.5333/c5915d59e78955e4
+mazesend_smoke_d0_s1001=6.8740/980f24f1eeee64bc
+mazesend_smoke_d3_s1001=5.3000/8eccad945c0e5365
+mazesend_smoke_d5_s1001=5.7273/82a544a5f417a492
+mazesend2hg_smoke_d5_s1001=5.5333/93f5b7271e4543dc
 mill_smoke_d0_s1001=6.2200/13d7cf7dcd8b5017
 mill_smoke_d3_s1001=4.6000/e3c08d7c641b8c4d
 mill_smoke_d5_s1001=4.6000/1a3c154de8cd6ddf
@@ -76,9 +78,9 @@ knights_smoke_d5_s1001=4.3846/9584e5d50e468582
 whiteknights_smoke_d0_s1001=4.5830/1f86383d17efda44
 whiteknights_smoke_d3_s1001=4.1600/0d94744543d3367b
 whiteknights_smoke_d5_s1001=4.1323/f8d74fa5da95ba69
-kithkin_smoke_d0_s1001=4.9860/7e57c92e7158ae11
-kithkin_smoke_d3_s1001=4.5067/7a59a24f833bd703
-kithkin_smoke_d5_s1001=4.4923/9f8e611919545b90
+kithkin_smoke_d0_s1001=4.9850/86f787954debe53f
+kithkin_smoke_d3_s1001=4.5067/13db01eea5cf9f13
+kithkin_smoke_d5_s1001=4.4862/81c888052281e42d
 antilife_smoke_d0_s1001=4.9260/4ee842d15b6de04a
 antilife_smoke_d3_s1001=4.0533/455a6382ba8531d4
 antilife_smoke_d5_s1001=4.2154/78d40b1e52e55503
@@ -179,7 +181,7 @@ giants_smoke_d5_s1001=5.7600/1f1796e715568119
 pirates_smoke_d0_s1001=4.7310/07288b485467b7b0
 pirates_smoke_d3_s1001=4.3200/9f34e8d62b2d4abe
 pirates_smoke_d5_s1001=4.3543/afde838d4ca8f36d
-selesnyav2_smoke_d0_s1001=5.0810/187278ea951142bf
+selesnyav2_smoke_d0_s1001=5.0800/cc25ae83cddd72c7
 selesnyav2_smoke_d3_s1001=4.4600/4b6cff175f3db3ed
 selesnyav2_smoke_d5_s1001=4.5943/00d59f7e34f2e04c
 selesnyav22hg_smoke_d5_s1001=4.7400/d61b1c69fbbdd83f
@@ -190,11 +192,11 @@ pd_smoke_d0_s1001=7.2650/a6ac1e823c72c23f
 pd_smoke_d3_s1001=5.3600/3ddb1805d5d45e11
 pd_smoke_d5_s1001=5.5100/6683a4c0eeb56823
 bruna2hg_smoke_d5_s1001=5.2800/014dedc045e04d69
-bruna_smoke_d0_s1001=5.9370/44a3f0fe946e3027
+bruna_smoke_d0_s1001=5.9370/4adbb498d8031c4d
 bruna_smoke_d3_s1001=4.7200/80d2425711f7ec42
 bruna_smoke_d5_s1001=4.7067/041c3c575a5249bc
 edf2hg_smoke_d5_s1001=3.9600/2c55524724e494f7
-edf_smoke_d0_s1001=5.2970/9cb3ed5f9d3a42db
+edf_smoke_d0_s1001=5.2970/c1bf1da988a01da1
 edf_smoke_d3_s1001=4.0000/e8da459a417633e4
 edf_smoke_d5_s1001=4.1100/bde3523548455051
 snow_smoke_d0_s1001=6.1300/21f0ecd840191c37
@@ -242,10 +244,10 @@ merfolkturns_smoke_d5_s1001=5.6000/1cefeb8b4693a2b8
 merfolkturns2hg_smoke_d3_s1001=6.0000/03f13d2a2fafa76b
 
 # --- regression ---
-mazesend_regression_d0_s2002=6.8960/3306b69cf1751a23
-mazesend_regression_d3_s2002=5.7333/3ed1321abddd7f81
-mazesend_regression_d5_s2002=5.6902/162469aaebd5315e
-mazesend_regression_d5_s3003=5.7000/a3f9f19bd0a6b72a
+mazesend_regression_d0_s2002=6.8600/14eb16f140019c37
+mazesend_regression_d3_s2002=5.7333/68e6b94f7de62f6d
+mazesend_regression_d5_s2002=5.6685/e4df6e27a121b101
+mazesend_regression_d5_s3003=5.7000/bb23a9d96c3d32cb
 mazesend_regression_d3_s30121=5.0000/e841b401e3cde60a
 mazesend_regression_d5_s30121=5.0000/e841b401e3cde60a
 mazesend_regression_d3_s30081=5.0000/156b855f42039436
@@ -411,10 +413,10 @@ whiteknights_regression_d0_s2002=4.5700/86fdc5f908b7b772
 whiteknights_regression_d3_s2002=4.0900/7bf0e912b2753e1a
 whiteknights_regression_d5_s2002=4.1620/49e180b9813ae9dd
 whiteknights_regression_d5_s3003=4.1220/1a29c60bbd40c9ed
-kithkin_regression_d0_s2002=4.9910/e24ddfe6872e8b56
-kithkin_regression_d3_s2002=4.4600/f2416b9ae0d81d60
-kithkin_regression_d5_s2002=4.4940/9eff3825471fd33d
-kithkin_regression_d5_s3003=4.4740/c9eb0f9ba1149a28
+kithkin_regression_d0_s2002=4.9880/012bddb19bb6c812
+kithkin_regression_d3_s2002=4.4600/5a6007bc6bee72a8
+kithkin_regression_d5_s2002=4.4920/b87fe63637612b81
+kithkin_regression_d5_s3003=4.4720/fb393ca6c8df10f9
 antilife_regression_d0_s2002=5.0330/7959db84d2ca44a5
 antilife_regression_d3_s2002=4.2200/d2b6257a2ca8fb08
 antilife_regression_d5_s2002=4.2580/5bf2dcb3841dd309
@@ -540,7 +542,7 @@ bruna_regression_d0_s2002=5.8890/c2ce3a93209e4e2a
 bruna_regression_d3_s2002=4.7200/f9813c16f811a775
 bruna_regression_d5_s2002=4.8600/c5f958ee23bbaf2d
 bruna_regression_d5_s3003=4.7000/2e5a73a4692bd1b9
-edf_regression_d0_s2002=5.3170/528f308fe530a67f
+edf_regression_d0_s2002=5.3170/38078c6b9efc52b1
 edf_regression_d3_s2002=3.9200/d8b8576334690536
 edf_regression_d5_s2002=4.0533/5691a2f80beed216
 edf_regression_d5_s3003=4.1267/dac2becaa4db1c4e
@@ -608,7 +610,7 @@ spirits_regression_d5_s2002=4.5333/1a8f67e8f5958abb
 spirits_regression_d5_s3003=4.5067/e279049c833e861f
 merfolkturns_regression_d0_s2002=6.0100/1d7d425819265b46
 merfolkturns_regression_d3_s2002=5.3600/511943ab5f5efcae
-merfolkturns_regression_d5_s2002=5.5667/8011a32354c3fb4a
+merfolkturns_regression_d5_s2002=5.5667/29dd91d4e5907154
 merfolkturns_regression_d5_s3003=5.6133/70b9eaa5b09ef91d
 
 # --- overnight ---
