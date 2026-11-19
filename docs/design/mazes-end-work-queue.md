@@ -146,3 +146,13 @@ USER (VERBATIM, correcting my reading): "What I mean by pruning fetches is about
 (Corrected brief to P5d-2: prune only (a) idle mana -> activate; (b)/(c) stay ranking. The target set is the USER's P3 menu, already shipped default ON in MazeRestrictLandTargets.)
 USER (VERBATIM): "And that is fine, because not fetching would be dominated, but this would be assuming we can replay it."
 (Sent to P5d-2: the idle-mana prune also requires Maze's End to come back before our next turn: an open drop to replay it, a Manabond/Burgeoning return, or the activation wins.)
+
+## USER on the 2026-11-19 overnight questions (~07:00 UTC, VERBATIM)
+
+- Q2 (s6 one turn short at b20, found at b100): "The problem is that we cannot afford to make the budget 100 most likely, so we'll need to attempt to prune to make this closer."
+  (S6 finding: s6 already wins T6 at d5 b20 on 7626b6105; it is knife-edge -- T1 searches depth 1 only because the pass-2 start gate estimates 3,011 x 6.0 = 18,066 > 1.1 x 14,989; pass 1 needs to be ~7.4% cheaper. ~20% of T1 rollouts are boards differing only in battlefield order.)
+- Q4 (the owed joint pay-refine, `MTG_OWED_JOINT_REFINE`): "For 4 it seems like we need to have something like the refine, but make it cheaper? I'm not entirely sure, but we are looking for better results overall."
+  (F5R/F5R-2: 84 refines hit the 4,096-probe cap, mostly redundant Talon/Baldur converter extensions; `bound1.patch` defers them and adds a pruning bound.)
+- Q6 (a second heavy job during d8 tails): "Yes, that seems fine."
+  (Implemented as `scripts/heavy_run.sh`: hands the lock on after 10 x 30 s of load < nproc/4 with MemAvailable >= 13 GB; at most one released tail.)
+- Q8 (order of the viewer build in the heavy queue): "I'll leave the order up to you."
