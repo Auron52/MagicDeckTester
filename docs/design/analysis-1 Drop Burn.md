@@ -1780,3 +1780,36 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   check_references_safe -> push phase-1-2-deck-analyzer (first push this session) -> background CI watch ->
   bash scripts/mullgen.sh run "decks/1 Drop Burn" fast (USER: "continue on to the mulligan profile"; builds PGO first).
   Still owed after: viewer audit, Stage 6 report, leaf_tiebreak --blocks 48.
+
+### CHECKPOINT ~10:20 UTC 2026-11-19 -- labels restored + verified, seed 8 saved, rebased again, building
+- Restored-label build (09:47): mtg-test 3725/3725; viewer_protocol_check burn 20/20 ok (0 repaired); viewer client
+  check passes (after fixing decks/burn -> decks/Burn on-disk case, a stale lowercase folder on the case-insensitive
+  mount since upstream d81e83fae). USER seed-8 reference saved (autosave push had failed on a DNS blip; pushed by hand
+  to references-autosave 1ddd793c0). ref_bench 10/10: search 3.400 = human 3.400, 0 short.
+- Rebased the 20 local commits onto origin 6bbfe4df1 (29 upstream: Jumbo unlock-order/aura levers, Stuffy runaway).
+  HeuristicArm.h: upstream 5 slots, then ours 4 (enum/name counts +4 each, as origin). regression_gt.txt per key:
+  burn keys ours, the rest origin's. check_gt_logs consistent. Backup pushed: origin/backup/1db-20261119.
+- RUNNING: ./build.sh (logs/1dropburn/build_rebase2.log, DONE marker; setsid-detached).
+- NEXT: mtg-test -> full smoke (byte-identity; burn should be identical since nothing upstream touched burn) ->
+  check_gt_logs -> check_references_safe -> push phase-1-2-deck-analyzer -> background CI watch ->
+  bash scripts/mullgen.sh run "decks/1 Drop Burn" fast (builds PGO, screens setting, generates, validates).
+
+### CHECKPOINT ~11:50 UTC 2026-11-19 -- post-rebase build done; unit + smoke running
+- ./build.sh after the rebase onto 6bbfe4df1: rc=0 (11:48 UTC).
+- RUNNING (setsid-detached): mtg-test -> logs/1dropburn/unit_rebase2.log ("UNIT rc=" line in smoke log), then
+  bash test/regression.sh --smoke -> logs/1dropburn/smoke_rebase2.log ("DONE rc=" marker).
+- NEXT: if smoke byte-identical (burn included) -> check_gt_logs -> check_references_safe -> push
+  phase-1-2-deck-analyzer (20 local commits incl. fb70e908f-replay Red Elementals) -> background
+  `gh run watch <id> --interval 60 --exit-status` -> bash scripts/mullgen.sh run "decks/1 Drop Burn" fast
+  (setsid-detached; builds PGO first; 2-hourly timer 01e1d807 covers it). If a burn row moves: attribute,
+  re-accept with --deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg, then push.
+- Still owed after the gen: viewer audit (audit_viewer_decisions / verify_deck --write-ledger), Stage 6 report,
+  leaf_tiebreak --blocks 48. Viewer runs from the primary checkout (setsid; MDT_REFERENCE_BACKUP_DIR set).
+
+### CHECKPOINT ~12:45 UTC 2026-11-19 -- smoke byte-identical; origin moved again, third rebase
+- Post-rebase (6bbfe4df1) mtg-test 3729/3729; full smoke 235/235 pass, 0 slower/faster/play-changed (73 min).
+  check_gt_logs 1343 consistent; check_references_safe OK.
+- Origin moved 10 more commits (Stuffy Doll escape-scry arms P/W default OFF in DecisionProviders/TurnSolver; Boars
+  keep table adopted, Boars GT rows only; Spirits references). Rebasing onto it, then (setsid chain
+  logs/1dropburn/rebase3_chain.log): ./build.sh -> mtg-test -> ./build.sh pgo -> smoke on PGO (byte-identical to
+  Release) -> push -> mullgen reuses the stamped PGO build.
