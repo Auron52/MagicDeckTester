@@ -71976,6 +71976,48 @@ void TurnSolver::DropProvablyUnpayablePlans(const GameState& state, const std::v
             }
         }
     }
+    // MTG_UNPAYABLE_PRUNE_HAZARD_TRACE=1 (DIAGNOSTIC, print-only): the fold hazard the prune-before-fold order guards against --
+    // a DROPPED plan P' whose one-cast-smaller subset P (same land) is still admitted -- with the board, so a unit test
+    // can rebuild the position (fold A would drop P for P' if the prune ran after the fold).
+    static const bool s_hazard = EnvOn("MTG_UNPAYABLE_PRUNE_HAZARD_TRACE");
+    if (!s_hazard) { return; }
+    auto names = [](const std::vector<Action>& v)
+    {
+        std::vector<std::string> n;
+        for (const Action& a : v) { n.push_back(a.card_name.str() + "#" + std::to_string(static_cast<int>(a.kind))); }
+        std::sort(n.begin(), n.end());
+        return n;
+    };
+    for (std::size_t i = 0; i < acts.size() && i < admit.size(); ++i)
+    {
+        if (admit[i] || acts[i] == nullptr || acts[i]->size() < 2) { continue; }
+        const std::vector<std::string> big = names(*acts[i]);
+        const std::string li = lands[i] != nullptr ? *lands[i] : std::string();
+        for (std::size_t j = 0; j < acts.size() && j < admit.size(); ++j)
+        {
+            if (!admit[j] || acts[j] == nullptr || acts[j]->size() + 1 != acts[i]->size()) { continue; }
+            if ((lands[j] != nullptr ? *lands[j] : std::string()) != li) { continue; }
+            const std::vector<std::string> small = names(*acts[j]);
+            if (!std::includes(big.begin(), big.end(), small.begin(), small.end())) { continue; }
+            std::string board, hand, sub, sup;
+            for (const std::string& n : big) { sup += ' ' + n; }
+            for (const std::string& n : small) { sub += ' ' + n; }
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                board += ' '; board += p.card.m_name.str(); if (p.tapped) { board += "(T)"; }
+            }
+            for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].hand)
+            { hand += ' '; hand += c.m_name.str(); }
+            std::fprintf(stderr, "[unpay-hazard] seed=%llu turn=%d phase=%d land=%s lands_played=%d dropped:%s | kept:%s"
+                                 " | board:%s | hand:%s\n",
+                         static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                         static_cast<int>(state.phase), li.c_str(),
+                         state.players[static_cast<std::size_t>(state.active_player_index)].lands_played_this_turn,
+                         sup.c_str(), sub.c_str(), board.c_str(), hand.c_str());
+            break;
+        }
+    }
 }
 bool TurnSolver::PlanProvablyUnpayableForTest(const GameState& state, const std::vector<Action>& acts,
                                               const std::string& land)
