@@ -4241,3 +4241,48 @@ T5, T5, **T6**. s1 has no win in 8 turns even unlimited; the search beats the US
     d2 b0 tree carries two drops. Every `MTG_MAZE_*` lever and several `MTG_BP_*` levers were flipped; none
     changes it.
   - Repro and traces are in R1-results section 4.
+
+## References (R2, 2026-11-19): the USER's games s7-s10
+
+Full write-up, repros and traces: `logs/maze/R2-results.md` (scratch `build/scratch/maze/r2/`). Binary: same as R1 (the
+primary's `build/Release/mtg`, e682d7942, `HEAD:src` 4cb388bd6), which recorded these games.
+
+**Replay gate (strict).** All 4 replay on the recording binary: s7 ok T5, s8 repaired T6, s9 ok T6, s10 repaired T6.
+On the origin-head engine (2f67da724) **s7 is SHUFFLE-DEAD**, like s2. A whole-repo strict sweep on that binary finds
+exactly 4 shuffle-dead refs among 890: Maze's End s2 and s7, and Mill s2 and s6.
+- **Root cause: 2ad8c3d41** ("Shuffle the passive opponent's library on its own ordinal"). It changed shuffle
+  CONSUMPTION, not just the opponent's library order. Before the commit, an opponent shuffle bumped the shared
+  `search_count` and so moved OUR later reshuffles. After it, the opponent uses its own ordinal and salt.
+  - The commit kept the shared ordinal only for refs without `opponent_land_model`. Every saved ref has that stamp,
+    yet all of them were recorded under the shared ordinal: the primary checkout's HEAD still lacks 2ad8c3d41.
+  - The refs that die are exactly those whose opponent cracked a fetch (s7 Misty Rainforest; s2 Mire + Foothills
+    x2), plus Mill, which shuffles the opponent's library itself.
+  - Proof, on one binary built from wip/maze-r1 src: a temporary lever that skips the new branch makes all 4
+    replay at their recorded turns. Without the lever all 4 are shuffle-dead.
+  - Pinning the opponent library would not fix this: s7's OWN T5 hand moves.
+- **Proposed fix (not implemented; owner of 2ad8c3d41 / coordinator):**
+  1. The claude-play trace writer (`src/main.cpp`, next to `opponent_land_model`) stamps
+     `"opponent_shuffle_ordinal": 1`.
+  2. Add `--legacy-shared-shuffle-ordinal` (and a batch field) to restore the shared ordinal.
+  3. `viewer_protocol_check.py`, `ref_bench.py` and `ref_handoff.py` pass it when the stamp is absent.
+  - It must land BEFORE the primary checkout fast-forwards past 2ad8c3d41. Otherwise new refs carry no stamp and
+    cannot be told apart from old ones.
+
+**Bench (ONE pooled batch, 16 games, exact opening hands).** USER/search per setting:
+
+| ref | USER | d5 b20 (shipped) | d5 b100 | d5 b2000 | d8 b0 |
+|---|---|---|---|---|---|
+| s7 | T5 | T5 | T5 | T5 | T5 |
+| s8 | T6 | T6 | T6 | T5 | T5 |
+| s9 | T6 | T6 | T6 | T5 | T5 |
+| s10 | T6 | T6 | T6 | T5 | T5 |
+
+The shipped search is **0/4 short and 0 faster** (5.750 / 5.750).
+- **s8, s9, s10: search beats the USER.** The shipped search wins T5 from the USER's T4 board on all three, and on
+  s10 also from the USER's own T5 board, where the USER held Sylvan Scrying.
+- The shipped search's own T5 is **budget only**. From the USER's T3 board it gives T6 at b20 and b100 and T5 at
+  b2000. d8 b0 from T1 finds T5 on all three, so there is **no completeness hole**.
+- For S6: at s9 T4, b20's root scans only {Boros, Baldur's Gate, defer} x {Maze's End>Gond Gate, none} across
+  breakpoint children. Its best is T6. It never reaches the line that re-drops Maze's End and puts in Talon Gates
+  with {4}.
+- No engine work is proposed. Whether b20 is enough is the USER's settings question, as for R1's s6.
