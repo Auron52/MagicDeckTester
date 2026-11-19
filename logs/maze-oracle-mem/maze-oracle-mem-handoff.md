@@ -50,6 +50,7 @@ see base_summary.txt next to this file: gi 0,2,3,4,7,11 died > 8 GB; gi 1 1.97 G
    distinct outcome boards, peak_live, rss.
 
 ## Running at handoff
+- UPDATE: chain2 BUILD SUCCEEDED (build rc=0, $S/build2.log); unit tests + repros were running after it.
 - chain1 ($S/chain1.sh, PID 3104518, holds the box lock): baseline repro, Maze gi 0..41 subset, finishing gi 33/35/41.
   Marker: `done` line in $S/chain1.status; results $S/base/summary.txt, traces $S/base/g*.err.
 - chain2 (launcher PID 3111621, waiting on the lock): $S/chain2.sh = build worktree -> $S/mtg.fix, mtg-test
