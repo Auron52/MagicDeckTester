@@ -71739,10 +71739,11 @@ namespace
 struct UnpayStep { ManaCost cost{}; bool bp = false; int supply = 0; };
 // The plan's steps, or false when one cannot be priced exactly (keep the plan).
 bool UnpayCollect(const GameState& state, const std::vector<Action>& acts, std::vector<UnpayStep>& out,
-                  std::vector<int>& tap_src, bool& land_draws, const std::string& land)
+                  std::vector<int>& tap_src, bool& land_draws, const std::string& land, int& land_credit_out,
+                  int& amulets_out)
 {
     const int me = state.active_player_index;
-    int lands = 0, scaled = 0;
+    int lands = 0, scaled = 0, amulets = 0;
     bool summit = false;   // a Gate (or any land of the named subtype) entering draws a card
     std::vector<std::string> draw_subs;
     for (const Permanent& p : state.battlefield)
@@ -71751,12 +71752,16 @@ bool UnpayCollect(const GameState& state, const std::vector<Action>& acts, std::
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
         if (p.card.IsLand()) { ++lands; if (!d->params.mana_per_other_controlled_subtype.empty()) { ++scaled; } }
+        if (d->params.untap_own_permanent_entering_tapped) { ++amulets; }
         for (const std::string& sub : d->params.draw_on_other_subtype_enter) { draw_subs.push_back(sub); }
     }
     for (const Action& a : acts)
     {
         if (a.kind == Action::Kind::CastFromHand && a.def != nullptr)
-        { for (const std::string& sub : a.def->params.draw_on_other_subtype_enter) { draw_subs.push_back(sub); } }
+        {
+            for (const std::string& sub : a.def->params.draw_on_other_subtype_enter) { draw_subs.push_back(sub); }
+            if (a.def->params.untap_own_permanent_entering_tapped) { ++amulets; }
+        }
     }
     summit = !draw_subs.empty();
     auto draws_on_enter = [&](const CardDefinition* d)
@@ -71765,7 +71770,11 @@ bool UnpayCollect(const GameState& state, const std::vector<Action>& acts, std::
         for (const std::string& sub : draw_subs) { if (CardHasSubtype(d->card, sub)) { return true; } }
         return false;
     };
-    const int land_credit = 2 + lands + scaled;
+    // + one per Amulet of Vigor (controlled or cast by the line): a land entering tapped under k Amulets is untapped k
+    // times, so it can tap for mana k times (the multi-Amulet float) -- more than the one tap the board credits.
+    const int land_credit = 2 + lands + scaled + amulets;
+    land_credit_out = land_credit;
+    amulets_out = amulets;
     land_draws = false;
     if (!land.empty())
     {
@@ -71876,14 +71885,34 @@ bool PlanUnpayableImpl(const GameState& state, const std::vector<Action>& acts, 
     std::vector<UnpayStep> steps;
     std::vector<int> tap_src;
     bool land_draws = false;
-    if (!UnpayCollect(state, acts, steps, tap_src, land_draws, land) || land_draws) { return false; }
+    int land_credit = 0;
+    int amulets_seen = 0;
+    if (!UnpayCollect(state, acts, steps, tap_src, land_draws, land, land_credit, amulets_seen) || land_draws)
+    { return false; }
     ManaCost bill{};
     int supply_total = 0;
     bool any_bp = false;
     for (const UnpayStep& st : steps) { AddManaCost(bill, st.cost); supply_total += st.supply; any_bp |= st.bp; }
     if (bill.ManaValue() == 0) { return false; }
+    // THE LAND DROP, placed untapped on the optimistic board -- unless it makes an as-enters choice the plan PINS
+    // (Plan::rad_mode, which the plan list's view does not carry: Thran Portal's / Manor Gate's colour, Gateway Plaza's
+    // pay-or-sacrifice). Unpinned, the board would take the provider's default (a colour the bill may not want, or a
+    // sacrificed Plaza), so such a drop is credited as any-colour supply instead -- the line-made-land credit, which
+    // over-covers its own tap and Baldur's Gate's extra count (AB d3 s202073 gi72 T1: Thran Portal + Burgeoning was
+    // dropped as unpayable). Under an Amulet of Vigor the placed drop also floats: one any-colour per Amulet.
+    std::string place = land;
+    int drop_wild = 0;
+    if (!land.empty())
+    {
+        const CardDefinition* ld = nullptr;
+        for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].hand)
+        { if (c.m_name.str() == land) { ld = CardDatabase::Instance().LookupCached(c); break; } }
+        if (ld == nullptr) { return false; }
+        if (LandHasEntryPinChoice(*ld)) { place.clear(); drop_wild = land_credit; }
+        else { drop_wild = amulets_seen; }   // placed untapped; under k Amulets a tapped entry floats up to k more
+    }
     // The optimistic base for this (land, set-aside) -- shared by the plans of one list with the same pair.
-    std::string key = land;
+    std::string key = place;
     for (const int id : tap_src) { key += '|'; key += std::to_string(id); }
     const GameState* base = nullptr;
     GameState local;
@@ -71893,13 +71922,13 @@ bool PlanUnpayableImpl(const GameState& state, const std::vector<Action>& acts, 
         if (base == nullptr)
         {
             bases->emplace_back(key, GameState{});
-            if (!UnpayBuildBase(state, land, tap_src, bases->back().second)) { bases->pop_back(); return false; }
+            if (!UnpayBuildBase(state, place, tap_src, bases->back().second)) { bases->pop_back(); return false; }
             base = &bases->back().second;
         }
     }
     else
     {
-        if (!UnpayBuildBase(state, land, tap_src, local)) { return false; }
+        if (!UnpayBuildBase(state, place, tap_src, local)) { return false; }
         base = &local;
     }
     const int mv = bill.ManaValue();
@@ -71907,6 +71936,7 @@ bool PlanUnpayableImpl(const GameState& state, const std::vector<Action>& acts, 
     {
         int wild = 0;
         for (const UnpayStep& st : steps) { wild += std::min(st.supply, mv - st.cost.ManaValue()); }
+        wild += std::min(drop_wild, mv);
         return !UnpayBoardPays(*base, bill, wild);
     }
     // Every continuation-opening step alone, with the other steps' supply (any of them may come before it).
@@ -71915,7 +71945,7 @@ bool PlanUnpayableImpl(const GameState& state, const std::vector<Action>& acts, 
         if (!steps[i].bp) { continue; }
         const int own = steps[i].cost.ManaValue();
         if (own == 0) { return false; }
-        const int wild = std::min(supply_total - steps[i].supply, own);
+        const int wild = std::min(supply_total - steps[i].supply + drop_wild, own);
         if (UnpayBoardPays(*base, steps[i].cost, wild)) { return false; }
     }
     return true;
@@ -71930,7 +71960,21 @@ void TurnSolver::DropProvablyUnpayablePlans(const GameState& state, const std::v
     {
         if (!admit[i] || acts[i] == nullptr || acts[i]->empty()) { continue; }
         if (bases.size() >= 8) { bases.clear(); }   // the reserve keeps the base pointers stable
-        if (PlanUnpayableImpl(state, *acts[i], lands[i] != nullptr ? *lands[i] : std::string(), &bases)) { admit[i] = 0; }
+        if (PlanUnpayableImpl(state, *acts[i], lands[i] != nullptr ? *lands[i] : std::string(), &bases))
+        {
+            admit[i] = 0;
+            // MTG_UNPAYABLE_PRUNE_TRACE=1 (DIAGNOSTIC, print-only, default off): each dropped plan, for auditing.
+            static const bool s_trace = EnvOn("MTG_UNPAYABLE_PRUNE_TRACE");
+            if (s_trace)
+            {
+                std::string line;
+                for (const Action& a : *acts[i])
+                { line += ' '; line += a.card_name.str(); line += '#'; line += std::to_string(static_cast<int>(a.kind)); }
+                std::fprintf(stderr, "[unpay-drop] seed=%llu turn=%d phase=%d land=%s acts:%s\n",
+                             static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                             static_cast<int>(state.phase), lands[i] != nullptr ? lands[i]->c_str() : "", line.c_str());
+            }
+        }
     }
 }
 bool TurnSolver::PlanProvablyUnpayableForTest(const GameState& state, const std::vector<Action>& acts,
