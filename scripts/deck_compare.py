@@ -2188,11 +2188,16 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
 
     # ms/game is a SUM OF PER-GAME WALL TIMES, so it inflates when the box is busy -- including with
     # this run's own other arms. It is a sizing aid, not a benchmark; say so where it is printed.
+    # It is also ORDER-BIASED: each arm is one job, the pool runs a cost tier's jobs in job order, so
+    # the last arm's games run in the draining tail and read faster (2026-11-19: the same deterministic
+    # game measured 11-30 s by when it ran). A wall A/B goes through an arms-innermost, order-rotated
+    # manifest and scripts/ab_wall.py, never through this column.
     if cost and max(cost.values()) > 2 * min(cost.values()):
         hi, lo = max(cost, key=cost.get), min(cost, key=cost.get)
         print(f"\n  cost is NOT uniform across arms: {hi} is {cost[hi]/cost[lo]:.1f}x {lo} per game"
               f" ({cost[hi]:.0f} vs {cost[lo]:.0f} ms).\n  A screen's wall clock is set by its"
-              " priciest arm; ms/game is wall, so it inflates under load.")
+              " priciest arm; ms/game is wall, so it inflates under load and favours later arms"
+              " (not a wall A/B: see scripts/ab_wall.py).")
 
     # THE CROSS-FORMAT COMPARISON, which is the whole reason the axis is per-arm. It is a
     # difference-of-differences, and it is PAIRED: a game index carries the same seed and the same
