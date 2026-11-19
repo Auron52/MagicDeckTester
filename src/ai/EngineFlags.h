@@ -2358,6 +2358,16 @@ inline bool BpDropRearmEnabled()
     static const bool v = EnvOn("MTG_BP_DROP_REARM", true);
     return heurarm::Flag(heurarm::BP_DROP_REARM, v);
 }
+// MTG_BP_RESUME_LOCKSTEP -- a PREFIX-RESUMED apply (ApplyPlanDirect's bp_resume branch) carries the state the full
+// apply had at the capture: the main-level segment count (main_bp_ord), the site-10 arming (deferred_put_armed),
+// the ENTRY-time keys (pre_plan_keys, pre_plan_acts) and the deferred loop's pass count. Without them the resumed
+// tail recorded, scored and replayed differently from the full apply (Maze's End F7-3: d5 g1026 T6 -> T7 at d8
+// b0). A general correctness fix, read by TurnSolver only. DEFAULT ON; =0 -> as before (the A/B hatch).
+inline bool BpResumeLockstepOn()
+{
+    static const bool v = EnvOn("MTG_BP_RESUME_LOCKSTEP", true);
+    return heurarm::Flag(heurarm::BP_RESUME_LOCKSTEP, v);
+}
 
 // MTG_BP_CAST_SUBTYPE -- the site-10 fan-out route for a CAST-SUBTYPE draw watcher (Sram, Senior
 // Edificer: "whenever you cast an Aura, Equipment, or Vehicle spell, draw a card").
