@@ -89,3 +89,60 @@ build in this tree runs or is queued; never touch references/; subagents do not 
 ## UPDATE: build2 finished rc=0 (search half 3b17a2a16 compiles; build/Release/{mtg,mtg-test} in the worktree).
 No queued or running alch-t3 jobs remain. Next: `flock /workspaces/MagicDeckTester/build/scratch/BOX.lock bash
 /workspaces/MagicDeckTester/build/scratch/alch-t3/chain2.sh` (step 2 of "Remaining").
+
+## UPDATE (agent 2, ~21:45 UTC): FULL-GAME ROOT CAUSE FOUND -- the Crab Umbra HOST is never searched
+Bisect (bin_h1 = heuristic half, play settings, `--claude-play --seed 12345681 --game-index 0 --max-turns 10
+--choices <prefix> --choices-then-auto`; prefix of `1,0,0,-1,1,1,0,-1,136,0,2,0`; outputs build/scratch/alch-t3/bisect/):
+- n=4 (T2 start) T4; n=8 (T3 start) T4; n=10 (after "land=Forest; Living Wish -> Brindle Boar", Boar fetched) T4;
+  n=11 (after the human's "Brindle Boar, Crab Umbra -> Accomplished Alchemist") **T3**; n=12 T3.
+- n=10 stays T4 at b200, b2000 AND `--depth 8 --budget-ms 0 --ignore-play-profile` (heuristic ON) -> a completeness hole.
+- `MTG_PLAN_DUMP=3 MTG_PLAN_DUMP_MAX=300 ... --budget-ms 2000` (the dump needs a FINITE budget) at n=10: 35 plans,
+  only 5 distinct action lists; `MTG_FS_ROOT_DUMP=3` shows the Umbra only as `Crab Umbra->#200010` (the Boar, beside
+  the Boar cast) or `Crab Umbra->#4` (Arbor Elf). **No plan puts the Umbra on the Alchemist (#1).**
+- WHY: the AURA CAST HOST RANKING (USER 2026-10-06, SpellEffects.h ~58390; TurnSolver.cpp ~19125) keeps ONE host per
+  plan class: the autonomous signature keys a creature Aura by NAME (`cre_host_sig` off), the dedup keeps the best
+  AuraHostKey (combat damage; tie-break "fewer Auras on creature MANA sources" = AGAINST the Alchemist), and
+  MTG_AURA_HOST_LATE_BIND (TurnSolver.cpp ~83497, BuildAuraLateBind / BindAuraLateHosts fast path "first legal host
+  that is not a ManaDork") binds the same pick earlier. `CreatureAuraHostInert` (~61349) says of Crab Umbra "its host
+  matters only to the host key" -- FALSE: `{2}{U}: Untap enchanted creature` re-uses the HOST's {T}; on the Alchemist it
+  is the whole combo. Same defect class as Curiosity (Niv) and Guilty Conscience, which were exempted
+  (aura_damage_trigger_draw / aura_host_damage_back keyed `#A<host>` in the signature).
+- So the heuristic half + search half (kActUntapFloat) only help once the Umbra is already on the Alchemist (n=11).
+
+## THE FIX (designed, NOT yet written -- next agent implements)
+Flag `MTG_AURA_UNTAP_HOST_SEARCH` (DEFAULT ON; heurarm slot AURA_UNTAP_HOST_SEARCH appended to HeuristicArm.h enum +
+kNames). An Aura with `params.untap_enchanted_cost` (Crab Umbra) has a host-dependent effect for every host with a {T}
+use; hosts without one are goldfish-inert for the untap (no blockers) and stay one class under the USER's ranking.
+1. Helper (SpellEffects.h, near AuraHostIsManaCreature): `AuraUntapsHost(def)` = creature aura with
+   untap_enchanted_cost; `UntapHostHasTapUse(const CardParams&)` = `!produces.empty() || tap_damage_cost ||
+   tap_draw_cost || tap_lifegain_cost || tap_investigate_cost || self_ping_cost` (the untap enumerator's own test,
+   TurnSolver.cpp ~49283; reuse it there too). Host def by number: own battlefield creature, else hand card.
+2. BuildAuraLateBind (~83552): for an untap-aura group (flag on) partition gp into KEEP (hosts with a tap use: own
+   search options) and BIND (the rest); late-bind only BIND when it has >= 2 members (product over BIND sizes), rep
+   chosen among BIND (first on battlefield), lb.hosts = BIND only; new gp = KEEP members + rep, in original order.
+3. Signatures: add `|| (flag && AuraUntapsHost(d))` to the `#A<host>` condition in PlanSignatureFast (~83218) AND
+   the legacy builder (~88847, lockstep). Then each tap-use host is its own dedup class; the BIND rep is one class.
+4. Leave CollapseGreedyCreatureAuraHosts / RetargetSolveAuraHosts (greedy Solve = permitted beyond the horizon) and
+   CreatureAuraHostInert as they are (say so in the comment).
+5. Unit test: GenericProvider board with Alchemist (X>=4) + Arbor Elf + a vanilla creature, Crab Umbra in hand:
+   EnumerateMainPlans holds Umbra->Alchemist AND Umbra->Arbor as distinct plans with the flag on; =0 -> one host.
+6. Then the acceptance (chain2.sh: MTG_AA_LOOP_CAST_DRAW=0 full game d8 b0 must win T3) and chain3 (A/B: add an arm
+   with MTG_AURA_UNTAP_HOST_SEARCH=0 to ab.sh -- it is a budgeted play change for the Alchemist deck and any deck
+   holding an Aura with untap_enchanted_cost: grep cards.json; only Crab Umbra today).
+SURFACE TO USER: this overrides the USER's host ranking for one card class (the ranking stays for every host without
+a tap use). Precedent: Curiosity / Guilty Conscience were exempted the same way.
+
+## Units on the worktree's own build (3b17a2a16): see build/scratch/alch-t3/units/s1.txt (bin copied to
+build/scratch/alch-t3/bin_s1/). The step-1 run (96 failed + SIGSEGV) used the COPIED bin_h1 mtg-test -- compare.
+- RESULT: 3719 cases, **1 failed** (the step-1 "96 failed + SIGSEGV" was the COPIED bin_h1 mtg-test run against
+  newer test sources/data -- an artefact). New "Untap refund float" tests PASS.
+- The 1 failure is REAL and caused by the search half: `Crab Umbra: the search offers the untap with a searched
+  count; executor == rollout` (test_accomplished_alchemist.cpp:910) `ro.floating_mana.Total() == 4` got **202**. The
+  test takes the LAST chosen_x==2 plan, which is now a site-9 continuation variant (PlanOpensBreakpoint marks any
+  ActivateUntap on a mana creature). Its continuation keeps re-opening on kActUntapFloat -- each refund is a NEW float
+  value -- with NOTHING in hand to spend it on (~100 re-opens, float 202). Two actions:
+  (a) the test should pick `p.bp_choice < 0` (it asserts the base plan's executor==rollout);
+  (b) MORE IMPORTANT, a work/termination concern: kActUntapFloat should arm only when the float can buy something
+      it could not before (e.g. a hand card / activation whose cost exceeds the plan-start pool and is <= the new
+      float+pool), or the re-open chain on a self-funding loop is pure waste (and at b0 potentially huge). Fix this
+      in CollectActivationKeys (key value = the cheapest newly affordable thing, not the raw float) before the A/B.
