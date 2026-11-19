@@ -72757,6 +72757,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // deck (a `while` on deferred_cantrip_resolve alone measurably changed flag-OFF Mirrorwing/
     // Hinata smoke digests -- caught 2026-08-21 against the HEAD binary).
     bool deferred_top_rearm = false;
+    // ...and its twin for the EXTRA-DROP re-arm after a continuation (Exploration; see the end of the deferred
+    // loop): a continuation that played a land with another drop open opens one more pass.
+    bool deferred_drop_rearm = false;
     // The cast that armed the deferred re-solve (registry-stable pointer; nullptr when unarmed).
     // Carried so the continuation can bind the MTG_CANTRIP_ORDER watermark to its site; with
     // several arming casts in one plan the LAST one wins, which matches whose continuation the
@@ -80795,11 +80798,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // that re-arm to be discarded, breaking the line at the second cantrip. Truncating the tail and
     // refusing to re-resolve it are contradictory; the partition has to carry both halves.
     const bool partition_loop = BpPartitionCantripEnabled();
-    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm || partition_loop)
+    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm || deferred_drop_rearm || partition_loop)
            && top_reset_passes++ <= 4)
     {
         top_first_pass    = false;
         deferred_top_rearm = false;
+        deferred_drop_rearm = false;
         // PREFIX-RESUME capture: this apply's varied breakpoint is the deferred one (the running
         // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank
@@ -80987,6 +80991,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         apply_continuation_plan(extra);
         apply_continuation_activations(extra, out_breakpoint != nullptr);
         if (out_breakpoint) { bp_sink_pop(); }
+        // THE EXTRA-DROP RE-ARM AFTER A CONTINUATION (Maze's End F7, 2026-11-19). A continuation is a Plan,
+        // and a Plan carries ONE land drop, so with a static extra drop (Exploration) a continuation that
+        // PLAYED a land while another drop is still open, with another land in hand, has left a NEW OPTION
+        // exactly as the section window's extra-drop half (LandDropNewlyOpen, armed before this loop) does
+        // for the base plan's own land. The section window only looks once, before the first pass, and every
+        // armer inside a continuation is sink-gated, so the second drop after a mid-turn breakpoint was
+        // unreachable at ANY budget: the USER's Maze's End s3 T4 line (Guild Summit, Sylvan Scrying ->
+        // Maze's End; continuation Maze's End; then The Black Gate, whose entry makes Summit draw) was never
+        // offered, d8 b0 included. Re-arm site 10 for ANOTHER pass of this loop, so the next drop is a
+        // searched breakpoint of its own (its list re-enumerated by EnumeratePlansWithLand; MTG_BP_NEW_ONLY
+        // keeps an old land once a land was played this turn), in BOTH worlds' order: the committed line
+        // records this pass as the next main-level segment and the executor replays every ordinal, and its
+        // no-commit fallback runs the same check after its end-of-main re-solve. drops_at_section was reset at
+        // this pass's own breakpoint (bp_searched_plan), so "played" means "played by this continuation".
+        // Not sink-gated, like the tutor-to-top re-arm: recording and scoring applies must loop alike.
+        // Deck-constant gated inside LandDropNewlyOpen: false at the first test for every deck without a
+        // static extra drop, so no other deck's play moves. MTG_BP_DROP_REARM=0 is the A/B hatch (EngineFlags.h).
+        if (BpHandEntryEnabled() && BpDropRearmEnabled() && !s_human_play && !deferred_cantrip_resolve
+            && TurnSolver::LandDropNewlyOpen(drops_at_section, state, karoo_deferred || cont_land.pending))
+        {
+            deferred_cantrip_resolve = true;
+            deferred_drop_rearm      = true;
+            deferred_trick_armed     = false;   // a pure site-10 occurrence (see deferred_site_index)
+            deferred_equip_armed     = false;
+            deferred_put_armed       = true;
+            deferred_cantrip_site    = nullptr; // armed by no cast: the section route
+            deferred_hand_before     = hand_at_section;
+        }
     }
 
     // Dig when stuck (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar, Forgotten

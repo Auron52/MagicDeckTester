@@ -1032,6 +1032,7 @@ enum Slot : int
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
     OWED_ACTS_JOINT_PAY,      // MTG_OWED_ACTS_JOINT_PAY   Maze's End F5: when the usual payment of a plan's casts would leave its TRAILING activations' mana unpayable (MTG_LINE_PAY_AUDIT's joint=YES class) and one joint solve pays the whole line, the line is paid jointly (TurnSolver::OwedActsJointPrepay -> LineJointPrepayCore), both worlds. A completeness fix (the mana-payment exemption), engine-wide. Default ON; =0 -> the casts-only payment
     MAZE_UNPAYABLE_PRUNE,     // MTG_MAZE_UNPAYABLE_PRUNE  Maze's End F5 (USER 2026-11-18: "drop plans that cannot pay a subset"): MazesEndProvider's plan-list filter drops a plan no payment order can pay on the optimistic board (TurnSolver::DropProvablyUnpayablePlans), gated on the deck property "no net-mana-positive card, no cost reducer". A RESTRICTION (the subset the plan would realise is its own plan). Default ON; =0 -> every enumerated plan offered, as before
+    BP_DROP_REARM,            // MTG_BP_DROP_REARM  a breakpoint continuation that PLAYED a land while a static extra drop (Exploration) is still open, with another land in hand, re-arms site 10 for one more pass of the deferred loop (rollout) and of the executor's no-commit end-of-main re-solve: a continuation carries ONE land, so the second drop after a mid-turn tutor was unfindable at any budget (the USER's Maze's End reference s3 T4: Guild Summit, Sylvan Scrying -> Maze's End, Maze's End, then The Black Gate). A completeness fix; deck-gated (deck_has_static_land_drops). DEFAULT ON; =0 -> as before (the A/B hatch)
     COUNT
 };
 
@@ -2008,6 +2009,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_LAND_DOMINANCE",
         "MTG_OWED_ACTS_JOINT_PAY",
         "MTG_MAZE_UNPAYABLE_PRUNE",
+        "MTG_BP_DROP_REARM",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

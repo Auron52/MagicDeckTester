@@ -322,3 +322,41 @@ TEST_CASE("Maze's End I3: the turn crossing fans Manabond's yes/no (the crossing
     t.deck_has_crossing_land_put = false;
     CHECK(TurnSolver::CrossingLandBoundaryPinsForTest(t).size() == 1);
 }
+
+// F7 (2026-11-19, the USER's Maze's End reference s3 T4): a SECOND land drop after a mid-turn breakpoint. A
+// continuation is a Plan and carries ONE land, so after a tutor's site-10 continuation played a land, the drop
+// Exploration still holds open was reachable only if the deferred loop re-armed for it -- it did not, and the
+// line was unfindable at any budget. Board: eight distinct Gates and an Amulet out, Exploration, NO land in hand,
+// two Sylvan Scryings; the library holds Selesnya Guildgate, Maze's End and Simic Guildgate. The only turn-5 win
+// tutors Maze's End AND Selesnya, then plays BOTH (two drops, each after the tutors), then activates Maze's End
+// for Simic: ten Gates. One drop short, the activation reaches nine and the win waits a turn.
+namespace
+{
+GameState TutorThenTwoDropsBoard(int explorations)
+{
+    GameState s = Base();
+    for (int i = 0; i < 8; ++i) { Put(s, kGates[i], 800 + i); }
+    Put(s, "Amulet of Vigor", 850);
+    for (int e = 0; e < explorations; ++e) { Put(s, "Exploration", 860 + e); }
+    s.players[0].hand.push_back(C("Sylvan Scrying", 870));
+    s.players[0].hand.push_back(C("Sylvan Scrying", 871));
+    s.players[0].library.push_back(C(kGates[8], 888));
+    s.players[0].library.push_back(C("Maze's End", 880));
+    s.players[0].library.push_back(C(kGates[9], 889));
+    for (int k = 0; k < 12; ++k) { s.players[0].library.push_back(C("Forest", 900 + k)); }
+    s.players[0].lands_played_this_turn     = 0;
+    s.players[0].bonus_land_drops_this_turn = StaticExtraLandDrops(s, 0);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Maze's End F7: two land drops AFTER a mid-turn tutor breakpoint (the s3 T4 shape, d3, unlimited budget)")
+{
+    LoadI3Cards();
+    GameState s = TutorThenTwoDropsBoard(1);
+    CHECK(PlayOut(s) == 5);
+    CHECK(s.won_by_effect);
+    // Control: without Exploration only one of the two tutored lands can be played this turn.
+    GameState c = TutorThenTwoDropsBoard(0);
+    CHECK(PlayOut(c) > 5);
+}
