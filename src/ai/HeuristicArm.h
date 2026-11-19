@@ -1066,6 +1066,7 @@ enum Slot : int
     KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights policy for Acclaimed Contender's dig (2026-11-20): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default ON since 2026-11-20 (play-identical over 6000 A/B games, ~1.6-1.8% fewer units; the USER may overrule); =0 is the searched default + RED FLAG
     FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. A sound identity fold. Default ON; =0 -> every order enumerated
     FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. Search enumerations only (g_rollout_nest == 0; the context is folded into the enumeration keys). DEFAULT OFF: held-out net +3 / 2,800 games (1 better / 4 worse); USER's call; =1 arms it
+    FOLD_LAND_ORDER_SEEN,     // MTG_FOLD_LAND_ORDER_SEEN  P5b-2 (Maze's End; the same USER rule as FOLD_LAND_ORDER): the land-order identity as a FIRST-REACHED dedup -- the search loops' post-apply dedup sets key a state with our same-class (DecisionProvider::LandEntryOrderClass) lands that entered this turn re-filled in card-number order (TurnSolver SeenKey), so of two lines playing commuting lands in either order the one the loop reaches first is scored and the later is skipped. No enumeration, rank or order changes
     COUNT
 };
 
@@ -2075,6 +2076,7 @@ inline const char* Name(int slot)
         "MTG_REQHEUR_OLD_DEFAULT",
         "MTG_KN_ETBDIG_RANK",
         "MTG_FOLD_LAND_ORDER",
+        "MTG_FOLD_LAND_ORDER_SEEN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

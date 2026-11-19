@@ -3002,6 +3002,9 @@ public:
     // The post-apply state identity every candidate dedup keys on (BuildDedupKey), folded to 64 bits.
     // Tests only: it is how a unit case checks that two states collide (or do not) in that key.
     static std::uint64_t     DedupKeyOf(const GameState& state);
+    // The land-order-canonical form of that key the search's post-apply dedup sets use (MTG_FOLD_LAND_ORDER_SEEN,
+    // P5b-2): equal to DedupKeyOf unless the fold applies. Tests only.
+    static std::uint64_t     LandOrderSeenKeyOf(const GameState& state);
     // The full mid-turn state identity the breakpoint plan memo keys on (BuildBreakpointKey, pre-combat),
     // folded to 64 bits. The AccomplishedAlchemist COMBO OFF route memoises its proven path on it: a
     // hand-rolled partial key let two boards that differ in a field it skipped (a land Aura's locked
