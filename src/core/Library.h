@@ -80,6 +80,16 @@ public:
         return *this;
     }
     Library(Library&&) noexcept            = default;
+    // COMPLETE LOGICAL EQUALITY (the mana oracle shares identical boards; BoardsEqual in ai/ManaOracle.cpp): the
+    // live window [m_top, end) and every piece of known-library information. The drawn prefix below m_top is not
+    // part of the library (no reader reaches it; a copy drops it), so two libraries that differ only there are equal.
+    bool operator==(const Library& o) const
+    {
+        return size() == o.size() && m_bottom_known == o.m_bottom_known && m_bottom_placed == o.m_bottom_placed
+            && m_known_top == o.m_known_top
+            && std::equal(m_cards.begin() + static_cast<std::ptrdiff_t>(m_top), m_cards.end(),
+                          o.m_cards.begin() + static_cast<std::ptrdiff_t>(o.m_top));
+    }
     Library& operator=(Library&&) noexcept = default;
 
     // --- size / access over the live window [m_top, end) ---

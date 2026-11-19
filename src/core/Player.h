@@ -8,6 +8,8 @@ struct StagedCard
 {
     Card card;
     int  expiry_turn = 0; // last turn on which this card may be played
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const StagedCard&) const = default;
 };
 
 // A card exiled with time counters by SUSPEND (Lotus Bloom: "Suspend 3-{0}"). Unlike a StagedCard
@@ -19,6 +21,8 @@ struct SuspendedCard
 {
     Card card;
     int  arrive_turn = 0; // upkeep when last counter is removed; -1 = declined, exiled with zero counters
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const SuspendedCard&) const = default;
 };
 
 struct Player
@@ -198,4 +202,6 @@ struct Player
     // Static land-drop effects (e.g. Exploration) are evaluated by GameEngine
     // against the battlefield; one-time triggered grants increment bonus_land_drops_this_turn.
     int LandDropsAvailable() const { return 1 + bonus_land_drops_this_turn; }
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const Player&) const = default;
 };

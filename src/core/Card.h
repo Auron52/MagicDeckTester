@@ -637,6 +637,8 @@ struct Card
         return n;
     }
     bool IsMulticolored() const { return ColorCount() >= 2; }
+    // Complete memberwise equality (the mana oracle shares identical boards; see BoardsEqual).
+    bool operator==(const Card&) const = default;
 };
 
 // Card's triviality is a PERFORMANCE CONTRACT, not an accident: with InternedName (an 8-byte
