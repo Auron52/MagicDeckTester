@@ -2350,6 +2350,14 @@ inline bool BpHandEntryEnabled()
     static const bool v = EnvOn("MTG_BP_HAND_ENTRY", true);   // DEFAULT ON (2026-09-27); =0 reverts
     return heurarm::Flag(heurarm::BP_HAND_ENTRY, v);
 }
+// MTG_BP_DROP_REARM -- the EXTRA-DROP RE-ARM after a breakpoint continuation (Maze's End F7, 2026-11-19; see the
+// end of ApplyPlanDirect's deferred loop and AIEngine's exec_drop_rearm_loop, the lockstep pair that reads this).
+// DEFAULT ON; =0 -> the second drop after a continuation's land is unreachable, as before (the A/B hatch).
+inline bool BpDropRearmEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_DROP_REARM", true);
+    return heurarm::Flag(heurarm::BP_DROP_REARM, v);
+}
 
 // MTG_BP_CAST_SUBTYPE -- the site-10 fan-out route for a CAST-SUBTYPE draw watcher (Sram, Senior
 // Edificer: "whenever you cast an Aura, Equipment, or Vehicle spell, draw a card").
