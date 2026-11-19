@@ -161,17 +161,17 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         // Guild Summit (S): count the entry sources in hand, play and library, however the draws fall.
         GameState s = Board(prov, 5, true);
         Hand(s, "Guild Summit", 30);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // 5 + fetch + one drop = 7
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 3);    // 5 + fetch + one drop = 7
         Lib(s, "Exploration", 31);
         Lib(s, "Exploration", 32);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // + two Explorations (drawn, cast) = 9
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 3);    // + two Explorations (drawn, cast) = 9
         Lib(s, "Archdruid's Charm", 33);
         CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // + the Charm = 10: no proof
         GameState t = Board(prov, 5, true);
         Put(t, "Guild Summit", 30);
         Put(t, "Burgeoning", 31);
         Lib(t, "Burgeoning", 32);
-        CHECK(MazesEndProvider::MazeWinlessBound(t) == 1);    // 5 + fetch + drop + two Burgeoning puts = 9
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == 3);    // 5 + fetch + drop + two Burgeoning puts = 9
         Lib(t, "Talon Gates of Madara", 33);
         CHECK(MazesEndProvider::MazeWinlessBound(t) == -1);   // + the Talon put = 10
         // A Manabond anywhere (here the library) dumps the hand with no source: give up.
@@ -188,9 +188,23 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         Lib(s, "Boros Guildgate", 32);
         Lib(s, "Izzet Guildgate", 33);
         Hand(s, "Citadel Gate", 34);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // 6 + 3 names = 9
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 2);    // 6 + 3 names = 9
         Lib(s, "Sea Gate", 35);
         CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 10 names reachable; Summit + Manabond: give up
+    }
+    {
+        // In play a hand / library Card instance carries NO type bits (Card::IsLand() is false there): the bound
+        // must read the definition. With the instance test, every name below was invisible and (N) "proved" 6 < 10.
+        GameState s = Board(prov, 6, true, false);
+        Put(s, "Guild Summit", 30);
+        Put(s, "Manabond", 31);
+        const char* const lib[4] = { "Boros Guildgate", "Izzet Guildgate", "Sea Gate", "Citadel Gate" };
+        for (int k = 0; k < 4; ++k) { Card c = C(lib[k], 40 + k); c.m_type_mask = 0; s.players[0].library.push_back(c); }
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 6 + 4 names = 10: no proof
+        Card h = C("Selesnya Guildgate", 50); h.m_type_mask = 0; s.players[0].hand.push_back(h);
+        s.players[0].library.pop_back();
+        s.players[0].library.pop_back();
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 2);    // 6 + Boros + Izzet + Selesnya = 9: the names bound proves
     }
     {
         // Already ten names: never a proof (an activation wins).
