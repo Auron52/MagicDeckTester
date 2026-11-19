@@ -13002,6 +13002,154 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
     }
     return SubsetPayableSequentialTail(state, cands, sel, order);
 }
+
+// THE UNLOCK-ORDER DOMAIN (MTG_PO_UNLOCK_ORDER, HeuristicArm slot PO_UNLOCK_ORDER; DEFAULT ON, =0 -> as before).
+// A same-line HASTE turns a mana creature entering this turn into a source: a haste Equipment equipped onto it
+// (the plan's MANA-UNLOCK equip, which ApplyManaUnlockEquips fires the moment both pieces are on the battlefield)
+// or an enters-haste watcher (Surrak and Goreclaw) cast ahead of it. What that mana can pay depends on the ORDER.
+// Jumbo Cactuar s30115214 T3, Forest + Wild Growth and Lightning Greaves on the board: {Green Sun's Zenith ->
+// Arbor Elf, Wild Growth -> the Forest, equip Greaves -> the Elf} pays only GSZ first (the Forest's {G}{G}; the
+// hasted Elf re-taps it for Wild Growth). The payable-order decider (ManaPayment.cpp PayableCastOrderCoreImpl)
+// admits an order only inside its producer domains, and its aggregate walk and bound know no unlock, so both apply
+// worlds realised the rank order (Wild Growth first) and dropped GSZ: the mana oracle's APPLY-DROP-ORDER (gate
+// claude-regate-20261118, 291 Jumbo flags; the dropped cast was GSZ in 152, Chariot of Victory in 73). The
+// enumeration's sequential walk (SeqWalkFixedOrder) DOES model both hastes: it fires ApplyManaUnlockEquips at the
+// apply's points and lets an enters-hasted dork tap (enter_haste_for_mana). So this domain prices orders with that
+// walk: every permutation of the given order, nearest first (Kendall distance, as the decider ranks its own), each
+// sharing a failed prefix skipped by the walk's PREFIX RULE (see OrderPaysSequentially). Two sites, one search:
+// the apply's fallback when the decider found nothing (TurnSolver::UnlockPayableOrder), and the enumeration's
+// payable-order retry (SubsetPayableSequentialTail) when the rank and decider orders failed, so the menu admits
+// exactly the subsets the apply then realises. The apply realising the plan the search chose (its casts, its
+// equips), never a pick: only the realisation order moves, only when the given order does not pay.
+// docs/design/jumbo-apply-drop-order-2026-11-18.md.
+static bool PoUnlockOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_PO_UNLOCK_ORDER", true);
+    return heurarm::Flag(heurarm::PO_UNLOCK_ORDER, env_on);
+}
+
+// Does the line hold a same-line haste for a mana creature? `any_unlock`: an unlock equip rides it. Otherwise an
+// enters-haste watcher cast beside a mana-dork cast it would haste (the walk's enter_haste_for_mana).
+static bool UnlockOrderHasHaste(const std::vector<Action>& acts, const std::vector<int>& order, bool any_unlock)
+{
+    if (any_unlock) { return true; }
+    if (!HasteDorkCreditEnabled()) { return false; }
+    bool watcher = false, dork = false;
+    for (int j : order)
+    {
+        const CardDefinition* d = acts[static_cast<std::size_t>(j)].def;
+        if (d == nullptr) { continue; }
+        watcher |= d->params.other_nontoken_enters_counter_haste > 0;
+        dork    |= d->tmpl == CardTemplate::ManaDork;
+    }
+    return watcher && dork;
+}
+
+// Two casts of one card the walk cannot tell apart: same definition, kind, cost and cost mode. Swapping them in an
+// order gives the same walk, so the search permutes CLASSES of such casts (an identity fold).
+static bool UnlockOrderSameCast(const Action& x, const Action& y)
+{
+    return x.def != nullptr && x.def == y.def && x.kind == y.kind && x.alt_cost == y.alt_cost
+        && x.cost == y.cost && x.card_name == y.card_name;
+}
+
+// Every order of `order` but the given one, nearest first, walked by SeqWalkFixedOrder over `sel`; the first that
+// pays replaces `order`. Orders are taken over classes of indistinguishable casts (UnlockOrderSameCast), so two
+// Voyaging Satyrs are one order, not two. Up to 7 casts: all of them; beyond, every single move (the decider's
+// neighbourhood). A failing walk's prefix (in class space) prunes every order that shares it.
+static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& sel,
+                              std::vector<int>& order, const std::vector<int>& charged)
+{
+    const int n = static_cast<int>(order.size());
+    if (n < 2) { return false; }
+    // cls[k]: the class of the cast at position k of the given order (the position of its first equal).
+    std::vector<int> cls(static_cast<std::size_t>(n));
+    for (int k = 0; k < n; ++k)
+    {
+        cls[static_cast<std::size_t>(k)] = k;
+        for (int e = 0; e < k; ++e)
+        {
+            if (UnlockOrderSameCast(acts[static_cast<std::size_t>(order[static_cast<std::size_t>(e)])],
+                                    acts[static_cast<std::size_t>(order[static_cast<std::size_t>(k)])]))
+            { cls[static_cast<std::size_t>(k)] = cls[static_cast<std::size_t>(e)]; break; }
+        }
+    }
+    std::vector<std::vector<int>> perms;   // sequences of classes
+    if (n <= 7)
+    {
+        std::vector<int> c(cls);
+        std::sort(c.begin(), c.end());
+        do { if (c != cls) { perms.push_back(c); } } while (std::next_permutation(c.begin(), c.end()));
+    }
+    else
+    {
+        for (int from = 0; from < n; ++from)
+        {
+            for (int to = 0; to < n; ++to)
+            {
+                if (to == from) { continue; }
+                std::vector<int> m(cls);
+                const int x = m[static_cast<std::size_t>(from)];
+                m.erase(m.begin() + from);
+                m.insert(m.begin() + to, x);
+                if (m != cls) { perms.push_back(std::move(m)); }
+            }
+        }
+        std::sort(perms.begin(), perms.end());
+        perms.erase(std::unique(perms.begin(), perms.end()), perms.end());
+    }
+    // Realise a class sequence: each class's casts in their given relative order. Its distance from the given
+    // order is the inversion count of the realised positions.
+    std::vector<int> posmap(static_cast<std::size_t>(n));
+    std::vector<int> next_of(static_cast<std::size_t>(n));
+    auto realise = [&](const std::vector<int>& cp)
+    {
+        std::fill(next_of.begin(), next_of.end(), 0);
+        for (int k = 0; k < n; ++k)
+        {
+            const int c = cp[static_cast<std::size_t>(k)];
+            int seen = 0, pos = -1;
+            for (int q = 0; q < n; ++q)
+            {
+                if (cls[static_cast<std::size_t>(q)] != c) { continue; }
+                if (seen++ == next_of[static_cast<std::size_t>(c)]) { pos = q; break; }
+            }
+            ++next_of[static_cast<std::size_t>(c)];
+            posmap[static_cast<std::size_t>(k)] = pos;
+        }
+    };
+    std::vector<std::pair<int, std::size_t>> rank;
+    rank.reserve(perms.size());
+    for (std::size_t i = 0; i < perms.size(); ++i)
+    {
+        realise(perms[i]);
+        int inv = 0;
+        for (int x = 0; x < n; ++x)
+        { for (int y = x + 1; y < n; ++y) { if (posmap[static_cast<std::size_t>(x)] > posmap[static_cast<std::size_t>(y)]) { ++inv; } } }
+        rank.emplace_back(inv, i);
+    }
+    std::stable_sort(rank.begin(), rank.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<std::vector<int>> failed;   // class-sequence prefixes no order can pay through
+    std::vector<int> trial(static_cast<std::size_t>(n));
+    for (const auto& r : rank)
+    {
+        const std::vector<int>& p = perms[r.second];
+        if (std::any_of(failed.begin(), failed.end(), [&](const std::vector<int>& f)
+                        { return std::equal(f.begin(), f.end(), p.begin()); })) { continue; }
+        realise(p);
+        for (int k = 0; k < n; ++k)
+        { trial[static_cast<std::size_t>(k)] = order[static_cast<std::size_t>(posmap[static_cast<std::size_t>(k)])]; }
+        int fail = -1;
+        if (SeqWalkFixedOrder(state, acts, sel, trial, charged, &fail))
+        {
+            order = trial;
+            return true;
+        }
+        if (fail >= 0 && fail < n) { failed.emplace_back(p.begin(), p.begin() + fail + 1); }
+    }
+    return false;
+}
+
 static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, std::vector<int>& order)
 {
@@ -13067,6 +13215,21 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         }
         ApplyPayableCastOrderAt(state, cands, etb_ord, seq_exits, seq_wild);
         if (etb_ord != order && run_walk(etb_ord)) { return true; }
+    }
+    // MTG_PO_UNLOCK_ORDER: the unlock-order domain's search (see UnlockOrderSearch), the twin of the apply's
+    // fallback (TurnSolver::UnlockPayableOrder). Only casts are in `order`; a Vial put or a reveal surcharge in the
+    // subset leaves the domain (the walk's set-level inputs those two read are order-sensitive).
+    if (PoUnlockOrderOn() && order.size() >= 2 && seq_rv_charged.empty()
+        && std::none_of(sel.begin(), sel.end(), [&](int j)
+                        { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial; }))
+    {
+        const bool any_unlock = std::any_of(sel.begin(), sel.end(), [&](int j)
+                                            { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); });
+        if (UnlockOrderHasHaste(cands, order, any_unlock))
+        {
+            std::vector<int> uo = order;
+            if (UnlockOrderSearch(state, cands, sel, uo, seq_rv_charged)) { return true; }
+        }
     }
     // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
     // [Brushland; Peregrine Drake; Eldrazi Displacer; Training Grounds] is rules-legal ONLY with
@@ -13218,6 +13381,39 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     // or free attach was skipped, so a walk index is then an `order` position.
     if (!ok && walk_fail >= 0 && charged.empty() && ord.size() == order.size()) { *fail_pos = walk_fail; }
     return ok;
+}
+
+// See TurnSolver.h and UnlockOrderSearch. The APPLY site: `acts` is the plan, `order` its cast sequence (equips
+// are not in it; the plan's unlock equips join the walk's `sel` exactly as both apply worlds fire them).
+bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    if (order.size() < 2 || !PoUnlockOrderOn()) { return false; }
+    // Same def back-fill as OrderPaysSequentiallyImpl (the walk reads `*a.def`).
+    const std::vector<Action>* use = &acts;
+    std::vector<Action> filled;
+    if (std::any_of(acts.begin(), acts.end(), [](const Action& a) { return a.def == nullptr && !a.card_name.str().empty(); }))
+    {
+        filled = acts;
+        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().LookupInterned(a.card_name); } }
+        use = &filled;
+    }
+    for (int j : order)
+    {
+        const Action& a = (*use)[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || IsRevealCostCast(a)) { return false; }
+    }
+    std::vector<int> sel = order;
+    bool any_unlock = false;
+    for (int i = 0; i < static_cast<int>(use->size()); ++i)
+    {
+        if (std::find(order.begin(), order.end(), i) != order.end()) { continue; }
+        const Action& a = (*use)[static_cast<std::size_t>(i)];
+        if (SeqWalkUnlockEquip(state, a)) { sel.push_back(i); any_unlock = true; }
+    }
+    if (!UnlockOrderHasHaste(*use, order, any_unlock)) { return false; }
+    const std::vector<int> none;
+    if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
+    return UnlockOrderSearch(state, *use, sel, order, none);
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color

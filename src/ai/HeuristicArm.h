@@ -1015,6 +1015,7 @@ enum Slot : int
     STUFFY_UNPRUNE_9B,        // MTG_STUFFY_UNPRUNE_9B  per-job form of MTG_UNPRUNE=redirectwindow,gchost,escapetarget (the three step-9b StuffyDollProvider prunes): MTG_UNPRUNE is one process-wide mask, so without this a pooled batch cannot carry the unpruned arm. DEFAULT OFF; =1 lifts the three prunes exactly as the mask does (same human-play / hand-back suppression)
     SEA_BUCKET_DISCARD,       // MTG_SEA_BUCKET_DISCARD  Sea Creatures: the USER's cleanup-discard buckets (2026-11-18, docs/design/sea-creatures-discard-policy-proposal.md): MANA (6-8 counting the board; cheap accelerants + one MV-3 accelerant early, a land drop per turn clamped to 1-2 lands) and THREATS (Spawning Kraken + Koma auto-keeps, a 6-drop and a 7-drop to start, the rest by P/T x castability, Sin conditional on a Saga line); 5 mana + 2 threats until board + the best 4 mana cards cast the kept threats, then 4 + 3; Whelming Wave shed first. SeaCreaturesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the generic max-MV ranking
     AURA_CEIL_HASTE_UNTAPPER, // MTG_AURA_CEIL_HASTE_UNTAPPER  the land-Aura scalar ceiling (EnumeratePlansCore's ef-aura-scalar pre-filter) counts a FRESH untapper (Arbor Elf / Voyaging Satyr from hand, a tutored copy, or a summoning-sick one) that a haste-Equipment equip in the SAME subset unlocks: its re-tap yield joins the supply and it re-taps the Aura'd host, so the Aura bonus is multiplied by it too. Without it Jumbo Cactuar's {Overgrowth, Satyr, equip Greaves/Chariot, Tooth and Nail} lines were unfindable at any budget (mana-clean gate claude-regate-20261118, 185 of 301 ENUM-GAP). A necessary-condition widening (still an upper bound); the sequential walk decides. docs/design/jumbo-tooth-and-nail-enum-2026-11-18.md
+    PO_UNLOCK_ORDER,          // MTG_PO_UNLOCK_ORDER  the UNLOCK-ORDER domain of the payable-order search: a line whose mana creature a same-line haste unlocks (a haste-Equipment unlock equip, or Surrak and Goreclaw's enters-haste beside a mana-dork cast) is ordered by the enumeration's sequential walk (SeqWalkFixedOrder, which fires ApplyManaUnlockEquips as the apply does) -- the given order when it pays, else the nearest permutation that pays (prefix-pruned). Apply site (PayableCastOrderCore's fallback, executor AND rollout) and enumeration site (SubsetPayableSequentialTail's retry). Jumbo Cactuar's 'GSZ -> Arbor Elf / Chariot first, equip, re-tap' orders were never tried and the rank order dropped GSZ or Chariot (mana-clean gate claude-regate-20261118: 291 APPLY-DROP-ORDER). A completeness fix: only the realisation order moves, only when the given order does not pay. DEFAULT ON; =0 -> as before. docs/design/jumbo-apply-drop-order-2026-11-18.md
     COUNT
 };
 
@@ -1974,6 +1975,7 @@ inline const char* Name(int slot)
         "MTG_STUFFY_UNPRUNE_9B",
         "MTG_SEA_BUCKET_DISCARD",
         "MTG_AURA_CEIL_HASTE_UNTAPPER",
+        "MTG_PO_UNLOCK_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
