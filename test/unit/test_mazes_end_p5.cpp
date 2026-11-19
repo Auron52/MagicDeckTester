@@ -244,9 +244,11 @@ TEST_CASE("Maze's End P5 (USER): Heap Gate's Treasure plan only where its mana h
     std::vector<char> admit(v.size(), 1);
     prov.PlanListAdmit(s, v, admit);
     CHECK(admit == std::vector<char>{ 1, 0, 1, 1 });
-    // Lever off: not live.
+    // Lever off: the Heap half is not live (the whole filter still is, through the F5 unpayable prune, unless it is off).
     {
         const Arm off(heurarm::MAZE_HEAP_TREASURE, 0);
+        CHECK_FALSE(prov.MazeHeapFilterLive(s));
+        const Arm prune_off(heurarm::MAZE_UNPAYABLE_PRUNE, 0);
         CHECK_FALSE(prov.PlanListFilterLive(s));
     }
     // Next turn's mana binds (a held Talon Gates' {4} with three lands and none in hand): the Treasure is kept.
