@@ -504,6 +504,12 @@ struct GameState
     // recorded under). Future-determining for the opponent's library order: folded in
     // dominance::Build() and RouteSig, value-gated (nonzero only after an opponent shuffle).
     std::uint8_t             opponent_search_count        = 0;
+    // REPLAY ONLY (--legacy-shared-shuffle-ordinal / batch "legacy_shared_shuffle_ordinal"): the
+    // opponent's shuffles use, and bump, the SHARED search_count -- the consumption every reference
+    // recorded before the own-ordinal change was played under. A reference without the
+    // `opponent_shuffle_ordinal` stamp is replayed with it. Per-game constant, set at setup, never
+    // changed by play, so it needs no fold (two states of one game always agree on it).
+    bool                     legacy_shared_shuffle_ordinal = false;
     // Pool slots (core/OpponentDeckPool.h) of the dealt opponent lists: players[1]'s, and 2HG's second
     // head's (kNoOpponentSlot when there is none). Set only by opponentdeck::Deal.
     std::uint8_t             opponent_slot                = 0;

@@ -6571,7 +6571,7 @@ void WriteClaudePlayTrace(const std::filesystem::path& log_dir, uint64_t seed, i
                           bool won, int win_turn, const std::string& mulligan_json,
                           const std::vector<std::string>& trace,
                           const std::vector<PlayEvent>& final_events,
-                          bool opponent_land_model)
+                          bool opponent_land_model, bool opponent_shuffle_ordinal)
 {
 if (!log_dir.empty())
 {
@@ -6597,6 +6597,10 @@ if (!log_dir.empty())
     // carry no stamp and replay through the old immediate-fetch path.
     if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
     if (opponent_land_model) { out << ", \"opponent_land_model\": 1"; }
+    // The opponent's library shuffles on its OWN ordinal (2ad8c3d41, ShuffleAfterSearch). A reference
+    // recorded before shuffled it on the shared search_count, carries no `opponent_shuffle_ordinal`,
+    // and replays under --legacy-shared-shuffle-ordinal.
+    if (opponent_shuffle_ordinal) { out << ", \"opponent_shuffle_ordinal\": 1"; }
     // ...and since USER 2026-11-14 a human-play fetch's land drop offers each target (resolve ON PLAY) and a
     // hold (kFetchHoldTarget). A `fetch_activation` reference without `fetch_on_play` was played under the
     // earlier forced hold and replays under --legacy-human-fetch-hold.
@@ -9725,11 +9729,13 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          bool then_auto = false,
                          const std::string& full_enum_spec = "",
                          int auto_depth = -1, int auto_budget_ms = -1,
-                         bool legacy_passive_opponent_lands = false)
+                         bool legacy_passive_opponent_lands = false,
+                         bool legacy_shared_shuffle_ordinal = false)
 {
     g_play_magus_upkeep_prompt = magus_upkeep_prompt;
     GameState state = GoldFishRunner::SetupGame(deck, seed, game_index,
-                                                legacy_passive_opponent_lands);
+                                                legacy_passive_opponent_lands,
+                                                legacy_shared_shuffle_ordinal);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
     // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
@@ -9847,7 +9853,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.
     WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, h.trace,
-                         h.event_log, state.opponent_plays_lands);
+                         h.event_log, state.opponent_plays_lands,
+                         state.opponent_plays_lands && !state.legacy_shared_shuffle_ordinal);
 
     WriteClaudePlayResult(state, h.event_log, h.dropped_log, won, win_turn, h.decisions_made,
                           mulligan_json, h.dropped_reason_log);
@@ -11880,6 +11887,7 @@ int main(int argc, char* argv[])
     bool        play_interactive = false;   // --interactive: viewer persistent-child mode
     bool        choices_then_auto = false;  // --choices-then-auto: search plays on after the prefix
     bool        legacy_passive_opponent_lands = false; // replay references recorded before opponent land play
+    bool        legacy_shared_shuffle_ordinal = false; // replay references recorded before the opponent's own shuffle ordinal
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
@@ -11932,6 +11940,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-fetch-immediate") { g_play_legacy_fetch_immediate = true; continue; } // replay references recorded before fetchlands could be held and activated
         if (flag == "--legacy-passive-opponent-lands") { legacy_passive_opponent_lands = true; continue; }
+        if (flag == "--legacy-shared-shuffle-ordinal") { legacy_shared_shuffle_ordinal = true; continue; } // replay a reference with no opponent_shuffle_ordinal stamp: the opponent shuffles on the shared search_count (value-less)
         if (flag == "--legacy-human-fetch-hold") { g_play_legacy_human_fetch_hold = true; continue; } // replay references recorded under the human-play fetch hold (no fetch_on_play stamp; see LegacyHumanFetchHoldOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
@@ -12231,7 +12240,8 @@ int main(int argc, char* argv[])
                                  magus_upkeep_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
                                  play_interactive, choices_then_auto, full_enum_str,
-                                 auto_depth, auto_budget_ms, legacy_passive_opponent_lands);
+                                 auto_depth, auto_budget_ms, legacy_passive_opponent_lands,
+                                 legacy_shared_shuffle_ordinal);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

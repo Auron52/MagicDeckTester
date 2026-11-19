@@ -197,6 +197,48 @@ TEST_CASE("an opponent fetch shuffles on its own ordinal and never moves our res
     CHECK(legacy.opponent_search_count == 0);
 }
 
+TEST_CASE("--legacy-shared-shuffle-ordinal replays an opponent shuffle on the shared ordinal; the default stays on its own")
+{
+    // A reference recorded before the own-ordinal change (no `opponent_shuffle_ordinal` stamp) had the
+    // opponent playing lands AND shuffling on search_count. The replay bit restores exactly that,
+    // without the land model's legacy board.
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+    Decklist plain;
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(forest != nullptr);
+    for (int i = 0; i < 40; ++i) { plain.mainboard.push_back(forest->card); }
+
+    GameState cur = GoldFishRunner::SetupGame(plain, 7, 6);
+    GameState old = GoldFishRunner::SetupGame(plain, 7, 6, false, true);
+    CHECK_FALSE(cur.legacy_shared_shuffle_ordinal);
+    REQUIRE(old.legacy_shared_shuffle_ordinal);
+    REQUIRE(old.opponent_plays_lands);              // the land model itself is unchanged
+    REQUIRE(cur.search_count == old.search_count);  // setup consumed nothing differently
+
+    const uint64_t before = cur.search_count;
+    ShuffleAfterSearch(cur, 1);
+    ShuffleAfterSearch(old, 1);
+    CHECK(cur.search_count == before);
+    CHECK(cur.opponent_search_count == 1);
+    CHECK(old.search_count == before + 1);
+    CHECK(old.opponent_search_count == 0);
+
+    // ...so OUR next reshuffle realises a different ordinal under the legacy bit, exactly as the
+    // recording binary did.
+    ShuffleAfterSearch(cur, 0);
+    ShuffleAfterSearch(old, 0);
+    CHECK(cur.search_count == before + 1);
+    CHECK(old.search_count == before + 2);
+
+    // The bit survives a state copy (the search clones states), and needs no fold: it is per-game constant.
+    GameState copy = old;
+    CHECK(copy.legacy_shared_shuffle_ordinal);
+}
+
 TEST_CASE("2HG deals both opponent heads a pool list; the cheaper one is the targeted head (USER 2026-11-17)")
 {
     static const bool loaded = [] {
