@@ -1,0 +1,467 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [60] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 17, "name": "Forbidden Orchard" }, { "num": 41, "name": "Nomads en-Kor" }, { "num": 13, "name": "Chain Reaction" }, { "num": 55, "name": "Spiteful Sliver" }, { "num": 14, "name": "Chain Reaction" }, { "num": 50, "name": "Screaming Nemesis" }, { "num": 1, "name": "Arid Mesa" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 60, "name": "Stuffy Doll" }, { "num": 35, "name": "Mogg Maniac" }, { "num": 16, "name": "Chain Reaction" }, { "num": 14, "name": "Chain Reaction" }, { "num": 8, "name": "Boros Garrison" }, { "num": 53, "name": "Screaming Nemesis" }, { "num": 17, "name": "Forbidden Orchard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 60, "name": "Stuffy Doll", "win_optimal": true }, { "num": 35, "name": "Mogg Maniac", "win_optimal": true }, { "num": 16, "name": "Chain Reaction", "win_optimal": true }, { "num": 14, "name": "Chain Reaction", "win_optimal": true }, { "num": 8, "name": "Boros Garrison", "win_optimal": true }, { "num": 53, "name": "Screaming Nemesis", "win_optimal": true }, { "num": 17, "name": "Forbidden Orchard", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 60, "name": "Stuffy Doll" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Guilty Conscience" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Boros Garrison", "cost": "", "mv": 0, "kind": "land" }, { "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 17, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Boros Garrison; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Boros Garrison", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forbidden Orchard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 3, "num": 17, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boros Garrison", "cost": "", "mv": 0, "kind": "land" }, { "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 4, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 3, "num": 17, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boros Garrison", "cost": "", "mv": 0, "kind": "land" }, { "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 4, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Loran's Escape" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 3, "num": 17, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boros Garrison", "cost": "", "mv": 0, "kind": "land" }, { "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 4, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 5, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Boros Garrison; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Boros Garrison", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Boros Garrison; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Boros Garrison", "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 2, "summary": "land=Boros Garrison (before Loran's Escape); cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Boros Garrison", "karoo_before": 1, "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "bounce",
+  "source": "Boros Garrison",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 6, "num": 8, "tapped": true, "is_land": true }, { "name": "Forbidden Orchard", "idx": 3, "num": 17, "is_land": true, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 4, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 5, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 3, "tapped": false, "name": "Forbidden Orchard", "label": "Forbidden Orchard" }, { "index": 1, "perm_index": 6, "tapped": true, "name": "Boros Garrison", "label": "Boros Garrison" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick. An UNTAPPED land you return is first tapped for mana in response (it floats until the phase ends), unless tapping it has a cost or side effect (pain, energy, a depletion counter) or its mana is spend-restricted."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "ability", "text": "Forbidden Orchard -- tapped for {any} in response to the bounce (floating until the phase ends)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 17, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0, "floating_mana": {"R": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 17, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forbidden Orchard", "cast=Screaming Nemesis"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Sacred Foundry" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 17, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Screaming Nemesis", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forbidden Orchard; cast: Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Screaming Nemesis"], "actions": [{ "card": "Screaming Nemesis" }] },
+    { "index": 1, "summary": "land=Sacred Foundry; cast: Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Screaming Nemesis"], "actions": [{ "card": "Screaming Nemesis" }] },
+    { "index": 2, "summary": "land=Forbidden Orchard; cast: Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 3, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 4, "summary": "land=Forbidden Orchard; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] },
+    { "index": 5, "summary": "land=Forbidden Orchard; cast: Loran's Escape → Mogg Maniac, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 6, "summary": "land=Forbidden Orchard; cast: Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Mogg Maniac", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 7, "summary": "land=Forbidden Orchard; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 8, "summary": "land=Sacred Foundry; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] },
+    { "index": 9, "summary": "land=Sacred Foundry; cast: Loran's Escape → Mogg Maniac, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 10, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 11, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 12, "summary": "land=none; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] },
+    { "index": 13, "summary": "land=Forbidden Orchard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Forbidden Orchard; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Forbidden Orchard", "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 15, "summary": "land=Sacred Foundry; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "tapped": true, "is_land": true }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Screaming Nemesis (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "tapped": true, "is_land": true }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 39, "cast_order": ["**", "land=Sacred Foundry", "cast=Guilty Conscience@53", "cast=Loran's Escape"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Spiteful Sliver" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "is_land": true, "taps": "WUBRG" }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Spiteful Sliver"], "cast_order_canonical": ["Guilty Conscience", "Spiteful Sliver"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Spiteful Sliver" }] },
+    { "index": 1, "summary": "land=Sacred Foundry; cast: Spiteful Sliver, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Spiteful Sliver", "Guilty Conscience"], "cast_order_canonical": ["Spiteful Sliver", "Guilty Conscience"], "actions": [{ "card": "Spiteful Sliver" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 2, "summary": "land=Sacred Foundry; cast: Spiteful Sliver, Guilty Conscience → Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Spiteful Sliver", "Guilty Conscience"], "cast_order_canonical": ["Spiteful Sliver", "Guilty Conscience"], "actions": [{ "card": "Spiteful Sliver" }, { "card": "Guilty Conscience", "enchant_target": 56, "enchant_target_name": "Spiteful Sliver" }] },
+    { "index": 3, "summary": "land=Sacred Foundry; cast: Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Spiteful Sliver"], "actions": [{ "card": "Spiteful Sliver" }] },
+    { "index": 4, "summary": "land=Sacred Foundry; cast: Loran's Escape → Screaming Nemesis, Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Spiteful Sliver"], "cast_order_canonical": ["Loran's Escape", "Spiteful Sliver"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Spiteful Sliver" }] },
+    { "index": 5, "summary": "land=Sacred Foundry; cast: Loran's Escape → Spiteful Sliver, Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Spiteful Sliver"], "cast_order_canonical": ["Loran's Escape", "Spiteful Sliver"], "actions": [{ "card": "Loran's Escape", "enchant_target": 56, "enchant_target_name": "Spiteful Sliver", "trick": true }, { "card": "Spiteful Sliver" }] },
+    { "index": 6, "summary": "land=Sacred Foundry; cast: Spiteful Sliver, Loran's Escape → Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Spiteful Sliver", "Loran's Escape"], "cast_order_canonical": ["Spiteful Sliver", "Loran's Escape"], "actions": [{ "card": "Spiteful Sliver" }, { "card": "Loran's Escape", "enchant_target": 56, "enchant_target_name": "Spiteful Sliver", "trick": true }] },
+    { "index": 7, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1, Spiteful Sliver", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Spiteful Sliver"], "cast_order_canonical": ["Loran's Escape", "Spiteful Sliver"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Spiteful Sliver" }] },
+    { "index": 8, "summary": "land=none; cast: Spiteful Sliver", "declared_order_payability": "not_verified", "land": null, "casts": ["Spiteful Sliver"], "actions": [{ "card": "Spiteful Sliver" }] },
+    { "index": 9, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Mogg Maniac"], "cast_order_canonical": ["Guilty Conscience", "Mogg Maniac"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Mogg Maniac" }] },
+    { "index": 10, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 11, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 12, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → Screaming Nemesis, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 13, "summary": "land=Sacred Foundry; cast: Loran's Escape → Screaming Nemesis, Mogg Maniac, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 14, "summary": "land=Sacred Foundry; cast: Loran's Escape → Screaming Nemesis, Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 15, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → Mogg Maniac, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 16, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Mogg Maniac", "Loran's Escape"], "cast_order_canonical": ["Guilty Conscience", "Mogg Maniac", "Loran's Escape"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 17, "summary": "land=Sacred Foundry; cast: Loran's Escape → Mogg Maniac, Mogg Maniac, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 18, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Guilty Conscience → Screaming Nemesis, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 19, "summary": "land=Sacred Foundry; cast: Loran's Escape → Mogg Maniac, Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 20, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Guilty Conscience → Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 21, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 22, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 23, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 24, "summary": "land=none; cast: Guilty Conscience → Screaming Nemesis, Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Guilty Conscience", "Mogg Maniac"], "cast_order_canonical": ["Guilty Conscience", "Mogg Maniac"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Mogg Maniac" }] },
+    { "index": 25, "summary": "land=none; cast: Mogg Maniac, Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 26, "summary": "land=none; cast: Mogg Maniac, Guilty Conscience → Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac", "Guilty Conscience"], "cast_order_canonical": ["Mogg Maniac", "Guilty Conscience"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Guilty Conscience", "enchant_target": 35, "enchant_target_name": "Mogg Maniac" }] },
+    { "index": 27, "summary": "land=Sacred Foundry; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] },
+    { "index": 28, "summary": "land=Sacred Foundry; cast: Loran's Escape → Screaming Nemesis, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 29, "summary": "land=Sacred Foundry; cast: Loran's Escape → Mogg Maniac, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 30, "summary": "land=Sacred Foundry; cast: Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Mogg Maniac", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 31, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 32, "summary": "land=none; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] },
+    { "index": 33, "summary": "land=none; cast: Loran's Escape → Screaming Nemesis, Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 34, "summary": "land=none; cast: Loran's Escape → Mogg Maniac, Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 35, "summary": "land=none; cast: Mogg Maniac, Loran's Escape → Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac", "Loran's Escape"], "cast_order_canonical": ["Mogg Maniac", "Loran's Escape"], "actions": [{ "card": "Mogg Maniac" }, { "card": "Loran's Escape", "enchant_target": 35, "enchant_target_name": "Mogg Maniac", "trick": true }] },
+    { "index": 36, "summary": "land=none; cast: Loran's Escape → 1/1 Spirit Token #1, Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape", "Mogg Maniac"], "cast_order_canonical": ["Loran's Escape", "Mogg Maniac"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }, { "card": "Mogg Maniac" }] },
+    { "index": 37, "summary": "land=Sacred Foundry; cast: Chain Reaction", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Chain Reaction"], "actions": [{ "card": "Chain Reaction" }] },
+    { "index": 38, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 39, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }] },
+    { "index": 40, "summary": "land=Sacred Foundry; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 41, "summary": "land=none; cast: Guilty Conscience → Screaming Nemesis", "declared_order_payability": "not_verified", "land": null, "casts": ["Guilty Conscience"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }] },
+    { "index": 42, "summary": "land=none; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → Screaming Nemesis", "declared_order_payability": "not_verified", "land": null, "casts": ["Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }] },
+    { "index": 43, "summary": "land=none; cast: Guilty Conscience → Screaming Nemesis, Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Guilty Conscience", "Loran's Escape"], "cast_order_canonical": ["Guilty Conscience", "Loran's Escape"], "actions": [{ "card": "Guilty Conscience", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis" }, { "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 44, "summary": "land=Sacred Foundry; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": [], "actions": [] },
+    { "index": 45, "summary": "land=Sacred Foundry; cast: Loran's Escape → Screaming Nemesis", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }] },
+    { "index": 46, "summary": "land=Sacred Foundry; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": "Sacred Foundry", "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] },
+    { "index": 47, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 48, "summary": "land=none; cast: Loran's Escape → Screaming Nemesis", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 53, "enchant_target_name": "Screaming Nemesis", "trick": true }] },
+    { "index": 49, "summary": "land=none; cast: Loran's Escape → 1/1 Spirit Token #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Loran's Escape"], "actions": [{ "card": "Loran's Escape", "enchant_target": 1000, "enchant_target_name": "1/1 Spirit Token", "enchant_target_label": "1/1 Spirit Token #1", "trick": true }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "type": "land_entry",
+  "source": "Sacred Foundry",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "is_land": true, "taps": "WUBRG" }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 24, "name": "Guilty Conscience", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 29, "name": "Loran's Escape", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Sacred Foundry", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Loran's Escape",
+  "turn": 4,
+  "loyalty": "given indestructible (and hexproof) until end of turn; then you scry 1",
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 8, "label": "Screaming Nemesis (3/3) (yours)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 3,
+  "options": [{ "index": 0, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 1, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 3, "label": "Screaming Nemesis (3/3) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index -- the permanent this ability (Loran's Escape) targets. It is given indestructible (and hexproof) until end of turn; then you scry 1. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "scry",
+  "source": "Loran's Escape",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "looked": [{ "name": "Blasphemous Act", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Blasphemous Act"] }, { "index": 1, "label": "Top: Blasphemous Act", "shuffle": false, "top": ["Blasphemous Act"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 4, "source": "Loran's Escape", "cards": [{ "name": "Blasphemous Act", "disposition": "kept" }] }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Mogg Maniac", "declared_order_payability": "not_verified", "land": null, "casts": ["Mogg Maniac"], "actions": [{ "card": "Mogg Maniac" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "target",
+  "source": "Screaming Nemesis",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "target",
+  "source": "Screaming Nemesis",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "target",
+  "source": "Screaming Nemesis",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "target",
+  "source": "Screaming Nemesis",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "target",
+  "source": "Screaming Nemesis",
+  "turn": 4,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Boros Garrison", "idx": 5, "num": 8, "is_land": true, "taps": "RW" }, { "name": "Forbidden Orchard", "idx": 6, "num": 17, "tapped": true, "is_land": true }, { "name": "Guilty Conscience", "idx": 11, "num": 24, "is_aura": true, "attached_to": 53, "attached_to_idx": 8, "is_land": false }, { "name": "Sacred Foundry", "idx": 10, "num": 48, "tapped": true, "is_land": true }, { "name": "Screaming Nemesis", "idx": 8, "num": 53, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 16, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 14, "name": "Chain Reaction", "cost": "{2}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 35, "name": "Mogg Maniac", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Spiteful Sliver", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Loran's Escape"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 3, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 4, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 7, "num": 1002, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Spirit Token", "idx": 9, "num": 1003, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Spirit Token (1/1) (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Spirit Token (1/1) (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 4, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "1/1 Spirit Token (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "trigger", "text": "⚡ Guilty Conscience -- its creature dealt damage; it deals 3 to Screaming Nemesis" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Screaming Nemesis was dealt 3 damage -- it deals 3 to the opponent" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Guilty Conscience -- its creature dealt damage; it deals 3 to Screaming Nemesis" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Screaming Nemesis was dealt 3 damage -- it deals 3 to the opponent" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Guilty Conscience -- its creature dealt damage; it deals 3 to Screaming Nemesis" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Screaming Nemesis was dealt 3 damage -- it deals 3 to the opponent" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Guilty Conscience -- its creature dealt damage; it deals 3 to Screaming Nemesis" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Screaming Nemesis was dealt 3 damage -- it deals 3 to the opponent" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Guilty Conscience -- its creature dealt damage; it deals 3 to Screaming Nemesis" },
+    { "turn": 4, "kind": "trigger", "text": "⚡ Screaming Nemesis was dealt 3 damage -- it deals 3 to the opponent" },
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Screaming Nemesis (3) — 3 to opponent (17→-1)" }
+  ]
+}
