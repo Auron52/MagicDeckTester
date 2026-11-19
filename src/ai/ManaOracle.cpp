@@ -13,6 +13,7 @@ extern thread_local int g_tapdbg_oracle_apply;   // TEMP DIAG (claude1115)
 #include "../core/GameLogger.h"
 #include "../core/GameState.h"
 #include "../core/SpellEffects.h"
+#include "../core/MemBudget.h"
 #include "../core/WorkCounters.h"   // workctr::t_priced: the per-decision work budget
 
 #include <algorithm>
@@ -409,6 +410,7 @@ std::atomic<long long> g_rb[RB_N];
 std::atomic<long long> g_rb_need_plan{0}, g_rb_need_later{0}, g_rb_rescue_tried{0}, g_rb_rescued{0};
 std::mutex             g_print_mu;
 std::atomic<long long> g_cap_retry{0}, g_cap_retry_ok{0};   // the CAPPED escalation (see its site)
+std::atomic<long long> g_mem_capped{0}, g_hit_only_released{0}, g_front_released{0};   // the board budget (BoardAcct)
 std::mutex             g_reason_mu;
 std::map<std::string, long long> g_unmodeled_reasons;
 std::atomic<long long> g_resume_checked{0};   // MTG_ORACLE_RESUME_CHECK: resumed retries checked equal
@@ -462,6 +464,12 @@ struct Reporter
         {
             std::fprintf(stderr, "=== MANA ORACLE decision budget: %lld decisions spent it, %lld plans not audited ===\n",
                          g_dec_capped.load(), g_dec_capped_plans.load());
+        }
+        if (g_mem_capped.load() > 0 || g_hit_only_released.load() > 0 || g_front_released.load() > 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE board memory: %lld searches capped by MTG_MANA_ORACLE_BOARD_MB, %lld pruned "
+                         "frontier boards and %lld hit-only outcome boards given back early ===\n", g_mem_capped.load(),
+                         g_front_released.load(), g_hit_only_released.load());
         }
         if (g_cap_retry.load() > 0)
         {
@@ -2988,9 +2996,57 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
 
 namespace
 {
+// THE ORACLE'S BOARD MEMORY BUDGET (Maze's End mana-clean, 2026-11-19). Realize keeps a whole GameState per
+// outcome and per frontier, and under the 400,000-apply retry one plan's search can hold hundreds of thousands of
+// them: Maze's End seed 30000000 T6 {Heap Gate + Sylvan Scrying + Burgeoning + Manabond} held 97,402 outcomes and
+// 99,839 frontier boards (~21 KB each, ~4 GB) on one thread, and a later plan took that single game past 8 GB; at
+// 32 workers the gate's oracle arm passed the 40 GB RSS cap in 25 s. The apply ceiling and the priced decision
+// budget bound TIME, not memory. So every board the oracle holds in a Realize -- its outcomes, its frontiers, the
+// capped pass's saved cursor -- is counted per thread (BoardAcct: an estimate from the board's contents, so the
+// count and every verdict are a function of the game alone, on every machine and at every thread count), and a
+// Realize that finds the thread's total past MTG_MANA_ORACLE_BOARD_MB stops as CAPPED, named as the memory
+// budget, exactly as the apply ceiling stops it; its escalation is skipped (the same boards would stop it again).
+// Default 768 MB per thread: 32 workers x 768 MB stays under a 40 GB cap beside the engine's own ~5 GB.
+// 0 = unbounded. Checker-only: play never reads it.
+thread_local long long t_board_live = 0;   // bytes of oracle boards alive on this thread (BoardAcct)
+long long BoardBudgetBytes()
+{
+    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_BOARD_MB", 768))) << 20;
+    return v;
+}
+inline bool BoardsOut() { return BoardBudgetBytes() > 0 && t_board_live >= BoardBudgetBytes(); }
+// A held board's footprint, estimated from its contents (deterministic; within a few % of RSS on Maze's End).
+long long BoardBytes(const GameState& s)
+{
+    long long b = static_cast<long long>(sizeof(GameState) + s.battlefield.size() * sizeof(Permanent)
+                                         + (s.exile.size() + s.stack.size()) * sizeof(Card));
+    for (const Player& pl : s.players)
+    { b += static_cast<long long>((pl.hand.size() + pl.library.size() + pl.graveyard.size()) * sizeof(Card)); }
+    return b;
+}
+long long ScriptBytes(const std::vector<PayOption>& sc)
+{
+    long long b = static_cast<long long>(sc.size() * sizeof(PayOption));
+    for (const PayOption& o : sc) { b += static_cast<long long>(o.taps.size() * sizeof(TurnSolver::PreTap)); }
+    return b;
+}
+// One holder's share of t_board_live: added when set, carried by a move, added again by a copy, given back at death.
+struct BoardAcct
+{
+    long long n = 0;
+    BoardAcct() = default;
+    BoardAcct(const BoardAcct& o) : n(o.n) { t_board_live += n; }
+    BoardAcct(BoardAcct&& o) noexcept : n(o.n) { o.n = 0; }
+    BoardAcct& operator=(const BoardAcct& o) { if (this != &o) { Set(o.n); } return *this; }
+    BoardAcct& operator=(BoardAcct&& o) noexcept { if (this != &o) { t_board_live -= n; n = o.n; o.n = 0; } return *this; }
+    ~BoardAcct() { t_board_live -= n; }
+    void Set(long long v) { t_board_live += v - n; n = v; }
+};
 struct Outcome
 {
     GameState                  st;
+    BoardAcct                  acct;        // st + script, counted against the board budget
+    bool                       released = false;   // hit-only: st was given back (a non-Clean outcome; see Realize)
     std::vector<std::string>   cast_drops;
     std::vector<std::string>   act_drops;
     std::multiset<std::string> left;        // hand cards the line used
@@ -3018,6 +3074,7 @@ struct Outcome
     bool Clean() const
     {
         if (!Full()) { return false; }
+        if (released) { return false; }   // only a non-Clean outcome's board is ever released
         if (st.players[static_cast<std::size_t>(st.active_player_index)].life <= 0) { return false; }
         for (const PayOption& p : script) { if (p.fail) { return false; } }
         return true;
@@ -3029,6 +3086,7 @@ struct Realization
     std::vector<Outcome>     outcomes;
     std::vector<std::string> unmodeled;
     bool                     capped = false;
+    bool                     mem_capped = false;   // ...by the board budget (BoardsOut), not the apply ceiling
     int                      hit = -1;    // stop_at_full: the index of the outcome the search stopped at
 };
 // A caller's further test of a full outcome (Realize's `accept`): false = not this caller's hit, search on.
@@ -3100,6 +3158,10 @@ struct FrontierRec
 {
     std::vector<PayOption> script;
     GameState              st;
+    BoardAcct              acct;          // st + script, counted against the board budget
+    std::uint64_t          pkey = 0;      // the Pareto prune's key (FrontKey) and resources, taken at capture
+    Res                    pres;
+    bool                   pdrop = false; // pruned (online, as it arrived): st and script were given back
     ManaCost               cost;
     bool                   for_creature = false;
     std::size_t            index = 0;
@@ -3120,6 +3182,75 @@ struct FrontierRec
     bool                   line_has_acts = false;
     bool                   batch = false;      // joint pre-cast float
 };
+
+// The frontier prune's key for one frontier (Realize): its core board and everything about the pending payment and
+// the line around it that two frontiers must share before their resources are compared.
+std::uint64_t FrontKey(const FrontierRec& f, bool line_context)
+{
+    std::uint64_t k = CoreKey(f.st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (f.index + 1))
+            ^ std::hash<std::string>{}(f.cost.ToString() + (f.for_creature ? "c" : "n")
+                                       + (f.creature_ability ? "a" : "s")
+                                       + (f.batch ? "b" : "p")
+                                       + "t" + std::to_string(f.tapahead)
+                                       + (f.has_spell ? "|" + f.spell.m_name.str() : "")
+                                       + "v" + std::to_string(f.sac_victim));
+    // A failed payment can leave the same board as a successful but
+    // effect-free activation. It still drops an action from the line,
+    // and a later payment cannot repair that drop. Keep frontiers with
+    // different failed steps apart before comparing their resources.
+    std::uint64_t failures = 0;
+    for (std::size_t step = 0; step < f.script.size(); ++step)
+    {
+        if (!f.script[step].fail) { continue; }
+        failures = (failures ^ (step + 1)) * 0x100000001b3ULL;
+    }
+    if (failures != 0) { k ^= failures; }
+    // A continuation can choose a different sacrifice victim even when its earlier
+    // payments reach the same board and bill. That pending action lives in the
+    // payment scope, not the board: keep its source/victim in the frontier key.
+    if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
+    {
+        k ^= (static_cast<std::uint64_t>(static_cast<std::uint32_t>(f.sac_spare_source))
+                    * 0x9E37'79B9'7F4A'7C15ULL)
+                 ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(f.sac_spare_victim))
+                    * 0xD1A5'AC51'B11D'AB1EULL);
+    }
+    // ...and the same for a breakpoint continuation's pending ACTIONS (Hook::cont_sig): the
+    // continuation was solved on the board its breakpoint saw, which two payment histories
+    // can leave different although the frontier boards agree. Keyed only when one was applied.
+    if (f.cont_sig != 0)
+    { k ^= f.cont_sig * 0xC2B2'AE3D'27D4'EB4FULL; }
+    // The attacker is tapped only DURING a combat-step payment and released after it.
+    // Do not let a permanently tapped creature with extra float prune that frontier.
+    if (f.dbl_combat_hold != 0)
+    {
+        k ^= std::hash<std::string>{}("combat-hold#" + std::to_string(f.dbl_combat_hold));
+    }
+    // Identical boards with different remaining-line bills can spend the same
+    // float differently. Keep those payment frontiers distinct.
+    if (line_context)
+    {
+        k ^= std::hash<std::string>{}("line#" + f.line_unpaid.ToString()
+            + (f.line_opens_unseen ? "u" : "k")
+            + (f.line_has_acts ? "a" : "c"));
+    }
+    return k;
+}
+// ParetoKeep's pairwise rule for two frontiers of one key: y covers x when y >= x on every resource either table
+// names (a name a table lacks reads 0), strictly when y is larger on a name y's table holds.
+bool ParetoCovers(const Res& y, const Res& x, bool& strict)
+{
+    strict = false;
+    for (const auto& kv : x) { if (Get(y, kv.first) < kv.second) { return false; } }
+    for (const auto& kv : y)
+    {
+        const int v = Get(x, kv.first);
+        if (kv.second < v) { return false; }
+        if (kv.second > v) { strict = true; }
+    }
+    return true;
+}
+bool OrderFoldCheck();
 
 // Where a realisation's next layer was first cut by the apply ceiling, and what the capped pass had there, so a
 // retry under a larger ceiling continues instead of starting over (Realize's `cursor`, lever (b)).
@@ -3161,6 +3292,40 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     RealizeCursor* cursor = nullptr, bool hit_only = false)
 {
     Realization r;
+    // MTG_MANA_ORACLE_MEM_TRACE=<n> (diagnostic, default 0 = off): print every Realize that kept >= n outcomes or
+    // frontier boards in one layer -- outcomes, peak frontier / kept / script counts, how many outcome boards are
+    // distinct, the boards the thread held (t_board_live) and the process RSS: the oracle's memory sizing data.
+    static const int s_mem_trace = std::max(0, EnvInt("MTG_MANA_ORACLE_MEM_TRACE", 0));
+    std::size_t peak_fronts = 0, peak_next = 0, peak_kept = 0, layers = 0;
+    long long peak_live = 0;
+    struct MemTrace
+    {
+        const Realization& r; const GameState& root; const TurnSolver::Plan& plan; bool pre, stop, hit_only;
+        const std::size_t& pf; const std::size_t& pn; const std::size_t& pk; const std::size_t& nl; const long long& pl;
+        ~MemTrace()
+        {
+            if (s_mem_trace <= 0) { return; }
+            const std::size_t held = std::max(r.outcomes.size(), pf);
+            if (held < static_cast<std::size_t>(s_mem_trace)) { return; }
+            std::unordered_set<std::uint64_t> exact, canon;
+            std::size_t clean = 0, rel = 0;
+            for (const Outcome& o : r.outcomes)
+            {
+                if (o.released) { ++rel; continue; }
+                exact.insert(CoreKey(o.st, false) ^ std::hash<std::string>{}(PoolText(o.st.floating_mana, 0))
+                             ^ (static_cast<std::uint64_t>(o.st.players[o.st.active_player_index].life) << 40));
+                canon.insert(CoreKey(o.st, true));
+                clean += o.Clean() ? 1 : 0;
+            }
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[mana-oracle] MEM %s plan={%s} stop=%d hit_only=%d cap=%d outcomes=%zu released=%zu "
+                         "peak_fronts=%zu peak_kept=%zu peak_scripts=%zu layers=%zu distinct_core=%zu distinct_canon=%zu "
+                         "clean=%zu capped=%d mem_capped=%d peak_live=%lldMB live_now=%lldMB rss=%lldMB\n",
+                         Ctx(root, pre).c_str(), PlanText(plan).c_str(), stop ? 1 : 0, hit_only ? 1 : 0, NodeCap(),
+                         r.outcomes.size(), rel, pf, pk, pn, nl, exact.size(), canon.size(), clean, r.capped ? 1 : 0,
+                         r.mem_capped ? 1 : 0, pl >> 20, t_board_live >> 20, membudget::CurrentRssBytes() / (1024 * 1024));
+        }
+    } _mem_trace{ r, root, plan, pre, stop_at_full, hit_only, peak_fronts, peak_next, peak_kept, layers, peak_live };
     // DEFAULT ON; =0 restores the old audit table for a focused A/B.
     static const bool s_line_context = EnvOn("MTG_ORACLE_LINE_CONTEXT", true);
     std::vector<std::vector<PayOption>> layer(1, prefix);
@@ -3234,10 +3399,49 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         {
             fronts = std::move(carried);
             carried.clear();
+            // THE ONLINE PRUNE (memory, Maze's End 2026-11-19). ParetoKeep drops frontier i when a frontier j of the
+            // same key covers it -- strictly, or equally with j first -- among the frontiers still kept, taken in
+            // index order. Applied as each frontier arrives it keeps exactly that set: a newcomer prunes every kept
+            // frontier it strictly covers (ParetoKeep lets any later frontier do so, kept or not), and is pruned
+            // itself when a kept earlier one covers it (an earlier one pruned since was pruned by a frontier that
+            // covers the newcomer too, strictly: covering is transitive). So a pruned board is given back as soon as
+            // it is pruned, not after the whole layer has been held. A resumed layer's carried frontiers were
+            // admitted the same way in the pass that reached them.
+            std::unordered_map<std::uint64_t, std::vector<std::size_t>> live;
+            for (std::size_t i = 0; i < fronts.size(); ++i) { if (!fronts[i].pdrop) { live[fronts[i].pkey].push_back(i); } }
+            auto release = [&](std::size_t i)
+            {
+                FrontierRec& f = fronts[i];
+                f.pdrop = true;
+                f.st = GameState();
+                std::vector<PayOption>().swap(f.script);
+                f.acct.Set(0);
+                g_front_released.fetch_add(1, std::memory_order_relaxed);
+            };
+            auto admit = [&](std::size_t i)
+            {
+                std::vector<std::size_t>& b = live[fronts[i].pkey];
+                const Res& xr = fronts[i].pres;
+                bool strict = false;
+                for (std::size_t y : b)
+                { if (ParetoCovers(xr, fronts[y].pres, strict) && strict) { release(y); } }
+                bool covered = false;
+                for (std::size_t y : b)
+                { if (!fronts[y].pdrop && ParetoCovers(fronts[y].pres, xr, strict)) { covered = true; break; } }
+                b.erase(std::remove_if(b.begin(), b.end(), [&](std::size_t y) { return fronts[y].pdrop; }), b.end());
+                if (covered) { release(i); } else { b.push_back(i); }
+                peak_live = std::max(peak_live, t_board_live);
+            };
             for (std::size_t li = start; li < layer.size(); ++li)
             {
                 std::vector<PayOption>& script = layer[li];
-                if (nodes >= NodeCap() || DecisionOut()) { r.capped = true; break; }
+                if (nodes >= NodeCap() || DecisionOut() || BoardsOut())
+                {
+                    r.capped = true;
+                    if (nodes < NodeCap() && !DecisionOut() && !r.mem_capped)
+                    { r.mem_capped = true; g_mem_capped.fetch_add(1, std::memory_order_relaxed); }
+                    break;
+                }
                 ++nodes;
                 ++t_dec_applies;
                 g_applies.fetch_add(1, std::memory_order_relaxed);
@@ -3326,7 +3530,11 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.line_opens_unseen = h.f_line_opens_unseen;
                     fr.line_has_acts = h.f_line_has_acts;
                     fr.batch        = h.f_batch;
+                    fr.pkey         = FrontKey(fr, s_line_context);
+                    fr.pres         = Resources(fr.st, /*with_float=*/true);
+                    fr.acct.Set(BoardBytes(fr.st) + ScriptBytes(fr.script));
                     fronts.push_back(std::move(fr));
+                    admit(fronts.size() - 1);
                     continue;
                 }
                 Outcome o;
@@ -3376,10 +3584,24 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 // not end the search either: a scripted payment further on may still realise the line.)
                 const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
                                && (want == nullptr || Includes(o.left, *want)) && (accept == nullptr || (*accept)(o));
+                // HIT-ONLY, BOARD GIVEN BACK (memory, 2026-11-19). A hit-only caller reads a non-hit outcome's board
+                // only when the outcome is Clean (the order search's hidden-card test); the sibling and ENUM-GAP
+                // searches read the hit alone. A non-Clean outcome keeps its script, notes and verdict fields, and
+                // Clean() keeps answering false for it (`released`). Kept whole under MTG_ORACLE_ORDER_FOLD_CHECK,
+                // whose diagnostic prints every outcome's core key.
+                if (hit_only && !full && !o.Clean() && !OrderFoldCheck())
+                {
+                    o.st = GameState();
+                    o.released = true;
+                    g_hit_only_released.fetch_add(1, std::memory_order_relaxed);
+                }
+                o.acct.Set((o.released ? 0 : BoardBytes(o.st)) + ScriptBytes(o.script));
+                peak_live = std::max(peak_live, t_board_live);
                 r.outcomes.push_back(std::move(o));
                 if (full) { r.hit = static_cast<int>(r.outcomes.size()) - 1; return r; }
             }
             start = 0;
+            peak_fronts = std::max(peak_fronts, fronts.size());
             if (r.capped)
             {
                 if (pending_save)
@@ -3392,60 +3614,26 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 break;
             }
             // ---- Pareto-prune the frontier boards of this layer -----------------------------------
-            std::vector<std::uint64_t> keys(fronts.size());
-            std::vector<Res> res(fronts.size());
-            for (std::size_t i = 0; i < fronts.size(); ++i)
+            // Done ONLINE as each frontier arrived (admit, above), which gives a pruned board back at once instead of
+            // holding the whole layer until it is complete; the kept set is exactly ParetoKeep's over the layer
+            // (MTG_ORACLE_PARETO_ONLINE_CHECK=1 recomputes it and aborts on any difference).
+            keep.assign(fronts.size(), 1);
+            for (std::size_t i = 0; i < fronts.size(); ++i) { if (fronts[i].pdrop) { keep[i] = 0; } }
+            static const bool s_online_check = EnvOn("MTG_ORACLE_PARETO_ONLINE_CHECK");
+            if (s_online_check)
             {
-                keys[i] = CoreKey(fronts[i].st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (fronts[i].index + 1))
-                        ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
-                                                   + (fronts[i].creature_ability ? "a" : "s")
-                                                   + (fronts[i].batch ? "b" : "p")
-                                                   + "t" + std::to_string(fronts[i].tapahead)
-                                                   + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
-                                                   + "v" + std::to_string(fronts[i].sac_victim));
-                // A failed payment can leave the same board as a successful but
-                // effect-free activation. It still drops an action from the line,
-                // and a later payment cannot repair that drop. Keep frontiers with
-                // different failed steps apart before comparing their resources.
-                std::uint64_t failures = 0;
-                for (std::size_t step = 0; step < fronts[i].script.size(); ++step)
+                std::vector<std::uint64_t> keys(fronts.size());
+                std::vector<Res> res(fronts.size());
+                for (std::size_t i = 0; i < fronts.size(); ++i) { keys[i] = fronts[i].pkey; res[i] = fronts[i].pres; }
+                if (ParetoKeep(keys, res) != keep)
                 {
-                    if (!fronts[i].script[step].fail) { continue; }
-                    failures = (failures ^ (step + 1)) * 0x100000001b3ULL;
+                    std::fprintf(stderr, "[mana-oracle] PARETO-ONLINE MISMATCH %s plan={%s} fronts=%zu\n",
+                                 Ctx(root, pre).c_str(), PlanText(plan).c_str(), fronts.size());
+                    std::abort();
                 }
-                if (failures != 0) { keys[i] ^= failures; }
-                // A continuation can choose a different sacrifice victim even when its earlier
-                // payments reach the same board and bill. That pending action lives in the
-                // payment scope, not the board: keep its source/victim in the frontier key.
-                if (fronts[i].sac_spare_source != 0 || fronts[i].sac_spare_victim != 0)
-                {
-                    keys[i] ^= (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_source))
-                                * 0x9E37'79B9'7F4A'7C15ULL)
-                             ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_victim))
-                                * 0xD1A5'AC51'B11D'AB1EULL);
-                }
-                // ...and the same for a breakpoint continuation's pending ACTIONS (Hook::cont_sig): the
-                // continuation was solved on the board its breakpoint saw, which two payment histories
-                // can leave different although the frontier boards agree. Keyed only when one was applied.
-                if (fronts[i].cont_sig != 0)
-                { keys[i] ^= fronts[i].cont_sig * 0xC2B2'AE3D'27D4'EB4FULL; }
-                // The attacker is tapped only DURING a combat-step payment and released after it.
-                // Do not let a permanently tapped creature with extra float prune that frontier.
-                if (fronts[i].dbl_combat_hold != 0)
-                {
-                    keys[i] ^= std::hash<std::string>{}("combat-hold#" + std::to_string(fronts[i].dbl_combat_hold));
-                }
-                // Identical boards with different remaining-line bills can spend the same
-                // float differently. Keep those payment frontiers distinct.
-                if (s_line_context)
-                {
-                    keys[i] ^= std::hash<std::string>{}("line#" + fronts[i].line_unpaid.ToString()
-                        + (fronts[i].line_opens_unseen ? "u" : "k")
-                        + (fronts[i].line_has_acts ? "a" : "c"));
-                }
-                res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
-            keep = ParetoKeep(keys, res);
+            if (s_mem_trace > 0)
+            { ++layers; peak_kept = std::max(peak_kept, static_cast<std::size_t>(std::count(keep.begin(), keep.end(), 1))); }
         }
         const std::size_t n = fronts.size();
         // THE NEXT LAYER IS BUILT ONLY AS FAR AS THE APPLY CEILING REACHES (memory, 2026-11-05). The layer loop
@@ -3571,6 +3759,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 next.push_back(std::move(s));
             }
         }
+        peak_next = std::max(peak_next, next.size());
         if (resume)
         {
             r.unmodeled.insert(r.unmodeled.end(), apply_notes.begin(), apply_notes.end());
@@ -4699,7 +4888,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         return v > 0 ? v : 400000;
     }();
     int cap_used = NodeCap();
-    if (r.capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())
+    if (r.capped && !r.mem_capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())
     {
         const int saved = t_node_cap;
         t_node_cap = s_retry;
@@ -4740,8 +4929,11 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     for (const std::string& u : r.unmodeled) { NoteUnmodeled(u); }
     if (r.capped)
     {
-        Emit(C_CAPPED, root, pre, plan, "payment search hit " + std::to_string(cap_used)
-                                        + " applies (MTG_MANA_ORACLE_NODES, then _RETRY); the complete side is partial for this plan");
+        Emit(C_CAPPED, root, pre, plan, r.mem_capped
+             ? "payment search hit the oracle's board memory budget (MTG_MANA_ORACLE_BOARD_MB=" + std::to_string(BoardBudgetBytes() >> 20)
+               + "); the complete side is partial for this plan"
+             : "payment search hit " + std::to_string(cap_used)
+               + " applies (MTG_MANA_ORACLE_NODES, then _RETRY); the complete side is partial for this plan");
     }
     std::string unscripted;
     for (const Outcome& o : r.outcomes) { if (!o.unscripted.empty()) { unscripted = o.unscripted; break; } }
@@ -4900,7 +5092,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             int cap = NodeCap();
             Realization got = Realize(root, candidate, pre, /*stop_at_full=*/true, {}, false,
                                       &e_want, nullptr, nullptr, /*hit_only=*/true);
-            if (got.capped && t_node_cap == 0 && s_retry > cap && !DecisionOut())
+            if (got.capped && !got.mem_capped && t_node_cap == 0 && s_retry > cap && !DecisionOut())
             {
                 const int saved = t_node_cap;
                 t_node_cap = s_retry;
@@ -4966,7 +5158,8 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 other_partial = true;
                 if (other_why.empty())
                 {
-                    other_why = ra.capped ? "an order's payment search hit its cap (" + std::to_string(alt_cap) + " applies)"
+                    other_why = ra.mem_capped ? std::string("an order's payment search hit the oracle's board memory budget")
+                              : ra.capped ? "an order's payment search hit its cap (" + std::to_string(alt_cap) + " applies)"
                                           : ra.unmodeled.front();
                 }
             }
