@@ -1,0 +1,432 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 7, "won": true,
+  "mulligan": { "count": 1, "bottom": [9] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 55, "name": "Usher of the Fallen" }, { "num": 20, "name": "Lingering Souls" }, { "num": 21, "name": "Lingering Souls" }, { "num": 10, "name": "Flooded Strand" }, { "num": 51, "name": "Unclaimed Territory" }, { "num": 52, "name": "Unclaimed Territory" }, { "num": 22, "name": "Lingering Souls" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 15, "name": "Geist of Saint Traft" }, { "num": 60, "name": "White Orchid Phantom" }, { "num": 11, "name": "Flooded Strand" }, { "num": 12, "name": "Flooded Strand" }, { "num": 9, "name": "Drogskol Captain" }, { "num": 27, "name": "Mausoleum Wanderer" }, { "num": 23, "name": "Lingering Souls" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 15, "name": "Geist of Saint Traft", "win_optimal": true }, { "num": 60, "name": "White Orchid Phantom", "win_optimal": true }, { "num": 11, "name": "Flooded Strand", "win_optimal": true }, { "num": 12, "name": "Flooded Strand", "win_optimal": true }, { "num": 9, "name": "Drogskol Captain", "win_optimal": true }, { "num": 27, "name": "Mausoleum Wanderer", "win_optimal": true }, { "num": 23, "name": "Lingering Souls", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 15, "name": "Geist of Saint Traft" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Flooded Strand", "cast=Mausoleum Wanderer"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 11, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 27, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Mausoleum Wanderer"], "actions": [{ "card": "Flooded Strand", "src_num": 11, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Mausoleum Wanderer" }] },
+    { "index": 3, "summary": "land=Flooded Strand; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 4, "summary": "land=Flooded Strand; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Watery Grave", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 5, "summary": "land=Flooded Strand; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 6, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 11, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Hallowed Fountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 2,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "land_entry",
+  "source": "Hallowed Fountain",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 12, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 27, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Flooded Strand", "cast=White Orchid Phantom"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Lingering Souls" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 12, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, White Orchid Phantom", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "White Orchid Phantom"], "actions": [{ "card": "Flooded Strand", "src_num": 12, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "White Orchid Phantom" }] },
+    { "index": 2, "summary": "land=Flooded Strand; cast: White Orchid Phantom", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": ["White Orchid Phantom"], "actions": [{ "card": "White Orchid Phantom" }] },
+    { "index": 3, "summary": "land=Flooded Strand; cast: White Orchid Phantom", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": ["White Orchid Phantom"], "actions": [{ "card": "White Orchid Phantom" }] },
+    { "index": 4, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 12, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Godless Shrine", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Plains", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 1,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "land_entry",
+  "source": "Godless Shrine",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 60, "name": "White Orchid Phantom", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "dig",
+  "source": "White Orchid Phantom (may destroy nonbasic land)",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "sick": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Opponent Nonbasic Land" }, { "index": 1, "legal": true, "name": "Hallowed Fountain" }, { "index": 2, "legal": true, "name": "Godless Shrine" }],
+  "note": "reply an examined index to DESTROY that nonbasic land (yours or the opponent's -- check whose before you pick; its controller may then search for a basic land, which enters tapped -- you are asked separately if it is yours), or -1 to destroy nothing. Default = the AI's pick (an opponent's, else nothing)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (White Orchid Phantom entered)" }, { "turn": 2, "kind": "trigger", "text": "White Orchid Phantom: destroys no land" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "sick": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "sick": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Millicent, Restless Revenant" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (1), White Orchid Phantom (2) — 3 to opponent (18→15)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Skyclave Apparition" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (1), White Orchid Phantom (2) — 3 to opponent (15→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Patrician Geist" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (1), White Orchid Phantom (2) — 3 to opponent (12→9)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Unclaimed Territory", "cast=Patrician Geist"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Unclaimed Territory" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 1, "toughness": 1 }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 2, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Patrician Geist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Patrician Geist", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Patrician Geist"], "actions": [{ "card": "Patrician Geist" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Geist of Saint Traft", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Geist of Saint Traft"], "actions": [{ "card": "Geist of Saint Traft" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Patrician Geist entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Patrician Geist", "idx": 9, "num": 32, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 8, "num": 54, "tapped": true, "is_land": true }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (3), White Orchid Phantom (3) — 6 to opponent (9→3)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Patrician Geist", "idx": 9, "num": 32, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 8, "num": 54, "tapped": true, "is_land": true }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 7, "card": "Skyclave Apparition" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Godless Shrine", "idx": 5, "num": 17, "is_land": true, "taps": "WB" }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "is_land": true, "taps": "WU" }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Patrician Geist", "idx": 9, "num": 32, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 8, "num": 54, "is_land": true, "taps": "C" }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lingering Souls", "declared_order_payability": "not_verified", "land": null, "casts": ["Lingering Souls"], "actions": [{ "card": "Lingering Souls" }] },
+    { "index": 1, "summary": "land=none; cast: Geist of Saint Traft", "declared_order_payability": "not_verified", "land": null, "casts": ["Geist of Saint Traft"], "actions": [{ "card": "Geist of Saint Traft" }] },
+    { "index": 2, "summary": "land=none; cast: Skyclave Apparition", "declared_order_payability": "not_verified", "land": null, "casts": ["Skyclave Apparition"], "actions": [{ "card": "Skyclave Apparition" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 7, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (1/1 Spirit Token entered)" }, { "turn": 7, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (1/1 Spirit Token entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "1/1 Spirit Token", "idx": 10, "num": 1000, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "1/1 Spirit Token", "idx": 11, "num": 1001, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Godless Shrine", "idx": 5, "num": 17, "tapped": true, "is_land": true }, { "name": "Hallowed Fountain", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 27, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Patrician Geist", "idx": 9, "num": 32, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Unclaimed Territory", "idx": 8, "num": 54, "tapped": true, "is_land": true }, { "name": "White Orchid Phantom", "idx": 6, "num": 60, "is_land": false, "power": 3, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 15, "name": "Geist of Saint Traft", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Millicent, Restless Revenant", "cost": "{5}{W}{U}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Flooded Strand", "Flooded Strand", "Lingering Souls"], "retrace_gy": ["Lingering Souls"], "flashback_gy": ["Lingering Souls"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "4/4 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (4), White Orchid Phantom (3), Patrician Geist (2) — 9 to opponent (3→-6)" }
+  ]
+}
