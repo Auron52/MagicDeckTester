@@ -67,8 +67,12 @@ def main():
 
     chunks = [(s, c) for s in args.seeds for c in range(0, args.games, args.chunk)]
     jobs = []
-    for s, c in chunks:
-        for name, flags, budget in arms:
+    for ci, (s, c) in enumerate(chunks):
+        # ROTATE the arm order per chunk: a pooled run's per-game wall depends on how loaded the box is
+        # when the game runs, so an arm that always sits second in its pair runs later and reads faster
+        # (scripts/ab_wall.py; .claude/skills/regression-testing.md "Measuring WALL in a pooled A/B").
+        # Results are order-free (each game is seeded by its job), so only the wall column moves.
+        for name, flags, budget in arms[ci % len(arms):] + arms[:ci % len(arms)]:
             j = {"name": "%s__s%d_c%d" % (name, s, c), "deck": args.deck, "profile": profile,
                  "games": args.chunk, "seed": s + c, "game_index": c, "max_turns": args.max_turns}
             if flags:
@@ -143,6 +147,8 @@ def main():
         print("%s vs %s: paired delta %+.4f t (chunks better %d / worse %d / tied %d; paired t=%.2f); "
               "wall %+.1f%%" % (n, names[0], mean, better, worse, len(d) - better - worse, t,
                                 100.0 * (wall[n] - wall[names[0]]) / max(1, wall[names[0]])))
+    print("wall is load-sensitive; for an order-balanced wall ratio run: scripts/ab_wall.py %s %s"
+          % (mpath, os.path.join(args.log_root, "batch.stdout")))
     print("\nlogs: %s" % args.log_root)
 
 
