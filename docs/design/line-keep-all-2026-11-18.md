@@ -199,6 +199,26 @@ So both Alchemist losses are budgeted-search ranking noise from a more faithful 
 wrong payment, and both recover at depth 8 unbudgeted. By the bar ("every deck net <= 0"; "+1 is not neutral") the
 lever stays **default OFF**; adopting it anyway is the USER's call.
 
+## AccomplishedAlchemist consistency re-measure (2026-11-19, USER: "If we get positive results on average let's just adopt")
+
+The USER asked whether the Alchemist's +1 was consistent or an artefact of the seeds tested. A fresh held-out sample:
+30,000 pairs, seed 610000+gi, gi 6000-35999, both arms with `MTG_AA_CAST_ORDER_V2` pinned ON (the order the USER
+adopted the same day), Release, `MTG_RSS_CAP_GB=40`, one pooled batch (`build/scratch/claude_lka_alc30k/`).
+
+| sample | pairs | faster | slower | net turns (on-off, unwon=9) | digest-only | cpu on/off |
+|---|---|---|---|---|---|---|
+| 11-18, v2 off (gi 0-5999) | 6,000 | 1 | 2 | +1 | 25 | ~1.023 |
+| 11-19, v2 on (gi 6000-35999) | 30,000 | 25 | 22 | +2 | 270 | 1.0302 |
+| pooled | 36,000 | 26 | 24 | **+3** | | |
+
+Per-game deltas on the 30k: 25 games -1 turn; 18 games +1, 3 games +2, 1 game +3 (gi 20248, T5 -> T8); two newly
+unwon (gi 26056 T8, gi 32673 T7); unwon 483 on vs 481 off. So the effect is not a consistent gain: it is a wash
+of single-turn budgeted-ranking flips in both directions, slightly net worse, at +3% CPU on this deck.
+
+**Verdict: not positive on average, so by the USER's rule it is NOT adopted; `MTG_LINE_KEEP_ALL` stays default OFF.**
+The repairs themselves remain correct (complete judge never disagreed); what does not pay on the Alchemist is the
+re-ranking of the budgeted root they cause. Reported to the USER 2026-11-19.
+
 ## Cost
 
 * Cheap judge: a WITNESS (the greedy pays the rest on the trial board) settles 95.4% of trials; `check_bad=0` over
@@ -212,7 +232,7 @@ lever stays **default OFF**; adopting it anyway is the USER's call.
 
 ## Open for the USER
 
-1. Adopt `MTG_LINE_KEEP_ALL` default ON despite AccomplishedAlchemist's +1 / 6,000 (both slower games recover at d8
-   b0; root cause above), or keep it off.
+1. ~~Adopt default ON?~~ USER 2026-11-19: adopt only if positive on average on the Alchemist. The 30,000-pair
+   re-measure is +2 (pooled +3 / 36,000) at +3% CPU, so it stays OFF (section above).
 2. The residual Dragons drops whose rest needs a rock the line itself casts (Sol Ring / Mind Stone): a ramp-aware rest
    board is a separate change.
