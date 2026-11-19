@@ -301,8 +301,14 @@ def cost_per_game(d, g0, threads, scratch, prior):
     for arm, level in (("on", 2), ("off", 0)):
         o = os.path.join(scratch, "probe.%s.%s.out" % (d.key, arm))
         print("mana_clean: sizing %s: %d games, %s arm" % (d.key, n, arm), file=sys.stderr, flush=True)
-        run_arm(engine_bin("mtg"), manifest, level, o, os.devnull, threads)
+        rc = run_arm(engine_bin("mtg"), manifest, level, o, os.devnull, threads)
         r = job_ms(o).values()
+        played = sum(p for p, _ in r)
+        if rc != 0 or played < n:
+            # A probe that dies (typically the RSS cap: exit 137) would size the run off the few games that finished
+            # and then kill the whole pooled arm minutes later, taking every other deck's chunks with it. Stop here.
+            sys.exit("mana_clean: sizing probe of %s FAILED on the %s arm (rc=%d, %d/%d games; see %s) -- likely the "
+                     "RSS cap; drop the deck from this run and investigate it alone" % (d.key, arm, rc, played, n, o))
         cost.append(sum(ms for _, ms in r) / max(1, sum(p for p, _ in r)))
     return cost[0], cost[1]
 
