@@ -1565,6 +1565,10 @@ INERT_PARAMS = {
     # qualifying opponent creature, and the cumulative upkeep is a disclosed always-paid
     # auto-decision (weakly dominant vs the passive opponent; see the War-Riders bracket note).
     "etb_opp_creates_tokens": "automatic ETB gift (fixed count, single opponent -> no target)",
+    # Vexing Devil: "any opponent may have it deal 4 damage to them. If a player does, sacrifice it."
+    # The choice is the OPPONENT's, resolved by the USER-ruled passive-opponent model
+    # (VexingDevilOpponentTakesDamage, ledger 2026-11-17); the controller makes no decision.
+    "etb_opp_may_take_damage_to_sac": "opponent's choice (Vexing Devil), USER-ruled passive-opponent model -- no player decision",
     "any_creature_enters_lifegain": "automatic enter trigger (Soul Warden; Soul's Attendant / Auriok Champion's 'you may' always taken -- disclosed 6a)",
     "own_creature_enters_lifegain": "automatic enter trigger (Suture Priest, may-always-taken)",
     # ---- Angels (2026-09-17). Every one of these is a MANDATORY, UNTARGETED trigger, a static
