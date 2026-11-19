@@ -4991,6 +4991,7 @@ public:
     bool LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const override;
     bool CrossingDumpAllLandsDominatesNo(const GameState& s, int controller) const override;
     bool PlanListFilterLive(const GameState& s) const override;
+    bool MazeHeapFilterLive(const GameState& s) const;   // Heap Gate's half of the plan-list filter (P5)
     void PlanListAdmit(const GameState& s, const std::vector<PlanView>& plans, std::vector<char>& admit) const override;
     // P6 (USER 2026-11-18, ruling 6): the off-main Maze's End activation in response to Manabond / Burgeoning is
     // always taken and redeployed (the premises are at the definition).

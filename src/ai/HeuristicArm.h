@@ -1011,6 +1011,7 @@ enum Slot : int
     MAZE_OFFMAIN_RESPOND,     // MTG_MAZE_OFFMAIN_RESPOND  Maze's End P6 (USER 2026-11-18 ruling 6): an untapped Maze's End is activated IN RESPONSE to a Manabond trigger (on a yes) or a Burgeoning trigger, then redeployed by that trigger (MazesEndProvider::OffMainMazeRedeployForced prunes the activate/decline choice to activate; the Gate fetched stays a searched crossing ordinal). Default ON; =0 -> no off-main response (with MAZE_OFFMAIN_BANK=0: the pre-P6 engine)
     MAZE_OFFMAIN_BANK,        // MTG_MAZE_OFFMAIN_BANK     Maze's End P6 (same ruling): after an off-main put (Manabond's dump at our end step, a Burgeoning put on the opponent's turn) a SEARCHED crossing ordinal offers activating an untapped Maze's End with no redeploy ("bank" a Gate: decline, or one per admitted fetch target). Default ON; =0 -> never offered
     OWED_ACTS_JOINT_PAY,      // MTG_OWED_ACTS_JOINT_PAY   Maze's End F5: when the usual payment of a plan's casts would leave its TRAILING activations' mana unpayable (MTG_LINE_PAY_AUDIT's joint=YES class) and one joint solve pays the whole line, the line is paid jointly (TurnSolver::OwedActsJointPrepay -> LineJointPrepayCore), both worlds. A completeness fix (the mana-payment exemption), engine-wide. Default ON; =0 -> the casts-only payment
+    MAZE_UNPAYABLE_PRUNE,     // MTG_MAZE_UNPAYABLE_PRUNE  Maze's End F5 (USER 2026-11-18: "drop plans that cannot pay a subset"): MazesEndProvider's plan-list filter drops a plan no payment order can pay on the optimistic board (TurnSolver::DropProvablyUnpayablePlans), gated on the deck property "no net-mana-positive card, no cost reducer". A RESTRICTION (the subset the plan would realise is its own plan). Default ON; =0 -> every enumerated plan offered, as before
     COUNT
 };
 
@@ -1966,6 +1967,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_OFFMAIN_RESPOND",
         "MTG_MAZE_OFFMAIN_BANK",
         "MTG_OWED_ACTS_JOINT_PAY",
+        "MTG_MAZE_UNPAYABLE_PRUNE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

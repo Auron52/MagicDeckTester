@@ -3379,6 +3379,16 @@ public:
     // pay it jointly (LineJointPrepayCore). Both apply worlds call it just before BatchPrepayMainCasts; true = paid
     // (skip the casts-only prepay), false = `state` untouched.
     static bool OwedActsJointPrepay(GameState& state, const std::vector<Action>& acts);
+    // PROVABLY-UNPAYABLE PLANS (Maze's End F5, USER 2026-11-18; see the definition): clears admit[i] for each plan
+    // (acts[i], lands[i]) that NO payment order can pay, judged on an OPTIMISTIC board (the plan's land drop on the
+    // battlefield untapped, every land / Treasure the line itself makes credited as any-colour mana). Sound ONLY for a
+    // deck with no net-mana-positive card and no cost reducer -- the caller (a provider's plan-list filter) gates it
+    // on that deck property. Only ever REMOVES plans.
+    static void DropProvablyUnpayablePlans(const GameState& state, const std::vector<const std::vector<Action>*>& acts,
+                                           const std::vector<const std::string*>& lands, std::vector<char>& admit);
+    // The single-plan verdict behind it (unit tests): true = no payment order pays the plan's binding steps.
+    static bool PlanProvablyUnpayableForTest(const GameState& state, const std::vector<Action>& acts,
+                                             const std::string& land);
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
