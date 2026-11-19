@@ -62,9 +62,11 @@ def main():
     games = entry["games"]
 
     jobs = []
-    for g in games:                      # reference-major, arm-minor: no arm-major barrier
+    for gidx, g in enumerate(games):     # reference-major, arm-minor: no arm-major barrier
         mull = g["mull"]
-        for name, flags, budget in arms:
+        # Arm order ROTATES per reference so no arm always starts second (a later start reads faster
+        # wall under a draining pool; see scripts/ab_wall.py). Results are order-free.
+        for name, flags, budget in arms[gidx % len(arms):] + arms[:gidx % len(arms)]:
             j = {"name": "%s__%s" % (name, ref_bench.job_name(key, g)),
                  "deck": entry["deck_obj"].deck_file, "profile": entry["deck_obj"].profile,
                  "games": 1, "seed": g["seed"], "game_index": g["gi"],
