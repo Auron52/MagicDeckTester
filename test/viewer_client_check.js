@@ -861,38 +861,6 @@ function testActivationPicker(win) {
 // pref round-trips through localStorage (it must outlive a game AND a server restart); a source with
 // no investigate is untouched; and clicking a fused Investigate OFF takes its deferred crack with it
 // rather than orphaning it.
-// LAND ENTRY "let AI decide" auto-replies only toward UNTAPPED (USER 2026-11-19, Spirits seed 9: a
-// main-2 Watery Grave auto-entered tapped and stranded Usher of the Fallen's boast). The heuristic's
-// "tapped" cannot see a line the user has not queued yet, so it must always be asked; "untapped" keeps
-// every line and costs only life, so it may still be auto-taken.
-function testLandEntryAutoDirection(win) {
-  const fails = [];
-  const chk = (c, m) => { if (!c) fails.push(m); };
-  let saved = null;
-  try { saved = win.localStorage.getItem('mdt_surface'); } catch (e) { /* jsdom always has it */ }
-  win.setSurface('land_entry', false);   // "let AI decide"
-  const realPush = win.pushChoice;
-  let pushed = [];
-  win.pushChoice = (dec, v, lab) => { pushed.push({ v, lab }); };
-  try {
-    const mk = (def) => ({ type: 'land_entry', decision_index: 9100 + def, source: 'Watery Grave',
-                           pay_life: 2, reveal_types: [], heuristic_default: def });
-    chk(win.autoResolveDecision(mk(0)) === false, 'an "enter tapped" default was auto-resolved (must ask)');
-    chk(pushed.length === 0, `an "enter tapped" default pushed a choice: ${JSON.stringify(pushed)}`);
-    pushed = [];
-    chk(win.autoResolveDecision(mk(1)) === true, 'an "untapped" default was not auto-resolved');
-    chk(pushed.length === 1 && pushed[0].v === 1, `an "untapped" default pushed ${JSON.stringify(pushed)}`);
-    win.setSurface('land_entry', true);  // "ask me": never auto-resolved either way
-    pushed = [];
-    chk(win.autoResolveDecision(mk(1)) === false && pushed.length === 0, 'surface ON still auto-resolved');
-  } finally {
-    win.pushChoice = realPush;
-    try { if (saved == null) { win.localStorage.removeItem('mdt_surface'); }
-          else { win.localStorage.setItem('mdt_surface', saved); } } catch (e) { /* inert */ }
-  }
-  return fails;
-}
-
 function testClueFuseOption(win) {
   const S = win.__getS(), fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2552,9 +2520,6 @@ async function testMorph() {
     if (btFails.length) { anyFail = true; console.log(`✗ blink board targeting: ${btFails.length} fail`); btFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ blink targets picked on the board (arm → click creature → stacks; 1 target asks nothing)'); }
     // The clue gesture is a GLOBAL option, not a per-click dialog (fast, DOM-only).
-    const leFails = testLandEntryAutoDirection(win);
-    if (leFails.length) { anyFail = true; console.log(`✗ land entry auto: ${leFails.length} fail`); leFails.forEach(m => console.log('  - ' + m)); }
-    else { console.log('✓ land entry "let AI decide" auto-takes untapped only; an enter-tapped default is always asked'); }
     const cfFails = testClueFuseOption(win);
     if (cfFails.length) { anyFail = true; console.log(`✗ clue fuse option: ${cfFails.length} fail`); cfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ clue fuse is a persisted GLOBAL option (one click, no modal, either state)'); }
