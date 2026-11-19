@@ -128,3 +128,32 @@ tied, 0 short. s3 records win_turn 6 and the search ties it. See logs/maze/F7-2-
   Since these are worse at unlimited budget, they are a real defect (a scored-vs-executed mismatch is the
   first suspect: e.g. the rec_bp_ord segment replay the parent flagged), not budget churn. Not yet root-caused.
 - Tiers: not run.
+
+## F7-3 (2026-11-19): the rec_bp_ord defect is a PREFIX-RESUME numbering bug
+- Real mechanism (code-read, then confirmed by the d8 rerun below): the wave loop captures a variant at its varied
+  breakpoint (`bp_capture`, top of the deferred loop, `bp_seen == plan.bp_at`) and resumes the later ranks from it.
+  The resume restored `*out_breakpoint = bp_resume->sink` (records already stamped 0, 1, ...) but NOT `main_bp_ord`,
+  so the resumed pass's push opened ordinal 0 again. g1026's committed T6 line was `bp_choice=2@2` (the second F7
+  re-armed pass): its Citadel Gate + Maze's End records were stamped 0 and replayed inside segment 0, ahead of
+  segment 1 (Golgari Guildgate + Exploration). Not the "unstamped trailing records" F7-2 guessed: every record site
+  is inside a push/pop.
+- Fix: `BpPrefixSnap::main_bp_ord`, captured at both capture sites and restored on resume. General (any deck whose
+  resumed variant follows an earlier main-level segment), not deck-gated, no hatch: a lockstep correctness fix.
+- `FdPlanText` now prints a record's ordinal (`k4@2:Citadel Gate`) under MTG_FD_TRACE.
+- Unit test "Maze's End F7-3: a prefix-resumed apply records the main-level segments the full apply records"
+  (hook `TurnSolver::BpResumeRecordsForTest`).
+- Chain (scripts/heavy_run.sh, MTG_HEAVY_TAIL_SAMPLES=40): `build/scratch/maze/f73/chain.sh` -- build -> units ->
+  b1 (the 10 d8 games + the F7-shape A/B, one pool) -> b2 (any NEW slower game at d8 b0) -> check.py gate -> tiers
+  (only on PASS, no accept). Markers: f73/stage, f73/DONE, f73/gate.txt, f73/tiers.DONE.
+- 15:3x UTC: the first chain built, and the new unit test FAILED (at=1 pre=1 ch=2: the full apply had 2 records,
+  the resume had 1). Second omission in the same resume: `deferred_put_armed` (site 10) was neither captured nor
+  restored, so a resumed site-10 pass re-solved as plain-cantrip site 3 and recorded a different continuation.
+  trick_armed/equip_armed were carried for exactly this reason; put_armed was missed. Now carried
+  (BpPrefixSnap::put_armed). This is pre-existing for every deck whose wave loop resumes a site-10 variant (the
+  put-in-hand / hand-entry tutors), so other decks MAY move in the tiers. Chain relaunched (try1/ holds the first
+  build log); it now runs `mtg-test -tc="Maze's End F7*"` first and stops with DONE=UNITFAIL on failure.
+- ~17:15 UTC try2: F7 unit test failed again, differently: full `PlayLand Maze's End@0, ActivatePermAbility Maze's
+  End@1`, resumed `PlayLand Maze's End@0` only. Third omission: the apply's ENTRY-time keys (`pre_plan_acts`,
+  MTG_BP_NEW_ONLY's "the base plan could have carried it", and `pre_plan_keys`, site 9's) were recomputed from the
+  SNAPSHOT state on resume, so the Maze's End the prefix had played read as pre-existing and NEW_ONLY dropped its
+  activation. Both now carried in BpPrefixSnap. try3 relaunched.
