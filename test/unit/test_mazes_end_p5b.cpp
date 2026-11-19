@@ -244,3 +244,130 @@ TEST_CASE("Maze's End P5b fold 2: it never folds an order-sensitive land, a draw
         CHECK(LandFirstPlans(s, held, 1) > 0);
     }
 }
+
+// ---- P5b-2: the land-order fold as a FIRST-REACHED dedup (MTG_FOLD_LAND_ORDER_SEEN) --------------------------
+// The two orders of two commuting lands reach states that differ ONLY in battlefield order. The search loops' dedup
+// key (SeenKey) folds that order -- so the later twin is skipped as a duplicate -- and nothing else.
+namespace
+{
+// Exploration out, then `lands` entered this turn IN THIS ORDER (played, tapped), each with a fixed card number.
+GameState Entered(const DecisionProvider* prov, const std::vector<std::pair<const char*, int>>& lands)
+{
+    GameState s = Base(prov);
+    s.deck_has_landfall = false;
+    s.deck_has_static_land_drops = true;
+    Permanent ex;
+    ex.card = C("Exploration", 1);
+    ex.controller_index = 0; ex.owner_index = 0;
+    s.battlefield.push_back(ex);
+    s.players[0].hand.push_back(C("Sea Gate", 9));   // something left in hand, the same in both orders
+    for (const auto& l : lands)
+    {
+        Permanent p;
+        p.card = C(l.first, l.second);
+        p.controller_index = 0; p.owner_index = 0;
+        p.tapped = true;
+        p.entered_this_turn = true;
+        s.battlefield.push_back(p);
+    }
+    s.players[0].lands_played_this_turn = static_cast<int>(lands.size());
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Maze's End P5b-2: the dedup key folds the order of two commuting lands, and only that")
+{
+    LoadP5bCards();
+    const MazesEndProvider prov;
+    const GameState ab = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+    const GameState ba = Entered(&prov, { { "Boros Guildgate", 3 }, { "Azorius Guildgate", 2 } });
+    // The exact key tells the two orders apart (FsOrderSig) -- which is why the plain dedup never merged them.
+    REQUIRE(TurnSolver::DedupKeyOf(ab) != TurnSolver::DedupKeyOf(ba));
+    {
+        const ArmP5b off(heurarm::FOLD_LAND_ORDER_SEEN, 0);
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ab) == TurnSolver::DedupKeyOf(ab));   // off: the exact key
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ba) == TurnSolver::DedupKeyOf(ba));
+    }
+    const ArmP5b on(heurarm::FOLD_LAND_ORDER_SEEN, 1);
+    CHECK(TurnSolver::LandOrderSeenKeyOf(ab) == TurnSolver::LandOrderSeenKeyOf(ba));
+    // The card-number order is the canonical one: that state keys exactly as before.
+    CHECK(TurnSolver::LandOrderSeenKeyOf(ab) == TurnSolver::DedupKeyOf(ab));
+    // Any other difference still separates them: a tapped flag, the hand.
+    {
+        GameState x = ba;
+        x.battlefield.back().tapped = false;
+        CHECK(TurnSolver::LandOrderSeenKeyOf(x) != TurnSolver::LandOrderSeenKeyOf(ab));
+        GameState y = ba;
+        y.players[0].hand.clear();
+        CHECK(TurnSolver::LandOrderSeenKeyOf(y) != TurnSolver::LandOrderSeenKeyOf(ab));
+    }
+    // A land that did not enter this turn is never moved.
+    {
+        GameState x = ab, y = ba;
+        x.battlefield[1].entered_this_turn = false; x.battlefield[2].entered_this_turn = false;
+        y.battlefield[1].entered_this_turn = false; y.battlefield[2].entered_this_turn = false;
+        CHECK(TurnSolver::LandOrderSeenKeyOf(x) != TurnSolver::LandOrderSeenKeyOf(y));
+    }
+    // Three lands in any order fold to one key.
+    {
+        const GameState p = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 }, { "Maze's End", 4 } });
+        const GameState q = Entered(&prov, { { "Maze's End", 4 }, { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+        const GameState r = Entered(&prov, { { "Boros Guildgate", 3 }, { "Maze's End", 4 }, { "Azorius Guildgate", 2 } });
+        CHECK(TurnSolver::LandOrderSeenKeyOf(p) == TurnSolver::LandOrderSeenKeyOf(q));
+        CHECK(TurnSolver::LandOrderSeenKeyOf(p) == TurnSolver::LandOrderSeenKeyOf(r));
+    }
+}
+
+TEST_CASE("Maze's End P5b-2: the USER's carve-outs keep their order in the key (order-sensitive lands, two Amulets, Summit)")
+{
+    LoadP5bCards();
+    const MazesEndProvider prov;
+    const ArmP5b on(heurarm::FOLD_LAND_ORDER_SEEN, 1);
+    // Gateway Plaza (pay or sacrifice) and a colour Gate (Cliffgate) are class -1: never moved.
+    for (const char* sensitive : { "Gateway Plaza", "Cliffgate" })
+    {
+        const GameState ab = Entered(&prov, { { sensitive, 2 }, { "Boros Guildgate", 3 } });
+        const GameState ba = Entered(&prov, { { "Boros Guildgate", 3 }, { sensitive, 2 } });
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ab) != TurnSolver::LandOrderSeenKeyOf(ba));
+    }
+    // Two Amulets of Vigor: every land is order-sensitive.
+    {
+        GameState ab = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+        GameState ba = Entered(&prov, { { "Boros Guildgate", 3 }, { "Azorius Guildgate", 2 } });
+        for (GameState* g : { &ab, &ba })
+        {
+            for (int k = 0; k < 2; ++k)
+            {
+                Permanent am;
+                am.card = C("Amulet of Vigor", 50 + k);
+                am.controller_index = 0; am.owner_index = 0;
+                g->battlefield.insert(g->battlefield.begin(), am);
+            }
+        }
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ab) != TurnSolver::LandOrderSeenKeyOf(ba));
+    }
+    // Guild Summit: a Gate and Maze's End are different classes -- their order is kept; two Gates still fold.
+    {
+        auto with_summit = [&](GameState g)
+        {
+            Permanent gs;
+            gs.card = C("Guild Summit", 55);
+            gs.controller_index = 0; gs.owner_index = 0;
+            g.battlefield.insert(g.battlefield.begin(), gs);
+            return g;
+        };
+        const GameState gm = with_summit(Entered(&prov, { { "Azorius Guildgate", 2 }, { "Maze's End", 4 } }));
+        const GameState mg = with_summit(Entered(&prov, { { "Maze's End", 4 }, { "Azorius Guildgate", 2 } }));
+        CHECK(TurnSolver::LandOrderSeenKeyOf(gm) != TurnSolver::LandOrderSeenKeyOf(mg));
+        const GameState ab = with_summit(Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } }));
+        const GameState ba = with_summit(Entered(&prov, { { "Boros Guildgate", 3 }, { "Azorius Guildgate", 2 } }));
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ab) == TurnSolver::LandOrderSeenKeyOf(ba));
+    }
+    // A deck without static extra land drops: the exact key, whatever the flag.
+    {
+        GameState ab = Entered(&prov, { { "Azorius Guildgate", 2 }, { "Boros Guildgate", 3 } });
+        GameState ba = Entered(&prov, { { "Boros Guildgate", 3 }, { "Azorius Guildgate", 2 } });
+        ab.deck_has_static_land_drops = false; ba.deck_has_static_land_drops = false;
+        CHECK(TurnSolver::LandOrderSeenKeyOf(ab) != TurnSolver::LandOrderSeenKeyOf(ba));
+    }
+}
