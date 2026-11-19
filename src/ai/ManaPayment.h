@@ -75,6 +75,13 @@ ManaCost GraveyardCastSpellCost(const CardDefinition& def, const GameState& stat
 // The "{N} less from your graveyard" total (Patrician Geist's reduces_graveyard_cast_generic, summed over
 // the permanents `controller` controls). GraveyardCastSpellCost applies it; exposed for the tests.
 int GraveyardCastGenericDiscount(const GameState& state, int controller);
+// HUMAN PLAY's graveyard-cast payment demand (MTG_HUMAN_GY_DEMAND, default ON; ManaPayment.cpp has the Spirits
+// seed 9 story): adds to nc_pips / cre_pips (W,U,B,R,G) the coloured pips of every graveyard card castable now by
+// flashback / retrace, and of the flashback of the spell being paid (PayingSpellCard) when `paying` is its hand
+// cost. Uncapped by mana value (ManaPayment.cpp says why). Callers gate on HumanPlayActive(); exposed for the tests.
+void HumanGraveyardCastDemand(const GameState& state, int active, const ManaCost& paying,
+                              int* nc_pips, int* cre_pips);
+bool HumanGyDemandEnabled();
 // EMERGE (CR 702.119a + 601.2f; Decimator of the Provinces, Boars I4): the alternative cost
 // CardParams::emerge_cost through every reducer (EffectiveSpellCostWithBase -- Herald's Horn applies),
 // then reduced by the sacrificed creature's printed mana value off the GENERIC part only, floored at 0
