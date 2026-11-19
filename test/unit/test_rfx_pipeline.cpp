@@ -3168,3 +3168,169 @@ TEST_CASE("rfx runaway fix: the zero-progress CYCLE FOLD -- an indestructible Ne
         CHECK(calls == 1);
     }
 }
+
+// ---- ESCAPE-SCRY ARMS (2026-11-19): Loran's Escape as a bare scry 1 -- arm P (prune, LOSSY, DEFAULT OFF) and arm W
+// (move-ordered last, ORDER only, DEFAULT OFF). USER 11-17 ~21:35: "I would prune Loran's Escape even when we have no
+// guilty conscience to one creature or perhaps even not castable. It is essentially a Scry 1." USER 11-19 ~06:20: "the
+// purpose of that card in the deck is primarily for indestructible and the combo, not for incidental scry 1."
+namespace
+{
+// Pin the escape-scry slots (and optionally the 9b unprune lever) for one test; -1 = the env default, restored on exit.
+struct EscArm
+{
+    EscArm(int prune, int last, int unprune = -1)
+    {
+        heurarm::t_arm[heurarm::STUFFY_ESCAPE_SCRY_PRUNE] = static_cast<std::int8_t>(prune);
+        heurarm::t_arm[heurarm::STUFFY_ESCAPE_SCRY_LAST]  = static_cast<std::int8_t>(last);
+        heurarm::t_arm[heurarm::STUFFY_UNPRUNE_9B]        = static_cast<std::int8_t>(unprune);
+    }
+    ~EscArm()
+    {
+        heurarm::t_arm[heurarm::STUFFY_ESCAPE_SCRY_PRUNE] = -1;
+        heurarm::t_arm[heurarm::STUFFY_ESCAPE_SCRY_LAST]  = -1;
+        heurarm::t_arm[heurarm::STUFFY_UNPRUNE_9B]        = -1;
+    }
+};
+Action EscapeAt(int target, const std::string& hand_name = std::string())
+{
+    Action a;
+    a.kind = Action::Kind::CastFromHand;
+    a.def = &DefRfx("Loran's Escape");
+    a.card_name = a.def->card.m_name;
+    a.enchant_target = target;
+    a.trick_hand_target = hand_name;
+    return a;
+}
+// The seed-5 gi-4 T1 shape: our Plains, the opponent's Orchard Spirit (spawned on the Orchard's play), no creature of
+// ours, Loran's Escape in hand.
+GameState EscapeSpiritBoard()
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.deck_has_spell_target_watch = false;
+    PutRfx(s, "Plains", 4001);
+    TokenRfx(s, 4002, 1, 1, 1, "Spirit");
+    Card e = DefRfx("Loran's Escape").card; e.m_number = 4010; s.players[0].hand.push_back(e);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 4020 + i; s.players[0].library.push_back(m); }
+    return s;
+}
+bool AnyEscapePlan(const GameState& s)
+{
+    for (const auto& p : TurnSolver::EnumerateMainPlans(s, true)) { if (LoranTargetOf(p) != 0) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("escape-scry arm P: the seed-5 shape (only an opponent Spirit to target) -- no Escape under the arm; base keeps it")
+{
+    const bool open = DecisionUnpruned(UnprunedGate::EscapeTarget);
+    {
+        const EscArm arm(0, 0);
+        CHECK(AnyEscapePlan(EscapeSpiritBoard()));
+    }
+    {
+        const EscArm arm(1, 0);
+        CHECK(AnyEscapePlan(EscapeSpiritBoard()) == open);
+    }
+    {
+        const EscArm arm(1, 0, 1);   // MTG_STUFFY_UNPRUNE_9B lifts arm P with the step-9b prunes
+        CHECK(AnyEscapePlan(EscapeSpiritBoard()));
+    }
+}
+
+TEST_CASE("escape-scry arm P: the predicate -- useful only on our non-indestructible creature with damage this turn")
+{
+    if (DecisionUnpruned(UnprunedGate::EscapeTarget)) { return; }   // the arm is lifted wholesale (case above)
+    const EscArm arm(1, 0);
+    const StuffyDollProvider& P = StuffyP();
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    s.deck_has_spell_target_watch = false;
+    PutRfx(s, "Plains", 4101);
+    for (int i = 0; i < 6; ++i) { PutRfx(s, "Mountain", 4102 + i); }   // 7 mana
+    PutRfx(s, "Boros Reckoner", 4110);
+    PutRfx(s, "Stuffy Doll", 4111).chosen_player = 1;
+    TokenRfx(s, 4112, 1, 1, 1, "Spirit");
+    Card e = DefRfx("Loran's Escape").card; e.m_number = 4090; s.players[0].hand.push_back(e);
+    // No GC, no sweeper: every target is a bare scry -- refused, in either main.
+    CHECK_FALSE(P.CollectedActionAllowed(s, EscapeAt(4110), true));
+    CHECK_FALSE(P.CollectedActionAllowed(s, EscapeAt(4110), false));
+    CHECK_FALSE(P.CollectedActionAllowed(s, EscapeAt(4111), true));   // the Doll (printed indestructible)
+    CHECK_FALSE(P.CollectedActionAllowed(s, EscapeAt(4112), true));   // the opponent's Spirit
+    // A non-Escape action is untouched by arm P (post-combat: the main split has nothing to say about it).
+    Action other = EscapeAt(4110);
+    other.def = &DefRfx("Boros Reckoner");
+    other.card_name = other.def->card.m_name;
+    CHECK(P.CollectedActionAllowed(s, other, false));
+    // Blasphemous Act castable alongside (3 creatures: {5}{R} + the Escape's {W} = 7): the Reckoner is useful.
+    GameState a = s;
+    Card act = DefRfx("Blasphemous Act").card; act.m_number = 4091; a.players[0].hand.push_back(act);
+    CHECK(P.CollectedActionAllowed(a, EscapeAt(4110), true));
+    CHECK_FALSE(P.CollectedActionAllowed(a, EscapeAt(4111), true));   // still nothing to gain on the Doll
+    CHECK_FALSE(P.CollectedActionAllowed(a, EscapeAt(4112), true));   // nor on theirs
+    // ...but not with one mana short: the Act and the Escape do not both fit.
+    GameState a6 = a;
+    for (Permanent& q : a6.battlefield) { if (q.card.m_number == 4107) { q.tapped = true; } }
+    CHECK_FALSE(P.CollectedActionAllowed(a6, EscapeAt(4110), true));
+    // An Escaped (already indestructible) Reckoner gains nothing even with the Act in hand.
+    GameState ai = a;
+    for (Permanent& q : ai.battlefield) { if (q.card.m_number == 4110) { q.temp_indestructible = true; } }
+    CHECK_FALSE(P.CollectedActionAllowed(ai, EscapeAt(4110), true));
+    // Guilty Conscience on the Reckoner: useful; GC on the Doll alone is no source for the Reckoner.
+    GameState g = s;
+    AttachGc(g, 4092, 4110);
+    CHECK(P.CollectedActionAllowed(g, EscapeAt(4110), true));
+    GameState gd = s;
+    AttachGc(gd, 4093, 4111);
+    CHECK_FALSE(P.CollectedActionAllowed(gd, EscapeAt(4110), true));
+    // A Guilty Conscience in hand, castable alongside: useful.
+    GameState gh = s;
+    Card gc = DefRfx("Guilty Conscience").card; gc.m_number = 4094; gh.players[0].hand.push_back(gc);
+    CHECK(P.CollectedActionAllowed(gh, EscapeAt(4110), true));
+    // A same-plan HAND target (Mogg Maniac {1}{R}) with the Act: 1 + 2 + (9 - 4 creatures = 5) = 8 > 7 -> refused;
+    // one more land -> kept.
+    GameState h = a;
+    Card mm = DefRfx("Mogg Maniac").card; mm.m_number = 4095; h.players[0].hand.push_back(mm);
+    CHECK_FALSE(P.CollectedActionAllowed(h, EscapeAt(4095, "Mogg Maniac"), true));
+    PutRfx(h, "Mountain", 4108);
+    CHECK(P.CollectedActionAllowed(h, EscapeAt(4095, "Mogg Maniac"), true));
+    // Arm OFF: nothing is refused (the main split refuses only sweepers, in main 1).
+    const EscArm off(0, 0);
+    CHECK(P.CollectedActionAllowed(s, EscapeAt(4112), true));
+    CHECK(P.CollectedActionAllowed(s, EscapeAt(4110), true));
+}
+
+TEST_CASE("escape-scry arm W: a scry-only Escape plan is move-ordered LAST; nothing is removed")
+{
+    if (DecisionUnpruned(UnprunedGate::EscapeTarget)) { return; }
+    GameState s = EscapeSpiritBoard();
+    PutRfx(s, "Plains", 4003);
+    // A second, non-Escape option (a hand creature would trip the step-9b target prune's hand rule).
+    Card r = DefRfx("Guilty Conscience").card; r.m_number = 4011; s.players[0].hand.push_back(r);
+    auto census = [&](int& esc, int& esc_back, int& other, int& other_back) {
+        esc = esc_back = other = other_back = 0;
+        for (const auto& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            const bool e = LoranTargetOf(p) != 0;
+            (e ? esc : other) += 1;
+            if (p.move_tier == -1) { (e ? esc_back : other_back) += 1; }
+            CHECK(p.move_tier != 1);
+        }
+    };
+    int e0, eb0, o0, ob0, e1, eb1, o1, ob1;
+    { const EscArm arm(0, 0); census(e0, eb0, o0, ob0); }
+    { const EscArm arm(0, 1); census(e1, eb1, o1, ob1); }
+    CHECK(e0 >= 1);
+    CHECK(e1 == e0);          // the same plans, every scry line still on the menu
+    CHECK(o1 == o0);
+    CHECK(eb0 == 0);          // arm off: no tier
+    CHECK(ob0 == 0);
+    CHECK(eb1 == e1);         // arm on: every scry-only Escape plan is at the back
+    CHECK(ob1 == 0);          // and nothing else is
+    // The hook itself: a selection holding the scry-only cast is at the back; an empty selection is not.
+    const EscArm arm(0, 1);
+    const StuffyDollProvider& P = StuffyP();
+    std::vector<Action> cands{ EscapeAt(4002) };
+    CHECK(P.PlanMoveOrderBack(s, cands, { 0 }, false));
+    CHECK_FALSE(P.PlanMoveOrderBack(s, cands, {}, false));
+}

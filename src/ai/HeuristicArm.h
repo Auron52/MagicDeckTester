@@ -1019,6 +1019,8 @@ enum Slot : int
     SEQ_TRAILING_EQUIP,       // MTG_SEQ_TRAILING_EQUIP  the enumeration's sequential walk (SeqWalkFixedOrder; SubsetPayableSequential, OrderPaysSequentially) prices a PAID equip that unlocks no mana -- and a planned unlock its host no longer needed (Surrak hasted it) -- at its end, as both apply worlds pay it in the trailing equip pass, instead of refusing the subset as an unmodelled kind. Jumbo Cactuar s30119376 T5 {Tooth and Nail, Surrak, Satyr x2, equip Chariot} (ENUM-GAP x19, ef-walk-fail) was unfindable at any budget while the same line without the equip was offered. A completeness fix of the walk. DEFAULT ON; =0 -> refused as before. docs/design/jumbo-apply-drop-order-2026-11-18.md
     RFX_FAN_CHARGE,           // MTG_RFX_FAN_CHARGE  the damage-reflection fans of AppendSubdecisionAxes (main + combat) charge each probe (one plan apply + combat) to the decision budget (unitsite rfx_fan). Before 2026-11-19 the fans' probe work was UNCHARGED, so a fan that grew was invisible to the budget and its Overrun backstop could never fire (Stuffy Doll held-out d3 gi8, unpruned: 8 GB in 21.7 min). A budget-accounting fix; DEFAULT ON, =0 restores the uncharged fans (measurement arm)
     STUFFY_LETHAL_ORCHARD_LEGACY,// MTG_STUFFY_LETHAL_ORCHARD_LEGACY  MEASUREMENT arm for the Stuffy Doll split-lethal fix (2026-11-19): StuffyDollProvider::ExtraLethalDamage counted one extra creature (Chain Reaction's X) and one extra Shaman pull target per UNTAPPED Forbidden Orchard of ours, but the engine makes Orchard Spirits at turn start / on the Orchard's play (SpawnForbiddenOrchardTokensTurnStart, LandPlay's on-play spawn), never at a tap, so the Spirit is already counted in the board's creatures. DEFAULT OFF (the fixed projection); =1 restores the over-count (with MTG_RFX_FAN_CHARGE=0 too: the f53235400 play)
+    STUFFY_ESCAPE_SCRY_PRUNE, // MTG_STUFFY_ESCAPE_SCRY_PRUNE  Stuffy Doll arm P (2026-11-19, USER 11-17 ~21:35 "perhaps even not castable. It is essentially a Scry 1" / 11-19 ~06:20 "the purpose of that card in the deck is primarily for indestructible and the combo, not for incidental scry 1"): StuffyDollProvider::CollectedActionAllowed refuses a Loran's Escape cast whose grant cannot matter this turn (StuffyEscapeCastIsScryOnly: not our creature, already indestructible, or no damage source this turn). LOSSY (the scry-only line becomes unfindable), DEFAULT OFF, A/B arm only
+    STUFFY_ESCAPE_SCRY_LAST,  // MTG_STUFFY_ESCAPE_SCRY_LAST  Stuffy Doll arm W (2026-11-19): the same scry-only Loran's Escape plans stay on the menu but are MOVE-ORDERED LAST among their wins tier (StuffyDollProvider::PlanMoveOrderBack, MoveOrderLess's provider tier = -1). ORDER only: nothing refused at any budget; a budget reaches real lines first; a scry line wins only when strictly better. Inert at d0 (the runner never move-orders). DEFAULT OFF, A/B arm
     COUNT
 };
 
@@ -1982,6 +1984,8 @@ inline const char* Name(int slot)
         "MTG_SEQ_TRAILING_EQUIP",
         "MTG_RFX_FAN_CHARGE",
         "MTG_STUFFY_LETHAL_ORCHARD_LEGACY",
+        "MTG_STUFFY_ESCAPE_SCRY_PRUNE",
+        "MTG_STUFFY_ESCAPE_SCRY_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

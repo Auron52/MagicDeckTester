@@ -3525,8 +3525,9 @@ static bool MoveOrderLess(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
     // OFF): same shape one tier down -- a plan whose payment must tap the best own
     // attacker sorts after siblings that keep the attack live.
     if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
-    // Provider front tier (PlanMoveOrderFront; Morph INT-8 E: Berserk first). Ordering only.
-    if (a.move_front != b.move_front) { return a.move_front; }
+    // Provider move tier (PlanMoveOrderFront +1, Morph INT-8 E: Berserk first; PlanMoveOrderBack -1, Stuffy Doll arm
+    // W: a scry-only Loran's Escape last). Ordering only. Identical to the old bool for tiers 0/1.
+    if (a.move_tier != b.move_tier) { return a.move_tier > b.move_tier; }
     if (a.value != b.value) { return a.value > b.value; }
     return a.bp_sched > b.bp_sched;   // MTG_BP_VARIANT_FIRST: exact tie -> the variant first
 }
@@ -87083,7 +87084,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         plan.freshmode_choice = fresh_tag ? 1 : 0;   // fresh-spend priced at the base (MTG_MINT_CREDIT_EXACT)
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
-        plan.move_front     = ResolveProvider(state).PlanMoveOrderFront(state, cands, sel, wins);   // ordering-only
+        {   // ordering-only provider tier: front +1, back -1 (PlanMoveOrderBack asked only when not front)
+            const DecisionProvider& mprov = ResolveProvider(state);
+            plan.move_tier = mprov.PlanMoveOrderFront(state, cands, sel, wins) ? std::int8_t{1}
+                           : (mprov.PlanMoveOrderBack(state, cands, sel, wins) ? std::int8_t{-1} : std::int8_t{0});
+        }
         // MTG_ENUM_PLAN_RESERVE (DEFAULT ON; =0 restores the grow-as-you-push loop): size the action vector
         // once. Capacity is not observable by anything downstream (copies allocate their own size), so
         // the plan is unchanged; perf put the 1->2->4->8 regrowth (each a copy of every Action so far) at
@@ -102443,7 +102448,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combo_off_rule == b.combo_off_rule)) { d += " combo_off_rule"; }
     if (!(a.pump_waste == b.pump_waste)) { d += " pump_waste"; }
     if (!(a.atk_forfeit == b.atk_forfeit)) { d += " atk_forfeit"; }
-    if (!(a.move_front == b.move_front)) { d += " move_front"; }
+    if (!(a.move_tier == b.move_tier)) { d += " move_tier"; }
     if (!(a.atk_dork_release == b.atk_dork_release)) { d += " atk_dork_release"; }
     if (!(a.searched_order == b.searched_order)) { d += " searched_order"; }
     if (!(a.soulbond_decline == b.soulbond_decline)) { d += " soulbond_decline"; }

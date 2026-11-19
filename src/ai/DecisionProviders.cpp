@@ -2667,9 +2667,9 @@ bool StuffyLoopSustainer(const GameState& s, const Permanent& q, int me)
 // Can one of our creature sweepers in hand be cast this turn alongside `extra_mv` more mana (the Aura itself)? A
 // sweeper "reaches" every creature, so it is a starter for any host. Mana count only (colours not checked): a
 // heuristic input, optimistic like ExtraLethalDamage's.
-bool StuffySweeperCastable(const GameState& s, int me, int extra_mv)
+bool StuffySweeperCastable(const GameState& s, int me, int extra_mv, int extra_creatures = 0)
 {
-    int creatures = 0;
+    int creatures = extra_creatures;
     for (const Permanent& q : s.battlefield) { if (q.card.IsCreature()) { ++creatures; } }
     const int avail = AvailableManaPool(s).Total();
     for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
@@ -2685,6 +2685,72 @@ bool StuffySweeperCastable(const GameState& s, int me, int extra_mv)
         if (mv + extra_mv <= avail) { return true; }
     }
     return false;
+}
+
+// LORAN'S ESCAPE AS A BARE SCRY 1 (2026-11-19, arms P and W below). Is `a` a cast of an indestructible-grant trick
+// ("target artifact or creature gains indestructible until end of turn", trick_targets_artifact_or_creature +
+// grants_temp_indestructible) whose GRANT cannot matter this turn, so that the cast buys only its scry? USER 11-17
+// ~21:35: "I would prune Loran's Escape even when we have no guilty conscience to one creature or perhaps even not
+// castable. It is essentially a Scry 1." and 11-19 ~06:20: "the purpose of that card in the deck is primarily for
+// indestructible and the combo, not for incidental scry 1." The grant is USEFUL (false) only when ALL of:
+//   * the target is OUR creature (battlefield, controller me; or a same-plan HAND creature, Action::trick_hand_target),
+//   * it is not already indestructible (printed -- the Doll -- or an earlier grant; a hand card: its printed keyword),
+//   * damage can reach one of our creatures this turn (goldfish: the opponent deals none): a Guilty Conscience on one
+//     of our creatures other than the Doll (its host's damage comes back to it, and a reflector it hits can reflect
+//     onto ours); the target carrying Guilty Conscience; a Guilty Conscience in hand castable alongside the Escape
+//     (+ the hand target); or one of our creature sweepers castable alongside them (StuffySweeperCastable; a
+//     same-plan hand target adds a creature to Blasphemous Act's discount). Mana counts only, colours unchecked --
+//     optimistic like the GC-host prune's, so the error side keeps a line rather than refusing one.
+// Everything else is scry-only (true): the no-effect representative (Doll, Mind Stone), an opponent creature (the
+// seed-5 gi-4 T1 Orchard Spirit), an indestructible / already-Escaped creature, a reflector with no damage this turn.
+// The Doll's {T} self-ping is not a source here: it damages only the (indestructible) Doll and reflects to the chosen
+// player; a Shaman en-Kor pull off it is refused autonomously by the step-9b redirect-window prune, and lifting that
+// prune (MTG_UNPRUNE / MTG_STUFFY_UNPRUNE_9B) lifts both arms too.
+bool StuffyEscapeCastIsScryOnly(const GameState& s, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+    if (d == nullptr || !d->params.trick_targets_artifact_or_creature || !d->params.grants_temp_indestructible)
+    { return false; }
+    const int me = s.active_player_index;
+    const auto& hand = s.players[static_cast<std::size_t>(me)].hand;
+    const int t = a.enchant_target;
+    const int esc_mv = d->card.m_mana_cost.ManaValue();
+    int hand_mv = 0;
+    bool hand_target = false;
+    if (!a.trick_hand_target.empty())
+    {
+        const Card* hc = nullptr;
+        for (const Card& c : hand) { if (c.m_number == t) { hc = &c; break; } }
+        if (hc == nullptr) { return true; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(*hc);
+        if (hd == nullptr || !hd->card.IsCreature() || hd->card.HasKeyword(Keyword::Indestructible)) { return true; }
+        hand_mv = hd->card.m_mana_cost.ManaValue();
+        hand_target = true;
+    }
+    else
+    {
+        const Permanent* q = nullptr;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == t) { q = &p; break; } }
+        if (q == nullptr || q->controller_index != me || !(q->card.IsCreature() || q->is_animated)) { return true; }
+        if (q->HasKeyword(Keyword::Indestructible)) { return true; }
+    }
+    // A damage source this turn.
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+        if (dmgrx::AuraHostDamageBackOn(s, q.card.m_number) <= 0) { continue; }
+        if (q.card.m_number == t || !StuffyIsDoll(dmgrx::Def(q))) { return false; }
+    }
+    const int avail = AvailableManaPool(s).Total();
+    for (const Card& c : hand)
+    {
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(c);
+        if (gd == nullptr || !gd->params.aura_host_damage_back || !gd->params.is_aura) { continue; }
+        if (esc_mv + hand_mv + gd->card.m_mana_cost.ManaValue() <= avail) { return false; }
+    }
+    if (StuffySweeperCastable(s, me, esc_mv + hand_mv, hand_target ? 1 : 0)) { return false; }
+    return true;
 }
 }   // namespace
 
@@ -3067,10 +3133,52 @@ bool StuffyIsCreatureSweeper(const CardDefinition& def)
     return def.params.damage_all_creatures > 0 || def.params.damage_all_creatures_count_creatures;
 }
 
-bool StuffyDollProvider::RestrictsCollectedActions() const { return StuffyMainSplitOn(); }
+// ARM P -- MTG_STUFFY_ESCAPE_SCRY_PRUNE (heurarm STUFFY_ESCAPE_SCRY_PRUNE). A LOSSY provider restriction, DEFAULT OFF,
+// a held-out A/B arm only (the USER decides adoption): an indestructible-grant cast that StuffyEscapeCastIsScryOnly
+// calls scry-only is refused in EITHER main, so the Escape is offered only with a target whose grant this turn's
+// damage could use ("perhaps even not castable", USER 11-17 ~21:35). Applied at CollectActions' tail
+// (RestrictsCollectedActions): search, rollout, d0 runner and executor lose the same casts; human play keeps every
+// cast (the hook is never consulted under HumanPlayActive). The scry-only line becomes UNFINDABLE at every budget --
+// that is why it is an arm and not a fold. Lifted with the step-9b prunes (MTG_UNPRUNE=escapetarget, MTG_UNPRUNED,
+// the per-job MTG_STUFFY_UNPRUNE_9B).
+static bool StuffyEscapeScryPruneOn()
+{
+    static const bool env = EnvOn("MTG_STUFFY_ESCAPE_SCRY_PRUNE");   // DEFAULT OFF (lossy A/B arm)
+    return heurarm::Flag(heurarm::STUFFY_ESCAPE_SCRY_PRUNE, env) && !StuffyStep9bUnpruned(UnprunedGate::EscapeTarget);
+}
+
+// ARM W -- MTG_STUFFY_ESCAPE_SCRY_LAST (heurarm STUFFY_ESCAPE_SCRY_LAST). The budget-staged form of P (CLAUDE.md "WAVES
+// ARE THE SANCTIONED WAY"): a plan casting a scry-only Escape stays on the menu at every budget but is MOVE-ORDERED
+// after its peers (MoveOrderLess's provider tier, -1; below wins_this_turn / sacfod_admit / pump_waste / atk_forfeit,
+// above value), so a binding budget spends on the real lines first and a larger one still reaches the scry line
+// ("It's possible it is justified here if we are in a bad spot", USER 11-19 ~06:20). ORDER only, nothing refused: at
+// unlimited budget every scry plan is still scored, and it wins a pass only when STRICTLY better (it loses exact
+// ties). Inert at depth 0 (the greedy runner never move-orders). DEFAULT OFF; never under human play.
+static bool StuffyEscapeScryLastOn()
+{
+    static const bool env = EnvOn("MTG_STUFFY_ESCAPE_SCRY_LAST");   // DEFAULT OFF (staged-order A/B arm)
+    return heurarm::Flag(heurarm::STUFFY_ESCAPE_SCRY_LAST, env) && !HumanPlayActive()
+        && !StuffyStep9bUnpruned(UnprunedGate::EscapeTarget);
+}
+
+bool StuffyDollProvider::PlanMoveOrderBack(const GameState& s, const std::vector<Action>& cands,
+                                           const std::vector<int>& sel, bool projected_lethal) const
+{
+    (void)projected_lethal;
+    if (!StuffyEscapeScryLastOn()) { return false; }
+    for (int j : sel)
+    {
+        if (j >= 0 && static_cast<std::size_t>(j) < cands.size() && StuffyEscapeCastIsScryOnly(s, cands[static_cast<std::size_t>(j)]))
+        { return true; }
+    }
+    return false;
+}
+
+bool StuffyDollProvider::RestrictsCollectedActions() const { return StuffyMainSplitOn() || StuffyEscapeScryPruneOn(); }
 
 bool StuffyDollProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
 {
+    if (StuffyEscapeScryPruneOn() && StuffyEscapeCastIsScryOnly(s, a)) { return false; }   // arm P (DEFAULT OFF)
     if (!is_pre_combat || !StuffyMainSplitOn()) { return true; }
     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return true; }
     const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
@@ -39339,7 +39447,7 @@ bool CycloneProvider::ReorderKeepShuffleOnly(const GameState& s) const
 // think 1 and 2 is probably fine, though Brainstorm turn 2 is still solid, but given that this is just a reorder it
 // might be fine. we can A/B a few different options." So: on the early turns, a plan that casts a Ponder-shaped
 // cantrip (cast_reorder, no put-back) and no put-back cantrip (Brainstorm, Brainsurge) is TRIED FIRST among its peers
-// (MoveOrderLess's move_front tier, below wins_this_turn, above value). ORDER only: every plan is still searched and a
+// (MoveOrderLess's provider move tier (+1), below wins_this_turn, above value). ORDER only: every plan is still searched and a
 // strictly better one still wins its pass; it matters for ties, cutoffs and what a cut-short pass reached.
 static bool CyclonePonderFirstT1On()
 {

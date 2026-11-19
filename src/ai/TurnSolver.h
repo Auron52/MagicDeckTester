@@ -2040,7 +2040,8 @@ public:
         // cast or regrow a Berserk-shape doubler are tried first). ORDERING ONLY, sorted below atk_forfeit and
         // above value in MoveOrderLess; derived deterministically from (state, actions) at enumeration.
         // In the 1-byte hole after miracle_choice (layout probe: sizeof(Plan) unchanged at 656).
-        bool move_front     = false;
+        // +1 = PlanMoveOrderFront (tried first), -1 = PlanMoveOrderBack (tried last; Stuffy Doll arm W), 0 = neither.
+        std::int8_t move_tier = 0;
         // Profane Tutor's off-suspend fetch at the NEXT upkeep (MTG_PROFANE_RESOLVE_FAN), packed per tutor-search
         // ordinal: chosen by the BOUNDARY FAN where the search crosses into that upkeep and recorded on the plan of
         // the turn that crossed (never a main-phase axis variant); written to GameState::scripted_suspend_tutor.

@@ -4242,8 +4242,13 @@ public:
     //     through the SAME reader. Every other card stays castable in both mains.
     //   MTG_STUFFY_CAST_ORDER (sub-flag, DEFAULT ON within the split): the USER's total order (no ties), the
     //     Escape-before-sweeper order fixed, and Mind Stone's sac-draw only at the end of main 1.
+    //   MTG_STUFFY_ESCAPE_SCRY_PRUNE (arm P, DEFAULT OFF, LOSSY): CollectedActionAllowed also refuses a Loran's Escape
+    //     cast whose grant cannot matter this turn (a bare scry 1). MTG_STUFFY_ESCAPE_SCRY_LAST (arm W, DEFAULT OFF):
+    //     those plans stay searched but are move-ordered LAST (PlanMoveOrderBack). Definitions hold the USER rulings.
     bool RestrictsCollectedActions() const override;
     bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    bool PlanMoveOrderBack(const GameState& s, const std::vector<Action>& cands,
+                           const std::vector<int>& sel, bool projected_lethal) const override;
     std::optional<MainPhase> MainPhaseOverride(const GameState& s, const CardDefinition& def) const override;
     const char* CastOrderTierName(int rank) const override;
     bool OrderOpaqueCastsByRank() const override;

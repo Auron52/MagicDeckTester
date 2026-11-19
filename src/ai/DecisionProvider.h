@@ -3193,6 +3193,13 @@ public:
     virtual bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
                                     const std::vector<int>& sel, bool projected_lethal) const
     { (void)s; (void)cands; (void)sel; (void)projected_lethal; return false; }
+    // PlanMoveOrderBack -- the same tier's BACK (asked only when PlanMoveOrderFront says false): a plan this answers
+    // true for is TRIED LAST among its peers (Plan::move_tier -1). ORDER only -- a budget-staged admission: a binding
+    // budget reaches it after its peers, a larger one still scores it, and nothing is removed at any budget (first
+    // user: Stuffy Doll's MTG_STUFFY_ESCAPE_SCRY_LAST). Default false -> byte-identical.
+    virtual bool PlanMoveOrderBack(const GameState& s, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel, bool projected_lethal) const
+    { (void)s; (void)cands; (void)sel; (void)projected_lethal; return false; }
     // FaceUpRegrowOrder -- the ORDER of a "when turned face up, return a card from your graveyard" flip's
     // named regrowth variants (EmitFaceUpActions; emission order = trial order among value-tied plans).
     // Reorder `names` in place; never add or drop one. Default: emission order (graveyard, then hand).
