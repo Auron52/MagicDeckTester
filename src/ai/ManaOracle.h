@@ -125,6 +125,7 @@ namespace manaoracle
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
         std::vector<int>       tapped_by_script;
+        std::size_t            f_tapped_n = 0;   // tapped_by_script's size when the frontier was taken
         // Every creature (Card::m_number) a SCALED dork the script tapped was counting at its tap (Priest of
         // Titania's Elves), so a yield raised by a card the plan took off the library's top is hidden information
         // (ManaOracle.cpp, BoostedByHiddenCard).
@@ -418,6 +419,11 @@ namespace manaoracle
     // printed); copies only.
     std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const TurnSolver::Plan& plan,
                                          const std::vector<TurnSolver::Plan>& menu);
+
+    // THE GOAL FOLD's running count (MTG_ORACLE_GOAL_FOLD, AuditPlan): frontiers not expanded so far in this process,
+    // and plans whose folded realisation did not cover the engine's board (realised again in full). For the tests.
+    long long GoalFoldedFrontiers();
+    long long GoalFoldRedos();
 
     // THE ENUM-GAP VERDICT for one plan a mana gate kept off `menu` (AuditDecision's per-plan check), for the unit
     // tests that pin its false-positive rules: the class it would report ("ENUM-GAP", "HIDDEN-INFO", a

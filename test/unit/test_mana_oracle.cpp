@@ -1587,3 +1587,33 @@ TEST_CASE("mana oracle: Siege-Gang's shot paid by eating Goblins is among the or
     const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[4].card.m_number) });
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/false, plan));
 }
+
+// ---- THE GOAL FOLD (MTG_ORACLE_GOAL_FOLD; docs/design/goblins-oracle-eat-fold-2026-11-19.md) ---------------------------
+// Two Siege-Gang shots paid by eating Goblins through Skirk: after the first {1}{R}, a frontier that ate a body the
+// engine's line keeps can never end on the engine's board (the eaten card is in the graveyard for good), so it is not
+// expanded -- and the plan's verdict is the unfolded one (covered, nothing to report).
+TEST_CASE("mana oracle: the goal fold skips frontiers that ate a body the engine's line keeps (two Siege-Gang shots)")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Mountain", "Skirk Prospector", "Siege-Gang Commander", "Goblin Lackey", "Goblin Piledriver",
+                          "Goblin Lackey", "Goblin King", "Goblin Matron", "Goblin Chieftain" });
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;
+    s.deck_has_upkeep_reanimate  = false;
+    s.deck_gy_readers            = 0;      // the fold's preconditions (GoalFoldAdmissible): stamped decks only
+    s.deck_has_mana_untapper     = false;
+    s.deck_has_tap_steal         = false;
+    s.deck_has_transform         = false;
+    s.battlefield[0].tapped = true;   // no land up: only bodies can pay
+    s.battlefield[3].tapped = true;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    SetLibrary(s, std::vector<std::string>(20, "Mountain"));
+    const TurnSolver::Plan plan = PlanOf({ SiegeGangShot(s, s.battlefield[4].card.m_number),
+                                           SiegeGangShot(s, s.battlefield[6].card.m_number) });
+    const long long folded0 = manaoracle::GoalFoldedFrontiers(), redo0 = manaoracle::GoalFoldRedos();
+    const std::vector<std::string> got = manaoracle::PlanVerdict(s, /*pre=*/false, plan, { plan });
+    CHECK(manaoracle::GoalFoldedFrontiers() > folded0);
+    CHECK(manaoracle::GoalFoldRedos() == redo0);
+    for (const std::string& c : got) { CHECK_MESSAGE(c.rfind("DOMINATED", 0) == 0, "unexpected flag ", c); }
+}

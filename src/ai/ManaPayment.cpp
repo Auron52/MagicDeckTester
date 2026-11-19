@@ -11989,7 +11989,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     {
         h.ended          = true;
         h.frontier       = true;
-        if (h.f_state != nullptr) { *h.f_state = state; }
+        if (h.f_state != nullptr) { *h.f_state = state; } h.f_tapped_n = h.tapped_by_script.size();
         h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
         h.f_line_unpaid = g_line_unpaid_cost;
         h.f_line_opens_unseen = g_line_opens_unseen;

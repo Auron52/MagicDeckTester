@@ -235,7 +235,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     {
         h.ended         = true;
         h.frontier      = true;
-        if (h.f_state != nullptr) { *h.f_state = state; }
+        if (h.f_state != nullptr) { *h.f_state = state; } h.f_tapped_n = h.tapped_by_script.size();
         h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
         h.f_line_unpaid = g_line_unpaid_cost;
         h.f_line_opens_unseen = g_line_opens_unseen;
@@ -379,6 +379,9 @@ std::atomic<long long> g_order_fold{0};
 std::atomic<long long> g_order_fold_class_walk{0};
 std::atomic<long long> g_fed_order_tries{0}, g_fed_order_pays{0};   // chained-feed reorders tried / that paid   // plans past the order bound searched by their fold classes   // order variants not realised: an earlier order is the same apply
 std::atomic<long long> g_hit_only_drop_cut{0};   // hit-only frontiers below an already-dropped action
+// The GOAL FOLD (MTG_ORACLE_GOAL_FOLD, see Realize): kept frontiers not expanded; plans whose folded realisation was
+// set aside because it did not cover the engine's board (the plan was realised again in full).
+std::atomic<long long> g_goal_folded{0}, g_goal_fold_plans{0}, g_goal_fold_redo{0}, g_goal_fold_checked{0};
 // MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
 // payments; the other orders of a drop).
 std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
@@ -453,6 +456,12 @@ struct Reporter
         { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld plans past the order bound searched by fold class ===\n", g_order_fold_class_walk.load()); }
         if (g_hit_only_drop_cut.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld frontiers below a dropped action not built ===\n", g_hit_only_drop_cut.load()); }
+        if (g_goal_fold_plans.load() != 0)
+        {
+            std::fprintf(stderr, "=== MANA ORACLE goal fold: %lld plans, %lld frontiers not expanded, %lld plans realised "
+                                 "again in full, %lld checked ===\n", g_goal_fold_plans.load(), g_goal_folded.load(),
+                         g_goal_fold_redo.load(), g_goal_fold_checked.load());
+        }
         if (g_route_macros.load() != 0)
         {
             std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
@@ -1426,6 +1435,80 @@ bool FoldStatsOn()
 }
 thread_local const GameState* t_fs_goal = nullptr;   // the engine's end board (FoldStatsOn, e_full plans only)
 thread_local long long t_fs_kept = 0, t_fs_gy_out = 0, t_fs_sym_dup = 0, t_fs_layers = 0, t_fs_fronts = 0;
+// THE ACTIVE PLAYER'S KEYED CARD COUNTS (the goal fold, AuditPlan): per card name, the active player's NONTOKEN
+// cards in a zone CoreKey keys by name -- the permanents they control, their hand, library and sideboard -- plus
+// their spells on the stack and the spell a frontier is paying for (in flight); key 0 holds the total. A pay-sac
+// source's name is left out everywhere (CoreKey leaves those permanents out). Two boards on the same CoreKey have
+// the same counts.
+using KeyedMap = std::unordered_map<std::uint64_t, int>;
+thread_local KeyedMap t_fs_goal_k;
+thread_local long long t_fs_kfail = 0, t_fs_kfail_opts = 0, t_fs_mono = 0, t_fs_keyviol = 0, t_fs_bad_out = 0,
+                       t_fs_bad_uns = 0, t_fs_bad_unm = 0, t_fs_untracked = 0, t_fs_tfail = 0, t_fs_tfail_opts = 0;
+KeyedMap KeyedCards(const GameState& s, const Card* in_flight)
+{
+    KeyedMap k;
+    auto add = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && IsPaySacSource(*d)) { return; }
+        ++k[c.m_name_hash];
+    };
+    const int a = s.active_player_index;
+    for (const Permanent& p : s.battlefield) { if (!p.is_token && p.controller_index == a) { add(p.card); } }
+    const Player& pl = s.players[static_cast<std::size_t>(a)];
+    for (const Card& c : pl.hand) { add(c); }
+    for (std::size_t i = 0; i < pl.library.size(); ++i) { add(pl.library.RawAt(i)); }
+    for (const Card& c : pl.sideboard) { add(c); }
+    for (const StackEntry& se : s.stack)
+    { if (se.type == StackEntry::EntryType::Spell && se.controller_index == a) { add(se.source); } }
+    if (in_flight != nullptr) { add(*in_flight); }
+    int tot = 0;
+    for (const auto& kv : k) { tot += kv.second; }
+    k[0] = tot;   // the TOTAL (name-blind) under key 0
+    return k;
+}
+bool FsFailsTot(const KeyedMap& k) { return k.at(0) < t_fs_goal_k.at(0); }
+// Some name has fewer keyed copies on `k` than on `goal` (key 0, the total, included).
+bool KeyedShort(const KeyedMap& k, const KeyedMap& goal)
+{
+    for (const auto& kv : goal)
+    {
+        const auto it = k.find(kv.first);
+        if ((it == k.end() ? 0 : it->second) < kv.second) { return true; }
+    }
+    return false;
+}
+bool FsFails(const KeyedMap& k) { return KeyedShort(k, t_fs_goal_k); }
+// THE GOAL FOLD's target (MTG_ORACLE_GOAL_FOLD): the engine's end board's keyed card counts, set by AuditPlan for the
+// plan's own complete-side realisation only (see AuditPlan for when, and Realize for the fold).
+thread_local const KeyedMap* t_goal_k = nullptr;
+thread_local long long t_goal_folded = 0;   // frontiers the current realisation did not expand
+bool OracleGoalFoldOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_GOAL_FOLD", true);   // DEFAULT ON; =0 -> every frontier expanded
+    return v;
+}
+std::atomic<int> g_fs_rise_prints{0};
+bool FsRises(const KeyedMap& child, const KeyedMap& parent, const GameState* where = nullptr)
+{
+    for (const auto& kv : child)
+    {
+        const auto it = parent.find(kv.first);
+        const int pv = it == parent.end() ? 0 : it->second;
+        if (kv.second <= pv) { continue; }
+        if (where != nullptr && g_fs_rise_prints.fetch_add(1) < 40)
+        {
+            std::string nm = kv.first == 0 ? std::string("(total)") : std::string("?");
+            for (const Permanent& p : where->battlefield) { if (p.card.m_name_hash == kv.first) { nm = p.card.m_name.str() + "@bf"; } }
+            for (const Card& c : where->players[static_cast<std::size_t>(where->active_player_index)].hand)
+            { if (c.m_name_hash == kv.first) { nm = c.m_name.str() + "@hand"; } }
+            std::fprintf(stderr, "[mana-oracle] FOLD-RISE %s %d -> %d turn=%d stack=%zu\n", nm.c_str(), pv, kv.second,
+                         where->turn_number, where->stack.size());
+        }
+        return true;
+    }
+    return false;
+}
 struct NoFodderScope
 {
     bool saved;
@@ -2276,7 +2359,7 @@ void ScriptedBatchPrepay(GameState& state, const ManaCost& combined, bool for_cr
         if (h.safe) { h.abandoned = true; return; }
         h.ended = true;
         h.frontier = true;
-        if (h.f_state != nullptr) { *h.f_state = state; }
+        if (h.f_state != nullptr) { *h.f_state = state; } h.f_tapped_n = h.tapped_by_script.size();
         h.f_line_unpaid = g_line_unpaid_cost;
         h.f_line_opens_unseen = g_line_opens_unseen;
         h.f_line_has_acts = g_line_hold_has_acts;
@@ -3128,6 +3211,9 @@ struct FrontierRec
     bool                   line_opens_unseen = false;
     bool                   line_has_acts = false;
     bool                   batch = false;      // joint pre-cast float
+    // The goal fold (Realize): every root mana source the unscripted-tap check reads is already tapped by this
+    // frontier's own script, so no outcome below it can be unscripted that way.
+    bool                   goal_cands_scripted = false;
 };
 
 // Where a realisation's next layer was first cut by the apply ceiling, and what the capped pass had there, so a
@@ -3174,6 +3260,22 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     static const bool s_line_context = EnvOn("MTG_ORACLE_LINE_CONTEXT", true);
     std::vector<std::vector<PayOption>> layer(1, prefix);
     int nodes = 0;
+    // The goal fold applies to the complete side's own realisation only (AuditPlan sets t_goal_k around it).
+    const KeyedMap* const goal_k = (stop_at_full || hit_only || !prefix.empty() || all_engine) ? nullptr : t_goal_k;
+    struct GoalHide   // a realisation nested inside this one's applies is not the one the target belongs to
+    {
+        const KeyedMap* saved = t_goal_k;
+        GoalHide() { t_goal_k = nullptr; }
+        ~GoalHide() { t_goal_k = saved; }
+    } _goal_hide;
+    // MTG_ORACLE_FOLD_STATS (diagnostic): each script's parent frontier and whether a frontier on its path already had
+    // fewer keyed copies of some card than the engine's end board (FsFails) -- the subtree a goal fold would skip.
+    bool fs_track = FoldStatsOn() && t_fs_goal != nullptr;
+    const KeyedMap fs_root_k = fs_track ? KeyedCards(root, nullptr) : KeyedMap{};
+    std::vector<int>    fs_par(1, -1);   // aligned with `layer`; -1 = the root
+    std::vector<char>   fs_bad(1, 0);
+    std::vector<char>   fs_tbad(1, 0);   // ...by the name-blind TOTAL test alone
+    std::vector<KeyedMap> fs_pk;           // the previous layer's frontiers' keyed counts
     // Battlefield permanents the plan itself uses (a {T}-cost activation, a sacrifice): an engine tap
     // of one of THOSE is the action, not an unscripted payment.
     std::set<int> plan_srcs;
@@ -3205,6 +3307,18 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         ~PlanSrcScope() { t_plan_srcs = saved; t_key_twin_taps = saved_twin; t_key_karoo_lands = saved_karoo; }
     } _plan_src_scope(&plan_srcs, has_karoo_in_hand);   // + the continuation's twinned {T} sources (KeyedApart)
     const int act = root.active_player_index;
+    // THE GOAL FOLD'S UNSCRIPTED GUARD: the root permanents the unscripted-tap check below reads (untapped, a mana
+    // source now, not the plan's own) -- a frontier is folded only once its script has tapped every one of them.
+    std::vector<int> goal_cands;
+    if (goal_k != nullptr)
+    {
+        for (const Permanent& p0 : root.battlefield)
+        {
+            if (p0.controller_index != act || p0.tapped) { continue; }
+            if (plan_srcs.count(p0.card.m_number) != 0 || plan_names.count(p0.card.m_name.str()) != 0) { continue; }
+            if (IsManaSourceNow(root, p0)) { goal_cands.push_back(p0.card.m_number); }
+        }
+    }
     // THE CAPPED RETRY CONTINUES FROM THE CUT (lever (b) of docs/design/mana-oracle-memory-time.md, USER 2026-11-06).
     // Under a larger ceiling the scripts are applied in exactly the same order -- a layer's scripts are its kept
     // frontiers' options in order, and the ceiling only decides where that list is cut -- so a retry from scratch
@@ -3227,6 +3341,11 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         std::vector<std::vector<PayOption>> next;
         std::size_t first_i = 0;
         std::vector<std::string> apply_notes;
+        std::vector<KeyedMap> fs_fk;     // aligned with `fronts`
+        std::vector<char>   fs_fbad, fs_ftbad;
+        std::vector<int>    fs_npar;   // aligned with `next`
+        std::vector<char>   fs_nbad, fs_ntbad;
+        if (fs_track && (resume || start != 0 || fs_par.size() != layer.size())) { fs_track = false; ++t_fs_untracked; }
         if (resume)
         {
             r = std::move(cursor->r);
@@ -3247,6 +3366,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             {
                 std::vector<PayOption>& script = layer[li];
                 if (nodes >= NodeCap() || DecisionOut()) { r.capped = true; break; }
+                const KeyedMap* fs_parent_k = !fs_track ? nullptr : (fs_par[li] < 0 ? &fs_root_k : &fs_pk[static_cast<std::size_t>(fs_par[li])]);
+                const bool fs_isbad = fs_track && fs_bad[li] != 0;
+                const bool fs_istbad = fs_track && fs_tbad[li] != 0;
                 ++nodes;
                 ++t_dec_applies;
                 g_applies.fetch_add(1, std::memory_order_relaxed);
@@ -3302,6 +3424,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 if (!h.tap_error.empty())
                 {
                     r.unmodeled.push_back("scripted payment refused: " + h.tap_error);
+                    if (fs_isbad) { ++t_fs_bad_unm; }
                     continue;
                 }
                 if (h.frontier)
@@ -3335,6 +3458,22 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.line_opens_unseen = h.f_line_opens_unseen;
                     fr.line_has_acts = h.f_line_has_acts;
                     fr.batch        = h.f_batch;
+                    if (goal_k != nullptr)
+                    {
+                        fr.goal_cands_scripted = true;
+                        const auto tb = h.tapped_by_script.begin();
+                        const auto te = tb + static_cast<std::ptrdiff_t>(std::min(h.f_tapped_n, h.tapped_by_script.size()));
+                        for (int c : goal_cands)
+                        { if (std::find(tb, te, c) == te) { fr.goal_cands_scripted = false; break; } }
+                    }
+                    if (fs_track)
+                    {
+                        KeyedMap ck = KeyedCards(fr.st, nullptr);   // the TRUE counts (the paying spell is in hand)
+                        if (FsRises(ck, *fs_parent_k, &fr.st)) { ++t_fs_mono; }
+                        fs_fk.push_back(std::move(ck));
+                        fs_fbad.push_back(fs_isbad ? 1 : 0);
+                        fs_ftbad.push_back(fs_istbad ? 1 : 0);
+                    }
                     fronts.push_back(std::move(fr));
                     continue;
                 }
@@ -3383,6 +3522,14 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
                 // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
                 // not end the search either: a scripted payment further on may still realise the line.)
+                if (fs_track)
+                {
+                    const KeyedMap ck = KeyedCards(o.st, nullptr);
+                    if (FsRises(ck, *fs_parent_k, &o.st)) { ++t_fs_mono; }
+                    if (fs_isbad) { ++t_fs_bad_out; if (!o.unscripted.empty()) { ++t_fs_bad_uns; } }
+                    if (CoreKey(o.st) == CoreKey(*t_fs_goal) && (fs_isbad || FsFails(ck) || FsRises(ck, t_fs_goal_k)))
+                    { ++t_fs_keyviol; }
+                }
                 const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
                                && (want == nullptr || Includes(o.left, *want)) && (accept == nullptr || (*accept)(o));
                 r.outcomes.push_back(std::move(o));
@@ -3462,8 +3609,14 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 std::unordered_set<std::uint64_t> sym;
                 for (std::size_t i = 0; i < fronts.size(); ++i)
                 {
+                    const KeyedMap fs_k = fs_track ? KeyedCards(fronts[i].st, fronts[i].has_spell ? &fronts[i].spell : nullptr)
+                                                   : KeyedMap{};   // the fold's own test (in-flight counted)
+                    if (fs_track && i < fs_fk.size() && FsFails(fs_k)) { fs_fbad[i] = 1; }
+                    if (fs_track && i < fs_fk.size() && FsFailsTot(fs_k)) { fs_ftbad[i] = 1; }
+                    if (fs_track && keep[i] && i < fs_ftbad.size() && fs_ftbad[i] != 0) { ++t_fs_tfail; }
                     if (!keep[i]) { continue; }
                     ++t_fs_kept;
+                    if (fs_track && i < fs_fbad.size() && fs_fbad[i] != 0) { ++t_fs_kfail; }
                     std::string rs;
                     for (const auto& kv : res[i]) { rs += kv.first + "=" + std::to_string(kv.second) + ";"; }
                     const std::uint64_t sk = (keys[i] ^ CoreKey(fronts[i].st, /*canonical=*/false))
@@ -3504,6 +3657,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
         for (std::size_t i = first_i; i < n; ++i)
         {
             if (!keep[i]) { g_pruned.fetch_add(1, std::memory_order_relaxed); continue; }
+            if (goal_k != nullptr && fronts[i].goal_cands_scripted
+                && KeyedShort(KeyedCards(fronts[i].st, fronts[i].has_spell ? &fronts[i].spell : nullptr), *goal_k))
+            { ++t_goal_folded; g_goal_folded.fetch_add(1, std::memory_order_relaxed); continue; }
             const std::size_t k0 = next.size(), u0 = r.unmodeled.size();   // where a cut here resumes (lever (b))
             auto note_cut = [&] { r.capped = true; if (!cut.set) { cut.set = true; cut.i = i; cut.k = k0; cut.u = u0; } };
             // ...AND ITS OPTIONS ARE ENUMERATED ONLY AS FAR AS THAT (USER 2026-11-06, lever (c) of
@@ -3603,9 +3759,20 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 fail.fail = true;
                 opts.push_back(fail);
             }
+            const bool fs_fb = fs_track && i < fs_fbad.size() && fs_fbad[i] != 0;
+            const bool fs_ftb = fs_track && i < fs_ftbad.size() && fs_ftbad[i] != 0;
+            if (fs_fb) { t_fs_bad_unm += static_cast<long long>(r.unmodeled.size() - u0); }
             for (PayOption& o : opts)
             {
                 if (next.size() >= room) { note_cut(); break; }
+                if (fs_track)
+                {
+                    fs_npar.push_back(static_cast<int>(i));
+                    fs_nbad.push_back(fs_fb ? 1 : 0);
+                    fs_ntbad.push_back(fs_ftb ? 1 : 0);
+                    if (fs_fb) { ++t_fs_kfail_opts; }
+                    if (fs_ftb) { ++t_fs_tfail_opts; }
+                }
                 std::vector<PayOption> s = f.script;
                 o.what = f.batch ? std::string("batch ") + f.cost.ToString()
                     : (f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString());
@@ -3634,6 +3801,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             cursor->u_apply      = r.unmodeled.size();
         }
         layer.swap(next);
+        if (fs_track)
+        { fs_pk = std::move(fs_fk); fs_par = std::move(fs_npar); fs_bad = std::move(fs_nbad); fs_tbad = std::move(fs_ntbad); }
     }
     return r;
 }
@@ -4667,6 +4836,50 @@ void AuditRoute(const GameState& root, bool pre, const TurnSolver::Plan& plan, c
                              .count(), std::memory_order_relaxed);
 }
 
+// THE GOAL FOLD'S PRECONDITIONS (AuditPlan). The fold's argument is that KeyedCards never rises along a realisation
+// and that the unscripted-tap check cannot fire below a frontier it does not expand. Each condition below is what
+// that needs, read off the deck stamps (a clear bit PROVES the deck has no such card; an unstamped state has them
+// all set, so the fold is off there) and the cards themselves (an unknown card turns it off):
+//  - deck_gy_readers == 0: no graveyard reader is keyed, so no card comes back out of a graveyard (the frontier prune
+//    already merges boards that differ only there, which is sound only if none can);
+//  - !deck_has_mana_untapper: the engine's tap-ahead and untap-choice counters move only under such a card;
+//  - !deck_has_tap_steal / !deck_has_transform, and no card of the active player's (any zone; tokens aside) that
+//    renames a card (a face, an adventure, a face-down cast), enters as or makes a copy, or steals: KeyedCards counts
+//    NAMES of nontoken cards the active player controls, which only such an effect could raise or fake;
+//  - the engine's own end board has an empty stack.
+// (The unscripted-tap check's other half -- a root mana source tapped outside every payment -- is guarded per
+// frontier in Realize: goal_cands_scripted.)
+bool GoalFoldAdmissible(const GameState& root, const GameState& e)
+{
+    if (root.deck_gy_readers != 0 || root.deck_has_mana_untapper || root.deck_has_tap_steal || root.deck_has_transform)
+    { return false; }
+    if (!e.stack.empty()) { return false; }
+    const int a = root.active_player_index;
+    auto changer = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return true; }
+        const CardParams& q = d->params;
+        return !q.transform_back_name.empty() || !q.transform_front_name.empty() || !q.daybound_back_name.empty()
+            || !q.face_down_real_name.empty() || !q.adventure_parent_name.empty() || q.enter_as_copy_of_entrant
+            || q.enter_as_copy_of_creature || q.token_copy_of_target || q.landfall_copy_self_at_lands != 0
+            || q.frontline_copy_tokens != 0 || q.endstep_token_ascend_copy || q.dies_trigger_copy_self_token
+            || q.garth_copy_ability || q.steal_tap_count != 0;
+    };
+    const Player& pl = root.players[static_cast<std::size_t>(a)];
+    for (const Card& c : pl.hand)      { if (changer(c)) { return false; } }
+    for (const Card& c : pl.graveyard) { if (changer(c)) { return false; } }
+    for (const Card& c : pl.sideboard) { if (changer(c)) { return false; } }
+    for (std::size_t i = 0; i < pl.library.size(); ++i) { if (changer(pl.library.RawAt(i))) { return false; } }
+    for (const Card& c : root.exile)   { if (changer(c)) { return false; } }
+    for (const Permanent& p : root.battlefield)
+    {
+        if (p.controller_index != a && p.owner_index != a) { continue; }
+        if (!p.is_token && changer(p.card)) { return false; }
+    }
+    return true;
+}
+
 // A board with its END-OF-MAIN-1 SWEEP undone: the lands the sweep tapped stand untapped again and both life
 // totals are the ones its first tap found (g_endm1_presweep_life). The sweep is not a payment: it is a policy that
 // fires every leftover pain land once the plan's last payment is made, and whether a land is worth firing depends
@@ -4689,6 +4902,46 @@ GameState UnSwept(const GameState& s, const std::vector<int>& taps, const int li
     }
     for (int i = 0; i < 2 && i < static_cast<int>(u.players.size()); ++i) { u.players[i].life = life[i]; }
     return u;
+}
+
+// Does `r` hold an outcome that COVERS the engine's whole-plan realisation -- the I1 test of AuditPlan's engine-full
+// branch (same line, same CoreKey, at least the resources; or both lost the same way; or the same with the end-of-
+// main-1 sweep undone)? The goal fold keeps its realisation only when this holds (AuditPlan).
+bool RealizationCovers(const Realization& r, const GameState& root, const EngineReal& er_in)
+{
+    const GameState& e = er_in.st;
+    const std::string e_line = LineKey(root, e);
+    const std::uint64_t ek = CoreKey(e);
+    const Res er = Resources(e, /*with_float=*/false);
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Full() || o.line != e_line || CoreKey(o.st) != ek) { continue; }
+        if (Covers(Resources(o.st, /*with_float=*/false), er, nullptr)) { return true; }
+    }
+    if (SelfHasLost(e))
+    {
+        const bool engine_draw = dmgev::OpponentLostRaw(e);
+        for (const Outcome& o : r.outcomes)
+        {
+            if (o.Full() && o.line == e_line && SelfHasLost(o.st) && dmgev::OpponentLostRaw(o.st) == engine_draw)
+            { return true; }
+        }
+        return false;
+    }
+    bool any = !er_in.sweep_taps.empty();
+    for (const Outcome& o : r.outcomes) { if (!o.sweep_taps.empty()) { any = true; break; } }
+    if (!any) { return false; }
+    const GameState eu = UnSwept(e, er_in.sweep_taps, er_in.presweep_life);
+    const std::uint64_t euk = CoreKey(eu);
+    const Res swept_er = Resources(eu, /*with_float=*/false);
+    for (const Outcome& o : r.outcomes)
+    {
+        if (!o.Full() || o.line != e_line || SelfHasLost(o.st)) { continue; }
+        const GameState ou = UnSwept(o.st, o.sweep_taps, o.presweep_life);
+        if (SelfHasLost(ou) || CoreKey(ou) != euk) { continue; }
+        if (Covers(Resources(ou, /*with_float=*/false), swept_er, nullptr)) { return true; }
+    }
+    return false;
 }
 
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
@@ -4714,12 +4967,13 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     std::multiset<std::string> e_want = LeftHand(root, e);
     for (const std::string& c : e_cast) { e_want.insert(c); }
     // ---- the complete side, in the engine's own order ----------------------------------------------
-    RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
     const long long main_a0 = t_dec_applies;
     struct MainCost { const long long& a0; bool done = false; void Stop() { if (!done) { g_cost_main.fetch_add(t_dec_applies - a0); done = true; } } ~MainCost() { Stop(); } } _main_cost{ main_a0 };
     t_fs_goal = (FoldStatsOn() && e_full) ? &e : nullptr;
     t_fs_kept = t_fs_gy_out = t_fs_sym_dup = t_fs_layers = t_fs_fronts = 0;
-    Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
+    t_fs_kfail = t_fs_kfail_opts = t_fs_mono = t_fs_keyviol = t_fs_bad_out = t_fs_bad_uns = t_fs_bad_unm = t_fs_untracked = 0;
+    t_fs_tfail = t_fs_tfail_opts = 0;
+    if (t_fs_goal != nullptr) { t_fs_goal_k = KeyedCards(e, nullptr); }
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
     // under a 400000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
     // (USER 2026-11-03), so the checker must be able to conclude. Fluctuator's cycling turns (each cycle a
@@ -4743,6 +4997,16 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         return v > 0 ? v : 400000;
     }();
     int cap_used = NodeCap();
+    Realization r;
+    // The complete side's own realisation under `goal` (the goal fold's target, or none), with its escalation.
+    const auto realize_main = [&](const KeyedMap* goal)
+    {
+    const KeyedMap* const saved_goal = t_goal_k;
+    t_goal_k      = goal;
+    t_goal_folded = 0;
+    RealizeCursor cursor;   // lever (b): the retry below continues from where this pass was cut
+    cap_used = NodeCap();
+    r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     if (r.capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())
     {
         const int saved = t_node_cap;
@@ -4780,11 +5044,94 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         g_cap_retry.fetch_add(1, std::memory_order_relaxed);
         if (!r.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
     }
+    t_goal_k = saved_goal;
+    };
+    // THE GOAL FOLD (MTG_ORACLE_GOAL_FOLD, DEFAULT ON; docs/design/goblins-oracle-eat-fold-2026-11-19.md). When the
+    // engine realised the whole plan, its verdict (cover, domination) reads only outcomes whose canonical CoreKey is
+    // the engine end board's. That key holds every card name in a hand, a library, a sideboard and on the battlefield
+    // (KeyedCards' zones), so an outcome on the engine's key has exactly the engine's KeyedCards counts. Along a
+    // realisation those counts never rise (KeyedCards: a nontoken card leaves them only for a zone no key holds -- a
+    // graveyard under deck_gy_readers == 0, exile -- and the frontier prune already rests on such a card never
+    // coming back: frontiers that differ only there share a key and one is dropped). So a frontier with FEWER copies
+    // of some name than the engine's end board -- Goblins: it ate a Piledriver where the engine ate a token -- has
+    // no outcome on the engine's key, and is not expanded. Two side channels read every outcome, so the fold runs
+    // only where neither can fire: the unscripted-tap check (a frontier is folded only once its own script has tapped
+    // every root mana source that check reads, and the deck has no same-phase untapper: the tap-ahead / untap-choice
+    // counters move only under one), and
+    // a verdict other than "covered" (ORACLE-GAP's outcome count and nearest script, CONTINUATION-DIFFERS) -- such
+    // a plan is realised again in full and judged on that. The apply notes of the frontiers not expanded feed
+    // only the UNMODELED census on a covered plan (not a flag), and a capped plan may now conclude.
+    KeyedMap goal_k;
+    const bool goal_fold = OracleGoalFoldOn() && e_full && GoalFoldAdmissible(root, e);
+    if (goal_fold) { goal_k = KeyedCards(e, nullptr); }
+    realize_main(goal_fold ? &goal_k : nullptr);
+    if (goal_fold)
+    {
+        g_goal_fold_plans.fetch_add(1, std::memory_order_relaxed);
+        if (t_goal_folded > 0 && !RealizationCovers(r, root, er_in))
+        {
+            g_goal_fold_redo.fetch_add(1, std::memory_order_relaxed);
+            realize_main(nullptr);
+        }
+        // MTG_ORACLE_GOAL_FOLD_CHECK=1 (diagnostic, default off): realise the plan in full as well, abort unless the
+        // full realisation covers too, holds the same outcomes on the engine's key in the same order, and has no
+        // unscripted outcome anywhere; the full realisation is the one judged (so the flags are the unfolded ones).
+        static const bool s_gf_check = EnvOn("MTG_ORACLE_GOAL_FOLD_CHECK");
+        if (s_gf_check && t_goal_folded > 0)
+        {
+            const Realization folded = r;
+            const bool folded_capped = r.capped;
+            realize_main(nullptr);
+            if (!r.capped && !folded_capped)
+            {
+                const std::string e_line = LineKey(root, e);
+                const std::uint64_t ekk = CoreKey(e);
+                auto on_key = [&](const Realization& x)
+                {
+                    std::vector<std::string> v;
+                    for (const Outcome& o : x.outcomes)
+                    {
+                        if (o.Full() && o.line == e_line && CoreKey(o.st) == ekk) { v.push_back(ScriptText(o.script)); }
+                    }
+                    return v;
+                };
+                bool uns = false;
+                for (const Outcome& o : r.outcomes) { if (!o.unscripted.empty()) { uns = true; break; } }
+                if (uns || !RealizationCovers(r, root, er_in) || on_key(r) != on_key(folded))
+                {
+                    std::fprintf(stderr, "[mana-oracle] GOAL-FOLD-CHECK MISMATCH %s plan={%s}: unscripted=%d covers=%d "
+                                 "on-key full %zu folded %zu\n", Ctx(root, pre).c_str(), PlanText(plan).c_str(),
+                                 uns ? 1 : 0, RealizationCovers(r, root, er_in) ? 1 : 0, on_key(r).size(),
+                                 on_key(folded).size());
+                    std::abort();
+                }
+                g_goal_fold_checked.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
     _main_cost.Stop();
     if (FoldStatsOn())
     {
         long long full = 0, ek_n = 0, uns = 0;
         const std::uint64_t ekk = e_full ? CoreKey(e) : 0;
+        // Root candidates of the unscripted check's third part: untapped active mana sources the plan does not name.
+        int p1 = 0;
+        {
+            std::set<int> srcs;
+            std::set<std::string> names;
+            for (const Action& a : plan.actions)
+            {
+                if (a.sac_source_id != 0) { srcs.insert(a.sac_source_id); }
+                if (a.sac_victim_id != 0) { srcs.insert(a.sac_victim_id); }
+                if (a.kind != Action::Kind::CastFromHand) { names.insert(a.card_name.str()); }
+            }
+            for (const Permanent& p0 : root.battlefield)
+            {
+                if (p0.controller_index != root.active_player_index || p0.tapped) { continue; }
+                if (srcs.count(p0.card.m_number) != 0 || names.count(p0.card.m_name.str()) != 0) { continue; }
+                if (IsManaSourceNow(root, p0)) { ++p1; }
+            }
+        }
         for (const Outcome& o : r.outcomes)
         {
             if (!o.unscripted.empty()) { ++uns; }
@@ -4794,10 +5141,14 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         }
         std::lock_guard<std::mutex> lk(g_print_mu);
         std::fprintf(stderr, "[mana-oracle] FOLD-STATS %s applies=%lld engine=%s capped=%d layers=%lld fronts=%lld kept=%lld "
-                     "gy_out=%lld sym_dup=%lld outcomes=%zu full=%lld ek=%lld unscripted=%lld unmodeled=%zu plan={%s}\n",
+                     "gy_out=%lld sym_dup=%lld outcomes=%zu full=%lld ek=%lld unscripted=%lld unmodeled=%zu "
+                     "kfail=%lld kfail_opts=%lld mono=%lld keyviol=%lld bad_out=%lld bad_uns=%lld bad_unm=%lld "
+                     "untracked=%lld tfail=%lld tfail_opts=%lld gyr=%x stack=%zu p1=%d untapper=%d plan={%s}\n",
                      Ctx(root, pre).c_str(), t_dec_applies - main_a0, e_full ? "full" : "drop", r.capped ? 1 : 0,
                      t_fs_layers, t_fs_fronts, t_fs_kept, t_fs_gy_out, t_fs_sym_dup, r.outcomes.size(), full, ek_n, uns,
-                     r.unmodeled.size(), PlanText(plan).c_str());
+                     r.unmodeled.size(), t_fs_kfail, t_fs_kfail_opts, t_fs_mono, t_fs_keyviol, t_fs_bad_out, t_fs_bad_uns,
+                     t_fs_bad_unm, t_fs_untracked, t_fs_tfail, t_fs_tfail_opts, static_cast<unsigned>(root.deck_gy_readers), e.stack.size(), p1,
+                     root.deck_has_mana_untapper ? 1 : 0, PlanText(plan).c_str());
         t_fs_goal = nullptr;
     }
     for (const std::string& u : r.unmodeled) { NoteUnmodeled(u); }
@@ -5524,6 +5875,9 @@ std::vector<std::string> PlanVerdict(const GameState& state, bool pre, const Tur
     t_emit_capture = saved;
     return got;
 }
+
+long long GoalFoldedFrontiers() { return g_goal_folded.load(); }
+long long GoalFoldRedos() { return g_goal_fold_redo.load(); }
 
 // ---- THE EXECUTOR'S PAYMENT SCRIPT (ManaOracle.h) -------------------------------------------------------
 }   // namespace manaoracle
