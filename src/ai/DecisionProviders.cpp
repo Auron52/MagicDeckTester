@@ -3199,12 +3199,22 @@ int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<
         if (is_doll(d)) { doll_cast = true; }
         if (d->card.IsCreature()) { ++cast_creatures; }
     }
+    // FORBIDDEN ORCHARD (fix 2026-11-19): tapping an Orchard for the sweeper adds NO creature in this engine. Its
+    // Spirit is made at turn start for every Orchard already in play and at the play of a new one
+    // (SpawnForbiddenOrchardTokensTurnStart, LandPlay's on-play spawn; design section 12, the "tap every Orchard at
+    // the start of main 1" model), so it is already among board_creatures. The projection used to add one Chain
+    // Reaction X (and one Shaman pull target) per untapped Orchard: on the split-lethal arm (MTG_STUFFY_SPLIT_LETHAL_M1)
+    // 27 of its 29 slower d0 games cast a main-1 Chain 1-4 life short and killed their own attackers.
+    // MTG_STUFFY_LETHAL_ORCHARD_LEGACY=1 (heurarm, per-job; DEFAULT OFF) restores the over-count (measurement arm).
+    static const bool s_orchard_legacy_env = EnvOn("MTG_STUFFY_LETHAL_ORCHARD_LEGACY");
+    const bool orchard_legacy = heurarm::Flag(heurarm::STUFFY_LETHAL_ORCHARD_LEGACY, s_orchard_legacy_env);
     int board_creatures = 0, orchards = 0;
     for (const Permanent& q : s.battlefield)
     {
         if (q.card.IsCreature()) { ++board_creatures; }
         const CardDefinition* d = dmgrx::Def(q);
-        if (d != nullptr && q.controller_index == me && !q.tapped && d->params.taps_spawn_opp_token) { ++orchards; }
+        if (orchard_legacy && d != nullptr && q.controller_index == me && !q.tapped && d->params.taps_spawn_opp_token)
+        { ++orchards; }
     }
     // Every cast's mana value, an Act at its per-creature discount (the same-turn creatures count too).
     for (const CardDefinition* d : cast)

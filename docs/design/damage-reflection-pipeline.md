@@ -2187,3 +2187,23 @@ Where the code departs from the sections above, and why. Each entry names the sy
   Minotaur never reaches a fan in goldfish (byte-identical). All 10 slower Stuffy games were repro'd one at a time
   (turn and units match the batch) and every one wins its OFF turn again with the charge ON at 2x budget (d3 b20 /
   d5 b40): budget starvation (the charged units leave less for the rest of the decision), not a lost line.
+  With the fold OFF (`MTG_RFX_CYCLE_FOLD=0`) and both / all three prunes lifted, d3 b10 gi8 now finishes (T3 win,
+  ~113-115 s, ~0.67-0.69 GB RSS) where the uncharged fan ran unbounded: the charge + poll bound a finite budget on
+  their own; the fold is what makes it cheap, and what bounds budget 0.
+* **Fix 4: the split-lethal projection's Orchard over-count** (`StuffyDollProvider::ExtraLethalDamage`). It added one
+  Chain Reaction X and one Shaman pull target per untapped Forbidden Orchard of ours, but the engine makes the Spirit
+  at turn start / on the Orchard's play, never at a tap, so it is already among the board's creatures. Fixed;
+  `MTG_STUFFY_LETHAL_ORCHARD_LEGACY=1` (heurarm, default OFF) restores the old count. Held-out (same pooled batch):
+  | pair | cell | games | faster/slower | paired pen ± se |
+  |---|---|---|---|---|
+  | A vs A-legacy (default play) | d0 | 3000 | 4/0 | -0.0037 ± 0.0019 (legacy loses 3 of the 4 outright) |
+  | A vs A-legacy | d3 b10 | 500 | 0/0 (1 digest) | 0 |
+  | D vs A | d0 | 3000 | 958/2 | -0.4740 ± 0.0158 (D-legacy vs A: 957/30) |
+  | D vs A | d3 b10 | 500 | 2/1 | -0.0020 ± 0.0035 |
+  D's remaining slower d0 games are gi 134 and 2145, unchanged by the fix and NOT the Orchard shape: a main-1 Chain
+  Reaction with two en-Kors, one reflector and one opponent Spirit, projected at exactly 16 / 16 >= life (X=4: the
+  reflector 4, two en-Kor shares 8, one Shaman PULL of the Spirit 4) but realised at 12: {1}{W} was left after the
+  Chain, yet the d0 line makes no pull (the pull axis's front at d0), so the projection credits a pull the greedy
+  runner never takes. D d3 gi105 (5 -> 6) diverges at its T3 land play, long before any sweeper: a search divergence from D's changed main-1 menu, not this shape.
+  At d3 b10, D casts a main-1 sweeper on 222 turns of 500 games and every one is lethal in that main (A: 0).
+
