@@ -157,3 +157,17 @@ tied, 0 short. s3 records win_turn 6 and the search ties it. See logs/maze/F7-2-
   MTG_BP_NEW_ONLY's "the base plan could have carried it", and `pre_plan_keys`, site 9's) were recomputed from the
   SNAPSHOT state on resume, so the Maze's End the prefix had played read as pre-existing and NEW_ONLY dropped its
   activation. Both now carried in BpPrefixSnap. try3 relaunched.
+
+## F7-4 (2026-11-19, checkpoint)
+- try 3 (a0621afba + b19044588, the deferred loop's pass counter also carried): F7 units PASS, full units rc=0.
+  build/scratch/maze/f73/gate.txt PASS: all 10 d8 b0 games tie or beat off (g506, g889, g1244 better; g1026 and 2HG
+  g41 now tie). F7-shape held-out A/B (both arms carry the resume fixes): mazesend-d5 net -104 (107/6), 2HG -22,
+  d3 -19, d0 0. The 6 slower A/B games are the same seed/gi as six of the ten d8 games, all recovered.
+- ref_bench maze_s_end (mtg.f73, d5 b20 policy): 11/11 tie or beat the USER (s8 faster by 1).
+- Tiers (no accept; f73/tiers.log): Maze improves (smoke d5 5.75->5.68, reg d5 s2002 5.69->5.60, s3003 5.69->5.59);
+  2 slower Maze games (reg d5 s2002 gi16, gi120: 5->6). OTHER DECKS MOVED, digest only (no aggregate change):
+  snow, niv, niv2hg, martyr, cyclone, edf, landfall.
+- Hatch MTG_BP_RESUME_LOCKSTEP (7f4a11b9d, default ON) so both arms fit one pooled batch. Chain
+  build/scratch/maze/f74/chain.sh (stage/DONE there): units, d8 b0 on gi16/gi120 vs the committed tree (both
+  hatches off), tier-key replicas (hatch check), held-out A/B on overnight seeds for every moved deck + Maze vs the
+  committed tree, then d8 b0 on every new slower game; gate f74/gate.txt.
