@@ -4236,10 +4236,49 @@ fill EVERY open land drop. With a spare drop it keeps its 100. Net turns vs the 
 4 on VB only) all recover at d8 b2000. Cyclone and Snow slower games recover at d8 b0 (Snow g393 and g782 with
 digests identical to base). Cost outlier for P7: d5 g476 @181001 needs ~20.7M units at d8 b2000 on both arms.
 
-**Open (blocks the GT accept): Snow +2.** Cyclone (-1) and Hydras (0) pass. Snow is 0 better / 2 worse over 1,900
-held-out games (ab2 d5 g393, fresh d5 g782), with units/game 10% lower. Both games are b20 near-ties (every root tail
-no-win) that recover at d8 b0. Suspected mechanism: Snow's Frost Augur / Scrying Sheets activations are canon-
-withheld trailing activations, so the canon-drop record sets `g_devseq_latent_hit`, and the DEV_SEQ second pass and
-dirty-node erasure re-spend the b20 budget. Next: count canon-drop records per Snow decision, find what the 10%
-fewer units cut, and price or scope the record (a budget-staged shape, never a gate). Then smoke + regression +
-accept (`--deck=` for mazesend, cyclone, snow, hydras), `check_gt_logs.py`.
+**Snow +2 (P5c2) -> fixed by P5c3.** Snow was 0 better / 2 worse over 1,900 held-out games (ab2 d5 g393, fresh d5
+g782). Mechanism (proven on g782, g393, g754 with `MTG_TURN_CENSUS` / `MTG_DEV_SEQ_STATS`): Snow's sidecar is `ladder
+single, leaf none`, so every main decision is FullSearchLineHybrid (a leafless probe, then FIT on what the probe left).
+The canon withholds Frost Augur / Scrying Sheets reveal-top activations, so the canon-drop record fires at nearly
+every probe; the probe's DEV_SEQ pass 2 never improved a line, but it spent the budget FIT would have used (g782 T2:
+probe ladder 6,854 -> 17,862 units, FIT rollouts 26,953 -> 4,534; the T2 cast changes and T5 -> T6).
+
+## P5c3/P5c4 (2026-11-19): the canon-drop pass 2 runs LAST in the hybrid; measured on the shared head e682d7942
+
+Commit `4ea2268d8` (`DevSeqDeferredP2`, TurnSolver.cpp only). A pass 2 whose pass 1 met ONLY canon-drop latents, in a
+hybrid probe that has a value model to escalate to, is run after the escalation if budget remains, and is taken only
+when it wins earlier than pass 1 and no verified hybrid win is at least as early. Provenance ("hard" = any latent
+that is not a canon-drop record) is carried through every inherited path (local memo, FSLineCache, searched-M2 memo,
+`gamelc::SupCdTag`). No value model (Maze's End, Hydras) or no canon drop: unchanged by construction. Re-prices only:
+at an unlimited budget the pass always runs. Write-up: `logs/maze/P5c4-notes.md` (scratch `build/scratch/maze/p5c4/`).
+
+**Held-out A/B on e682d7942** (one pooled batch, arms innermost; the base arm reproduces the shared head's smoke GT
+digests on Snow / Maze's End / Cyclone / Hydras d5). fix = this branch vs base = the shared head:
+| deck | games/arm | better/worse | net |
+|---|---|---|---|
+| Snow (d5 x2,800 incl. 1,200 fresh, d3 x600) | 3,400 | 6/0 | -6 |
+| Cyclone (+2HG) | 1,700 | 2/1 | -1 |
+| Hydras (+2HG) | 900 | 0/0 | 0 |
+| Maze's End std (ab2 seeds + 181001, then FRESH 211001+) | 4,550 | 65/45 | -20 |
+| Maze's End 2HG | 450 | 6/9 | +3 |
+| Melira, Landfall, Niv, Alchemist, Martyr (each +2HG, d5 x600, d3 x100) | 900 each | 0/0 | 0 |
+Maze's End as a deck: **-17 over 5,000 games**. On the first sample alone it read +2 (std -1, 2HG +3); the
+attribution put all of it on the VB fetch amendment vs the P1c defer (engine + defer was 1/0 vs base; P6 off, VB was
+-2), divergences T1-T3 near-tie root choices in both directions (24 better / 28 worse), none at an off-main point:
+the P5c2 mechanism (the fetch eval reorders the beyond-horizon greedy). The fresh sample then read VB 41/21, -19.
+
+**d8 recovery:** every slower game recovers. ab7: 28 of 29 at d8 b0 (23 identical digests); g567 @181001 abandons at
+50M on both arms and is T8 = T8 at d8 b2000. Fresh: all 26 at d8 b0 (24 identical). Tier slower games (smoke Maze d5
+g25 g28, 2HG g25 g28, regression s2002 g183, s3003 g25, martyr s2002 g149): all equal turns at d8 b0. Martyr g149 is
+the P5c engine change (new == fix), not P5c3.
+
+**Tiers:** units 3655/3655, scenarios 584/584, references 878 (0 drift). Smoke + regression run on all decks; 26 keys
+moved (8 smoke, 18 regression), all accepted `--deck=`-scoped; `check_gt_logs.py` 0 stale. Aggregates: every moved
+key equal or better except mazesend2hg smoke 5.5333 -> 5.6000 (2 games, both recover at d8 b0) and martyr
+regression d5 s2002 5.1800 -> 5.1867 (g149, recovers at d8 b0). Units/game: the P5c engine costs +2-6% on the
+canon-drop decks (Melira +3.7%, Landfall +4.2%, Martyr +2.8%); the P5c3 fix adds ~+7% on Snow vs base (Snow's FIT
+rollouts are back).
+
+**OWED (USER):** the spare-drop fetch rule (`MazeFetchDropsSpoken`, `396035b5a`) answers USER ruling 2-5 ("there is
+value to banking extra lands even if you have a new-name gate in hand"); it measures -19 on fresh seeds vs the P1c
+defer and -1 / +3 on the earlier seeds. It ships as the default; the USER's sign-off on the rule is still owed.
