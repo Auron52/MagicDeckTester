@@ -52,6 +52,9 @@ struct ValuePlay
     //                                would commit, then the hybrid's trust escalation (user design,
     //                                2026-09-09: no-leaf warm-ups, "the value-leaf first when escalation is
     //                                needed"). With leaf "none" the model stays attached for that pass.
+    //   ladder: "sparse"         => the SPARSE HEURISTIC LADDER (sampled gate 4; docs/design/sparse-heuristic-ladder.md):
+    //                                the rollout ladder with no value model (any learned model in the file is set
+    //                                aside), skipping rollouts a leafless pass makes unnecessary. leaf "none" overrides it.
     //   ladder: "single"         => the SINGLE-PASS shape (2026-09-10): the probe runs unreserved as deep as its
     //                                gate allows (a proven win ends the decision), then ONE rollout pass at the
     //                                deepest probed depth whose predicted cost fits the remaining budget (FIT,
