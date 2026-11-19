@@ -4018,7 +4018,7 @@ TEST_CASE("Cast order, GENERIC_WEATHER_ONLY_LAST (DEFAULT OFF): the generic tier
     }
 }
 
-// ---- THE USER'S WEATHER RULE (2026-10-22): MTG_AA_GENERIC_WEATHER_FLEX / MTG_AA_CAST_ORDER_V2 (both DEFAULT OFF) ----
+// ---- THE USER'S WEATHER RULE (2026-10-22): MTG_AA_GENERIC_WEATHER_FLEX (DEFAULT OFF) / MTG_AA_CAST_ORDER_V2 (DEFAULT ON, USER 2026-11-19) ----
 // USER: "Weather the Storm needs to be flexible. For example, a common play would be spell, Weather the Storm + tap
 // alchemist for 6 using that to play Staff of Domination and untap Alchemist. You cannot do that with it just at the
 // end. I would say the untappers should be possible to do before or after it (depending on mana)." Ledger, "Round 3".
@@ -4183,12 +4183,13 @@ TEST_CASE("Weather flex (DEFAULT OFF): Weather preferred last; an untapper moves
         CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
               == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
     }
-    // Inert with the flag off (=0 and unset): the arrangement is the identity, the walk hook off.
+    // Inert with gwf off (=0 and unset) and v2 explicitly off (=0; v2 is DEFAULT ON since the USER's 2026-11-19
+    // adoption, so "unset" no longer means off for it): the arrangement is the identity, the walk hook off.
     for (int v : { 0, -1 })
     {
-        if (v == -1 && (EnvOn("MTG_AA_GENERIC_WEATHER_FLEX") || EnvOn("MTG_AA_CAST_ORDER_V2"))) { continue; }
+        if (v == -1 && EnvOn("MTG_AA_GENERIC_WEATHER_FLEX")) { continue; }
         GameState s = FlexBoardAa(3);
-        FlexArmsAa a(0, 1, v, v);
+        FlexArmsAa a(0, 1, v, 0);
         CHECK(ArrangedCastsAa(s, { "Arbor Elf", "Weather the Storm", "Crab Umbra" })
               == std::vector<std::string>{ "Arbor Elf", "Crab Umbra", "Weather the Storm" });
         CHECK_FALSE(AaProv().LifeScaledManaInOrderWalk());
