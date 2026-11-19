@@ -23448,6 +23448,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             std::vector<int>  legal;
             for (int ci = 0; ci < static_cast<int>(cands.size()); ++ci)
             { examined.push_back(state.battlefield[cands[ci]].card); legal.push_back(ci); }
+            // A bare-name source: the TARGET of the outlet's haste / -X/-X (see DigRoleScope).
+            const DigRoleScope role(op->sac_outlet_grants_haste ? "outlet_haste" : "outlet_shrink");
             const int c = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, 0);
             if (c >= 0 && c < static_cast<int>(cands.size())) { pick = cands[c]; }
         }
@@ -26026,6 +26028,7 @@ inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
         {
             std::vector<int> legal;
             for (std::size_t k = 0; k < examined.size(); ++k) { legal.push_back(static_cast<int>(k)); }
+            const DigRoleScope role("impulse_keep");   // a bare-name source: the exiled card you may PLAY
             const int pick = (*g_play_dig_chooser)(state, controller, self.card.m_name.str(),
                                                    examined, legal, static_cast<int>(best));
             if (pick >= 0 && pick < static_cast<int>(examined.size()))
@@ -39081,6 +39084,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                     {
                         const std::vector<Card> examined{ top };
                         const std::vector<int>  legal{ 0 };
+                        const DigRoleScope role("reveal_top");   // a bare-name source: a yes/no on the TOP card
                         take = (*g_play_dig_chooser)(state, controller, src_name,
                                                      examined, legal, 0) == 0;
                     }
@@ -39207,6 +39211,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 std::vector<int>  legal;
                 for (int ci = 0; ci < static_cast<int>(cands.size()); ++ci)
                 { examined.push_back(state.battlefield[cands[ci]].card); legal.push_back(ci); }
+                const DigRoleScope role("ice_counter");   // a bare-name source: the ice counter's TARGET
                 const int c = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, 0);
                 if (c >= 0 && c < static_cast<int>(cands.size())) { pick = cands[c]; }
             }
@@ -53782,8 +53787,9 @@ inline MazeOffMainSource MazeOffMainFindSource(const GameState& s, int me)
 }
 
 // The human's answer (the dig chooser over the fetchable Gates; -1 = decline). Returns an index into `targets`.
-inline int MazeOffMainHumanPick(const GameState& s, int me, const MazeOffMainSource& src, const std::string& why,
-                                bool default_activate)
+// `default_target` = the index into `targets` the AI would take (-1 = decline).
+inline int MazeOffMainHumanPickAt(const GameState& s, int me, const MazeOffMainSource& src, const std::string& why,
+                                  int default_target)
 {
     std::vector<Card> ex;
     std::vector<int> legal;
@@ -53795,13 +53801,51 @@ inline int MazeOffMainHumanPick(const GameState& s, int me, const MazeOffMainSou
         ex.push_back(td->card);
     }
     if (ex.empty()) { return -1; }
-    const int r = (*g_play_dig_chooser)(s, me, "Maze's End: activate " + why + " (search for a Gate)?", ex, legal,
-                                        default_activate ? 0 : -1);
+    int dflt = -1;
+    if (default_target >= 0 && default_target < static_cast<int>(src.targets.size()))
+    {
+        const std::string& dn = src.targets[static_cast<std::size_t>(default_target)].name;
+        for (int i = 0; i < static_cast<int>(ex.size()); ++i)
+        { if (ex[static_cast<std::size_t>(i)].m_name.str() == dn) { dflt = i; break; } }
+    }
+    const int r = (*g_play_dig_chooser)(s, me, "Maze's End: activate " + why + " (search for a Gate)?", ex, legal, dflt);
     if (r < 0 || r >= static_cast<int>(ex.size())) { return -1; }
     for (int i = 0; i < static_cast<int>(src.targets.size()); ++i)
     { if (src.targets[static_cast<std::size_t>(i)].name == ex[static_cast<std::size_t>(r)].m_name.str()) { return i; } }
     return -1;
 }
+inline int MazeOffMainHumanPick(const GameState& s, int me, const MazeOffMainSource& src, const std::string& why,
+                                bool default_activate)
+{ return MazeOffMainHumanPickAt(s, me, src, why, default_activate ? 0 : -1); }
+
+// HUMAN PLAY: "I already said no at this board" (USER 2026-11-19, Maze's End reference s5_gi4). The off-main WIN
+// below now ASKS a human instead of taking the win, and three call points can reach the same board back to back
+// (the win check inside PerformEndStepManabond, the bank it falls through to, GameEngine's win check after it). A
+// decline at the win prompt covers the bank's question too (both offer every Gate, or no activation), so the
+// declined board is remembered and neither asks again until the board changes. Process-global like the other
+// human-play state (one game per --claude-play process); never read outside human play.
+struct MazeHumanDeclineKey
+{
+    int turn = -1, active = -1, bf = -1, tapped = -1, hand = -1, library = -1;
+    bool operator==(const MazeHumanDeclineKey& o) const
+    {
+        return turn == o.turn && active == o.active && bf == o.bf && tapped == o.tapped && hand == o.hand
+            && library == o.library;
+    }
+};
+inline MazeHumanDeclineKey MazeHumanBoardKey(const GameState& s, int me)
+{
+    MazeHumanDeclineKey k;
+    k.turn = s.turn_number;
+    k.active = s.active_player_index;
+    k.bf = static_cast<int>(s.battlefield.size());
+    k.tapped = 0;
+    for (const Permanent& p : s.battlefield) { if (p.tapped) { ++k.tapped; } }
+    k.hand = static_cast<int>(s.players[static_cast<std::size_t>(me)].hand.size());
+    k.library = static_cast<int>(s.players[static_cast<std::size_t>(me)].library.size());
+    return k;
+}
+inline MazeHumanDeclineKey& MazeHumanDeclinedBoard() { static MazeHumanDeclineKey k; return k; }
 
 // Apply the activation on the real board ({T}, then the {3}, then the ability: Maze's End to hand, the fetch, the
 // shuffle, the win check). The payment was proven on a probe (MazeOffMainPayable).
@@ -53868,7 +53912,12 @@ inline int MazeOffMainBank(GameState& s, const char* window)
         if (src.id < 0) { break; }
         const std::string why = std::string("with no redeploy, ") + window;
         int pick = -1;
-        if (MazeOffMainHumanAsks()) { pick = MazeOffMainHumanPick(s, me, src, why, /*default_activate=*/false); }
+        if (MazeOffMainHumanAsks())
+        {
+            if (MazeHumanDeclinedBoard() == MazeHumanBoardKey(s, me)) { break; }   // declined the win prompt here
+            pick = MazeOffMainHumanPick(s, me, src, why, /*default_activate=*/false);
+            if (pick < 0) { MazeHumanDeclinedBoard() = MazeHumanBoardKey(s, me); }
+        }
         else
         {
             const int r = TakeCrossingLandRank(s, static_cast<int>(src.targets.size()) + 1);   // rank 0 = decline
@@ -54024,6 +54073,45 @@ inline bool TryOffMainAltWinActivation(GameState& state)
         { targets.push_back(lc.m_name.str()); }
     }
     if (have >= mp.alt_win_distinct_named_count) { targets.push_back(kTutorDeclineTarget); }
+    // HUMAN PLAY ASKS (USER 2026-11-19, Maze's End reference s5_gi4: "The reference there didn't give me a choice on
+    // whether to activate Maze's End at the end."). The dominance fold below is the ENGINE's (winning now beats every
+    // alternative), but activating is still the player's decision: a human is asked "activate Maze's End now?" over
+    // the FULL fetch menu (MazeOffMainTargets is unpruned in human play) with the first winning Gate preselected, or
+    // declines. The preselection is exactly what the fold would have taken (the first payable copy, the first
+    // winning name in library order), so a reference recorded before this prompt replays to the same win from the
+    // engine default (test/viewer_protocol_check.py answers a decision point a reference predates with
+    // heuristic_default). Autonomous play never reaches this branch (MazeOffMainHumanAsks is false outside human
+    // play and inside every probe / search scope), so it is byte-identical.
+    if (MazeOffMainHumanAsks())
+    {
+        std::string win_target;
+        for (const auto& [id, md] : mazes)
+        {
+            for (const std::string& t : targets)
+            {
+                RevealLogPause quiet;
+                GameState probe = state;
+                if (OffMainAltWinActivationProbe(probe, me, id, *md, t)) { win_target = t; break; }
+            }
+            if (!win_target.empty()) { break; }
+        }
+        if (win_target.empty()) { return false; }
+        if (MazeHumanDeclinedBoard() == MazeHumanBoardKey(state, me)) { return false; }
+        const MazeOffMainSource src = MazeOffMainFindSource(state, me);
+        int dflt = -1;
+        for (int i = 0; i < static_cast<int>(src.targets.size()); ++i)
+        { if (src.targets[static_cast<std::size_t>(i)].name == win_target) { dflt = i; break; } }
+        // No menu to show (the count is already >= N and no Gate is left to fetch): the win needs no choice of
+        // target, so the fold below takes it as before.
+        if (src.id >= 0 && dflt >= 0)
+        {
+            const int pick = MazeOffMainHumanPickAt(state, me, src, "now, off the main phase -- a fetch here WINS the game",
+                                                    dflt);
+            if (pick < 0) { MazeHumanDeclinedBoard() = MazeHumanBoardKey(state, me); return false; }
+            (void)MazeOffMainApply(state, me, src, src.targets[static_cast<std::size_t>(pick)], "off the main phase");
+            return state.won_by_effect;
+        }
+    }
     for (const auto& [id, md] : mazes)
     {
         for (const std::string& t : targets)

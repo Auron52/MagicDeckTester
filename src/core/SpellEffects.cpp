@@ -1845,6 +1845,7 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
         // indices, -1 declines the "may"). Nulled by RevealLogPause during search/rollout.
         if (!legal.empty() && g_play_dig_chooser)
         {
+            const DigRoleScope role("attack_dig");   // a bare-name source: the pick goes ONTO THE BATTLEFIELD
             int picked = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, take);
             bool ok = (picked == -1);
             for (int li : legal) { if (li == picked) { ok = true; break; } }
