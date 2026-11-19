@@ -4,28 +4,35 @@
     scripts/ab_wall.py <manifest.json> <batch.stdout> [--base base] [--arms fix,nr]
 
 WHY (2026-11-19, Maze's End F5 / AB-ORDER). In a pooled A/B the per-game `ms=` and even `cpu=` of a game
-are not a property of the game: they depend on how loaded the box is while it runs (16 cores / 32 SMT
-threads, a laptop part whose all-core clock is far below its one-core boost). The SAME deterministic game
-(identical digest and units) measured 11.1 s, 23.3 s and 30.5 s of wall in three batches. When the arms of a
-seed do not run at the same moment -- `same_seed_inflight: 1` serialises them, a budget or depth difference
-sends them to different LPT tiers, a per-arm job runs arm-major -- whichever arm systematically runs LATER
-lands in the run's draining tail and looks faster. F5 read a 35% "fix is slower" that flipped to a 9% "fix is
-faster" by swapping which arm came first. Play is unaffected (digests and units are identical in every order);
-only the wall reading is biased.
+are not a property of the game: they depend on how loaded the box is while it runs (here 16 cores / 32 SMT
+threads, a laptop part whose all-core clock is far below its one-core boost). Maze's End d3 s192014 gi13
+(identical digest and units every time) costs 12.1 s alone on a quiet core and ~24 s inside a saturated
+32-thread pool. There is NO cross-game cache behind it: two identical copies run back to back on ONE thread
+(--threads 1) read 0.997, and play is untouched (digests and units identical in every order).
+
+THE BIAS. `same_seed_inflight: 1` serialises a seed's copies, so the second copy of a LONG game starts only
+when the first ends -- in the run's draining tail, on an idle box, at up to 2x speed. Identical arms, 150
+Maze's End d3 games, mtg.f5g:
+    same_seed_inflight 1, A always first      B/A ms 0.844 (replicate 0.840)   <- pure order effect
+    same_seed_inflight 1, order alternated    naive 0.936, BALANCED 0.947      <- mostly, not fully, removed
+    same_seed_inflight 0, A always first      B/A ms 1.004                     <- the fix
+    one job per arm, 150 games each (arm-major, deck_compare's shape)  B/A 0.966
+The second copy's speed-up is not a uniform factor (only the games that reach the tail get it), so the
+balanced ratio below cancels it only in expectation; the real fix is to let a seed's arms RUN SIDE BY SIDE:
+same_seed_inflight 0, or >= the number of arms. Keep 1 only where the seeds are memory-heavy (deep, hard
+seeds holding GBs), and then read BALANCED with that caveat, or time the arms in separate full batches.
 
 WHAT THIS PRINTS, per arm against the base arm, on the games both played:
   * naive ratio: sum(ms arm) / sum(ms base) -- what a hand-rolled analysis reports;
   * the same ratio split by which arm of the pair the manifest DISPATCHES first (`same_seed_inflight` and the
     pool's ready-first rule make the manifest order the start order within a cost tier);
   * the ORDER-BALANCED ratio sqrt(R_base_first * R_arm_first): if running second multiplies a game's cost by
-    f, the two strata read r*f and r/f, and their geometric mean is r. With an identical-arms manifest it
-    should read 1.000 while the naive ratio does not -- that is the check this tool exists to pass;
+    f, the two strata read r*f and r/f, and their geometric mean is r;
   * the order factor f = sqrt(R_base_first / R_arm_first) (1.000 = no order effect);
   * the same three for `cpu=` (thread CPU time: removes descheduling, NOT SMT or clock-speed contention), and
     the units ratio (deterministic work, load-free, but not wall-faithful across search shapes).
-The balanced ratio needs both strata populated: build the manifest with the arm order ALTERNATED per seed
-(scripts/deck_avg_arms.py and scripts/ref_bench_arms.py rotate it; an ad-hoc mkab should too). With every
-pair in one stratum it says so and prints only the naive numbers, which are then order-confounded.
+The balanced ratio needs both strata populated: alternate the arm order per seed (scripts/deck_avg_arms.py
+and scripts/ref_bench_arms.py rotate it). It warns when a pair is serialised by same_seed_inflight.
 
 Pairing: a job name is "<arm>__<rest>" (deck_avg_arms / ref_bench_arms) or "<rest>_<arm>" (the mkab
 shape, e.g. d3_g13_fix). <rest> is the pair key. Jobs with played=0 are dropped from their pair.
@@ -108,6 +115,12 @@ def main():
             continue
         print(f"\n{arm} vs {base}: {N} paired games ({n[0]} {base}-first, {n[1]} {arm}-first), "
               f"digests differing {dig}")
+        ser = sum(1 for p in pairs.values() if p.get(base) in pos and p.get(arm) in pos
+                  and 0 < (jobs[pos[p[base]]].get("same_seed_inflight") or 0) < len(p))
+        if ser:
+            print(f"  WARNING: {ser} pair(s) run SERIALISED (same_seed_inflight below the arm count): the later copy of a"
+                  " long game runs in the draining tail and reads fast (identical arms: 0.84). For wall, use"
+                  " same_seed_inflight 0 (or >= arms); otherwise read BALANCED, which cancels it only in expectation")
         if tiered:
             print(f"  WARNING: {tiered} pair(s) differ in weight/depth/budget_ms/profile, so the pool's LPT sort, not the"
                   " manifest, decides which arm starts first; the strata (and BALANCED) are approximate for them")
