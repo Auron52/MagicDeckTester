@@ -9535,6 +9535,34 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the cast-armed classes' fallback (acq_pending, below) does: resolve_draw_breakpoint honours the
     // plan's searched continuation or re-solves with the searched engine. GENERAL (any activation or
     // trigger draw in a fallback main), not deck-gated -- measured as a play change.
+    // THE EXTRA-DROP RE-ARM AFTER A CONTINUATION -- executor twin of the end of ApplyPlanDirect's deferred loop
+    // (Maze's End F7). An end-of-main re-solve whose continuation PLAYED a land while another drop is still open
+    // (Exploration) and another land is in hand leaves a new option, and the rollout re-arms site 10 for one more
+    // pass there; the no-commit fallback re-solves the same way, as many passes as the rollout's loop allows.
+    // exec_drops_at_section was reset at the re-solve's own entry (exec_section_reset), as the rollout's is at
+    // its pass's breakpoint. Deck-constant gated inside LandDropNewlyOpen. (A committed line needs nothing here:
+    // the rollout recorded each pass as its own segment and the catch-all below replays every ordinal.)
+    auto exec_drop_rearm_loop = [&]()
+    {
+        for (int pass = 0; pass < 4; ++pass)
+        {
+            if (!BpHandEntryEnabled() || !BpDropRearmEnabled() || HumanPlayActive()
+                || !TurnSolver::LandDropNewlyOpen(exec_drops_at_section, state, karoo_deferred)) { return; }
+            rdb_site           = nullptr;              // armed by no cast: the section route
+            rdb_hand           = exec_hand_at_section; // the hand as the pass opened
+            rdb_site_activated = true;
+            if (TurnSolver::BreakpointHandSnapshotWanted(state))
+            {
+                rdb_plan_casts.clear();
+                for (const Action& pa : plan.actions)
+                {
+                    if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                    rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                }
+            }
+            resolve_draw_breakpoint(0);
+        }
+    };
     bool section_fallback = false;
     if (BpHandEntryEnabled() && !HumanPlayActive() && !cast_draw_engine
         && ((g_hand_entry_seq != exec_seq_at_section
@@ -9565,6 +9593,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
         resolve_draw_breakpoint(0);
+        exec_drop_rearm_loop();
     }
 
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
@@ -9603,6 +9632,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
         resolve_draw_breakpoint(0);
+        exec_drop_rearm_loop();
     }
     if (!staged_break && fd_plan_committed && !plan.breakpoint_actions.empty())
     {
