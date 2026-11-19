@@ -1866,3 +1866,20 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   check_references_safe -> push phase-1-2-deck-analyzer (first push this session) -> background gh run watch
   --interval 60. Then viewer audit, Stage 6 report, leaf_tiebreak --blocks 48, check_references_safe, CronDelete 01e1d807.
 - (21:08) attribution early results: RC smoke onedropburn 0;RC smoke onedropburn2hg 0;RC regression onedropburn 0;RC regression onedropburn2hg 0;RC overnight onedropburn 1; -- an rc 1 needs root-causing (read logs/keep_attr/<mode>_<key>/ and the tail of keep_attr.log) before accepting.
+
+## Mulligan profile: ADOPTED (2026-11-19)
+- Exhaustive keep + bottom table generated on src c4599c921 (PGO), recipe fast, K=11, d1/b1 (settings screen: rho 0.9812,
+  fidelity 0.9996, 0.15x play cost), 16559 entries, 22864 sub-cells. Files: `1 Drop Burn.keepmodel.exhaustive.profile.json.gz`
+  + `.raw.json.gz`. `value_play` in the profile records expected_buckets 11 / mull_gen_depth 1 / mull_gen_budget_ms 1
+  (generation-only keys).
+- mullgen.sh validation: keep exhaustive vs static -0.1003t (4/4 seed pairs, t -8.4); confounded bottom (mode 3) blind vs
+  lookahead -0.0354t (5/5, t -9.2). PASSED.
+- Overnight rows expanded ENTRY -> FULL first, accepted with the table absent (cc01a9a37).
+- With the table (pooled smoke+regression+overnight, --deck=onedropburn,onedropburn2hg): overnight d3 4/4 rows faster
+  (-0.003..-0.063), d5 4/4 faster (-0.018..-0.072), 2HG 3/4 faster (s5005 +0.076), d0 4/4 faster; smoke all faster;
+  regression d3/d5 s2002 +0.067/+0.073 (75/150 games), d5 s3003 -0.067, 2HG -0.147. Search cost ~1/15-1/20.
+- keep_adoption_attribution.py, every tier and both keys: baselines reproduced on both sides; overnight 14,010 games:
+  5380 different mulligan count, 1552 different bottom, 59 bottom-order digest-only, 6 "unexplained" (4 onedropburn d3,
+  2 onedropburn2hg d5; all same win turn, same keep, same bottomed card). All 6 reproduce the table-OFF digest exactly with
+  the table ON and MTG_EXHAUSTIVE_BOTTOM=0 (build/scratch/1db/residue) -- lookahead-bottom residue (the lookahead's
+  searches change later search state), not a table leak; same finding as Boars gi65. GT accepted for all 3 tiers.
