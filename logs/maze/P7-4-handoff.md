@@ -17,12 +17,13 @@ Worktree `.claude/worktrees/maze-p7`, branch `wip/maze-p7`. Results: `logs/maze/
 - `ebbc388b0` smoke GT accepted for (a)+(b): only mazesend_smoke_d5 (5.7348 -> 5.7197) and mazesend2hg_smoke_d5
   (play only) move; 0 searched slower, 2 faster; 229 unchanged.
 
-## Running (not waited on)
-- Regression tier (all decks) on fc204f2f8's binary: `build/scratch/maze/p7/chain8.sh`, log `reg8.log`, marker
-  `chain8.DONE` (and a "reg8 exit" line in `chain8.log`). Queued on the heavy lock behind other agents.
+## Regression tier on fc204f2f8 -- DONE, NOT YET ACCEPTED (`build/scratch/maze/p7/reg8.log`)
+365 unchanged; 3 changed, all mazesend*: d3 s2002 5.7333 (play only), d5 s2002 5.6685 -> 5.6522, d5 s3003 5.6933
+(play only). Searched: 3 faster, **1 slower: `mazesend_regression_d5_s3003 gi14` 6 -> 7** (repro `--seed 3017
+--game-index 14`, d5 b20). Its d8 b0 check (both arms) is owed before the accept.
 
 ## Remaining, in order
-1. When `chain8.DONE` exists: check `reg8.log` -- expect only mazesend* to change. Explain every searched-slower game
+1. d8 b0 on s3003 gi14 (seed 3017), both arms. Then explain every searched-slower game
    (d8 b0, abandon >= 50M, `"ignore_play_profile": true`, repro seed = base + gi, `game_index` = gi; arms
    base = `MTG_MAZE_CASTDOM_WINDOWS=0` + `MTG_MAZE_CASTDOM_PERPLAN=0` vs default). Then
    `bash test/regression.sh --accept-with-regressions="<one line>" --deck=mazesend`, `python3 test/check_gt_logs.py`,
