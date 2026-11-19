@@ -52,7 +52,9 @@ const char* const kGuildgates[10] = { "Azorius Guildgate", "Rakdos Guildgate", "
                                       "Boros Guildgate",   "Izzet Guildgate" };
 
 // Turn 4, main 1, no land played: the first `g` Guildgates (untapped) and, if `maze`, an untapped Maze's End in play.
-GameState Board(const DecisionProvider& prov, int g, bool maze)
+// `deep`: the other Guildgates are in the library, so the NAMES bound (N) reads exactly ten names and never proves --
+// the cases below then exercise (P), (C) and (S). The identity searches pass false and build their own library.
+GameState Board(const DecisionProvider& prov, int g, bool maze, bool deep = true)
 {
     GameState s;
     s.active_player_index = 0;
@@ -64,6 +66,7 @@ GameState Board(const DecisionProvider& prov, int g, bool maze)
     s.players[0].lands_played_this_turn = 0;
     for (int i = 0; i < g; ++i) { Put(s, kGuildgates[i], 1 + i); }
     if (maze) { Put(s, "Maze's End", 20); }
+    if (deep) { for (int i = g; i < 10; ++i) { s.players[0].library.push_back(C(kGuildgates[i], 100 + i)); } }
     return s;
 }
 void Hand(GameState& s, const char* name, int number) { s.players[0].hand.push_back(C(name, number)); }
@@ -155,13 +158,39 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);
     }
     {
-        // Guild Summit draws: no proof, whatever the count.
-        GameState s = Board(prov, 1, false);
+        // Guild Summit (S): count the entry sources in hand, play and library, however the draws fall.
+        GameState s = Board(prov, 5, true);
         Hand(s, "Guild Summit", 30);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);
-        GameState t = Board(prov, 1, false);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // 5 + fetch + one drop = 7
+        Lib(s, "Exploration", 31);
+        Lib(s, "Exploration", 32);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // + two Explorations (drawn, cast) = 9
+        Lib(s, "Archdruid's Charm", 33);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // + the Charm = 10: no proof
+        GameState t = Board(prov, 5, true);
         Put(t, "Guild Summit", 30);
-        CHECK(MazesEndProvider::MazeWinlessBound(t) == -1);
+        Put(t, "Burgeoning", 31);
+        Lib(t, "Burgeoning", 32);
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == 1);    // 5 + fetch + drop + two Burgeoning puts = 9
+        Lib(t, "Talon Gates of Madara", 33);
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == -1);   // + the Talon put = 10
+        // A Manabond anywhere (here the library) dumps the hand with no source: give up.
+        GameState u = Board(prov, 1, false);
+        Put(u, "Guild Summit", 30);
+        Lib(u, "Manabond", 31);
+        CHECK(MazesEndProvider::MazeWinlessBound(u) == -1);
+    }
+    {
+        // (N) NAMES: whatever Summit / Manabond do, a Gate name that is in neither hand nor library cannot enter.
+        GameState s = Board(prov, 6, true, false);
+        Put(s, "Guild Summit", 30);
+        Put(s, "Manabond", 31);
+        Lib(s, "Boros Guildgate", 32);
+        Lib(s, "Izzet Guildgate", 33);
+        Hand(s, "Citadel Gate", 34);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);    // 6 + 3 names = 9
+        Lib(s, "Sea Gate", 35);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 10 names reachable; Summit + Manabond: give up
     }
     {
         // Already ten names: never a proof (an activation wins).
@@ -199,7 +228,7 @@ TEST_CASE("Maze's End P7d: the fold is an identity fold -- the leafless search a
     {
         // A win next turn: T4 play Izzet (8 names), T5 play Boros (9) and fetch the tenth. Lines that spend T4
         // otherwise leave T5 provably short (e.g. 7 names + one drop + the fetch), and the fold answers those.
-        GameState s = Board(prov, 7, true);
+        GameState s = Board(prov, 7, true, false);
         Hand(s, "Izzet Guildgate", 30);
         Hand(s, "Boros Guildgate", 31);
         for (int k = 0; k < 6; ++k) { Lib(s, k % 2 ? "Citadel Gate" : "Orzhov Guildgate", 40 + k); }
@@ -212,7 +241,7 @@ TEST_CASE("Maze's End P7d: the fold is an identity fold -- the leafless search a
     }
     {
         // No win within the pass: both arms refute, the fold saves leaves.
-        GameState s = Board(prov, 3, true);
+        GameState s = Board(prov, 3, true, false);
         Hand(s, "Izzet Guildgate", 30);
         Hand(s, "Boros Guildgate", 31);
         for (int k = 0; k < 6; ++k) { Lib(s, k % 2 ? "Citadel Gate" : "Orzhov Guildgate", 40 + k); }
