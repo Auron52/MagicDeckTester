@@ -8386,6 +8386,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_etbcolor:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -8404,6 +8405,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteEtbColorDecisionJson(std::cout, s, source, menu, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_etbcolor; }
             std::exit(70);
         };
     g_play_etb_color_chooser = &etb_color_chooser;
@@ -8414,6 +8416,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             const int di = static_cast<int>(cursor);
+        claude_retry_etbtype:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -8434,6 +8437,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteEtbTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_etbtype; }
             std::exit(70);
         };
     g_play_etb_type_chooser = &etb_type_chooser;
@@ -8447,6 +8451,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_etbkw:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -8465,6 +8470,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteEtbKeywordsDecisionJson(std::cout, s, source, option_masks, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_etbkw; }
             std::exit(70);
         };
     g_play_etb_keywords_chooser = &etb_keywords_chooser;
@@ -8478,6 +8484,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_ctype:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -8496,6 +8503,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteCreatureTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_ctype; }
             std::exit(70);
         };
     g_play_creature_type_chooser = &creature_type_chooser;
