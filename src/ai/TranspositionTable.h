@@ -9,6 +9,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 // Per-decision memoization of SimulateToEnd(state, depth) -> win turn.
 //
@@ -206,8 +207,15 @@ public:
 
     std::size_t Size() const { return m_map.size(); }
 
+    // CUT WINS (P5b-3, TurnSolver's LandTwinSet). A win is stored whatever the rollout met, and a rollout cut by a
+    // budget can still win, later than it would have uncut. Only the land-order fold asks (MarkCutWin is called with
+    // that fold live): a hit on such a key tells an enclosing land-twin window that its answer rests on a cut. No
+    // play reads it, so an empty set is the flag-off table exactly.
+    void MarkCutWin(const Key& k) { if (m_map.count(k) != 0) { m_cut_win.insert(k); } }
+    bool IsCutWin(const Key& k) const { return !m_cut_win.empty() && m_cut_win.count(k) != 0; }
+
     // Drop all entries (the game-persistent leaf cache is cleared per game).
-    void Clear() { m_map.clear(); m_nowin.clear(); Account(-m_bytes); }
+    void Clear() { m_map.clear(); m_nowin.clear(); m_cut_win.clear(); Account(-m_bytes); }
 
     // TIER-1 LEDGER (core/Tier1Ledger.h): each table reports its approximate footprint -- a map node
     // (next pointer + cached hash + key/value, malloc-rounded) plus its bucket slot -- to the owning
@@ -215,13 +223,14 @@ public:
     static constexpr long long kWinEntryBytes   = 64;
     static constexpr long long kNoWinEntryBytes = 80;
     TranspositionTable() = default;
-    TranspositionTable(const TranspositionTable& o) : m_map(o.m_map), m_nowin(o.m_nowin) { Account(o.m_bytes); }
+    TranspositionTable(const TranspositionTable& o) : m_map(o.m_map), m_nowin(o.m_nowin), m_cut_win(o.m_cut_win)
+    { Account(o.m_bytes); }
     TranspositionTable(TranspositionTable&& o) noexcept
-        : m_map(std::move(o.m_map)), m_nowin(std::move(o.m_nowin)), m_bytes(o.m_bytes)
-    { o.m_map.clear(); o.m_nowin.clear(); o.m_bytes = 0; }
+        : m_map(std::move(o.m_map)), m_nowin(std::move(o.m_nowin)), m_cut_win(std::move(o.m_cut_win)), m_bytes(o.m_bytes)
+    { o.m_map.clear(); o.m_nowin.clear(); o.m_cut_win.clear(); o.m_bytes = 0; }
     TranspositionTable& operator=(const TranspositionTable& o)
     {
-        if (this != &o) { m_map = o.m_map; m_nowin = o.m_nowin; Account(o.m_bytes - m_bytes); }
+        if (this != &o) { m_map = o.m_map; m_nowin = o.m_nowin; m_cut_win = o.m_cut_win; Account(o.m_bytes - m_bytes); }
         return *this;
     }
     TranspositionTable& operator=(TranspositionTable&& o) noexcept
@@ -229,8 +238,9 @@ public:
         if (this != &o)
         {
             Account(-m_bytes);
-            m_map = std::move(o.m_map); m_nowin = std::move(o.m_nowin); m_bytes = o.m_bytes;
-            o.m_map.clear(); o.m_nowin.clear(); o.m_bytes = 0;
+            m_map = std::move(o.m_map); m_nowin = std::move(o.m_nowin); m_cut_win = std::move(o.m_cut_win);
+            m_bytes = o.m_bytes;
+            o.m_map.clear(); o.m_nowin.clear(); o.m_cut_win.clear(); o.m_bytes = 0;
         }
         return *this;
     }
@@ -241,6 +251,7 @@ private:
     std::unordered_map<Key, int, KeyHash> m_map;
     // key -> the refutation (cutoff it was proved under + the body's replayable side effects)
     std::unordered_map<Key, NoWinEntry, KeyHash> m_nowin;
+    std::unordered_set<Key, KeyHash> m_cut_win;   // wins stored by a cut rollout (MarkCutWin; land-order fold only)
     long long m_bytes = 0;   // this table's share of the thread's tier-1 ledger
 };
 
