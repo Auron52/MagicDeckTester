@@ -1,0 +1,300 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 24, "name": "Mausoleum Wanderer" }, { "num": 6, "name": "Drogskol Captain" }, { "num": 20, "name": "Lingering Souls" }, { "num": 38, "name": "Secluded Courtyard" }, { "num": 21, "name": "Lingering Souls" }, { "num": 55, "name": "Usher of the Fallen" }, { "num": 51, "name": "Unclaimed Territory" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Secluded Courtyard", "cast=Mausoleum Wanderer"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Usher of the Fallen" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 24, "name": "Mausoleum Wanderer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Mausoleum Wanderer", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Mausoleum Wanderer"], "actions": [{ "card": "Mausoleum Wanderer" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Unclaimed Territory", "cast=Usher of the Fallen", "cast=Usher of the Fallen"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Skyclave Apparition" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Usher of the Fallen", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Usher of the Fallen, Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Usher of the Fallen", "Usher of the Fallen"], "cast_order_canonical": ["Usher of the Fallen", "Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }, { "card": "Usher of the Fallen" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 2, "summary": "land=none; cast: Usher of the Fallen", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Usher of the Fallen entered)" }, { "turn": 2, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Usher of the Fallen entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "sick": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "sick": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Skyclave Apparition" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (1), Usher of the Fallen (2), Usher of the Fallen (2) — 5 to opponent (17→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Usher of the Fallen: boast: create a creature token", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen", "src_num": 55, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "boast: create a creature token", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Usher of the Fallen: boast: create a creature token", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen", "src_num": 56, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "boast: create a creature token", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "token", "text": "🍄 Usher of the Fallen: creates 1 Human" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Aether Vial" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (1), Usher of the Fallen (2), Usher of the Fallen (2), 1/1 Human Token (1) — 6 to opponent (12→6)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: Usher of the Fallen: boast: create a creature token", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen", "src_num": 55, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "boast: create a creature token", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Usher of the Fallen: boast: create a creature token", "declared_order_payability": "not_verified", "land": null, "casts": ["Usher of the Fallen"], "actions": [{ "card": "Usher of the Fallen", "src_num": 56, "activate": true, "cost_pips": "W", "activation_cost": "{1}{W}", "act_label": "boast: create a creature token", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "token", "text": "🍄 Usher of the Fallen: creates 1 Human" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Human Token", "idx": 9, "num": 1001, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "tapped": true, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Supreme Phantom" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Human Token", "idx": 9, "num": 1001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "is_land": true, "taps": "C" }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 2, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Supreme Phantom", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Supreme Phantom", "declared_order_payability": "not_verified", "land": null, "casts": ["Supreme Phantom"], "actions": [{ "card": "Supreme Phantom" }] },
+    { "index": 1, "summary": "land=none; cast: Aether Vial", "declared_order_payability": "not_verified", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "➕ Mausoleum Wanderer: +1/+1 until end of turn (Supreme Phantom entered)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Human Token", "idx": 9, "num": 1001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mausoleum Wanderer", "idx": 4, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 3, "num": 38, "tapped": true, "is_land": true }, { "name": "Supreme Phantom", "idx": 10, "num": 47, "sick": true, "is_land": false, "power": 1, "toughness": 3 }, { "name": "Unclaimed Territory", "idx": 5, "num": 51, "tapped": true, "is_land": true }, { "name": "Usher of the Fallen", "idx": 6, "num": 55, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Usher of the Fallen", "idx": 7, "num": 56, "is_land": false, "power": 3, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Drogskol Captain", "cost": "{1}{W}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 20, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 21, "name": "Lingering Souls", "cost": "{2}{W}", "mv": 3, "kind": "nonpermanent" }, { "num": 43, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Skyclave Apparition", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Mausoleum Wanderer (3), Usher of the Fallen (3), Usher of the Fallen (3), 1/1 Human Token (1), 1/1 Human Token (1) — 11 to opponent (6→-5)" }
+  ]
+}
