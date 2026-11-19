@@ -101524,16 +101524,49 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         const LegendKeepTurnZones z = LegendKeepTurnZonesOf(state);
         auto live_of = [&](const TurnSolver::Plan& p)
         { return p.legend_keep_turn == 0 && LegendKeepTurnFanLive(state, z, p); };
+        // MTG_PB_LAZY_CANDS: a lazily held clone block is TWINNED LAZILY, the soulbond decline twins' shape
+        // (AppendSoulbondDeclineVariants). Every fan kind varies only a pin field (putback_choice, ponder_choice,
+        // look_top_pins, champion_pins, prophets_sac_choice) that live_of never reads -- it reads land_to_play,
+        // actions and legend_keep_turn, all the prototype's -- so a clone is live exactly when its prototype is.
+        // A live fan therefore gets its prototype stamped legend_keep_turn = 1 (what the in-place stamp does to
+        // each materialised clone), and a TWIN FAN of the same kind, size and pins whose prototype carries the
+        // twin's two edits, in a block at the twins' position: the twins of the entries before the fan's block
+        // come first. Same list, field for field (MTG_PB_LAZY_CANDS_VERIFY compares every index).
+        // WHY (2026-11-19): this step used to MATERIALISE the layout. On Merfolk Turns (two Emperor Mihail II
+        // make the fan live) it rebuilt the whole Prophets champion fan inside every live m1 enumeration and
+        // then doubled it with twins: 700K-plan / 2.1 GB lists, a 5.5 GB peak in one ordinary game (seed
+        // 30000172 gi172) and a 40 GB RSS-cap abort of a 32-thread batch. Page faults: 90% at this site.
+        PbLazyLayout* const lz = (pb_lazy != nullptr && pb_lazy->active) ? pb_lazy : nullptr;
         bool any = false;
         for (const TurnSolver::Plan& p : all) { if (live_of(p)) { any = true; break; } }
+        if (!any && lz != nullptr)
+        { for (const TurnSolver::Plan& p : lz->protos) { if (live_of(p)) { any = true; break; } } }
         if (any)
         {
-            // A lazily held clone block shares its base's land and actions, so it is live exactly when its base is:
-            // materialise it so every clone gets its twin (the Loam fan's precedent).
-            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
             std::vector<TurnSolver::Plan> lk_extra;
-            for (TurnSolver::Plan& p : all)
+            const std::size_t lz_nb = lz != nullptr ? lz->NumBlocks() : 0;
+            const std::size_t lz_nf = lz != nullptr ? lz->fan_n.size() : 0;
+            std::size_t lz_next = 0;
+            auto twin_block = [&](std::size_t b)
             {
+                const std::size_t f1 = b + 1 < lz_nb ? lz->blk_f0[b + 1] : lz_nf;
+                bool opened = false;
+                for (std::size_t fi = lz->blk_f0[b]; fi < f1; ++fi)
+                {
+                    if (!live_of(lz->protos[fi])) { continue; }
+                    lz->protos[fi].legend_keep_turn = 1;
+                    if (!opened) { lz->OpenBlock(all.size() + lk_extra.size()); opened = true; }
+                    TurnSolver::Plan tp = lz->protos[fi];
+                    tp.legend_keep_turn = 2;
+                    tp.bp_wave0 = false;
+                    lz->AddFan(std::move(tp), lz->fan_n[fi], lz->fan_kind[fi], lz->fan_base[fi],
+                               lz->fan_pin_off[fi], lz->fan_pin_w[fi]);
+                }
+            };
+            for (std::size_t i = 0, n = all.size(); i < n; ++i)
+            {
+                while (lz_next < lz_nb && lz->blk_at[lz_next] == i) { twin_block(lz_next++); }
+                TurnSolver::Plan& p = all[i];
                 if (!live_of(p)) { continue; }
                 p.legend_keep_turn = 1;
                 TurnSolver::Plan v = p;
@@ -101541,6 +101574,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 v.bp_wave0 = false;
                 lk_extra.push_back(std::move(v));
             }
+            while (lz_next < lz_nb) { twin_block(lz_next++); }
             all.insert(all.end(), std::make_move_iterator(lk_extra.begin()), std::make_move_iterator(lk_extra.end()));
         }
     }
