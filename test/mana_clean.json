@@ -4367,6 +4367,52 @@
      "seed": 30085000,
      "src": "1be7404574549a33458f476c983e5fc98677791c",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 4,
+      "APPLY-DROP-ORDER": 7,
+      "CAPPED": 6,
+      "CONTINUATION-DIFFERS": 249,
+      "DOMINATED-CREATURE": 140,
+      "DOMINATED-LAND": 817,
+      "DOMINATED-LIFE": 84,
+      "DROP-COVERED": 209,
+      "ENUM-GAP": 978,
+      "ORACLE-GAP": 17,
+      "PHANTOM": 1731
+     },
+     "commit": "d4fe1671d1d891ed847f578d450d319aec1dacc0",
+     "date": "2026-11-19T15:55:47Z",
+     "decisions": 40213,
+     "deck": "decks/Fungus/Fungus.cod",
+     "deck_sha": "d7f17aa4ca81bdb5a5dc4cb721e9613eb68ea126",
+     "game_index": 90000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1152,
+     "life_breakpoints": [],
+     "ms_off": 415905,
+     "ms_on": 5731377,
+     "report": "logs/mana_clean/claude-queue-20261119h2/report.md",
+     "run": "claude-queue-20261119h2",
+     "seed": 30090000,
+     "src": "e48797e50fbf002734ebb84b95ef1c88be813fe9",
+     "verdict": "issues"
     }
    ]
   },
