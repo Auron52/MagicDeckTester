@@ -45,10 +45,13 @@ on:
       - 'references/**'
   workflow_dispatch:
 
-# A newer push to the same branch supersedes an in-flight run.
+# An in-flight run is never cancelled: it finishes, and at most ONE run waits behind it per branch (a
+# newer push replaces the waiting run, never the running one), so pushes cannot build a backlog
+# (USER 2026-11-19: "let it run and then only launch a new one for subsequent pushes after it is done").
+# Nobody waits on CI: start a background watch and read the result when it lands (CLAUDE.md).
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

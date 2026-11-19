@@ -88,3 +88,12 @@ machine), and on ordering:
   generation). Example of plain play drift: Bruna's value leaf predates the 2026-10-10 width collapses.
 * Still open: the claim/lock protocol between machines, where the queue lives, and whether an idle box
   may regenerate while it also runs suite tiers (contention makes timing-based outputs wrong).
+
+## 2026-11-19: OWED -- land through the push queue
+
+The shared branch now takes gated pushes only through `scripts/push_queue.py land` (CLAUDE.md, "PUSH TO
+THE SHARED BRANCH THROUGH THE PUSH QUEUE"), and the pre-push hook refuses any other gated push. The
+adoption step (`land_result` in `scripts/artifact_queue.py`) still pushes `HEAD:<shared>` directly with a
+GT accept, so the hook refuses it; it reports "lost the race three times -- left for an agent", which is a
+safe stop, not a silent one. Before the worker is restarted, make `land_result` `join`, `wait` for its
+turn, rebase, run its tiers under `hold`, then `land` (and `requeue` on a failed tier).

@@ -596,34 +596,57 @@ launch unless the user requests a restart.
     projection inflated on every axis. The user: *"We shouldn't be running it with the value leaf.
     Those should absolutely be serial."*
 
-- **PUSH TO THE SHARED BRANCH AT MOST ONCE EVERY 4 HOURS PER SESSION (user directive, 2026-11-11).**
-  The user's words: *"change your push rhythm to once every 4 hours"*, *"every 4 hours to the shared
-  branch. Other branches are okay if you have need beyond that"*, and *"In an ideal situation this will
-  lead to the 4-hour period ending up different for every agent and thereby much less thrashing."*
-  * **Why:** several sessions push to the same branch. Every push forces the others to rebase (and, when
-    `src` or GT replays, rebuild and re-run smoke), and CI uses `cancel-in-progress`, so frequent pushes
-    keep cancelling each other's Windows runs. Fewer, batched pushes per session --
-    with each session's window falling at a different time -- cut that churn.
-  * **How:** commit locally as you go; integrate and push the shared branch (currently
-    `phase-1-2-deck-analyzer`) in ONE batch at most every 4 hours, counted from your session's last push
-    there. Each push still follows the normal steps: `scripts/check_references_safe.py`, rebase (never
-    merge), rebuild + smoke + `test/check_gt_logs.py` when replayed `src`/GT require it, then a background
-    CI watch.
-  * **Subagents do not push the shared branch;** the parent session does, in its window. Put this in
-    every brief.
-  * **Other branches are exempt:** a `wip/*`, `backup/*` or other personal branch may be pushed whenever
-    needed (e.g. to protect work before a risky step).
-  * **References are NOT throttled:** a new user reference still goes to `origin/references-autosave` at
-    once (see the play-server hard rules above); this rule never delays protecting one.
-  * **A fix for an issue that is CAUSING TROUBLE FOR OTHER AGENTS is NOT throttled (USER 2026-11-18):**
-    *"Any issue that is causing trouble for other agents is an exception and CI failures are an obvious
-    one. For the rest it will need my coordination."* (Earlier the same day, on CI fixes: *"They are rare
-    enough that it shouldn't cause too much trouble."*) Examples: red CI on the shared branch, a broken
-    build or failing tier that other sessions inherit on rebase. Push the fix as soon as it is verified
-    (green on a `wip/*` branch, or the local equivalent), without waiting for your 4-hour window. Push
-    ONLY the fix: hold your other unpushed commits for the window (rebase so the fix goes first), and do
-    not reset the window clock on account of a fix-only push. **Any other early push needs the USER's
-    coordination**: surface it and wait for the window meanwhile.
+- **PUSH TO THE SHARED BRANCH THROUGH THE PUSH QUEUE -- KEEP WORKING UNTIL IT IS YOUR TURN (user
+  directive, 2026-11-19; replaces the 2026-11-11 "once every 4 hours" rule).** The user's words: *"I would
+  prefer agents to be able to skip churning when they are not the next to push"*, *"My preference would be
+  that they continue working on other things and if they can do that we don't need the 4-hour or even a
+  1-hour limit"*, and *"As long as the rule is 'keep working and only push changes when the queue opens up'
+  I think we would be fine."*
+  * **Why:** several sessions, on more than one container, push one branch (currently
+    `phase-1-2-deck-analyzer`). Each push that moves play makes the next pusher rebase, rebuild and re-run
+    smoke. The 4-hour rule was meant to space sessions out, and in practice it did not: a session would
+    validate, find origin had moved, and validate again (*"it doesn't seem to be working as well in
+    practice"*). The queue gives ONE session at a time the lease; origin cannot move under it, so one
+    validation is enough, and since both containers share the host's CPU it also serialises the heavy
+    validation runs.
+  * **How (`scripts/push_queue.py`; the queue is `queue.json` on origin's `push-queue` branch):**
+    1. Commit locally as you go. When you have something ready to land, `python3 scripts/push_queue.py
+       join` (it also installs the pre-push hook in your clone).
+    2. **Keep working.** Do NOT rebase, rebuild or re-smoke for the shared branch while you are not the
+       head. Arm a background waiter: `python3 scripts/push_queue.py wait` (`run_in_background`; it exits
+       0 at your turn, and 75 after 110 min so you can re-arm it). Commits you make meanwhile ride along.
+    3. **At your turn** (you hold the lease): `git fetch` + `git rebase origin/<shared>` (never merge),
+       `scripts/check_references_safe.py`, and -- when the rebase replayed someone else's gated changes or
+       your own commits touch gated paths -- rebuild + unit + smoke + `test/check_gt_logs.py`. Run that
+       validation under `push_queue.py hold -- <command>` (or `keepalive --pid <pid>` for a detached
+       run) so the lease stays alive; a head silent for 45 min is reaped by the next waiter.
+    4. `python3 scripts/push_queue.py land`: pushes HEAD to the shared branch and hands the lease to the
+       next session in ONE atomic push. If ungated commits landed meanwhile it rebases over them itself.
+       Then start the background CI watch (below).
+    5. **Validation failed?** `push_queue.py requeue` (back of the queue), fix it, then wait again. Never
+       hold the lease while you debug. Giving up: `push_queue.py leave`.
+  * **What skips the queue:** a push that touches no GATED path goes straight to the shared branch,
+    because it cannot make anyone rebuild. GATED = `src/ test/ decks/ cmake/`, the build files, and every
+    `scripts/`/`tools/` file the build or a tier can reach. That last set is COMPUTED from the pushed commit
+    (`push_queue.py closure` prints it), not listed by hand, so a tier that starts calling a new script
+    gates that script automatically. **The invariant (USER: *"We do need to be careful that this invariant
+    holds going forward ... if it doesn't it needs to be flagged and addressed"*):** an ungated push can
+    never change what the build produces or what a tier reports. If you find a tier or the build reading
+    something the closure misses (a path built at run time, an env-named file), that is a defect: flag it
+    to the USER and fix `tier_closure` in the same change. `test/push_queue_test.py` covers the
+    mechanism. **The one deliberate exemption is `references/`:** a user reference is never delayed (play
+    server hard rules). A reference that lands during someone's validation is replayed by the next tier
+    run, and one that stops replaying is the agent's to fix.
+  * **Enforced by a pre-push hook** (`.githooks/pre-push`, `core.hooksPath=.githooks`, set by `join` or
+    `push_queue.py install-hook`): a gated push to the shared branch that does not come from `land` is
+    refused. Never bypass it; a clone of the repo needs the hook installed before its first push.
+  * **Subagents do not push the shared branch;** the parent session does. Put this in every brief.
+  * **Other branches are exempt:** `wip/*`, `backup/*` and personal branches may be pushed whenever needed.
+  * **A fix for an issue that is CAUSING TROUBLE FOR OTHER AGENTS goes right behind the current head**
+    (USER 2026-11-18: *"Any issue that is causing trouble for other agents is an exception and CI failures
+    are an obvious one."*): `push_queue.py join --urgent`. Examples: red CI on the shared branch, a broken
+    build or failing tier that other sessions inherit on rebase. Land ONLY the fix in that turn (rebase so
+    it goes first) and re-join for the rest.
 
 - **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
   `.github/workflows/build.yml` builds on **windows-latest** on every push
@@ -642,6 +665,10 @@ launch unless the user requests a restart.
   (they all authenticate as `dtippett-bot`). 2026-11-13: the limit hit 0 mid-watch (HTTP 403) and the watch
   died without a verdict. After a 403, check `gh api rate_limit --jq .resources.core` and wait for the
   reset rather than retrying.
+  **CI never cancels a running build (USER 2026-11-19):** `cancel-in-progress: false` -- the running build
+  finishes and at most one run waits behind it per branch (a newer push replaces the WAITING run), so a
+  burst of pushes cannot build a backlog. A run you watch may therefore show as cancelled while it is
+  still queued; the next one covers your commits.
   **Do NOT wait on CI (USER 2026-10-21: *"we could also not wait on CI, but still check the result when it
   finishes. It rarely fails after all."*).** Start the watch in the background and carry on: never hold a
   landing, a report or the next step for it. Report the per-OS outcome when it lands; if it has not landed

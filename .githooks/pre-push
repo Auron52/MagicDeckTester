@@ -1,0 +1,7 @@
+#!/bin/sh
+# Push-queue gate (CLAUDE.md, "PUSH TO THE SHARED BRANCH THROUGH THE PUSH QUEUE"; scripts/push_queue.py).
+# Refuses a push to the shared branch that touches gated paths unless it comes from `push_queue.py land`.
+# A worktree on a branch from before the queue has no script: nothing to enforce there.
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$top/scripts/push_queue.py" ] || exit 0
+exec python3 "$top/scripts/push_queue.py" pre-push "$@"
