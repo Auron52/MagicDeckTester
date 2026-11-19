@@ -68695,13 +68695,28 @@ long long MazesEndProvider::NoWinLeafProgress(const GameState& s) const
 //      <= (the Maze's Ends on the battlefield) + Maze's End re-entries, and a re-entry can activate this turn only
 //      UNTAPPED, i.e. under an Amulet of Vigor (controlled, or in hand for {1}); each re-entry spends a drop,
 //      a Charm, a Burgeoning put, or rides a Manabond trigger (each puts every Maze's End in hand: at most 4).
-// Proof: min(P, C) + G0 < 10. GIVES UP (0 / reason) with a Guild Summit controlled or in hand: its draws put
-// unknown library cards in hand -- Explorations, Manabonds -- and neither bound survives that. With nothing in the
+// Proof: min(P, C) + G0 < 10 -- while no Guild Summit is controlled or in hand (its draws put unknown library cards
+// in hand, and neither bound survives that; a Summit in the library is unreachable without one). Two more bounds:
+//  (N) NAMES (any line, Summit and Manabond included). Every Gate that enters comes from the hand or the library
+//      (nothing in the list returns a card from the graveyard or exile), so D <= G0 + the distinct Gate names in
+//      hand + library that we do not control now. Proof when that is < 10.
+//  (S) SUMMIT (a Guild Summit controlled or in hand, and NO Manabond controlled, in hand or in the library). Draws
+//      are unbounded in count and order, so count ENTRY SOURCES instead of cards. A Gate entry is one of: a land
+//      drop (a drop open now, or the one each Exploration cast this turn adds -- at most every Exploration in hand +
+//      library); a Burgeoning put (one per copy, on the opponent's one land play -- at most every copy controlled,
+//      in hand or in the library); an Archdruid's Charm put or a Talon Gates {4} put (at most every copy in hand +
+//      library; a Scrying-tutored Talon is one of those copies); or a Maze's End fetch. A fetch spends a Maze's End
+//      activation; each Maze's End on the battlefield has one (it returns to hand), and any other activation needs a
+//      Maze's End ENTRY first, which spends one of the drop / Burgeoning / Charm sources above and adds no Gate. So
+//      entries <= ME_bf + drops + Explorations + Burgeonings + Charms + Talons (hand, battlefield and library), a
+//      bound on the line however the draws fall; mana is ignored (it only loosens). Manabond is excluded because its
+//      end-step dump puts every land in hand with no source at all.
+// A SUMMIT node with no proof answers -1 (the census's CODE-1).
 // list that untaps a land after it enters but Amulet (on entry), no draw but Summit's, and no other off-main put,
 // both bounds hold through our end step and the opponent's turn (MTG_MAZE_OFFMAIN_RESPOND / _BANK lines included:
 // each of their activations is a fetch above). Those facts are about THIS LIST, so the proof first checks that every
 // card we hold, control or can search for is one of its cards (an edited list gets no proof until this is reviewed).
-// Reason codes (the fold's census): -1 Guild Summit, -2 bound open, -3 a card outside the reviewed list.
+// Reason codes (the fold's census): -1 Guild Summit (S and N open), -2 bound open, -3 a card outside the reviewed list.
 static bool MazeLastPlyKnownCard(const std::string& n)
 {
     static const std::unordered_set<std::string> k = {
@@ -68735,12 +68750,60 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
     { if (q.controller_index == me && !MazeLastPlyKnownCard(q.card.m_name.str())) { return -3; } }
     const int g0 = CountDistinctNamedLandsWithSubtype(s, me, maze->params.alt_win_distinct_named_subtype, need);
     if (g0 >= need) { return 0; }
+    // (N): the distinct Gate names in hand + library we do not control.
+    {
+        std::vector<const std::string*> pool;
+        auto add = [&](const Card& c)
+        {
+            if (!c.IsLand()) { return; }
+            const std::string& n = c.m_name.str();
+            if (!MazeDefIsGate(CardDatabase::Instance().LookupCached(c)) || MazeControlsGateNamed(s, me, n)) { return; }
+            for (const std::string* x : pool) { if (*x == n) { return; } }
+            pool.push_back(&n);
+        };
+        for (const Card& c : pl.hand) { add(c); }
+        for (const Card& c : pl.library) { add(c); }
+        if (g0 + static_cast<int>(pool.size()) < need) { return 1; }
+    }
+    // (S): a Guild Summit controlled or in hand -- count the entry sources (above), or give up (-1).
+    {
+        int summit = 0, mb = 0, ex = 0, bg = 0, ch = 0, tl = 0, mz = 0;
+        auto tally = [&](const std::string& n, bool lib)
+        {
+            if (n == "Guild Summit") { summit += lib ? 0 : 1; }
+            else if (n == "Manabond") { ++mb; }
+            else if (n == "Exploration") { ++ex; }
+            else if (n == "Burgeoning") { ++bg; }
+            else if (n == "Archdruid's Charm") { ++ch; }
+            else if (n == "Talon Gates of Madara") { ++tl; }
+        };
+        for (const Card& c : pl.hand) { tally(c.m_name.str(), false); }
+        for (const Card& c : pl.library) { tally(c.m_name.str(), true); }
+        int expl_bf = 0, burg_bf = 0;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index != me) { continue; }
+            const std::string& n = q.card.m_name.str();
+            if (n == "Guild Summit") { ++summit; }
+            else if (n == "Manabond") { ++mb; }
+            else if (n == "Burgeoning") { ++burg_bf; }
+            else if (n == "Exploration") { ++expl_bf; }
+            if (q.card.m_name == maze->card.m_name) { ++mz; }
+        }
+        (void)expl_bf;   // a controlled Exploration is already in LandDropsAvailable
+        if (summit > 0)
+        {
+            if (mb > 0) { return -1; }
+            const int drops0 = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn);
+            const int bound_s = mz + drops0 + ex + bg + burg_bf + ch + tl;
+            return g0 + bound_s < need ? 1 : -1;
+        }
+    }
     int me_bf = 0, amulet = 0, burg = 0, manabond = 0;
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != me) { continue; }
         const std::string& n = q.card.m_name.str();
-        if (n == "Guild Summit") { return -1; }
         if (q.card.m_name == maze->card.m_name) { ++me_bf; }
         else if (n == "Amulet of Vigor") { ++amulet; }
         else if (n == "Burgeoning") { ++burg; }
@@ -68751,7 +68814,6 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
     for (const Card& c : pl.hand)
     {
         const std::string& n = c.m_name.str();
-        if (n == "Guild Summit") { return -1; }
         if (n == "Exploration") { ++expl; }
         else if (n == "Archdruid's Charm") { ++charm; }
         else if (n == "Sylvan Scrying") { ++scry; }
