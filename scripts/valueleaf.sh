@@ -1653,6 +1653,31 @@ phase_trustre() {
     mark E7b_trust
 }
 
+# ------------- PHASE E.8: the SPARSE HEURISTIC LADDER replaces a heuristic-ladder shape (value_play.ladder "sparse")
+# USER 2026-11-17 (P18j ruling 3): "valueleaf.sh GAINS A STAGE that measures mode 4 against the heur ladder (when
+# the ladder is the shape that would ship) and turns it on for the deck when it wins." USER 2026-11-19: "I don't want
+# the heuristic ladder for any deck." (mode 4 = the sparse heuristic ladder, the USER's name 2026-11-19.) All of it is
+# in scripts/sparse_ladder_stage.py: ONE pooled batch, live vs sparse on every deck of this run whose live shape runs
+# the heuristic ladder (no sidecar, a play-settings-only sidecar, the emulated ladder; the leafless and learned-leaf
+# shapes are skipped with a note), 8 held-out seeds x 500 paired games. Adopted iff cheaper in work units AND net
+# paired win turns <= 0; anything else is a RESIDUAL LOSER recorded for investigation. Installs IN THIS TREE, commits
+# nothing, every outcome in DECISIONS.txt. LAST, after E.6: it measures the shape that would otherwise ship.
+phase_sparse() {
+    done_p E8_sparse && return 0
+    log "PHASE E.8: the sparse heuristic ladder vs the heuristic-ladder shape each deck ships"
+    local row key dir stem mkey base games dirs=()
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        dirs+=("$dir")
+    done
+    if [ ${#dirs[@]} -gt 0 ]; then
+        python3 scripts/sparse_ladder_stage.py "${dirs[@]}" --work "$VLQ/sparse" --decisions "$DECISIONS" --write 2>&1 \
+            | tee -a "$VLQ/driver.log"
+        [ "${PIPESTATUS[0]}" -eq 0 ] || { log "  PHASE E.8: FAILED -- NOT marked done; a re-run reuses a finished batch"; return 1; }
+    fi
+    mark E8_sparse
+}
+
 # ------------- (PHASE F, the mulligan-generation setting screen, MOVED to scripts/mullgen.sh run, USER
 # 2026-10-18: "remove it as a value-leaf stage and make it a mulligan profile stage that only runs when it
 # hasn't been done yet." The screen runs before a deck's first keep-table generation, value leaf or not.)
@@ -1681,7 +1706,7 @@ finish|run)
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
     _eb=$(harness_bin) && log "engine: $_eb ($(harness_bin_kind "$_eb"); MTG_PGO=0 pins Release)"
     for ph in phase_freeze phase_rows phase_split phase_train phase_leafcal phase_matrix phase_riskgate \
-              phase_meta phase_emulcal phase_measure phase_adopt phase_playset phase_trustre phase_skipcal; do
+              phase_meta phase_emulcal phase_measure phase_adopt phase_playset phase_trustre phase_skipcal phase_sparse; do
         check_freeze || exit 1
         check_decks  || exit 1
         check_leaf_keys || exit 1
@@ -1704,7 +1729,8 @@ status)
         E_adopt)   echo "E.5 adopt     ";;
         E6_skipcal) echo "E.6 skip allow";;
         E7_playset) echo "E.7 play set  ";;
-        E7b_trust)  echo "E.7b trust    ";; esac; }
+        E7b_trust)  echo "E.7b trust    ";;
+        E8_sparse)   echo "E.8 sparse    ";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
@@ -1720,7 +1746,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E7_playset E7b_trust E6_skipcal; do
+    for p in 00_freeze A_rows A_split B_train C0_leafcal C_matrix C_riskgate D_meta E0_emulcal E_measure E_adopt E7_playset E7b_trust E6_skipcal E8_sparse; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done
@@ -1887,5 +1913,27 @@ playset)
     [ -s "$DECISIONS" ] && log "=== DECISIONS taken without stopping: $DECISIONS ==="
     exit "$_rc"
     ;;
-*) echo "usage: $0 {run|ab|skipcal|playset|status} [deck-dir ...]"; echo "  $0 run                          # regenerate the whole fleet"; echo "  $0 run decks/Five Colour         # one deck, new or existing"; echo "  $0 run decks/A decks/B          # two+ decks in ONE pooled queue (3 tails, not 3 per deck)"; echo "  $0 ab  decks/Five Colour         # adoption A/B of the staged model, no matrix needed"; echo "  $0 skipcal [decks/X ...]        # phase E.6 alone: escalation-skip allowance for live leaves"; echo "  $0 playset [decks/X ...]        # phase E.7 alone: decide the play setting for live leaves"; echo "  the deck(s) are the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
+sparse)
+    # PHASE E.8 ALONE: the sparse heuristic ladder against the heuristic-ladder shape a deck ships (no sidecar, a
+    # play-settings-only one, the emulated ladder). No marker -- it always re-decides -- and no freeze check: it measures the tree as it
+    # stands. Named decks, else every REGRESSION-SUITE deck (the stage itself skips the leafless and learned-leaf
+    # shapes). ONE pooled batch over all of them.
+    harness_pgo_ensure
+    _dirs=()
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        if [ ${#DECK_DIRS[@]} -eq 0 ] && ! python3 scripts/suite_gate.py --require "$dir" > /dev/null 2>&1; then
+            log "  sparse: $dir is not a regression-suite deck (an archived list?) -- skipped"; continue
+        fi
+        _dirs+=("$dir")
+    done
+    [ ${#_dirs[@]} -gt 0 ] || { echo "no deck to measure"; exit 2; }
+    log "=== PHASE E.8 ALONE (sparse): ${#_dirs[@]} deck(s) ==="
+    python3 scripts/sparse_ladder_stage.py "${_dirs[@]}" --work "$VLQ/sparse" --decisions "$DECISIONS" --write 2>&1 \
+        | tee -a "$VLQ/driver.log"
+    _rc=${PIPESTATUS[0]}
+    [ -s "$DECISIONS" ] && log "=== DECISIONS taken without stopping: $DECISIONS ==="
+    exit "$_rc"
+    ;;
+*) echo "usage: $0 {run|ab|skipcal|playset|sparse|status} [deck-dir ...]"; echo "  $0 run                          # regenerate the whole fleet"; echo "  $0 run decks/Five Colour         # one deck, new or existing"; echo "  $0 run decks/A decks/B          # two+ decks in ONE pooled queue (3 tails, not 3 per deck)"; echo "  $0 ab  decks/Five Colour         # adoption A/B of the staged model, no matrix needed"; echo "  $0 skipcal [decks/X ...]        # phase E.6 alone: escalation-skip allowance for live leaves"; echo "  $0 playset [decks/X ...]        # phase E.7 alone: decide the play setting for live leaves"; echo "  $0 sparse [decks/X ...]         # phase E.8 alone: the sparse heuristic ladder vs a heuristic-ladder shape"; echo "  the deck(s) are the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
 esac
