@@ -33,7 +33,7 @@ keeps a full board per apply ... revisit only if a deck shows it" -- at the old 
 
 Baseline single-game RSS (old code + trace, 1 thread, MTG_RSS_CAP_GB=8; trailing 1 = killed by the cap):
 see base_summary.txt next to this file: gi 0,2,3,4,7,11 died > 8 GB; gi 1 1.97 GB, 5 0.89, 10 2.84, 12 3.92,
-13 6.49 GB gi 33 finished at 8.88 GB peak (7m17s; above the 8 GB cap between watchdog samples); gi 35/41 still running at handoff -- $S/base/summary.txt.
+13 6.49 GB gi 33 finished at 8.88 GB peak (7m17s; above the 8 GB cap between watchdog samples); gi 35 killed at 10.2 GB in 21 s; gi 41 2.33 GB. Baseline COMPLETE (chain1 done).
 
 ## Fix at b5bb31b61 (WIP: NOT YET BUILT OR TESTED)
 1. Board accounting (`BoardAcct`, thread_local t_board_live) on Outcome and FrontierRec, deterministic estimate
