@@ -591,7 +591,8 @@ bool HasPlanWith(const std::vector<TurnSolver::Plan>& plans, const std::vector<s
             if (a.kind == Action::Kind::CastFromHand) { got.insert(a.card_name.str()); }
             if (a.kind == Action::Kind::Equip) { equip = true; }
         }
-        for (const std::string& c : casts) { if (got.count(c) == 0) { return false; } }
+        for (const std::string& c : casts)
+        { if (got.count(c) < static_cast<std::size_t>(std::count(casts.begin(), casts.end(), c))) { return false; } }
         return equip == want_equip;
     });
 }
@@ -994,4 +995,64 @@ TEST_CASE("Jumbo Cactuar realises GSZ -> Arbor Elf before Wild Growth when the G
         ApplyPayableCastOrder(s, acts, order);
         CHECK(order == std::vector<int>{1, 0});
     }
+}
+
+// MTG_SEQ_TRAILING_EQUIP (mana-clean gate claude-regate-20261118, ENUM-GAP s30119376 T5 m1 x19, gate ef-walk-fail): 8 mana
+// from Forest#18 (Wild Growth x2 + Overgrowth) and Forest#14 (Overgrowth), Chariot of Victory on the board. Surrak
+// first (6), both Satyrs enter hasted by its trigger and re-tap Forest#18 for 5 each, Tooth and Nail (7), and the {1}
+// left pays Chariot's equip in the trailing pass. The walk refused any subset holding a paid equip that unlocks no
+// mana, so the line with the equip was off the menu while the same line without it was offered. The unlock-order
+// lever reaches the same casts by another equip (onto a Satyr, fired as an unlock in an order that pays it).
+TEST_CASE("Jumbo Cactuar enumerates Surrak-hasted Satyrs funding Tooth and Nail with a trailing Chariot equip")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 5;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 18);
+    PutOnBoard(s, "Wild Growth", 59);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Forest", 14);
+    PutOnBoard(s, "Overgrowth", 42);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Overgrowth", 41);
+    s.battlefield.back().aura_attached_to = 14;
+    PutOnBoard(s, "Chariot of Victory", 8);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 18;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Surrak and Goreclaw", 30));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 54));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 56));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+    s.players[0].library.push_back(CopyOf("Forest", 15));
+
+    const std::vector<std::string> line = {"Tooth and Nail", "Surrak and Goreclaw", "Voyaging Satyr", "Voyaging Satyr"};
+    // The equip hosts of every enumerated plan holding the whole line plus an equip, per lever setting.
+    auto hosts = [&](int unlock, int trailing)
+    {
+        JumboArm arm; arm.Set(heurarm::PO_UNLOCK_ORDER, unlock).Set(heurarm::SEQ_TRAILING_EQUIP, trailing);
+        const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+        std::set<int> h;
+        for (const auto& p : plans)
+        {
+            if (!HasPlanWith({p}, line, true)) { continue; }
+            for (const Action& a : p.actions) { if (a.kind == Action::Kind::Equip) { h.insert(a.sac_victim_id); } }
+        }
+        return h;
+    };
+    // Both levers off: every equip variant of the line is refused (the game's ENUM-GAP x19).
+    CHECK(hosts(0, 0).empty());
+    // MTG_SEQ_TRAILING_EQUIP alone: Chariot onto Surrak (#30, no mana to unlock) is paid at the walk's end.
+    CHECK(hosts(0, 1).count(30) == 1);
+    // MTG_PO_UNLOCK_ORDER alone: Chariot onto Satyr #54 as an unlock, in an order that fires it; Surrak's equip
+    // still refused.
+    const std::set<int> u = hosts(1, 0);
+    CHECK(u.count(54) == 1);
+    CHECK(u.count(30) == 0);
 }
