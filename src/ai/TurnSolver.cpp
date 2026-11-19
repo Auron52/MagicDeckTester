@@ -71332,7 +71332,7 @@ static bool BuildLineJointBill(const std::vector<Action>& acts, LineJointBill& j
 // could later pay a coloured pip) -- and put the activations' share into the line hold (g_line_hold_has_acts), so
 // the line-aware float orders see what the rest of the line owes. false with `state` untouched when the board
 // cannot pay the bill jointly.
-static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool trace, bool no_refine = false)
+static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool trace)
 {
     const ManaCost& bill = jb.bill;
     if (bill.ManaValue() == 0) { return false; }
@@ -71343,15 +71343,7 @@ static bool LineJointPrepayCore(GameState& state, const LineJointBill& jb, bool 
         for (Permanent& p : state.battlefield)
         { if (p.card.m_number == id && p.controller_index == me && !p.tapped) { p.tapped = true; } }
     }
-    bool paid_ok;
-    {
-        // MTG_OWED_JOINT_REFINE=0 (cost experiment, owed-activations route only): the solve without the pay-refine.
-        const std::int8_t saved_refine = heurarm::t_arm[heurarm::PAY_REFINE];
-        if (no_refine) { heurarm::t_arm[heurarm::PAY_REFINE] = 0; }
-        paid_ok = TapForCostDirect(state, bill, /*for_creature=*/false);
-        heurarm::t_arm[heurarm::PAY_REFINE] = saved_refine;
-    }
-    if (!paid_ok)
+    if (!TapForCostDirect(state, bill, /*for_creature=*/false))
     {
         if (trace) { std::fprintf(stderr, "[joint-pay] the board cannot pay the bill jointly\n"); }
         state = saved;
@@ -71712,9 +71704,7 @@ bool TurnSolver::OwedActsJointPrepay(GameState& state, const std::vector<Action>
                      static_cast<int>(state.floating_mana.Total()), line.c_str(), board.c_str());
         return false;
     }
-    static const bool s_refine = EnvOn("MTG_OWED_JOINT_REFINE", true);
-    const bool no_refine = !heurarm::Flag(heurarm::OWED_JOINT_REFINE, s_refine);
-    if (!LineJointPrepayCore(state, jb, s_trace, no_refine)) { return why("no joint payment"); }
+    if (!LineJointPrepayCore(state, jb, s_trace)) { return why("no joint payment"); }
     owedjointstats::Bump(owedjointstats::g_fired);
     return true;
 }
