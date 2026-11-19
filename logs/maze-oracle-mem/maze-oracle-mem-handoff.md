@@ -111,3 +111,10 @@ see base_summary.txt next to this file: gi 0,2,3,4,7,11 died > 8 GB; gi 1 1.97 G
    expected byte-identical), Windows CI, and a mana_clean re-run of Maze's End and Merfolk Turns; the user should
    be told that Maze's End plans that used to be uncomputable (OOM) now report CAPPED (memory budget) and fail
    the gate honestly.
+
+## RESOLVED 2026-11-19 ~17:50 UTC (successor agent)
+- Units: the 9 failures are all AccomplishedAlchemist "Cast order" cases (pre-existing at 22d11f7b5, pinned in
+  4884aa67e). The Equip-fold / Theft / INT-9 / SB cases listed above were MESSAGE blocks, not failures; they pass
+  (55/55 by -tc, with and without MTG_ORACLE_PARETO_ONLINE_CHECK=1). Full suite with the check: same 9, no mismatch.
+- Repros, the pooled run, the digest identity and the default: see docs/design/mana-oracle-board-memory-2026-11-19.md.
+- Merfolk gi13 oracle-ON is NOT this mechanism (plan enumeration under AuditDecision); see that doc, section 4.
