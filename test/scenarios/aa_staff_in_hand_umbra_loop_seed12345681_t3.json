@@ -1,0 +1,74 @@
+{
+  "_comment": [
+    "THE AUTONOMOUS HALF of test/combo_off/aa_co_17 (seed 12345681 T3, USER 2026-11-19: 'A T3 win is possible",
+    "and we fail to reach it'). The same mid-turn board -- Brindle Boar already sacrificed (X = 4), Crab Umbra on the untapped",
+    "Alchemist, nothing else to tap, Staff of Domination in hand, Stroke 17 cards down -- at the deck's play setting (d5 b20).",
+    "The win needs the Umbra loop to bank the Staff's {3} with the Alchemist left untapped (ComputeUntapLoopNeed (f),",
+    "kLoopPayCastDraw), then the Staff, then the loop's draws to the Stroke. Before MTG_AA_LOOP_CAST_DRAW no loop was offered",
+    "and the engine won T4 at every budget (budget 0 included)."
+  ],
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+  "turn": 3,
+  "on_the_play": false,
+  "active_life": 24,
+  "opponent_life": 20,
+  "opponent_library_size": 51,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "life_gained_this_turn": 4,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Forest",
+      "tapped": true
+    },
+    {
+      "name": "Arbor Elf",
+      "tapped": true
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "sick": false
+    },
+    {
+      "name": "Crab Umbra",
+      "equips": "Accomplished Alchemist"
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Staff of Domination"
+  ],
+  "library_top": [
+    "Feed the Clan",
+    "Crab Umbra",
+    "Forest",
+    "Utopia Sprawl",
+    "Nourish",
+    "Forest",
+    "Elvish Harbinger",
+    "Arbor Elf",
+    "Elvish Harbinger",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Elvish Harbinger",
+    "Nourish",
+    "Seedcradle Witch",
+    "Stroke of Genius"
+  ],
+  "library_filler": "Forest",
+  "library_size": 50,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "expect_win_turn": 3
+}
