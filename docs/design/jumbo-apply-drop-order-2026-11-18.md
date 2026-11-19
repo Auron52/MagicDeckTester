@@ -42,6 +42,9 @@ casts in its order (no Vial put, no reveal surcharge). In that domain orders are
 plan's unlock (and trailing) equips in its `sel`: the given order when it pays, else every permutation nearest-first
 (Kendall distance to the given order; all permutations for n <= 7, single moves beyond), with the walk's prefix rule
 skipping every permutation that shares a failed prefix.
+Orders are taken over CLASSES of indistinguishable casts (same definition, kind, cost and cost mode --
+`UnlockOrderSameCast`), so two Voyaging Satyrs are one order, not two: an identity fold (the walk cannot tell them
+apart; Jumbo digests were byte-identical with and without it over 1000 games) that removes ~10% of the search's cost.
 
 * Apply site: `TurnSolver::UnlockPayableOrder`, called by `PayableCastOrderCore` only when the decider found nothing
   (so every order the decider settles is byte-identical).
@@ -76,6 +79,77 @@ Reach: decks with a PAID equip -- Jumbo (Chariot), Boars (Loxodon Warhammer), Co
 Martyr Lifegain (Jitte). `MTG_PO_UNLOCK_ORDER` reaches decks with a haste Equipment and a mana creature: Jumbo,
 Angels (Giada), Boars, Bruna, Five Colour.
 
-## Measurement
+## Measurement (2026-11-19, worktree `wip/jumbo-order`, Release)
 
-(pending)
+Unit tests: `mtg-test -tc="*Jumbo*"` 20/20. The s30115214 board: `ApplyPayableCastOrder` moves GSZ ahead of Wild
+Growth with `PO_UNLOCK_ORDER` on, not off. The s30119376 board: with both levers off no plan holds
+{Tooth and Nail, Surrak, Satyr, Satyr} plus an equip; `SEQ_TRAILING_EQUIP` alone offers Chariot onto Surrak (#30);
+`PO_UNLOCK_ORDER` alone offers Chariot onto Satyr #54 (an unlock, in an order that fires it) but not onto Surrak.
+
+### Repros (oracle level 2, one pooled batch, arms off / u = unlock only / on = both)
+
+| seed, turn | off | u | on |
+|---|---|---|---|
+| 30115140 T3 | APPLY-DROP-ORDER 1 | ORACLE-GAP 1 (*) | ORACLE-GAP 1 (*) |
+| 30115214 T3 | APPLY-DROP-ORDER 5 | -- | -- |
+| 30115251 T3 | APPLY-DROP-ORDER 10 | -- | -- |
+| 30115377 T3 | APPLY-DROP-ORDER 6 | -- | -- |
+| 30115733 T3 | APPLY-DROP-ORDER 6 | -- | -- |
+| 30116038 T4 | APPLY-DROP-ORDER 5 | -- | -- |
+| 30116848 T3 | APPLY-DROP-ORDER 1 | -- | -- |
+| 30115578 T4 | APPLY-DROP-ORDER 1 | APPLY-DROP-ORDER 1 | APPLY-DROP-ORDER 1 (residual) |
+| 30119376 T5 | ENUM-GAP 19 | -- | -- |
+
+(*) Analyzer side: the engine now realises {Overgrowth, Arbor Elf, equip Chariot -> Elf} with the Elf hasted and
+re-tapping the Forest ({G} left floating); the oracle has no outcome with the haste re-tap, so it reports ORACLE-GAP.
+Residual s30115578 T4 ({Tooth and Nail x2, Chariot, Satyr, equip Chariot}; the oracle pays it in the order
+T&N > Satyr > Chariot > equip): unchanged in every arm, a different mechanism, not chased here.
+
+### Slice (gi 115000-116999, both levers 0 vs 1; flags / decisions / games)
+
+| class | levers off | levers on |
+|---|---|---|
+| ENUM-GAP | 43 / 42 / 26 | 28 / 27 / 18 |
+| APPLY-DROP | 7 / 3 / 3 | 2 / 2 / 2 |
+| APPLY-DROP-ORDER | 92 / 32 / 24 | 1 / 1 / 1 |
+| ORACLE-GAP | 42 / 15 / 11 | 42 / 15 / 12 |
+| PHANTOM | 4681 / 851 / 365 | 3452 / 632 / 291 |
+
+### Held-out A/B (one pooled `mtg --batch`, seed = 30000000+gi, game_index = gi, play settings, gi from 650000)
+
+Arms: off, u = `MTG_PO_UNLOCK_ORDER` only, ut = both. Jumbo 5000 pairs (all three arms); Angels, Bruna, Colossus
+Hammer, Kitty Equipment, Five Colour 1000 pairs, Martyr Lifegain and Boars 500 pairs (off vs ut). Slower/faster
+count games whose win turn moved (a non-win scored 9).
+
+| deck | comparison | faster | slower | net | digest-only | mean turn d | units | CPU |
+|---|---|---|---|---|---|---|---|---|
+| Jumbo Cactuar | u vs off (unlock lever) | 2 | 0 | -2 | 104 | -0.0004 | x0.994 | **x1.445** |
+| Jumbo Cactuar | ut vs u (trailing lever) | 0 | 0 | 0 | 38 | 0 | x1.002 | x0.989 |
+| Angels | ut vs off | 0 | 0 | 0 | 0 | 0 | x1.000 | x0.987 |
+| Boars | ut vs off | 0 | 0 | 0 | 1 | 0 | x1.000 | x1.028 |
+| Bruna | ut vs off | 0 | 0 | 0 | 13 | 0 | x1.004 | x1.016 |
+| Colossus Hammer | ut vs off | 0 | 0 | 0 | 0 | 0 | x1.000 | x0.982 |
+| Five Colour | ut vs off | 0 | 0 | 0 | 13 | 0 | x1.000 | x1.023 |
+| Kitty Equipment | ut vs off | 0 | 0 | 0 | 0 | 0 | x1.000 | x1.004 |
+| Martyr Lifegain | ut vs off | 0 | 0 | 0 | 0 | 0 | x1.000 | x0.994 |
+
+Faster Jumbo games: gi 653146 and 653783 (T5 -> T4). No slower game in any deck, so no d8 b0 recovery run was owed.
+Every deck's net is <= 0. The class fold is an identity: all 290 jobs had the same digests as the pre-fold binary.
+
+Lever-off identity: `MTG_PO_UNLOCK_ORDER=0 MTG_SEQ_TRAILING_EQUIP=0 bash test/regression.sh --smoke` ALL PASS
+(231 passed, 0 play changes vs committed GT). Smoke/regression GT with the levers ON is not accepted yet (Jumbo rows
+move: digest-only and two faster games).
+
+### CPU of the unlock-order search (open)
+
+The search's walks are not charged to the budget (units x0.994), so its cost is pure extra CPU: Jumbo x1.445 at the
+same play (x1.64 before the class fold). Counted over 1000 Jumbo games: 517k searches, 5.4M walks, 36k orders found
+(7%); by order length n = 2..8: 167k / 176k / 101k / 55k / 16k / 2.1k / 50, so n = 5..7 carry most of the walks.
+Tried and dropped: an order-free necessary bound (SpwfProvablySupplyShort on a board with every line haste
+pre-granted). The generous version was sound (0 violations in verify mode) but caught only 16% of searches (-3% CPU);
+a tighter one (only real haste grants) caught 18% and was UNSOUND (40 violations), so neither ships.
+Options for the USER: (a) keep as is (x1.45 CPU on Jumbo only; other decks within noise); (b) re-price the walks
+against the decision budget (`TurnSolver::DecisionBudget()`, as the equip route does -- inert at unlimited budget,
+but it moves budgeted play and needs its own A/B); (c) a resumable prefix-sharing walk (DFS over orders with the
+scratch board copied per depth) to cut the per-walk cost.
+

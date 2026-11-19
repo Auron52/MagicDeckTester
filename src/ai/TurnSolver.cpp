@@ -13110,19 +13110,41 @@ static bool UnlockOrderHasHaste(const std::vector<Action>& acts, const std::vect
     return watcher && dork;
 }
 
-// Every permutation of `order` but the given one, nearest first, walked by SeqWalkFixedOrder over `sel`; the
-// first that pays replaces `order`. n <= 7: all of them; beyond, every single move (the decider's neighbourhood).
+// Two casts of one card the walk cannot tell apart: same definition, kind, cost and cost mode. Swapping them in an
+// order gives the same walk, so the search permutes CLASSES of such casts (an identity fold).
+static bool UnlockOrderSameCast(const Action& x, const Action& y)
+{
+    return x.def != nullptr && x.def == y.def && x.kind == y.kind && x.alt_cost == y.alt_cost
+        && x.cost == y.cost && x.card_name == y.card_name;
+}
+
+// Every order of `order` but the given one, nearest first, walked by SeqWalkFixedOrder over `sel`; the first that
+// pays replaces `order`. Orders are taken over classes of indistinguishable casts (UnlockOrderSameCast), so two
+// Voyaging Satyrs are one order, not two. Up to 7 casts: all of them; beyond, every single move (the decider's
+// neighbourhood). A failing walk's prefix (in class space) prunes every order that shares it.
 static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& sel,
                               std::vector<int>& order, const std::vector<int>& charged)
 {
     const int n = static_cast<int>(order.size());
     if (n < 2) { return false; }
-    std::vector<std::vector<int>> perms;
-    std::vector<int> perm(static_cast<std::size_t>(n));
-    for (int p = 0; p < n; ++p) { perm[static_cast<std::size_t>(p)] = p; }
+    // cls[k]: the class of the cast at position k of the given order (the position of its first equal).
+    std::vector<int> cls(static_cast<std::size_t>(n));
+    for (int k = 0; k < n; ++k)
+    {
+        cls[static_cast<std::size_t>(k)] = k;
+        for (int e = 0; e < k; ++e)
+        {
+            if (UnlockOrderSameCast(acts[static_cast<std::size_t>(order[static_cast<std::size_t>(e)])],
+                                    acts[static_cast<std::size_t>(order[static_cast<std::size_t>(k)])]))
+            { cls[static_cast<std::size_t>(k)] = cls[static_cast<std::size_t>(e)]; break; }
+        }
+    }
+    std::vector<std::vector<int>> perms;   // sequences of classes
     if (n <= 7)
     {
-        while (std::next_permutation(perm.begin(), perm.end())) { perms.push_back(perm); }   // lexicographic
+        std::vector<int> c(cls);
+        std::sort(c.begin(), c.end());
+        do { if (c != cls) { perms.push_back(c); } } while (std::next_permutation(c.begin(), c.end()));
     }
     else
     {
@@ -13131,35 +13153,57 @@ static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>&
             for (int to = 0; to < n; ++to)
             {
                 if (to == from) { continue; }
-                std::vector<int> m(perm);
+                std::vector<int> m(cls);
                 const int x = m[static_cast<std::size_t>(from)];
                 m.erase(m.begin() + from);
                 m.insert(m.begin() + to, x);
-                perms.push_back(std::move(m));
+                if (m != cls) { perms.push_back(std::move(m)); }
             }
         }
         std::sort(perms.begin(), perms.end());
         perms.erase(std::unique(perms.begin(), perms.end()), perms.end());
     }
-    auto inversions = [](const std::vector<int>& p)
+    // Realise a class sequence: each class's casts in their given relative order. Its distance from the given
+    // order is the inversion count of the realised positions.
+    std::vector<int> posmap(static_cast<std::size_t>(n));
+    std::vector<int> next_of(static_cast<std::size_t>(n));
+    auto realise = [&](const std::vector<int>& cp)
     {
-        int k = 0;
-        for (std::size_t i = 0; i < p.size(); ++i)
-        { for (std::size_t j = i + 1; j < p.size(); ++j) { if (p[i] > p[j]) { ++k; } } }
-        return k;
+        std::fill(next_of.begin(), next_of.end(), 0);
+        for (int k = 0; k < n; ++k)
+        {
+            const int c = cp[static_cast<std::size_t>(k)];
+            int seen = 0, pos = -1;
+            for (int q = 0; q < n; ++q)
+            {
+                if (cls[static_cast<std::size_t>(q)] != c) { continue; }
+                if (seen++ == next_of[static_cast<std::size_t>(c)]) { pos = q; break; }
+            }
+            ++next_of[static_cast<std::size_t>(c)];
+            posmap[static_cast<std::size_t>(k)] = pos;
+        }
     };
     std::vector<std::pair<int, std::size_t>> rank;
     rank.reserve(perms.size());
-    for (std::size_t i = 0; i < perms.size(); ++i) { rank.emplace_back(inversions(perms[i]), i); }
+    for (std::size_t i = 0; i < perms.size(); ++i)
+    {
+        realise(perms[i]);
+        int inv = 0;
+        for (int x = 0; x < n; ++x)
+        { for (int y = x + 1; y < n; ++y) { if (posmap[static_cast<std::size_t>(x)] > posmap[static_cast<std::size_t>(y)]) { ++inv; } } }
+        rank.emplace_back(inv, i);
+    }
     std::stable_sort(rank.begin(), rank.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    std::vector<std::vector<int>> failed;   // prefixes (in positions of the given order) no order can pay through
+    std::vector<std::vector<int>> failed;   // class-sequence prefixes no order can pay through
     std::vector<int> trial(static_cast<std::size_t>(n));
     for (const auto& r : rank)
     {
         const std::vector<int>& p = perms[r.second];
         if (std::any_of(failed.begin(), failed.end(), [&](const std::vector<int>& f)
                         { return std::equal(f.begin(), f.end(), p.begin()); })) { continue; }
-        for (int k = 0; k < n; ++k) { trial[static_cast<std::size_t>(k)] = order[static_cast<std::size_t>(p[static_cast<std::size_t>(k)])]; }
+        realise(p);
+        for (int k = 0; k < n; ++k)
+        { trial[static_cast<std::size_t>(k)] = order[static_cast<std::size_t>(posmap[static_cast<std::size_t>(k)])]; }
         int fail = -1;
         if (SeqWalkFixedOrder(state, acts, sel, trial, charged, &fail))
         {
