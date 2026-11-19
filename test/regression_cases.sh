@@ -212,7 +212,8 @@ SMOKE_CASES=(
   "mill2hg 5 1001  5 20"
   # boars (Boars): ADDED 2026-11-13 by the analysis (docs/design/analysis-Boars.md), all three tiers at once, at
   # martyr/galadriel's pre-keep-table ENTRY shape. Gruul creature ramp, BoarsProvider, no value_play block -> play
-  # rows are d5 b20. No keep table and no value leaf yet, so GT WILL move when they land. boars2hg: Zhur-Taa Druid
+  # rows are d5 b20. Exhaustive keep table ADOPTED 2026-11-19 (GT accepted with it live, all three tiers); no
+  # value leaf (the sampled-gate ladder plays), so GT moves again if one lands. boars2hg: Zhur-Taa Druid
   # and Herald of Ilharg deal damage to EACH opponent, so heads matter.
   "boars      0  1001 1000  0"
   "boars      3  1001   50 10"

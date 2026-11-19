@@ -863,23 +863,55 @@ Final verification on `79232d09c`: the focused fetch suite passed 9 cases/426 as
 
 After rebasing onto the shared Merfolk Turns main-phase split (`0c10b683d`), the combined simulator built and a pooled Boars/Merfolk Turns smoke run checked eight rows. All four Boars rows, both searched Merfolk Turns rows, and the Merfolk Turns 2HG row matched their accepted fingerprints. The Merfolk Turns depth-0 row changed 12 games: gi156 improved one turn; gi167, gi440, and gi840 took one extra turn; eight others changed play without changing the win turn. The three slower games all play a second Three Tree City. In the former line, the newly played legendary City supplied mana before the legend rule removed it at combat; `PlayLandFromHand` now checks that state-based action immediately after the land play, as required before priority. gi156 changed its City line and subsequent draws. The other eight changed lines were inspected: four have draw divergence after a changed line, and four have identical draws with the same win turn (some spend the new mana line on earlier spells). The depth-0 Merfolk row was accepted with this correctness reason in the ground-truth provenance; no searched Merfolk row was rebaselined.
 
-## Mulligan profile: generated, validated, shipped DISABLED (2026-11-19)
+## Mulligan profile: ADOPTED (2026-11-19)
 
-The exhaustive keep + bottom table WAS generated and passed `mullgen.sh`'s A/B validation. It is shipped
-here quarantined, so the deck's play does not change (USER 2026-11-19: put the Boars profile on the shared
-branch disabled, so that it is obvious it was done).
+The exhaustive keep + bottom table is LIVE (USER 2026-11-19: *"I don't want to disable it."*). It was first
+put on the shared branch quarantined under `.DISABLED` names (`33f47ab92`); this adoption renames it to the
+live names and re-baselines the suite with it present.
 
-* Files: `decks/Boars/Boars.keepmodel.exhaustive.profile.DISABLED.json.gz` and
-  `Boars.keepmodel.exhaustive.raw.DISABLED.json.gz`, byte-identical to the `.profile.json.gz` /
-  `.raw.json.gz` of `c474d068b` (branch `adopt/sunday-profiles`, handoff
-  `docs/design/handoff-sunday-profiles-2026-11-16.md`). The renamed names are what keep them inert: the
-  runtime loads only `<stem>.keepmodel.exhaustive.profile.json[.gz]`.
-* Generation: frozen commit `245c26f2a` (the raw meta reads `245c26f2a+dirty`), PGO+LTO, recipe `fast`
-  (R=30), K=18, d1 / b1, play digest `eb58bcf3ec35b9a5`. The decklist is unchanged since then. The screened
-  generation setting is now recorded in `Boars.profile.json` (`value_play`: `expected_buckets` 18,
-  `mull_gen_depth` 1, `mull_gen_budget_ms` 1; generation-only keys, they do not touch play).
-* NOT adopted: `src` has 154 commits since `245c26f2a`. Enabling it is a USER decision and needs: rename to
-  the live names, the keep-table overnight row expansion, a held-out adoption A/B on the current engine, and
-  smoke + regression + overnight GT accepted with the table present.
+* Files: `decks/Boars/Boars.keepmodel.exhaustive.profile.json.gz` and `Boars.keepmodel.exhaustive.raw.json.gz`,
+  byte-identical to the `.profile.json.gz` / `.raw.json.gz` of `c474d068b` (branch `adopt/sunday-profiles`).
+* Generation: frozen commit `245c26f2a` (raw meta `245c26f2a+dirty`), PGO+LTO, recipe `fast` (R=30), K=18,
+  d1 / b1, max_mull 6, seed_base 1000000, play digest `eb58bcf3ec35b9a5`; passed `mullgen.sh`'s A/B there. The
+  decklist is unchanged since. The screened generation setting is recorded in `Boars.profile.json`
+  (`value_play`: `expected_buckets` 18, `mull_gen_depth` 1, `mull_gen_budget_ms` 1; generation-only keys).
+  `src` is 154 commits newer than the frozen commit, hence the re-measurement below.
+* **Held-out adoption A/B on the current engine** (tree `39cef96f4`, PGO+LTO, one pooled `mtg --batch`, 24/24
+  workers busy; table absent = `exhaustive_profile: none` = static keep + lookahead bottoming, i.e. what the deck
+  played; table present = the shipping condition, the table's own baked bottoming; play rows d5 b20 with the play
+  profile owning the depth; seeds 61061..68068 step 1001, plus 71071..86086 for 2HG; loss scored as 9):
+
+  | format | n | delta (present - absent) | se | faster / slower | unwon games | search units |
+  |---|---|---|---|---|---|---|
+  | Standard | 8,000 | **-0.0395** | 0.0068 (t -5.8) | 893 / 766 | 32 -> 3 | 0.197x |
+  | 2HG | 7,200 | **+0.0144** | 0.0076 (t +1.9) | 758 / 933 | 27 -> 8 | 0.20x |
+
+* **The 2HG residual is the absent arm's clairvoyance, not a worse table.** Classifying every moved game from
+  per-game traces (2HG 2,400 games, Standard 2,000): the games with the SAME mulligan count and a DIFFERENT
+  bottom are slower with the table in every single case (2HG 100 games, +103 turns, 0 faster; Standard 61 games,
+  +61, 0 faster). The absent arm's lookahead bottomer plays every candidate bottom out on the game's REAL
+  library, so where the two bottoms differ it has, by construction, picked the hindsight-best one. The keep
+  decisions themselves (games whose mulligan count changed) net -61 turns in 2HG and -119 in Standard. The
+  confounded A/B settles it (`MTG_CONFOUND_BOTTOM=1`: reshuffle after the bottoming decision, both arms, same
+  seeds): Standard **-0.1015 +/- 0.0073** (n 8,000, 1,179 faster / 613 slower), 2HG **-0.0746 +/- 0.0079**
+  (n 7,200, 1,092 / 752). The table is clearly better in both formats once the peek is removed (clairvoyant
+  wins are not regressions, USER 2026-10-13).
+* **Overnight rows** expanded ENTRY -> FULL first, accepted with the table absent (`03796ba9d`): d3 125 -> 325 b10,
+  d5 4x300 -> 4x1425 b20, boars2hg 4x75 -> 4x175 b20. With the table the deck costs ~1/5 of its table-absent search
+  units, so the full set (~0.6 worker-h) is cheaper than the ENTRY set was without the table (~2.1 worker-h).
+* **GT accepted with the table live**, all three tiers, scoped `--deck=boars,boars2hg`. Per-game move vs the
+  table-absent GT (loss = 9):
+
+  | tier | Standard d0 | Standard d3 | Standard d5 | 2HG d5 |
+  |---|---|---|---|---|
+  | smoke | -0.154 (n 1,000) | -0.060 (50) | -0.080 (100) | +0.040 (25) |
+  | regression | -0.153 (1,000) | -0.020 (50) | -0.003 (300) | +0.093 (75) |
+  | overnight | -0.123 (8,000) | -0.059 (325) | -0.035 (5,700) | +0.000 (700) |
+
+  `keep_adoption_attribution.py` on every tier and both keys: both replays reproduce their baselines, and every
+  changed game is a different mulligan count, a different bottom, or bottom order only. One exception,
+  `boars2hg_regression_d5_s2002` gi65 (T5 both sides, digest moved, same keep and same bottom): replayed with the
+  table keeping and `MTG_EXHAUSTIVE_BOTTOM=0` it reproduces the table-off digest exactly, so it is the
+  lookahead bottomer's pre-turn-1 rollout residue (the Bruna 2026-10-28 case), not the table reaching into play.
 * Value leaf: phase A stopped by the USER with 9,942 rows banked (`docs/design/boars-valueleaf-memory-2026-11-17.md`);
   the deck plays the sampled-gate ladder (`Boars.value.json`, `sampled_gate=3`).
