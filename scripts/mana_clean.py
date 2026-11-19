@@ -172,6 +172,17 @@ def save_state(st):
     os.replace(tmp, STATE)
 
 
+# Decks the gate is known NOT to be tractable on yet, with the doc that says why. `status` shows them as
+# "parked" and a default `run` (every DUE deck) skips them; naming one runs it anyway. A parked deck still fails
+# the gate (it has no clean run); parking only stops a default run from spending the box on it.
+# 2026-11-19: a default-style run included extra_turns and its 64-game sizing probe alone held the box ~45 min
+# at ~975 core-s/game under the oracle (5,000 games would be ~42 h), for a deck parked on 2026-11-11.
+PARKED = {
+    "extra_turns": "docs/design/extra-turns-mana-oracle-sizing-2026-11-10.md (oracle audit intractable: ~1,000-plan "
+                   "real-decision menus spend the 300-priced-s decision budget; CAPPED-DECISION fails the gate)",
+}
+
+
 def shipping(decks):
     """Every SHIPPING list with a profile (an archived variant is decks/<Deck>/<v1-...>)."""
     return [d for k, d in sorted(decks.items())
@@ -193,7 +204,9 @@ def verdict(entry, sha, src_now):
     return last["verdict"], last
 
 
-def due(entry, sha, src_now):
+def due(entry, sha, src_now, key=None):
+    if key in PARKED:
+        return False
     state, last = verdict(entry, sha, src_now)
     if state in ("never", "changed", "short"):
         return True
@@ -214,11 +227,13 @@ def cmd_status(args, decks):
     for d in chosen:
         e = st.get(d.key)
         state, last = verdict(e, deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now)
+        state = "parked" if d.key in PARKED else state
         n = next_game(e)
         print("%-22s %-12s %8s %8s %-14s %d-%d%s" % (
             d.key, state, last["games"] if last else "-", last["issues"] if last else "-",
             last["src"][:12] if last else "-", n, n + GAMES - 1,
-            "  DUE" if due(e, deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now) else ""))
+            "  DUE" if due(e, deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now, d.key)
+            else "  (%s)" % PARKED[d.key] if d.key in PARKED else ""))
     return 0
 
 
@@ -341,7 +356,7 @@ def cmd_run(args, decks):
     else:
         chosen = pick(args.decks, decks) if args.decks else [
             d for d in shipping(decks)
-            if due(st["decks"].get(d.key), deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now)]
+            if due(st["decks"].get(d.key), deck_sha(os.path.relpath(d.deck_file, ROOT)), src_now, d.key)]
         if not chosen:
             print("mana_clean: no deck is due (status lists them)", file=sys.stderr)
             return 0
