@@ -59,6 +59,9 @@ MTG_TURN_CENSUS=1 writes a file named `1` into the cwd's repo root: move it out,
   fires. Never compiled -- fix compile errors first.
 
 ## Jobs running / markers
+- **UPDATE 14:54 UTC: build0 FINISHED, `EXIT 0`** (compiled cleanly, incl. the new unit test). Binaries:
+  `build/Release/mtg` (14:51) and `build/Release/mtg-test` (14:54) in this worktree. Nothing else is running.
+  Step 1 below is done except copying the binary to `build/scratch/sumf/mtg.stf`; start at step 2.
 - Build: `scripts/heavy_run.sh ./build.sh` PID **1542413** (cwd this worktree), log
   `/workspaces/MagicDeckTester/build/scratch/sumf/build0.log`; DONE marker = a line `EXIT <rc>` appended to that log.
   It was queued behind ~12 heavy-lock waiters at 12:40 UTC and builds whatever src is on disk when it starts (the
