@@ -126,5 +126,33 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   save over it."* -> DONE: Worldfire -> Overgrown Tomb (present: `etb_pay_life_to_untap` 2, gated under Blood
   Sun by step 3), sideboard zone removed; worktree and primary copies identical, CRLF kept.
 
+- B3 search targets (USER 2026-11-20, verbatim): *"Generally speaking, if you have only one Diabolic Revelation
+  and only 6 (or 5) mana you don't want to cast it. At 6 mana with an extra it might make sense to play it to
+  fetch something useful. Note that a number of cards in the deck are not worth searching at all. Blood Sun
+  should be searched early with Grim Tutor or Dimir Machinations if it is missing, but is not necessary to
+  search once we have one. The only lands we should be searching for produce 3 (lotuses) or 4 mana (scorched
+  ruins) and, with blood sun out, Lotus Field and Vale are the same so they can be collapsed. The only
+  acceleration enchantments we want to consider are Exploration and Fastbond and, honestly, we might just want
+  to always get fastbond in Goldfishing to simplify things as you don't need any more of these once you have
+  it. We shouldn't run out of life before finishing the opponent. Obvious search targets beyond that would be
+  Time Warp (earlier), Emrakul (later) and almost always a replacement Diabolic Revelation. (you don't want to
+  run out of these, though there will be times where you use a Grim Tutor to find Diabolic Revelation. If you
+  have none that is a clear play."*
+  Parent's reading -> provider RESTRICTION (USER-authored, ON by default, one `MTG_` lever so it can be A/B'd
+  and reported against the unrestricted search; adoption stays the USER's):
+  (a) Revelation is not cast at X <= 1 unless another Revelation is in hand (5 mana = X 0 is already folded);
+  (b) tutor targets (Revelation packages, Grim Tutor, Machinations' transmute) are limited to: Blood Sun only
+      while we have none (battlefield or hand); lands only Lotus Vale / Lotus Field / Scorched Ruins; accel
+      enchantments only Exploration and Fastbond, none once a Fastbond is on the battlefield or in hand,
+      Fastbond ordered first; Time Warp (ordered early); Emrakul (ordered late); Diabolic Revelation (a
+      replacement, nearly always). Everything else (Burgeoning, Ulamog, Grim Tutor, Machinations, Karoos,
+      fastlands, City, Cairns, Tomb) is not a search target;
+  (c) under Blood Sun Lotus Field = Lotus Vale ALWAYS (F-R2 on even while Ulamog is reachable: answers the
+      step-6 Ulamog-exiles-own-Blood-Sun question);
+  (d) own death stays live (B1).
+  Open readings surfaced to the USER: Blood Sun via Revelation when missing (kept allowed); transmute into
+  Grim Tutor (excluded by the whitelist); "always get Fastbond" as Exploration-not-searched-while-Fastbond-
+  in-library (built as an A/B arm, not the default).
+
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
