@@ -35777,6 +35777,9 @@ static bool BpSearchInRollouts()
 // robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
 // nest 0. Mirrors g_bp_root_enum for the SolveWithLookahead path (enforce_budget).
 static thread_local int g_fsline_nest = 0;
+// MTG_DVS_TRACE (diagnostic, print-only, DEFAULT OFF): the MTG_BP_DEV_SEQ latent records and the MTG_INWIN_CACHE
+// no-win stores / hits they must keep sound (AccomplishedAlchemist 2026-11-20, seed 12345681).
+static bool DvsTraceOn() { static const bool v = EnvOn("MTG_DVS_TRACE"); return v; }
 
 // A no-win is a genuine refutation only if the node actually finished looking. These are the events
 // that make it provisional instead: a budget overrun/exhaustion abort, and a beam that stopped the
@@ -81224,6 +81227,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 // MTG_BP_DEV_SEQ: the occurrence this variant reaches only by targeting it. Recorded,
                 // never counted (see g_bp_seen_latent), so the numbering stays the executor's.
+                if (DvsTraceOn())
+                { std::fprintf(stderr, "[dvs] latent9m T%d fsnest=%d rnest=%d enum=%d sup=%d tp=%d pend=%d\n", state.turn_number,
+                               g_fsline_nest, g_rollout_nest, g_bp_enum_depth, g_devseq_suppress, g_devseq_two_pass,
+                               TurnSolver::PostEntryActivationPending(state, s9_keys) ? 1 : 0); }
                 if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0
                     && TurnSolver::PostEntryActivationPending(state, s9_keys))
                 { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n; ++g_devseq_hard_n;
@@ -81553,6 +81560,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (reopen > 0 && !TurnSolver::PostEntryActivationPending(state, s9_keys)) { break; }
                 if (!(plan.bp_all || TurnSolver::BpChoiceAt(plan, bp_seen) >= 0))
                 {
+                    if (DvsTraceOn())
+                    { std::fprintf(stderr, "[dvs] latent9d T%d fsnest=%d rnest=%d enum=%d sup=%d tp=%d\n", state.turn_number,
+                                   g_fsline_nest, g_rollout_nest, g_bp_enum_depth, g_devseq_suppress, g_devseq_two_pass); }
                     if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0)
                     { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n;
                       g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
@@ -118866,6 +118876,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 const int q_cut = (leafless_node && gamelc::LeaflessReadsLeafed()) ? std::min(cutoff, we) : cutoff;
                 if (in != inwin::t_map.end() && q_cut <= std::min(in->second.nowin_bound, we))
                 {
+                    if (DvsTraceOn())
+                    { std::fprintf(stderr, "[dvs] iw-hit T%d depth=%d cutoff=%d bound=%d fsnest=%d rnest=%d sup=%d tp=%d\n",
+                                   state.turn_number, depth, cutoff, in->second.nowin_bound, g_fsline_nest, g_rollout_nest,
+                                   g_devseq_suppress, g_devseq_two_pass); }
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (p17::On()) { ++p17::t_iw_n; }
                     if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
@@ -121948,6 +121962,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 auto it = inwin::t_map.find(k);
                 if (it == inwin::t_map.end())
                 {
+                    if (DvsTraceOn())
+                    { std::fprintf(stderr, "[dvs] iw-store T%d depth=%d cutoff=%d b=%d fsnest=%d rnest=%d enum=%d sup=%d tp=%d dlat=%llu\n",
+                                   state.turn_number, depth, cutoff, b, g_fsline_nest, g_rollout_nest, g_bp_enum_depth,
+                                   g_devseq_suppress, g_devseq_two_pass, g_devseq_latent_n - dvs_latent_at_entry); }
                     if (admit(sizeof(inwin::Entry) + 64))
                     {
                         inwin::t_map.emplace(k, inwin::Entry{ TurnSolver::SearchLine{ max_turns + 1, {} }, max_turns + 1, b, 0ull });
@@ -121959,6 +121977,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
                 else if (it->second.nowin_bound < b)
                 {
+                    if (DvsTraceOn())
+                    { std::fprintf(stderr, "[dvs] iw-widen T%d depth=%d cutoff=%d b=%d (was %d) fsnest=%d rnest=%d sup=%d tp=%d dlat=%llu\n",
+                                   state.turn_number, depth, cutoff, b, it->second.nowin_bound, g_fsline_nest, g_rollout_nest,
+                                   g_devseq_suppress, g_devseq_two_pass, g_devseq_latent_n - dvs_latent_at_entry); }
                     it->second.nowin_bound = b; inwin::g_widen.fetch_add(1, std::memory_order_relaxed);
                     if (inwin::Verify())
                     { inwin::t_ctx[k] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<int>(gamelc::LeafCode(state)),
