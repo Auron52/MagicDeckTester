@@ -257,6 +257,34 @@ deferrals provisional.
   be smart about this for now." => OWED (queued after the E-fixes): move the DuplicateCastHasUpside check BELOW the
   `!HumanPlayActive() && !g_searched_play` d0 gate (restores the 2026-08-29 ruling "turn it on all of the time, but
   have d0 ignore that option"); expect WK d0 and likely Merfolk Turns d0 GT to move back -> accept with this provenance.
+- USER (~07:00 11-20, verbatim, answers the 7 batched decisions):
+  1. Loran's Escape scry-only (P / W / slot): "The real question is how much of that usage is clairvoyance and how
+     much a real play. I suppose if you have the cards to win otherwise it might make sense, but if it is relying on
+     clairvoyant draws that isn't so great. All that said, it might not be worth our effort fiddling with this unless
+     there is a significant benefit somewhere." => NEITHER P nor W; Escape keeps slot 10; no further work unless a
+     significant benefit turns up. Both levers stay built, default OFF.
+  2. MTG_RFX_FAN_CHARGE: "Let's try (b)" => OWED: bill reflection-fan probes only against the Overrun ceiling (not
+     the normal budget); measure vs (a) and vs the pre-charge tree; adoption bar as usual.
+  3. MTG_STUFFY_SPLIT_LETHAL_M1: "I see, so this is a d0 fix. I guess that is okay, though it shouldn't have a big
+     impact on searched." => ADOPT, default ON (accept the moved Stuffy GT keys with this provenance).
+  4. MTG_STUFFY_OPP_CREATURE_PRUNE: "Why not just always target the opponent in the prune? But yeah, obviously we
+     should not waste anything on their creatures." => ADOPT, default ON. Answered: the only own-creature targets
+     the provider keeps are a Guilty Conscience host (damage into it starts/continues the loop -- the USER's own
+     "a reflection aimed at it" starter) and a Sliver with 2+ Spiteful grants (reflects once per grant), plus F2c
+     candidates while a GC is out; every other own target is already folded to the face.
+  5. GC-host amendment: "I don't really care about this. I doubt this is worth doing. Just leave it as-is. But yes,
+     nothing should be en-Kor first. I think the higher-power reflector that can attack is slightly preferred
+     because the loop is shoter. (otherwise it doesn't matter) If we really wanted to fix d0 we would just not cast
+     guilty conscience except when it provides lethal either by finishing the opponent after combat damage or
+     through the combo which requires indestructible." => NOT BUILT; GC-host prune stays as is.
+  6. MTG_CCO_NONCREATURE_POOL in human menus: "This is fine to turn on as long as we make sure to fix any issues we
+     might find. I am not okay with needing to replay references I already did, so any that are broken need to be
+     fixed." => OWED: ON for human menus; every reference must still replay (VPC --strict 0 drift / enum-gap; fix
+     the engine or checker for any that break -- never a re-save).
+  7. Karoo bounce float colour (sweep issue E): "(a) is the way to go and should be sufficient when combined with
+     manual tap." => OWED: pip-aware human default float colour (the colour something in hand can spend this
+     phase); manual tap stays the override; new `karoo_float` stamp + legacy replay flag so older references replay
+     as recorded. Closes sweep flag E once built.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
