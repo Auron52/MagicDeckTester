@@ -588,23 +588,19 @@ std::vector<std::string> SbArranged(GameState& s, const std::vector<Action>& act
 }
 }
 
-TEST_CASE("SB order: Apostle precedes Ritual with Stone and two Intents when payable")
+// USER 2026-11-20 ("Let's just go with my rule."): with Thrumming Stone already out, a plain Ritual (not a sacrifice
+// consumer) keeps its rank-1 slot, and the Apostle goes just before the spell that sacrifices it -- however many
+// sacrifice claims the line holds and whether or not an Apostle-first order would pay. (Retired the 2026-11-16 /
+// 2026-11-19 Apostle-before-Ritual moves.)
+TEST_CASE("SB order: with the Stone out a plain Ritual stays first (Intents)")
 {
     ArmM arm;
-    arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 1);
+    arm.Set(heurarm::SB_CAST_ORDER, 1);
     GameState s = BaseM(5);
     s.battlefield.push_back(PermM(kStoneM, 50));
     const std::vector<Action> acts = { SbCastA(s, kIntentM, 60), SbCastA(s, kRitM, 61),
                                        SbCastA(s, kApM, 62), SbCastA(s, kIntentM, 63) };
-    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kApM, kRitM, kIntentM, kIntentM });
-    {
-        ArmM off; off.Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 0);
-        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
-    }
-    GameState without_stone = BaseM(5);
-    const std::vector<Action> plain = { SbCastA(without_stone, kIntentM, 60), SbCastA(without_stone, kRitM, 61),
-                                        SbCastA(without_stone, kApM, 62), SbCastA(without_stone, kIntentM, 63) };
-    CHECK(SbArranged(without_stone, plain) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
+    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
     GameState short_mana = BaseM(1);
     short_mana.battlefield.push_back(PermM(kStoneM, 50));
     const std::vector<Action> short_line = { SbCastA(short_mana, kIntentM, 60), SbCastA(short_mana, kRitM, 61),
@@ -612,30 +608,19 @@ TEST_CASE("SB order: Apostle precedes Ritual with Stone and two Intents when pay
     CHECK(SbArranged(short_mana, short_line) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
 }
 
-// MTG_SB_APOSTLE_FODDER_CLAIMS: Culling the Weak is a sacrifice claim on the Apostle bodies exactly as an Intent is,
-// so {Intent, Culling, Ritual, Apostle} under a visible Stone casts the Apostle (and its ripple) before the Ritual's.
-// Gate claude-queue-20261119g2 s30114160 T5 (board Lake + Stone + two Swamps): the Ritual-first order dropped Intent.
-TEST_CASE("SB order: Culling counts as a sacrifice claim for Apostle-before-Ritual")
+// Same rule with Culling the Weak as one of the claims (gate s30114160's hand): Ritual, then the Apostle right before
+// Culling (its sacrifice), then Intent.
+TEST_CASE("SB order: with the Stone out a plain Ritual stays first (Culling + Intent)")
 {
     ArmM arm;
-    arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 1)
-       .Set(heurarm::SB_APOSTLE_FODDER_CLAIMS, 1);
+    arm.Set(heurarm::SB_CAST_ORDER, 1);
     GameState s = BaseM(3);
     s.battlefield.push_back(PermM(kStoneM, 50));
     std::vector<Action> acts = { SbCastA(s, kIntentM, 60), SbCastA(s, kCullM, 61), SbCastA(s, kRitM, 62),
                                  SbCastA(s, kApM, 63) };
     acts[0].trick_hand_target = kApM;   // the SAC-ANY-CREATURE post-pass's hand victim
     acts[1].trick_hand_target = kApM;
-    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kApM, kRitM, kCullM, kIntentM });
-    {
-        ArmM off; off.Set(heurarm::SB_APOSTLE_FODDER_CLAIMS, 0);   // Intents only: one claim, no move
-        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kCullM, kIntentM });
-    }
-    {
-        // One claim (Culling alone) is not "two or more": the Ritual keeps its rank-1 slot.
-        const std::vector<Action> one = { acts[1], acts[2], acts[3] };
-        CHECK(SbArranged(s, one) == std::vector<std::string>{ kRitM, kApM, kCullM });
-    }
+    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kCullM, kIntentM });
     GameState without_stone = BaseM(3);
     std::vector<Action> plain = { SbCastA(without_stone, kIntentM, 60), SbCastA(without_stone, kCullM, 61),
                                   SbCastA(without_stone, kRitM, 62), SbCastA(without_stone, kApM, 63) };

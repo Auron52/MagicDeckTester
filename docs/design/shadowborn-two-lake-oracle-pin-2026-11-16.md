@@ -1,5 +1,7 @@
 # Shadowborn: two Lake cracks retain the early-crack pin
 
+> **RETIRED 2026-11-20 (USER ruling).** The USER: *"in the stone already out situation it may be simpler just to let the ritual go first if it is not a consumer"*, clarified *"'It may be simpler' (it referring to the simplicity of the implementation and correction logic) ... 'if it is not a consumer' referring to the ritual"*, then *"Let's just go with my rule."* Both Apostle-before-Ritual moves (`MTG_SB_APOSTLE_BEFORE_RITUAL_INTENT`, `MTG_SB_APOSTLE_FODDER_CLAIMS`) were deleted: with Thrumming Stone out a plain Ritual keeps its rank-1 slot and the Apostle goes just before the sacrifice spell that eats it. Both were play-neutral in their A/Bs; the rare shape they fixed (s30097662, s30114160) is expected to show as APPLY-DROP-ORDER in the mana-clean gate again.
+
 The fresh Shadowborn PGO mana-clean gate on indices 85,000–89,999 was
 oracle-on/off play-identical and found ten issues: seven `APPLY-DROP`, two
 `APPLY-DROP-ORDER`, and one `ORACLE-GAP`. The report is
