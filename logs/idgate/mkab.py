@@ -16,7 +16,7 @@ for j in jobs:
         flip += 1
         for a, v in arms:
             k = dict(j); k['name'] = f"{a}__{j['name']}" + (f"_o{o}" if len(parts) > 1 else '')
-            k['flags'] = {'MTG_ID_GATE_TRIAL': v}
+            k['flags'] = dict(j.get('flags', {}), MTG_ID_GATE_TRIAL=v)
             if len(parts) > 1:
                 k['seed'] = j['seed'] + o; k['game_index'] = o; k['games'] = n
             out.append(k)

@@ -1,0 +1,6256 @@
+{
+"jobs": [
+{
+"name": "off__mazesend_smoke_d0_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mazesend_smoke_d0_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mazesend_smoke_d3_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 41851,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mazesend_smoke_d3_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 41851,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__mazesend_smoke_d5_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 132,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 115193,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mazesend_smoke_d5_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 132,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 115193,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mazesend2hg_smoke_d5_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 30,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 103617,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mazesend2hg_smoke_d5_s1001",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 30,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 103617,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__mill_smoke_d0_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mill_smoke_d0_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mill_smoke_d3_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14058,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mill_smoke_d3_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14058,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__mill_smoke_d5_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26653,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mill_smoke_d5_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26653,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mill2hg_smoke_d5_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 5,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26584,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mill2hg_smoke_d5_s1001",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 5,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26584,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__boars_smoke_d0_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__boars_smoke_d0_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__boars_smoke_d3_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 5773,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__boars_smoke_d3_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 5773,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__boars_smoke_d5_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5155,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__boars_smoke_d5_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5155,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__boars2hg_smoke_d5_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 10733,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__boars2hg_smoke_d5_s1001",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 10733,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__sea_smoke_d0_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__sea_smoke_d0_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__sea_smoke_d3_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 32665,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__sea_smoke_d3_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 32665,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__sea_smoke_d5_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 53590,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__sea_smoke_d5_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 53590,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__sea2hg_smoke_d5_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 167400,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__sea2hg_smoke_d5_s1001",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 167400,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__stuffy_smoke_d0_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__stuffy_smoke_d0_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__stuffy_smoke_d3_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 45489,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__stuffy_smoke_d3_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 45489,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__stuffy_smoke_d5_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 71677,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__stuffy_smoke_d5_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 71677,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__stuffy2hg_smoke_d5_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 36459,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__stuffy2hg_smoke_d5_s1001",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 36459,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__morph_smoke_d0_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__morph_smoke_d0_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__morph_smoke_d3_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4779,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__morph_smoke_d3_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4779,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__morph_smoke_d5_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3804,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__morph_smoke_d5_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3804,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__morph2hg_smoke_d5_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 11710,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__morph2hg_smoke_d5_s1001",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 11710,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__hydras_smoke_d0_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__hydras_smoke_d0_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__hydras_smoke_d3_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14297,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__hydras_smoke_d3_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14297,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__hydras_smoke_d5_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 13607,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__hydras_smoke_d5_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 13607,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__hydras2hg_smoke_d5_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 37287,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__hydras2hg_smoke_d5_s1001",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 37287,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__extraturns_smoke_d0_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__extraturns_smoke_d0_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__extraturns_smoke_d3_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 7364,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__extraturns_smoke_d3_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 7364,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__extraturns_smoke_d5_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8275,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__extraturns_smoke_d5_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8275,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__extraturns2hg_smoke_d5_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2967,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__extraturns2hg_smoke_d5_s1001",
+"deck": "decks/Extra Turns/Extra Turns.cod",
+"profile": "decks/Extra Turns/Extra Turns.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2967,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__gods_smoke_d0_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__gods_smoke_d0_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__gods_smoke_d3_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 27001,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__gods_smoke_d3_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 27001,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__gods_smoke_d5_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 67959,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__gods_smoke_d5_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 67959,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__gods2hg_smoke_d5_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 126868,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__gods2hg_smoke_d5_s1001",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 126868,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__merfolk_smoke_d0_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__merfolk_smoke_d0_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__merfolk_smoke_d3_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4497,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__merfolk_smoke_d3_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4497,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__merfolk_smoke_d5_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3714,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__merfolk_smoke_d5_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3714,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__merfolk2hg_smoke_d3_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 10561,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__merfolk2hg_smoke_d3_s1001",
+"deck": "decks/Merfolk/Merfolk.cod",
+"profile": "decks/Merfolk/Merfolk.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 10561,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__midrangeburn_smoke_d0_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__midrangeburn_smoke_d0_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__midrangeburn_smoke_d3_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9458,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__midrangeburn_smoke_d3_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9458,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__midrangeburn_smoke_d5_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 12546,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__midrangeburn_smoke_d5_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 12546,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__midrangeburn2hg_smoke_d5_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26845,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__midrangeburn2hg_smoke_d5_s1001",
+"deck": "decks/Midrange Burn/Midrange Burn.cod",
+"profile": "decks/Midrange Burn/Midrange Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 26845,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__modernrwburn_smoke_d0_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__modernrwburn_smoke_d0_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__modernrwburn_smoke_d3_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4257,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__modernrwburn_smoke_d3_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4257,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__modernrwburn_smoke_d5_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 7584,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__modernrwburn_smoke_d5_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 7584,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__modernrwburn2hg_smoke_d5_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 28164,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__modernrwburn2hg_smoke_d5_s1001",
+"deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+"profile": "decks/Modern RW Burn/Modern RW Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 28164,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__fungusv3_smoke_d0_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__fungusv3_smoke_d0_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fungusv3_smoke_d3_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4583,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fungusv3_smoke_d3_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4583,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__fungusv3_smoke_d5_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 6787,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__fungusv3_smoke_d5_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 6787,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fungusv32hg_smoke_d5_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 9019,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fungusv32hg_smoke_d5_s1001",
+"deck": "decks/Fungus/Fungus.cod",
+"profile": "decks/Fungus/Fungus.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 9019,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__slivers_smoke_d0_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__slivers_smoke_d0_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__slivers_smoke_d3_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2745,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__slivers_smoke_d3_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2745,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__slivers_smoke_d5_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1340,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__slivers_smoke_d5_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1340,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__burn_smoke_d0_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__burn_smoke_d0_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__burn_smoke_d3_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3719,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__burn_smoke_d3_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3719,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__burn_smoke_d5_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 450,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 1912,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__burn_smoke_d5_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"games": 450,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 1912,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__th_smoke_d0_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__th_smoke_d0_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__th_smoke_d3_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6576,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__th_smoke_d3_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6576,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__th_smoke_d5_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 8842,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__th_smoke_d5_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 8842,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__knights_smoke_d0_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__knights_smoke_d0_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__knights_smoke_d3_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3511,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__knights_smoke_d3_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3511,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__knights_smoke_d5_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1095,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__knights_smoke_d5_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1095,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__whiteknights_smoke_d0_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__whiteknights_smoke_d0_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__whiteknights_smoke_d3_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 1662,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__whiteknights_smoke_d3_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 1662,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__whiteknights_smoke_d5_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 336,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__whiteknights_smoke_d5_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 336,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__kithkin_smoke_d0_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__kithkin_smoke_d0_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__kithkin_smoke_d3_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4280,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__kithkin_smoke_d3_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4280,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__kithkin_smoke_d5_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 2696,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__kithkin_smoke_d5_s1001",
+"deck": "decks/Kithkin/Kithkin.cod",
+"profile": "decks/Kithkin/Kithkin.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 2696,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__antilife_smoke_d0_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__antilife_smoke_d0_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__antilife_smoke_d3_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3167,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__antilife_smoke_d3_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3167,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__antilife_smoke_d5_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3566,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__antilife_smoke_d5_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3566,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__hinata_smoke_d0_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__hinata_smoke_d0_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__hinata_smoke_d3_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 54860,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__hinata_smoke_d3_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 54860,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__hinata_smoke_d5_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 80655,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__hinata_smoke_d5_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 80655,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__cyclone_smoke_d0_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__cyclone_smoke_d0_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__cyclone_smoke_d3_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 58003,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__cyclone_smoke_d3_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 58003,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__cyclone_smoke_d5_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 72516,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__cyclone_smoke_d5_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 72516,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__cyclone2hg_smoke_d3_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 73679,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__cyclone2hg_smoke_d3_s1001",
+"deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+"profile": "decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 73679,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__shadowborn_smoke_d0_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__shadowborn_smoke_d0_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__shadowborn_smoke_d3_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 10308,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__shadowborn_smoke_d3_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 10308,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__shadowborn_smoke_d5_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 15223,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__shadowborn_smoke_d5_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 15223,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__shadowborn2hg_smoke_d3_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13471,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__shadowborn2hg_smoke_d3_s1001",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13471,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragonstorm_smoke_d0_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragonstorm_smoke_d0_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__dragonstorm_smoke_d3_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2693,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__dragonstorm_smoke_d3_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2693,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragonstorm_smoke_d5_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1885,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragonstorm_smoke_d5_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1885,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__auras_smoke_d0_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__auras_smoke_d0_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__auras_smoke_d3_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2508,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__auras_smoke_d3_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 100,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2508,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__auras_smoke_d5_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 450,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1713,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__auras_smoke_d5_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"games": 450,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1713,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__goblins_smoke_d0_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__goblins_smoke_d0_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__goblins_smoke_d3_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3857,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__goblins_smoke_d3_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3857,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__goblins_smoke_d5_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 60,
+"weight": 10668,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__goblins_smoke_d5_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 60,
+"weight": 10668,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__creature_giving_smoke_d0_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__creature_giving_smoke_d0_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__creature_giving_smoke_d3_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9642,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__creature_giving_smoke_d3_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9642,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__creature_giving_smoke_d5_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 9370,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__creature_giving_smoke_d5_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 9370,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__mirrorwing_smoke_d0_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mirrorwing_smoke_d0_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mirrorwing_smoke_d3_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4308,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mirrorwing_smoke_d3_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4308,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__mirrorwing_smoke_d5_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3679,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__mirrorwing_smoke_d5_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3679,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fivecolour_smoke_d0_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fivecolour_smoke_d0_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__fivecolour_smoke_d3_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13283,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__fivecolour_smoke_d3_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13283,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fivecolour_smoke_d5_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 21784,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fivecolour_smoke_d5_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 21784,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__stompy_smoke_d0_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__stompy_smoke_d0_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__stompy_smoke_d3_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4106,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__stompy_smoke_d3_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4106,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__stompy_smoke_d5_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3861,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__stompy_smoke_d5_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3861,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__jumbo_smoke_d0_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__jumbo_smoke_d0_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__jumbo_smoke_d3_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3659,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__jumbo_smoke_d3_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3659,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__jumbo_smoke_d5_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4719,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__jumbo_smoke_d5_s1001",
+"deck": "decks/Jumbo Cactuar/Jumbo Cactuar.cod",
+"profile": "decks/Jumbo Cactuar/Jumbo Cactuar.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4719,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__minotaur_smoke_d0_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__minotaur_smoke_d0_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__minotaur_smoke_d3_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4016,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__minotaur_smoke_d3_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4016,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__minotaur_smoke_d5_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3502,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__minotaur_smoke_d5_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3502,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__kittyv3_smoke_d0_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__kittyv3_smoke_d0_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__kittyv3_smoke_d3_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 5515,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__kittyv3_smoke_d3_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 5515,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__kittyv3_smoke_d5_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 14,
+"weight": 6447,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__kittyv3_smoke_d5_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 14,
+"weight": 6447,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragons_smoke_d0_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragons_smoke_d0_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__dragons_smoke_d3_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3365,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__dragons_smoke_d3_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3365,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragons_smoke_d5_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2218,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragons_smoke_d5_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2218,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__breaching_smoke_d0_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__breaching_smoke_d0_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__breaching_smoke_d3_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 100,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__breaching_smoke_d3_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 100,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__breaching_smoke_d5_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 55,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__breaching_smoke_d5_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 55,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__critter_smoke_d0_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__critter_smoke_d0_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__critter_smoke_d3_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2215,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__critter_smoke_d3_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2215,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__critter_smoke_d5_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 80,
+"weight": 723,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__critter_smoke_d5_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 80,
+"weight": 723,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__lhc_smoke_d0_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__lhc_smoke_d0_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__lhc_smoke_d3_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3206,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__lhc_smoke_d3_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3206,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__lhc_smoke_d5_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2001,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__lhc_smoke_d5_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2001,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__melira_smoke_d0_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__melira_smoke_d0_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__melira_smoke_d3_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 25603,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__melira_smoke_d3_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 25603,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__melira_smoke_d5_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 120,
+"weight": 86933,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__melira_smoke_d5_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 120,
+"weight": 86933,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__angels_smoke_d0_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__angels_smoke_d0_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__angels_smoke_d3_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2963,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__angels_smoke_d3_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 75,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2963,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__angels_smoke_d5_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1395,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__angels_smoke_d5_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"games": 325,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1395,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__hinata2hg_smoke_d5_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 66167,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__hinata2hg_smoke_d5_s1001",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 66167,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__antilife2hg_smoke_d5_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2064,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__antilife2hg_smoke_d5_s1001",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2064,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__minotaur2hg_smoke_d5_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8053,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__minotaur2hg_smoke_d5_s1001",
+"deck": "decks/Minotaur/Minotaur.cod",
+"profile": "decks/Minotaur/Minotaur.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8053,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__goblins2hg_smoke_d5_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 60,
+"weight": 15519,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__goblins2hg_smoke_d5_s1001",
+"deck": "decks/Goblins/Goblins.cod",
+"profile": "decks/Goblins/Goblins.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 60,
+"weight": 15519,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__knights2hg_smoke_d5_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3500,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__knights2hg_smoke_d5_s1001",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3500,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__whiteknights2hg_smoke_d5_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1024,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__whiteknights2hg_smoke_d5_s1001",
+"deck": "decks/White Knights/White Knights.cod",
+"profile": "decks/White Knights/White Knights.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1024,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__fivecolour2hg_smoke_d5_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 96204,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__fivecolour2hg_smoke_d5_s1001",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 96204,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fluctuator2hg_smoke_d5_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 2011,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fluctuator2hg_smoke_d5_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 2011,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__angels2hg_smoke_d5_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4676,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__angels2hg_smoke_d5_s1001",
+"deck": "decks/Angels/Angels.cod",
+"profile": "decks/Angels/Angels.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4676,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__slivers2hg_smoke_d5_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3957,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__slivers2hg_smoke_d5_s1001",
+"deck": "decks/Slivers/Slivers.txt",
+"profile": "decks/Slivers/Slivers.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3957,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__burn2hg_smoke_d5_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 21111,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__burn2hg_smoke_d5_s1001",
+"deck": "decks/Burn/Burn.txt",
+"profile": "decks/Burn/Burn.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 21111,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__th2hg_smoke_d5_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 38616,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__th2hg_smoke_d5_s1001",
+"deck": "decks/Treasure Hunt/Treasure Hunt.txt",
+"profile": "decks/Treasure Hunt/Treasure Hunt.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 38616,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragonstorm2hg_smoke_d5_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4389,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragonstorm2hg_smoke_d5_s1001",
+"deck": "decks/Dragonstorm/Dragonstorm.cod",
+"profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4389,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__auras2hg_smoke_d5_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3773,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__auras2hg_smoke_d5_s1001",
+"deck": "decks/Auras/Auras.cod",
+"profile": "decks/Auras/Auras.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3773,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__creature_giving2hg_smoke_d5_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 14320,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__creature_giving2hg_smoke_d5_s1001",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 14320,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__mirrorwing2hg_smoke_d5_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8134,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__mirrorwing2hg_smoke_d5_s1001",
+"deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+"profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8134,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__stompy2hg_smoke_d5_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5827,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__stompy2hg_smoke_d5_s1001",
+"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+"profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5827,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__kittyv32hg_smoke_d5_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 14,
+"weight": 13364,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__kittyv32hg_smoke_d5_s1001",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 14,
+"weight": 13364,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__dragons2hg_smoke_d5_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5145,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__dragons2hg_smoke_d5_s1001",
+"deck": "decks/Dragons/Dragons.cod",
+"profile": "decks/Dragons/Dragons.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5145,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__breaching2hg_smoke_d5_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 56,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__breaching2hg_smoke_d5_s1001",
+"deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
+"profile": "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 56,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__critter2hg_smoke_d5_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 80,
+"weight": 1168,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__critter2hg_smoke_d5_s1001",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 80,
+"weight": 1168,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__lhc2hg_smoke_d5_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8200,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__lhc2hg_smoke_d5_s1001",
+"deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
+"profile": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8200,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__melira2hg_smoke_d5_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 120,
+"weight": 146170,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__melira2hg_smoke_d5_s1001",
+"deck": "decks/Melira Pod/Melira Pod.cod",
+"profile": "decks/Melira Pod/Melira Pod.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 120,
+"weight": 146170,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__pirates2hg_smoke_d5_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 13019,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__pirates2hg_smoke_d5_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 13019,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__soldiers2hg_smoke_d5_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 6067,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__soldiers2hg_smoke_d5_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 6067,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__colossus2hg_smoke_d5_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 6883,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__colossus2hg_smoke_d5_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 6883,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__elementals2hg_smoke_d5_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 68382,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__elementals2hg_smoke_d5_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 68382,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__redelem2hg_smoke_d5_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 21036,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__redelem2hg_smoke_d5_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 21036,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__pd2hg_smoke_d5_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 50412,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__pd2hg_smoke_d5_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 50412,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fluctuator_smoke_d0_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fluctuator_smoke_d0_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__fluctuator_smoke_d3_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2011,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__fluctuator_smoke_d3_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2011,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__fluctuator_smoke_d5_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 2770,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__fluctuator_smoke_d5_s1001",
+"deck": "decks/Fluctuator/Fluctuator.cod",
+"profile": "decks/Fluctuator/Fluctuator.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 40,
+"weight": 2770,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__giants_smoke_d0_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__giants_smoke_d0_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__giants_smoke_d3_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4024,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__giants_smoke_d3_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4024,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__giants_smoke_d5_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4412,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__giants_smoke_d5_s1001",
+"deck": "decks/Giants/Giants.cod",
+"profile": "decks/Giants/Giants.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4412,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__pirates_smoke_d0_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__pirates_smoke_d0_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__pirates_smoke_d3_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6058,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__pirates_smoke_d3_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6058,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__pirates_smoke_d5_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4406,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__pirates_smoke_d5_s1001",
+"deck": "decks/Pirates/Pirates.cod",
+"profile": "decks/Pirates/Pirates.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4406,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__selesnyav2_smoke_d0_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__selesnyav2_smoke_d0_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__selesnyav2_smoke_d3_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4332,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__selesnyav2_smoke_d3_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4332,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__selesnyav2_smoke_d5_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2698,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__selesnyav2_smoke_d5_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 2698,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__selesnyav22hg_smoke_d5_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3406,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__selesnyav22hg_smoke_d5_s1001",
+"deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
+"profile": "decks/Selesnya Lifegain/Selesnya Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 3406,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__soldiers_smoke_d0_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__soldiers_smoke_d0_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__soldiers_smoke_d3_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3023,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__soldiers_smoke_d3_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 3023,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__soldiers_smoke_d5_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 1459,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__soldiers_smoke_d5_s1001",
+"deck": "decks/Soldiers/Soldiers.cod",
+"profile": "decks/Soldiers/Soldiers.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 1459,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__pd_smoke_d0_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__pd_smoke_d0_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__pd_smoke_d3_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 20220,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__pd_smoke_d3_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 20220,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__pd_smoke_d5_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 29893,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__pd_smoke_d5_s1001",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 29893,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__bruna2hg_smoke_d5_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 30605,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__bruna2hg_smoke_d5_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 30605,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__bruna_smoke_d0_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__bruna_smoke_d0_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__bruna_smoke_d3_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 12438,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__bruna_smoke_d3_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 12438,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__bruna_smoke_d5_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 15856,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__bruna_smoke_d5_s1001",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 15856,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__edf2hg_smoke_d5_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8880,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__edf2hg_smoke_d5_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8880,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__edf_smoke_d0_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__edf_smoke_d0_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__edf_smoke_d3_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 8528,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__edf_smoke_d3_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 8528,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__edf_smoke_d5_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8673,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__edf_smoke_d5_s1001",
+"deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+"profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 8673,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__snow_smoke_d0_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__snow_smoke_d0_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__snow_smoke_d3_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 43463,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__snow_smoke_d3_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 43463,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__snow_smoke_d5_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 56305,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__snow_smoke_d5_s1001",
+"deck": "decks/Snow/Snow.cod",
+"profile": "decks/Snow/Snow.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 56305,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__landfall_smoke_d0_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__landfall_smoke_d0_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__landfall_smoke_d3_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14746,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__landfall_smoke_d3_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14746,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__landfall_smoke_d5_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 33353,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__landfall_smoke_d5_s1001",
+"deck": "decks/Landfall/Landfall.cod",
+"profile": "decks/Landfall/Landfall.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 33353,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__galadriel_smoke_d0_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__galadriel_smoke_d0_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__galadriel_smoke_d3_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4601,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__galadriel_smoke_d3_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4601,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__galadriel_smoke_d5_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5900,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__galadriel_smoke_d5_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5900,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__galadriel2hg_smoke_d5_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5907,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__galadriel2hg_smoke_d5_s1001",
+"deck": "decks/Galadriel/Galadriel.cod",
+"profile": "decks/Galadriel/Galadriel.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5907,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__niv_smoke_d0_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__niv_smoke_d0_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__niv_smoke_d3_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14606,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__niv_smoke_d3_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 25,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14606,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__niv_smoke_d5_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 50105,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__niv_smoke_d5_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 50105,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__niv2hg_smoke_d5_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 25414,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__niv2hg_smoke_d5_s1001",
+"deck": "decks/NivMizzetCombo/NivMizzetCombo.cod",
+"profile": "decks/NivMizzetCombo/NivMizzetCombo.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 25414,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__colossus_smoke_d0_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__colossus_smoke_d0_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__colossus_smoke_d3_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2404,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__colossus_smoke_d3_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2404,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__colossus_smoke_d5_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1743,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__colossus_smoke_d5_s1001",
+"deck": "decks/Colossus Hammer/Colossus Hammer.cod",
+"profile": "decks/Colossus Hammer/Colossus Hammer.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 1743,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__vampires_smoke_d0_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__vampires_smoke_d0_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__vampires_smoke_d3_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6164,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__vampires_smoke_d3_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6164,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__vampires_smoke_d5_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4784,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__vampires_smoke_d5_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 175,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 4784,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__vampires2hg_smoke_d5_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 23952,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__vampires2hg_smoke_d5_s1001",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 23952,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__alchemist_smoke_d0_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__alchemist_smoke_d0_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__alchemist_smoke_d3_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 21693,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__alchemist_smoke_d3_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 21693,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__alchemist_smoke_d5_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 19699,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__alchemist_smoke_d5_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"games": 150,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 19699,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__alchemist2hg_smoke_d5_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 31307,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__alchemist2hg_smoke_d5_s1001",
+"deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+"profile": "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 31307,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__elementals_smoke_d0_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__elementals_smoke_d0_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__elementals_smoke_d3_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14806,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__elementals_smoke_d3_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14806,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__elementals_smoke_d5_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 23023,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__elementals_smoke_d5_s1001",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 125,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 23023,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__martyr_smoke_d0_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__martyr_smoke_d0_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__martyr_smoke_d3_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 11800,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__martyr_smoke_d3_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 11800,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__martyr_smoke_d5_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 17819,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__martyr_smoke_d5_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 17819,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__martyr2hg_smoke_d5_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 14670,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__martyr2hg_smoke_d5_s1001",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 25,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 14670,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__redelem_smoke_d0_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__redelem_smoke_d0_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__redelem_smoke_d3_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4924,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__redelem_smoke_d3_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4924,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__redelem_smoke_d5_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 4094,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__redelem_smoke_d5_s1001",
+"deck": "decks/Red Elementals/Red Elementals.cod",
+"profile": "decks/Red Elementals/Red Elementals.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 30,
+"weight": 4094,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__spirits_smoke_d0_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__spirits_smoke_d0_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__spirits_smoke_d3_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9291,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__spirits_smoke_d3_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 9291,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__spirits_smoke_d5_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5556,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__spirits_smoke_d5_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 100,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 5556,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__spirits2hg_smoke_d3_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 17033,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__spirits2hg_smoke_d3_s1001",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 17033,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__merfolkturns_smoke_d0_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__merfolkturns_smoke_d0_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 1000,
+"seed": 1001,
+"depth": 0,
+"budget_ms": 0,
+"ignore_play_profile": true,
+"weight": 1,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__merfolkturns_smoke_d3_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 35399,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__merfolkturns_smoke_d3_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 35399,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "on__merfolkturns_smoke_d5_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 30,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 81723,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+},
+{
+"name": "off__merfolkturns_smoke_d5_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 30,
+"seed": 1001,
+"budget_ms": 20,
+"weight": 81723,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "off__merfolkturns2hg_smoke_d3_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 61168,
+"flags": {
+"MTG_ID_GATE_TRIAL": false
+}
+},
+{
+"name": "on__merfolkturns2hg_smoke_d3_s1001",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 10,
+"seed": 1001,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 61168,
+"flags": {
+"MTG_ID_GATE_TRIAL": true
+}
+}
+]
+}

@@ -1,0 +1,18 @@
+CMake Deprecation Warning at build/_deps/doctest-src/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.5 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value or use a ...<max> suffix to tell
+  CMake that the project does not need compatibility with older versions.
+
+
+>>> build: Release on 12 jobs -> build/Release/
+[1/9] Computing engine fingerprint (MTG_ENGINE_FP)
+[2/9] Generating MTG_* flag registry
+[3/8] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/ExhaustiveKeep.cpp.o
+[4/8] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/TurnSolver.cpp.o
+[5/8] Linking CXX static library Release/libmtg-core.a
+[6/8] Linking CXX executable Release/mtg
+[7/8] Linking CXX executable Release/mtg-analyze
+[8/8] Linking CXX executable Release/mtg-test
+>>> done: build/Release/  (config=Release, optimized)
