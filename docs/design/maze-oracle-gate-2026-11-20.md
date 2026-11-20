@@ -54,7 +54,24 @@ oracle's job is to find out whether that exemption ever loses a line. That needs
 
 ### Measured
 
-(pending)
+Repro games (`MTG_MANA_ORACLE=2`, one thread, seed 30000000 + gi, the deck's own profile), baseline binary = the same
+src without the change:
+
+| gi | applies base -> new | UNMODELED base -> new | ORACLE-GAP / MISS | oracle ms base -> new | wall, RSS (new) |
+|---|---|---|---|---|---|
+| 9 | 370 -> 370 | 0 -> 0 | 0 / 0 | 58 | 0.7 s, 42 MB |
+| 21 | 10,390 -> 10,395 | 10 -> **0** | 0 / 0 | 1,210 -> 1,624 | 3.7 s, 229 MB |
+| 27 | 2,926 -> 2,926 | 0 -> 0 | 0 / 0 | 1,091 | 3.6 s, 166 MB |
+| 167 | 578,290 -> 621,924 (+7.5%) | 170 -> **0** | 0 / 0 | 87,911 -> 101,800 (+16%) | 96.8 s, 1.37 GB |
+
+Every outcome that used to carry the unscripted-tap note now gets a verdict, and none of them is a gap: on these games
+the provider's Gate order never lost a line. The cost is the tap-choice frontiers' own expansions (+7.5% applies on
+g167). Game output is byte-identical to the baseline on all four.
+
+* Unit tests: the two new cases pass, and both FAIL with `MTG_ORACLE_TAP_CHOICE=0` (the negative control); the whole
+  suite passes, 3,780 / 3,780.
+* Smoke (4 threads, lane): 235 passed, 0 failed, per-game audit 0 configs changed, 0 play changes -- oracle-off play
+  is byte-identical, as the construction says. No GT to accept.
 
 ## 2. CAPPED-DECISION and the cost of a Maze's End decision
 
