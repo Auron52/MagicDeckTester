@@ -625,6 +625,7 @@ add_executable(mtg-test
     test/unit/test_mazes_end_p7d.cpp
     test/unit/test_mazes_end_f1.cpp
     test/unit/test_mazes_end_p6.cpp
+    test/unit/test_mazes_end_p5d6.cpp
     test/unit/test_mazes_end_f5.cpp
     test/unit/test_summit_twin_fold.cpp
     test/unit/test_mazes_end_f6.cpp
