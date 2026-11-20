@@ -93,7 +93,7 @@ build/scratch/claude_sacfodder_fix3/ab1):
 | prune on, wave off | 1/4 +3 | x1.092 | 0/3 +3 | x1.037 |
 
 Slower (on): Goblins 620594 (4->5), 622286 (3->4), 622411 (3->4); Fungus 630865, 633295 (4->5). d8 b0: Fungus both
-recover (4/4); Goblins see the handoff.
+recover (4/4); Goblins 620594 4/4, 622286 3/3, 622411 3/3 -- every slower game recovers at d8 b0.
 
 **Residue (why it does not clear):** in every slower game the dev-seq second pass NEVER took a line
 (`MTG_DEV_SEQ_STATS`: pass2_better=0), and only 2-4 decisions per game route through FullSearchLine's two passes at
