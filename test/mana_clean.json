@@ -5151,6 +5151,51 @@
      "seed": 30130000,
      "src": "b8173fdad445e9d9709a65b3e26ff3150668a778",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 63,
+      "APPLY-DROP-ORDER": 8,
+      "CAPPED": 206,
+      "CONTINUATION-DIFFERS": 378,
+      "DOMINATED-LAND": 360,
+      "DROP-COVERED": 563,
+      "ENUM-GAP": 1978,
+      "HIDDEN-INFO": 30,
+      "ORACLE-GAP": 100,
+      "PHANTOM": 975
+     },
+     "commit": "55fca4f7a7b16961c638391d8da14e1a0edd6cd3",
+     "date": "2026-11-20T17:34:44Z",
+     "decisions": 32712,
+     "deck": "decks/Goblins/Goblins.cod",
+     "deck_sha": "93d7505d6f7a9b4cdc0e56d682e625f2ceca594f",
+     "game_index": 135000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 2355,
+     "life_breakpoints": [],
+     "ms_off": 761173,
+     "ms_on": 7907409,
+     "report": "logs/mana_clean/claude-queue-20261120a/report.md",
+     "run": "claude-queue-20261120a",
+     "seed": 30135000,
+     "src": "31070f52fd9cbeedeae1f418caa1ba79a487d21a",
+     "verdict": "issues"
     }
    ]
   },
