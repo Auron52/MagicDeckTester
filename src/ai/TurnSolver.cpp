@@ -81546,13 +81546,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         t9 = TurnSolver::ComputeContinuationTraits(state, s9x);
                         TurnSolver::CarryPendingActivations(t9, CurrentPlanTraits());
                     }
-                    PlanTraitsScope  _t9_scope(PlanTraitsWanted() ? &t9 : nullptr);
-                    TapKeepLastScope _t9_keep(PumpTargetHoldEnabled() ? t9.pump_target_card : 0);
-                    ContPinFrame _cpf9(s9x, out_breakpoint);
-                    bp_play_searched_land(s9x, out_breakpoint);
-                    apply_continuation_precasts(s9x);
-                    apply_continuation_plan(s9x);
-                    apply_continuation_activations(s9x, out_breakpoint != nullptr);
+                    // The records this continuation appends to the deferred continuation's sink form ONE segment
+                    // (Action::rec_s9d_seg): the replay dispatches each segment's activations at its end, as here.
+                    std::vector<Action>* const s9_sink = (out_breakpoint != nullptr && !sink_stack.empty())
+                                                       ? sink_stack.back() : nullptr;
+                    const std::size_t s9_rec0 = s9_sink != nullptr ? s9_sink->size() : 0;
+                    {
+                        PlanTraitsScope  _t9_scope(PlanTraitsWanted() ? &t9 : nullptr);
+                        TapKeepLastScope _t9_keep(PumpTargetHoldEnabled() ? t9.pump_target_card : 0);
+                        ContPinFrame _cpf9(s9x, out_breakpoint);
+                        bp_play_searched_land(s9x, out_breakpoint);
+                        apply_continuation_precasts(s9x);
+                        apply_continuation_plan(s9x);
+                        apply_continuation_activations(s9x, out_breakpoint != nullptr);
+                    }
+                    if (s9_sink != nullptr && s9_sink->size() > s9_rec0)
+                    {
+                        const std::shared_ptr<const PlanTraits> seg = std::make_shared<const PlanTraits>(t9);
+                        for (std::size_t ri = s9_rec0; ri < s9_sink->size(); ++ri) { (*s9_sink)[ri].rec_s9d_seg = seg; }
+                    }
                 }
                 if (!s9_reopen || s9x.actions.empty() || OpponentHasLost(state)
                     || (s9_cyc && TurnSolver::Site9ChainRepeats(s9_chain, state)))
