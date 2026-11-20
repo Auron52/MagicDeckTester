@@ -1121,7 +1121,7 @@ inline bool SpectacleCreditEtbOppOn()
 // untapped land kept is never worse than its {R} floated for this phase only).
 inline bool FireblastFloatOn()
 {
-    static const bool env_on = EnvOn("MTG_FIREBLAST_FLOAT", false);
+    static const bool env_on = EnvOn("MTG_FIREBLAST_FLOAT", true);
     return heurarm::Flag(heurarm::FIREBLAST_FLOAT, env_on);
 }
 

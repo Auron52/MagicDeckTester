@@ -67591,7 +67591,7 @@ static bool OneDropBurnOrderEnabled()
 // legal; with MTG_FIREBLAST_FLOAT the sacrificed untapped Mountains' {R} still pays for them.
 static bool OneDropBurnFireblastEarly()
 {
-    static const bool on = EnvOn("MTG_ONEDROPBURN_FIREBLAST_EARLY", false);
+    static const bool on = EnvOn("MTG_ONEDROPBURN_FIREBLAST_EARLY", true);
     return heurarm::Flag(heurarm::ONEDROPBURN_FIREBLAST_EARLY, on);
 }
 
@@ -67599,7 +67599,7 @@ static bool OneDropBurnFireblastEarly()
 // that" -- see Main2CastAllowed.
 static bool OneDropBurnM2HeldEnabled()
 {
-    static const bool on = EnvOn("MTG_ONEDROPBURN_M2_HELD", false);
+    static const bool on = EnvOn("MTG_ONEDROPBURN_M2_HELD", true);
     return OneDropBurnOrderEnabled() && heurarm::Flag(heurarm::ONEDROPBURN_M2_HELD, on);
 }
 

@@ -363,6 +363,13 @@ GameState NPostCombat(const std::vector<const char*>& hand)
 TEST_CASE("1 Drop Burn order: Needle Drop and Skewer the Critics rank LAST but Fireblast, in either main")
 {
     OrderPin on(true);
+    // The USER's 2026-11-18 order, Fireblast LAST: MTG_ONEDROPBURN_FIREBLAST_EARLY (default ON since 2026-11-20) is
+    // pinned OFF here; the early rank has its own test below.
+    struct EarlyOff
+    {
+        EarlyOff() { heurarm::t_arm[heurarm::ONEDROPBURN_FIREBLAST_EARLY] = 0; }
+        ~EarlyOff() { heurarm::t_arm[heurarm::ONEDROPBURN_FIREBLAST_EARLY] = -1; }
+    } early_off;
     GameState s = NBoard(2, {});
     s.m_provider = &OdbProv();
     for (const Phase ph : { Phase::PreCombatMain, Phase::PostCombatMain })
