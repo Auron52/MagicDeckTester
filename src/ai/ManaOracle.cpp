@@ -1860,6 +1860,14 @@ struct PayEnum
     std::size_t                     probes = 0;
     std::size_t                     memo_hits = 0;
     std::size_t                     cap    = 4096;
+    // THE DFS NODE CAP (2026-11-20). `cap` counts VERIFY probes only. A Dfs node that does not cover the bill, or a
+    // layered node answered from vmemo, costs no probe, so the refine's release layers (F5R, each layer a full Dfs
+    // restricted to one set size) could walk the source classes' face combinations with no bound at all: Galadriel
+    // reference s10 gi9 went from 11 s to over 40 min in PayEnum::Dfs. The refine sets node_cap; past it the
+    // enumeration is CAPPED exactly as at the probe cap (the refine keeps the best payment found so far, or none).
+    // The mana oracle's own enumerations leave it unbounded.
+    std::size_t                     dfs_nodes = 0;
+    std::size_t                     node_cap  = static_cast<std::size_t>(-1);
     bool                            capped = false;
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
     int                             line_surplus_taps = 0; // audit-only: one-unit taps saved for a later plan payment
@@ -2407,6 +2415,7 @@ struct PayEnum
     void Dfs(std::size_t ci, const int col[6], int total)
     {
         if (capped || halt || Hopeless(0)) { return; }
+        if (++dfs_nodes > node_cap) { capped = true; return; }
         if (size_limit >= 0)
         {
             const std::size_t lim = static_cast<std::size_t>(size_limit);
@@ -2974,9 +2983,13 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     std::vector<PayEnum::Slot> slots;
     PayEnum pe{ masked, cost, for_creature, srcs, suffix_max, st0, seen, opts };
     pe.whole_float = true;
+    // The Dfs node cap (PayEnum::node_cap): MTG_PAY_REFINE_NODE_CAP, default 64x the probe cap (the pre-tap memo's
+    // own 64 * cap ceiling); 0 = unbounded.
+    { static const long long s_nc = EnvInt("MTG_PAY_REFINE_NODE_CAP", 64 * 4096);
+      if (s_nc > 0) { pe.node_cap = static_cast<std::size_t>(s_nc); } }
     // MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED=1 (diagnostic, with MTG_PAY_REFINE_BOUND_VERIFY): the eager recompute runs
     // with no probe cap, so every mismatch it reports is one the layers got wrong or left capped.
-    { static const bool s_unc = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED"); if (s_unc && t_refine_eager_fed) { pe.cap = static_cast<std::size_t>(1) << 40; } }
+    { static const bool s_unc = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED"); if (s_unc && t_refine_eager_fed) { pe.cap = static_cast<std::size_t>(1) << 40; pe.node_cap = static_cast<std::size_t>(-1); } }
     if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
     // THE SACRIFICE VICTIM IS NOT A RESOURCE (MTG_REFINE_VICTIM_SPENT, DEFAULT ON; =0 the victim counts like any
     // source). While this payment's cast sacrifices a creature as an additional cost (g_pay_sac_victim, Natural
