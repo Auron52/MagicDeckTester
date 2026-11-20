@@ -52,6 +52,12 @@ Q1 (the lands-short "win out" tier 1000 vs C2=100): "I'm not exactly sure what t
 
 Q2 (Manabond counting as "comes back" in prune (a)): "I think this case depends more on whether we care about the cards discarded. For example a Gates Ablaze does nothing in goldfish and can be freely discarded. An extra Guild Summit is usually not needed. 1 Exploration is possibly worth keeping if we don't have one out, but otherwise we can probably drop all of the other accelerators since Manabond can drop multiple lands in a turn. Amulets are usually good to keep if you can because of how they interact with Maze's End so they would prefer to be kept. It might be worth going through a discard heuristic to help with this process of determining what is important."
 
+Q2 follow-up (Manabond discard value, VERBATIM): "Archdruid's Charm and Sylvan Scrying are droppable when the manabond is high-impact (multiple lands) or sets us up to win. If we have only 1 land and the Scrying or Charm it would be best to cast it first if you can."
+Reading (parent): Charm / Scrying count as discardable when Manabond's yes puts 2+ lands in, or sets up the win. With only
+1 land to put, the better line casts the Scrying / Charm first (if mana allows) and then decides Manabond, so the rule
+should prefer that ordering, not count them as free discards. Burgeoning: parent proposed "droppable like the other
+accelerators"; the USER did not object -- default, UNCONFIRMED.
+
 ## Plan from the rulings (parent's reading; P5d-6 builds it)
 - The "win out" tier was meant to beat other spare-mana sinks, not spells. Against spells the fetch's rank is CONDITIONAL:
   lands in hand exceed the drops available (need to DEPLOY) -> Exploration / Manabond / Burgeoning outrank the fetch;
