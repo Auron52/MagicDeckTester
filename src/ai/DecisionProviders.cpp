@@ -15697,10 +15697,10 @@ bool LandfallProvider::ImplementsRequiredHeuristic(RequiredHeuristic h) const
     return h == RequiredHeuristic::GenesisWavePut && WaveRulePolicyOn();
 }
 
-// ---- KnightsProvider: Acclaimed Contender's dig (DRAFT, MTG_KN_ETBDIG_RANK; see the header) ----------------------
+// ---- KnightsProvider: Acclaimed Contender's dig (MTG_KN_ETBDIG_RANK, default ON; see the header) ----------------------
 static bool KnightsEtbDigRankOn()
 {
-    static const bool on = EnvOn("MTG_KN_ETBDIG_RANK");   // DEFAULT OFF (a USER decision); =1 -> the draft
+    static const bool on = EnvOn("MTG_KN_ETBDIG_RANK", true);   // DEFAULT ON (2026-11-20, parent default; USER may overrule); =0 -> searched default + RED FLAG
     return heurarm::Flag(heurarm::KN_ETBDIG_RANK, on);
 }
 

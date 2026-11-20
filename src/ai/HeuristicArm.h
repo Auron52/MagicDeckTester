@@ -1039,7 +1039,7 @@ enum Slot : int
     REQHEUR_OLD_DEFAULT,      // MTG_REQHEUR_OLD_DEFAULT  MEASUREMENT arm (2026-11-20, provider-heuristic-required.md): a registered decision with NO deck policy runs the pre-2026-11-20 engine default instead of the searched default (Acclaimed Contender: the dig axis capped at the 3 front matches in library order; Paragon and Genesis Wave have no searched default yet, so the lever does not touch them). Default OFF; never a play setting
     SL_PARAGON_POLICY,        // MTG_SL_PARAGON_POLICY  Selesnya Lifegain DRAFT policy for Nykthos Paragon (2026-11-20, provider-heuristic-required.md): the provider declares the old greedy (spend every unused copy on the first gain) as its LifegainCountersSpend policy, so the searched spend axis is off for the deck.
     WAVE_RULE_POLICY,         // MTG_WAVE_RULE_POLICY   Landfall + Selesnya Lifegain DRAFT policy for Genesis Wave (2026-11-20): the provider declares the disclosed put rule (DecisionProvider::GenesisWavePutPicks) as its GenesisWavePut policy, so the searched subset axis is off for the deck.
-    KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights DRAFT policy for Acclaimed Contender's dig (2026-11-20, for USER review): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default OFF until the USER rules
+    KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights policy for Acclaimed Contender's dig (2026-11-20): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default ON since 2026-11-20 (play-identical over 6000 A/B games, ~1.6-1.8% fewer units; the USER may overrule); =0 is the searched default + RED FLAG
     COUNT
 };
 
