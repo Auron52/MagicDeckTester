@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f6695ff3e  date 2026-11-20
+# Regression ground truth -- commit 546d0e1bc  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -91,7 +91,7 @@ cyclone_smoke_d0_s1001=8.3090/30023e95ee6e7cc2
 cyclone_smoke_d3_s1001=4.8800/f2c16fa6692145bf
 cyclone_smoke_d5_s1001=4.7500/271eb790255560ae
 cyclone2hg_smoke_d3_s1001=4.9200/a78339dbebc05689
-shadowborn_smoke_d0_s1001=7.3740/02905bcdf0b07354
+shadowborn_smoke_d0_s1001=7.3740/b74f2888a2728c07
 shadowborn_smoke_d3_s1001=5.0000/02ab69968e7e39d2
 shadowborn_smoke_d5_s1001=4.7800/3adc6495434a900b
 shadowborn2hg_smoke_d3_s1001=5.2600/0501a15d0438254d
@@ -439,7 +439,7 @@ cyclone_regression_d5_s3003=4.7133/b6b4f9d841250259
 shadowborn_regression_d0_s2002=7.3370/8716f3687558b9ff
 shadowborn_regression_d3_s2002=4.7600/b893c3e056e40764
 shadowborn_regression_d3_s3003=4.9333/dc855060cdd2f136
-shadowborn_regression_d5_s2002=4.7600/0bf71f1a62309132
+shadowborn_regression_d5_s2002=4.7600/0bf2c69e88c477dd
 shadowborn_regression_d5_s3003=4.7733/17c6158fbf21b296
 dragonstorm_regression_d0_s2002=4.9860/68ba387d85a7e517
 dragonstorm_regression_d3_s2002=4.2100/1c7efc84c5c63785
