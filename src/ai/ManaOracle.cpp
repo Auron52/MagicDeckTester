@@ -4203,7 +4203,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
     for (const Card& c : root.players[root.active_player_index].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && d->params.etb_bounce_land) { has_karoo_in_hand = true; break; }
+        if (d != nullptr && EffectiveLandDef(root, *d).params.etb_bounce_land) { has_karoo_in_hand = true; break; }   // Blood Sun
     }
     for (const Action& a : plan.actions)
     {

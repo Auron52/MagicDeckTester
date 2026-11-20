@@ -1297,6 +1297,24 @@ const std::map<std::string, std::vector<int>>* DeckNumbering()
 }
 }   // namespace
 
+// BLOOD SUN's self-guard (see StampDeckTraits). Our mainboard and sideboard only: the passive opponent's lands
+// enter through opponentdeck::PlayLeftmostLandFrom, which models only their enters-tapped rules and fetch -- both
+// gated there (G4) -- so the opponent's list holds no ability that could keep playing under Blood Sun.
+std::string GoldFishRunner::LandAbilityLossSelfGuard(const Decklist& deck)
+{
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand() || d->land_ungated_ability.empty()) { continue; }
+            return "[bloodsun] " + d->card.m_name.str() + " has " + d->land_ungated_ability
+                 + ", an ungated land ability under Blood Sun; gate it before playing this list";
+        }
+    }
+    return std::string{};
+}
+
 void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 {
     // Shuffle-variance instrument (see GameState::shuffle_salt): an independent salt lets the SAME
@@ -1769,6 +1787,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // (its lord_effect, its tap_token_*) are invisible here. No stamp gates a lord or tap-token walk
         // today, so it plays correctly; a future stamp that does must follow transform_back_name.
         bool transform = false, tap_steal = false;
+        bool land_ability_loss = false;   // Blood Sun (GameState::deck_has_land_ability_loss)
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1776,6 +1795,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (!d) { continue; }
                 if (d->params.garth_copy_ability)             { garth = true; }
+                if (d->params.lands_lose_nonmana_abilities)   { land_ability_loss = true; }
                 if (d->params.dredge > 0)                    { dredge = true; }
                 if (d->params.keranos_first_draw || d->params.mogis_opponent_upkeep
                     || d->params.klothys_first_main || d->params.ephara_upkeep_draw)
@@ -1899,6 +1919,22 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_land_aura         = garth || land_aura;
         state.deck_has_land_tap_bonus    = garth || land_tap_bonus;
         state.deck_has_islandize         = garth || islandize;
+        // Same reasoning, no lever: a clear bit PROVES no Blood Sun can be on the battlefield, so every
+        // LandNonManaAbilitiesSuppressed walk is dead code for that deck (core/LandAbilityLoss.h).
+        state.deck_has_land_ability_loss = garth || land_ability_loss;
+        // THE SELF-GUARD (docs/design/blood-sun-pipeline.md 2.4): a Blood Sun list must not hold a land whose
+        // ability Blood Sun removes but no chokepoint gates -- that land would keep playing its ability. Loud, at
+        // setup, before any game: the fix is to gate the ability (or drop the land), never to play on.
+        if (land_ability_loss)
+        {
+            const std::string why = LandAbilityLossSelfGuard(deck);
+            if (!why.empty())
+            {
+                std::fprintf(stderr, "%s\n", why.c_str());
+                std::fflush(stderr);
+                std::exit(3);
+            }
+        }
         state.deck_has_chosen_color_pump = garth || chosen_color_pump;
         // Same reasoning, and no lever either: a clear bit PROVES no landfall or
         // land-play watcher can make this deck's land position matter.

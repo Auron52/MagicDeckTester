@@ -18,6 +18,7 @@
 #include "GameState.h"
 #include "DrawCap.h"
 #include "OpponentDeckPool.h"
+#include "LandAbilityLoss.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <string>

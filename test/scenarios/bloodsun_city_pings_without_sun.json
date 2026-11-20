@@ -1,0 +1,35 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "City of Brass",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lightning Bolt"
+ ],
+ "human_lines": [
+  "cast=Lightning Bolt",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_opponent_life": 17,
+ "expect_active_life": 19,
+ "comment": "Blood Sun step 3: CONTROL of bloodsun_sun_city_no_ping -- without Blood Sun City of Brass pings 1 when tapped (20 -> 19); the shared card is unchanged outside Blood Sun."
+}

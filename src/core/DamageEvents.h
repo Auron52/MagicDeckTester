@@ -56,6 +56,7 @@
 #include "EnvFlags.h"
 #include "GameSetup.h"
 #include "GameState.h"
+#include "LandAbilityLoss.h"   // Blood Sun: EffectiveTapSelfDamage (City of Brass's triggered ping)
 #include "GameLogger.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"
@@ -211,6 +212,11 @@ inline int PainForTap(const CardDefinition& def, Color col, bool has_c_mode)
     if (def.params.tap_self_damage <= 0) { return 0; }
     if (def.params.tap_self_damage_any_mode) { return def.params.tap_self_damage; }
     return (col == Color::Colorless && has_c_mode) ? 0 : def.params.tap_self_damage;
+}
+// The same in a game state: 0 for a tap whose damage Blood Sun removed (City of Brass's trigger, G5).
+inline int PainForTap(const GameState& s, const CardDefinition& def, Color col, bool has_c_mode)
+{
+    return EffectiveTapSelfDamage(s, def) <= 0 ? 0 : PainForTap(def, col, has_c_mode);
 }
 
 // ApplyLifegainReplacements -- CR 616.1: the affected player orders the replacement effects, and
@@ -518,10 +524,11 @@ inline bool PaymentPainSafe(const GameState& s, int ctrl)
         { life0 += p.mana_tap_mark >> kMarkPainShift; }
         if (p.tapped && p.mana_tap_mark == 0) { continue; }
         const CardDefinition* d = Def(p);
-        if (d && d->params.tap_self_damage > 0)
+        const int sd = d ? EffectiveTapSelfDamage(s, *d) : 0;   // G5: City of Brass's ping is gone under Blood Sun
+        if (sd > 0)
         {
-            potential += d->params.tap_self_damage;
-            largest = std::max(largest, d->params.tap_self_damage);
+            potential += sd;
+            largest = std::max(largest, sd);
         }
     }
     // FLOATED PAIN (FloatFlushEnabled): with a Tamanoa out each tap is its own event, paid back before

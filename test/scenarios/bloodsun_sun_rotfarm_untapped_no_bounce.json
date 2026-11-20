@@ -1,0 +1,49 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Golgari Rot Farm",
+  "Rampant Growth",
+  "Rampant Growth"
+ ],
+ "human_lines": [
+  "land=Golgari Rot Farm;cast=Rampant Growth;cast=Rampant Growth",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_lacks": [
+  "in response to the bounce"
+ ],
+ "expect_human_summary_contains": "land=Golgari Rot Farm; cast: Rampant Growth, Rampant Growth",
+ "comment": "Blood Sun step 3 (design 3.4 row 1): UNDER BLOOD SUN GOLGARI ROT FARM ENTERS UNTAPPED AND BOUNCES NOTHING (rulings 3-4: its enters-tapped rule and its enter trigger are gone). Swamp + Forest + the Rot Farm's {B}{G} pay two Rampant Growths ({1}{G} each); nothing is dropped and no bounce float happens. Without Blood Sun the Rot Farm enters tapped and returns a land (bloodsun_rotfarm_bounces.json)."
+}

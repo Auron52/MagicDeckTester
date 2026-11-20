@@ -17,6 +17,7 @@
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "OpponentDeck.h"               // TakeFromTop: THE mill primitive (sets opponent_decked)
+#include "LandAbilityLoss.h"            // Blood Sun: LandNonManaAbilitiesSuppressed / EffectiveLandDef
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
@@ -2419,9 +2420,10 @@ inline void TapDripLandsIfUseful(GameState& state, int controller_index)
         NoteEndM1SweepTap(state, p);
         // Armed (Prevent Damage): the coloured drip tap's pain is a damage EVENT (Tamanoa) and the
         // tap a land tap (Manabarbs); both resolve at the flush below. Unarmed: the raw loss.
+        const int self_dmg = EffectiveTapSelfDamage(state, *def);   // G5 (Blood Sun)
         if (state.dmg_events_armed)
-        { dmgev::ArmedManaTap(state, controller_index, p, def->params.tap_self_damage); }
-        else if (def->params.tap_self_damage > 0) { state.players[controller_index].life -= def->params.tap_self_damage; }
+        { dmgev::ArmedManaTap(state, controller_index, p, self_dmg); }
+        else if (self_dmg > 0) { state.players[controller_index].life -= self_dmg; }
         OpponentGainsLife(state, controller_index, def->params.tap_opponent_lifegain);
     }
     dmgev::FlushDamageEvents(state);   // no-op unless armed
@@ -3176,9 +3178,14 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
 {
     const std::string& name = face.card.m_name.str();
     if (entering.m_name != face.card.m_name) { notes.push_back("as " + name); }
+    // BLOOD SUN (G4): "All lands" -- the opponent's too. A land entering while a Blood Sun is on the battlefield has
+    // lost every non-mana ability (CR 614.12: its replacement effects are read as it would exist there): no
+    // enters-tapped rule (it enters untapped), no Lake replacement, no Karoo bounce, no ETB life gain. The legend
+    // rule is not an ability and still applies. (The fetch half is gated in PlayLeftmostLandFrom.)
+    const bool suppressed = LandNonManaAbilitiesSuppressed(state);
     // LAKE OF THE DEAD (CR 614.1c, a replacement: the land never enters without its sacrifice).
     const std::string& sac_sub = face.params.etb_replace_sacrifice_land_subtype;
-    if (!sac_sub.empty())
+    if (!sac_sub.empty() && !suppressed)
     {
         int victim = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -3204,7 +3211,7 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
     perm.controller_index = 1;
     perm.owner_index = 1;
     perm.entered_this_turn = true;
-    perm.tapped = force_tapped || OpponentLandEntersTapped(state, face, head, hand);
+    perm.tapped = force_tapped || (!suppressed && OpponentLandEntersTapped(state, face, head, hand));
     if (perm.tapped) { notes.push_back("tapped"); }
     std::size_t idx = state.battlefield.size();
     if (OpponentLandsFrontOn())
@@ -3237,7 +3244,7 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
 
     // KAROO (etb_bounce_land): "return a land you control to its owner's hand" -- that head's land, to
     // that head's hand (its right end).
-    if (face.params.etb_bounce_land)
+    if (face.params.etb_bounce_land && !suppressed)
     {
         int pick = -1, karoo = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -3260,7 +3267,7 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
                             ? std::string("returns itself to hand") : "returns " + back.m_name.str() + " to hand");
         }
     }
-    if (face.params.etb_lifegain > 0) { life_gains.emplace_back(name, face.params.etb_lifegain); }
+    if (face.params.etb_lifegain > 0 && !suppressed) { life_gains.emplace_back(name, face.params.etb_lifegain); }
 }
 
 // REPLAY ONLY (--legacy-opponent-land-entry, GameLogger.h OpponentLandEntryRulesOn): the land drop as it was
@@ -3372,7 +3379,8 @@ inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& 
     const int life_cost = typed_fetch
         ? std::max(1, fp.land_search_activation_life_cost)
         : fp.land_search_activation_life_cost;
-    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost)
+    // BLOOD SUN (G4): a fetchland has lost its fetch -- it simply stays.
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost || LandNonManaAbilitiesSuppressed(state))
     {
         OpponentLandEnters(state, card, *face, false, head, hand, graveyard, result.notes, result.life_gains);
         return result;
@@ -28072,6 +28080,8 @@ inline bool LotusDropDominated(const GameState& state, const CardDefinition& def
 {
     const int need = LandLotusSacrificeCount(def.params);
     if (need <= 0 || ActiveHornCount(state) > 0) { return false; }
+    // BLOOD SUN: the Lotus land enters free (no replacement, no trigger), so holding it dominates nothing.
+    if (LandNonManaAbilitiesSuppressed(state)) { return false; }
     const int me = state.active_player_index;
     const bool replacement = def.params.etb_replace_sacrifice_untapped_lands > 0;
     int lands = 0;
@@ -28473,6 +28483,8 @@ inline void ApplyRadMill(GameState& state, int controller)
 inline void SpawnForbiddenOrchardTokensTurnStart(GameState& state)
 {
     int n = 0;
+    // BLOOD SUN (G6): the Orchard's "whenever you tap this land for mana" is a TRIGGER, lost under Blood Sun.
+    if (LandNonManaAbilitiesSuppressed(state)) { return; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index
@@ -50557,6 +50569,8 @@ inline bool DefIsGate(const CardDefinition& def) { return def.card.m_subtypes.Ha
 inline bool GateEntersUntappedByGond(const GameState& state, const CardDefinition& def, int controller = -1)
 {
     if (!DefIsGate(def)) { return false; }
+    // BLOOD SUN (G1): Gond Gate's "Gates you control enter untapped" is a land ability, lost too.
+    if (LandNonManaAbilitiesSuppressed(state)) { return false; }
     const int ctrl = LandEntryController(state, controller);
     for (const Permanent& p : state.battlefield)
     {
@@ -50581,6 +50595,9 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
 {
     const CardParams& pp = def.params;
     const int ctrl = LandEntryController(state, controller);
+    // BLOOD SUN (G1, rulings 3-4 / CR 614.12): an entering land has already lost every enters-tapped rule (plain,
+    // shock, reveal, fastland, checkland, control) -- it enters untapped, nothing paid, no choice.
+    if (LandNonManaAbilitiesSuppressed(state)) { return false; }
     if (GateEntersUntappedByGond(state, def, ctrl)) { return false; }
     // The pay-the-cost-or-enter-tapped decision is provider-owned (LandEntersUntapped); the base
     // hook returns the engine answer unchanged, so this is byte-identical. It is routed through the
@@ -50664,6 +50681,7 @@ inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def
 {
     const CardParams& pp = def.params;
     const int ctrl = LandEntryController(state, controller);
+    if (LandNonManaAbilitiesSuppressed(state)) { return false; }   // BLOOD SUN (G1): nothing to choose
     if (GateEntersUntappedByGond(state, def, ctrl)) return false;
     if (pp.etb_pay_life_to_untap > 0)
         return state.players[static_cast<std::size_t>(ctrl)].life > pp.etb_pay_life_to_untap;
@@ -50677,6 +50695,7 @@ inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def
 // payable cost (its life); a reveal land pays nothing (revealing is free); a plain land is a no-op.
 inline void ApplyLandUntapPayment(GameState& state, const CardDefinition& def, int controller = -1)
 {
+    if (LandNonManaAbilitiesSuppressed(state)) { return; }   // BLOOD SUN (G1): a shock's "as enters" is gone
     if (def.params.etb_pay_life_to_untap > 0)
         state.players[static_cast<std::size_t>(LandEntryController(state, controller))].life
             -= def.params.etb_pay_life_to_untap;
@@ -53533,7 +53552,7 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     const ManaPool before = state.floating_mana;
     // A painland (not a creature-only one: its colour would launder the restriction) whose colour the rest of the
     // line still owes takes the coloured mode and its damage (MTG_KAROO_FLOAT_PAINLAND_OWED); otherwise the free {C}.
-    const bool pain_land = plain_c && d->params.tap_self_damage > 0 && !d->params.colored_creature_only;
+    const bool pain_land = plain_c && EffectiveTapSelfDamage(state, *d) > 0 && !d->params.colored_creature_only;
     int pain_paid = 0;
     if (pinned)       { state.floating_mana.Add(static_cast<Color>(pin), 1); }
     else if (pain_land && KarooFloatPainlandOwedOn() && FloatLineOwedColour(state, controller, *d, p))
@@ -54417,6 +54436,7 @@ inline bool ResolveEtbSacUnlessPay(GameState& state, int controller, int card_nu
     if (idx < 0) { return false; }
     const CardDefinition* def = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(idx)].card);
     if (def == nullptr || !def->params.etb_sacrifice_unless_pay.has_value()) { return true; }
+    if (LandNonManaAbilitiesSuppressed(state)) { return true; }   // BLOOD SUN (G2/G3): the Plaza's trigger is gone
     const ManaCost& cost = *def->params.etb_sacrifice_unless_pay;
     bool affordable;
     {
@@ -54607,6 +54627,9 @@ inline void ResolveLotusFieldSacrifice(GameState& state, int controller, const C
 inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& def, int self_index, int entry_pin = -1)
 {
     if (self_index < 0 || self_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // BLOOD SUN (G3): these are the land's own "when this land enters" triggers -- they never trigger for a land that
+    // entered under Blood Sun (ruling 3). Every second-pass caller (Genesis Wave, a land search, Manabond) reaches it.
+    if (LandNonManaAbilitiesSuppressed(state)) { return; }
     if (def.params.etb_bounce_land)
     { BounceKarooLand(state, state.battlefield[self_index].controller_index, self_index); }
     // Lotus Field's "When this land enters, sacrifice two lands" (a trigger, so here with the Karoo bounce; no card
@@ -54682,10 +54705,15 @@ struct DeferredLandLooks
 };
 // (LandEntryTap, the DeferredLandLooks forward declaration and EnterLand's default arguments are declared above
 // PerformTutorToBattlefield.)
-inline void EnterLand(GameState& state, const CardDefinition& def, int card_number,
+inline void EnterLand(GameState& state, const CardDefinition& def_in, int card_number,
                       bool resolve_full_etb, bool fire_landfall, LandEntryTap entry_tap, int controller,
                       DeferredLandLooks* defer_looks)
 {
+    // BLOOD SUN (G3): a land PUT onto the battlefield while a Blood Sun is there enters as its MANA-ONLY projection
+    // (core/LandAbilityLoss.h; the land drop's G2 twin): untapped unless the PUTTING effect says tapped, no Lotus
+    // replacement, no counters, no scry / surveil / energy / bounce / Field trigger / lifegain / Plaza. The entry
+    // pin is still TAKEN off the printed definition so a pinned put never leaves it armed for the next land.
+    const CardDefinition& def = EffectiveLandDef(state, def_in);
     // The entering land's CONTROLLER (Maze's End I2): every enters-tapped condition is judged for it, and
     // the permanent is created under it. < 0 = the active player -- every caller before I3's Burgeoning.
     const int ctrl = LandEntryController(state, controller);
@@ -54718,7 +54746,7 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     }
     else { tapped = LandEntersTapped(state, def, true, ctrl); }
     // The land-entry pin (colour / pay) for THIS entry, taken before anything below can enter another land.
-    const int entry_pin = TakeLandEntryPin(def);
+    const int entry_pin = TakeLandEntryPin(def_in);
     // LOTUS VALE / SCORCHED RUINS (etb_replace_sacrifice_untapped_lands): "If this land would enter, sacrifice two
     // untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's
     // graveyard." A REPLACEMENT of THIS entry (CR 614.1c), so it applies to a put exactly as to a drop (Burgeoning),
@@ -56085,6 +56113,9 @@ inline std::vector<std::vector<int>> LotusSacrificePicksImpl(const GameState& st
     std::vector<std::vector<int>> out;
     const int need = LandLotusSacrificeCount(def.params);
     if (need <= 0) { return out; }
+    // BLOOD SUN: no replacement and no trigger, so there is nothing to pick -- an EMPTY menu (no pin fan; both
+    // resolvers below return at once).
+    if (LandNonManaAbilitiesSuppressed(state)) { return out; }
     const bool replacement = def.params.etb_replace_sacrifice_untapped_lands > 0;
     std::vector<int> elig;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -56222,6 +56253,7 @@ inline bool ResolveLotusEntryReplacement(GameState& state, int controller, const
 {
     const int need = def.params.etb_replace_sacrifice_untapped_lands;
     if (need <= 0) { return true; }
+    if (LandNonManaAbilitiesSuppressed(state)) { return true; }   // BLOOD SUN: the replacement is gone; it enters
     const std::vector<int> v = ChooseLotusVictims(state, controller, def, /*self_index=*/-1, pin);
     if (static_cast<int>(v.size()) < need) { return false; }
     // NO tap-first float: the victims must be UNTAPPED as the replacement applies, so tapping one for mana first
@@ -56234,6 +56266,7 @@ inline void ResolveLotusFieldSacrifice(GameState& state, int controller, const C
                                        int pin)
 {
     if (def.params.etb_sacrifice_lands <= 0) { return; }
+    if (LandNonManaAbilitiesSuppressed(state)) { return; }   // BLOOD SUN: the enter trigger never triggers
     const std::vector<int> v = ChooseLotusVictims(state, controller, def, self_index, pin);
     // TAP-FIRST: the trigger uses the stack, so each untapped victim is tapped for its mana in response first
     // (CR 605.3a; the mana floats until the phase ends) -- the Lake / Karoo float. Floats never move a permanent,
@@ -57272,7 +57305,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
                 { ResolveLotusFieldSacrifice(state, controller_index, *def, li, put_pin); break; }
             }
         }
-        if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
+        if (IsForbiddenOrchard(EffectiveLandDef(state, def))) { SpawnOpponentSpirit(state); }   // G6 (Blood Sun)
     }
     else
     {
@@ -58081,7 +58114,7 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
         s_src_bf.push_back(bi);
         for (Color c : prod)
         {
-            int dmg = dmgev::PainForTap(*d, c, has_c);
+            int dmg = dmgev::PainForTap(state, *d, c, has_c);
             if (barbs && land) { dmg += barb_total; }
             modes.push_back({ static_cast<int>(c), y, dmg * kDmgW + flex });
         }
@@ -58236,7 +58269,7 @@ inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, cons
             }
         }
         // TapPainSourcesIfUseful's mode on a pain-useful board: the first coloured mode, else {C}.
-        const int sp = dmgev::PainForTap(*d, sweep_col, has_c);
+        const int sp = dmgev::PainForTap(state, *d, sweep_col, has_c);
         q.src |= (1ull << bi);
         if (land) { q.land |= (1ull << bi); }
         q.cols[bi] = cols;
@@ -58249,7 +58282,7 @@ inline void PaymentDeferralDP(const GameState& state, const ManaCost& cost, cons
         src.modes.clear();
         for (Color c : prod)
         {
-            const dmgev::ChainV now = dmgev::TapEventsValue(q.now, dmgev::PainForTap(*d, c, has_c), land);
+            const dmgev::ChainV now = dmgev::TapEventsValue(q.now, dmgev::PainForTap(state, *d, c, has_c), land);
             const long long pack = (src.later.opp - now.opp) * kOpp + (src.later.life - now.life) * kLife + flex;
             src.modes.push_back({ static_cast<int>(c), y, pack, now });
         }
@@ -60018,7 +60051,7 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
         Color col = has_c ? Color::Colorless : prod[0];
         if (pain_useful && has_col)
         { for (Color c : prod) { if (c != Color::Colorless) { col = c; break; } } }
-        const int pain = dmgev::PainForTap(*d, col, has_c);
+        const int pain = dmgev::PainForTap(state, *d, col, has_c);
         if (!dmgev::CanPayManaTapLife(state, ctrl, *d)) { continue; }
         if (d->params.tap_is_life_payment && nbarb == 0) { continue; }
         if (pain == 0 && nbarb == 0) { continue; }  // nothing to gain from this tap

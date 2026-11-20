@@ -27733,6 +27733,7 @@ namespace
     const RedElementalsProvider  g_red_elementals;
     const CreatureBurnProvider   g_creature_burn;
     const StuffyDollProvider     g_stuffy_doll;
+    const BloodSunProvider       g_blood_sun;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -30499,6 +30500,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // redirect_pull_cost, Spiteful Sliver's grants_reflect_to_subtype. NOT reflect_dealt_damage alone (Boros
     // Reckoner is in Minotaur) and NOT Blasphemous Act's per-creature reducer (a generic wrath).
     bool stuffy = false;
+    // BLOOD SUN (design 10.3): Blood Sun's own param, carried by no other card. Above `anti` (step 5's Grim Tutor /
+    // Diabolic Revelation set it through tutor_to_hand) and every tutor-keyed signature.
+    bool bloodsun = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -30735,6 +30739,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
                              "Kraken") != p.bounce_all_creatures_except_subtypes.end())
             { sea = true; }
         }
+        if (p.lands_lose_nonmana_abilities) { bloodsun = true; }
         if (p.self_ping_damage > 0 || p.aura_host_damage_back || p.redirect_shield
             || p.redirect_pull_cost.has_value()
             || p.grants_reflect_to_subtype != CardParams::ReflectTo::None)
@@ -31316,6 +31321,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (stuffy)      { return g_stuffy_doll; }
     // Creature Burn: above `redelem` (see the flag); its signature is carried by no other deck.
     if (cburn)       { return g_creature_burn; }
+    // Blood Sun: beside Stuffy Doll (see the flag); its signature is carried by no other deck.
+    if (bloodsun)    { return g_blood_sun; }
     if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).

@@ -4433,6 +4433,15 @@ struct CardParams
     // drop's trigger step): any lands, itself included, tapped or not -- an untapped victim is tapped for its
     // mana in response first (FloatLandBeforeSacrifice); with fewer than N lands, every land. 0 = none.
     int etb_sacrifice_lands = 0;
+    // Blood Sun: "All lands lose all abilities except mana abilities." (CR 613.1f, layer 6; both controllers' lands).
+    // Read ONLY through LandNonManaAbilitiesSuppressed (core/LandAbilityLoss.h), which every land-entry and tap-trigger
+    // chokepoint consults; gated per game by GameState::deck_has_land_ability_loss, so every deck without a Blood Sun
+    // is byte-identical. docs/design/blood-sun-pipeline.md section 2.
+    bool lands_lose_nonmana_abilities = false;
+    // City of Brass: its tap_self_damage is a TRIGGERED ability ("Whenever this land becomes tapped, it deals 1 damage
+    // to you"), NOT part of its mana ability (a painland's / Ancient Tomb's damage is). Read ONLY under Blood Sun's
+    // suppression (the land's mana-only projection drops the damage), so it is byte-identical everywhere else.
+    bool tap_self_damage_is_trigger = false;
     // Lake of the Dead's crack: "{T}, Sacrifice a <subtype>: Add ..." -- with this set, the
     // sac_for_mana ability TAPS the source (it stays) and sacrifices ANOTHER land with this subtype
     // instead of the source itself (ApplySacForMana). Empty = the Lotus / Dwarven Ruins self-sac.
@@ -5701,6 +5710,20 @@ struct CardDefinition
     // and fall back to name equality, which is the pre-existing behaviour -- never as a match, or
     // every Register-built card would fold into every other.
     std::uint64_t behaviour_identity = 0;
+    // BLOOD SUN (core/LandAbilityLoss.h; docs/design/blood-sun-pipeline.md 2.3-2.4), all three DERIVED at load from
+    // the raw `parameters` keys through the classification of cards/LandAbilityClasses.h:
+    //   land_ability_loss_twin -- the MANA-ONLY PROJECTION of a land: a copy of this definition whose params drop
+    //     every GATED key (enters tapped, Karoo bounce, scry, lifegain, the Lotus sacrifices, City of Brass's
+    //     triggered ping, ...). nullptr when the land has no gated key (the projection IS this definition) and for
+    //     every non-land. EffectiveLandDef(state, def) hands it out while a Blood Sun is on the battlefield.
+    //   mana_only_identity -- behaviour_identity of that projection (keywords dropped too: a land's keyword
+    //     abilities are lost as well). Equal to behaviour_identity for a land with nothing to drop; 0 = none.
+    //   land_ungated_ability -- the first raw key of a LAND that is neither a mana ability nor gated (a fetch, a
+    //     manland, a storage land, an unclassified key...): Blood Sun would remove it and nothing gates it, so
+    //     StampDeckTraits refuses a Blood Sun list holding such a land (the section 2.4 self-guard). Empty = none.
+    const CardDefinition* land_ability_loss_twin = nullptr;
+    std::uint64_t mana_only_identity = 0;
+    std::string land_ungated_ability;
     CardParams params;
 };
 
@@ -5961,6 +5984,8 @@ private:
     CardParams BuildParamsFromJson(const nlohmann::json& params) const;
 
     std::unordered_map<std::string, CardDefinition> m_cards;
+    // Blood Sun's mana-only land projections (CardDefinition::land_ability_loss_twin points into these nodes).
+    std::unordered_map<std::string, CardDefinition> m_land_twins;
     std::unordered_map<std::string, std::string>    m_alias_to_name;   // see CanonicalName()
     std::unordered_map<std::string, std::string>    m_image_refs;      // see ImageRefs()
     std::unordered_map<std::string, uint64_t>       m_def_hash;   // see DefHash()

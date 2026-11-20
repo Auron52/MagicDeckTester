@@ -1287,6 +1287,13 @@ struct GameState
     // dead-code elimination, no lever (P13 2026-11-12: the walk ran once per land per mana query, ~2% of
     // Hydras' d5 wall). Same stamp discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE.
     bool                     deck_has_islandize : 1          = true;
+    // BLOOD SUN (2026-11-20, docs/design/blood-sun-pipeline.md 2.2): the mainboard or sideboard holds a card with
+    // CardParams::lands_lose_nonmana_abilities. DECK CONSTANT (StampDeckTraits), never folded; gates
+    // LandNonManaAbilitiesSuppressed's battlefield walk (core/LandAbilityLoss.h), so a clear bit PROVES no land has
+    // lost an ability and every other deck pays one bool test per land-entry / tap-pain chokepoint. Garth holds it
+    // open like the rest. DEFAULT TRUE: an unstamped state (a unit test, the scenario harness before its stamp)
+    // walks, which finds a Blood Sun only where one is.
+    bool                     deck_has_land_ability_loss : 1  = true;
     // Gauntlet of Power's chosen-colour anthem (CardParams::chosen_color_pump_*): gates ComputeLordBonus's
     // battlefield walk when the caller passes no prefiltered anthem list. cards.json holds every deck's
     // cards, so a DB-wide constant would always be true; this per-game stamp is the real gate. Same
@@ -2168,9 +2175,12 @@ struct GameState
 // that watches the land's entry (landfall), its play (Horn of Greed), or a scry watcher whose
 // trigger the land's own ETB scry fires (deck_has_scry_watcher -- Galadriel). Gates the land-POSITION
 // axis (Plan::land_slot) in the enumeration; every other deck keeps the land-first order only.
+// BLOOD SUN (deck_has_land_ability_loss): a land played after Blood Sun resolves enters as its mana-only projection
+// (untapped, no bounce, no Lotus sacrifice), so the land before / after that cast is a real choice too
+// (TurnSolver::PutsLandfallWatcher counts the Blood Sun cast as the position's watcher).
 inline bool LandOrderMatters(const GameState& s)
 {
-    return s.deck_has_landfall || s.deck_has_scry_watcher;
+    return s.deck_has_landfall || s.deck_has_scry_watcher || s.deck_has_land_ability_loss;
 }
 
 // THE win predicate. Every "have we won?" test in BOTH worlds goes through here.

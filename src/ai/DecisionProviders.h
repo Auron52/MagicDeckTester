@@ -4401,6 +4401,26 @@ public:
     const char* Name() const override { return "StuffyDoll"; }
 };
 
+// BLOOD SUN (docs/design/blood-sun-pipeline.md 10.3; step 3 = the SKELETON). The deck routed to GenericProvider
+// (no signature of its own tripped); it gets its own class NOW, in the first step that adds one of its params, so it
+// never measures under a borrowed provider -- and step 5's Grim Tutor / Diabolic Revelation (tutor_to_hand) would
+// otherwise move it to AntiLifegainProvider. Signature: Blood Sun's lands_lose_nonmana_abilities (carried by no other
+// card), routed in the top block beside `stuffy`, ABOVE `anti` and every tutor-keyed signature.
+// DeckProvider (== Generic) unchanged for now; later steps add the go-off packages (step 6-7), the tutor width / cast
+// time axis, the chain walk (step 8), the Machinations order, and the effective-enters_tapped keep / discard ranks.
+// Cast order is the GENERIC default (USER-OWNED: authored and presented at Stage 5, never adopted here).
+class BloodSunProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. The turn-scoped certificate is inapplicable under deck_has_extra_turn (Time Warp, "
+               "Emrakul's extra turn: a win this ROUND can come on an extra turn), and Diabolic Revelation's "
+               "package axis makes the reachable damage depend on the library. ProvenNoWinThisRound (one-sided, "
+               "round-aware) is design step 9." }; }
+    const char* Name() const override { return "BloodSun"; }
+};
+
 // MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1
 // restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one half
 // would refuse the sweepers in main 1 with no second main to catch them -- DELETING the casts, not moving them.

@@ -87,7 +87,13 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // Pathway the faces share these params (back synthesized from the front), so `fdef` == the
     // old front read -- byte-identical; for a spell//land only the back carries land semantics
     // (Turntimber: pay 3 life or enter tapped).
-    const CardDefinition& fdef = *face_def;
+    // BLOOD SUN (G2, rulings 3-4 / CR 614.12): a land played while a Blood Sun is on the battlefield has already lost
+    // every non-mana ability as it would apply, so the whole drop below reads its MANA-ONLY projection
+    // (core/LandAbilityLoss.h): no Lake / Lotus replacement, enters untapped with nothing paid (G1), no rad, no
+    // energy, no Plaza, no scry / surveil, no Karoo bounce, no Lotus Field trigger, no lifegain, no Orchard spawn.
+    // NOT the Amulet untaps (an artifact's), the snow / landfall watchers (other permanents') or the land-play
+    // bookkeeping. The plain definition (and identity) everywhere else -> byte-identical without a Blood Sun.
+    const CardDefinition& fdef = EffectiveLandDef(state, *face_def);
 
     // LAKE OF THE DEAD (etb_replace_sacrifice_land_subtype): "If this land would enter, sacrifice a
     // Swamp instead. If you do, put this land onto the battlefield. If you don't, put it into its
@@ -616,7 +622,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             if (!def) { continue; }
             if (hold_top_consumer && front != nullptr
                 && front->params.look_top_put_creature_count > 0) { continue; }   // combo piece, not the drop
-            if (def->params.etb_bounce_land && (!has_other_land || karoo_returns_karoo())) { continue; }
+            if (EffectiveLandDef(state, *def).params.etb_bounce_land && (!has_other_land || karoo_returns_karoo())) { continue; }
             if (LakeDropWithoutVictim(state, *def)) { continue; }   // see LakeDropWithoutVictim
             if (LandClosingWindowEnabled())
             {
@@ -764,7 +770,7 @@ int ActivationColorLandIndex(const GameState& state, int preferred)
             if (ap.hand[i].m_impulse_no_land) { continue; }
             const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[i]));
             if (def == nullptr) { continue; }
-            if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { continue; }
             if (LakeDropWithoutVictim(state, *def)) { continue; }
             if (pass == 0 && def->params.produces.size() <= 1) { continue; }
             if (supplies(i)) { return i; }

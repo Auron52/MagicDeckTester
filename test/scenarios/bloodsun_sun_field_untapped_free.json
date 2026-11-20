@@ -1,0 +1,48 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lotus Field",
+  "Blood Sun",
+  "Rampant Growth"
+ ],
+ "human_lines": [
+  "land=Lotus Field;cast=Blood Sun;cast=Rampant Growth",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_history_lacks": [
+  "in response to the sacrifice"
+ ],
+ "comment": "Blood Sun step 3 (design 3.4 row 6): UNDER BLOOD SUN LOTUS FIELD ENTERS UNTAPPED AND SACRIFICES NOTHING (enters-tapped and its enter trigger are lost). Field's {R}{R}{R} pays Blood Sun, Swamp + Forest pay Rampant Growth: all five mana are there only if the Field is untapped and both lands survive."
+}
