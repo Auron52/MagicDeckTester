@@ -1050,6 +1050,7 @@ enum Slot : int
     LASTPLY_NOWIN_CENSUS,     // MTG_LASTPLY_NOWIN_CENSUS  DIAGNOSTIC (default off): the last-ply fold NEVER cuts; it searches every eligible node and tallies the certificate's verdicts, the units under each, and any proven node that then won (UNSOUND, must be 0). =2 (env) also prints each unsound node. A slot so one pooled batch can carry a census arm beside a fold arm
     LASTPLY_PROBE_MEASURE,    // MTG_LASTPLY_PROBE_MEASURE The last-ply fold does NOT fire inside a RECORDING probe (g_probe_recording): the probe's per-depth tree cost and leaf count price a later pass that cannot fold (FIT, the reserve, the K-predictor), and a folded node removes exactly the leaves that pass will face (Snow gi961: recorded leaves 184 -> 0, FIT admitted a d3 rollout pass priced at 111 units that ran to the 25x ceiling, T6 -> T7). Same reason as PROBE_INCLUSIVE_CUT. Default ON; =0 -> fold inside a recording probe too
     MAZE_IDLE_FETCH,          // MTG_MAZE_IDLE_FETCH       Maze's End P5d (USER 2026-11-18: "Though, if there is idle mana we should use it."; "And that is fine, because not fetching would be dominated, but this would be assuming we can replay it."): a plan without a Maze's End activation is removed when the menu holds the same plan plus one fetch and Maze's End comes back (an open drop left for the replay, Manabond / Burgeoning, or the fetch wins). Default ON; =0 -> every such plan searched
+    MAZE_IDLE_FETCH_REVEAL,   // MTG_MAZE_IDLE_FETCH_REVEAL  Maze's End P5d-5 (amends MAZE_IDLE_FETCH): prune (a) keeps a no-fetch plan whose land or PlayLand puts a Gate in under our draw-on-Gate-enter watcher (Guild Summit), or that casts such a watcher -- the fetch can follow the reveal in the breakpoint continuation, where (a) applies again with the draw known. Default OFF (USER decision pending); =1 -> guard on
     COUNT
 };
 
@@ -2044,6 +2045,7 @@ inline const char* Name(int slot)
         "MTG_LASTPLY_NOWIN_CENSUS",
         "MTG_LASTPLY_PROBE_MEASURE",
         "MTG_MAZE_IDLE_FETCH",
+        "MTG_MAZE_IDLE_FETCH_REVEAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
