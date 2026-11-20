@@ -519,7 +519,9 @@ inline bool LineKeepAllOn()
     return heurarm::Flag(heurarm::LINE_KEEP_ALL, env_on);
 }
 
-// MTG_LINE_KEEP_ROCK (DEFAULT OFF until measured; =0 byte-identical) -- the line-keep rung (LineReducerKeepHold,
+// MTG_LINE_KEEP_ROCK (DEFAULT ON since 2026-11-20: held-out A/B 24,600 pairs net -6, every deck <= 0 but Niv-Mizzet
+// Combo +1 on its first 1,000 pairs and -13 pooled over 3,000, every slower game recovering at d8 b0; =0 restores the old
+// payment byte for byte) -- the line-keep rung (LineReducerKeepHold,
 // ManaPayment.cpp) on every applying line of two or more held casts that casts a MANA ROCK, and, on every line the rung
 // reaches, the rest judged with the rock being paid for on the board (RampLaterPayable's rule: it enters untapped and the
 // later casts meet its mana). A rock in the line declines the whole-turn joint prepay (PP_PRODUCER, BatchPrepayMainCasts),
@@ -529,7 +531,7 @@ inline bool LineKeepAllOn()
 // Read PER CALL (heurarm slot LINE_KEEP_ROCK), seeded where the reducer credit is.
 inline bool LineKeepRockOn()
 {
-    static const bool env_on = EnvOn("MTG_LINE_KEEP_ROCK", false);
+    static const bool env_on = EnvOn("MTG_LINE_KEEP_ROCK", true);
     return heurarm::Flag(heurarm::LINE_KEEP_ROCK, env_on);
 }
 

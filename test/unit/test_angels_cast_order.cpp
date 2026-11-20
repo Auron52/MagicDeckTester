@@ -333,11 +333,14 @@ TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the li
     // Farm and its {2} must come from Sol Ring's {C}{C}, so the Farm's second {W} floats for Lightstall.
     // With the strict SHORT test the generic ate that {W} (owed 1, supply 1 -> "not short") and
     // Lightstall stayed in hand; the zero-surplus test pays the generic off the spare Sol Ring.
-    for (int tight : {0, 1})
+    // MTG_LINE_KEEP_ROCK (default ON) repairs the same strand from the other side (the line casts Sol Ring, so the
+    // line-keep rung judges the rest with it on the board): pinned OFF for the two lever arms, then ON with the lever off.
+    for (int tight : {0, 1, 2})
     {
         CAPTURE(tight);
         ArmAO arm(1, 0);
-        heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = static_cast<std::int8_t>(tight);
+        heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = static_cast<std::int8_t>(tight == 1 ? 1 : 0);
+        heurarm::t_arm[heurarm::LINE_KEEP_ROCK] = static_cast<std::int8_t>(tight == 2 ? 1 : 0);
         const std::vector<std::string> hand = {"Lightstall Inquisitor", "Righteous Valkyrie", "Sol Ring"};
         GameState s = BoardAO(0, hand, {"Seraph Sanctuary"});
         PutAO(s, "Remote Farm", 9);
@@ -354,6 +357,7 @@ TEST_CASE("Payer: MTG_LINE_SPARE_TIGHT keeps Remote Farm's second {W} for the li
             CHECK(s.players[0].hand[0].m_name == "Lightstall Inquisitor");
         }
         heurarm::t_arm[heurarm::LINE_SPARE_TIGHT] = -1;
+        heurarm::t_arm[heurarm::LINE_KEEP_ROCK] = -1;
     }
 }
 

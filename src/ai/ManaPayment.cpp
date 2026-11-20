@@ -10801,7 +10801,11 @@ std::atomic<unsigned long long> g_lkr_trial{0}, g_lkr_fired{0};
 // MTG_LINE_REDUCER_KEEP_STATS (print-only): where the rung's time goes, by the point a call returned -- 0 a pre-test
 // or the witness, 1 the complete judge (rest payable), 2 the joint unpayable, 3 a strand no repair keeps, 4 fired --
 // and whether a rock was credited (+5).
-std::atomic<unsigned long long> g_lk_ph_n[10]{}, g_lk_ph_ns[10]{};
+std::atomic<unsigned long long> g_lk_ph_n[12]{}, g_lk_ph_ns[12]{};
+// ...and the repair search's own work: hold-out sets tried, of them paid, tables built, their options, options made.
+std::atomic<unsigned long long> g_lk_held_try{0}, g_lk_held_paid{0}, g_lk_opt_try{0}, g_lk_opt_n{0}, g_lk_tables{0};
+// ...the time in MinimalPayments, and the table index of the option that fired (0, 1, 2, 3+).
+std::atomic<unsigned long long> g_lk_mp_ns{0}, g_lk_fire_idx[4]{};
 struct LineReducerKeepStats
 {
     ~LineReducerKeepStats()
@@ -10815,15 +10819,21 @@ struct LineReducerKeepStats
                      g_lka_fired.load(), g_lka_check_bad.load(), static_cast<double>(g_lka_ns.load()) / 1e6);
         std::fprintf(stderr, "[line-keep-rock] rock_trials=%llu rock_fired=%llu\n", g_lkr_trial.load(),
                      g_lkr_fired.load());
-        static const char* const ph[5] = {"filtered", "rest-payable", "joint-unpayable", "strand-nofire", "fired"};
+        static const char* const ph[6] = {"filtered", "rest-payable", "joint-unpayable", "strand-nofire", "fired-held",
+                                          "fired-table"};
         for (int r = 0; r < 2; ++r)
         {
-            for (int k = 0; k < 5; ++k)
+            for (int k = 0; k < 6; ++k)
             {
                 std::fprintf(stderr, "[line-keep-phase] %s %-15s n=%llu ms=%.1f\n", r ? "rock " : "other", ph[k],
-                             g_lk_ph_n[r * 5 + k].load(), static_cast<double>(g_lk_ph_ns[r * 5 + k].load()) / 1e6);
+                             g_lk_ph_n[r * 6 + k].load(), static_cast<double>(g_lk_ph_ns[r * 6 + k].load()) / 1e6);
             }
         }
+        std::fprintf(stderr, "[line-keep-work] held_try=%llu held_paid=%llu tables=%llu table_opts=%llu opt_try=%llu "
+                     "table_ms=%.1f fire_idx=%llu/%llu/%llu/%llu\n",
+                     g_lk_held_try.load(), g_lk_held_paid.load(), g_lk_tables.load(), g_lk_opt_n.load(),
+                     g_lk_opt_try.load(), static_cast<double>(g_lk_mp_ns.load()) / 1e6, g_lk_fire_idx[0].load(),
+                     g_lk_fire_idx[1].load(), g_lk_fire_idx[2].load(), g_lk_fire_idx[3].load());
     }
 };
 LineReducerKeepStats g_lrk_stats;
@@ -10862,15 +10872,20 @@ void PutLineKeepRock(GameState& b, const LineKeepRock& rock)
     b.battlefield.push_back(perm);
 }
 
-bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature, const LineKeepRock& rock = {})
+// ...judged ON `c` itself, which it spends (the rock is put on it, the backtracker taps it): for a scratch board the caller
+// discards, it saves the copy LineBillPayable makes -- the same board, so the same answer.
+bool LineBillPayableOn(GameState& c, const ManaCost& bill, bool for_creature, const LineKeepRock& rock = {})
 {
-    RampScratch sc(s);
-    GameState& c = sc.Board();
     PutLineKeepRock(c, rock);
     if (!PaymentManaCovers(c, for_creature, bill.ManaValue() - static_cast<int>(c.floating_mana.Total())))
     { return false; }
     ManaPool start = c.floating_mana;
     return TapForCostBacktrack(c, bill, for_creature, start);
+}
+bool LineBillPayable(const GameState& s, const ManaCost& bill, bool for_creature, const LineKeepRock& rock = {})
+{
+    RampScratch sc(s);
+    return LineBillPayableOn(sc.Board(), bill, for_creature, rock);
 }
 
 // PayHolding for a SET of sources (card numbers): each untapped one is unable to pay for the span of the payment.
@@ -10958,7 +10973,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         ~PhaseClock()
         {
             if (!on) { return; }
-            const int k = (rock ? 5 : 0) + phase;
+            const int k = (rock ? 6 : 0) + phase;
             g_lk_ph_n[k].fetch_add(1, std::memory_order_relaxed);
             g_lk_ph_ns[k].fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
@@ -11019,6 +11034,20 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             if (pd->params.sac_for_mana_amount > 0 || pd->params.sac_outlet_add_mana_amount > 0) { return true; }
             if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter
                               || pd->params.mana_per_creature_feeder_generic > 0)) { return true; }
+            // A hybrid-fed filter land (Cascade Bluffs, is_filter) that one of a RAMP-FILTER rock's own colours can feed:
+            // the Signet's {U} into the Bluffs makes two, and when the Signet was fed a {C} (Sol Ring, Saprazzan Skerry)
+            // the board alone has no coloured unit to feed the Bluffs in its place -- so the bound below (the board pays
+            // the bill + the feed + the rest net of one pip per Signet colour) would no longer be a necessary condition.
+            // (Found by reading, not measured: the tight-check diagnostic saw no such repair; closed so the cut is exact
+            // by construction.) A {C}-only rock cannot feed one, so it keeps its tight test.
+            if (!p.tapped && pd->params.is_filter && rock.def != nullptr && rock.def->params.ramp_filter)
+            {
+                for (Color fc : pd->params.produces)
+                {
+                    if (fc == Color::Colorless) { continue; }
+                    for (Color rc : rock.def->params.produces) { if (rc == fc) { return true; } }
+                }
+            }
         }
         return false;
     };
@@ -11133,7 +11162,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         ManaPool av_a2 = available ? *available : ManaPool{};
         if (!TapForCostSharedDiag(a2.Board(), cost_in, for_creature, available ? &av_a2 : nullptr, honor_legacy_cco))
         { return none; }
-        if (LineBillPayable(a2.Board(), rest, rest_creature, rock)) { return none; }
+        if (LineBillPayableOn(a2.Board(), rest, rest_creature, rock)) { return none; }   // a2 is not read again
     }
     else
     {
@@ -11190,9 +11219,11 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             for (int t = 0; t < nt; ++t) { if (m & (1u << t)) { held.push_back(tapped[static_cast<std::size_t>(t)]); } }
             RampScratch b(state);
             ManaPool av_b = available ? *available : ManaPool{};
+            if (s_stats) { g_lk_held_try.fetch_add(1, std::memory_order_relaxed); }
             if (!PayHoldingSet(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
             { continue; }
-            if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
+            if (s_stats) { g_lk_held_paid.fetch_add(1, std::memory_order_relaxed); }
+            if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             _ph.phase = 4;
@@ -11206,23 +11237,52 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // {R}{R} floating for Inferno -- the greedy pays Mind Stone + one Turf exactly). The oracle's payment table, the
     // one MTG_PAY_REFINE already makes in play, offers that superset (a multi-unit tap plus one more); its options are
     // made in table order and the first whose board pays the rest is the payment.
-    const std::vector<manaoracle::PayOption> opts =
-        manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(), /*whole_float=*/false,
-                                    nullptr, nullptr, 0, kLineKeepTableOpts, 0);
-    for (const manaoracle::PayOption& opt : opts)
+    //
+    // THE TABLE IS ASKED FOR IN TWO STEPS, A PREFIX FIRST (exact). MinimalPayments' lazy stop (`max_opts`, PayEnum::want)
+    // ends the enumeration once it holds that many options, so a smaller ask returns a PREFIX of the larger table, in
+    // the same order. The first option that keeps the rest is the payment either way: a prefix holding it ends the
+    // search without the rest of the enumeration, and otherwise the full table is asked for and made from where the
+    // prefix ended (the prefix's options already failed). Niv-Mizzet Combo spent ~40% of the rung's time building
+    // tables; MTG_LKR_TABLE_PREFIX (default 1; 0 = one full ask) is the prefix size, every value the same payments.
+    static const std::size_t s_prefix = static_cast<std::size_t>(
+        std::clamp(EnvInt("MTG_LKR_TABLE_PREFIX", 1), 0, static_cast<int>(kLineKeepTableOpts)));
+    std::size_t made = 0;   // options of the table already made (they failed)
+    for (int ask = 0; ask < 2; ++ask)
     {
-        if (opt.fail) { continue; }
-        RampScratch b(state);
-        ManaPool av_b = available ? *available : ManaPool{};
-        if (!MakeLineKeepOption(b.Board(), opt, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
-        { continue; }
-        if (!LineBillPayable(b.Board(), rest, rest_creature, rock)) { continue; }
-        (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
-        if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
-        _ph.phase = 4;
-        tight_dump("table");
-        none.opt = opt;
-        return none;
+        const std::size_t want = ask == 0 && s_prefix > 0 ? s_prefix : kLineKeepTableOpts;
+        std::chrono::steady_clock::time_point t_mp{};
+        if (s_stats) { t_mp = std::chrono::steady_clock::now(); }
+        const std::vector<manaoracle::PayOption> opts =
+            manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(),
+                                        /*whole_float=*/false, nullptr, nullptr, 0, want, 0);
+        if (s_stats)
+        {
+            g_lk_tables.fetch_add(1, std::memory_order_relaxed);
+            g_lk_opt_n.fetch_add(opts.size(), std::memory_order_relaxed);
+            g_lk_mp_ns.fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - t_mp).count()), std::memory_order_relaxed);
+        }
+        for (std::size_t i = made; i < opts.size(); ++i)
+        {
+            const manaoracle::PayOption& opt = opts[i];
+            if (opt.fail) { continue; }
+            if (s_stats) { g_lk_opt_try.fetch_add(1, std::memory_order_relaxed); }
+            RampScratch b(state);
+            ManaPool av_b = available ? *available : ManaPool{};
+            if (!MakeLineKeepOption(b.Board(), opt, cost_in, for_creature, available ? &av_b : nullptr,
+                                    honor_legacy_cco))
+            { continue; }
+            if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
+            (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
+            if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
+            if (s_stats) { g_lk_fire_idx[std::min<std::size_t>(i, 3)].fetch_add(1, std::memory_order_relaxed); }
+            _ph.phase = 5;
+            tight_dump("table");
+            none.opt = opt;
+            return none;
+        }
+        if (opts.size() < want || want == kLineKeepTableOpts) { break; }   // the whole table was made
+        made = opts.size();
     }
     // MTG_LINE_REDUCER_KEEP_STATS (print-only): a sample of the strands no repair keeps, with a rock credited.
     if (s_stats && rock.def != nullptr)
