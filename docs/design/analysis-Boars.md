@@ -913,5 +913,12 @@ live names and re-baselines the suite with it present.
   `boars2hg_regression_d5_s2002` gi65 (T5 both sides, digest moved, same keep and same bottom): replayed with the
   table keeping and `MTG_EXHAUSTIVE_BOTTOM=0` it reproduces the table-off digest exactly, so it is the
   lookahead bottomer's pre-turn-1 rollout residue (the Bruna 2026-10-28 case), not the table reaching into play.
+* **Play setting d6 / b40 (2026-11-20, USER: *"D6B40 seems okay for Boars."*)**, in `Boars.value.json`'s enabled
+  `value_play` block (`target_depth` 6, `budget_ms` 40). valueleaf.sh E.7 had adopted d6b20 (0.941x units, delta
+  +0.00000 vs the built-in d5/b20); the USER picked d6b40 from the same grid (delta -0.00125, t -3.99, 1.070x units,
+  8 seeds x 1000 paired). The d5 play rows of every tier (boars and boars2hg) run b40 accordingly. GT accepted in the
+  same pooled run as the Sea Creatures / Merfolk Turns adoptions: smoke 0 games moved; regression boars d5 s3003 1
+  faster, boars2hg 1 faster (3 digests); overnight boars d5 9 faster / 0 slower (26 digests moved of 5,700), boars2hg
+  0 / 0 (5 digests of 700); d0 and d3 unchanged (they do not read the play setting).
 * Value leaf: phase A stopped by the USER with 9,942 rows banked (`docs/design/boars-valueleaf-memory-2026-11-17.md`);
   the deck plays the sampled-gate ladder (`Boars.value.json`, `sampled_gate=3`).
