@@ -60,7 +60,9 @@ valued at T2 for the same reason, so deep settings play Vivid Creek (T7).
    deck the library" (9-card library -> {11}; 8 -> {11,0}; singleton recorder flags multi).
    Not reviewed against the mtg-rules skill yet (CR 702.52 dredge needs >= N cards; CR 704.5b empty-draw loss).
 
-## RUNNING AT HANDOFF -- do NOT kill
+## BUILD UPDATE: the queued build FINISHED rc=0 (09:19 UTC) -- binary build/Release/mtg is fc04fac0e's tree; start at step 2.
+
+## RUNNING AT HANDOFF -- do NOT kill (now finished, see above)
 - Build of this worktree, queued on the heavy lock: heavy_run PID **2202227** (parent shell 2202225), command
   `MTG_BUILD_JOBS=12 bash scripts/heavy_run.sh ./build.sh`, log
   `/workspaces/MagicDeckTester/build/scratch/maze/dmg/build.log`; DONE marker = a line `rc=N` appended to
