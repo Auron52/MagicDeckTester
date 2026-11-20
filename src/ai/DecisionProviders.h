@@ -4362,7 +4362,14 @@ public:
     // the distinct names of any 60-card list), and every to-hand tutor cast of a plan carries its own target (the
     // per-cast named axis), closing the one-tutor-per-plan gap for this deck. Order: TutorCandidates' generic order.
     int  TutorSearchWidth() const override { return 64; }
-    bool TutorCastTimeAxis(const CardParams& p) const override { return p.tutor_to_hand && !p.wish_from_sideboard; }
+    // Diabolic Revelation (tutor_up_to_x) is NOT a single-target tutor: its package rides its own cast-time axis.
+    bool TutorCastTimeAxis(const CardParams& p) const override
+    { return p.tutor_to_hand && !p.wish_from_sideboard && !p.tutor_up_to_x; }
+    // Diabolic Revelation's ORDINARY package order (design §5.4; ORDER only, every package is still enumerated):
+    // lands by the mana they add (net of what they cost to put out), drop-makers, Revelation, Time Warp, Blood Sun
+    // (when none is out), Emrakul, the other tutors, Ulamog, Worldfire last.
+    void RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
+                              std::vector<int>& order) const override;
 };
 
 // MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1

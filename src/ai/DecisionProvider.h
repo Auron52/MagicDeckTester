@@ -3622,6 +3622,19 @@ public:
     // the named axis would cut lines the index axis reached.
     virtual bool TutorCastTimeAxis(const CardParams& p) const { (void)p; return false; }
 
+    // RevelationClassOrder -- the ORDER (never a restriction) in which Diabolic Revelation's package enumeration
+    // (CardParams::tutor_up_to_x; core/RevelationPackages.h, Blood Sun step 6, design §4.4 / §5.4) ranks the
+    // library's classes. For each X the packages are enumerated in lexicographic order over this ranking, so the
+    // best-ranked classes fill the early (wave-0) packages; every multiset is still enumerated (the later waves),
+    // whatever the ranking. `class_defs[i]` is class i's representative definition, in canonical order; `order`
+    // arrives as the identity permutation and must be left a permutation of 0..n-1. It must read only the classes
+    // and the battlefield's NON-LAND permanents (never the hand, the mana or the land drop of the moment), so every
+    // enumeration at one node -- each land variant -- agrees on the ranking and so on the wave partition.
+    // Base: the canonical order.
+    virtual void RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
+                                      std::vector<int>& order) const
+    { (void)s; (void)class_defs; (void)order; }
+
     // CleanupDiscardSearchWidth -- how many of CleanupDiscardCandidates' ranked cards the ROLLOUT's
     // end-of-turn cleanup branches over (1 == the ranked pick only, byte-identical to no branch).
     //

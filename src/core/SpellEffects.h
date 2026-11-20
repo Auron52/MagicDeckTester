@@ -18,6 +18,7 @@
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "OpponentDeck.h"               // TakeFromTop: THE mill primitive (sets opponent_decked)
 #include "LandAbilityLoss.h"            // Blood Sun: LandNonManaAbilitiesSuppressed / EffectiveLandDef
+#include "RevelationPackages.h"         // Blood Sun step 6: Diabolic Revelation's package encoding
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
@@ -3154,6 +3155,64 @@ inline void ApplyLoseLifeOnResolve(GameState& state, int controller, const CardD
                       "\xF0\x9F\xA9\xB8 " + def.card.m_name.str() + ": you lose " + std::to_string(n) + " life");
     }
     if (state.dmg_events_armed && controller == state.active_player_index) { dmgev::SbaCheckpoint(state); }
+}
+
+// DIABOLIC REVELATION (CardParams::tutor_up_to_x; Blood Sun step 6, design §4.1): "Search your library for up to X
+// cards, put those cards into your hand, then shuffle." The cast's PACKAGE rides `encoded` (revpkg::EncodePackage:
+// the names the search chose at enumeration; the library at cast time is the library at resolution, nothing in the
+// pool acting in between); each name takes one library copy (a name no longer present is skipped: "up to"), at most
+// `x` cards, then ONE shuffle for the whole search (the PerformEtbTutorToHandMulti precedent; CR 701.19). Called by
+// BOTH worlds (TurnSolver apply_one, EffectHandler) in place of PerformTutor. HUMAN PLAY: the generic multi-pick
+// (`dragon`, g_play_dragon_chooser) over every library copy, up to X, copies allowed, stopping early allowed; the
+// package's cards preselected (the Bilbo shape). Nulled in every search / rollout scope, so autonomous play reads
+// the package alone.
+inline void PerformTutorPackageToHand(GameState& state, int controller, const CardDefinition& def, int x,
+                                      const std::string& encoded)
+{
+    Player& ap = state.players[static_cast<std::size_t>(controller)];
+    std::vector<std::string> names = revpkg::DecodePackage(encoded);
+    if (x < 0) { x = 0; }
+    if (static_cast<int>(names.size()) > x) { names.resize(static_cast<std::size_t>(x)); }
+    if (g_play_dragon_chooser != nullptr && x > 0)
+    {
+        std::vector<Card> cands(ap.library.begin(), ap.library.end());
+        std::stable_sort(cands.begin(), cands.end(),
+                         [](const Card& a, const Card& b) { return a.m_name.str() < b.m_name.str(); });
+        std::vector<int> heur;
+        std::vector<bool> used(cands.size(), false);
+        for (const std::string& nm : names)
+        {
+            for (std::size_t i = 0; i < cands.size(); ++i)
+            {
+                if (!used[i] && cands[i].m_name.str() == nm) { used[i] = true; heur.push_back(static_cast<int>(i)); break; }
+            }
+        }
+        const std::vector<int> picked = (*g_play_dragon_chooser)(
+            state, controller, def.card.m_name.str() + ": up to " + std::to_string(x) + " cards to HAND", cands, x, heur);
+        names.clear();
+        for (int i : picked)
+        {
+            if (i >= 0 && i < static_cast<int>(cands.size()) && static_cast<int>(names.size()) < x)
+            { names.push_back(cands[static_cast<std::size_t>(i)].m_name.str()); }
+        }
+    }
+    for (const std::string& nm : names)
+    {
+        for (std::size_t i = 0; i < ap.library.size(); ++i)
+        {
+            if (ap.library[i].m_name.str() != nm) { continue; }
+            Card c = ap.library[i];
+            ap.library.erase(ap.library.begin() + static_cast<std::ptrdiff_t>(i));
+            EnterHand(state, controller, std::move(c), HandEntryReason::Tutor);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "tutor",
+                              "\xF0\x9F\x94\x8D " + nm + " -- searched to hand (" + def.card.m_name.str() + ")");
+            }
+            break;
+        }
+    }
+    ShuffleAfterSearch(state, controller);
 }
 
 // Would casting `def` now kill its caster at resolution? Own death live, and the spell's own "you lose N life" takes

@@ -590,6 +590,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     // human_repick: this IS a cast resolving, so a human at the viewer re-picks
                     // here off the live zone with the plan's baked target as the default (one frame
                     // per cast instance, in cast order). Inert without a chooser installed.
+                    // Diabolic Revelation (tutor_up_to_x): the cast's whole package, ONE shuffle (lockstep with
+                    // apply_one; Blood Sun step 6). Param-gated: every other tutor is PerformTutor, unchanged.
+                    if (def.params.tutor_up_to_x)
+                    {
+                        PerformTutorPackageToHand(state, entry.controller_index, def, entry.chosen_x.value_or(0),
+                                                  entry.tutor_target);
+                    }
+                    else
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
                                  def.card.m_name, /*human_repick=*/true);
                     // Grim Tutor's "You lose 3 life" (Blood Sun step 5; lockstep with apply_one). Param-gated.

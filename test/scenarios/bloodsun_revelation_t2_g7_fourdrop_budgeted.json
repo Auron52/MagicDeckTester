@@ -1,0 +1,102 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 12,
+ "active_life": 20,
+ "opponent_life": 15,
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Exploration",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Exploration",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Exploration",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Diabolic Revelation"
+ ],
+ "library": [
+  "Scorched Ruins",
+  "Scorched Ruins",
+  "Scorched Ruins",
+  "Scorched Ruins",
+  "Emrakul, the Aeons Torn"
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 5,
+ "expect_win_turn": 3,
+ "comment": "Blood Sun step 6, scenario T2 (USER G7, design \u00a75.3): Blood Sun out, 11 Swamps, four land drops (three Explorations), Diabolic Revelation in hand, a SMALL library (4 Scorched Ruins, 1 Emrakul, 7 Swamps). With the ORDINARY package order (no go-off front yet) the X = 5 package {Ruins x4, Emrakul} is wave 0: Revelation (10), four Ruins enter untapped under Blood Sun (+16), Emrakul (15) -> its cast trigger's extra turn, where Emrakul attacks for 15 = the opponent's 15. Win at round 3 (extra turns do not count). d3, budget 100."
+}

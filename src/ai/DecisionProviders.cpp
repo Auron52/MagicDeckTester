@@ -7,6 +7,7 @@
 #include "ValueArm.h"
 #include "ManaOracle.h"
 #include "../core/EnvFlags.h"
+#include "../core/LandAbilityLoss.h"   // Blood Sun step 6: RevelationClassOrder reads EffectiveLandDef
 #include <iostream>
 #include <cstdlib>
 #include <cctype>
@@ -73182,4 +73183,42 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
     }
     if (MazeHeapFilterLive(s)) { MazeHeapTreasureAdmit(s, *this, plans, admit); }
     if (MazeIdleFetchLive(s))  { MazeIdleFetchAdmit(s, plans, admit); }
+}
+
+// BLOOD SUN step 6: Diabolic Revelation's ordinary package order (design §5.4). A stable sort of the classes by a
+// static role key read off each class's params (and, for Blood Sun itself, whether one is already out -- a non-land
+// battlefield read, which no land variant of a node changes). ORDER only: the enumeration is complete whatever this
+// returns (core/RevelationPackages.h).
+void BloodSunProvider::RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
+                                            std::vector<int>& order) const
+{
+    const bool sun_out = LandNonManaAbilitiesSuppressed(s);
+    auto role = [&](const CardDefinition* d) -> int
+    {
+        if (d == nullptr) { return 60; }
+        const CardParams& p = d->params;
+        if (d->card.IsLand())
+        {
+            // The mana the land adds once it is out, net of the lands it costs (Lotus Vale / Field, a Karoo's
+            // bounce) -- read through the land's EFFECTIVE definition (under Blood Sun every one is a plain land).
+            const CardParams& e = EffectiveLandDef(s, *d).params;
+            int net = std::max(1, e.produces_amount);
+            net -= std::max(e.etb_replace_sacrifice_untapped_lands, e.etb_sacrifice_lands);
+            if (e.etb_bounce_land) { net -= 1; }
+            return 10 - std::clamp(net, -5, 9);                 // 1 (adds 9) .. 15
+        }
+        if (p.static_extra_land_drops > 0 || p.opponent_land_play_put_land_from_hand) { return 20; }   // drop-makers
+        if (p.tutor_up_to_x)                         { return 21; }   // the next Revelation
+        if (p.extra_turns_on_resolve > 0)            { return 22; }   // Time Warp
+        if (p.lands_lose_nonmana_abilities)          { return sun_out ? 45 : 23; }
+        if (p.cast_trigger_extra_turns > 0)          { return 24; }   // Emrakul
+        if (p.tutor_to_hand || p.look_top_target_player_exile_reorder > 0) { return 25; }   // Grim Tutor, Machinations
+        if (p.cast_trigger_exile_target_permanents > 0) { return 26; }   // Ulamog
+        if (p.exile_all_permanents)                  { return 50; }   // Worldfire last (§9.3)
+        return 30;
+    };
+    std::vector<int> key(class_defs.size());
+    for (std::size_t i = 0; i < class_defs.size(); ++i) { key[i] = role(class_defs[i]); }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b)
+                     { return key[static_cast<std::size_t>(a)] < key[static_cast<std::size_t>(b)]; });
 }

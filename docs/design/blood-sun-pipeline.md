@@ -1597,3 +1597,59 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
   b100: life 3 -> never cast, life stays 3; life 4 -> fetch the bottom Bolt and kill this turn at 1 life; Machinations
   exiles two Swamps to draw the Bolt for a turn-4 kill). Smoke: 235/235 PASS, **0 moved digests** vs
   `impl4/smoke-step4-batch.log`; saved as `build/scratch/bloodsun/impl5/smoke-step5-batch.log`.
+
+### Implementation notes (step 6)
+**Commit:** `git log --grep "Blood Sun step 6:"` (WIP if the handoff note `logs/bloodsun/impl-step6-handoff.md` exists).
+- **Param** `tutor_up_to_x` (a modifier on `tutor_to_hand`; Diabolic Revelation carries `tutor_to_hand`,
+  `tutor_shuffle_after`, `tutor_up_to_x`), so every generic tutor reader (the AcqResolve re-solve after a to-hand
+  tutor, the shuffle / library-reader predicates) sees it as a tutor. The single-target axes skip it: the index axis
+  (`Plan::tutor_choice`, both fan sites), the per-cast named axis, and `BloodSunProvider::TutorCastTimeAxis`.
+- **Package encoding** (`src/core/RevelationPackages.h`): the cast's `tutor_target` = `"<wave>\x1d" + names` (the
+  Tooth and Nail encoded-names precedent; no new Action field), `chosen_x = |S|`. Signature term `#DR` + X + package
+  in both plan-signature builders.
+- **Resolution** `PerformTutorPackageToHand` (SpellEffects.h): names -> hand (a missing name is skipped), at most X,
+  ONE `ShuffleAfterSearch`; called in place of `PerformTutor` by EffectHandler and apply_one (Grim Tutor's life loss
+  call stays after it, inert here). Human: the `dragon` multi-pick over every library copy, up to X, package preselected.
+- **Generator** (`revpkg`): classes = lands by `behaviour_identity` (by `EffectiveLandIdentity` when F-R2 holds),
+  nonlands by name, canonical order by name; per X the RANK-LEX enumeration (`FirstFill` / `NextLex`) over the
+  provider's `RevelationClassOrder` -- complete and duplicate-free, tested against `CountMultisets` (closed form).
+  F-R1 copies, F-R3 X = |S|, F-R4 X >= 1 (autonomous), F-R2 below.
+- **Deviation (F-R2 condition):** the design's "no Blood Sun removal except an exile-all-hands effect in either
+  decklist" is implemented as a LIVE, conservative scan of OUR hand / library / graveyard / battlefield / stack
+  (`revpkg::CardCanEndOwnEnchantment`; the goldfish opponent never casts). **The Blood Sun list's own Ulamog breaks
+  it:** its cast trigger exiles two target permanents and, with no opponent permanent, targets OURS -- Blood Sun
+  included -- so while an Ulamog is reachable the twin fold is OFF (Vale and Field stay separate classes: more
+  packages, nothing lost). Surfaced to the USER (open question).
+- **Waves** (`revwave`, TurnSolver.cpp): a normal enumeration admits wave 0 (ordinals [0, K0 = 4) of every X) and sets
+  `pending` when an X has more. FSLineWin's **Revelation wave phase** (after the group waves) re-enumerates wave k
+  with waves 0..k admitted and keeps only plans whose highest-wave Revelation cast is wave k (the tranche partition:
+  multi-Revelation plans mixing waves are covered), prices each wave with `ChargeDecisionUnits(budget, packages
+  emitted)` (inert with no budget), stops at `AnytimeStop`, and walks the wave plans' deferred bp ranks. The enum
+  memo (`EnumeratePlansWithLand` / M2) is bypassed while the hand holds a package tutor or a wave is enumerating (a
+  memo hit would skip CollectActions and lose `pending`); its globals fingerprint gains a last bit.
+- **Generator-stop:** no wave is enumerated, and a wave stops mid-way, once `best.win_turn <= state.turn_number` (a
+  this-turn kill already returns before the phase). Counters `revwave::g_phase_packages` / `_round_win_stops`.
+- **Ordinary order** (`BloodSunProvider::RevelationClassOrder`, §5.4 as a static role key): lands by net mana (Ruins,
+  Lotus, Karoos, duals), drop-makers, Revelation, Time Warp, Blood Sun (none out), Emrakul, other tutors, Ulamog,
+  Worldfire last. The "binding resource" refinement of drop-makers vs lands is NOT modelled (order only). The go-off
+  front (stage 1/2 packages) is step 8's and will plug in ahead of the rank-lex order.
+- **Deviation (human X):** X is a `main_phase` plan variant (one cast per legal X 0..max under HumanPlayActive, the
+  Genesis Wave shape), not the `x_value` chooser; then `dragon` at resolution. DECISIONS.md row; audit maps
+  `tutor_up_to_x` -> `dragon`.
+- **NOT done (handoff order):** (1) the Revelation wave phase in **SolveWithLookahead** (the executor's
+  no-verified-win fallback) and EnumerateMainPlansExhaustive -- there Revelation sees wave 0 only, a completeness gap
+  at those hosts until closed; breakpoint-continuation enumerations likewise see wave 0; (2) the case-3 last-wave
+  prune (§5.4, default OFF, U4).
+- **Rules review (2d):** X is chosen on casting (CR 601.2b; X = 0 legal, offered to a human); the printed "up to X" lets
+  the player take any number from 0 to X (a package name no longer in the library is simply not taken); "then
+  shuffle" is ONE shuffle after the whole search, and it happens even when nothing is taken. The cards go to hand (no ETB, no reveal).
+- **Measurements (step 6 tree):** `mtg-test` 3826 cases, 3826 pass (5 new in `test_bloodsun_revelation.cpp`).
+  `test/scenarios.sh` 626/626 (2 new: T2 at budget 0 and d3 b100, both win at round 3 through the wave-0 package
+  {Ruins x4, Emrakul} with the ORDINARY order -- Revelation X = 5, four Ruins, Emrakul, its extra turn's attack).
+  T2 wall: 0.26 s (budget 0), 0.24 s (d3 b100), whole `mtg --scenario` process; `--scenario` reports no unit count
+  (MTG_DUMP_UNITS is a batch-mode file), so units are not recorded. The win is a round-3 win reached in the extra
+  turn, so the generator-stop ends the node before any wave is generated. `audit_viewer_decisions.py --no-sweep`
+  rc 0 (expected types now include `dragon`); `audit_card_costs.py` rc 0 (match); `audit_card_fields.py` rc 0.
+  Smoke: 235/235 PASS, **0 moved digests** vs `impl5/smoke-step5-batch.log` (the shared edits -- the {X} block branch,
+  the tutor resolution sites, the signature terms, the enum-memo gate's hand scan -- are all param-gated); saved as
+  `build/scratch/bloodsun/impl6/smoke-step6-batch.log`.

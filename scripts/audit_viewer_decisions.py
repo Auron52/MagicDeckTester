@@ -328,6 +328,11 @@ MANIFEST = {
     # STANDS (put nothing). The value of X is a separate `main_phase` plan variant -- the {X}
     # enumeration branch emits every legal X 0..max under HumanPlayActive().
     "reveal_x_put_permanents": ("dragon",             truthy),
+    # Diabolic Revelation (Blood Sun step 6): "Search your library for up to X cards, put those cards into your
+    # hand". X is a `main_phase` plan variant (every legal X 0..max under HumanPlayActive(), the Genesis Wave shape);
+    # the cards are the generic multi-pick `dragon` from PerformTutorPackageToHand (candidates = every library copy,
+    # max_puts = X, the autonomous package preselected; fewer allowed).
+    "tutor_up_to_x":         ("dragon",               truthy),
     # Replenish is mandatory for every non-Aura enchantment. When an Aura is
     # present, choosing its legal host reuses the generic board-click target
     # chooser at the simultaneous-entry resolution site.
