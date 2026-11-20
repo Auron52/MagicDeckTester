@@ -2870,6 +2870,9 @@ public:
         long long cold_leaves = 0, read_leaves = 0, cold_reads = 0, read_reads = 0;
     };
     static LeaflessReadProbe LeaflessReadProbeForTest(const GameState& state, int depth, int max_turns, bool second_main);
+    // Test seam for MTG_LEAF_GAME_OVER: one LEAFLESS (constant-leaf) FSLineWin of `state` at `depth`, uncut, with the
+    // LEAF_GAME_OVER arm pinned to `arm` (0 off, 1 on); returns its win turn. Per-game caches are cleared before and after.
+    static int LeaflessFrameWinForTest(const GameState& state, int depth, int max_turns, int arm);
     // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation counts 5
     // odometer visits after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget) and
     // is stored; then it is looked up -- by CacheHitCharge (the real caches) and by pledger::WouldServe / WouldReplay
