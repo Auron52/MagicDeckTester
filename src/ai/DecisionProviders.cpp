@@ -69069,6 +69069,7 @@ MAZE_P5_LEVER(MazeHeapTreasureOn,     MAZE_HEAP_TREASURE,      "MTG_MAZE_HEAP_TR
 MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
 MAZE_P5_LEVER(MazeIdleFetchOn,        MAZE_IDLE_FETCH,         "MTG_MAZE_IDLE_FETCH",         true)   // P5d
+MAZE_P5_LEVER(MazeIdleFetchRevealOn,  MAZE_IDLE_FETCH_REVEAL,  "MTG_MAZE_IDLE_FETCH_REVEAL",  false)   // P5d-5 amendment of (a)
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
@@ -70469,9 +70470,50 @@ static void MazeIdleFetchAdmit(const GameState& s, const std::vector<DecisionPro
         if (open_after >= hand_after + 1 || returns || wins_now) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
     }
     if (covered.empty()) { return; }
+    // P5d-5 REVEAL GUARD (MTG_MAZE_IDLE_FETCH_REVEAL, default OFF): a plan whose land or actions REVEAL a card this turn
+    // (a Gate entering under a draw-on-Gate-enter watcher of ours, or casting one -- Guild Summit) is not a "no fetch"
+    // plan: its fetch can follow the reveal in the breakpoint continuation, which is enumerated again after the draw (so
+    // this prune applies there with the drawn cards known). Removing it forces the fetch AHEAD of the reveal, with the
+    // target and the land-drop use chosen before the draw that real play would also see. Mechanism: Maze's End blind
+    // seed 201321 gi 320 salt 4 at d8 b0, where (a) took Guild Summit -> Gruul Guildgate -> draw -> Gate -> fetch (T5 win)
+    // off the menu in favour of fetching first (6 -> 9; with the guard 6). Measurements: logs/maze/P5d5-handoff.md.
+    const bool reveal_guard = MazeIdleFetchRevealOn();
+    std::vector<std::string> draw_sub;   // subtypes whose entering draws for us
+    if (reveal_guard)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr) { for (const std::string& t : d->params.draw_on_other_subtype_enter) { draw_sub.push_back(t); } }
+        }
+    }
+    auto enters_draws = [&](const CardDefinition* d)
+    {
+        if (d == nullptr) { return false; }
+        for (const std::string& t : draw_sub) { if (CardHasSubtype(d->card, t)) { return true; } }
+        return false;
+    };
+    auto plan_reveals = [&](std::size_t i)
+    {
+        for (const Action& a : *plans[i].actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
+                && (!a.def->params.draw_on_other_subtype_enter.empty() || !a.def->params.etb_tap_subtype_draw.empty()))
+            { return true; }   // casting the watcher (Guild Summit's ETB draw)
+        }
+        if (draw_sub.empty()) { return false; }
+        if (!plans[i].land->empty() && enters_draws(CardDatabase::Instance().Lookup(*plans[i].land))) { return true; }
+        for (const Action& a : *plans[i].actions)
+        {
+            if (a.kind == Action::Kind::PlayLand && enters_draws(a.def)) { return true; }
+        }
+        return false;
+    };
     for (std::size_t i = 0; i < plans.size(); ++i)
     {
         if (!admit[i]) { continue; }
+        if (reveal_guard && plan_reveals(i)) { continue; }
         std::vector<std::string> keys;
         bool maze = false;
         for (const Action& a : *plans[i].actions)

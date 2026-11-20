@@ -4493,7 +4493,15 @@ d1b1 7/9). Blind ensemble (salts 1-4, d8 b0) on the 12: 10 are clairvoyance (shi
 g823 g892, 2HG g196 g254, d1b3 g64, d1b1 g46 g186). **Two persist blind: d5 g231 (+2 over 4 salts) and d5 g320 (+4)**;
 Blind totals over salts 1-4 (`bl2/`): g231 ship 28, u2 28, u2+(a) 28, fix 29, shipped 30 (Amulet +1, plus +1 from (a) on
 top of it); g320 ship 25, u2 26, u2+(a) 29, fix 26, shipped 29. **g320 salt 4 is the first NON-clairvoyant prune (a)
-loss: 6 -> 9 blind on both bases** -- ROOT-CAUSE OWED (the USER's "never worse with idle mana" says it should not exist).
+loss: 6 -> 9 blind on both bases.** ROOT CAUSE (P5d-5): not fetch-vs-idle mana but fetch-vs-REVEAL. One turn deeper, in
+Guild Summit's subtree, the T4 host `{Gruul Guildgate, []}` wins at T5 through its BREAKPOINT continuation (the Gate's
+Summit draw, the drawn Gate into the Exploration drop, then the Maze's End fetch); (a) read it as "no fetch" (the fetch
+is not in `actions`) and removed it for `{Gruul, [fetch X]}`, which fetches before the draw. Real play sees that draw
+too, so this is not clairvoyance. Amendment `MTG_MAZE_IDLE_FETCH_REVEAL` (default OFF, the P5d-5 reveal guard): (a)
+keeps a plan whose land / PlayLand puts a Gate in under our draw-on-Gate-enter watcher, or that casts one. g320 s4
+d8 b0 9 -> 6; blind salts 1-4 g320 26 (= fix), g231 29. Sample-wide vs shipped: blind std -2 / 2HG -1, clairvoyant d5
+-16, 2HG -3, d3 -3, d1b3 -3, d1b1 0, d0 identical. d8 b0: 51 of its 55 slower games recover; d5 g219, 2HG g108 g161 g21
+did not on salt 1 (4-salt ensemble: P5d-6).
 **Sample-wide BLIND A/B** (`blw/`, blind_salt 1, same seeds and rows, net turns vs blind ship): shipped (fix + (a)) d5 -8,
 2HG -8, d3 -6, d1b3 -20, d1b1 -3 (**std -37, 2HG -8: better than ship on every row**); fix alone -7 / -11 / -9 / -18 / +6;
 u2 +6 / +2 / -3 / -17 / +2. So the Amulet tier is a blind win (fix vs u2: d5 -13, 2HG -13), and (a) on top of fix is

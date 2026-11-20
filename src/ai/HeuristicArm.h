@@ -1037,6 +1037,7 @@ enum Slot : int
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     MAZE_IDLE_FETCH,          // MTG_MAZE_IDLE_FETCH       Maze's End P5d (USER 2026-11-18: "Though, if there is idle mana we should use it."; "And that is fine, because not fetching would be dominated, but this would be assuming we can replay it."): a plan without a Maze's End activation is removed when the menu holds the same plan plus one fetch and Maze's End comes back (an open drop left for the replay, Manabond / Burgeoning, or the fetch wins). Default ON; =0 -> every such plan searched
+    MAZE_IDLE_FETCH_REVEAL,   // MTG_MAZE_IDLE_FETCH_REVEAL  Maze's End P5d-5 (amends MAZE_IDLE_FETCH): prune (a) keeps a no-fetch plan whose land or PlayLand puts a Gate in under our draw-on-Gate-enter watcher (Guild Summit), or that casts such a watcher -- the fetch can follow the reveal in the breakpoint continuation, where (a) applies again with the draw known. Default OFF (USER decision pending); =1 -> guard on
     COUNT
 };
 
@@ -2018,6 +2019,7 @@ inline const char* Name(int slot)
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
         "MTG_MAZE_IDLE_FETCH",
+        "MTG_MAZE_IDLE_FETCH_REVEAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
