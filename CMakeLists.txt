@@ -300,6 +300,7 @@ add_executable(mtg-test
     test/unit/test_deeproot_pilgrimage.cpp
     test/unit/test_hand_demand_pay.cpp
     test/unit/test_odo_flat_gate_cut.cpp
+    test/unit/test_rollout_cut_store.cpp
     test/unit/test_shadowborn_lakeprof.cpp
     test/unit/test_mana_oracle.cpp
     test/unit/test_board_identity.cpp
