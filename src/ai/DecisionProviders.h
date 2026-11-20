@@ -1509,9 +1509,11 @@ public:
     // holding -- so a multi-card cleanup must re-ask after each shed. The generic fallback (=0) is
     // prefix-stable, so it keeps the batched path.
     bool CleanupDiscardShedStable() const override;
-    // ACCLAIMED CONTENDER'S DIG -- a DRAFT policy for USER review (MTG_KN_ETBDIG_RANK, DEFAULT OFF; 2026-11-20,
-    // docs/design/provider-heuristic-required.md). Off, the deck carries the provider-policy RED FLAG and plays the
-    // engine's searched default (every legal match, library order). On: same-NAME copies folded onto the first (exact,
+    // ACCLAIMED CONTENDER'S DIG -- the deck policy (MTG_KN_ETBDIG_RANK, DEFAULT ON since 2026-11-20 -- the parent's
+    // default, the USER may overrule: it played identically to the searched default on all 6000 paired A/B games at
+    // ~1.6-1.8% fewer units; docs/design/provider-heuristic-required.md). =0: the deck carries the provider-policy RED
+    // FLAG and plays the engine's searched default (every legal match, library order). WhiteKnights inherits it.
+    // On: same-NAME copies folded onto the first (exact,
     // the PiratesProvider precedent), the rest RANKED -- castable now with the untapped lands (site 10 can deploy it
     // this turn), then lord value on the current board (power_bonus x own creatures it pumps), then castable next turn,
     // then mana value -- and the axis keeps EVERY ranked match (an ORDER, not a cut; the rank decides the playout's
