@@ -1,0 +1,31 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 4,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [],
+ "hand": [
+  "Golgari Rot Farm",
+  "Bone Saw"
+ ],
+ "human_lines": [
+  "land=Golgari Rot Farm",
+  "pass",
+  "pass",
+  "land=Golgari Rot Farm;cast=Bone Saw",
+  "pass",
+  "pass"
+ ],
+ "expect_human_summary_contains": "land=Golgari Rot Farm; cast: Bone Saw",
+ "comment": "Blood Sun step 1: GOLGARI ROT FARM ALONE BOUNCES ITSELF (ruling: 'If this land enters the battlefield and you control no other lands, its ability will force you to return it to your hand'). T3 with no other land: the Rot Farm returns itself (BounceKarooLand's mandatory self pick). T4 the same Rot Farm is in HAND again, so the T4 line playing it (with a {0} Bone Saw, which makes the summary unique to T4) is committed. Had it stayed on the battlefield, T4's hand would hold no Rot Farm and the line would not be offered."
+}

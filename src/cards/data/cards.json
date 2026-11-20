@@ -18742,6 +18742,62 @@
    }
   },
   {
+   "name": "Golgari Rot Farm",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {B}{G}. [Karoo bounce land, the Rakdos Carnarium shape exactly (produces B+G, produces_amount 2, enters_tapped, etb_bounce_land): enters tapped, taps for {B}{G}, and its ETB returns one of your lands to hand -- the searched Karoo bounce (Plan::bounce_choice, BounceSearchCandidates; the human answers the bounce prompt). Ruling 'you control no other lands -> return itself' is the existing Karoo semantics: BounceKarooLand returns the Karoo itself when it is the only land (karoo_self_bounce is never enumerated as a choice).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true,
+    "etb_bounce_land": true
+   }
+  },
+  {
+   "name": "Copperline Gorge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {R} or {G}. [Fastland, the Blooming Marsh shape exactly (fastland_max_other_lands 2): untapped with zero, one or two other lands, tapped with three or more. The simultaneous-entry ruling (lands entering at the same time are not counted) is the existing fastland semantics (EnterLand PreDecided entry for a simultaneous multi-put).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "fastland_max_other_lands": 2
+   }
+  },
+  {
+   "name": "Graven Cairns",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{B/R}, {T}: Add {B}{B}, {B}{R}, or {R}{R}. [Filter land, the Fire-Lit Thicket / Cascade Bluffs shape exactly (is_filter): the {T}: Add {C} first ability is every is_filter land's implicit free {C} mode; fed one {B} or {R} from another source it yields two mana of {B}/{R} in any split (simulated as mana-neutral colour fixing). Both are mana abilities. Colour fixing, not ramp.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "is_filter": true
+   }
+  },
+  {
    "name": "Keldon Champion",
    "mana_cost": "{2}{R}{R}",
    "types": [

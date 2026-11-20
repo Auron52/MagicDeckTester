@@ -1,0 +1,39 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Copperline Gorge",
+  "Lightning Bolt",
+  "Rampant Growth"
+ ],
+ "validate_line": "land=Copperline Gorge;cast=Lightning Bolt;cast=Rampant Growth",
+ "expect_verdict": "illegal",
+ "expect_reason_contains": "no untapped source produces red mana",
+ "comment": "Blood Sun step 1: COPPERLINE GORGE WITH THREE OTHER LANDS ENTERS TAPPED (fastland_max_other_lands 2, the Blooming Marsh shape). The Gorge is the only {R} source, so Lightning Bolt is unpayable this turn: ILLEGAL. Control: bloodsun_gorge_untapped_two_lands.json."
+}

@@ -1,0 +1,33 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Graven Cairns",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Sol Ring"
+ ],
+ "human_lines": [
+  "cast=Sol Ring",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_human_summary_contains": "cast: Sol Ring",
+ "comment": "Blood Sun step 1: GRAVEN CAIRNS' {T}: ADD {C} PAYS GENERIC. The Cairns alone, no feeder: its implicit free {C} mode (every is_filter land's first ability) pays Sol Ring {1}."
+}

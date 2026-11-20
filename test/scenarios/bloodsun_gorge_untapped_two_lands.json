@@ -1,0 +1,40 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Copperline Gorge",
+  "Lightning Bolt",
+  "Rampant Growth"
+ ],
+ "human_lines": [
+  "land=Copperline Gorge;cast=Lightning Bolt;cast=Rampant Growth",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_human_summary_contains": "land=Copperline Gorge; cast: Lightning Bolt",
+ "expect_opponent_life": 17,
+ "comment": "Blood Sun step 1: COPPERLINE GORGE WITH TWO OTHER LANDS ENTERS UNTAPPED (two or fewer other lands). Its {R} pays Lightning Bolt (opponent 20 -> 17) and the two Forests pay Rampant Growth; nothing is dropped. Control of bloodsun_gorge_tapped_three_lands.json."
+}

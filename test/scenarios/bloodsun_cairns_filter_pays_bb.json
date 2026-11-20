@@ -1,0 +1,37 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Mountain",
+   "controller": 0
+  },
+  {
+   "name": "Graven Cairns",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Bloodghast"
+ ],
+ "human_lines": [
+  "cast=Bloodghast",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_human_summary_contains": "cast: Bloodghast",
+ "comment": "Blood Sun step 1: GRAVEN CAIRNS' FILTER PAYS {B}{B} (is_filter, the Fire-Lit Thicket shape). Mountain + Graven Cairns: no land makes {B} on its own (the Cairns' plain mode is {C}); the Mountain's {R} feeds {B/R},{T}: Add {B}{B}, which pays Bloodghast {B}{B}. Without the filter the line is not offered."
+}
