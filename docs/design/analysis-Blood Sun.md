@@ -72,6 +72,9 @@ probably still heuristically prune the regular search case, but having this go-o
 that 2 should also be included in the go-off. There is always a bridge to 1 if you can do 2."* ->
 go-off = (1) + (2); (3) gets a provider prune (prune-adoption bar). Design to check the "always a
 bridge" claim against the 2-Time-Warp limit and report any residual gap to the USER.
+USER (verbatim): *"Well, if you are casting Revelation and putting out extra lands anyway. Maybe not if
+you just have Time Warp in hand."* -> go-off (2) = the REVELATION-DRIVEN bridge (Revelation cast this
+turn, Time Warp + a Revelation retained + extra lands put out); a bare Time Warp from hand is case (3).
 
 
 ## Standing decisions (pass to every subagent)
