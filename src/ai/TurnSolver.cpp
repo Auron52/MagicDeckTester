@@ -70494,7 +70494,26 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         const bool src_over  = newly_n > combined.ManaValue() - bt_start.Total();
         const bool mana_over = !src_over && newly_n >= 2 && produced.Total() > combined.ManaValue()
                             && PayExcessReleaseOn();
-        if (src_over || mana_over)
+        // A SCALED LAND'S PLAIN TAP (MTG_PAY_REFINE_SCALED, the per-cast refine's twin): the solve's backtracker tries
+        // Three Tree City's plain {C} first and keeps the first covering set, so an exact solve of four or more taps can
+        // hold City's {C} where its fed mode ({2} -> N of a colour) pays the same bill off fewer of those sources --
+        // neither trigger above fires. Merfolk Turns gate claude-queue-20261119i s30000557 T6 {Banneret, Prophets}: the
+        // prepay tapped City's {C} plus five lands for a bill of six, and Emperor Mihail II's second {1} (no part of
+        // the line's hold) found nothing untapped; Island + Rogue's Passage into City make six {U} alone. A give-back
+        // under this trigger is a STRICT SUBSET of the solve's own taps, as under mana_over: a dominance, no swap.
+        bool scaled_over = false;
+        if (!src_over && !mana_over && newly_n >= 4 && PayRefineScaledOn())
+        {
+            for (int i = 0; i < lim && !scaled_over; ++i)
+            {
+                if (!(newly & (1ull << i))) { continue; }
+                const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+                scaled_over = ScaledManaCreatureCount(state, &p) >= d->params.mana_per_creature_feeder_generic + 2;
+            }
+        }
+        if (src_over || mana_over || scaled_over)
         {
             // Flexibility = how many distinct colours the source can add. A source we cannot price
             // sorts last (released only if nothing better works).
@@ -70577,7 +70596,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                                     /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
                                  && PrepayColoursFit(p2, combined, nullptr, nullptr);
                 bool subset_ok = true;
-                if (o2 && mana_over)
+                if (o2 && (mana_over || scaled_over))
                 {
                     // Every source this re-solve taps was tapped by the payment it replaces (best_bf), and at
                     // least the candidate is given back. Anything else is a swap, which this trigger never makes.
