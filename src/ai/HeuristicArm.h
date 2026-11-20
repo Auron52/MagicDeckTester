@@ -1036,6 +1036,8 @@ enum Slot : int
     BP_DROP_REARM,            // MTG_BP_DROP_REARM  a breakpoint continuation that PLAYED a land while a static extra drop (Exploration) is still open, with another land in hand, re-arms site 10 for one more pass of the deferred loop (rollout) and of the executor's no-commit end-of-main re-solve: a continuation carries ONE land, so the second drop after a mid-turn tutor was unfindable at any budget (the USER's Maze's End reference s3 T4: Guild Summit, Sylvan Scrying -> Maze's End, Maze's End, then The Black Gate). A completeness fix; deck-gated (deck_has_static_land_drops). DEFAULT ON; =0 -> as before (the A/B hatch)
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
+    UO_BUDGET_PRICE,          // MTG_UO_BUDGET_PRICE  the unlock-order search's walks (MTG_PO_UNLOCK_ORDER: the enumeration site's tree beyond the given order's own path, the apply site's given walk and search) are CHARGED to the decision budget (unitsite unlock_order): one unit per MTG_UO_BUDGET_PRICE_W cast steps, the equip route's shape (inert at an unlimited budget: DecisionBudget() is nullptr). The USER's option (a), 2026-11-20 -- PROPOSED, DEFAULT OFF until the USER rules. docs/design/jumbo-apply-drop-order-2026-11-18.md
+    UO_BUDGET_CUT,            // MTG_UO_BUDGET_CUT  with UO_BUDGET_PRICE on, the ENUMERATION site's search also STOPS (no other order admitted) once the decision budget is Exhausted() or Overrun() -- the equip route's per-link cut test, read at each charge. The apply site is charged, never cut. DEFAULT ON (inert while the price is off); =0 -> charge only (the reflection fans' shape)
     COUNT
 };
 
@@ -2016,6 +2018,8 @@ inline const char* Name(int slot)
         "MTG_BP_DROP_REARM",
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
+        "MTG_UO_BUDGET_PRICE",
+        "MTG_UO_BUDGET_CUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -1056,3 +1056,136 @@ TEST_CASE("Jumbo Cactuar enumerates Surrak-hasted Satyrs funding Tooth and Nail 
     CHECK(u.count(54) == 1);
     CHECK(u.count(30) == 0);
 }
+
+// MTG_UO_BUDGET_PRICE (the USER's option (a), 2026-11-20; DEFAULT OFF): the unlock-order search's walks are charged to
+// the decision budget. INERT at an unlimited root (nothing charged, same order); at a finite root the APPLY site is
+// charged and never cut, so it still realises the paying order even when the budget is spent.
+TEST_CASE("Jumbo Cactuar unlock-order price: the apply site is inert unbudgeted, charged and never cut budgeted")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Lightning Greaves", 37);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+    Action tutor = JumboCast(s, "Green Sun's Zenith", 90, 0, "Arbor Elf");
+    tutor.chosen_x = 1;
+    tutor.cost.generic += 1;
+    tutor.hand_index = 0;
+    Action aura = JumboCast(s, "Wild Growth", 58, 10);
+    aura.hand_index = 1;
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = "Lightning Greaves";
+    equip.def = CardDatabase::Instance().Lookup("Lightning Greaves");
+    REQUIRE(equip.def != nullptr);
+    equip.sac_source_id = 37;
+    equip.sac_victim_id = 1;
+    const std::vector<Action> acts{tutor, aura, equip};
+    auto run = [&](int price, SearchBudget* b)
+    {
+        JumboArm arm; arm.Set(heurarm::PO_UNLOCK_ORDER, 1).Set(heurarm::UO_BUDGET_PRICE, price);
+        std::vector<int> order{1, 0};
+        const bool moved = TurnSolver::UnlockPayableOrderUnderRootForTest(s, acts, order, b);
+        CHECK(moved);
+        return order;
+    };
+    const std::vector<int> want{0, 1};
+    {   // unlimited root (no budget object, and an unlimited one): nothing charged, the same order
+        SearchBudget unl(0);
+        CHECK(run(1, nullptr) == want);
+        CHECK(run(1, &unl) == want);
+        CHECK(unl.Used() == 0);
+    }
+    {   // finite root, price off: nothing charged
+        SearchBudget b(1000000);
+        CHECK(run(0, &b) == want);
+        CHECK(b.Used() == 0);
+    }
+    {   // finite root, price on: charged
+        SearchBudget b(1000000);
+        CHECK(run(1, &b) == want);
+        CHECK(b.Used() > 0);
+    }
+    {   // finite root already spent: the apply is still not cut
+        SearchBudget b(1);
+        b.Consume(1);
+        CHECK(run(1, &b) == want);
+        CHECK(b.Used() > 1);
+    }
+}
+
+// The ENUMERATION site under the price: with the budget spent, the search beyond the given order is CUT (the
+// Satyr-#54 unlock line, which only another order pays, leaves the menu); with no budget, or the price off, it stays.
+TEST_CASE("Jumbo Cactuar unlock-order price: the enumeration site is cut only by a spent finite budget")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 5;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 18);
+    PutOnBoard(s, "Wild Growth", 59);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Forest", 14);
+    PutOnBoard(s, "Overgrowth", 42);
+    s.battlefield.back().aura_attached_to = 18;
+    PutOnBoard(s, "Overgrowth", 41);
+    s.battlefield.back().aura_attached_to = 14;
+    PutOnBoard(s, "Chariot of Victory", 8);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 18;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(CopyOf("Tooth and Nail", 70));
+    s.players[0].hand.push_back(CopyOf("Surrak and Goreclaw", 30));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 54));
+    s.players[0].hand.push_back(CopyOf("Voyaging Satyr", 56));
+    s.players[0].library.push_back(CopyOf("Jumbo Cactuar", 33));
+    s.players[0].library.push_back(CopyOf("Forest", 15));
+    const std::vector<std::string> line = {"Tooth and Nail", "Surrak and Goreclaw", "Voyaging Satyr", "Voyaging Satyr"};
+    auto hosts = [&](int price, SearchBudget* b)
+    {
+        TurnSolver::ClearPerGameCaches();
+        JumboArm arm;
+        arm.Set(heurarm::PO_UNLOCK_ORDER, 1).Set(heurarm::SEQ_TRAILING_EQUIP, 0).Set(heurarm::UO_BUDGET_PRICE, price);
+        const auto plans = TurnSolver::EnumerateMainPlansUnderRootForTest(s, true, b);
+        TurnSolver::ClearPerGameCaches();
+        std::set<int> h;
+        for (const auto& p : plans)
+        {
+            if (!HasPlanWith({p}, line, true)) { continue; }
+            for (const Action& a : p.actions) { if (a.kind == Action::Kind::Equip) { h.insert(a.sac_victim_id); } }
+        }
+        return h;
+    };
+    SearchBudget unl(0);
+    CHECK(hosts(1, nullptr).count(54) == 1);   // unlimited root: inert
+    CHECK(hosts(1, &unl).count(54) == 1);
+    CHECK(unl.Used() == 0);
+    {
+        SearchBudget spent(1);
+        spent.Consume(1);
+        CHECK(hosts(0, &spent).count(54) == 1);   // price off: the spent budget changes nothing here
+    }
+    {
+        SearchBudget spent(1);
+        spent.Consume(1);
+        CHECK(hosts(1, &spent).count(54) == 0);   // price on: cut
+    }
+    {
+        SearchBudget b0(100000000), b1(100000000);
+        CHECK(hosts(0, &b0).count(54) == 1);
+        CHECK(hosts(1, &b1).count(54) == 1);      // price on, budget left: found, and charged on top
+        CHECK(b1.Used() > b0.Used());
+    }
+}
