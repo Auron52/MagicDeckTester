@@ -10983,7 +10983,8 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // that looser joint passed ~227k strands per 400 games that no repair could keep, each running the whole
     // hold-out and table search (57% of the rung's time). Exact: the repairs found, and so play, are unchanged.
     // Y = produces_amount: the engine models no mana doubler. NOT on a board with an untapped generic-fed converter
-    // (ramp_filter: Ferrous Lake, a Signet; any_color_filter: Capital City, Arcum's Astrolabe): the rock's {C} feeds
+    // (ramp_filter: Ferrous Lake, a Signet; any_color_filter: Capital City, Arcum's Astrolabe; Three Tree City's {2}
+    // feeder, mana_per_creature_feeder_generic -- Merfolk Turns, 40 of 40 refusals before it): the rock's {C} feeds
     // its {1} and comes out coloured, so it can meet a coloured pip of the rest (Niv-Mizzet Combo; a first cut without
     // this guard lost 261 of 68,607 repairs on the probe). A hybrid-fed filter land (is_filter) takes a coloured pip.
     // NOR with a sacrifice-for-mana source on the board (Generator Servant's {C}{C}, a sac outlet's fodder, an
@@ -11002,23 +11003,56 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (pd == nullptr) { continue; }
             if (pd->params.sac_for_mana_amount > 0 || pd->params.sac_outlet_add_mana_amount > 0) { return true; }
-            if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter)) { return true; }
+            if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter
+                              || pd->params.mana_per_creature_feeder_generic > 0)) { return true; }
         }
         return false;
     };
-    if (rock.def != nullptr && !rock.def->params.ramp_filter && !rock.def->params.produces.empty()
-        && std::all_of(rock.def->params.produces.begin(), rock.def->params.produces.end(),
-                       [](Color c) { return c == Color::Colorless; })
-        && !generic_fed_converter_up())
+    // A RAMP-FILTER rock (Izzet Signet: "{1}, {T}: Add {U}{R}") is the same question with a feed: fed once by the
+    // board's {1}, it meets at most one rest pip of each colour it makes (or a generic, when the rest has no pip of
+    // that colour). So the board pays this bill + that {1} + the rest net of those -- one generic standing for one or
+    // two pips, which also covers a repair that never activates it. (Niv-Mizzet Combo: Signet {2} off the only Sol
+    // Ring, {U} left with nothing to feed it -- the looser joint let the Signet's own +1 pass ~100k such strands per
+    // 400 games.) Not when nothing of the rest is removable, and never with a mana untapper in the deck (a rock untapped
+    // mid-turn yields twice).
+    const bool rock_c = rock.def != nullptr && !rock.def->params.ramp_filter && !rock.def->params.any_color_filter
+                     && !rock.def->params.produces.empty()
+                     && std::all_of(rock.def->params.produces.begin(), rock.def->params.produces.end(),
+                                    [](Color c) { return c == Color::Colorless; });
+    const bool rock_rf = rock.def != nullptr && rock.def->params.ramp_filter && !rock.def->params.produces.empty();
+    if ((rock_c || rock_rf) && !state.deck_has_mana_untapper && !generic_fed_converter_up())
     {
         ManaCost rest_t = rest;
-        int y = std::max(1, rock.def->params.produces_amount);
-        const int c = std::min(y, rest_t.colorless);
-        rest_t.colorless -= c;
-        y -= c;
-        rest_t.generic -= std::min(y, rest_t.generic);
-        joint_t = AddManaCosts(cost_in, rest_t);
-        tight = true;
+        if (rock_c)
+        {
+            int y = std::max(1, rock.def->params.produces_amount);
+            const int c = std::min(y, rest_t.colorless);
+            rest_t.colorless -= c;
+            y -= c;
+            rest_t.generic -= std::min(y, rest_t.generic);
+            tight = true;
+        }
+        else
+        {
+            int removed = 0;
+            for (Color c : rock.def->params.produces)
+            {
+                int* pip = nullptr;
+                switch (c)
+                {
+                    case Color::White:     pip = &rest_t.white; break;
+                    case Color::Blue:      pip = &rest_t.blue; break;
+                    case Color::Black:     pip = &rest_t.black; break;
+                    case Color::Red:       pip = &rest_t.red; break;
+                    case Color::Green:     pip = &rest_t.green; break;
+                    case Color::Colorless: pip = &rest_t.colorless; break;
+                }
+                if (pip != nullptr && *pip > 0) { --*pip; ++removed; }
+                else if (rest_t.generic > 0) { --rest_t.generic; ++removed; }
+            }
+            if (removed > 0) { rest_t.generic += 1; tight = true; }   // the feed
+        }
+        if (tight) { joint_t = AddManaCosts(cost_in, rest_t); }
     }
     // DIAGNOSTIC (print-only, default off): MTG_LKR_TIGHT_CHECK=1 runs the loose path after a tight refusal and prints
     // any repair the tight test would have refused (expected none).
