@@ -38,7 +38,7 @@ origin/phase-1-2-deck-analyzer 8fbbc5023 (batch 1). This handoff commit sits on 
   NOTE: an earlier d8 b0 run WITHOUT `--game-index 14` (`p7g/d8r/gi14.out`, T7) is NOT the suite game. Ignore it.
 
 ## RUNNING (started by P7-8)
-- **d8 b0 recovery of gi14**: PID 2959538 (`mtg.p7t ... --seed 3017 --game-index 14 --depth 8 --budget-ms 0
+- **(FINISHED: T7, see Remaining 0)** d8 b0 recovery of gi14: PID 2959538 (`mtg.p7t ... --seed 3017 --game-index 14 --depth 8 --budget-ms 0
   --ignore-play-profile --threads 1`), output `p7g/d8r/gi14b.out`. It is done when that file has a line `rc=`.
   Read its `avg (turns)`. The bar is <= 6.
 - **VPC subset**: heavy_run PID 2957079 (`MTG_BIN=p7g/mtg.p7t python3 test/viewer_protocol_check.py --strict --only
@@ -47,6 +47,13 @@ origin/phase-1-2-deck-analyzer 8fbbc5023 (batch 1). This handoff commit sits on 
   after this handoff; P7-9 should arm its own waiter on the two `rc=` lines.
 
 ## Remaining for batch 2, in order
+0. **RESULT LANDED (P7-8, after this handoff was first written): gi14 at d8 b0 = T7 (3,333,732 units, folded=71124,
+   `p7g/d8r/gi14b.out`). IT DOES NOT RECOVER, so the bar is NOT met.** Next probe (single-thread, no lock): the same
+   d8 b0 run with `MTG_MAZE_CASTDOM_WINDOWS=0` on mtg.p7t. If that gives T6, P7c (a)'s window rule makes the T6 line
+   unfindable at unlimited budget, i.e. LOSSY. Root-cause it in MazesEndProvider::CastDominanceKeep (which off-main
+   point the window rule folds away on this game; the T6 line at d5 b20 with win0 shows the line exists), fix it,
+   and re-run the tiers. If it also gives T7, the T6 at d5 b20 is budget luck and d8 b0 cannot reach 6 either way;
+   report both numbers to the coordinator.
 1. **gi14 d8 b0 verdict.** If T6: the slowdown is budget churn of P7c (a) and the bar is met. If T7: P7c (a)'s
    window rule loses a line, so root-cause it (MazesEndProvider::CastDominanceKeep window conditions) before
    accepting. The fix, or the question, goes to the coordinator.
