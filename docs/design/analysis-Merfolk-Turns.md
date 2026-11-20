@@ -910,3 +910,46 @@ handles that stream error and falls back to stateless replay, while the
 client offers a retry if the request fails. A focused seed 12 check reaches
 the City type prompt and the Prophets champion prompt; the full viewer
 client check passes.
+
+## Mulligan profile: ADOPTED (2026-11-20)
+
+USER 2026-11-19: *"For merfolk turns we should also ship the keep table."*
+
+* Files: `Merfolk Turns.keepmodel.exhaustive.{profile,raw}.json.gz`, byte-identical to commit `c474d068b` (branch
+  `adopt/sunday-profiles`); generated on frozen commit `92993e95b`, PGO+LTO, passed `mullgen.sh`'s A/B there
+  (`docs/design/handoff-sunday-profiles-2026-11-16.md` on that commit). `Merfolk Turns.profile.json` gains the
+  screened generation setting (`value_play`: `expected_buckets` 17, `mull_gen_depth` 1, `mull_gen_budget_ms` 1).
+  No value sidecar (no candidate cleared the adoption rule there).
+* **Held-out adoption A/B on the current engine** (src `e48797e50`, PGO+LTO, same pooled batches and seeds as Sea
+  Creatures' 2026-11-20 A/B; d5 b20; loss = 9):
+
+  | format | n | delta (present - absent) | faster / slower | unwon | units |
+  |---|---|---|---|---|---|
+  | Standard | 8,000 | **-0.0843 +/- 0.0082** (t -10.2) | 1,469 / 940 | 37 -> 22 | 0.304x |
+  | 2HG | 7,200 | **-0.0129 +/- 0.0099** (t -1.3) | 1,161 / 1,183 | 75 -> 54 | 0.290x |
+  | Standard, confounded (`MTG_CONFOUND_BOTTOM=1`) | 8,000 | **-0.1146 +/- 0.0085** (t -13.5) | 1,639 / 899 | 47 -> 24 | 0.311x |
+  | 2HG, confounded | 7,200 | **-0.0576 +/- 0.0103** (t -5.6) | 1,323 / 1,032 | 89 -> 68 | 0.305x |
+
+  With the table d5 b20 costs ~1.15 s/game (2HG ~3.33 s) thread-wall vs 3.75 / 11.02 s absent. Per-game traces:
+  mulligan-count changes net -769 turns (Standard) / -267 (2HG); same-count, different-bottom games are all slower
+  (Standard 91 games +95, 2HG 150 +173, 0 faster) -- the absent arm's clairvoyant lookahead bottoming. The 2HG
+  unconfounded result is a tie for that reason; the table is not tuned for 2HG (USER: *"it is true that the table is
+  not optimized for 2HG, so this is perhaps not that surprising."*).
+* **Rows**: overnight ENTRY -> FULL and smoke to the Hinata floor first, accepted with the table absent (`5325b8559`):
+  overnight d3 125 -> 325 b10, d5 4x300 -> 4x1425 b20; smoke d3 10 -> 50, d5 30 -> 100. No 2HG overnight row
+  (merfolkturns2hg stays the smoke d3 canary).
+* **GT accepted with the table live**, all three tiers (same pooled run as Sea Creatures and Boars). Per-game move
+  vs the table-absent GT (loss = 9):
+
+  | tier | d0 | d3 | d5 | 2HG d3 |
+  |---|---|---|---|---|
+  | smoke | -0.171 (n 1,000) | +0.020 (50) | -0.010 (100) | -0.300 (10) |
+  | regression | -0.108 (1,000) | -0.160 (50) | -0.253 (150 s2002) | -- |
+  | overnight | -0.152 (8,000) | -0.139 (325) | -0.095 (5,700) | -- |
+
+  `keep_adoption_attribution.py`, every tier: both replays reproduce their baselines; every changed game is a
+  different mulligan count, a different bottom, or bottom order only, except 3 same-hand same-bottom games
+  (`merfolkturns_overnight_d5_s7007` gi1174 and gi1295, `merfolkturns_regression_d3_s2002` gi29; win turn unchanged,
+  digest moved). Replayed singly with the table keeping and `MTG_EXHAUSTIVE_BOTTOM=0`, all three reproduce the
+  table-off digest exactly: the lookahead bottomer's pre-turn-1 rollout residue (the Bruna 2026-10-28 / Boars
+  gi65 case), not the table reaching into play.
