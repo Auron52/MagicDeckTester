@@ -6653,8 +6653,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const int bp_ch = TurnSolver::BpChoiceAt(plan, bp_idx);
         if (bp_idx >= 0 && bp_ch >= 0 && !blindsearch::NoReplay())
         {
+            // Blood Sun step 6 lockstep: a continuation-wave variant (Plan::rv_cont_wave) scored its TARGETED
+            // occurrence from the wave-k list, so the executor indexes that same list there.
             const std::vector<TurnSolver::Plan> cands =
-                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+                (plan.rv_cont_wave > 0 && !plan.bp_all && bp_idx == plan.rv_cont_at)
+                    ? TurnSolver::EnumerateBreakpointPlansAtWave(state, is_pre_combat_main, plan.rv_cont_wave)
+                    : TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
             // CHAIN SLOT lockstep (TurnSolver's kBpChainChoice): the search scored a turn in which
             // this breakpoint took the j-th CHAIN continuation, so the executor must resolve the
             // sentinel the same way. Resolving it as a rank would overrun into the greedy fallback

@@ -2301,6 +2301,13 @@ public:
         //    board-payable one (Fungus gi 630182 / 630865: the fold kept the eating host and dropped the T4 line).
         bool sacfod_admit  = false;
         bool sacfod_credit = false;
+        // Blood Sun step 6 (Diabolic Revelation package waves, TurnSolver.cpp revwave): > 0 on a CONTINUATION-WAVE
+        // variant -- its breakpoint occurrence rv_cont_at (the wave slot's own occurrence: bp_at, or the first
+        // deviation of a compound variant's bp_pre) resolves its choice in the wave-k continuation list (waves 0..k
+        // admitted, wave k's tranche kept) instead of the ordinary wave-0 list; every other occurrence reads the
+        // ordinary list. The executor honours it too (AIEngine's breakpoint replay indexes the same list). 0 elsewhere.
+        std::int8_t rv_cont_wave = 0;
+        std::int8_t rv_cont_at   = 0;
         // MTG_BP_VARIANT_FIRST: scheduling-only tag (1 on a wave-0 variant). MoveOrderPlans breaks an
         // EXACT value tie in its favour, so a base plan's searched continuations are scored before the
         // base's own EMPTY-continued line. Never read by anything that decides; ordering only.
@@ -3290,6 +3297,9 @@ public:
     static bool IsBpDemotedChoice(int c)
     { return c >= kBpDemotedChoice && c < kBpDemotedChoice + kBpDemotedMax; }
     static std::vector<Plan> EnumerateBreakpointDemoted(const GameState& state, bool is_pre_combat);
+    // Blood Sun step 6: the WAVE-k continuation list (Plan::rv_cont_wave; waves 0..k admitted, wave k's tranche kept)
+    // -- the executor's twin of the rollout's rv_cont_wave resolution, so both index the one memoised derivation.
+    static std::vector<Plan> EnumerateBreakpointPlansAtWave(const GameState& state, bool is_pre_combat, int wave);
 
     // TEST SEAM (unit tests only; not read by play). Drives the deferred wave walker (BpWaveWalker in
     // TurnSolver.cpp) over `plans` exactly as a host does -- Next(), apply, Report() -- with every

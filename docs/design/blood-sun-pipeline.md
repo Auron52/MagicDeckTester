@@ -1636,10 +1636,57 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
 - **Deviation (human X):** X is a `main_phase` plan variant (one cast per legal X 0..max under HumanPlayActive, the
   Genesis Wave shape), not the `x_value` chooser; then `dragon` at resolution. DECISIONS.md row; audit maps
   `tutor_up_to_x` -> `dragon`.
-- **NOT done (handoff order):** (1) the Revelation wave phase in **SolveWithLookahead** (the executor's
-  no-verified-win fallback) and EnumerateMainPlansExhaustive -- there Revelation sees wave 0 only, a completeness gap
-  at those hosts until closed; breakpoint-continuation enumerations likewise see wave 0; (2) the case-3 last-wave
-  prune (§5.4, default OFF, U4).
+- **Part 2 -- every host reaches every package** (`git log --grep "Blood Sun step 6: (part 2)"`). Two shared helpers
+  (TurnSolver.cpp, before FSLineWin), no per-host copies:
+  * `RevWaveTranche(k, budget, more, enumerate)` -- one wave of the HOST'S OWN plan list through the host's own
+    enumeration call (its parity guards: FSLineWin's fresh axis + bp-root flag, SolveWithLookahead's root
+    CondemnSuppressGuard), tranche filter `revwave::PlanMaxWave == k`, priced `ChargeDecisionUnits(emitted)`.
+    Hosts: **FSLineWin** (part 1, now through the helper), **SolveWithLookahead** (the executor's no-verified-win
+    fallback and the per-turn leaf; tranches built lazily once and rescored per sub_depth pass, the group-wave shape,
+    scored by the group-wave scorer `score_gw` -- hoisted out of the group-wave block and shared; deferred bp ranks
+    of the tranche plans walked; generator-stop on `pass_best_win <= state.turn_number`), and
+    **EnumerateMainPlansExhaustive** (waves appended after the group tranches, budget-checked like them; a capped
+    `!tranches` regime keeps wave 0 and reports `truncated`; no score, so no generator-stop).
+  * `RevContWaves(...)` -- the **breakpoint continuations' waves** (a Revelation reached only after a breakpoint:
+    Grim Tutor finding it, a draw). The continuation list is derived and cached per state and admits wave 0;
+    `Plan::rv_cont_wave = k` + `Plan::rv_cont_at` make ONE occurrence read the wave-k list instead
+    (`BpEnumEntryForWave`: the same lookup with waves 0..k admitted to the derivation's enumeration and
+    `revwave::t_cont_wave` arming the tranche filter in `BpDeriveContinuationList`'s own frame; `BpEnumBuildKey` folds
+    both, so it is its own cache entry and the hit-charge replay is unchanged). The executor indexes the same list
+    (`TurnSolver::EnumerateBreakpointPlansAtWave`, AIEngine lockstep). The phase is the ordinary deferred walker over
+    the host's base plans (`bp_wave0` cleared: every slot from rank 0) in a new wave mode (`BpWaveWalker(...,
+    rv_wave)`: stamps rv_cont_wave/rv_cont_at on every hand-out; EMPTY arm and demoted wave off -- they are wave-0
+    lists; DEV_SEQ compound slots ON, which is how the breakpoint NESTED after the wave-k continuation -- the
+    Revelation's own resolution -- is branched with the wave-k choice held). Triggered only when one of the host's
+    own searched applies read a list with `BpEnumEntry::rv_more` (`revwave::ContPendScope`, per host, keyed on the
+    rollout nest), next wave only when a wave-k list held more. Priced one decision unit per hand-out; AnytimeStop;
+    generator-stop. Hosts: FSLineWin, SolveWithLookahead.
+  * Inertness: every new path is gated on a `tutor_up_to_x` card holding packages past its wave (`pending`,
+    `rv_more`); the key fold is skipped at wave 0; so other decks are byte-identical (smoke below).
+  * **Not covered (stated):** the m2 hosts (FSLineTail's main-2 loop, ApplySecondMainInSearch) still see wave 0 only.
+    Design §10.2: second main is not relevant for this deck (every spell is sorcery-speed setup; nothing is created in
+    combat), so a main-2 Revelation never beats the main-1 one here; the card is generic, so a deck that casts it in
+    main 2 would need the same `RevWaveTranche` call in those hosts. A wave-k continuation inside a wave-k'
+    continuation (two Revelations each after a breakpoint) is reached only through the compound slots' first
+    deviation (rv_cont_at is ONE occurrence).
+- **Still NOT built:** the case-3 last-wave prune (§5.4, default OFF, U4).
+- **Part 2 tests** (`test_bloodsun_revelation.cpp`, 3 new; the fixture: Revelation in hand, 7 mana, opponent at 3, the
+  only kills {Bolt} / {Bolt, Mountain} are wave-1 packages): SolveWithLookahead returns the wave-1 package and commits
+  a this-turn win; EnumerateMainPlansExhaustive's menu holds it (not truncated) while EnumerateMainPlans' wave 0 does
+  not; the wave-0 continuation list lacks it, the wave-1 continuation list (`EnumerateBreakpointPlansAtWave`, the
+  executor's lockstep reader) holds it and only wave-1 tranche plans.
+- **Measurements (part 2 tree):** `mtg-test` 3829 cases, all pass (3 new; plus `test_bloodsun_step5.cpp` repaired: its
+  Worldfire arming check built the deck from the shipped list, which lost Worldfire at 04b85bf21 -- the card is now
+  added from the card data). `test/scenarios.sh` 626/626. Smoke 235/235 PASS, **0 moved digests** vs
+  `impl6/smoke-step6-batch.log`; saved as `build/scratch/bloodsun/impl6b/smoke-step6b-batch.log`.
+- **Finding (pre-existing, not a wave defect; surfaced):** a search-level test of Grim Tutor -> Revelation (cast IN the
+  continuation) -> both Bolts (the Revelation's own resolution is a NESTED breakpoint) does not win this turn at an
+  unlimited budget EVEN WHEN the package is a wave-0 one (10 Swamps + 2 Mountains, opponent at 6: d1 FullSearchLine
+  returns win turn 5; with Revelation in hand from the start the same kill is found at turn 4). So the nested
+  continuation after a continuation-cast Revelation is not reached by the existing breakpoint machinery (DEV_SEQ /
+  nested slots); that is why the continuation host's test is at the list level. Owed: root-cause it (a nested
+  breakpoint inside a continuation, all waves alike) -- it bears on the deck's Grim Tutor / Dimir Machinations ->
+  Revelation lines.
 - **Rules review (2d):** X is chosen on casting (CR 601.2b; X = 0 legal, offered to a human); the printed "up to X" lets
   the player take any number from 0 to X (a package name no longer in the library is simply not taken); "then
   shuffle" is ONE shuffle after the whole search, and it happens even when nothing is taken. The cards go to hand (no ETB, no reveal).
