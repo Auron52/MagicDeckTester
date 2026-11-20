@@ -56489,6 +56489,28 @@ void AccomplishedAlchemistProvider::ArrangeCastOrder(const GameState& s, const s
 bool AccomplishedAlchemistProvider::ExactOrderWalk() const { return AaWeatherFlexActive(); }
 bool AccomplishedAlchemistProvider::LifeScaledManaInOrderWalk() const { return AaWeatherFlexActive(); }
 
+// THE UMBRA GOES ON THE ALCHEMIST (USER 2026-11-20). Crab Umbra's "{2}{U}: Untap enchanted creature" re-uses the
+// host's {T}: on Accomplished Alchemist at X >= 4 it is the deck's self-funding mana loop, on anything else it is
+// close to blank in a goldfish. The shared ranking's damage terms cannot see that, and its "fewer Auras on creature
+// mana sources" tie-break points away from the Alchemist; this term (AuraHostKey::combo, right after lethal) puts
+// the Umbra on an Alchemist whenever one is a legal host for the plan. Keyed on params: the Aura by
+// untap_enchanted_cost, the Alchemist by its role (mana_per_life_gained). It moved here from the engine's
+// AuraHostBoardKey (2026-11-10, same flag, same rank), where the late-bound host walk's fast path never read it --
+// which is why, on seed 12345681 T3, no searched plan ever put the Umbra on the Alchemist.
+static bool AaUmbraHostOn()
+{
+    static const bool env = EnvOn("MTG_AA_UMBRA_HOST", true);   // DEFAULT ON; =0 -> the generic ranking
+    return env;
+}
+bool AccomplishedAlchemistProvider::RanksCreatureAuraHosts() const { return AaUmbraHostOn(); }
+int AccomplishedAlchemistProvider::CreatureAuraHostRank(const GameState& /*s*/, const CardDefinition& aura,
+                                                        const CardDefinition& host) const
+{
+    if (!AaUmbraHostOn()) { return 0; }
+    return (aura.params.is_aura && aura.params.untap_enchanted_cost.has_value() && host.params.mana_per_life_gained)
+         ? 1 : 0;
+}
+
 // V2's BOARD ACTIVATIONS, after every cast (USER: "the abilities need to go at the end"), at their steps of the ONE
 // list (kAaV2List): LIFE (Brindle Boar's sacrifice, Staff of Domination's {2},{T}: gain 1), UNTAP THE ALCHEMIST
 // cheapest per iteration first (Crab Umbra {2}{U}, Galvanic's granted {2}{U}, Staff {3},{T} + {1}, Seedcradle Witch

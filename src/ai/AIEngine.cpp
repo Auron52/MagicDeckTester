@@ -6564,6 +6564,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;
+        // SITE 9 AFTER THE DEFERRED CONTINUATION, executor twin (MTG_SITE9_AFTER_DEFERRED; the rollout's is in
+        // ApplyPlanDirect's deferred loop): the activation snapshot before this continuation, taken only where the
+        // rollout takes it -- the first counted occurrence of a plan carrying a choice. A COMMITTED line never gets
+        // here for that occurrence (its recorded segment, which holds the rollout's site-9 continuation, is replayed
+        // by replay_segment), so this is the no-commit fallback's half.
+        const bool s9d_on = bp_depth == 0 && !HumanPlayActive() && plan.bp_choice >= 0 && bp_seen_exec == 0
+                         && !fd_plan_committed && Site9AfterDeferredOn();
+        std::vector<uint64_t> s9d_keys;
+        if (s9d_on) { s9d_keys = TurnSolver::SnapshotActivatableAbilities(state); }
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -6828,6 +6837,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             g_line_pay_frame->cont_acts.push_back(d);
             if (!extra.actions.empty()) { g_line_pay_frame->cont_spent = true; }
         }
+        // The continuation is applied once -- and again for each site-9 continuation that follows it (the
+        // MTG_SITE9_AFTER_DEFERRED chain at the end of this loop body), exactly as the rollout applies both through
+        // the same continuation appliers.
+        std::vector<uint64_t> s9_keys;
+        std::vector<uint64_t> s9_chain;
+        const bool s9_reopen = Site9ReopenEnabled();
+        const bool s9_cyc = s9_reopen && Site9CycleStopEnabled();
+        for (int s9d_pass = 0; ; ++s9d_pass)
+        {
         const ContPins rdb_pins = ContPinsOf(extra);
         std::optional<ContPinScope> rdb_scope;
         if (rdb_pins.Any()) { rdb_scope.emplace(&rdb_pins); }
@@ -6892,7 +6910,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // BREAKPOINT LEFTOVERS: the interrupted list's remaining casts join this continuation, ordered
         // together by the deck's order (or dropped when they would cost it a payment). Lockstep twin:
         // ApplyPlanDirect's impulse-exile branch, at the same point (after land + pre-casts).
-        if (!my_leftovers.empty() && my_lo_site != nullptr
+        if (s9d_pass == 0 && !my_leftovers.empty() && my_lo_site != nullptr
             && ResolveProvider(state).MergesBreakpointLeftovers(*my_lo_site))
         { my_lo_taken = MergeBreakpointLeftovers(state, extra.actions, extra.searched_order, my_leftovers); }
         std::vector<int> cont_order;
@@ -7078,6 +7096,51 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (rdb_acts_inline) { exec_trailing_activations(extra.actions); }
             else                 { exec_continuation_activations(extra.actions); }
         }
+        // SITE 9 AFTER THE DEFERRED CONTINUATION (MTG_SITE9_AFTER_DEFERRED), the rollout's chain test for test:
+        // the first follow-up needs the snapshot taken at entry, a non-empty continuation as occurrence 0 and nothing
+        // nested counted (bp_seen_exec == 1); each later one the re-open rules of the main site-9 twin. Opened only
+        // when the plan's choice targets it (the rollout records an untargeted one latent and applies nothing).
+        bool s9_go = false;
+        if (s9d_pass == 0)
+        {
+            s9_go = s9d_on && bp_seen_exec == 1 && !extra.actions.empty() && !OpponentHasLost(state)
+                 && TurnSolver::PostEntryActivationPending(state, s9d_keys);
+            if (s9_go) { s9_keys = s9d_keys; if (s9_cyc) { TurnSolver::Site9ChainRepeats(s9_chain, state); } }
+        }
+        else
+        {
+            s9_go = s9_reopen && !extra.actions.empty() && !OpponentHasLost(state)
+                 && !(s9_cyc && TurnSolver::Site9ChainRepeats(s9_chain, state))
+                 && TurnSolver::PostEntryActivationPending(state, s9_keys);
+        }
+        if (!s9_go || s9d_pass >= kSite9ReopenCeiling
+            || !(plan.bp_all || TurnSolver::BpChoiceAt(plan, bp_seen_exec) >= 0))
+        { break; }
+        s9_keys = TurnSolver::SnapshotActivatableAbilities(state);
+        {
+            const int s9_idx = bp_seen_exec++;
+            const int s9_ch  = TurnSolver::BpChoiceAt(plan, s9_idx);
+            TurnSolver::Site9Trace(s9d_pass == 0 ? "exd" : "exd+", state, plan, is_pre_combat_main);
+            const std::vector<TurnSolver::Plan> s9_cands = TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+            const bool s9_dem = TurnSolver::IsBpDemotedChoice(s9_ch);
+            const std::vector<TurnSolver::Plan> s9_demoted = s9_dem
+                ? TurnSolver::EnumerateBreakpointDemoted(state, is_pre_combat_main) : std::vector<TurnSolver::Plan>{};
+            const std::size_t s9_dj = s9_dem ? static_cast<std::size_t>(s9_ch - TurnSolver::kBpDemotedChoice) : 0;
+            const int s9_ci = (s9_ch >= TurnSolver::kBpChainChoice)
+                ? TurnSolver::BpChainCandIndex(state, s9_cands, s9_ch - TurnSolver::kBpChainChoice) : s9_ch;
+            if (!(s9_dem ? (s9_dj < s9_demoted.size()) : (s9_ci >= 0 && s9_ci < static_cast<int>(s9_cands.size()))))
+            { break; }
+            extra = s9_dem ? s9_demoted[s9_dj] : s9_cands[static_cast<std::size_t>(s9_ci)];
+            // Its land (bp_play_searched_land's twin, as the main site-9 twin plays it).
+            if (extra.land_decided && !extra.land_to_play.empty() && exec_cont_lands_held == 0
+                && !exec_cont_land_defer(rdb_land, extra))
+            { std::optional<ScriptedTopChoice> _cstc;
+              if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+              const ManaCost _lfd_c = LineCastCostTotal(extra.actions);
+              LandFloatDemandScope _lfd(&_lfd_c);
+              TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
+        }
+        }   // the continuation / site-9 chain loop
         // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as

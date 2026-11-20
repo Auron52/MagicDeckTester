@@ -2159,11 +2159,8 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         for (const TurnSolver::Plan& p : v) { o.push_back(GreedyPlanTextAa(p)); }
         return o;
     };
-    // The pre-2026-11-19 fold over EVERY host (MTG_AURA_UNTAP_HOST_SEARCH=0): with the lever on, these boards' hosts
-    // all have a tap use but the Galvanic Alchemist, so nothing is left to fold -- the partitioned fold has its own
-    // case ("Crab Umbra host search: ...").
-    const std::int8_t uh = heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH];
-    heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = 0;
+    // AaProv ranks the Umbra onto the Alchemist (CreatureAuraHostRank), so these boards also pin the late-bound
+    // walk's fast path to the provider's tier: it must bind what the full key would.
     long long dropped = 0;
     for (int board = 0; board < 4; ++board)
     {
@@ -2185,7 +2182,6 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         { Arm a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
         CHECK_MESSAGE(text(on) == text(off), "board ", board);
     }
-    heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = uh;
     CHECK(dropped > 0);
 }
 
@@ -4538,19 +4534,13 @@ TEST_CASE("Untap refund float: the key stops at the dearest thing the float coul
     CHECK_FALSE(TurnSolver::PostEntryActivationPending(h6, pre5));
 }
 
-// ---- AN AURA THAT UNTAPS ITS HOST (MTG_AURA_UNTAP_HOST_SEARCH; 2026-11-19, seed 12345681 T3) ----------------------
-// Crab Umbra's "{2}{U}: Untap enchanted creature" re-uses the HOST's {T}, so every own host with a tap use is its own
-// searched plan; the AURA CAST HOST RANKING (combat damage; "fewer Auras on mana sources") still decides among the
-// hosts without one. Before: one plan per class, and the ranking's tie-break kept the Umbra OFF the Alchemist.
+// ---- THE UMBRA GOES ON THE ALCHEMIST (USER 2026-11-20; AccomplishedAlchemistProvider::CreatureAuraHostRank) -------
+// "Just have a heuristic specific to the deck and we are done. Obviously in this deck Accomplished Alchemist is the
+// target." The deck's provider ranks an untap Aura on a life-scaled mana creature first (AuraHostKey::combo); every
+// consumer of the shared ranking reads it, including the late-bound host walk's fast path, which used to read only
+// the dork tie-break -- so before, no plan put the Umbra on the Alchemist (seed 12345681 T3).
 namespace
 {
-struct UntapHostArmAa
-{
-    std::int8_t prev;
-    explicit UntapHostArmAa(bool on) : prev(heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH])
-    { heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = on ? 1 : 0; }
-    ~UntapHostArmAa() { heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = prev; }
-};
 struct LateBindArmAa
 {
     std::int8_t prev;
@@ -4558,13 +4548,13 @@ struct LateBindArmAa
     { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = on ? 1 : 0; }
     ~LateBindArmAa() { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = prev; }
 };
-// The hosts of the plans that cast ONLY the Umbra (the class the ranking used to fold to one member).
-std::set<int> UmbraOnlyHostsAa(const std::vector<TurnSolver::Plan>& plans)
+// The hosts of the base plans that cast the Umbra and exactly `n` actions in all.
+std::set<int> UmbraHostsAa(const std::vector<TurnSolver::Plan>& plans, std::size_t n)
 {
     std::set<int> hosts;
     for (const TurnSolver::Plan& p : plans)
     {
-        if (p.bp_choice >= 0 || p.actions.size() != 1) { continue; }
+        if (p.bp_choice >= 0 || p.actions.size() != n) { continue; }
         const Action* a = CastOfAa(p, "Crab Umbra");
         if (a != nullptr) { hosts.insert(a->enchant_target); }
     }
@@ -4572,31 +4562,54 @@ std::set<int> UmbraOnlyHostsAa(const std::vector<TurnSolver::Plan>& plans)
 }
 }   // namespace
 
-TEST_CASE("Crab Umbra host search: every host with a tap use is its own plan; the rest stay one ranked class")
+TEST_CASE("Crab Umbra host: the deck's provider puts it on the Alchemist; the generic ranking does not")
 {
     GameState s = FreshAa();
-    s.m_provider = nullptr;                                  // GenericProvider: no deck rule involved
     PutAa(s, "Island");
-    const int alch = PutAa(s, "Accomplished Alchemist");     // a live mana creature (the loop host)
+    const int alch = PutAa(s, "Accomplished Alchemist");     // the loop host
     const int elf  = PutAa(s, "Arbor Elf");                  // a mana creature
-    const int galv = PutAa(s, "Galvanic Alchemist");         // no {T} use: ranked
-    const int boar = PutAa(s, "Brindle Boar");               // no {T} use, TAPPED: ranked below the Galvanic
-    MutAa(s, boar)->tapped = true;
+    PutAa(s, "Galvanic Alchemist");                          // a non-dork body: the generic ranking's pick
     s.players[0].life_gained_this_turn = 4;
     HandAa(s, "Crab Umbra");
-    std::vector<TurnSolver::Plan> on_lb, on_walk, off;
-    long long dropped = 0;
+    for (int lb = 0; lb < 2; ++lb)
     {
-        UntapHostArmAa u(true);
-        { LateBindArmAa lb(true); const long long d0 = AuraLateBindTestCount();
-          on_lb = TurnSolver::EnumerateMainPlans(s, true); dropped = AuraLateBindTestCount() - d0; }
-        { LateBindArmAa lb(false); on_walk = TurnSolver::EnumerateMainPlans(s, true); }
+        LateBindArmAa arm(lb == 1);
+        s.m_provider = &AaProv();
+        CHECK_MESSAGE(UmbraHostsAa(TurnSolver::EnumerateMainPlans(s, true), 1) == std::set<int>{ alch }, "late-bind ", lb);
+        s.m_provider = nullptr;                              // GenericProvider: the USER's 2026-10-06 ranking alone
+        const std::set<int> g = UmbraHostsAa(TurnSolver::EnumerateMainPlans(s, true), 1);
+        CHECK_MESSAGE(g.size() == 1, "late-bind ", lb);
+        CHECK_MESSAGE(g.count(alch) == 0, "late-bind ", lb);
+        CHECK_MESSAGE(g.count(elf) == 0, "late-bind ", lb);  // "fewer Auras on creature mana sources"
     }
-    { UntapHostArmAa u(false); off = TurnSolver::EnumerateMainPlans(s, true); }
-    const std::set<int> want = { alch, elf, galv };
-    CHECK(UmbraOnlyHostsAa(on_lb) == want);
-    CHECK(UmbraOnlyHostsAa(on_walk) == want);                 // the fold binds only the {T}-less hosts
-    CHECK(dropped > 0);                                       // ...and still folds them (galv + boar -> one)
-    CHECK(UmbraOnlyHostsAa(off).size() == 1);                 // =0: the pre-2026-11-19 single class
-    CHECK(UmbraOnlyHostsAa(off).count(alch) == 0);            // ...which kept the Umbra off the Alchemist
+}
+
+TEST_CASE("Crab Umbra host: an Alchemist cast earlier in the same plan takes it; otherwise the generic ranking")
+{
+    GameState s = FreshAa();
+    s.m_provider = &AaProv();
+    for (int k = 0; k < 5; ++k) { PutAa(s, "Forest"); }
+    PutAa(s, "Island");
+    PutAa(s, "Galvanic Alchemist");                          // the generic ranking's pick (not a mana creature)
+    HandAa(s, "Crab Umbra");
+    HandAa(s, "Accomplished Alchemist");
+    const int hand_alch = s.players[0].hand.back().m_number;
+    for (int lb = 0; lb < 2; ++lb)
+    {
+        LateBindArmAa arm(lb == 1);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        bool both = false;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            if (p.bp_choice >= 0 || p.actions.size() != 2 || CastOfAa(p, "Accomplished Alchemist") == nullptr) { continue; }
+            const Action* u = CastOfAa(p, "Crab Umbra");
+            if (u == nullptr) { continue; }
+            both = true;
+            CHECK_MESSAGE(u->enchant_target == hand_alch, "late-bind ", lb);
+        }
+        CHECK_MESSAGE(both, "late-bind ", lb);
+        const std::set<int> alone = UmbraHostsAa(plans, 1);  // no Alchemist in the plan: the generic ranking
+        CHECK_MESSAGE(alone.size() == 1, "late-bind ", lb);
+        CHECK_MESSAGE(alone.count(hand_alch) == 0, "late-bind ", lb);
+    }
 }

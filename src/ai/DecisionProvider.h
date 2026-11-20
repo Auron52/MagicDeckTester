@@ -1441,6 +1441,18 @@ public:
     virtual void DamageBackAuraHostCandidates(const GameState& /*s*/, const CardDefinition& /*aura*/,
                                               std::vector<int>& /*io*/) const {}
 
+    // CreatureAuraHostRank -- a DECK's ORDER over a creature Aura's hosts, read by the AURA CAST HOST RANKING
+    // (core/SpellEffects.h, AuraHostKey::combo: compared right after "lethal this turn", ahead of the damage
+    // terms). `aura` is attached to `host` on the ranked board; the board's sum over its own attached Auras is the
+    // term. Every consumer of the ranking reads it -- the search's plan dedup, the late-bound host walk
+    // (BindAuraLateHosts), Solve's host collapse and ResolveEnchantTarget's fallback -- so the executor and the
+    // rollout cannot disagree. ORDER only: nothing is refused, and human play / MTG_UNPRUNED (whose plan
+    // signature keys the host) still offer every host. Consulted only when RanksCreatureAuraHosts() (the cheap
+    // gate: no other deck walks the attachments). DEFAULT: 0 (the USER's 2026-10-06 ranking unchanged).
+    virtual bool RanksCreatureAuraHosts() const { return false; }
+    virtual int  CreatureAuraHostRank(const GameState& /*s*/, const CardDefinition& /*aura*/,
+                                      const CardDefinition& /*host*/) const { return 0; }
+
     // IndestructibleGrantTargetCandidates -- the target set of a "target artifact or creature gains indestructible"
     // spell (CardParams::trick_targets_artifact_or_creature, Loran's Escape) after the engine's identity and
     // no-effect folds: `io` holds battlefield m_numbers and same-plan hand card numbers, `inert_rep` the one
