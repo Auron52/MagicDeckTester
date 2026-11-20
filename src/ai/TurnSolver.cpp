@@ -1563,6 +1563,8 @@ enum Site
     kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
     kRfxFan,               // the damage-reflection fans (AppendSubdecisionAxes): one unit per probe (MTG_RFX_FAN_CHARGE)
     kPlanPrice,            // a plan list's build price: one unit per N materialised plans (DecisionProvider::PlanListPricePer)
+    kUnlockOrder,          // the unlock-order search's walks: one unit per MTG_UO_BUDGET_PRICE_W (default 16) cast steps
+                           // (MTG_UO_BUDGET_PRICE, default OFF; uoprice::Meter)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1570,7 +1572,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "plan_price"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "plan_price", "unlock_order"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -12848,6 +12850,153 @@ static int ApexPairGateCredit(const GameState* state, const Action& a)
     return 0;
 }
 
+// ---- THE UNLOCK-ORDER SEARCH'S PRICE (MTG_UO_BUDGET_PRICE, heurarm UO_BUDGET_PRICE; DEFAULT OFF -- PROPOSED
+// 2026-11-20, the USER's option (a); adopting it is the USER's call) ------------------------------------------------
+// WHY. The unlock-order search (MTG_PO_UNLOCK_ORDER, below) is a provider-side sub-search the decision budget never
+// saw: its walks charge nothing (lever on/off units x0.995), so its whole cost is CPU on top of the budget -- Jumbo
+// Cactuar x1.20 game CPU after the exact work (MTG_UO_DFS, MTG_UO_FOLD), ~80% of it at the enumeration site, where
+// only ~3.5% of searches find an order. This bills the walks to TurnSolver::DecisionBudget(), the equip route's shape
+// (equiproute::NodeUnits / TurnSolver::ChargeDecisionUnits): ONE unit per W cast steps (MTG_UO_BUDGET_PRICE_W),
+// a step being one cast paid and resolved by the walk (UnlockOrderDfsRec's step(), or one cast of an order-by-order
+// walk), charged on steps 0, W, 2W, ... of each search (ceil, no residual carried between searches, so a charge
+// never depends on what a batch worker ran before). W is priced by MEASUREMENT: the steps' own CPU against the deck's
+// CPU per budget unit (docs/design/jumbo-apply-drop-order-2026-11-18.md, "Pricing the walks").
+//
+// WHAT IS CHARGED. Only the work the lever adds. At the ENUMERATION site the given order's own walk is pre-lever
+// work (MTG_PO_UNLOCK_ORDER=0 walks it too), so under MTG_UO_FOLD its path through the tree (inversion floor 0) is
+// never charged and never cut: its verdict is always reached. Everything else -- the other orders, the apply site's
+// given walk and its nearest-order search -- is charged.
+//
+// THE CUT (MTG_UO_BUDGET_CUT, DEFAULT ON while the price is on). At the enumeration site, before each charge, the
+// equip route's per-link test `budget != nullptr && (Exhausted() || Overrun())` stops the search: no further order
+// is admitted, and the subset stands or falls on the given order and the ETB order, exactly as with the lever off.
+// The APPLY site is charged and never cut: it realises a plan the search already chose (the AA route's rule), and a
+// cut there would drop a cast of a line the search scored. Exhausted()/Overrun() count their binds (budgetbind), so
+// a plan list derived across a cut is never stored (cachecharge's read guard) -- a cut "no" is not a verdict.
+//
+// SOUND BY CONSTRUCTION AT LARGE BUDGET (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE
+// UNFINDABLE"): at an unlimited root DecisionBudget() is nullptr, so the meter holds no budget -- nothing is charged,
+// nothing is read, nothing is cut -- and the search is today's search; below that, more budget only moves the cut
+// later. (Deliberately no CacheChargeNoteNull() at a null budget, unlike the other charge sites: that note is read by
+// the cache's hit test against the GREEDY budget too, which can be live at an unlimited root, so it would let the
+// lever move unbudgeted play. The cost is only that an entry derived with no decision frame open replays none of
+// these units.) It never picks: a cut only withholds an order the search did not reach, it does not choose one.
+namespace uoprice
+{
+inline bool PriceOn()
+{
+    static const bool env = EnvOn("MTG_UO_BUDGET_PRICE");
+    return heurarm::Flag(heurarm::UO_BUDGET_PRICE, env);
+}
+inline bool CutOn()
+{
+    static const bool env = EnvOn("MTG_UO_BUDGET_CUT", true);
+    return heurarm::Flag(heurarm::UO_BUDGET_CUT, env);
+}
+// Steps per unit, PRICED BY MEASUREMENT (MTG_UO_PRICE_STATS=1, Jumbo Cactuar 400 games gi 719000-719399, lever on,
+// 2 threads, 2026-11-20): the searches took 5.19 s of wall over 2.77M chargeable + 0.34M exempt steps (1,668 ns a
+// step, setup included), i.e. ~4.62 s of lever work; the deck's lever-off arm ran 15,663 ns of game CPU per budget
+// unit, so that work is worth ~295k units. Ceil-per-search pricing charges 456k at W=8, 350k at W=12, 304k at W=16,
+// 259k at W=24 (the >= 1 unit a search floor dominates beyond that), so W = 16 bills the walks at their measured
+// cost. (Cross-check: the whole arm's CPU delta, on - off, 11.0 ms a game, is ~281k units.)
+inline constexpr int kDefaultW = 16;
+inline int StepsPerUnit()
+{
+    static const int v = std::max(1, EnvInt("MTG_UO_BUDGET_PRICE_W", kDefaultW));
+    return v;
+}
+// MTG_UO_PRICE_STATS=1 (diagnostic, never read by play): per site, searches / steps / exempt steps / units charged /
+// cuts / wall ns, and what ceil-per-search pricing would charge at several W -- the calibration of W. Printed at exit.
+inline bool StatsOn() { static const bool v = EnvOn("MTG_UO_PRICE_STATS"); return v; }
+enum Site : int { kEnum = 0, kApply = 1, kSites = 2 };
+inline constexpr int kWs[] = { 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 };
+inline constexpr int kNW = static_cast<int>(sizeof(kWs) / sizeof(kWs[0]));
+struct Stats
+{
+    std::atomic<long long> searches{0}, steps{0}, exempt{0}, units{0}, cuts{0}, ns{0};
+    std::atomic<long long> ceil_w[kNW] = {};
+};
+inline Stats g_stats[kSites];
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!StatsOn()) { return; }
+        static const char* kName[kSites] = { "enum", "apply" };
+        for (int s = 0; s < kSites; ++s)
+        {
+            const Stats& t = g_stats[s];
+            std::fprintf(stderr, "[uo-price] site=%s searches=%lld steps=%lld exempt=%lld units=%lld cuts=%lld ns=%lld",
+                         kName[s], t.searches.load(), t.steps.load(), t.exempt.load(), t.units.load(), t.cuts.load(),
+                         t.ns.load());
+            for (int k = 0; k < kNW; ++k) { std::fprintf(stderr, " ceil_w%d=%lld", kWs[k], t.ceil_w[k].load()); }
+            std::fprintf(stderr, "\n");
+        }
+    }
+};
+inline Dumper g_dumper;
+// One search's meter. `budget` nullptr (price off, an unlimited root, no decision frame): it only counts.
+struct Meter
+{
+    SearchBudget* budget = nullptr;
+    int           w      = 1;
+    bool          cut_ok = false;
+    bool          cut    = false;
+    long long     steps  = 0;    // charged (chargeable) steps
+    long long     exempt = 0;    // the given order's own steps (never charged)
+    long long     units  = 0;
+    int           site   = kEnum;
+    std::chrono::steady_clock::time_point t0{};
+    Meter(int site_, bool cut_allowed) : site(site_)
+    {
+        if (PriceOn())
+        {
+            budget = TurnSolver::DecisionBudget();
+            w      = StepsPerUnit();
+            cut_ok = cut_allowed && CutOn();
+        }
+        if (StatsOn()) { t0 = std::chrono::steady_clock::now(); }
+    }
+    ~Meter()
+    {
+        if (!StatsOn()) { return; }
+        Stats& t = g_stats[site];
+        t.searches.fetch_add(1, std::memory_order_relaxed);
+        t.steps.fetch_add(steps, std::memory_order_relaxed);
+        t.exempt.fetch_add(exempt, std::memory_order_relaxed);
+        t.units.fetch_add(units, std::memory_order_relaxed);
+        if (cut) { t.cuts.fetch_add(1, std::memory_order_relaxed); }
+        t.ns.fetch_add(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count(),
+                       std::memory_order_relaxed);
+        for (int k = 0; k < kNW; ++k) { t.ceil_w[k].fetch_add((steps + kWs[k] - 1) / kWs[k], std::memory_order_relaxed); }
+    }
+    Meter(const Meter&)            = delete;
+    Meter& operator=(const Meter&) = delete;
+    // One chargeable step, BEFORE it is walked. False = the search is cut for budget (the step is not walked).
+    bool Step()
+    {
+        if (budget != nullptr && steps % w == 0)
+        {
+            if (cut_ok && (budget->Exhausted() || budget->Overrun())) { cut = true; return false; }
+            ConsumeAtN(budget, unitsite::kUnlockOrder, 1);
+            ++units;
+        }
+        ++steps;
+        return true;
+    }
+    // `k` steps already walked (an order-by-order walk's tail, the apply's given walk): charged, never cut.
+    void Add(long long k)
+    {
+        for (long long i = 0; i < k; ++i)
+        {
+            if (budget != nullptr && steps % w == 0) { ConsumeAtN(budget, unitsite::kUnlockOrder, 1); ++units; }
+            ++steps;
+        }
+    }
+    void Exempt() { ++exempt; }
+};
+}   // namespace uoprice
+
 // MTG_UO_DFS (DEFAULT ON; =0 -> the order-by-order walk, as before) -- the unlock-order search's orders walked as
 // ONE TREE over class sequences (UnlockOrderSearch, MTG_PO_UNLOCK_ORDER). The search used to walk every candidate
 // order from the top: a fresh board copy, the walk's set-level setup, and every cast of the order re-paid, though
@@ -12879,6 +13028,7 @@ struct UnlockOrderDfs
     std::vector<int>        best;              // the paying order found (cand indices)
     std::vector<int>        trial;
     std::vector<char>       placed;            // per given position
+    uoprice::Meter*         meter = nullptr;   // MTG_UO_BUDGET_PRICE: charges (and may cut) each step off the given path
 };
 // The snapshot boards of UnlockOrderDfsRec: one per tree depth, warm per thread, nesting-safe (PayScratch's
 // pattern; std::deque so growing never moves a board an outer frame holds).
@@ -12973,6 +13123,14 @@ static bool UnlockOrderDfsRec(UnlockOrderDfs& d, GameState& cp, std::vector<Acti
         dirty = true;
         const int p = cpos[i];
         const int j = (*d.order)[static_cast<std::size_t>(p)];
+        // MTG_UO_BUDGET_PRICE: a step off the given order's own path (floor > 0, or any step when the given order is
+        // not a leaf here) is charged before it is walked, and the enumeration's search stops when the budget is
+        // spent (see uoprice). The given path (include_given, floor 0) is pre-lever work: never charged, never cut.
+        if (d.meter != nullptr)
+        {
+            if (d.include_given && clb[i] == 0) { d.meter->Exempt(); }
+            else if (!d.meter->Step()) { return true; }
+        }
         d.placed[static_cast<std::size_t>(p)] = 1;
         d.trial[static_cast<std::size_t>(depth)] = j;
         bool stop = false;
@@ -14096,7 +14254,7 @@ static bool UnlockOrderSameCast(const Action& x, const Action& y)
 // neighbourhood). A failing walk's prefix (in class space) prunes every order that shares it.
 static bool UnlockOrderSearchByOrder(const GameState& state, const std::vector<Action>& acts,
                                      const std::vector<int>& sel, std::vector<int>& order,
-                                     const std::vector<int>& charged)
+                                     const std::vector<int>& charged, uoprice::Meter* meter = nullptr)
 {
     const int n = static_cast<int>(order.size());
     if (n < 2) { return false; }
@@ -14177,8 +14335,12 @@ static bool UnlockOrderSearchByOrder(const GameState& state, const std::vector<A
         realise(p);
         for (int k = 0; k < n; ++k)
         { trial[static_cast<std::size_t>(k)] = order[static_cast<std::size_t>(posmap[static_cast<std::size_t>(k)])]; }
+        // MTG_UO_BUDGET_PRICE: each walk's first step is charged (and may be cut) before it, its tail after it.
+        if (meter != nullptr && !meter->Step()) { return false; }
         int fail = -1;
-        if (SeqWalkFixedOrder(state, acts, sel, trial, charged, &fail))
+        const bool paid = SeqWalkFixedOrder(state, acts, sel, trial, charged, &fail);
+        if (meter != nullptr) { meter->Add((fail >= 0 && fail < n ? fail + 1 : n) - 1); }
+        if (paid)
         {
             order = trial;
             return true;
@@ -14218,11 +14380,13 @@ static bool UnlockOrderDfsEligible(const std::vector<Action>& acts, const std::v
 // `include_given` (any-mode only, MTG_UO_FOLD): the given order is one of the tree's leaves, walked first.
 static bool UnlockOrderSearchTree(const GameState& state, const std::vector<Action>& acts,
                                   const std::vector<int>& sel, std::vector<int>& order,
-                                  const std::vector<int>& charged, bool nearest, bool include_given = false)
+                                  const std::vector<int>& charged, bool nearest, bool include_given = false,
+                                  uoprice::Meter* meter = nullptr)
 {
     const int n = static_cast<int>(order.size());
     UnlockOrderDfs d;
     d.order = &order;
+    d.meter = meter;
     d.nearest = nearest;
     d.include_given = include_given && !nearest;
     d.cls.resize(static_cast<std::size_t>(n));
@@ -14249,11 +14413,12 @@ static bool UnlockOrderSearchTree(const GameState& state, const std::vector<Acti
     return true;
 }
 static bool UnlockOrderSearch(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& sel,
-                              std::vector<int>& order, const std::vector<int>& charged, bool nearest)
+                              std::vector<int>& order, const std::vector<int>& charged, bool nearest,
+                              uoprice::Meter* meter = nullptr)
 {
     if (!UoDfsOn() || !UnlockOrderDfsEligible(acts, order))
-    { return UnlockOrderSearchByOrder(state, acts, sel, order, charged); }
-    if (!UoDfsVerifyOn()) { return UnlockOrderSearchTree(state, acts, sel, order, charged, nearest); }
+    { return UnlockOrderSearchByOrder(state, acts, sel, order, charged, meter); }
+    if (!UoDfsVerifyOn()) { return UnlockOrderSearchTree(state, acts, sel, order, charged, nearest, false, meter); }
     std::vector<int> o_old = order, o_new = order;
     const bool r_old = UnlockOrderSearchByOrder(state, acts, sel, o_old, charged);
     const bool r_new = UnlockOrderSearchTree(state, acts, sel, o_new, charged, nearest);
@@ -14400,7 +14565,9 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         auto fold = [&]() -> bool
         {
             std::vector<int> uo = order;
-            if (UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false, /*include_given=*/true))
+            uoprice::Meter meter(uoprice::kEnum, /*cut_allowed=*/true);   // MTG_UO_BUDGET_PRICE
+            if (UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false, /*include_given=*/true,
+                                      &meter))
             { return true; }
             return etb_ord != order && !UnlockOrderRealisesGiven(cands, order, etb_ord) && run_walk(etb_ord);
         };
@@ -14438,7 +14605,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         if (uo_dom)
         {
             std::vector<int> uo = order;
-            if (UnlockOrderSearch(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false)) { return true; }
+            uoprice::Meter meter(uoprice::kEnum, /*cut_allowed=*/true);   // MTG_UO_BUDGET_PRICE
+            if (UnlockOrderSearch(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false, &meter)) { return true; }
         }
     }
     // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
@@ -14626,8 +14794,14 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         && !EtbPutReducerOrderDomain(state, *use, order)
         && !BeastsLordReducerOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
-    if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
-    return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
+    // MTG_UO_BUDGET_PRICE: this site's walks are the lever's own work -- charged, never cut (see uoprice).
+    uoprice::Meter meter(uoprice::kApply, /*cut_allowed=*/false);
+    int fail = -1;
+    const bool given_pays = SeqWalkFixedOrder(state, *use, sel, order, none, &fail);
+    const int n = static_cast<int>(order.size());
+    meter.Add(fail >= 0 && fail < n ? fail + 1 : n);
+    if (given_pays) { return false; }   // the given order pays: kept
+    return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true, &meter);
 }
 
 // MTG_PO_DAMAGE_ORDER: see PoDamageOrderOn. The domain: hand casts only (no reveal surcharge), at least one cast whose
@@ -144269,6 +144443,7 @@ static long long MtgTurnCensusFlag(int f)   // nodekind's non-exclusive plan fla
     X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
     X(u_rfx_fan,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRfxFan]))               \
     X(u_plan_price,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPlanPrice]))            \
+    X(u_unlock_order,     MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kUnlockOrder]))          \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
@@ -145392,6 +145567,20 @@ std::vector<Action> TurnSolver::CollectActionsUnderRootForTest(const GameState& 
 {
     DecisionBudgetScope root(true, budget, state.turn_number);
     return CollectActions(state, is_pre_combat);
+}
+
+bool TurnSolver::UnlockPayableOrderUnderRootForTest(const GameState& state, const std::vector<Action>& acts,
+                                                    std::vector<int>& order, SearchBudget* budget)
+{
+    DecisionBudgetScope root(true, budget, state.turn_number);
+    return UnlockPayableOrder(state, acts, order);
+}
+
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansUnderRootForTest(const GameState& state, bool is_pre_combat,
+                                                                             SearchBudget* budget)
+{
+    DecisionBudgetScope root(true, budget, state.turn_number);
+    return EnumerateMainPlans(state, is_pre_combat);
 }
 
 // ---- OBSERVER ISOLATION (TurnSolver::ObserverIsolationScope; see TurnSolver.h) ------------------------------
