@@ -3259,7 +3259,7 @@
       "Enchant"
     ],
     "mana_cost": "{W}",
-    "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage, Guilty Conscience deals that much damage to that creature.",
+    "oracle_text": "Enchant creature\nWhenever enchanted creature deals damage, this Aura deals that much damage to that creature.",
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
@@ -8750,5 +8750,46 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Browbeat": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Flame Javelin": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{2/R}{2/R}{2/R}",
+    "oracle_text": "({2/R} can be paid with any two mana or with {R}. This card's mana value is 6.)\nFlame Javelin deals 4 damage to any target.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Keldon Champion": {
+    "cmc": 4.0,
+    "keywords": [
+      "Echo",
+      "Haste"
+    ],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Haste\nEcho {2}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)\nWhen this creature enters, it deals 3 damage to target player or planeswalker.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Creature — Human Barbarian"
+  },
+  "Keldon Marauders": {
+    "cmc": 2.0,
+    "keywords": [
+      "Vanishing"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Vanishing 2 (This creature enters with two time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)\nWhen this creature enters or leaves the battlefield, it deals 1 damage to target player or planeswalker.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Human Warrior"
   }
 }
