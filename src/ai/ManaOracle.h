@@ -329,8 +329,13 @@ namespace manaoracle
                        bool creature_ability, PayOption& out);
     // TESTS ONLY: this thread's last RefinePaymentImpl run -- its probes, whether its enumeration stopped short
     // (`capped`: the probe cap / ceiling, or a budget cut) and whether the decision's budget cut it (`budget_cut`).
-    struct RefineRunStats { std::size_t probes = 0; bool capped = false; bool budget_cut = false; long rbt_units = 0; };
-    RefineRunStats LastRefineRunForTest();
+    struct RefineRunStats { std::size_t probes = 0; bool capped = false; bool budget_cut = false; long rbt_units = 0; std::size_t nodes = 0; };
+    RefineRunStats LastRefineRunForTest(bool reset = false);
+    // TESTS ONLY: the refine's free probe allowance on this thread (0 = the shipped 4,096), so a small board can
+    // exercise the budget-charged cap; the Dfs node cap scales with it (64x).
+    void SetRefineFreeProbesForTest(std::size_t n);
+    // TESTS ONLY: ReachesByTapping (the refine's acceptance test); `cut` (optional) reports a budget cut.
+    bool ReachesByTappingForTest(const GameState& c, const GameState& e, bool* cut);
     // An option's taps, through the routes MinimalPayments verified them with (ApplyHumanPreTap /
     // OracleCreatureTap). False = a tap was refused (the state may be part-tapped: the caller restores).
     bool PerformPayTaps(GameState& state, const PayOption& o);

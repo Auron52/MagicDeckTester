@@ -4,7 +4,10 @@
 #include <doctest/doctest.h>
 
 #include "ai/HeuristicArm.h"
+#include "ai/ManaOracle.h"
 #include "ai/ManaPayment.h"
+#include "ai/SearchBudget.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
 #include "core/GameState.h"
@@ -249,6 +252,145 @@ TEST_CASE("payment: Remote Farm + Sol Ring pay {2}{W}{W} and give the Plains bac
                 CHECK(g.floating_mana.Total() == 0);
             }
             else { CHECK(TappedPr(g, plains)); CHECK(g.floating_mana.colorless == 1); }   // the defect, pinned
+        }
+    }
+}
+
+// THE BUDGET-CHARGED CAP (MTG_PAY_REFINE_BUDGET_CAP, Maze's End F5R-3/F5R-4). The refine's probe cap is a price: the
+// free allowance (4,096; lowered here through the test hook so a small board reaches it) is untouched, and past it
+// each probe charges the decision's budget. With no budget (an unlimited root) the refine runs to its answer; with an
+// exhausted budget it stops (budget_cut), and that answer -- a function of the budget, not of the boards -- is never
+// memoised. Without the lever the allowance is a wall.
+TEST_CASE("payment: the refine's probe cap is a price -- free allowance, then the budget; never memoised when cut (MTG_PAY_REFINE_BUDGET_CAP)")
+{
+    GameState s = BoardPr(5);
+    int num = 1;
+    PutPr(s, num, "Stomping Ground");
+    PutPr(s, num, "Birds of Paradise");
+    PutPr(s, num, "Blood Crypt");
+    PutPr(s, num, "Faeburrow Elder");
+    PutPr(s, num, "Breeding Pool");
+    ManaCost wubrg;
+    wubrg.white = wubrg.blue = wubrg.black = wubrg.red = wubrg.green = 1;
+    auto pay = [&](int cap_arm, std::size_t free_probes)
+    {
+        manaoracle::ClearRefineMemoPerGame();
+        manaoracle::SetRefineFreeProbesForTest(free_probes);
+        heurarm::t_arm[heurarm::PAY_REFINE_BUDGET_CAP] = static_cast<std::int8_t>(cap_arm);
+        manaoracle::LastRefineRunForTest(/*reset=*/true);
+        GameState g = s;
+        const bool ok = PayPr(g, wubrg, /*for_creature=*/true, 1);
+        heurarm::t_arm[heurarm::PAY_REFINE_BUDGET_CAP] = -1;
+        manaoracle::SetRefineFreeProbesForTest(0);
+        std::string r = ok ? "paid" : "failed";
+        for (const Permanent& p : g.battlefield) { r += p.tapped ? " T" : " U"; }
+        return r;
+    };
+    const std::string full = pay(0, 0);
+    const manaoracle::RefineRunStats st0 = manaoracle::LastRefineRunForTest();
+    CAPTURE(full);
+    CAPTURE(st0.probes);
+    REQUIRE(st0.probes > 3);    // the board must reach the lowered allowance below
+    CHECK_FALSE(st0.capped);
+    // Lever off: the lowered allowance is a wall.
+    pay(0, 2);
+    CHECK(manaoracle::LastRefineRunForTest().capped);
+    // Lever on, no decision budget (an unlimited root): the refine runs past the allowance to the full answer.
+    CHECK(pay(1, 2) == full);
+    {
+        const manaoracle::RefineRunStats st = manaoracle::LastRefineRunForTest();
+        CHECK_FALSE(st.capped);
+        CHECK_FALSE(st.budget_cut);
+        CHECK(st.probes == st0.probes);
+    }
+    // Lever on, an exhausted decision budget: cut at the allowance, and the cut answer is not memoised.
+    SearchBudget spent(10);
+    spent.Consume(10);
+    SearchBudget* const prev = TurnSolver::SwapDecisionBudgetForTest(&spent);
+    manaoracle::ClearRefineMemoPerGame();
+    manaoracle::SetRefineFreeProbesForTest(2);
+    heurarm::t_arm[heurarm::PAY_REFINE_BUDGET_CAP] = 1;
+    manaoracle::LastRefineRunForTest(true);
+    { GameState g = s; PayPr(g, wubrg, true, 1); }
+    const manaoracle::RefineRunStats cut = manaoracle::LastRefineRunForTest(true);
+    { GameState g = s; PayPr(g, wubrg, true, 1); }   // the same refine again: recomputed, not a memo hit
+    const manaoracle::RefineRunStats again = manaoracle::LastRefineRunForTest(true);
+    // A live budget with room: charged past the allowance, one unit per probe, and finishes.
+    SearchBudget room(1000000);
+    TurnSolver::SwapDecisionBudgetForTest(&room);
+    manaoracle::ClearRefineMemoPerGame();
+    std::string with_room;
+    { GameState g = s; const bool ok = PayPr(g, wubrg, true, 1); with_room = ok ? "paid" : "failed";
+      for (const Permanent& p : g.battlefield) { with_room += p.tapped ? " T" : " U"; } }
+    const manaoracle::RefineRunStats roomy = manaoracle::LastRefineRunForTest(true);
+    TurnSolver::SwapDecisionBudgetForTest(prev);
+    heurarm::t_arm[heurarm::PAY_REFINE_BUDGET_CAP] = -1;
+    manaoracle::SetRefineFreeProbesForTest(0);
+    CHECK(cut.budget_cut);
+    CHECK(cut.capped);
+    CHECK(cut.probes == 3);      // two free, the third asked the budget and stopped
+    CHECK(again.probes == 3);    // ran again (a memo hit runs no refine and leaves the record reset)
+    CHECK(again.budget_cut);
+    CHECK(with_room == full);
+    CHECK_FALSE(roomy.budget_cut);
+    CHECK(room.Used() == static_cast<long long>(st0.probes) - 2);
+}
+
+// THE PRICED, FOLDED ReachesByTapping (MTG_PAY_REFINE_RBT_PRICED). Five Plains given back for the five {W} the
+// engine's payment floated: the plain test refuses any release past four sources outright, at every budget; the
+// priced one reaches it with no budget and stops (cut) on an exhausted one. On a release of at most four sources
+// within the 256-combination guard both answer the same.
+TEST_CASE("payment: ReachesByTapping prices its release and combination caps instead of refusing (MTG_PAY_REFINE_RBT_PRICED)")
+{
+    auto board = [](int lands, const char* nm, bool tapped)
+    {
+        GameState g = BoardPr(5);
+        int num = 1;
+        for (int i = 0; i < lands; ++i) { PutPr(g, num, nm, tapped); }
+        return g;
+    };
+    auto reaches = [](const GameState& c, const GameState& e, int arm, bool* cut)
+    {
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_PRICED] = static_cast<std::int8_t>(arm);
+        const bool r = manaoracle::ReachesByTappingForTest(c, e, cut);
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_PRICED] = -1;
+        return r;
+    };
+    {
+        const GameState c = board(5, "Plains", false);
+        GameState e = board(5, "Plains", true);
+        e.floating_mana.white = 5;
+        bool cut = false;
+        CHECK_FALSE(reaches(c, e, 0, nullptr));   // the defect, pinned: five released is refused at any budget
+        CHECK(reaches(c, e, 1, &cut));
+        CHECK_FALSE(cut);
+        SearchBudget spent(10);
+        spent.Consume(10);
+        SearchBudget* const prev = TurnSolver::SwapDecisionBudgetForTest(&spent);
+        const bool r = reaches(c, e, 1, &cut);
+        TurnSolver::SwapDecisionBudgetForTest(prev);
+        CHECK_FALSE(r);
+        CHECK(cut);
+        e.floating_mana.white = 6;                 // one more than five Plains make: unreachable either way
+        CHECK_FALSE(reaches(c, e, 0, nullptr));
+        CHECK_FALSE(reaches(c, e, 1, nullptr));
+    }
+    for (const char* nm : { "Stomping Ground", "Breeding Pool" })
+    {
+        const GameState c = board(3, nm, false);
+        GameState e = board(3, nm, true);
+        for (int w = 0; w <= 3; ++w)
+        {
+            e.floating_mana = ManaPool{};
+            if (std::string(nm) == "Stomping Ground") { e.floating_mana.red = w; e.floating_mana.green = 3 - w; }
+            else { e.floating_mana.green = w; e.floating_mana.blue = 3 - w; }
+            CAPTURE(nm);
+            CAPTURE(w);
+            CHECK(reaches(c, e, 0, nullptr));
+            CHECK(reaches(c, e, 1, nullptr));
+            e.floating_mana.white = 1;              // a colour none of them makes
+            CHECK_FALSE(reaches(c, e, 0, nullptr));
+            CHECK_FALSE(reaches(c, e, 1, nullptr));
         }
     }
 }
