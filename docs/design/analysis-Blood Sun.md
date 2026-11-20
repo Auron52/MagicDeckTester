@@ -57,6 +57,11 @@ turns like these. Having an exploration out if often not enough since you need t
 earlier. You want to get to an extra turn with what you have remaining."* -> the recognizer's resource
 is the REMAINING land drops / mana / cards this turn; an Exploration in play does not satisfy the set
 by itself; extra Explorations (stacking) or Fastbond are often required picks.
+USER (verbatim): *"Once you can play 4 lands in a turn you can search for 4 Scorched Ruins (or 3 and
+one lotus), emrakul and Diabolic Revelation, play Emrakul and begin looping. It typically goes something
+like that after you have the extra land drops from the Time Warp extra turn."* -> canonical Emrakul-loop
+entry: >= 4 remaining drops + 11 mana -> Revelation X=6 {Ruins x4 | Ruins x3 + Lotus, Emrakul,
+Revelation} -> 15-16 mana -> Emrakul -> loop. Scenario test.
 
 
 ## Standing decisions (pass to every subagent)
