@@ -1,0 +1,12 @@
+alchemist            | guard: n=2535 net=-6 better=7 worse=1 units=1.006x | ship: n=2535 net=-6 better=7 worse=1 units=1.006x
+alchemist2hg         | guard: n=600 net=-1 better=1 worse=0 units=1.007x | ship: n=600 net=-1 better=1 worse=0 units=1.007x
+creature_giving      | guard: n=6065 net=+0 better=0 worse=0 units=1.000x | ship: n=6065 net=+1 better=1 worse=2 units=0.975x
+creature_giving2hg   | guard: n=600 net=+0 better=0 worse=0 units=1.000x | ship: n=600 net=+0 better=0 worse=0 units=0.978x
+mazesend             | guard: n=1286 net=+0 better=0 worse=0 units=1.000x | ship: n=1286 net=-1 better=1 worse=0 units=1.000x
+midrangeburn         | guard: n=6006 net=+0 better=0 worse=0 units=1.002x | ship: n=6006 net=+0 better=0 worse=0 units=1.002x
+midrangeburn2hg      | guard: n=680 net=+0 better=0 worse=0 units=1.001x | ship: n=680 net=+0 better=0 worse=0 units=1.001x
+
+ship-slower games: 3
+   alchemist_overnight_d5_s7007_o325 325 5 6 6
+   creature_giving_overnight_d5_s4004_o275 290 5 6 5
+   creature_giving_overnight_d5_s5005_o400 419 5 6 5

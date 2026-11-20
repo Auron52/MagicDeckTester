@@ -1,0 +1,17 @@
+Loaded 60 mainboard card(s)
+Loaded profile from decks/Maze's End/Maze's End.profile.json
+[play] depth=6 budget=0ms source=cli(--ignore-play-profile)
+[goldfish] workers=1 (hw_concurrency=32, affinity=32, requested=1)
+[inwin-cache] DISAGREE job=- turn=5 depth=2 cutoff=5 cached=9 fresh=5 nest=5 leaf=2 | stored: turn=5 depth=1 cutoff=5 nest=5 leaf=2 sup=0 twop=1 hexits=0
+[inwin-cache] DISAGREE job=- turn=4 depth=3 cutoff=5 cached=9 fresh=5 nest=4 leaf=2 | stored: turn=4 depth=2 cutoff=5 nest=4 leaf=2 sup=0 twop=1 hexits=0
+[inwin-cache] DISAGREE job=- turn=3 depth=4 cutoff=5 cached=9 fresh=5 nest=3 leaf=2 | stored: turn=3 depth=3 cutoff=5 nest=3 leaf=2 sup=0 twop=1 hexits=0
+[inwin-cache] DISAGREE job=- turn=2 depth=5 cutoff=5 cached=9 fresh=5 nest=2 leaf=2 | stored: turn=2 depth=4 cutoff=5 nest=2 leaf=2 sup=0 twop=1 hexits=0
+Seed          : 3076
+Games played  : 1
+avg (turns)   : 5.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+[inwin-cache] win_hits=0 nowin_hits=25 win_stores=4 nowin_stores=1159 widened=161 full_refusals=0 verified=25 DISAGREE=4 MATERIAL=4
+[game-line-cache] win_hits=0 nowin_hits=6018 stores=1654 full_refusals=0 leafless_reads=0
+[id-hint-game] lookups=283 cur_hits=0 prev_hits=0
+[enum-memo] hits=0 misses=1655 clears=0
+[solve-memo] hits=0 misses=0 clears=0
+wall=9.54 rss=138624KB

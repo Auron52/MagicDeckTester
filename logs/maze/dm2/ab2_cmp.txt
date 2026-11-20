@@ -1,0 +1,5 @@
+creature_giving      | guard: n=0 net=+0 better=0 worse=0 units=0.000x | ship: n=8550 net=-8 better=8 worse=0 units=0.979x
+creature_giving2hg   | guard: n=0 net=+0 better=0 worse=0 units=0.000x | ship: n=1200 net=-1 better=2 worse=1 units=0.976x
+
+ship-slower games: 1
+   creature_giving2hg_heldout2_d5_s8008_o200 212 5 6 None
