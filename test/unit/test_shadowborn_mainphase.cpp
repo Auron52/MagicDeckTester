@@ -740,3 +740,117 @@ TEST_CASE("SB order: Ritual-after-Stone is ONE arrangement per line -- the plan 
         if (swamps >= 6) { CHECK(sf_on > 0); } else { CHECK(sf_on == 0); }
     }
 }
+
+// ---- the USER's extreme case (2026-11-20; docs/design/shadowborn-extreme-case-2026-11-20.md) ----------------------
+// "In the worst case you might have just 1 swamp out and Dark ritual x 2, Shadowborn x 2, Thrumming stone and Culling
+// the Weak in your hand. In theory it should be possible to Dark Ritual x2 Shadowborn + Culling Thrumming Stone,
+// Shadowborn to go off. ... You cannot cast the Shadowborn first in this example."
+// Mana: Swamp B (1) -> Ritual (3) -> Ritual (5) -> Apostle (4) -> Culling eating it (7) -> Stone {5} (2) -> Apostle (1).
+namespace
+{
+std::string SbExtremeCasts(const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    std::string out;
+    for (int i : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        if (!out.empty()) { out += " > "; }
+        if (a.kind == Action::Kind::CastFromHand) { out += a.card_name.str(); }
+        else if (a.kind == Action::Kind::ActivatePermAbility) { out += "act:" + a.card_name.str() + "->" + a.tutor_target.str(); }
+        else { out += "kind" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str(); }
+        if (!a.trick_hand_target.empty()) { out += "[eats hand " + a.trick_hand_target + "]"; }
+        else if (a.soulfire_own_targets != 0) { out += "[eats #" + std::to_string(a.soulfire_own_targets) + "]"; }
+    }
+    return out;
+}
+GameState SbExtremeState(bool going_off, Phase ph)
+{
+    GameState s = BaseM(1);
+    s.phase = ph;
+    s.players[0].lands_played_this_turn = 0;
+    for (const char* nm : { kRitM, kRitM, kApM, kApM, kStoneM, kCullM })
+    { s.players[0].hand.push_back(CardM(nm, 60 + static_cast<int>(s.players[0].hand.size()))); }
+    std::vector<std::string> lib;
+    if (going_off) { for (int k = 0; k < 6; ++k) { lib.push_back(kApM); } }
+    for (const char* nm : { kOverM, "Reaper from the Abyss", kJetM, "Sire of Insanity" }) { lib.push_back(nm); }
+    for (int k = 0; k < 20; ++k) { lib.push_back(kSwM); }
+    LibM(s, lib);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("SB extreme case: the rank order + ArrangeCastOrder realise Ritual, Ritual, Apostle, Culling, Stone, Apostle")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1);
+    GameState s = BaseM(1);
+    std::vector<Action> acts = { SbCastA(s, kRitM, 60), SbCastA(s, kRitM, 61), SbCastA(s, kApM, 62),
+                                 SbCastA(s, kApM, 63), SbCastA(s, kStoneM, 64), SbCastA(s, kCullM, 65) };
+    acts[5].trick_hand_target = kApM;   // the SAC-ANY-CREATURE post-pass's hand victim
+    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kRitM, kApM, kCullM, kStoneM, kApM });
+    std::vector<int> user = { 0, 1, 2, 5, 4, 3 };
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, user));
+    std::vector<int> apostle_first = { 2, 0, 1, 5, 4, 3 };   // "You cannot cast the Shadowborn first"
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, apostle_first));
+}
+
+TEST_CASE("SB extreme case: the enumerator offers the six-cast line (census, both mains)")
+{
+    SearchedM sp;
+    for (const bool going_off : { true, false })
+    {
+        for (const bool pre : { true, false })
+        {
+            GameState s = SbExtremeState(going_off, pre ? Phase::PreCombatMain : Phase::PostCombatMain);
+            const std::string tag = std::string(going_off ? "going-off" : "control") + (pre ? " main1" : " main2");
+            int n = 0, full = 0;
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, pre))
+            {
+                ++n;
+                std::vector<int> order;
+                int rit = 0, ap = 0; bool cull = false, stone = false;
+                for (int i = 0; i < static_cast<int>(p.actions.size()); ++i)
+                {
+                    const Action& a = p.actions[static_cast<std::size_t>(i)];
+                    if (a.kind == Action::Kind::CastFromHand)
+                    {
+                        order.push_back(i);
+                        const std::string nm = a.card_name.str();
+                        rit += nm == kRitM; ap += nm == kApM; cull |= nm == kCullM; stone |= nm == kStoneM;
+                    }
+                }
+                std::stable_sort(order.begin(), order.end(),
+                                 [&](int x, int y) { return CastOrderLess(s, p.actions[x], p.actions[y]); });
+                ApplyDeckCastArrangement(s, p.actions, order);
+                const bool is_full = rit == 2 && ap == 2 && cull && stone;
+                full += is_full;
+                std::vector<int> all(p.actions.size());
+                for (int i = 0; i < static_cast<int>(all.size()); ++i) { all[static_cast<std::size_t>(i)] = i; }
+                const std::string line = tag + " plan v=" + std::to_string(p.value) + (is_full ? " FULL " : " ")
+                                       + "set: " + SbExtremeCasts(p.actions, all) + " | arranged: "
+                                       + SbExtremeCasts(p.actions, order) + " pays="
+                                       + (TurnSolver::OrderPaysSequentially(s, p.actions, order) ? "1" : "0");
+                MESSAGE(line);
+            }
+            const std::string sum = tag + ": " + std::to_string(n) + " plans, " + std::to_string(full) + " cast all six";
+            MESSAGE(sum);
+            if (!pre) { CHECK(full > 0); }
+        }
+    }
+}
+
+// The CURRENT rule with the Stone already out (USER 2026-11-20: "in the stone already out situation it may be easier
+// just to let the ritual go first if it is not a consumer." / "if there is a Dark Ritual and Apostle and 1 Mana
+// floating the ritual should go first even if stone is already out."): with no sacrifice claim the Ritual keeps its
+// rank-1 slot, at one mana and at two.
+TEST_CASE("SB order: Stone out, Ritual + Apostle with no sacrifice claim -> the Ritual goes first")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1);
+    for (int swamps : { 1, 2 })
+    {
+        GameState s = BaseM(swamps);
+        s.battlefield.push_back(PermM(kStoneM, 50));
+        const std::vector<Action> acts = { SbCastA(s, kApM, 60), SbCastA(s, kRitM, 61) };
+        const std::vector<std::string> want = { kRitM, kApM };
+        CHECK_MESSAGE(SbArranged(s, acts) == want, swamps, " Swamps");
+    }
+}

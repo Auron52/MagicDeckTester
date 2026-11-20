@@ -46,7 +46,15 @@ How the order arises (`ShadowbornProvider`, `src/ai/DecisionProviders.cpp`):
 
 The unit test `SB extreme case: the rank order + ArrangeCastOrder realise ...` (test_shadowborn_mainphase.cpp) pins
 the arrangement. It also checks that the USER's order pays under `OrderPaysSequentially` and that Apostle-first does not.
-`SB extreme case: the enumerator offers the six-cast line` prints the plan census for both mains and both libraries.
+`SB extreme case: the enumerator offers the six-cast line` prints the plan census for both mains and both libraries:
+
+| library | main 1 | main 2 | of which cast all six | arranged order of every six-cast plan |
+|---|---|---|---|---|
+| going off | 1 (the fold) | 148 | 24: 8 with no activation, 8 with `act -> Overlord`, 8 with `act -> Jetmir` | R R A C S A, pays |
+| control | 1 | 64 | 8, no activation | R R A C S A, pays |
+
+Each block of 8 is one cast set repeated across its variants. The going-off library also offers the activation
+variants because the enumerator credits the Apostles the ripple chain will reveal.
 
 Main 2 rather than main 1: the main-1 rule (`Main1PlanAdmitted`) folds every main-1 plan to its main-2 twin when no
 creature is attack-ready. This is a sound fold, and in this position the outcome is the same.
@@ -87,6 +95,12 @@ This matches the USER's rule (*"I would put the shadowborn cast right before the
 ... doesn't need a shadowborn."*) for Culling. The Intent case is the one place where an Apostle that a cast consumes
 does not sit right before that cast. Rank 4 places it after the Stone and ahead of the Demons and tutors that rank
 between them.
+
+## Unrelated pre-existing failure seen while testing
+
+`INT-9 free casts: a revealed Thrumming Stone is cast and the legend rule keeps the copy the cast names`
+(test_shadowborn_int9.cpp:184, `REQUIRE(casts.size() == 2)`) fails on origin/phase-1-2-deck-analyzer 8fbbc5023. It also
+fails when run alone, and this branch changes no src.
 
 ## No fix proposed
 
