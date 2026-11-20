@@ -1738,7 +1738,7 @@ TEST_CASE("mana oracle: Guild Summit's choice of WHICH Gates to tap is driven, s
         GameState g = s;
         TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
         REQUIRE(TappedGates(g) == 5);                   // (the premise: the ETB tapped two Gates)
-        REQUIRE(g.players[0].hand.size() == 2);         // ...and drew two
+        REQUIRE(g.players[0].cards_drawn_this_turn == 2);   // ...and drew two (the playout then plays a Forest)
     }
     // Every outcome the engine reaches is one the oracle reaches with nothing the engine chose on its own.
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan, /*scripted_only=*/true));
