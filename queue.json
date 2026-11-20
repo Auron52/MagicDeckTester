@@ -8,6 +8,13 @@
    "id": "8854e545ddab:stuffy-analysis",
    "joined": "2026-11-20T00:20:27Z",
    "note": "Stuffy viewer mana fix A+B + ledger (needs rebuild+unit+smoke)"
+  },
+  {
+   "branch": "wip/maze-shared",
+   "host": "550a08fdc1f3",
+   "id": "550a08fdc1f3:wip/maze-shared",
+   "joined": "2026-11-20T00:42:44Z",
+   "note": "Maze's End fix batch (F5/F5R/F7/Summit/SHUF/P5c/P7 + GT; needs rebuild+unit+smoke+reg)"
   }
  ]
 }
