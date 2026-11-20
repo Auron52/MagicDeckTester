@@ -1,0 +1,61 @@
+('rev', 'mazesend-d1b1') {'recovered': 1}
+('rev', 'mazesend-d3') {'recovered': 2}
+('rev', 'mazesend2hg-d5') {'recovered': 2}
+('revB', 'mazesend-d1b1') {'recovered': 4}
+('revB', 'mazesend-d1b3') {'recovered': 3, 'UNRESOLVED': 1}
+('revB', 'mazesend-d3') {'recovered': 2}
+('revB', 'mazesend-d5') {'recovered': 11, 'UNRESOLVED': 3}
+('revB', 'mazesend2hg-d5') {'recovered': 3}
+('revq2', 'mazesend-d1b1') {'recovered': 1}
+('revq2', 'mazesend-d1b3') {'recovered': 1}
+('revq2', 'mazesend-d3') {'recovered': 2}
+('revq2', 'mazesend-d5') {'recovered': 9}
+('revq2', 'mazesend2hg-d5') {'recovered': 3}
+('revq2B', 'mazesend-d1b1') {'UNRESOLVED': 1, 'recovered': 9, 'persists': 1}
+('revq2B', 'mazesend-d1b3') {'UNRESOLVED': 2, 'recovered': 7}
+('revq2B', 'mazesend-d3') {'recovered': 6, 'UNRESOLVED': 2, 'persists': 2}
+('revq2B', 'mazesend-d5') {'persists': 6, 'recovered': 21, 'UNRESOLVED': 5, 'pending': 1}
+('revq2B', 'mazesend2hg-d5') {'recovered': 11, 'persists': 2}
+PERSIST (lever d8 > ship d8):
+   ('revq2B', 'mazesend-d5') 95 6.0 7.0 7.0 6.0
+   ('revq2B', 'mazesend-d5') 303 5.0 6.0 6.0 5.0
+   ('revq2B', 'mazesend-d5') 412 4.0 6.0 5.0 4.0
+   ('revq2B', 'mazesend-d5') 427 5.0 6.0 6.0 5.0
+   ('revq2B', 'mazesend-d5') 600 7.0 9.0 8.0 7.0
+   ('revq2B', 'mazesend-d5') 654 7.0 9.0 9.0 7.0
+   ('revq2B', 'mazesend2hg-d5') 6 5.0 6.0 6.0 5.0
+   ('revq2B', 'mazesend2hg-d5') 296 6.0 7.0 7.0 6.0
+   ('revq2B', 'mazesend-d3') 222 7.0 8.0 8.0 7.0
+   ('revq2B', 'mazesend-d3') 293 5.0 6.0 9.0 6.0
+   ('revq2B', 'mazesend-d1b1') 58 5.0 6.0 6.0 5.0
+UNRESOLVED (50M ceiling; (played,avg) lever / ship):
+   ('revB', 'mazesend-d5') 639 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revB', 'mazesend-d5') 628 7.0 8.0 (0, 0.0) (0, 0.0)
+   ('revB', 'mazesend-d5') 780 8.0 9.0 (1, 7.0) (0, 0.0)
+   ('revB', 'mazesend-d1b3') 110 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d5') 639 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d5') 704 8.0 9.0 (0, 0.0) (1, 9.0)
+   ('revq2B', 'mazesend-d5') 814 7.0 8.0 (1, 8.0) (0, 0.0)
+   ('revq2B', 'mazesend-d5') 780 8.0 9.0 (1, 7.0) (0, 0.0)
+   ('revq2B', 'mazesend-d5') 628 7.0 8.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d3') 4 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d3') 162 5.0 6.0 (0, 0.0) (1, 9.0)
+   ('revq2B', 'mazesend-d1b3') 11 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d1b3') 110 6.0 7.0 (0, 0.0) (0, 0.0)
+   ('revq2B', 'mazesend-d1b1') 10 6.0 7.0 (0, 0.0) (0, 0.0)
+pending 1
+TIER slower games (new binary d8 b0 vs OLD tier score):
+   mazesend2hg_smoke_d5_s1001_g25 old 4 new@d8 4.0 recovered
+   mazesend_smoke_d5_s1001_g105 old 7 new@d8 7.0 recovered
+   mazesend_smoke_d5_s1001_g108 old 5 new@d8 5.0 recovered
+   mazesend_regression_d3_s2002_g0 old 5 new@d8 5.0 recovered
+   mazesend_regression_d5_s2002_g11 old 5 new@d8 6.0 PERSISTS
+   mazesend_regression_d5_s2002_g42 old 5 new@d8 6.0 PERSISTS
+   mazesend_regression_d5_s2002_g53 old 6 new@d8 6.0 recovered
+   mazesend_regression_d5_s2002_g79 old 5 new@d8 5.0 recovered
+   mazesend_regression_d5_s2002_g113 old 5 new@d8 5.0 recovered
+   mazesend_regression_d5_s3003_g58 old 4 new@d8 4.0 recovered
+   mazesend_regression_d5_s3003_g68 old 6 new@d8 6.0 recovered
+   mazesend_regression_d5_s3003_g108 old 5 new@d8 5.0 recovered
+   mazesend_regression_d5_s3003_g111 old 6 new@d8 6.0 recovered
+   mazesend_regression_d5_s3003_g112 old 6 new@d8 UNRESOLVED 
