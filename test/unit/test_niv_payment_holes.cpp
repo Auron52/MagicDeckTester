@@ -294,9 +294,27 @@ TEST_CASE("Niv payment hole 2: Izzet Signet's {2} routes the last feeder through
         CHECK(FindNp(*g, 56)->tapped);
     }
 
-    // Lever OFF: the feed-blind greedy strands the Lake and the Servant stays in hand (the hole).
+    // MTG_LINE_KEEP_ROCK alone (the feed route off) also keeps the Servant: the line casts a rock, so the line-keep rung
+    // judges the rest with the Signet on the board and repairs the Signet's payment.
     {
         ArmNp off(heurarm::RAMP_FEED_ROUTE, false);
+        ArmNp rock(heurarm::LINE_KEEP_ROCK, true);
+        GameState r1 = s;
+        TurnSolver::ApplyPlan(r1, *p, true);
+        const GameState e1 = RunExecutorNp(s, *p);
+        for (const GameState* g : { static_cast<const GameState*>(&r1), &e1 })
+        {
+            INFO("feed route OFF, rock keep ON, world: " << WorldNp(g, &r1));
+            CHECK(FindNp(*g, 24) != nullptr);
+            CHECK(FindNp(*g, 12) != nullptr);
+            CHECK_FALSE(InHandNp(*g, 12));
+            CHECK(FindNp(*g, 11)->tapped);
+        }
+    }
+    // Both levers OFF: the feed-blind greedy strands the Lake and the Servant stays in hand (the hole).
+    {
+        ArmNp off(heurarm::RAMP_FEED_ROUTE, false);
+        ArmNp rock(heurarm::LINE_KEEP_ROCK, false);
         GameState r0 = s;
         TurnSolver::ApplyPlan(r0, *p, true);
         const GameState e0 = RunExecutorNp(s, *p);

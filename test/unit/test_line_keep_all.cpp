@@ -121,14 +121,18 @@ TEST_CASE("Line keep (all lines): Mind Stone's {2} leaves the Mountain for Atsus
         CHECK(LineReducerCredit(s0, line) == 0);   // not a reducer line: the reducer rung alone never reached it
         CHECK(LineKeepBound(line));
     }
+    // MTG_LINE_KEEP_ROCK (default ON) binds this Mind Stone line by itself (test_line_keep_rock.cpp); pinned off here so
+    // the off arm is the line no lever reaches.
     {
         ArmLka arm(heurarm::LINE_KEEP_ALL, false);
+        ArmLka rock(heurarm::LINE_KEEP_ROCK, false);
         CHECK_FALSE(LineKeepBound(line));
     }
     for (const bool on : { true, false })
     {
         CAPTURE(on);
         ArmLka arm(heurarm::LINE_KEEP_ALL, on);
+        ArmLka rock(heurarm::LINE_KEEP_ROCK, false);
         GameState s = s0;
         CHECK(PayThenRest(s, line, 1, line[0].cost, /*rest_creature=*/true) == on);
     }
