@@ -48,7 +48,10 @@ are on wip/maze-p7). Scratch: `build/scratch/maze/p7g/` (tools in `tools/`). Bin
   or a no-win cache entry the folded node stores with an empty line). This is OWED before the fold ships on Snow.
 
 ## In flight (started by me)
-- chain5 (PID 2323111): smoke then regression with `VPC_SKIP=1` (coordinator hold), then
+- **chain5 DIED at 11:08 UTC, right as the smoke batch started** (smoke4.log stops at `=== BATCH`; no `smoke4 exit`
+  line; cause unknown -- possibly killed with the session's background tasks). **The tiers have NOT run.** Relaunch as is:
+  `bash build/scratch/maze/p7g/tools/chain5.sh` (its wait on PID 2309277 passes at once; it re-checks the binary == mtg.p7r).
+  Original description -- chain5 (PID 2323111): smoke then regression with `VPC_SKIP=1` (coordinator hold), then
   `MTG_BIN=p7g/mtg.p7r python3 test/viewer_protocol_check.py --strict --only Maze_s_End`. Logs `p7g/smoke4.log`, `reg4.log`,
   `vpc4.log`; status lines in `p7g/chain4.log`; DONE marker `p7g/chain4.DONE`. Binary checked == mtg.p7r before the tiers.
 - cen11 (heavy_run PID 2345850): Snow + EDF census (400 games each of d5b20 / d3b10, + Snow gi961) -- soundness of their certificates
