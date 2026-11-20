@@ -9,20 +9,34 @@ mulligan profile yet. I'm trying to use the reset budget efficiently which means
 high-inference tasks like analyzing over high-CPU tasks for the rest of the week."
 
 ## State at closeout
-- **Batch 2** is being integrated on `wip/maze-batch2` (base origin 1f3c23fab) and lands through the push queue.
-  It contains:
-  - maze-shared 39bc4a308: the overnight GT for the 13 new mazesend keys
-  - DM-2 311e4c1d9
-  - RC 7d4c2f5d4
-  - P7 973c795bb
-  - F6 ac4b294d0
+- **Batch 2 LANDED 2026-11-20 23:02 UTC as f519df877** on the shared branch (push queue; built on origin
+  1f3c23fab by cherry-pick). Contents:
+  - the overnight GT for the 13 new mazesend keys;
+  - DM-2;
+  - RC, with the print-only diagnostic;
+  - P7;
+  - F6: the fed float and the Baldur's Gate hold, both ON;
+  - P5d, added on the USER's scope ruling: "Anything crucial or important should go in." That covers the
+    fetch-then-replay turn, the Amulet no-drop tier, and the USER's idle-mana prune (a) `MTG_MAZE_IDLE_FETCH`,
+    ON. The reveal guard `MTG_MAZE_IDLE_FETCH_REVEAL` is flipped ON. `MTG_MAZE_FETCH_TIER_FULL`,
+    `MTG_MAZE_FETCH_RANK_COND` and `MTG_MAZE_MANABOND_DISCARD` stay OFF.
 
-  Its validation is units, smoke, regression, d8 b0 on games slower on the combined tree, then accept,
-  ref_bench and verify_deck. The landing commit is recorded in the ledger.
-- **Bars met before batch 2:**
-  - ref_bench: 0/11 short (search 5.727 vs human 5.818; s8 one turn faster).
-  - verify_deck GATE PASS.
-  - GT consistent (`check_gt_logs`: 0 stale).
+  Handoff: `logs/maze/I6-handoff.md`.
+- **Validation on the combined tree:**
+  - units 3803/3803, scenarios 594/594;
+  - VPC on all 930 refs: 0 drift or divergence;
+  - 25 keys moved across 9 decks; accepted set = FAIL set;
+  - `check_gt_logs` 1358 consistent, 0 stale.
+- **Bars:**
+  - ref_bench maze_s_end 0/11 short (5.818 = human);
+  - verify_deck GATE PASS;
+  - suite cost: mazesend worst shape d5 b20 4977 ms/game, 0.88x Hinata's 5681 in the same regression run
+    (limit 3x).
+- **d8 b0:**
+  - 12 searched slower games: 11 recover;
+  - s3003 g112 (seed 3115) is UNRESOLVED: both the combined and origin binaries hit the 50M-unit ceiling;
+  - 254 d0 slower games not checked at d8 (d0 is net better in both tiers);
+  - P5d's g108 guard-on repro never produced a result (killed after 12.5 h), so that is UNRESOLVED too.
 
 ## DEFERRED: the mulligan profile (next CPU-heavy stage for this deck)
 `scripts/mullgen.sh run "decks/Maze's End"`. Run it alone on the box, on the frozen commit that includes batch 2,
@@ -38,7 +52,7 @@ Before launching, re-confirm on the frozen tip:
 
 | Item | Branch / evidence | Measured | Recommendation |
 |---|---|---|---|
-| P5d "rev" (fetch-and-replay rule) | `wip/maze-p5d` c5c1ce805; `logs/maze/p5d7/` | passes net held-out; d8 b0: 0 persist, 4 UNRESOLVED (unit ceiling) | adopt |
+| P5d "rev" (reveal guard) | LANDED ON in batch 2; `logs/maze/p5d7/` | passes net held-out; d8 b0: 0 persist, 4 UNRESOLVED (unit ceiling) | shipped ON; the USER may flip it off |
 | P5d revq2 | same | passes net; d8 b0: 11 persist (the q2 component) | out |
 | P5d q2, cond, c2, q2nb | same | fail the net bar | out |
 | P5b land-twin fold, with the RC fix | `wip/maze-rc1-p5b` 3ebba2691; RC2-handoff | std −2 / 2HG −1; the 3 slower games recover at d8 b0 | adopt (sound fold) |
@@ -58,7 +72,7 @@ Before launching, re-confirm on the frozen tip:
 | b0 backstop re-screen | work-queue USER ruling 2026-11-18 ~22:15 | after every other item |
 
 ## Open USER questions carried forward
-1. P5d rev: adopt? (recommend yes)
+1. P5d reveal guard: shipped ON in batch 2 under the scope ruling; keep it? (recommend yes)
 2. P5b fold: adopt? (recommend yes)
 3. Build and A/B the bp-node per-host gate?
 4. Manabond q2: prune "yes" when it would discard the held land tutor and no Maze's End is anywhere? (currently it only orders "no" first)
