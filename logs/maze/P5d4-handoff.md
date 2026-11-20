@@ -53,3 +53,6 @@ accept `--deck=mazesend,mazesend2hg`, check_gt_logs, push wip/maze-p5d. 3. ledge
     `$S/abb/run.out` u2B/idleB: `cat $S/abb/run.out $P4/blw/*.out | grep -v ^AMU > x; python3 $S/anab.py x shipB`.
   If the Amulet tier is net worse BLIND sample-wide, root-cause g231/g320 (logs: CLI can't set heurarm slots; use
   `MTG_MAZE_IDLE_FETCH` env / a TEMP build) and update the ledger P5d section's "Two persist blind" line.
+- bl2 DONE: blind totals (salts 1-4) g231 ship 28 / u2 28 / u2+(a) 28 / fix 29 / shipped 30; g320 ship 25 / u2 26 /
+  u2+(a) 29 / fix 26 / shipped 29. g320 s4 (seed 201321, game_index 320, blind_salt 4, d8 b0): prune (a) 6 -> 9 BLIND on
+  both bases = first non-clairvoyant (a) loss. NEXT: root-cause it (which removed plan, which turn), then report.
