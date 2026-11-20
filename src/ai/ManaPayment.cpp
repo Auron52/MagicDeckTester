@@ -10994,6 +10994,101 @@ static int AnyFilterFeedRouteHold(const GameState& state, const ManaCost& cost_i
     return held;
 }
 
+// ---- THE SCALED-LAND FEED ROUTE: hold a source out of a payment that strands the line's fed scaled land (MTG_SCALED_LAND_ROUTE) ----
+//
+// THE HOLE (the Merfolk Turns mana-clean gate claude-queue-20261119i, 5,000 games: the three leading APPLY-DROP
+// signatures, x220 / x200 / x180, and most of the family's 6,952 flags). Three Tree City's "{2},{T}: add N of one
+// colour" (N = our Merfolk) is the land's only big mode, and the payer prefers its plain "{T}: Add {C}" for a generic
+// pip: s30000073 T7 {Sol Ring + Wanderwine Prophets (+ Greaves equip)}, lands City, Rogue's Passage, Island, six
+// Merfolk. Sol Ring's {1} took City's {C}; Prophets' {4}{U}{U} then met Island + Passage + Sol Ring's {C}{C} -- four
+// mana -- and was dropped in the executor and the rollout alike, where Island for the Ring, the Ring's {C}{C} into
+// City for six {U}, pays it. The same shape one payment later, s30002188 T5 {Sol Ring, Stonybrook Banneret,
+// Prophets}: Banneret's {1}{U} off the Island and the Ring left City with nothing to feed it. No line-aware rung saw
+// it: the ramp route is for a ramp filter, the any-colour route for an any-colour filter, the line-keep rung only for
+// a reducer line, and none credits the rock being cast (the Ring IS City's feed).
+//
+// THE REPAIR is the any-colour route's hold-out (HoldOutFor's shape), decided before the payment so it is made
+// once. While a scaled land of ours is untapped, its fed mode makes something and the line still owes mana after
+// this payment, the payment is TRIED on a scratch board; only when that trial leaves the rest of the line unpayable,
+// while the board this payment found pays this bill and the rest together, is ONE of the trial's sources held out
+// (battlefield order), and the first whose board pays the rest is the payment made. "The rest" is the line hold
+// net of this payment and of the line's same-turn reducer credit (LineReducerKeepHold's rest: the hold prices a cast
+// at enumeration, before Banneret's discount), judged by the complete backtracker with the cast being paid on the
+// board as an untapped rock when it is one (RampLaterPayable). A rest priced too low only makes the route fire less.
+// Not a preference: everywhere else the payment is the greedy's, byte for byte, and a replaced payment provably
+// strands the declared line. Executor and rollout share this payer, and so do the payability walks.
+//
+// COST. A board scan unless a scaled land is untapped and the line owes more; then one trial and one backtracker
+// solve, the alternatives only on a strand. Decks with a scaled land: Merfolk Turns and Goblins (Three Tree City),
+// Maze's End (Baldur's Gate).
+namespace
+{
+std::atomic<unsigned long long> g_slr_trial{0}, g_slr_strand{0}, g_slr_fired{0};
+struct ScaledLandRouteStats
+{
+    ~ScaledLandRouteStats()
+    {
+        if (!EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
+        std::fprintf(stderr, "[scaled-land-route] trials=%llu stranded=%llu fired=%llu\n",
+                     g_slr_trial.load(), g_slr_strand.load(), g_slr_fired.load());
+    }
+};
+ScaledLandRouteStats g_slr_stats;
+}   // namespace
+
+static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, bool for_creature,
+                               ManaPool* available, bool honor_legacy_cco)
+{
+    if (!ScaledLandRouteOn() || state.dmg_events_armed) { return 0; }
+    ManaCost later = RampLaterBill(cost_in);
+    later.generic = std::max(0, later.generic - g_line_reducer_credit);
+    if (later.ManaValue() <= 0) { return 0; }
+    if (cost_in.ManaValue() <= static_cast<int>(state.floating_mana.Total())) { return 0; }
+    const int active = state.active_player_index;
+    bool scaled_up = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+        if (ScaledManaCreatureCount(state, &p) >= 1) { scaled_up = true; break; }
+    }
+    if (!scaled_up) { return 0; }
+    // The cast being paid, if it is a mana rock that enters untapped (Sol Ring): the rest of the line meets its mana.
+    const CardDefinition* rock = nullptr;
+    if (const Card* pc = PayingSpellCard())
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(*pc);
+        if (d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped) { rock = d; }
+    }
+    g_slr_trial.fetch_add(1, std::memory_order_relaxed);
+    TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
+    RevealLogPause _quiet;
+    g_play_tap_pref_chooser = tap_pref;   // the pause's destructor restores the same pointer
+    RampScratch a(state);
+    ManaPool av_a = available ? *available : ManaPool{};
+    if (!TapForCostSharedDiag(a.Board(), cost_in, for_creature, available ? &av_a : nullptr, honor_legacy_cco))
+    { return 0; }
+    // (No amount-short exit, unlike the ramp route: a fed scaled land MAKES mana, so a trial board short of the rest's
+    // amount can still be the greedy's strand.)
+    if (RampLaterPayable(a.Board(), later, rock)) { return 0; }
+    if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
+    g_slr_strand.fetch_add(1, std::memory_order_relaxed);
+    std::vector<int> tapped;
+    PaymentTapped(state, a.Board(), tapped, nullptr);
+    for (int held : tapped)
+    {
+        RampScratch b(state);
+        ManaPool av_b = available ? *available : ManaPool{};
+        if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
+        { continue; }
+        if (!RampLaterPayable(b.Board(), later, rock)) { continue; }
+        g_slr_fired.fetch_add(1, std::memory_order_relaxed);
+        return held;
+    }
+    return 0;
+}
+
 // ---- MTG_PAY_REFINE: the cheapest payment of the same bill out of the same taps --------------------------
 //
 // THE DEFECT (the mana oracle census, 39 decks x 30 games, seed 1100001). Every DOMINATED flag -- a payment of a
@@ -11104,7 +11199,27 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
     const bool spent = state.players[a].life < pre.life || state.players[a].energy_counters < pre.energy
                     || (!for_creature && state.floating_haste_c < pre.fhc);
     const bool surplus = newly >= 2 && FloatTotal(state) > float_pre;
-    if (!spent && !surplus) { return; }
+    // MTG_PAY_REFINE_SCALED (DEFAULT ON; =0 -> as before): a payment that tapped a SCALED LAND (Three Tree City) among
+    // four or more sources, while its fed mode makes at least {feeder} + 2. The backtracker tries the land's plain {C}
+    // first and keeps the first covering set, so it can pay N mana off N sources where the fed mode pays the same bill
+    // off fewer of them -- an exact payment, nothing floats, and neither trigger above fires. Merfolk Turns mana-clean
+    // gate claude-queue-20261119i, s30001289 T5: Wanderwine Prophets' {3}{U}{U} took four Islands + City's {C}; two
+    // Islands feeding City (four Merfolk -> {U}{U}{U}{U}) plus one more pay it and leave an Island for Emperor Mihail
+    // II's {1}, so the line's Merfolk token was lost (ORACLE-GAP x155 and its family). The refine below is the
+    // dominance test itself (a subset of these taps, at least the engine's float): this only lets it look.
+    bool scaled = false;
+    if (!spent && !surplus && newly >= 4 && PayRefineScaledOn())
+    {
+        for (std::size_t i = 0; i < state.battlefield.size() && !scaled; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != a || !p.tapped || pre.bf[i].tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+            scaled = ScaledManaCreatureCount(state, &p) >= d->params.mana_per_creature_feeder_generic + 2;
+        }
+    }
+    if (!spent && !surplus && !scaled) { return; }
     g_refine_trig.fetch_add(1, std::memory_order_relaxed);
     static const bool s_clock = EnvOn("MTG_PAY_REFINE_STATS");
     struct Clock
@@ -11415,6 +11530,10 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     int afr_held = 0;
     if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0)
     { afr_held = AnyFilterFeedRouteHold(state, cost_in, for_creature, available, honor_legacy_cco); }
+    // THE SCALED-LAND FEED ROUTE (see ScaledLandRouteHold): the same hold-out, for a payment that leaves a scaled land
+    // (Three Tree City) unable to fund the rest of the line.
+    if (t_pay_nest == 1 && !_ramp_route && haste_keep == 0 && afr_held == 0 && !manaoracle::t_float_only)
+    { afr_held = ScaledLandRouteHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     // THE PROVIDER'S HOLD-UP (see ProviderHoldUpHold): the same hold-out, for a cost the deck wants left payable.
     // Where the trial's quiet scope would change nothing, it is paid first instead (PayProviderHoldUp, below).
     std::vector<ManaCost> phu_targets;

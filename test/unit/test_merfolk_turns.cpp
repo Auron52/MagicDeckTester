@@ -1304,3 +1304,152 @@ TEST_CASE("Merfolk Turns bounds Prophets victims by its actual token sources")
     put.tutor_target = InternedName("Emperor Mihail II");
     CHECK(provider.ProphetsMerfolkVictimWidth(state, {put, cast}, 2, 0) == 8);
 }
+
+// MTG_PAY_REFINE_SCALED (ManaPayment.cpp PayRefineAfter). The mana-clean gate claude-queue-20261119i, s30001289 T5:
+// Wanderwine Prophets' {3}{U}{U} (Stonybrook Banneret's discount) on four Islands + Three Tree City with four Merfolk.
+// The backtracker takes City's plain {C} first and pays off all five sources, exactly, so nothing floats and the
+// refine's two older triggers stay quiet; City's fed mode (two Islands for {U}{U}{U}{U}) plus one Island pays the
+// same bill and gives an Island back -- for Emperor Mihail II's {1}, the line's Merfolk token.
+TEST_CASE("Three Tree City's fed mode refines an exact payment that tapped its plain {C}")
+{
+    LoadMerfolkCards();
+    auto board = [] {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 5;
+        AddPermanent(s, "Island", 10);
+        AddPermanent(s, "Island", 11);
+        AddPermanent(s, "Island", 12);
+        AddPermanent(s, "Island", 13);
+        AddPermanent(s, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+        AddPermanent(s, "Stonybrook Banneret", 46);
+        AddPermanent(s, "Emperor Mihail II", 8);
+        AddPermanent(s, "Rishadan Dockhand", 31);
+        AddPermanent(s, "Merfolk Sovereign", 27);
+        return s;
+    };
+    ManaCost bill;
+    bill.generic = 3;
+    bill.blue = 2;
+    auto untapped_islands = [](const GameState& s)
+    {
+        int n = 0;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_name == "Island" && !p.tapped) { ++n; } }
+        return n;
+    };
+    GameState on = board();
+    REQUIRE(ScaledManaCreatureCount(on, &on.battlefield[4]) == 4);
+    REQUIRE(TapForCostShared(on, bill, /*for_creature=*/true, nullptr, true));
+    CHECK(untapped_islands(on) == 1);
+    CHECK(on.floating_mana.Total() == 0);
+
+    heurarm::t_arm[heurarm::PAY_REFINE_SCALED] = 0;
+    GameState off = board();
+    const bool paid_off = TapForCostShared(off, bill, /*for_creature=*/true, nullptr, true);
+    heurarm::t_arm[heurarm::PAY_REFINE_SCALED] = -1;
+    REQUIRE(paid_off);
+    CHECK(untapped_islands(off) == 0);   // the defect: four Islands + City's {C}
+}
+
+// MTG_SCALED_LAND_ROUTE (ManaPayment.cpp ScaledLandRouteHold). The mana-clean gate claude-queue-20261119i, s30000073
+// T7 {Sol Ring, Wanderwine Prophets}: lands Three Tree City, Rogue's Passage, Island and six Merfolk. The greedy paid
+// Sol Ring's {1} off City's {C}; Prophets' {4}{U}{U} then met Island + Passage + Sol Ring's {C}{C} (four mana) and was
+// dropped. Holding City out of the Ring's payment lets the Ring's {C}{C} feed City for six {U}.
+TEST_CASE("Sol Ring's {1} keeps Three Tree City for Wanderwine Prophets (MTG_SCALED_LAND_ROUTE)")
+{
+    LoadMerfolkCards();
+    auto board = [] {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 7;
+        AddPermanent(s, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+        AddPermanent(s, "Rogue's Passage", 35);
+        AddPermanent(s, "Island", 10);
+        AddPermanent(s, "Rishadan Dockhand", 31);
+        AddPermanent(s, "Merfolk Sovereign", 27);
+        AddPermanent(s, "Tidal Warrior", 53);
+        AddPermanent(s, "Rishadan Dockhand", 32);
+        AddPermanent(s, "Silvergill Douser", 42);
+        AddPermanent(s, "Stonybrook Banneret", 46);
+        return s;
+    };
+    const CardDefinition* ring = CardDatabase::Instance().Lookup("Sol Ring");
+    const CardDefinition* prophets = CardDatabase::Instance().Lookup("Wanderwine Prophets");
+    REQUIRE(ring != nullptr);
+    REQUIRE(prophets != nullptr);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        heurarm::t_arm[heurarm::SCALED_LAND_ROUTE] = on ? 1 : 0;
+        GameState s = board();
+        REQUIRE(ScaledManaCreatureCount(s, &s.battlefield[0]) == 6);
+        // Banneret is on the board, so Prophets is priced {3}{U}{U}; the hold is Ring + Prophets.
+        ManaCost pro = EffectiveSpellCost(*prophets, s);
+        ManaCost hold = ring->card.m_mana_cost;
+        AddManaCost(hold, pro);
+        bool prophets_paid = false;
+        {
+            LineUnpaidCostScope luc(hold);
+            Card rc = ring->card;
+            rc.m_number = 45;
+            {
+                SpellSubtypePayScope pay(&rc);
+                REQUIRE(TapForCostDirect(s, ring->card.m_mana_cost, /*for_creature=*/false));
+            }
+            CHECK(s.battlefield[0].tapped == !on);   // City held out of the {1} only with the route
+            Permanent ringp;
+            ringp.card = rc;
+            ringp.controller_index = 0;
+            ringp.owner_index = 0;
+            s.battlefield.push_back(ringp);
+            Card pc = prophets->card;
+            pc.m_number = 57;
+            SpellSubtypePayScope pay(&pc);
+            prophets_paid = TapForCostDirect(s, pro, /*for_creature=*/true);
+        }
+        heurarm::t_arm[heurarm::SCALED_LAND_ROUTE] = -1;
+        CHECK(prophets_paid == on);
+    }
+}
+
+// The mana-clean gate claude-queue-20261119i, s30000762 T4 (ENUM-GAP x6): Island, Island, Three Tree City and three
+// Merfolk (Tidal Warrior, Silvergill Douser, Emperor Mihail II) with Seahunter, Rishadan Dockhand and two Islands in
+// hand. Dockhand first ({U} off the new Island) makes four Merfolk, and the other two Islands feeding City pay
+// Seahunter's {2}{U}{U}; the menu kept {Island + Seahunter + Dockhand} off.
+TEST_CASE("Three Tree City: Dockhand before Seahunter is on the menu (s30000762 T4)")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 4;
+    state.m_provider = &provider;
+    AddPermanent(state, "Island", 10);
+    AddPermanent(state, "Tidal Warrior", 53);
+    AddPermanent(state, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+    AddPermanent(state, "Silvergill Douser", 42);
+    AddPermanent(state, "Island", 11);
+    AddPermanent(state, "Emperor Mihail II", 8);
+    for (const auto& [name, number] : std::vector<std::pair<const char*, int>>{
+             {"Seahunter", 38}, {"Rishadan Dockhand", 31}, {"Island", 12}, {"Island", 13}})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card card = def->card;
+        card.m_number = number;
+        state.players[0].hand.push_back(card);
+    }
+    bool offered = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        if (plan.land_to_play != "Island") { continue; }
+        bool sea = false, dock = false;
+        for (const Action& a : plan.actions)
+        {
+            sea  |= a.kind == Action::Kind::CastFromHand && a.card_name == "Seahunter";
+            dock |= a.kind == Action::Kind::CastFromHand && a.card_name == "Rishadan Dockhand";
+        }
+        offered |= sea && dock;
+    }
+    CHECK(offered);
+}
