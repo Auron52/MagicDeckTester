@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "stuffy-analysis",
+   "head_since": "2026-11-20T00:20:27Z",
+   "host": "8854e545ddab",
+   "id": "8854e545ddab:stuffy-analysis",
+   "joined": "2026-11-20T00:20:27Z",
+   "note": "Stuffy viewer mana fix A+B + ledger (needs rebuild+unit+smoke)"
+  }
+ ]
 }
