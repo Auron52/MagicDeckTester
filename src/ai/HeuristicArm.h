@@ -1036,6 +1036,7 @@ enum Slot : int
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     ID_GATE_TRIAL,            // MTG_ID_GATE_TRIAL  FullSearchLine's ladder START GATE: a pass whose ESTIMATE does not fit is STARTED anyway as a TRIAL whose overrun ceiling is the gate's own allowance (alpha x remaining); a trial that runs past it rolls back to the prior pass (anytime rescue kept), so a pass is refused only when it really does not fit. Re-prices nothing at an unlimited budget (the gate never refuses there). DEFAULT ON; =0 -> refuse on the estimate, as before
+    ID_GATE_COLD,             // MTG_ID_GATE_COLD  (acts only with ID_GATE_TRIAL on) the start gate's estimate is built on COLD pass costs: a pass's measured cost plus the units its hits in the game-persistent caches (game line cache, in-window proof cache) cost when those answers were first computed, so a pass made nearly free by the previous decision's (often aborted) deeper search no longer bootstraps a tiny estimate that admits the next pass at the 25x proportional ceiling. The estimate is max(warm, cold): it only ever turns an admitted pass into a trial (capped at the gate's allowance). Inert at an unlimited budget (no refusals, no trials). DEFAULT ON; =0 -> the warm estimate (IDG-1/IDG-2's trial)
     COUNT
 };
 
@@ -2016,6 +2017,7 @@ inline const char* Name(int slot)
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
         "MTG_ID_GATE_TRIAL",
+        "MTG_ID_GATE_COLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

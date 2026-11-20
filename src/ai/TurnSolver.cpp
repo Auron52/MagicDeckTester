@@ -109637,9 +109637,21 @@ static std::uint64_t SfxProbeCtx(const GameState& state);   // defined after gam
 // start state can roll out differently in a later decision (probe: 24 clean same-cutoff disagreements in 95,293 usable
 // matches on the regression tier, all within-decision tie paths -- unchanged with E1, E2, the game line cache or the
 // mana cache off). A served answer is one such path. Measured as a play change.
+// COLD-COST CREDIT (MTG_ID_GATE_COLD's accounting): the cumulative work units this thread's hits in the
+// GAME-PERSISTENT caches (rgc below, the game line cache, the in-window proof cache) were spared -- each hit adds the
+// cold cost its entry recorded when it was first computed (its own units plus the credit of the persistent hits beneath
+// it). Only deltas are read (a node's cold cost at its store, a ladder pass's cold cost), so it is never reset.
+// Accounting only: nothing reads it but the start gate's trial estimate (see IdGateColdOn).
+namespace coldcost
+{
+    inline thread_local long long t_credit = 0;
+    inline std::int32_t Clamp(long long u)
+    { return static_cast<std::int32_t>(std::max(0LL, std::min(u, static_cast<long long>(std::numeric_limits<std::int32_t>::max())))); }
+}
 namespace rgc
 {
-    struct E { int result; int bound; long long tb; long long life; bool win; };
+    // cold: see FSLineEntry::cold -- the units the rollout from this key cost (in the padding after `win`).
+    struct E { int result; int bound; long long tb; long long life; bool win; std::int32_t cold; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
     inline std::atomic<long long> g_hits{0}, g_win_hits{0}, g_lookups{0}, g_stores{0}, g_full{0};
     inline std::size_t Cap()
@@ -109667,6 +109679,7 @@ namespace sfxprobe
     struct E { int result; int cutoff; std::uint64_t epoch; bool start; std::uint64_t ctx; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
     inline thread_local std::vector<TranspositionTable::Key> t_pending;
+    inline thread_local std::vector<long long> t_pending_u;   // gamework::t_used at each t_pending push (rgc cold cost)
     inline thread_local bool t_collect = false;
     // [0] start-key match, [1] suffix-key match; each split same-decision / earlier-decision
     inline std::atomic<long long> g_roll{0}, g_roll_u{0};
@@ -109676,7 +109689,7 @@ namespace sfxprobe
     // same-cutoff matches whose FRESH rollout was not clean (a bind or truncation), and how many of those disagree
     inline std::atomic<long long> g_eqc_fresh_unclean{0}, g_eqc_dis_unclean{0};
     inline std::atomic<int> g_printed{0};
-    inline void Clear() { t_map.clear(); t_pending.clear(); t_collect = false; }
+    inline void Clear() { t_map.clear(); t_pending.clear(); t_pending_u.clear(); t_collect = false; }
     struct Reporter
     {
         ~Reporter()
@@ -109758,7 +109771,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             combatpin::t_reads = cp_reads0;
             if (CanonSimKeyOn()) { Fold(bk, FsOrderSig(state)); }
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
-            sfxprobe::t_pending.push_back(bk);
+            sfxprobe::t_pending.push_back(bk); sfxprobe::t_pending_u.push_back(gamework::t_used);
         }
         if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
@@ -110805,6 +110818,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_rgc_hit; }
+                coldcost::t_credit += e.cold;
                 if (e.result <= cutoff_turn) { return e.result; }
                 leafeval::Publish(leafeval::kInvalid);   // what a fresh run publishes when it aborts at the cutoff
                 return max_turns + 1;
@@ -110813,6 +110827,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_rgc_hit; }
+                coldcost::t_credit += e.cold;
                 if (cutoff_turn >= max_turns) { leafeval::Publish(e.tb); leafeval::PublishLife(e.life); }
                 else                          { leafeval::Publish(leafeval::kInvalid); }
                 return max_turns + 1;
@@ -110826,8 +110841,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             auto it = sfxprobe::t_map.find(key);
             if (it != sfxprobe::t_map.end()) { sfx_copy = it->second; sfx_hit = &sfx_copy; }
         }
-        sfxprobe::t_pending.clear();
+        sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear();
         sfxprobe::t_pending.push_back(key);   // [0] = this rollout's own start key
+        sfxprobe::t_pending_u.push_back(gamework::t_used);
         sfxprobe::t_collect = true;
     }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
@@ -110839,15 +110855,16 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         const bool win = result <= max_turns;
         if (rgc_clean && (win || (nowin_armed && NoWinStoreUngradedOn())))
         {
-            const rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win };
+            rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win, 0 };
             for (std::size_t i = 0; i < sfxprobe::t_pending.size(); ++i)
             {
                 if (rgc::t_map.size() >= rgc::Cap()) { rgc::g_full.fetch_add(1, std::memory_order_relaxed); break; }
+                e.cold = i < sfxprobe::t_pending_u.size() ? coldcost::Clamp(gamework::t_used - sfxprobe::t_pending_u[i]) : 0;
                 if (rgc::t_map.emplace(rgc::Key(sfxprobe::t_pending[i], sfx_ctx), e).second)
                 { rgc::g_stores.fetch_add(1, std::memory_order_relaxed); }
             }
         }
-        if (!sfx_on) { sfxprobe::t_pending.clear(); }
+        if (!sfx_on) { sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear(); }
     }
     if (sfx_on)
     {
@@ -110895,7 +110912,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             for (std::size_t i = 0; i < sfxprobe::t_pending.size() && sfxprobe::t_map.size() < (1u << 22); ++i)
             { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0, sfx_ctx }); }
         }
-        sfxprobe::t_pending.clear();
+        sfxprobe::t_pending.clear(); sfxprobe::t_pending_u.clear();
     }
     if (ko_vcopy)
     {
@@ -111085,6 +111102,12 @@ struct FSLineEntry
     // was searched at the full cutoff) -- the bound is therefore exactly the cutoff it ran under.
     // A WIN carries INT_MAX: valid for every query, i.e. byte-identical to the old behaviour.
     int nowin_bound = std::numeric_limits<int>::max();
+    // COLD COST (game-persistent caches only; 0 elsewhere): the work units this answer cost when it was first
+    // computed, plus what the persistent-cache hits beneath it had cost (coldcost::t_credit). A later hit
+    // credits it, so a pass answered from an earlier decision's work still reports what it would cost cold --
+    // the start gate's trial estimate (ID_GATE_COLD) reads that, never play. Sits in the padding before
+    // order_sig, so the entry's size (and every byte cap built on it) is unchanged.
+    std::int32_t cold = 0;
     // Order signature of the state the WIN line was computed under (canon mode only; 0 = unset).
     // A SearchLine's actions reference cards by HAND INDEX / battlefield position, so a line is
     // only replayable on a state with the SAME zone ORDER. Ordered keys guaranteed that for free;
@@ -111095,6 +111118,8 @@ struct FSLineEntry
     // nowins are ~99.99% of monster entries).
     std::uint64_t order_sig = 0;
 };
+static_assert(sizeof(FSLineEntry) == sizeof(TurnSolver::SearchLine) + 16,
+              "FSLineEntry::cold must sit in the padding after nowin_bound (the caches' byte caps assume the old size)");
 
 // See the forward declaration's comment (order-exact key for dedup sites / plan-carrying memos).
 // BuildDedupKey in two halves, so a caller holding a state that differs from an already-keyed one
@@ -112681,7 +112706,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
         const long long kb = FslBytes(line);
         if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
         lc->charged_kb += kb;
-        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
+        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), 0, sig });
         if (pastcut::On() && line.win_turn > pastcut::t_node_cutoff)
         { pastcut::g_stores.fetch_add(1, std::memory_order_relaxed); pastcut::t_rec[key] = { lc, pastcut::t_node_cutoff }; }
     }
@@ -112689,7 +112714,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
              || (it->second.line.truncated && !line.truncated))   // fill-in: complete line supersedes a truncated one
     {
         const long long oldkb = FslBytes(it->second.line);
-        it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
+        it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), 0, sig };
         if (pastcut::On())
         {
             if (line.win_turn > pastcut::t_node_cutoff)
@@ -117886,7 +117911,8 @@ namespace inwin
     inline bool Verify() { static const bool v = EnvOn("MTG_INWIN_CACHE_VERIFY"); return v; }
     inline std::size_t CapBytes()
     { static const std::size_t v = static_cast<std::size_t>(std::max(1, EnvInt("MTG_INWIN_CACHE_MB", 24))) << 20; return v; }
-    struct Entry { TurnSolver::SearchLine line; int win; int nowin_bound; std::uint64_t order_sig; };
+    // `cold`: see FSLineEntry::cold. (It took the slot of a `win` field that always equalled line.win_turn.)
+    struct Entry { TurnSolver::SearchLine line; std::int32_t cold; int nowin_bound; std::uint64_t order_sig; };
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash> t_map;
     inline thread_local std::size_t t_bytes = 0;
     inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_win_stores{0}, g_nowin_stores{0}, g_widen{0}, g_full{0};
@@ -118141,7 +118167,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (lf != gamelc::t_map.end() && cutoff <= lf->second.nowin_bound)
             {
                 gamelc::g_lf_hits.fetch_add(1, std::memory_order_relaxed);
-                if (!gamelc::Verify()) { return lf->second.line; }
+                if (!gamelc::Verify()) { coldcost::t_credit += lf->second.cold; return lf->second.line; }
                 gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = lf->first; lf_hit = true;
             }
         }
@@ -118163,7 +118189,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_glc_w; }
                 if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
-                if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
+                if (!gamelc::Verify()) { coldcost::t_credit += gw->second.cold; ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
             }
             else
@@ -118175,7 +118201,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (p17::On()) { ++p17::t_glc_n; }
                     if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
-                    if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
+                    if (!gamelc::Verify()) { coldcost::t_credit += gn->second.cold; ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
             }
@@ -118201,6 +118227,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc::g_lr_hits.fetch_add(1, std::memory_order_relaxed); ++gamelc::t_lr_hits;
                     if (!gamelc::Verify())
                     {
+                        coldcost::t_credit += gw->second.cold;
                         if (in_win) { ++g_fs_memo_win_hits; return gw->second.line; }
                         ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} };
                     }
@@ -118213,7 +118240,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     gamelc::g_lr_hits.fetch_add(1, std::memory_order_relaxed); ++gamelc::t_lr_hits;
-                    if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
+                    if (!gamelc::Verify()) { coldcost::t_credit += gn->second.cold; ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
             }
@@ -118226,12 +118253,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
             if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
             auto iw = inwin::t_map.find(inwin::WinKey(inwin::Ctx(kw, state)));
-            if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
+            if (iw != inwin::t_map.end() && iw->second.line.win_turn <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
             {
                 inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_iw_w; }
-                if (!inwin::Verify()) { ++g_fs_memo_win_hits; return iw->second.line; }
-                inwin_hit = true; inwin_hit_win = iw->second.win;
+                if (!inwin::Verify()) { coldcost::t_credit += iw->second.cold; ++g_fs_memo_win_hits; return iw->second.line; }
+                inwin_hit = true; inwin_hit_win = iw->second.line.win_turn;
             }
             else
             {
@@ -118247,7 +118274,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (p17::On()) { ++p17::t_iw_n; }
-                    if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
+                    if (!inwin::Verify()) { coldcost::t_credit += in->second.cold; ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
                     inwin_hit = true; inwin_hit_win = max_turns + 1;
                 }
             }
@@ -118750,6 +118777,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // is the right quantity: skipping this node skips everything under it too.
     const long long of_used_at_entry = (budget != nullptr) ? budget->Used() : 0;
     #define OF_UNITS() ((budget != nullptr) ? (budget->Used() - of_used_at_entry) : 0)
+    // ...and what it would cost COLD (FSLineEntry::cold): its own units plus the persistent-cache hits' credit beneath.
+    const long long cold_credit_at_entry = coldcost::t_credit;
+    #define COLD_UNITS() coldcost::Clamp(OF_UNITS() + (coldcost::t_credit - cold_credit_at_entry))
     // MTG_EXHAUST_PROBE (diagnostic; see exhprobe). Reads only.
     const bool exh_fs_on    = exhprobe::On() && lc != nullptr;
     const bool exh_fs_entry = exh_fs_on && exhprobe::ExhNow(budget);
@@ -121226,11 +121256,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     gamelc::g_stores.fetch_add(1, std::memory_order_relaxed);
                     if (gamelc::Verify())
                     { gamelc::t_ctx[gk] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<long long>(gamework::Used()) }; }
-                    if (win) { gamelc::t_map.emplace(gk, FSLineEntry{ best, std::numeric_limits<int>::max(),
+                    if (win) { gamelc::t_map.emplace(gk, FSLineEntry{ best, std::numeric_limits<int>::max(), COLD_UNITS(),
                                                                       CanonSimKeyOn() ? FsOrderSig(state) : 0ull }); }
                     else     // a past-cutoff line is order-exact and unproven: keep only the refutation
                     { gamelc::t_map.emplace(gk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best,
-                                                             std::min(cutoff, max_turns + 1) }); }
+                                                             std::min(cutoff, max_turns + 1), COLD_UNITS() }); }
                 }
             }
             else if (!win && it->second.nowin_bound != std::numeric_limits<int>::max()
@@ -121253,7 +121283,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         gamelc::t_bytes += nb;
                         tier1::Set(tier1::kGameLc, static_cast<long long>(gamelc::t_bytes));
                         gamelc::g_lf_stores.fetch_add(1, std::memory_order_relaxed);
-                        gamelc::t_map.emplace(fk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best, b });
+                        gamelc::t_map.emplace(fk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best, b, COLD_UNITS() });
                     }
                 }
                 else if (fi->second.nowin_bound < b) { fi->second.nowin_bound = b; }
@@ -121302,7 +121332,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 const TranspositionTable::Key k = inwin::WinKey(inwin::Ctx(kw, state));
                 if (inwin::t_map.find(k) == inwin::t_map.end() && admit(ApproxFslBytes(best) + 64))
                 {
-                    inwin::t_map.emplace(k, inwin::Entry{ best, best.win_turn, std::numeric_limits<int>::max(), osig });
+                    inwin::t_map.emplace(k, inwin::Entry{ best, COLD_UNITS(), std::numeric_limits<int>::max(), osig });
                     inwin::g_win_stores.fetch_add(1, std::memory_order_relaxed);
                 }
             }
@@ -121316,7 +121346,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     if (admit(sizeof(inwin::Entry) + 64))
                     {
-                        inwin::t_map.emplace(k, inwin::Entry{ TurnSolver::SearchLine{ max_turns + 1, {} }, max_turns + 1, b, 0ull });
+                        inwin::t_map.emplace(k, inwin::Entry{ TurnSolver::SearchLine{ max_turns + 1, {} }, COLD_UNITS(), b, 0ull });
                         inwin::g_nowin_stores.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
@@ -121374,6 +121404,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else { ofwprobe::g_worse.fetch_add(1, std::memory_order_relaxed); }
     }
     #undef OF_UNITS
+    #undef COLD_UNITS
     if (exh_fs_on)
     {
         exhprobe::Exit(exhprobe::kFsl, key, exh_fs_rep, exh_fs_entry, cutoff, max_turns, best.win_turn,
@@ -121454,7 +121485,7 @@ namespace
         struct Rec
         {
             bool on = false; int k = 0; int boot = 0; long long c1 = 0, c0 = 0; double est = 0, rem = 0, alpha = 0;
-            long long lim = 0, used = 0; int fit = 0; int pw = 0; int p18 = 0; int vl = 0;
+            long long lim = 0, used = 0, cc1 = 0; int fit = 0; int pw = 0; int p18 = 0; int vl = 0;
             long long sh = -1; int sht = -1; int shw = -1;
         };
         inline void Emit(const Rec& r, const GameState& s, bool sm, int depth, long long act, int st, int w)
@@ -121462,10 +121493,10 @@ namespace
             char ln[512];
             const int n = std::snprintf(ln, sizeof ln,
                 "[idg] j=%s s=%llu T%d sm=%d D=%d k=%d b=%d c1=%lld c0=%lld est=%.0f rem=%.0f lim=%lld a=%.2f fit=%d"
-                " act=%lld st=%d pw=%d w=%d p18=%d vl=%d sh=%lld sht=%d shw=%d\n",
+                " act=%lld st=%d pw=%d w=%d p18=%d vl=%d sh=%lld sht=%d shw=%d cc1=%lld\n",
                 heurarm::t_job_name ? heurarm::t_job_name : "-", static_cast<unsigned long long>(s.game_seed),
                 s.turn_number, sm ? 1 : 0, depth, r.k, r.boot, r.c1, r.c0, r.est, r.rem, r.lim, r.alpha, r.fit,
-                act, st, r.pw, w, r.p18, r.vl, r.sh, r.sht, r.shw);
+                act, st, r.pw, w, r.p18, r.vl, r.sh, r.sht, r.shw, r.cc1);
             if (n > 0) { std::fwrite(ln, 1, static_cast<std::size_t>(std::min<int>(n, sizeof ln - 1)), stderr); }
         }
     }
@@ -121490,6 +121521,21 @@ namespace
     {
         static const bool s_env = EnvOn("MTG_ID_GATE_TRIAL", true);   // DEFAULT ON; =0 disables
         return heurarm::Flag(heurarm::ID_GATE_TRIAL, s_env);
+    }
+    // THE TRIAL'S COLD ESTIMATE (MTG_ID_GATE_COLD / heurarm ID_GATE_COLD; DEFAULT ON, acts only with the trial on).
+    // The estimate's inputs are the passes' MEASURED costs, and a pass answered from the game-persistent caches
+    // (rgc, the game line cache, the in-window proofs) costs a fraction of what it would cold. That bites hardest
+    // right after a trial: an ABORTED trial still stores every subtree it completed, so the next decision's pass 1
+    // costs ~nothing, the 6.0 bootstrap estimate on it is tiny, and pass 2 is ADMITTED -- with the 25x proportional
+    // ceiling instead of the trial's allowance (measured, Maze's End d5 s3003 gi73 at b20: T2 pass 1 = 10 units after
+    // T1's aborted trial, pass 2 admitted at est 60 ran 46,669 = 2.6x the budget; T3 pass 2 92,474). So under the trial
+    // the estimate is max(warm, cold), the cold one built on cold pass costs (coldcost::t_credit). Since a trial that
+    // fits completes exactly as an admitted pass does, the only change is the ceiling of a pass the cold estimate says
+    // will not fit: the allowance instead of 25x. Inert at an unlimited budget (no refusal, no trial).
+    inline bool IdGateColdOn()
+    {
+        static const bool s_env = EnvOn("MTG_ID_GATE_COLD", true);   // DEFAULT ON; =0 -> the warm estimate only
+        return IdGateTrialOn() && heurarm::Flag(heurarm::ID_GATE_COLD, s_env);
     }
     // PRICED START GATE, the one rule (FullSearchLine's ladder AND FIT's climb under fit_gate "ladder" call this, so the
     // climb is admitted by exactly the ladder's priced test): true = the next pass may START. pr_prev / pr_prev2 = the
@@ -122159,6 +122205,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     int        prev_committed = committed_depth;
 
     long long c_prev = 0, c_prev2 = 0;       // work units of passes k-1, k-2
+    long long cc_prev = 0, cc_prev2 = 0;     // ...and their COLD costs (coldcost::t_credit added; IdGateColdOn's estimate)
     bool      have_prev = false, have_prev2 = false;
     long long l_prev = -1, l_prev2 = -1;     // rollout-leaf units of passes k-1, k-2 (sampled gate _pqg only)
     long long pr_prev = 0, pr_prev2 = 0;     // PRICED work (workctr::t_priced, ns) of passes k-1, k-2: the priced gate
@@ -123394,6 +123441,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             : kDefaultGrowth;
             if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && ratio > kDefaultGrowth) { ratio = kDefaultGrowth; }
             double estimate = static_cast<double>(c_prev) * ratio;
+            if (!vl_active && IdGateColdOn() && cc_prev > c_prev)
+            {
+                // The trial's COLD estimate (see IdGateColdOn): the same rule on cold pass costs, never below the warm one.
+                double cratio = (have_prev2 && cc_prev2 > 0)
+                              ? static_cast<double>(cc_prev) / static_cast<double>(cc_prev2) : kDefaultGrowth;
+                if (p18_qg && p18_K > 0 && have_prev2 && l_prev2 == 0 && cratio > kDefaultGrowth) { cratio = kDefaultGrowth; }
+                estimate = std::max(estimate, static_cast<double>(cc_prev) * cratio);
+            }
             const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
@@ -123452,7 +123507,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             {
                 idg = idgcensus::Rec{};
                 idg.on = true; idg.k = pass_depth; idg.boot = (have_prev2 && c_prev2 > 0) ? 0 : 1;
-                idg.c1 = c_prev; idg.c0 = have_prev2 ? c_prev2 : -1; idg.est = estimate; idg.rem = remaining;
+                idg.c1 = c_prev; idg.c0 = have_prev2 ? c_prev2 : -1; idg.cc1 = cc_prev; idg.est = estimate; idg.rem = remaining;
                 idg.alpha = gate_alpha; idg.lim = budget->Limit(); idg.used = budget->Used();
                 idg.fit = idg_trial_allow > 0 ? 2 : (fits ? 1 : 0);   // 2 = refused by the estimate, run as a trial
                 idg.pw = prev_line.win_turn; idg.p18 = p18_K > 0 ? 1 : 0;
@@ -123475,6 +123530,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // SAMPLED GATE: the committing pass starts at the best win its sampled rollouts reached (a real line reaches it).
         const int p18_cut = (p18_K > 0 && p18_wb > 0) ? std::min(root_cut, p18_wb) : root_cut;
         long long used_before = budget ? budget->Used() : 0;
+        const long long cold_before = coldcost::t_credit;   // the pass's cold cost (IdGateColdOn)
         const long long pr_before = workctr::t_priced;   // priced start gate (see above)
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
         const long long p16_leaf0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
@@ -123629,9 +123685,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+        cc_prev2 = cc_prev; cc_prev = cost + (coldcost::t_credit - cold_before);
         l_prev2 = l_prev;   l_prev = p16::t_leaf_units - p16_leaf0;
-        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; l_prev2 = p18_lfK1; }
-        if (p18_rx && pass_depth == p18_K) { c_prev += static_cast<long long>(p18_cK_add); }   // _prx2: the samples that warmed it
+        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); cc_prev2 = c_prev2; have_prev2 = true; l_prev2 = p18_lfK1; }
+        if (p18_rx && pass_depth == p18_K) { c_prev += static_cast<long long>(p18_cK_add); cc_prev += static_cast<long long>(p18_cK_add); }   // _prx2: the samples that warmed it
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
 
         // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
