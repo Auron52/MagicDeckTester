@@ -24,8 +24,22 @@ Worktree `.claude/worktrees/maze-p5d`, branch `wip/maze-p5d` (base 021c821d0). P
 - Real-play rationale (not clairvoyance): drawing first and then fetching lets the fetch target and the land-drop
   use depend on the draw. Real play sees that draw too.
 
+## Measurements (rev batch DONE, `$O/rev.out`; mtg.p6 lever OFF == mtg.p5: idB 400/400 digests identical to blw candB)
+- d8 b0 BLIND salts 1-4 totals: g320 rev 8/6/6/6 = 26 (= fix 26; shipped 29; ship 25); g231 rev 7/8/6/8 = 29 (= fix 29;
+  shipped 30; ship 28 -- the remaining +1 is the Amulet tier's, not (a)'s).
+- BLIND sample-wide (blind_salt 1, net turns): revB vs shipB d5 -9, 2HG -9, d3 -11, d1b3 -20, d1b1 +1 (std -39, 2HG -9);
+  revB vs candB (shipped) d5 -1, 2HG -1, d3 -5, d1b3 0, d1b1 +4 (std -2, 2HG -1); (a)-with-reveal on fix: std -11 (was -9),
+  2HG +2 (was +3).
+- CLAIRVOYANT (ac seeds, net turns): rev vs shipped (fixidle == cand) d5 -16 (18/2), 2HG -3, d3 -3, d1b3 -3, d1b1 0, d0 0
+  (identical); rev vs ship d5 -12, 2HG 0, d3 -6, d1b3 -7, d1b1 +2, d0 -16; rev vs fix d5 -4, 2HG +1, d3 -2, d1b3 +1, d1b1 -2.
+  The games rev recovers include most of the old "(a) clairvoyant losses" (d5 g81 g231 g629 g823, 2HG g254, d1b3 g64,
+  d1b1 g186), so the reveal mechanism, not only clairvoyance, was behind several of them.
+
 ## Running
-- rev batch (`$O/run_rev.sh` PID 2099824, heavy_run -> `$O/rev_inner.sh`, `$O/m_rev.json` 4809 jobs, mtg.p6; out
+- d8 (`$O/run_d8.sh` PID 2128603, `$O/m_d8.json` 110 jobs = the 55 games where rev is slower than shipped (3
+  clairvoyant: d5 g516 g984, d1b1 g159; 52 blind salt 1), arms rev / cand at d8 b0 (50M ceiling); out `$O/d8.out`,
+  marker `$O/d8.done`). Read: rev <= cand on each?
+- (DONE) - rev batch (`$O/run_rev.sh` PID 2099824, heavy_run -> `$O/rev_inner.sh`, `$O/m_rev.json` 4809 jobs, mtg.p6; out
   `$O/rev.out`, marker `$O/rev.done`): (1) d8 b0 blind g231/g320 salts 1-4 `BL_*_rev` (+ `_cand` g320 s4);
   (2) `*_revB` = blw's candB jobs + reveal (blind_salt 1), `*_idB` = every 5th candB on mtg.p6 (digest identity vs
   blw candB); (3) `*_rev` clairvoyant on the ac fixidle jobs (+ d0 on ac fix).
