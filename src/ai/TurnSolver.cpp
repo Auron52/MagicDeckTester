@@ -128128,6 +128128,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         };
         auto w0len_record = [&](const Plan& pl)
         {
+            if (g_fs_sim_trace > 0)   // RC-3 DIAG
+            { std::fprintf(stderr, "[fs-sim]   rec ci=%zu bpc=%d any_d=%llu lat9_d=%llu sup=%d nobp_here=%d w0nobp=%d\n", cand_index,
+                           pl.bp_choice, (unsigned long long)(g_bp_any_last - any_before),
+                           (unsigned long long)(g_bp_latent9_last - latent9_before), g_bp_searchonly_suppressed ? 1 : 0,
+                           nobp_here ? 1 : 0, w0nobp_here ? 1 : 0); }
             if (pl.bp_choice < 0 && g_bp_base_canon_last != canon_before && BpCanonWaveOn())
             { bp_canon.insert(cand_index); }
             if (w0chain_here)
@@ -129352,6 +129357,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                 /*host_pends=*/false,   // this loop never passes the node a capture
                                 bp_canon.empty() ? nullptr : &bp_canon);
             for (const DevSeqSeed& sd : la_dvs_seeds) { walker.SeedDevSeq(sd.tmpl, {}, sd.at, sd.choice, sd.seen, sd.latent, sd.drop); }   // MTG_BP_DEV_SEQ
+            if (g_fs_sim_trace > 0)   // RC-3 DIAG
+            { std::fprintf(stderr, "[fs-sim]   WAVES t%d empty=%d slots=%zu nobp=%zu w0lens=%zu canon=%zu seeds=%zu\n", state.turn_number,
+                           walker.Empty() ? 1 : 0, static_cast<std::size_t>(walker.Empty() ? 0 : walker.SlotCount()), bp_nobp.size(),
+                           bp_w0_lens.size(), bp_canon.size(), la_dvs_seeds.size()); }
             if (walker.Empty())
             {
                 if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
