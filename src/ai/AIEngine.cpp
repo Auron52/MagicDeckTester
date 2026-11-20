@@ -6147,14 +6147,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::vector<Action> rec_unlock_acts;   // the open section's records (outlives rec_unlock)
         std::optional<CastSectionUnlock> rec_unlock;
         int rec_unlock_ord = 0;
+        // The SITE-9-AFTER-DEFERRED segment being replayed (Action::rec_s9d_seg; null = the continuation's own
+        // records). A section covers ONE segment's records, as the rollout's apply_continuation_plan covered one
+        // continuation's actions. Records with no segment stamp are all null, so this filter is the old one.
+        std::shared_ptr<const PlanTraits> rec_seg;
+        bool rec_seg_opened = false;
         auto rec_section = [&](int ord)
         {
             if (rec_unlock && rec_unlock_ord == ord) { return; }
             rec_unlock.reset();
             rec_unlock_acts.clear();
-            for (const Action& r : recs) { if (r.rec_bp_ord == ord) { rec_unlock_acts.push_back(r); } }
+            for (const Action& r : recs)
+            { if (r.rec_bp_ord == ord && r.rec_s9d_seg == rec_seg) { rec_unlock_acts.push_back(r); } }
             rec_unlock.emplace(state, rec_unlock_acts);
             rec_unlock_ord = ord;
+            rec_seg_opened = true;
         };
         if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
         {
@@ -6170,8 +6177,35 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::optional<LineUnpaidCostScope>  rec_luc;
         std::optional<LineOpensUnseenScope> rec_lou;
         auto rec_line_close = [&]() { rec_lou.reset(); rec_luc.reset(); };
+        // A segment's board activations, dispatched under the continuation traits the rollout applied that
+        // segment under (Action::rec_s9d_seg) -- the continuation's own segment keeps the records' scope above.
+        auto rec_flush_acts = [&]()
+        {
+            if (rec_acts.empty()) { return; }
+            std::optional<PlanTraitsScope>  seg_traits;
+            std::optional<TapKeepLastScope> seg_keep;
+            if (rec_seg && PlanTraitsWanted())
+            {
+                seg_traits.emplace(rec_seg.get());
+                seg_keep.emplace(PumpTargetHoldEnabled() ? rec_seg->pump_target_card : 0);
+            }
+            exec_continuation_activations(rec_acts);
+            rec_acts.clear();
+        };
         for (const Action& a : recs)
         {
+            // SEGMENT BOUNDARY (MTG_SITE9_AFTER_DEFERRED): the rollout finished the previous continuation -- its
+            // cast section (opened up front even when it cast nothing), its line, then its board activations --
+            // before it applied the site-9 continuation these records begin. Close it the same way here.
+            if (a.rec_s9d_seg != rec_seg)
+            {
+                if (!rec_seg_opened && a.rec_s9d_seg) { rec_section(recs.front().rec_bp_ord); }
+                rec_unlock.reset();
+                rec_line_close();
+                rec_flush_acts();
+                rec_seg = a.rec_s9d_seg;
+                rec_seg_opened = false;
+            }
             // Inline continuations can inherit an outer scope with fewer casts and no
             // pending cycle. Re-deriving from their realized records invents a different
             // hold (s131117: Ponder strands a filter's last feeder). Restore the actual
@@ -6301,7 +6335,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!rec_unlock && !recs.empty()) { rec_section(recs.front().rec_bp_ord); }
         rec_unlock.reset();  // ...which ends before the trailing activations, as apply_plan_actions does
         rec_line_close();    // ...and so does its line
-        if (!rec_acts.empty()) { exec_continuation_activations(rec_acts); }
+        rec_flush_acts();    // (the last segment's, under its own traits when it is a site-9 segment)
     };
 
     // Fallback draw breakpoint for the NON-committed full-depth plan (the develop-when-
@@ -6733,6 +6767,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::vector<uint64_t> s9_chain;
         const bool s9_reopen = Site9ReopenEnabled();
         const bool s9_cyc = s9_reopen && Site9CycleStopEnabled();
+        // The deferred continuation's own traits (pass 0, after its carry): the rollout installs every site-9
+        // continuation that follows it INSIDE that scope, so each one's pending activations carry from it -- not
+        // from the main plan's scope this loop is back in once pass 0's scope has closed.
+        std::optional<PlanTraits> s9d_outer_traits;
         for (int s9d_pass = 0; ; ++s9d_pass)
         {
         const ContPins rdb_pins = ContPinsOf(extra);
@@ -6759,7 +6797,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // MTG_ACT_HOLD_OUTER (lockstep with ApplyPlanDirect's continuation install): the main
             // plan's unfired trailing activations are still owed their {T} while this continuation
             // pays its casts. Read before the scope replaces CurrentPlanTraits().
-            TurnSolver::CarryPendingActivations(_cont_traits, CurrentPlanTraits());
+            TurnSolver::CarryPendingActivations(_cont_traits, s9d_pass > 0 && s9d_outer_traits
+                                                                  ? &*s9d_outer_traits : CurrentPlanTraits());
+            if (s9d_pass == 0 && s9d_on) { s9d_outer_traits = _cont_traits; }
         }
         PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
         TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);

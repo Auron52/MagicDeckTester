@@ -1008,6 +1008,16 @@ struct Action
     // ran after the FIRST Hunt, the base plan's second Hunt then could not pay, T4 kill -> T5).
     // Nested records (breakpoint_casts) keep 0 -- they replay under their own recorded cast.
     int rec_bp_ord = 0;
+    // A SITE-9-AFTER-DEFERRED SEGMENT (MTG_SITE9_AFTER_DEFERRED): the top-level records one site-9 continuation that
+    // followed a deferred continuation appended to the deferred continuation's sink, stamped with the continuation
+    // traits that continuation was applied under (one shared object per continuation, so pointer identity is the
+    // segment boundary). The rollout applied each such continuation in its own section -- its casts, then its board
+    // activations, before the next continuation began -- so the executor's replay_recorded must close the previous
+    // segment (dispatch its activations) at the boundary instead of pooling every segment's activations into ONE
+    // trailing pass (whose provider sort reorders them: Accomplished Alchemist s3043/s3090, Staff untap loops ahead of
+    // the Ezuri pumps they interleaved with, the Alchemist left tapped, committed T4 kill realised T5). Null = not an
+    // s9d segment (the continuation's own records and every other record).
+    std::shared_ptr<const PlanTraits> rec_s9d_seg;
 
     // Memberwise equality (C++20 defaulted: EVERY member, so a field added later is compared without
     // anyone remembering to). The one consumer is the combat-pin main-phase share in
