@@ -332,7 +332,7 @@ namespace manaoracle
     struct RefineRunStats { std::size_t probes = 0; bool capped = false; bool budget_cut = false; long rbt_units = 0; std::size_t nodes = 0; };
     RefineRunStats LastRefineRunForTest(bool reset = false);
     // TESTS ONLY: the refine's free probe allowance on this thread (0 = the shipped 4,096), so a small board can
-    // exercise the budget-charged cap; the Dfs node cap scales with it (64x).
+    // exercise the budget-charged cap (the Dfs node cap is left as it is).
     void SetRefineFreeProbesForTest(std::size_t n);
     // TESTS ONLY: ReachesByTapping (the refine's acceptance test); `cut` (optional) reports a budget cut.
     bool ReachesByTappingForTest(const GameState& c, const GameState& e, bool* cut);

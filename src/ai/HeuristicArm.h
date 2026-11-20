@@ -1039,6 +1039,7 @@ enum Slot : int
     PAY_REFINE_BUDGET_CAP,    // MTG_PAY_REFINE_BUDGET_CAP  the payment refine's 4,096-probe cap becomes a price: probes past it charge one unit each to the decision's budget and stop only when that budget runs out; at an unlimited root nothing cuts but a safety ceiling (MTG_PAY_REFINE_CEILING). A budget-cut refine is never memoised
     PAY_REFINE_PRECHECK,      // MTG_PAY_REFINE_PRECHECK  the payment refine's release layers skip the work no candidate of the layer can use when ReachesByTapping must refuse every one of them (more than four sources released, no untapper): the acceptance tests and the surplus supersets. Sound (the choice is the eager one); it only moves where the probe cap cuts. Default OFF until measured
     PAY_REFINE_RBT_PRICED,    // MTG_PAY_REFINE_RBT_PRICED  ReachesByTapping's two fixed caps (more than four released sources refused; 256 face combinations) become a price: the face combinations are folded by their post-tap effect (an identity fold), the first 256 checks of a <= 4-source call stay free, every other check charges one unit to the decision's budget, and at an unlimited root nothing stops but a safety ceiling. A budget-cut refine is never memoised. Default OFF until measured
+    PAY_REFINE_RBT_SUBSET,    // MTG_PAY_REFINE_RBT_SUBSET  ReachesByTapping may leave a released source UNTAPPED: the candidate is tested as it is first (a source given back covers a tapped one, as CoversBoards and the no-untapper deck's own test already read it), then with any subset of the released sources re-tapped. It used to re-tap every one, so a released source that cannot tap on its own (a fed face with nothing floating: Baldur's Gate's {2},{T}) refused every candidate that gave it back -- Maze's End's {9}{G} / {11}{U} whole-line bills, 49 of the 50 capped refines of 430 games. A completeness fix. Default OFF until measured
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     COUNT
 };
@@ -2023,6 +2024,7 @@ inline const char* Name(int slot)
         "MTG_PAY_REFINE_BUDGET_CAP",
         "MTG_PAY_REFINE_PRECHECK",
         "MTG_PAY_REFINE_RBT_PRICED",
+        "MTG_PAY_REFINE_RBT_SUBSET",
         "MTG_SUMMIT_TWIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

@@ -2871,6 +2871,7 @@ bool PayOptionOn(GameState& sc, const PayOption& o, const ManaCost& cost, bool f
 // memoised), and the checks it charged (stats / tests).
 thread_local bool t_rbt_cut   = false;
 thread_local long t_rbt_units = 0;
+std::atomic<long long> g_rbt_notap{0};   // MTG_PAY_REFINE_RBT_SUBSET: accepted with nothing re-tapped
 std::atomic<long long> g_rbt_calls{0}, g_rbt_big{0}, g_rbt_checks{0}, g_rbt_combos{0}, g_rbt_cut{0}, g_rbt_ceil{0}, g_rbt_maxchk{0};
 
 // THE PRICED, FOLDED ReachesByTapping (MTG_PAY_REFINE_RBT_PRICED). The plain one tries every face combination of the
@@ -2886,7 +2887,8 @@ std::atomic<long long> g_rbt_calls{0}, g_rbt_big{0}, g_rbt_checks{0}, g_rbt_comb
 //    check charges one unit to TurnSolver::DecisionBudget() and the call stops (refusing, `t_rbt_cut`) only when that
 //    budget is exhausted or overrun or the game's backstop trips. At an unlimited root nothing is charged and nothing
 //    stops but MTG_PAY_REFINE_RBT_CEILING checks (default 1<<20), a safety ceiling no measured call reaches.
-bool ReachesByTappingPriced(const GameState& c, const GameState& e, const GameState& masked, const std::vector<int>& released)
+bool ReachesByTappingPriced(const GameState& c, const GameState& e, const GameState& masked, const std::vector<int>& released,
+                            bool subset)
 {
     static const long long s_ceiling = std::max(256LL, static_cast<long long>(EnvInt("MTG_PAY_REFINE_RBT_CEILING", 1 << 20)));
     static const bool s_verify = EnvOn("MTG_PAY_REFINE_RBT_VERIFY");
@@ -2907,6 +2909,12 @@ bool ReachesByTappingPriced(const GameState& c, const GameState& e, const GameSt
         {
             if (std::find(sc.nums.begin(), sc.nums.end(), num) == sc.nums.end()) { continue; }
             for (const Face& f : sc.faces) { Face g = f; g.pt.num = num; fs.push_back(g); }
+        }
+        if (subset)
+        {
+            // MTG_PAY_REFINE_RBT_SUBSET: left untapped (no effect, no pool): its own fold identity.
+            Face g; g.pt.num = -1; g.pre_ok = true; g.regular = true; g.effect = 0x534B4950ull;
+            fs.push_back(g);
         }
         if (fs.empty()) { return false; }
         faces_of.push_back(std::move(fs));
@@ -2976,6 +2984,7 @@ bool ReachesByTappingPriced(const GameState& c, const GameState& e, const GameSt
         for (std::size_t r = 0; r < faces_of.size() && ok; ++r)
         {
             const Face& f = faces_of[r][st.pick[r]];
+            if (f.pt.num < 0) { continue; }
             ok = (f.creature ? OracleCreatureTap(c2, f.pt) : ApplyEnginePreTap(c2, f.pt)).empty();
         }
         if (ok && CoversBoards(c2, e, true, nullptr)) { reached = true; break; }
@@ -2997,6 +3006,7 @@ bool ReachesByTappingPriced(const GameState& c, const GameState& e, const GameSt
             for (std::size_t r = 0; r < faces_of.size() && ok; ++r)
             {
                 const Face& f = faces_of[r][k[r]];
+                if (f.pt.num < 0) { continue; }
                 ok = (f.creature ? OracleCreatureTap(c2, f.pt) : ApplyEnginePreTap(c2, f.pt)).empty();
             }
             if (ok && CoversBoards(c2, e, true, nullptr)) { full = true; break; }
@@ -3032,7 +3042,10 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         p.tapped = true;
     }
     if (released.empty()) { return CoversBoards(c, e, true, nullptr); }
-    if (PayRefineRbtPricedOn()) { return ReachesByTappingPriced(c, e, masked, released); }
+    // MTG_PAY_REFINE_RBT_SUBSET: a source given back covers a tapped one, so the candidate as it is comes first.
+    const bool subset = PayRefineRbtSubsetOn();
+    if (subset && CoversBoards(c, e, true, nullptr)) { g_rbt_notap.fetch_add(1, std::memory_order_relaxed); return true; }
+    if (PayRefineRbtPricedOn()) { return ReachesByTappingPriced(c, e, masked, released, subset); }
     if (released.size() > 4) { ++t_trc_rbt[0]; return false; }
     // (for_creature: the table then also holds a restricted source's creature-only route.)
     const std::vector<SrcClass> srcs = BuildSources(masked, /*for_creature=*/true, nullptr, 31);
@@ -3045,7 +3058,8 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
             if (std::find(sc.nums.begin(), sc.nums.end(), num) == sc.nums.end()) { continue; }
             for (const Face& f : sc.faces) { TurnSolver::PreTap t = f.pt; t.num = num; fs.emplace_back(t, f.creature); }
         }
-        if (fs.empty()) { return false; }
+        if (fs.empty() && !subset) { return false; }
+        if (subset) { TurnSolver::PreTap skip = TurnSolver::PreTap{}; skip.num = -1; fs.emplace_back(skip, false); }   // left untapped
         faces_of.push_back(std::move(fs));
     }
     std::vector<std::size_t> k(faces_of.size(), 0);
@@ -3057,9 +3071,40 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         for (std::size_t r = 0; r < faces_of.size() && ok; ++r)
         {
             const auto& f = faces_of[r][k[r]];
+            if (f.first.num < 0) { continue; }   // MTG_PAY_REFINE_RBT_SUBSET: left untapped
             ok = (f.second ? OracleCreatureTap(c2, f.first) : ApplyEnginePreTap(c2, f.first)).empty();
         }
         if (ok && CoversBoards(c2, e, true, nullptr)) { return true; }
+        static const bool s_dbg = EnvOn("MTG_RBT_DEBUG");   // diagnostic: why a combination fails
+        static std::atomic<int> s_dbg_n{0};
+        if (s_dbg && guard < 2 && s_dbg_n.fetch_add(1) < 400)
+        {
+            std::string w;
+            for (std::size_t r2 = 0; r2 < faces_of.size(); ++r2)
+            {
+                const auto& f = faces_of[r2][k[r2]];
+                if (f.first.num < 0) { w += " skip"; continue; }
+                OracleScratch dscr(c);
+                const std::string why = f.second ? OracleCreatureTap(dscr.Board(), f.first) : ApplyEnginePreTap(dscr.Board(), f.first);
+                w += " #" + std::to_string(f.first.num) + (why.empty() ? ":ok" : (":FAIL(" + why + ")"));
+            }
+            std::string dx;
+            if (ok)
+            {
+                const int pa = c2.active_player_index;
+                dx = " life " + std::to_string(c2.players[pa].life) + "/" + std::to_string(e.players[pa].life) + " float "
+                   + PoolText(c2.floating_mana, c2.floating_haste_c) + " vs " + PoolText(e.floating_mana, e.floating_haste_c)
+                   + " cfloat " + std::to_string(c2.floating_creature_mana.Total()) + "/" + std::to_string(e.floating_creature_mana.Total())
+                   + " bfloat " + std::to_string(c2.floating_bigspell_mana.Total()) + "/" + std::to_string(e.floating_bigspell_mana.Total());
+                for (std::size_t i = 0; i < c2.battlefield.size() && i < e.battlefield.size(); ++i)
+                {
+                    const Permanent& p = c2.battlefield[i]; const Permanent& q = e.battlefield[i];
+                    if (p.controller_index == pa && p.tapped != q.tapped) { dx += " tapdiff:" + p.card.m_name.str() + (p.tapped ? "(c tapped)" : "(c untapped)"); }
+                }
+            }
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[rbt-dbg] released=%zu combo%d apply=%d%s%s\n", released.size(), guard, ok ? 1 : 0, w.c_str(), dx.c_str());
+        }
         std::size_t r = 0;
         while (r < k.size() && ++k[r] == faces_of[r].size()) { k[r] = 0; ++r; }
         if (r == k.size()) { break; }
@@ -3204,7 +3249,7 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     // own 64 * cap ceiling); 0 = unbounded.
     { static const long long s_nc = EnvInt("MTG_PAY_REFINE_NODE_CAP", 64 * 4096);
       if (s_nc > 0) { pe.node_cap = static_cast<std::size_t>(s_nc); } }
-    if (t_free_probes_test != 0) { pe.cap = t_free_probes_test; if (pe.node_cap != static_cast<std::size_t>(-1)) { pe.node_cap = 64 * pe.cap; } }
+    if (t_free_probes_test != 0) { pe.cap = t_free_probes_test; }
     // MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED=1 (diagnostic, with MTG_PAY_REFINE_BOUND_VERIFY): the eager recompute runs
     // with no probe cap, so every mismatch it reports is one the layers got wrong or left capped.
     { static const bool s_unc = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED"); if (s_unc && t_refine_eager_fed) { pe.cap = static_cast<std::size_t>(1) << 40; pe.node_cap = static_cast<std::size_t>(-1); } }
@@ -3353,7 +3398,7 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     // is the eager one; only where the probe cap cuts moves. Off under MTG_PAY_REFINE_RBT_PRICED, which admits a
     // release past four at a price.
     bool refused_layer = false;
-    const bool precheck = PayRefinePrecheckOn() && !no_trade && !PayRefineRbtPricedOn();
+    const bool precheck = PayRefinePrecheckOn() && !no_trade && !PayRefineRbtPricedOn() && !PayRefineRbtSubsetOn();
     std::vector<PayEnum::Slot> fed_slots, fed_next, sur_slots, sur_next;
     std::map<std::vector<std::pair<int, int>>, bool> vmemo;
     std::unordered_map<std::uint64_t, std::size_t> rep;
@@ -3555,8 +3600,8 @@ struct RefineMemoReport
                      g_rcap_maxp_null.load(), g_rcap_nover.load(), g_rcap_maxn.load(), g_rcap_maxn_null.load());
         std::fprintf(stderr, "=== PAY REFINE PRECHECK: considers_skipped=%lld surplus_slots_skipped=%lld ===\n",
                      g_rpre_skip_all.load(), g_rpre_sur.load());
-        std::fprintf(stderr, "=== PAY REFINE RBT: calls=%lld released_gt4=%lld combos=%lld checks=%lld max_checks=%lld budget_cut=%lld ceiling=%lld ===\n",
-                     g_rbt_calls.load(), g_rbt_big.load(), g_rbt_combos.load(), g_rbt_checks.load(), g_rbt_maxchk.load(),
+        std::fprintf(stderr, "=== PAY REFINE RBT: notap=%lld calls=%lld released_gt4=%lld combos=%lld checks=%lld max_checks=%lld budget_cut=%lld ceiling=%lld ===\n",
+                     g_rbt_notap.load(), g_rbt_calls.load(), g_rbt_big.load(), g_rbt_combos.load(), g_rbt_checks.load(), g_rbt_maxchk.load(),
                      g_rbt_cut.load(), g_rbt_ceil.load());
     }
 } g_refine_memo_report;

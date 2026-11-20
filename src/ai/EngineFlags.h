@@ -822,6 +822,12 @@ inline bool PayRefineRbtPricedOn()
     static const bool env_on = EnvOn("MTG_PAY_REFINE_RBT_PRICED", false);
     return heurarm::Flag(heurarm::PAY_REFINE_RBT_PRICED, env_on);
 }
+// MTG_PAY_REFINE_RBT_SUBSET (2026-11-20, Maze's End F5R-4): see heurarm::PAY_REFINE_RBT_SUBSET. Default OFF until measured.
+inline bool PayRefineRbtSubsetOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_RBT_SUBSET", false);
+    return heurarm::Flag(heurarm::PAY_REFINE_RBT_SUBSET, env_on);
+}
 inline bool PayRefineWildOutOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_REFINE_WILD_OUT", true);

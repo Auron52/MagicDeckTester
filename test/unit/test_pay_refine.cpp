@@ -394,3 +394,40 @@ TEST_CASE("payment: ReachesByTapping prices its release and combination caps ins
         }
     }
 }
+
+// THE SUBSET RULE (MTG_PAY_REFINE_RBT_SUBSET). A candidate that gives back a source the engine's payment tapped covers
+// it outright when nothing it floated is missing -- an untapped source is at least the tapped one (CoversBoards, and a
+// deck with a same-phase untapper reads it that way already). The plain test re-taps EVERY released source, so one
+// that cannot tap on its own refused the candidate: Cascade Bluffs ({U/R},{T}) given back ahead of an Island, with
+// nothing floating to feed it, while the engine's payment floated only the Island's {U} (Maze's End: Baldur's Gate's
+// {2},{T} in the {9}{G} / {11}{U} whole-line bills).
+TEST_CASE("payment: ReachesByTapping may leave a released source untapped (MTG_PAY_REFINE_RBT_SUBSET)")
+{
+    GameState c = BoardPr(5);
+    int num = 1;
+    PutPr(c, num, "Cascade Bluffs");
+    PutPr(c, num, "Island");
+    GameState e = c;
+    for (Permanent& p : e.battlefield) { p.tapped = true; }
+    e.floating_mana.blue = 1;
+    auto reaches = [](const GameState& x, const GameState& y, int subset, int priced)
+    {
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_SUBSET] = static_cast<std::int8_t>(subset);
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_PRICED] = static_cast<std::int8_t>(priced);
+        const bool r = manaoracle::ReachesByTappingForTest(x, y, nullptr);
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_SUBSET] = -1;
+        heurarm::t_arm[heurarm::PAY_REFINE_RBT_PRICED] = -1;
+        return r;
+    };
+    CHECK_FALSE(reaches(c, e, 0, 0));   // the defect, pinned: the Bluffs must tap first and has no feed
+    CHECK_FALSE(reaches(c, e, 0, 1));
+    CHECK(reaches(c, e, 1, 0));         // the Island alone makes the {U}; the Bluffs stays up
+    CHECK(reaches(c, e, 1, 1));
+    // Nothing floated at all: the candidate as it is covers.
+    e.floating_mana = ManaPool{};
+    CHECK(reaches(c, e, 1, 0));
+    // More than the two can make: still refused.
+    e.floating_mana.blue = 1; e.floating_mana.red = 1; e.floating_mana.white = 1;
+    CHECK_FALSE(reaches(c, e, 1, 0));
+    CHECK_FALSE(reaches(c, e, 1, 1));
+}
