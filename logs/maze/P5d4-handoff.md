@@ -38,3 +38,18 @@ accept `--deck=mazesend,mazesend2hg`, check_gt_logs, push wip/maze-p5d. 3. ledge
 - Running chain (`$P4/run_chain.sh`): units -> `regression.sh --both` (markers `$P4/tiers/units.done`, `both.done`); then
   bl2 (`$P4/bl2/done`: fix-only blind on g231/g320, u2/u2idle on g320) then blw (`$P4/blw/done`: sample-wide blind
   fixB/candB/shipB at blind_salt 1, compare with abb u2B/idleB).
+
+## Update 2026-11-20 ~02:30 UTC (P5d-4 stopping at ~215K context)
+- DONE: units 3655/3655; smoke+regression all decks: only 10 Maze keys moved; accepted `--deck=mazesend,mazesend2hg`
+  (`d616a508a`), check_gt_logs 0 stale; ledger "## P5d" + TapTutorPutEval comment (`02b566d48`); pushed wip/maze-p5d
+  (force-with-lease over the pre-squash 4cc103057).
+- FINDING: d0 is +459 turns / 20k vs ship (fresh @310001, `$P4/d0/`); cause = kMazeFetchWins (1000, the USER's "win out")
+  outranking Exploration / Guild Summit / Burgeoning in the d0 greedy. C2 (tier = full 100) fixes it (-190 vs ship) and
+  is better on every searched row -- OWED to the USER, NOT shipped.
+- PENDING (queued on heavy.lock, launched by P5d-4; no waiter survives this agent -- set your own):
+  * bl2 (`$P4/bl2/run.sh`, marker `$P4/bl2/done`, outputs `p5.out` fix-only blind g231/g320 salts 1-4, `p3.out` u2/u2idle
+    blind g320). Read: does the Amulet tier alone (fix) make g231/g320 worse blind?
+  * blw (`$P4/blw/run.sh`, marker `$P4/blw/done`, `p5.out` fixB/candB, `ab.out` shipB; blind_salt 1, abb seeds). Compare with
+    `$S/abb/run.out` u2B/idleB: `cat $S/abb/run.out $P4/blw/*.out | grep -v ^AMU > x; python3 $S/anab.py x shipB`.
+  If the Amulet tier is net worse BLIND sample-wide, root-cause g231/g320 (logs: CLI can't set heurarm slots; use
+  `MTG_MAZE_IDLE_FETCH` env / a TEMP build) and update the ledger P5d section's "Two persist blind" line.
