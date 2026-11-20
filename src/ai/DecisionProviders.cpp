@@ -56421,6 +56421,30 @@ void AccomplishedAlchemistProvider::ArrangeCastOrder(const GameState& s, const s
 bool AccomplishedAlchemistProvider::ExactOrderWalk() const { return AaWeatherFlexActive(); }
 bool AccomplishedAlchemistProvider::LifeScaledManaInOrderWalk() const { return AaWeatherFlexActive(); }
 
+// THE ALCHEMIST TAPS LAST (MTG_AA_ALCH_TAP_LAST, DEFAULT ON; heurarm AA_ALCH_TAP_LAST; 2026-11-20). Accomplished
+// Alchemist's yield is max(1, life gained this turn), so it can only GROW within the turn, and its {T} is the deck's
+// loop: the Crab Umbra / Staff / Galvanic untaps re-use it. The inherited rank put it in the same creature band as
+// Arbor Elf (both ManaDork; tie broken by board order), so on seed 12345681 T3 (Forest, Living Wish -> Brindle Boar,
+// Boar + Crab Umbra, sac the Boar for X = 4) the payer paid the Boar's last pip with the Alchemist's 1 rather than
+// Arbor Elf's re-tap of the Sprawl Forest (G + U: the U then pays the Umbra) -- the Alchemist was tapped before the
+// gain, the post-sac {2}{U} untap was unpayable and the T3 line died in every searched plan at every budget. The
+// card's own note listed this as a PARTIAL ("an Alchemist should tap LAST ... belongs in the deck's own provider and
+// must be measured"), and the USER's Weather rule already treats "tapping an Accomplished Alchemist before the list's
+// last lifegain" as the failure to avoid. Ranked one past the highest creature-band rank (the burst land, 68), so it
+// is still tapped whenever the cost needs it. Order only -- no option is removed.
+static bool AaAlchTapLastOn()
+{
+    static const bool env = EnvOn("MTG_AA_ALCH_TAP_LAST", true);
+    return heurarm::Flag(heurarm::AA_ALCH_TAP_LAST, env);
+}
+int AccomplishedAlchemistProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int r = SelesnyaLifegainProvider::ManaSourceRank(s, def);
+    if (def.params.mana_per_life_gained && def.card.IsCreature() && AaAlchTapLastOn())
+    { return std::max(r, kGrowableManaCreatureTapRank + 4); }
+    return r;
+}
+
 // THE UMBRA GOES ON THE ALCHEMIST (USER 2026-11-20). Crab Umbra's "{2}{U}: Untap enchanted creature" re-uses the
 // host's {T}: on Accomplished Alchemist at X >= 4 it is the deck's self-funding mana loop, on anything else it is
 // close to blank in a goldfish. The shared ranking's damage terms cannot see that, and its "fewer Auras on creature

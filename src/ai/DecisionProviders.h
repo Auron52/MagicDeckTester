@@ -3978,6 +3978,12 @@ public:
                           std::vector<int>& order) const override;
     bool ExactOrderWalk() const override;
     bool LifeScaledManaInOrderWalk() const override;
+    // THE ALCHEMIST TAPS LAST (MTG_AA_ALCH_TAP_LAST, DEFAULT ON; heurarm AA_ALCH_TAP_LAST; 2026-11-20, seed 12345681
+    // T3). A life-scaled source (mana_per_life_gained) ranks behind every other mana source, the whole creature band
+    // included: its yield can only grow within the turn, and once tapped its {T} is gone until an untapper pays for
+    // it. Payment ORDER only (the standing mana-payment exemption); a cost that needs the Alchemist still taps it.
+    // =0 -> the inherited rank. See the .cpp.
+    int  ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     // MTG_AA_CAST_ORDER_V2: ONE list of casts and board activations (kAaV2List; USER-amended 2026-11-18: Scholar of
     // Athreos's cast at the finish, before its drain); Stroke of Genius at the opponent after every setup cast; the
     // board activations life -> untap loop (cheapest first) -> finish -> combat pumps.

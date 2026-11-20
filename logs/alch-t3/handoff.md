@@ -259,3 +259,87 @@ Running (agent 3 launched): chain3b = `flock BOX.lock bash build/scratch/alch-t3
   Wish-alone variant never reaches the deferred s9 (check the DEV_SEQ latent record / bp_seen==1 guard / whether site
   10 is counted for that plan), and check hole (a) (payer taps the Alchemist for the Boar on the Umbra+Wish root route).
 - ab4 NOT run (pointless until acceptance passes, though it would still measure the rank/burst changes).
+
+## UPDATE (agent 5, 2026-11-20 ~13:10 UTC): hole (a) FIXED (tap order); the remaining T1 hole is an MTG_INWIN_CACHE soundness bug vs MTG_BP_DEV_SEQ
+### USER rulings (verbatim; all earlier ones above still stand)
+- "I would like to know why we can't find it at any budget." / "we should improve the heuristic and the search itself." / "the heuristic is our answer to this working at a lower budget, but the search should be capable at a high budget."
+- On the Crab Umbra host: "Why do we need branching here? Just have a heuristic specific to the deck and we are done. Obviously in this deck Accomplished Alchemist is the target." (host = deck provider rule; generic MTG_AURA_UNTAP_HOST_SEARCH stays DELETED)
+- On BurstPendingActColour: "Yes, we need to fix this."
+- CLAUDE.md hard rule: no greedy pick inside the search window; heuristics only in a DecisionProvider, only to restrict or order options.
+
+### Done this agent (WIP commit below; BUILT = build/Release in the worktree, build6.log EXIT 0)
+1. Unit fix: test_accomplished_alchemist.cpp "Crab Umbra chooses Accomplished Alchemist over an attacking Harbinger" now sets
+   `s.m_provider = &aa_prov` (local static AccomplishedAlchemistProvider). NOT yet re-run (units owed on this build).
+2. HOLE (a) FIXED -- MTG_AA_ALCH_TAP_LAST (DEFAULT ON; heurarm slot AA_ALCH_TAP_LAST appended to HeuristicArm.h enum + kNames):
+   AccomplishedAlchemistProvider::ManaSourceRank override (DecisionProviders.h/.cpp, after LifeScaledManaInOrderWalk):
+   mana_per_life_gained creature -> max(inherited, kGrowableManaCreatureTapRank + 4 = 69), i.e. behind the whole creature band.
+   Evidence (chain4 binary, ho8 trace build/scratch/alch-t3/t5/ho8.err lines 3056-3069, "rod" = state after the site-10
+   deferred continuation): every Living-Wish-alone continuation left `Accomplished Alchemist#1(T)` with Arbor Elf untapped
+   (e.g. 3058: `float=0 bf=[Forest#20(T),Arbor Elf#4,Forest#21(T),...,Accomplished Alchemist#1(T),Forest#22(T),Brindle Boar]`):
+   the Boar's last pip took the Alchemist's 1 (exact) instead of Arbor's Sprawl re-tap (G+U, the U pays the Umbra).
+   The card's own note listed this PARTIAL ("an Alchemist should tap LAST ... belongs in the deck's own provider").
+   Result (chain5a, build5): ho8 (T3-start hand-off) d8 b0 heur OFF: T4 -> **T3**; acc_heur (full game heur ON d8 b0) and
+   play_heur (d5 b20) **T3** (were T4). acc_all (full game heur OFF d8 b0) still T4; play_off T4.
+3. MTG_DVS_TRACE (diagnostic, print-only, default off; TurnSolver.cpp near g_fsline_nest + 5 fprintf sites: the two latent
+   records, inwin no-win store/widen/hit).
+4. build/scratch/alch-t3/ab4.sh updated: every arm sets MTG_AA_ALCH_TAP_LAST; new arm `tlast`; `all` has it =1. NOT run.
+   build/scratch/alch-t3/chain5.sh written (units, combo_off, aa scenarios, acceptance arms incl. acc_notlast/play_notlast).
+
+### Why the FULL game still wins T4 (heur OFF, d8 b0) -- ROOT CAUSE located
+- Bisect (build/scratch/alch-t3/bisect5/, claude-play prefixes of 1,0,0,-1,1,1,0,-1 at d8 b0 heur OFF): n=1,2 T4; n=3,4 T3;
+  n=7,8 T3 (n=6 T4 is a hand-off artefact). Full game / n=2 pick Utopia Sprawl GREEN on T2 (events: "Utopia Sprawl -- chose
+  Green"); T3 needs BLUE (the Umbra's {U} and {2}{U} have no other blue source but the Alchemist). The colour IS searched
+  (EtbChoiceCandidates fans x1/x2/x3/x5); the T1 search simply never finds the T3 win: `[search] T1 pass=3 done win=11`,
+  pass 4 win=4, then the MTG_BP_DEV_SEQ second pass runs at cost 0/0/1 (`[dev-seq] ... pass2=1 pass2_better=0`,
+  sites fs_pre=1, compound n=0) -- it reads cached answers instead of walking.
+- **MTG_INWIN_CACHE=0 -> T3**: the n=2 hand-off AND the full game (seed 12345681 keep 7 d8 b0 heur OFF) win **T3**.
+  Lever matrix with MTG_INWIN_CACHE=0 (full game): all on T3; ALCH_TAP_LAST=0 T4; AURA_LATE_BIND_RANK=0 T4; BP_UNTAP_FLOAT=0 T4;
+  SITE9_AFTER_DEFERRED=0 T3; BURST_ACT_COLOUR_PENDING=0 T3 (so s9d and burst are NOT needed for this game).
+  MTG_GAME_LINE_CACHE=0 alone: T4. MTG_BP_DEV_SEQ=0: T4. MTG_BP_DEV_SEQ_ALL=1: T4.
+- MTG_INWIN_CACHE_VERIFY=1 at n=2: `[inwin-cache] DISAGREE job=- turn=2 depth=2 cutoff=3 cached=11 fresh=3 nest=2`
+  (verified=2 DISAGREE=1 MATERIAL=1) and with verify the search returns T3.
+- MTG_DVS_TRACE=1 (build/scratch/alch-t3/bisect5/dvs.err, cmd = n=2 hand-off + MTG_DVS_TRACE=1 MTG_INWIN_CACHE_VERIFY=1
+  MTG_TRACE=search). Exact lines:
+    9:   [dvs] iw-store T2 depth=1 cutoff=11 b=2 fsnest=2 rnest=0 enum=0 sup=1 tp=1 dlat=0
+    856: [dvs] iw-store T3 depth=1 cutoff=11 b=3 fsnest=3 rnest=0 enum=0 sup=1 tp=1 dlat=0
+    858: [search] T1 pass=3 done win=11 cost=2988 used=3098
+    861: [dvs] iw-store T3 depth=2 cutoff=11 b=3 fsnest=3 rnest=0 enum=0 sup=1 tp=1 dlat=0
+    862: [dvs] iw-widen T2 depth=3 cutoff=11 b=3 (was 2) fsnest=2 rnest=0 sup=1 tp=1 dlat=0      <-- the unsound proof
+    863: [search] T1 pass=4 done win=4 cost=4 used=3102
+    866: [dvs] iw-hit T2 depth=2 cutoff=3 bound=3 fsnest=1 rnest=0 sup=0 tp=1                  <-- pass 2 reads it
+    867: [dvs] iw-hit T3 depth=1 cutoff=3 bound=3 fsnest=2 rnest=0 sup=0 tp=1
+  Latent records DO happen in pass 1 (tabulated: latent9m T3 sup=1 pend=1 x144, latent9d T3 sup=1 x64), but the T2 node
+  that widened the no-win proof to 3 (ladder pass 4, cost 4 = answered from caches) had dlat=0: its walk met no latent
+  ITSELF because its children were answered from memo entries of nodes that DID meet one, and that read did not make it
+  dirty. inwin's store guard (`complete && !dvs_sup`, TurnSolver.cpp ~119858) therefore filed a ONE-DEVIATION refutation as a
+  full-tree proof, and pass 2 (sup=0) served it at T2 depth 2 cutoff 3, so pass 2 never walked to the compound slot.
+  Same family as MTG_DEV_SEQ_DIRTY_READ (which covers only lc reads with lc->dvs_mode==1 && dvs_dirty non-empty,
+  ~116690) and the gamelc SupTag scheme (~119715).
+- HYPOTHESIS / candidate fix (not written): an inwin entry made inside a SUPPRESSED pass (g_devseq_suppress > 0) must not be
+  readable by an unsuppressed pass. Either (i) store under a SupTag'd key whenever g_devseq_suppress > 0 (read by suppressed
+  passes only, like gamelc::SupTag), or (ii) find which read path skipped the dirty mark (lc hit without dvs_mode, the T3
+  depth-2 store at line 861 with dlat=0 is the first suspect: what answered ITS children?) and mark it. (i) is the robust
+  one; check gamelc's clean-node stores for the same hole (they also store plain-tagged when dvs_sup is false).
+  Must be an engine-wide soundness fix with its own lever (e.g. MTG_INWIN_DEVSEQ_TAG, default ON), A/B + tiers (all decks
+  can move: inwin and dev-seq are generic).
+
+### Remaining, in order
+1. Implement the inwin/dev-seq fix; rebuild (./build.sh under BOX.lock); run `bash build/scratch/alch-t3/chain5.sh
+   build/scratch/alch-t3/chain5` under BOX.lock (units incl. the :416 fix, combo_off, aa scenarios, acceptance arms).
+   Acceptance = acc_all T3 (heur OFF d8 b0); report play_off/play_heur (d5 b20). Check acc_verify for MISMATCH lines.
+   Optionally run once with MTG_INWIN_CACHE_VERIFY=1 to confirm DISAGREE=0.
+2. Add the new lever to ab4.sh arms (base =0, own arm, all =1); run `flock BOX.lock bash build/scratch/alch-t3/ab4.sh`
+   (output ab4/report.txt, DONE marker ab4/DONE).
+3. smoke + regression --both (`env -C <wt> bash test/regression.sh --both`, tiers.sh shape) under BOX.lock; inwin fix and s9d
+   are engine-wide -> A/B every deck that moves (lever on/off); per-game audit of every slower searched game at
+   --depth 8 --budget-ms 0; accept GT in the worktree only after; python3 test/check_gt_logs.py.
+4. Update docs/design/aa-staff-in-hand-loop-cast-draw.md (tap-last, the inwin hole) + this file; commit named paths; push
+   ONLY backup/2026-11-20/alch-t3. Never the shared branch.
+5. Consider removing MTG_DVS_TRACE once the fix lands (diagnostic only) or keep it documented.
+
+### USER-owned questions to surface (with numbers when measured)
+- MTG_AA_ALCH_TAP_LAST is a deck payment-ORDER rule (provider, order only); adoption needs the ab4 tlast arm numbers.
+- MTG_SITE9_AFTER_DEFERRED and MTG_BURST_ACT_COLOUR_PENDING are not needed for seed 12345681 once tap-last + the inwin fix
+  are in; whether to keep them rests on ab4 (s9d is engine-wide).
+
+### Running jobs: NONE from this agent (all probes finished; legacy-search probe bmdiep2p4 was stopped -- own experiment).

@@ -407,7 +407,11 @@ TEST_CASE("Ezuri combat pump cannot spend mana from its declared attackers")
 
 TEST_CASE("Crab Umbra chooses Accomplished Alchemist over an attacking Harbinger")
 {
+    // The Umbra-on-Alchemist rank is the deck provider's rule (CreatureAuraHostRank, MTG_AA_UMBRA_HOST),
+    // so the board carries the Alchemist provider (AaProv() is defined later in this file).
+    static const AccomplishedAlchemistProvider aa_prov;
     GameState s = FreshAa();
+    s.m_provider = &aa_prov;
     s.deck_reads_lifegain_in_play = true;
     PutAa(s, "Elvish Harbinger");
     const int alchemist = PutAa(s, "Accomplished Alchemist", /*sick=*/true);
