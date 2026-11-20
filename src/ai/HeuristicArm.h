@@ -1037,6 +1037,7 @@ enum Slot : int
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     AA_LOOP_CAST_DRAW,        // MTG_AA_LOOP_CAST_DRAW  AccomplishedAlchemist (2026-11-19, seed 12345681 T3): a draw engine in HAND (Staff of Domination) is an untap-loop payoff -- ComputeUntapLoopNeed (f) kLoopPayCastDraw (the loop banks the engine's cast with the Alchemist left untapped) and the Combo Off rule row FIN-STAFF-HAND-DIG. The provider (heuristic) half of docs/design/aa-staff-in-hand-loop-cast-draw.md. DEFAULT ON; =0 -> no such need (the pre-2026-11-19 provider)
     BP_UNTAP_FLOAT,           // MTG_BP_UNTAP_FLOAT  breakpoint SITE 9 for an activated untap's REFUND (2026-11-19, the search half of docs/design/aa-staff-in-hand-loop-cast-draw.md): mana FLOATING beside a live mana creature an own activated untapper can aim at is an activation key (kActUntapFloat, valued by the float), so a plan whose trailing untaps refund mana -- which none of its casts, applied first, could spend -- re-plans the rest of the main phase onto it, and each further refund re-opens (MTG_SITE9_REOPEN, deviation sequences MTG_BP_DEV_SEQ). Completeness: 'untap, untap, cast the Staff off the float' was unfindable at every budget unless the provider recognised a loop need. DEFAULT ON; =0 -> no such key
+    AURA_UNTAP_HOST_SEARCH,   // MTG_AURA_UNTAP_HOST_SEARCH  AccomplishedAlchemist (2026-11-19, seed 12345681 T3; docs/design/aa-staff-in-hand-loop-cast-draw.md): an Aura that UNTAPS its host (untap_enchanted_cost, Crab Umbra) re-uses the HOST's {T}, so each own host with a tap use (a mana ability or a {T} ability) is its own SEARCHED plan -- the plan signature keys it (#A) and the late-bind fold covers only the hosts without one. The AURA CAST HOST RANKING (USER 2026-10-06) still picks among the rest. Completeness: Umbra on the Alchemist (the whole combo) was never searched at any budget. DEFAULT ON; =0 -> one host per plan class (the pre-2026-11-19 fold)
     COUNT
 };
 
@@ -2018,6 +2019,7 @@ inline const char* Name(int slot)
         "MTG_SUMMIT_TWIN_FOLD",
         "MTG_AA_LOOP_CAST_DRAW",
         "MTG_BP_UNTAP_FLOAT",
+        "MTG_AURA_UNTAP_HOST_SEARCH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
