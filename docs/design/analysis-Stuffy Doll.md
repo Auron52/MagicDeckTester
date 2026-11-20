@@ -335,7 +335,7 @@ build/scratch/stuffy/sweep/results.json). They reduce to 7 issues:
 | B | 930007, 930008 | protocol defect | The multi-ordering drop probe ran ApplyPlanDirect on a plan with the land undecided, so it played the GREEDY land (e.g. the second Sacred Foundry) and labelled an unpayable line `not_verified` with no drops (Mind Stone after Maniac with 1 mana left). The single-ordering probe already pinned `land_decided`. The ordering probe now pins it too, human play only, so search is untouched. human_plan_realised_check: 712 committed plans, 0 realised differently from their label. FIXED |
 | C | 930004 | protocol defect | Stuffy Doll's as-enters choose_player listed creatures. Picking one was silently dropped, and "opponent" stood. The legal set is now players only (main.cpp choose_player legal set). FIXED |
 | D | 930005 | protocol defect | A `divide` reply (en-Kor shield, Fury, fixed-damage divide) that did not sum to the total was silently replaced by the engine's allocation, and the trace recorded the rejected amounts. Now a stderr `[claude-play] WARNING`, and the trace records the APPLIED allocation, with the reply under `rejected`. FIXED |
-| E | 930004 | viewer defect, USER decision | When Boros Garrison bounces an untapped dual, the engine taps it "in response" and picks the float colour itself (SpellEffects FloatLandBeforeSacrifice); human play is never asked. In 930004 {W} would have cast Guilty Conscience. Options: (a) pip-aware human default, (b) a viewer setting that asks, (c) both (recommended). Any option needs a new `karoo_float` rule stamp plus a legacy replay flag so older references replay as recorded. OPEN, USER |
+| E | 930004 | viewer defect, USER decision | When Boros Garrison bounces an untapped dual, the engine taps it "in response" and picks the float colour itself (SpellEffects FloatLandBeforeSacrifice); human play is never asked. In 930004 {W} would have cast Guilty Conscience. Options: (a) pip-aware human default, (b) a viewer setting that asks, (c) both (recommended). Any option needs a new `karoo_float` rule stamp plus a legacy replay flag so older references replay as recorded. USER chose (a), DEFERRED (signed off under Approved deferrals; manual tap is the override) |
 | F | 930011 | viewer defect | The simultaneous-trigger order prompt listed two Guilty Conscience triggers as just "Guilty Conscience". Entries now read `<name> on <host>: deals N to it` / `<name>: reflects N` (dmgrx::t_viewer_dig_labels; claude-play `label`, viewer panel). FIXED |
 | G | 930011 | cosmetic | The combat event's life arrow was read after damage triggers had resolved: "7 to opponent (9->-1)" with 3 of it from Reckoner's reflection. The event now appends "+ N from damage triggers" (viewer text only; LogAttack unchanged). FIXED |
 
@@ -351,3 +351,13 @@ rows). Searched: 0 slower, 3 faster, 297 play-changed at the same score. d0: 651
 s2002 gi145 4->5); d0 averages 6.426->5.935 (smoke) and 6.470->6.018 (regression). viewer_protocol_check --strict:
 930 refs, 0 drift / contract-fail. The ~2 h Galadriel s10 gi9 replay in that run is origin's (Maze's End F5R
 pay-refine Dfs, reproduced on origin 8fbbc5023 without these commits); fix queued as wip/refine-node-cap.
+
+## Approved deferrals
+
+- `claude_sweep:unresolved` -- sweep flag E (Boros Garrison floats an untapped dual's mana with an engine-picked
+  colour; human play is never asked). USER 2026-11-20, verbatim: "(a) is the way to go and should be sufficient
+  when combined with manual tap." and, on signing the deferral off: "It's fine as long as the player has the
+  ability to manual tap." The player can: a manual `tap=<land>#<id>:<colour>` token may be queued before ANY
+  step, the land play included (claude-play `--tap-pref <turn>:pre:<step>:<ids>`), so tapping the dual for the
+  wanted colour before playing the Garrison floats that colour and the Garrison then returns the tapped dual.
+  Option (a) (pip-aware default) is written up in docs/design/stuffy-doll-deferred-2026-11-20.md, item 1.
