@@ -58,7 +58,38 @@ oracle's job is to find out whether that exemption ever loses a line. That needs
 
 ## 2. CAPPED-DECISION and the cost of a Maze's End decision
 
-(pending)
+### Where the capped decisions' work goes
+
+The three top CAPPED-DECISION repros, each auditing one turn (`MTG_MANA_ORACLE_ONLY_TURN`, a new diagnostic: play is
+the same with the oracle on or off, so the earlier turns need not be audited), one thread, binary with the tap
+choice:
+
+| repro | applies | frontiers / pruned | priced s | oracle s | process wall | RSS | verdict |
+|---|---|---|---|---|---|---|---|
+| g30 T6 | 1,878,180 | 1,494,399 / 783,069 | 189 | 1,728 | 1,571 s | 2.6 GB | BUDGET-SPENT, WALL-BP-CAP, 92 of 106 plans unaudited |
+| g4 T7 | 1,069,544 | 1,041,551 / 495,454 | 142 | 1,453 | 1,324 s | 2.2 GB | BUDGET-SPENT, WALL-BP-CAP, 128 of 132 unaudited |
+| g14 T5 | 1,599,771 | 1,337,365 / 1,147,657 | 165 | 577 | 526 s | 1.5 GB | completes; 2 plans CAPPED by the board memory budget (768 MB) |
+
+The priced work is 10-30% of the decision's real cost: the decisions are cut by the wall backstop, not the priced
+budget. A `perf record` of g30 T6 (flat, 49 Hz) put **~75% of all samples in the frontier Pareto prune's comparison**:
+`__memcmp` 34.5%, `std::_Rb_tree<std::string,...>` lookups 19.1%, `_Rb_tree_increment` 12.7%, `ParetoCovers` itself
+8.4%; `Realize` 3.0%, `BuildSimKeyBase` 1.8%, everything else under 1% each. The online prune (Realize, `admit`)
+compares each new frontier with every live frontier of the same key, and each comparison looked every resource name
+of both tables up in the other (`Res` is a `std::map<std::string,int>` whose keys are long class strings with a
+common prefix). It is unpriced, which is why the priced budget never saw it.
+
+### Fix: an exact speedup of the prune (no change to what it keeps)
+
+* `ParetoCovers` is one merge walk over the two sorted tables instead of a lookup per name (same answer: a name a table
+  lacks reads 0, strictness counted only on names y holds).
+* THE PARETO SCREEN (`ParetoSig`, per frontier, filled on first use): two necessary conditions of a cover, tested
+  before the walk. If y covers x then sum(y) >= sum(x) (strictly for a strict cover), and every name x holds a
+  positive amount of is positive in y, so x's positive-name bit mask (one hashed bit per name) is a subset of y's. A
+  pair failing either cannot be a cover, so the prune keeps and drops exactly the frontiers it did before.
+* Identity check: g21 gives the same applies / frontiers / pruned / options (10,395 / 2,002 / 504 / 10,058) with
+  oracle ms 1,624 -> 516 (3.1x).
+
+(Measurements on g167 and on the three capped repros: pending.)
 
 ## 3. The real classes
 
