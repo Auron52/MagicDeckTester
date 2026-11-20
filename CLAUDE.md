@@ -631,6 +631,12 @@ launch unless the user requests a restart.
        Then start the background CI watch (below).
     5. **Validation failed?** `push_queue.py requeue` (back of the queue), fix it, then wait again. Never
        hold the lease while you debug. Giving up: `push_queue.py leave`.
+  * **STILL BATCH YOUR CHANGES (USER 2026-11-20):** *"I still want you to batch changes up for pushing."*
+    The queue removes the time limit, not the batching. Join when you have a meaningful batch (an
+    integrated, validated result), not after every commit, and land everything you have in that one turn.
+    The same applies to pushes that skip the queue: a docs or checkpoint commit is not a reason to push on
+    its own. Let it ride along with your next landing. (Exceptions: references, and an urgent fix for
+    something troubling other sessions.)
   * **What skips the queue:** a push that touches no GATED path goes straight to the shared branch,
     because it cannot make anyone rebuild. GATED = `src/ test/ decks/ cmake/`, the build files, and every
     `scripts/`/`tools/` file the build or a tier can reach. That last set is COMPUTED from the pushed commit
