@@ -87,3 +87,10 @@ build/scratch/maze/rc1/; waiters on PID (`kill -0`) or DONE markers, never `pgre
 the shared branch; no timeouts; do not kill runs you did not start; sound fix default ON; engine heuristic-free in
 the search window; A/B bar per-deck net <= 0 and every slower game recovers at --depth 8 --budget-ms 0; hand off at
 ~250K.
+
+## UPDATE ~07:47 UTC: first build attempt failed on 9p ENOMEM, requeued
+Both builds exited 1 with only `Cannot allocate memory` on a header read (the 9p order-4 allocation failure, not RAM
+and not a compile error; TurnSolver.cpp had not finished compiling). Logs moved to `rc1/try1/`. Requeued the same
+`heavy_run.sh ./build_both.sh`: heavy_run PID **2267322
+2267323**, same markers `rc1/build_rc1.done` / `rc1/build_p5b.done`.
+If it fails the same way again, just retry; do not cap jobs on that basis.
