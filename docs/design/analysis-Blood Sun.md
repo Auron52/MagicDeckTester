@@ -107,7 +107,12 @@ abilities (Karoo enters-tapped + bounce, City of Brass ping, fastland enters-tap
 Scryfall JSONs + rulings: `build/scratch/bloodsun/scry/collection.json` (primary build volume).
 
 ## Stage 2 — cards
-(pending)
+2026-11-20 ~11:45 UTC: Opus design agent launched (brief `logs/bloodsun/design-brief.md`) ->
+`docs/design/blood-sun-pipeline.md` + step plan; USER guidance above relayed to it verbatim. Then one
+fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue autonomously overnight.
 
 ## Open USER decisions
-(none yet)
+- B1 own death: arm `own_death_live` for this deck (Fastbond pings, City of Brass, Grim Tutor, Worldfire
+  life 1)? Recommended: a deck-level stamp keyed on those params so no other deck's play moves. Default taken
+  provisionally: arm it for this deck.
+- Go-off (2) "always bridges to (1)": design to report any residual gap.
