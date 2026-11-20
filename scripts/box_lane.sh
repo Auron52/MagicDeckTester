@@ -31,6 +31,10 @@ dir=/workspaces/MagicDeckTester/build/scratch/lane
 mkdir -p "$dir"
 need_gb=$(( slots * cap + 2 ))
 
+# FIFO-ish admission: only the waiter holding queue.lock tries for slots, so a 4-slot build is not starved by a
+# stream of 1-slot jobs grabbing each slot as it frees (2026-11-20: two agents' 4-slot builds waited 1 h 45 min).
+exec {qfd}>"$dir/queue.lock"
+flock "$qfd"
 while :; do
   held=()
   for i in $(seq 1 $max); do
@@ -47,5 +51,6 @@ while :; do
   sleep 30
 done
 
+exec {qfd}>&-   # admitted: let the next waiter try
 echo "box_lane: $(date -u +%H:%M) running on ${slots} slot(s), MTG_RSS_CAP_GB=$(( slots * cap )): $*" >&2
 env MTG_RSS_CAP_GB=$(( slots * cap )) MTG_BUILD_JOBS="$slots" MTG_LANE_SLOTS="$slots" "$@"
