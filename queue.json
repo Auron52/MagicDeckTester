@@ -1,12 +1,3 @@
 {
- "entries": [
-  {
-   "branch": "wip/maze-batch2",
-   "head_since": "2026-11-20T22:59:27Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/maze-batch2",
-   "joined": "2026-11-20T22:59:27Z",
-   "note": "Maze's End batch 2 (DM-2, RC, P7, F6, P5d; units/smoke/regression/VPC/ref_bench/verify PASS)"
-  }
- ]
+ "entries": []
 }
