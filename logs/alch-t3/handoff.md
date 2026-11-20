@@ -146,3 +146,39 @@ build/scratch/alch-t3/bin_s1/). The step-1 run (96 failed + SIGSEGV) used the CO
       it could not before (e.g. a hand card / activation whose cost exceeds the plan-start pool and is <= the new
       float+pool), or the re-open chain on a self-funding loop is pure waste (and at b0 potentially huge). Fix this
       in CollectActivationKeys (key value = the cheapest newly affordable thing, not the raw float) before the A/B.
+
+## UPDATE (agent 3, 2026-11-20 ~07:00 UTC): both fixes BUILT + COMMITTED 163e81f56; full game still T4 -- a THIRD hole
+Done:
+- 163e81f56: (1) kActUntapFloat value = min(float, UntapFloatSpendCap) (dearest hand spell / mana-costed ability of
+  ours; X spells at X=0; untap abilities not counted); no key when cap = 0. (2) MTG_AURA_UNTAP_HOST_SEARCH (default ON,
+  heurarm AURA_UNTAP_HOST_SEARCH): UntapAuraKeepHosts (own creatures + hand creatures with UntapHostHasTapUse), #A key in
+  PlanSignatureFast + legacy (lockstep, `untap_keep` pointer param), BuildAuraLateBind KEEP/BIND partition. Unit fix at
+  :910 (bp_choice < 0) + 2 new cases; the old late-bind equivalence case pins the new lever OFF.
+- chain2b (build/scratch/alch-t3/chain2b/summary.txt): units 3721/3721 PASS; combo_off 51/51; aa_* scenarios unchanged.
+- Probes at d8 b0 (heuristic OFF unless noted): hand-off n=10 (after the human's "Forest; Living Wish -> Boar") **T3**
+  (was T4 at every budget before the host fix); n=12 T3; play setting n=10 T3. FULL GAME seed 12345681 keep 7: **T4** in
+  every arm (search, nohost, nofloat, both; d8 b0 and d5 b20). Bisect (bisect2/, d8 b0 heur OFF): n<=8 T4, n=10 T3.
+So the remaining hole is the T3 decision ITSELF (Forest + Living Wish, nothing else). Two candidate cuts, both found by
+reading traces (bisect2/rd8.err = MTG_FS_ROOT_DUMP=3 MTG_SITE9_TRACE=3 at n=8):
+ (a) ROUTE "root plan Crab Umbra->Alchemist + Living Wish": site 9 opens (the Umbra is a new untapper), the continuation
+     casts the Boar -- and the PAYER taps the ALCHEMIST for it (re-open state: Arbor Elf(T), Forest#22(T), Alchemist(T),
+     float 1) although Forest#22 + Arbor Elf untapping Forest#20 (Utopia Sprawl's host, 2 mana) pay {2}{G} exactly. With
+     the Alchemist tapped the post-sac Umbra untap ({2}{U}) is unpayable from float 1: line dead. The human's line kept the
+     Alchemist untapped (Wish = Forest#20 + Sprawl; Boar + Umbra = Forest#21 + Forest#22 + Arbor->Forest#20). This is the
+     mana-payment exemption area (src/ai/ManaPayment.cpp TapForCostSharedOnceImpl / ManaSourceRank); a candidate rule:
+     a creature an own untap Aura is attached to (or a live loop host) is tapped LAST. Not done; a play change.
+ (b) ROUTE "root plan Living Wish alone": the Boar arrives in hand -> SITE 10 continuation (deferred put-in-hand). In
+     the ROLLOUT (TurnSolver.cpp ~79880 site 9 loop, then ~80105 the deferred site 3/5/6/10 apply) site 9 runs BEFORE the
+     deferred continuation and never after it, so a site-10 continuation that casts an untapper (Umbra) or a sac outlet
+     (Boar) gets no post-entry re-plan for their activations. rd8.err has NO [site9] line for the Wish-alone base plan.
+     Executor twin: AIEngine.cpp site 9 ~9312, resolve_draw_breakpoint ~6420 -- check its order before changing either.
+     A fix = run the site-9 check (snapshot before the deferred continuation, PostEntryActivationPending after) after the
+     deferred continuation, in BOTH worlds, lockstep. Structural; budget-staged by the existing wave walker.
+  Next agent: confirm which (one claude-play hand-off forcing the human menu's Wish-alone plan 136 + target 0 at n=8 is
+  exactly n=10, which wins -- so (b) is the search-structure hole: the same line is found as a ROOT plan but not as a
+  site-10 continuation). Then fix, rebuild, re-run chain2b's acceptance block.
+Running (agent 3 launched): chain3b = `flock BOX.lock bash build/scratch/alch-t3/chain3b.sh` (launcher PID 1529923,
+  flock 1529930; queued behind adopt-1119 step4 at launch): ab2.sh (5 arms base/heur/search/nohost/all, seeds 61001/63001
+  x1000, d5 b20 -> build/scratch/alch-t3/ab2/report.txt, per-game MTG_DUMP_WINS in ab2/batch.stderr) then tiers.sh
+  (smoke+regression --both -> build/scratch/alch-t3/tiers/both.txt). DONE marker build/scratch/alch-t3/chain3b/DONE.
+  It tests 163e81f56 only; a third fix needs its own A/B + tiers again.
