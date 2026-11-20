@@ -59,6 +59,11 @@ struct SacFodderMenuArm
     explicit SacFodderMenuArm(int on) { heurarm::t_arm[heurarm::SAC_FODDER_MENU] = static_cast<std::int8_t>(on); }
     ~SacFodderMenuArm() { heurarm::t_arm[heurarm::SAC_FODDER_MENU] = -1; }
 };
+struct SacFodderInertArm
+{
+    explicit SacFodderInertArm(int on) { heurarm::t_arm[heurarm::SAC_FODDER_INERT_PRUNE] = static_cast<std::int8_t>(on); }
+    ~SacFodderInertArm() { heurarm::t_arm[heurarm::SAC_FODDER_INERT_PRUNE] = -1; }
+};
 
 // Goblins s30125177 gi125177 T2 main 1 with the land drop spent: one untapped Mountain and a Goblin Lackey; hand
 // Lightning Bolt, Skirk Prospector, Siege-Gang Commander.
@@ -397,6 +402,14 @@ TEST_CASE("Sac fodder menu: a plan payable only by eating bodies is flagged and 
         for (const TurnSolver::Plan& p : plans) { CHECK_FALSE(p.sacfod_admit); }
     }
     SacFodderMenuArm arm(1);
+    {
+        // {Skirk, Lackey} off one Mountain eats Skirk for the Lackey: the turn ends with the Lackey alone, which
+        // {Lackey} reaches with Skirk still in hand -- dominated (MTG_SAC_FODDER_INERT_PRUNE, default ON).
+        const std::vector<TurnSolver::Plan> pruned = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        CHECK(FindPlan(pruned, { "Skirk Prospector", "Goblin Lackey" }) == nullptr);
+        CHECK(FindPlan(pruned, { "Goblin Lackey" }) != nullptr);
+    }
+    SacFodderInertArm inert(0);   // the tag and the ordering, on the plan the prune would remove
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
     const TurnSolver::Plan* both  = FindPlan(plans, { "Skirk Prospector", "Goblin Lackey" });
     const TurnSolver::Plan* lack  = FindPlan(plans, { "Goblin Lackey" });
@@ -503,6 +516,7 @@ TEST_CASE("Sac fodder menu: the fodder walk gate refuses a body-eating plan no o
     s.players[0].hand.push_back(CardSfm("Goblin Lackey", 11));
     for (int i = 0; i < 20; ++i) { s.players[0].library.push_back(CardSfm("Mountain", 100 + i)); }
     SacFodderMenuArm arm(1);
+    SacFodderInertArm inert(0);   // the walk gate itself (with the prune, both plans below are dominated anyway)
     const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
     CHECK(FindPlan(plans, { "Goblin Lackey", "Skirk Prospector", "Goblin Lackey" }) == nullptr);
     const TurnSolver::Plan* both = FindPlan(plans, { "Skirk Prospector", "Goblin Lackey" });
@@ -511,4 +525,93 @@ TEST_CASE("Sac fodder menu: the fodder walk gate refuses a body-eating plan no o
     GameState t = s;
     TurnSolver::ApplyPlan(t, *both, /*is_pre_combat=*/true);
     CHECK(t.players[0].hand.size() == 1);   // one Lackey left: Skirk and the other Lackey were cast
+}
+
+// MTG_SAC_FODDER_INERT_PRUNE -- the card-data premises (CardDatabase.cpp's audited whitelists).
+TEST_CASE("Sac fodder menu: the inert-fodder audit classifies the Goblins list")
+{
+    LoadSfm();
+    auto D = [](const char* n) -> const CardDefinition&
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(std::string(n));
+        REQUIRE_MESSAGE(d != nullptr, n);
+        return *d;
+    };
+    for (const char* n : { "Goblin Lackey", "Goblin Piledriver", "Goblin King", "Stingscourger" })
+    { CHECK_MESSAGE(D(n).fodder_inert, n); CHECK_MESSAGE(D(n).fodder_inert_outlet, n); }
+    // An ETB, a death trigger, a tutor, a haste grant (Krenko taps the turn Chieftain is out), a reducer, an outlet.
+    for (const char* n : { "Mogg War Marshal", "Goblin Matron", "Goblin Chieftain", "Goblin Warchief",
+                           "Siege-Gang Commander", "Skirk Prospector", "Krenko, Mob Boss", "Pashalik Mons",
+                           "Goblin Chainwhirler", "Muxus, Goblin Grandee" })
+    { CHECK_FALSE_MESSAGE(D(n).fodder_inert, n); }
+    CHECK(D("Skirk Prospector").fodder_inert_outlet);
+    CHECK_FALSE(D("Utopia Mycon").fodder_inert_outlet);   // spore counters: more than an outlet
+    // Watchers that act from the battlefield: audited off it, not on it.
+    for (const char* n : { "Krenko, Mob Boss", "Pashalik Mons", "Rundvelt Hordemaster", "Three Tree City",
+                           "Cavern of Souls", "Goblin Warchief", "Mogg War Marshal" })
+    { CHECK_FALSE_MESSAGE(D(n).fodder_board_audited, n); CHECK_MESSAGE(D(n).fodder_deck_audited, n); }
+    for (const char* n : { "Mountain", "Lightning Bolt", "Siege-Gang Commander", "Goblin Matron", "Skirk Prospector",
+                           "Goblin Chieftain", "Aether Vial", "Goblin Lackey", "Twinshot Sniper" })
+    { CHECK_MESSAGE(D(n).fodder_board_audited, n); }
+    // Brightcap Badger grants a fresh Saproling a {T}: Add {G} -- never audited.
+    CHECK_FALSE(D("Brightcap Badger").fodder_deck_audited);
+}
+
+namespace
+{
+// Two Mountains and nothing else on the board; hand Skirk Prospector, Goblin Lackey, Lightning Bolt.
+GameState TwoMountainsSkirkLackeyBolt(const GoblinsProvider& prov)
+{
+    LoadSfm();
+    GameState s;
+    s.active_player_index        = 0;
+    s.turn_number                = 2;
+    s.phase                      = Phase::PreCombatMain;
+    s.players[0].life            = 20;
+    s.players[1].life            = 20;
+    s.m_provider                 = &prov;
+    s.deck_has_sac_mana_outlet   = true;
+    s.deck_has_endstep_reanimate = false;
+    s.deck_has_upkeep_reanimate  = false;
+    s.players[0].lands_played_this_turn = 1;
+    PutSfm(s, "Mountain", 36);
+    PutSfm(s, "Mountain", 37);
+    s.players[0].hand.push_back(CardSfm("Skirk Prospector", 57));
+    s.players[0].hand.push_back(CardSfm("Goblin Lackey", 10));
+    s.players[0].hand.push_back(CardSfm("Lightning Bolt", 1));
+    for (int i = 0; i < 20; ++i) { s.players[0].library.push_back(CardSfm("Mountain", 100 + i)); }
+    return s;
+}
+}  // namespace
+
+TEST_CASE("Sac fodder menu: a plan that must eat a body it casts for nothing else is dominated (inert prune)")
+{
+    const GoblinsProvider prov;
+    SacFodderMenuArm arm(1);
+    const GameState s = TwoMountainsSkirkLackeyBolt(prov);
+    // {Skirk, Lackey, Bolt} off two Mountains must eat Lackey (or Skirk) for the Bolt: {Skirk, Bolt} and
+    // {Lackey, Bolt} reach the same board with a card more in hand.
+    {
+        SacFodderInertArm inert(0);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        CHECK(FindPlan(plans, { "Skirk Prospector", "Goblin Lackey", "Lightning Bolt" }) != nullptr);
+    }
+    {
+        SacFodderInertArm inert(1);
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        CHECK(FindPlan(plans, { "Skirk Prospector", "Goblin Lackey", "Lightning Bolt" }) == nullptr);
+        CHECK(FindPlan(plans, { "Skirk Prospector", "Lightning Bolt" }) != nullptr);
+        CHECK(FindPlan(plans, { "Goblin Lackey", "Lightning Bolt" }) != nullptr);
+        CHECK(FindPlan(plans, { "Skirk Prospector", "Goblin Lackey" }) != nullptr);
+    }
+    // A creature counter on the board (Krenko counts the Lackey while it is out): no prune. (A death watcher such as
+    // Pashalik Mons keeps the payer itself off -- SacOutletEatHasValue -- so it never reaches the prune.)
+    {
+        SacFodderInertArm inert(1);
+        GameState t = s;
+        PutSfm(t, "Krenko, Mob Boss", 70);
+        t.battlefield.back().tapped = true;
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(t, /*is_pre_combat=*/true);
+        CHECK(FindPlan(plans, { "Skirk Prospector", "Goblin Lackey", "Lightning Bolt" }) != nullptr);
+    }
 }

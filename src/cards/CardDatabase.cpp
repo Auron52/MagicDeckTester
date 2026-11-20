@@ -409,6 +409,97 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             }
             def.walk_bound_audited = ok;
         }
+        // THE INERT-FODDER DOMINANCE PRUNE's premises (CardDefinition::fodder_inert / _inert_outlet / _board_audited /
+        // _deck_audited; the prune and its proof are at TurnSolver.cpp BuildSacFodderMenuCtx). WHITELISTS of raw keys,
+        // audited 2026-11-19 card by card for the Goblins list (the only single-colour sac-for-mana outlet deck):
+        //   * INERT: what a creature cast and eaten in the SAME main phase never uses -- a combat trigger (Lackey's
+        //     put, Piledriver's / Muxus' attack pump), a static P/T lord (read only by combat and P/T displays: no
+        //     audited board card reads power in a main phase), an echo (paid next upkeep, never by a dead body);
+        //   * BOARD: + mana production with no spend restriction, tutors (read the library), its OWN entry / cast
+        //     riders (damage, tokens, a reveal-put), a sac outlet's eat-for-mana / eat-for-damage (a body eaten
+        //     there is not eaten for mana), haste grants, Aether Vial's counters. None watches another creature
+        //     enter, die, be cast or be counted, and none makes mana another spend could not use;
+        //   * DECK: + the watchers that act only FROM THE BATTLEFIELD (a death trigger, Krenko's count, Three Tree
+        //     City's count, Cavern's creature-only mana, Warchief's reducer, Pashalik's outlet tokens): a body dead
+        //     in this main is invisible to them anywhere else. Anything reading the turn's history (spells cast,
+        //     creatures died / entered) or the graveyard is unaudited, so it disables the prune from any zone.
+        {
+            static const char* const kInertParams[] = {
+                "combat_damage_puts_subtype_from_hand", "attack_pump_power_per_other_matching",
+                "attack_self_pump_per_other_subtype", "attack_self_pump_power", "attack_self_pump_tough",
+                "subtypes_affected", "power_bonus", "tough_bonus", "lord_excludes_self", "echo_cost",
+            };
+            static const char* const kOutletManaParams[] = {
+                "sac_creature_outlet", "sac_creature_requires_subtype", "sac_outlet_add_mana_color",
+                "sac_outlet_add_mana_amount",
+            };
+            static const char* const kBoardParams[] = {
+                "produces", "produces_amount", "enters_tapped", "enters_tapped_with_depletion", "tap_self_damage",
+                "tap_self_damage_any_mode", "mana_rock", "upkeep_adds_charge",
+                "tutor_to_hand", "tutor_types", "tutor_shuffle_after",
+                "damage", "targeting", "etb_damage_each_opponent", "etb_damage_any", "channel_cost", "channel_damage",
+                "etb_self_creates_tokens", "etb_created_token_power", "etb_created_token_toughness",
+                "etb_created_token_subtypes", "created_token_color",
+                "etb_reveal_count", "etb_reveal_put_subtypes", "etb_reveal_put_creatures_only", "etb_reveal_put_max_mv",
+                "sac_creature_cost", "sac_outlet_damage", "grants_haste",
+            };
+            static const char* const kDeckParams[] = {
+                "dies_watch_subtype", "dies_watch_includes_self", "dies_trigger_damage", "dies_trigger_impulse_exile",
+                "dies_impulse_requires_subtype", "dies_impulse_expiry_next_turn", "dies_trigger_creates_tokens",
+                "dies_token_power", "dies_token_toughness", "dies_token_subtypes",
+                "tap_creates_tokens_per_controlled_subtype", "tap_created_token_power", "tap_created_token_toughness",
+                "tap_created_token_subtypes",
+                "mana_per_creature_subtype", "mana_per_creature_feeder_generic", "choose_type_on_enter",
+                "colored_creature_only", "reduces_spell_subtype",
+                "sac_outlet_creates_tokens", "sac_outlet_token_power", "sac_outlet_token_toughness",
+                "sac_outlet_token_subtypes",
+            };
+            static const char* const kInertTemplates[] = { "custom", "vanilla_creature", "lord_effect" };
+            static const char* const kBoardTemplates[] = {
+                "custom", "vanilla_creature", "lord_effect", "basic_land", "direct_damage", "mana_dork" };
+            static const char* const kFodderKeywords[] = {
+                "Flying", "Trample", "Vigilance", "Double strike", "First strike", "First Strike", "Haste", "Menace",
+                "Reach", "Lifelink", "Deathtouch", "Defender", "Shroud", "Hexproof", "Indestructible", "Ward",
+            };
+            auto in = [](const auto& arr, const std::string& k)
+            { for (const char* a : arr) { if (k == a) { return true; } } return false; };
+            const std::string tmpl = entry.value("template", std::string("custom"));
+            bool inert = in(kInertTemplates, tmpl) && def.card.IsCreature();
+            bool inert_outlet = inert;
+            bool board = in(kBoardTemplates, tmpl);
+            bool deck  = board;
+            // A custom-template card with NO parameters is either vanilla or modelled somewhere this audit cannot
+            // see (by name): not audited. Only the vanilla templates may carry nothing.
+            const bool has_params = entry.contains("parameters") && entry["parameters"].is_object()
+                                 && !entry["parameters"].empty();
+            if (!has_params && tmpl != "vanilla_creature" && tmpl != "basic_land")
+            { inert = inert_outlet = board = deck = false; }
+            if (has_params)
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                {
+                    const std::string& k = it.key();
+                    const bool ki = in(kInertParams, k), ko = in(kOutletManaParams, k);
+                    const bool kb = ki || ko || in(kBoardParams, k);
+                    if (!ki) { inert = false; }
+                    if (!ki && !ko) { inert_outlet = false; }
+                    if (!kb) { board = false; }
+                    if (!kb && !in(kDeckParams, k)) { deck = false; }
+                }
+            }
+            if (entry.contains("keywords") && entry["keywords"].is_array())
+            {
+                for (const json& kw : entry["keywords"])
+                {
+                    if (!kw.is_string() || !in(kFodderKeywords, kw.get<std::string>()))
+                    { inert = inert_outlet = board = deck = false; break; }
+                }
+            }
+            def.fodder_inert         = inert;
+            def.fodder_inert_outlet  = inert_outlet;
+            def.fodder_board_audited = board;
+            def.fodder_deck_audited  = deck;
+        }
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name
