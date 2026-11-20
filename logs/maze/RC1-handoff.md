@@ -94,3 +94,9 @@ and not a compile error; TurnSolver.cpp had not finished compiling). Logs moved 
 `heavy_run.sh ./build_both.sh`: heavy_run PID **2267322
 2267323**, same markers `rc1/build_rc1.done` / `rc1/build_p5b.done`.
 If it fails the same way again, just retry; do not cap jobs on that basis.
+
+## UPDATE ~09:36 UTC: the requeue failed the same way; NOT requeued again
+Second attempt: both trees exit 1, again only `Cannot allocate memory` on header reads (SpellEffects.h), ~100-125
+objects in, TurnSolver.cpp never reached -- so the fix has still never been compiled. Logs in `rc1/try2/`. No build is
+queued now. RC-2: check `dmesg` for the 9p allocation failure, then requeue
+`cd build/scratch/maze/rc1 && MTG_RSS_CAP_GB=20 bash scripts/heavy_run.sh ./build_both.sh` (markers as above).
