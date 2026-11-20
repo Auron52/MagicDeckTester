@@ -1,16 +1,18 @@
-# Regression ground truth -- commit 546d0e1bc  date 2026-11-20
+# Regression ground truth -- commit a6b56e4fa  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
+# accepted-with-regressions (smoke, 2026-11-20): batch 2 (I6, 2026-11-20): Maze's End shared heavy_run + overnight entry rows, DM-2 MTG_LEAF_GAME_OVER + MTG_INWIN_EXIT_GUARD, RC-1 rollout-cache bind guards, P7c/P7d castdom windows + last-ply no-win fold + winless cert + MTG_LASTPLY_PROBE_MEASURE, F6 fed float + Baldur hold, P5d idle-fetch prune + reveal guard ON (USER scope ruling); 12 searched slower: 8 recovered per component d8 b0 (RC hinata gi83, P7 s3003 gi14 base-equal T7, P5d rev tier list), 4 fresh d8 b0 vs origin in logs/maze/I6-handoff.md
+# accepted-with-regressions (regression, 2026-11-20): batch 2 (I6, 2026-11-20): Maze's End shared heavy_run + overnight entry rows, DM-2 MTG_LEAF_GAME_OVER + MTG_INWIN_EXIT_GUARD, RC-1 rollout-cache bind guards, P7c/P7d castdom windows + last-ply no-win fold + winless cert + MTG_LASTPLY_PROBE_MEASURE, F6 fed float + Baldur hold, P5d idle-fetch prune + reveal guard ON (USER scope ruling); 12 searched slower: 8 recovered per component d8 b0 (RC hinata gi83, P7 s3003 gi14 base-equal T7, P5d rev tier list), 4 fresh d8 b0 vs origin in logs/maze/I6-handoff.md
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mazesend_smoke_d0_s1001=6.8650/d371ce35d5a9b45f
-mazesend_smoke_d3_s1001=5.2000/be17a074f3c173f1
-mazesend_smoke_d5_s1001=5.6742/786372c07aca1bf0
-mazesend2hg_smoke_d5_s1001=5.3333/bbda1d5c657c8bd9
+mazesend_smoke_d0_s1001=6.8500/5d37968eb16e1301
+mazesend_smoke_d3_s1001=5.1000/ac28be7e4bbb8e9d
+mazesend_smoke_d5_s1001=5.5758/d96d7b403aef4c8c
+mazesend2hg_smoke_d5_s1001=5.1667/3fd8f23ba64621f8
 mill_smoke_d0_s1001=6.1200/398fc11e7602c763
 mill_smoke_d3_s1001=4.8000/c97ac4a6805a7c6c
 mill_smoke_d5_s1001=4.6000/1b45ef7ca83aae45
@@ -49,7 +51,7 @@ merfolk_smoke_d5_s1001=4.1500/d22df3f9c5538206
 merfolk2hg_smoke_d3_s1001=4.9200/59fac5cecf5dd127
 midrangeburn_smoke_d0_s1001=5.2170/150ea77c6705d19d
 midrangeburn_smoke_d3_s1001=4.4800/3fc73c2768ad9f71
-midrangeburn_smoke_d5_s1001=4.3800/72571e24f249d2b4
+midrangeburn_smoke_d5_s1001=4.3800/cee2ab31d08f6726
 midrangeburn2hg_smoke_d5_s1001=5.3200/56d3174626e7f3fe
 onedropburn_smoke_d0_s1001=4.2310/ae3af5d60c144166
 onedropburn_smoke_d3_s1001=3.5200/335c6c969a7610ab
@@ -86,7 +88,7 @@ antilife_smoke_d3_s1001=4.0400/ede28e8625d5d377
 antilife_smoke_d5_s1001=4.2031/013151286334c349
 hinata_smoke_d0_s1001=6.7450/53f1fb0fb35ee096
 hinata_smoke_d3_s1001=5.5400/5375072b67fbca69
-hinata_smoke_d5_s1001=5.4900/ceee427df27b93a1
+hinata_smoke_d5_s1001=5.5000/cf869f7cf1dec8c5
 cyclone_smoke_d0_s1001=8.3090/30023e95ee6e7cc2
 cyclone_smoke_d3_s1001=4.8800/f2c16fa6692145bf
 cyclone_smoke_d5_s1001=4.7500/271eb790255560ae
@@ -105,8 +107,8 @@ goblins_smoke_d0_s1001=3.9800/f9234d4eef8f3a3c
 goblins_smoke_d3_s1001=3.6800/44ed57197427f989
 goblins_smoke_d5_s1001=3.5700/c44aa4e1a0e3d5f3
 creature_giving_smoke_d0_s1001=5.4930/67abfc18a74de79c
-creature_giving_smoke_d3_s1001=4.6200/72bb06e1342bb88e
-creature_giving_smoke_d5_s1001=4.6400/79630a86a400bd6a
+creature_giving_smoke_d3_s1001=4.6200/0463cae9da9cdcbe
+creature_giving_smoke_d5_s1001=4.6400/7b7cdfda9f9b71a3
 mirrorwing_smoke_d0_s1001=5.6980/94a65c7740226d29
 mirrorwing_smoke_d3_s1001=4.3800/80f62f61c4cf7cc2
 mirrorwing_smoke_d5_s1001=4.1920/95dab69defa5aac0
@@ -157,7 +159,7 @@ burn2hg_smoke_d5_s1001=5.7600/3d35961c73010338
 th2hg_smoke_d5_s1001=4.6600/ecc7f3f9bda17440
 dragonstorm2hg_smoke_d5_s1001=4.6600/19610df5cd9ebd91
 auras2hg_smoke_d5_s1001=4.4000/5e4ce15125063dd4
-creature_giving2hg_smoke_d5_s1001=4.8800/1972bbf4bd319ac9
+creature_giving2hg_smoke_d5_s1001=4.8800/e85bc252de679164
 mirrorwing2hg_smoke_d5_s1001=4.6000/d525599ea5396333
 stompy2hg_smoke_d5_s1001=4.2200/e33acaa4f055ba9e
 kittyv32hg_smoke_d5_s1001=4.3200/9705c76ca4e44bec
@@ -222,8 +224,8 @@ vampires_smoke_d5_s1001=4.2229/36c7dc7885a07e73
 vampires2hg_smoke_d5_s1001=4.8600/427eb6a758965cd5
 alchemist_smoke_d0_s1001=6.2230/da3ebeea568ae45b
 alchemist_smoke_d3_s1001=5.0200/dc13a754585a6300
-alchemist_smoke_d5_s1001=4.9400/bf4dcbaa00ebf492
-alchemist2hg_smoke_d5_s1001=5.1400/8dfdf176a8b56b26
+alchemist_smoke_d5_s1001=4.9333/7f1cf453aed084bd
+alchemist2hg_smoke_d5_s1001=5.1200/aa1047a29d009bf9
 elementals_smoke_d0_s1001=5.5960/c9a78ce3e2e3f6fd
 elementals_smoke_d3_s1001=4.4400/26d17d610e9bc5f0
 elementals_smoke_d5_s1001=4.3360/79f56bdb5319619e
@@ -244,14 +246,14 @@ merfolkturns_smoke_d5_s1001=5.5400/b6d53c30b0fc5ca7
 merfolkturns2hg_smoke_d3_s1001=5.7000/ffe1ee34e422a5db
 
 # --- regression ---
-mazesend_regression_d0_s2002=6.8640/26c1d31ffbdf08e8
-mazesend_regression_d3_s2002=5.7333/f75a364c4bf6d5f4
-mazesend_regression_d5_s2002=5.5598/cfcc860fa82d6bb4
-mazesend_regression_d5_s3003=5.5867/1fe626c7ab0cd526
-mazesend_regression_d3_s30121=5.0000/d5017d8764559343
-mazesend_regression_d5_s30121=5.0000/d5017d8764559343
+mazesend_regression_d0_s2002=6.8280/9b336dfa69e5532f
+mazesend_regression_d3_s2002=5.6667/a907dcb2c82dcc03
+mazesend_regression_d5_s2002=5.4946/fb985ddeb857bcda
+mazesend_regression_d5_s3003=5.5467/9cb32f619eca98ee
+mazesend_regression_d3_s30121=5.0000/1219f565045807b3
+mazesend_regression_d5_s30121=5.0000/1219f565045807b3
 mazesend_regression_d3_s30081=4.0000/03186c5673236c69
-mazesend_regression_d5_s30081=5.0000/b68b21fc754a1757
+mazesend_regression_d5_s30081=4.0000/03186c5673236c69
 mill_regression_d0_s2002=6.2000/1319f32d2f0a9448
 mill_regression_d3_s2002=5.0000/58b7d80b3f5dd456
 mill_regression_d5_s2002=5.0000/2573e9ad87363dae
@@ -321,8 +323,8 @@ burn_regression_d3_s30001=4.3500/c3ce2c0b999782ac
 burn_regression_d5_s30001=4.3500/c3ce2c0b999782ac
 colossus_regression_d3_s30001=3.2000/b6a3e4ec7d038fc1
 colossus_regression_d5_s30001=3.2000/b6a3e4ec7d038fc1
-creature_giving_regression_d3_s30001=4.7500/e1d02f29aeb5f2bb
-creature_giving_regression_d5_s30001=4.7500/e1d02f29aeb5f2bb
+creature_giving_regression_d3_s30001=4.7500/8caa146aae825501
+creature_giving_regression_d5_s30001=4.7500/8c8cbd8257e74088
 critter_regression_d3_s30001=4.3000/2fb248b6df2563d5
 critter_regression_d5_s30001=4.3000/bf860bbfc46ac44f
 lhc_regression_d3_s30001=4.8000/dbdb7f6d34daebfe
@@ -454,9 +456,9 @@ goblins_regression_d3_s2002=3.6900/57ca381c24d71047
 goblins_regression_d5_s2002=3.7920/c03fcc381df69832
 goblins_regression_d5_s3003=3.7840/3db3ffea0e9cc964
 creature_giving_regression_d0_s2002=5.5460/ea936ed01d59d6a1
-creature_giving_regression_d3_s2002=4.5400/90619fae5b3bcdd8
-creature_giving_regression_d5_s2002=4.6024/2b58e6c296f363ec
-creature_giving_regression_d5_s3003=4.5929/8e10d2d772c2fe64
+creature_giving_regression_d3_s2002=4.5400/e4e91e60cb394689
+creature_giving_regression_d5_s2002=4.6000/ab48d2fe11af1b3a
+creature_giving_regression_d5_s3003=4.5929/51879f86afbdf4e3
 mirrorwing_regression_d0_s2002=5.8900/70d1e4c29f6ffa9e
 mirrorwing_regression_d3_s2002=4.2667/f4a97d9800512528
 mirrorwing_regression_d5_s2002=4.1733/9dce393a447c19b1
@@ -585,9 +587,9 @@ elementals_regression_d5_s2002=4.2800/4548085ee65da630
 elementals_regression_d5_s3003=4.2333/770a57c468ff0e45
 midrangeburn_regression_d0_s2002=5.1930/4a4ef7024c395e2f
 midrangeburn_regression_d3_s2002=4.4933/4d1330a80fbc317c
-midrangeburn_regression_d5_s2002=4.3867/33c2e517efc5fdba
+midrangeburn_regression_d5_s2002=4.3867/a9618460faa56a67
 midrangeburn_regression_d5_s3003=4.3000/39734f848d13568e
-midrangeburn2hg_regression_d5_s2002=5.6533/4d51e7ebfac4c900
+midrangeburn2hg_regression_d5_s2002=5.6533/26029ee0b53c4af2
 onedropburn_regression_d0_s2002=4.2380/ccd3328b6e6abfc5
 onedropburn_regression_d3_s2002=3.6533/2ede21c57c5a1110
 onedropburn_regression_d5_s2002=3.7133/c3cced7fc991db81
