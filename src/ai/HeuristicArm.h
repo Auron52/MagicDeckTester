@@ -1020,6 +1020,8 @@ enum Slot : int
     MAZE_LAND_DOMINANCE,      // MTG_MAZE_LAND_DOMINANCE   Maze's End P7: the LAND half (fold B) of MAZE_CAST_DOMINANCE. Default ON; =0 -> fold A only
     FOLD_LAND_ORDER,          // MTG_FOLD_LAND_ORDER       P5b fold 2 (Maze's End; USER: "the order doesn't matter much here unless the second land is played after other things or we are paying for a cost like Gateway Plaza"): after a turn of nothing but land drops, an extra drop's land-FIRST plans for a commuting land (DecisionProvider::LandEntryOrderClass) that sorts below a land already played (and held since main 1) are not enumerated -- the sorted order reaches the same board. Search enumerations only (g_rollout_nest == 0; the context is folded into the enumeration keys). DEFAULT OFF: held-out net +3 / 2,800 games (1 better / 4 worse); USER's call; =1 arms it
     FOLD_LAND_ORDER_SEEN,     // MTG_FOLD_LAND_ORDER_SEEN  P5b-2 (Maze's End; the same USER rule as FOLD_LAND_ORDER): the land-order identity as a FIRST-REACHED dedup -- the search loops' post-apply dedup sets key a state with our same-class (DecisionProvider::LandEntryOrderClass) lands that entered this turn re-filled in card-number order (TurnSolver SeenKey), so of two lines playing commuting lands in either order the one the loop reaches first is scored and the later is skipped. No enumeration, rank or order changes. DEFAULT OFF: held-out net +1 Maze's End (2 better / 3 worse) / -1 2HG over 2,800 each, every slower game recovering at d8 b0 -- the USER's call; =1 arms it
+    SOLVE_MEMO_BIND_GUARD,    // MTG_SOLVE_MEMO_BIND_GUARD  RC-1 soundness fix, DEFAULT ON: the greedy Solve memo does not store a walk a budget test CUT (budgetbind::t_binds moved; the charged walk, MTG_SOLVE_CHARGE). =0 restores the old store rule (A/B control only). See solvememo::BindGuardOn in TurnSolver.cpp
+    LEAF_WIN_BIND_GUARD,      // MTG_LEAF_WIN_BIND_GUARD    RC-1 soundness fix, DEFAULT ON: the leaf table stores a rollout's WIN only when no truncation or budget bind happened beneath it (the no-win store's and the rollout game cache's watermark). =0 restores the old store rule (A/B control only). See the win store in SimulateToEnd
     COUNT
 };
 
@@ -1984,6 +1986,8 @@ inline const char* Name(int slot)
         "MTG_MAZE_LAND_DOMINANCE",
         "MTG_FOLD_LAND_ORDER",
         "MTG_FOLD_LAND_ORDER_SEEN",
+        "MTG_SOLVE_MEMO_BIND_GUARD",
+        "MTG_LEAF_WIN_BIND_GUARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

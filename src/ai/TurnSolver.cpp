@@ -1135,6 +1135,25 @@ static std::atomic<long long> g_nowin_store_checked{0}, g_nowin_store_bad{0};
 // the missing fade-counter fold in BuildSimKey was found.
 static thread_local std::unordered_map<TranspositionTable::Key, std::unique_ptr<GameState>,
                                        TranspositionTable::KeyHash> t_nowin_stored_states;
+// MTG_LEAF_VERIFY's WIN-half twin of the map above (RC-1): the state each win was stored from plus the
+// cutoff it ran under, so a stale win hit can replay the STORED state and tell a key hole from drift.
+struct LeafVerifyStored { std::unique_ptr<GameState> st; int cutoff = 0; int result = 0; };
+static thread_local std::unordered_map<TranspositionTable::Key, LeafVerifyStored,
+                                       TranspositionTable::KeyHash> t_leaf_stored_states;
+static bool LeafVerifyOn() { static const bool on = EnvOn("MTG_LEAF_VERIFY"); return on; }
+// MTG_LEAF_WIN_BIND_GUARD (DEFAULT ON): see the win store in SimulateToEnd. =0 is an A/B control only.
+static bool LeafWinBindGuardOn()
+{
+    static const bool env = EnvOn("MTG_LEAF_WIN_BIND_GUARD", true);
+    return heurarm::Flag(heurarm::LEAF_WIN_BIND_GUARD, env);
+}
+// MTG_LEAF_VERIFY_TRACE=<h1 hex>: trace (fs-sim) every verify replay of that one key. Diagnostic only.
+static std::uint64_t LeafVerifyTraceKey()
+{
+    static const std::uint64_t v = []{ const char* e = std::getenv("MTG_LEAF_VERIFY_TRACE");
+                                       return (e && *e) ? std::strtoull(e, nullptr, 16) : 0ull; }();
+    return v;
+}
 // MTG_NOWIN_VERIFY_POISON -- the harness's POSITIVE CONTROL, and it exists because "bad=0" is the
 // exact shape a broken checker produces. It serves a no-win entry while IGNORING its bound, which is
 // unsound by construction: the entry refutes only turns <= bound, so a query with a later cutoff can
@@ -59933,6 +59952,18 @@ namespace solvememo
     inline void NoteSet(long long d) { t_bytes += d; tier1::Set(tier1::kSolveMemo, t_bytes); }
     inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO", true); return v; }
     inline bool VerifyOn() { static const bool v = EnvOn("MTG_SOLVE_MEMO_VERIFY"); return v; }
+    // MTG_SOLVE_MEMO_BIND_GUARD (DEFAULT ON, a soundness fix; =0 restores the old store rule, A/B control only).
+    // A greedy walk that a budget test CUT (the charged walk's Exhausted()/Overrun(), MTG_SOLVE_CHARGE) returns its
+    // best-so-far plan, which is not a function of the key. Storing it served the cut plan to every later solve of
+    // the same position in the decision -- including the unbudgeted verify re-rolls and a budgeted host with budget
+    // left -- so a rollout's answer followed which positions had been solved earlier under a spent budget (RC-1,
+    // Maze's End 2HG d1 b1 g491: MTG_NOWIN_VERIFY "SAME-STATE DRIFT", gone with the memo off). A cut walk is
+    // detected the way the rollout m1 memo and the no-win stores detect one: budgetbind::t_binds moved under it.
+    inline bool BindGuardOn()
+    {
+        static const bool env = EnvOn("MTG_SOLVE_MEMO_BIND_GUARD", true);
+        return heurarm::Flag(heurarm::SOLVE_MEMO_BIND_GUARD, env);
+    }
 
     // condemn_drops/trunc_delta: the memoized body's side-counter contributions, REPLAYED on a
     // searched-m2 hit (audit §6.1; see enummemo::Entry -- same class, same fix). Unused (always
@@ -59993,7 +60024,7 @@ namespace solvememo
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
                                            TranspositionTable::KeyHash> t_m2cache;
 
-    inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
+    inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0}, g_bind_refusals{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
     inline std::atomic<uint64_t> g_m2_hits{0}, g_m2_misses{0}, g_m2_clears{0};
     // Verify pass over the M2 memo's hits (shares MTG_SOLVE_MEMO_VERIFY). Mandatory soundness
@@ -60103,6 +60134,8 @@ namespace solvememo
             std::fprintf(stderr, "[solve-memo] hits=%llu misses=%llu clears=%llu",
                          (unsigned long long)g_hits.load(), (unsigned long long)g_misses.load(),
                          (unsigned long long)g_clears.load());
+            if (g_bind_refusals.load() != 0)
+            { std::fprintf(stderr, " bind_refusals=%llu", (unsigned long long)g_bind_refusals.load()); }
             if (VerifyOn())
             {
                 std::fprintf(stderr, " verified=%llu MISMATCHES=%llu",
@@ -60615,11 +60648,18 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, c
     }
 
     solvememo::g_misses.fetch_add(1, std::memory_order_relaxed);
+    const unsigned long long binds_before = budgetbind::t_binds;
     TurnSolver::Plan p = SolveUncached(state, is_pre_combat, permit);
     // A VOID game stores nothing: the walk above may have stopped early on the per-game backstop
     // (kWalkAbandonStride / gamework::Poll), so `p` is the best-so-far of a truncated walk. Always
     // false unless a unit ceiling or a wall cap is armed.
     if (gamework::Abandoned()) { return p; }
+    // ...and neither does a walk a BUDGET cut (see solvememo::BindGuardOn): `p` is again a best-so-far.
+    // An unlimited budget never binds, so unbudgeted play is untouched.
+    // The armed per-decision meter cuts the same walk without booking a bind (its Exceeded() path), so a spent
+    // meter refuses too -- the plan caches' own "Exceeded means no store" rule. Disarmed in play: inert there.
+    if (solvememo::BindGuardOn() && (budgetbind::t_binds != binds_before || decisionwork::Exceeded()))
+    { solvememo::g_bind_refusals.fetch_add(1, std::memory_order_relaxed); return p; }
     if (cache.size() >= solvememo::Cap())
     {
         for (const auto& kv : cache) { solvememo::NoteSet(-solvememo::EntryBytes(kv.second.plan)); }
@@ -109210,7 +109250,24 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                     {
                         std::cerr << "[leaf-verify] STALE HIT #" << n << " turn=" << state.turn_number
                                   << " depth=" << depth << " cached=" << *cached << " fresh=" << fresh
+                                  << " key=" << std::hex << key.h1 << std::dec
                                   << " (key collides two different-rollout states)\n";
+                        auto sit = t_leaf_stored_states.find(key);
+                        if (sit != t_leaf_stored_states.end() && sit->second.st)
+                        {
+                            FsSimTraceScope _tr(key.h1 == LeafVerifyTraceKey());
+                            GameState s1 = *sit->second.st;
+                            const int r_same = SimulateToEndImpl(s1, depth, max_turns, nullptr, sit->second.cutoff,
+                                                                 second_main, nullptr);
+                            GameState s2 = *sit->second.st;
+                            const int r_loose = SimulateToEndImpl(s2, depth, max_turns, nullptr, max_turns + 1,
+                                                                  second_main, nullptr);
+                            std::fprintf(stderr, "[leaf-verify]   STORED replay now: cutoff=%d -> %d, loose -> %d (stored %d)"
+                                                 " -> %s\n  HIT    %s\n  STORED %s\n",
+                                         sit->second.cutoff, r_same, r_loose, sit->second.result,
+                                         r_loose == fresh ? "SAME-STATE DRIFT" : "KEY HOLE",
+                                         FsSimBoardText(state).c_str(), FsSimBoardText(*sit->second.st).c_str());
+                        }
                     }
                 }
             }
@@ -109394,6 +109451,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     std::unique_ptr<GameState> nowin_vcopy;   // MTG_NOWIN_VERIFY's store-time check only
     if (nowin_armed && NoWinVerifyOn() && !t_nowin_verifying)
     { nowin_vcopy = std::make_unique<GameState>(state); }
+    std::unique_ptr<GameState> leaf_vcopy;    // MTG_LEAF_VERIFY's store-time check only (RC-1)
+    if (tt != nullptr && LeafVerifyOn() && !t_nowin_verifying)
+    { leaf_vcopy = std::make_unique<GameState>(state); }
     // MTG_LEAF_KILL_ONLY_VERIFY (see LeafKillOnlyOn): the reference run, on a copy, with the scope
     // suppressed. Only where a kill-only turn can occur (depth > 0, a cutoff before the horizon).
     std::unique_ptr<GameState> ko_vcopy;
@@ -109565,10 +109625,48 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         }
     }
 
+    // LEAF WIN STORE WATERMARK (MTG_LEAF_WIN_BIND_GUARD, DEFAULT ON, a soundness fix; =0 restores the old store
+    // rule, A/B control only). A win is stored as the budget-free answer for its key ("exact and cutoff-independent",
+    // TranspositionTable.h), which holds only if no budget test cut anything beneath it. The charged greedy walk
+    // (MTG_SOLVE_CHARGE; Maze's End opts in) stops at its best-so-far once the rollout's budget is spent, so a rollout
+    // run after the spend can win LATER than the same rollout with budget left -- and that later win was stored and
+    // served (RC-1, Maze's End 2HG d1 b1 g491: MTG_LEAF_VERIFY cached=8 fresh=7 six times; zero with the charge off).
+    // Same watermark as the no-win store and the rollout game cache: no truncation and no bind under this call. A
+    // refused win is recomputed on its next lookup. An unlimited budget never binds, so unbudgeted play is untouched.
+    const bool win_store_clean = !LeafWinBindGuardOn()
+        || (g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
+            && !decisionwork::Exceeded());   // (the armed decision meter cuts without a bind; disarmed in play)
     if (tt != nullptr && result <= max_turns)
     {
-        PROF_INC(tt_stores); tt->Store(key, result);
-        if (lt_live && result > state_turn_at_entry && !lt_mark.Clean()) { tt->MarkCutWin(key); }   // P5b-3
+        if (win_store_clean && leaf_vcopy)
+        {
+            // MTG_LEAF_VERIFY store-time check (RC-1): re-derive the win fresh (no table, no budget) at the stored
+            // cutoff and at a loose one. A mismatch here means the stored run's own context (nested tables, the
+            // budget, the cutoff) changed its answer; a clean store with a stale hit later means DRIFT.
+            FsSimTraceScope _tr(key.h1 == LeafVerifyTraceKey());
+            GameState s1 = *leaf_vcopy;
+            const int r_same = SimulateToEndImpl(s1, depth, max_turns, nullptr, cutoff_turn, second_main, nullptr);
+            GameState s2 = *leaf_vcopy;
+            const int r_loose = SimulateToEndImpl(s2, depth, max_turns, nullptr, max_turns + 1, second_main, nullptr);
+            if (r_same != result || r_loose != result)
+            {
+                static std::atomic<int> s_n{0};
+                if (s_n.fetch_add(1) < 12)
+                {
+                    std::fprintf(stderr, "[leaf-verify] STORE-TIME MISMATCH t%d depth=%d stored=%d cutoff=%d fresh_same=%d"
+                                         " fresh_loose=%d key=%llx nest=%d\n  %s\n",
+                                 leaf_vcopy->turn_number, depth, result, cutoff_turn, r_same, r_loose,
+                                 static_cast<unsigned long long>(key.h1), g_rollout_nest, FsSimBoardText(*leaf_vcopy).c_str());
+                }
+            }
+            if (t_leaf_stored_states.size() > 8192) { t_leaf_stored_states.clear(); }
+            t_leaf_stored_states[key] = LeafVerifyStored{ std::move(leaf_vcopy), cutoff_turn, result };
+        }
+        if (win_store_clean)
+        {
+            PROF_INC(tt_stores); tt->Store(key, result);
+            if (lt_live && result > state_turn_at_entry && !lt_mark.Clean()) { tt->MarkCutWin(key); }   // P5b-3
+        }
     }
     else if (tt != nullptr)
     {
@@ -138422,6 +138520,58 @@ TurnSolver::SpentTwice TurnSolver::SimulateToEndSpentTwiceForTest(const GameStat
 }
 
 long long TurnSolver::FslEdgeNoReachCountForTest() { return t_fsl_edge_noreach_n; }
+
+// RC-1 test hooks (see TurnSolver.h).
+TurnSolver::CutMemoProbe TurnSolver::SolveMemoCutProbeForTest(const GameState& state, bool is_pre_combat)
+{
+    CutMemoProbe r;
+    const GreedyPermit permit(GreedySite::HorizonLeaf, 0);
+    SearchBudget* const prev_b = g_greedy_charge_budget;
+    const int prev_w = g_greedy_charge_w, prev_acc = g_greedy_charge_acc;
+    g_greedy_charge_budget = nullptr;
+    const Plan full = SolveUncached(state, is_pre_combat, permit);   // no budget host: the uncut walk
+    ++g_decision_epoch;                          // a fresh decision scope: the memo holds nothing for `state`
+    ++g_cs_solver_nest;                          // inside a search frame, where the memo is live
+    SearchBudget spent(1);
+    spent.Consume(1);                            // the rollout budget is already spent
+    g_greedy_charge_budget = &spent; g_greedy_charge_w = 1; g_greedy_charge_acc = 0;
+    const Plan cut = Solve(state, is_pre_combat, permit);
+    g_greedy_charge_budget = nullptr;
+    const Plan served = Solve(state, is_pre_combat, permit);
+    --g_cs_solver_nest;
+    g_greedy_charge_budget = prev_b; g_greedy_charge_w = prev_w; g_greedy_charge_acc = prev_acc;
+    r.cut_differs    = !solvememo::SamePlan(cut, full);
+    r.served_is_full = solvememo::SamePlan(served, full);
+    r.served_is_cut  = solvememo::SamePlan(served, cut);
+    return r;
+}
+
+TurnSolver::CutLeafProbe TurnSolver::LeafWinCutProbeForTest(const GameState& state, int max_turns)
+{
+    CutLeafProbe r;
+    const std::int8_t prev_arm = heurarm::t_arm[heurarm::SOLVE_CHARGE];
+    heurarm::t_arm[heurarm::SOLVE_CHARGE] = 1;   // the charged greedy walk (Maze's End's opt-in)
+    {
+        ++g_decision_epoch;
+        GameState c = state;
+        r.fresh = SimulateToEnd(std::move(c), 0, max_turns, nullptr, max_turns + 1, false, nullptr);
+    }
+    TranspositionTable tt;
+    {
+        ++g_decision_epoch;
+        SearchBudget spent(1);
+        spent.Consume(1);
+        GameState c = state;
+        r.cut = SimulateToEnd(std::move(c), 0, max_turns, &spent, max_turns + 1, false, &tt);
+    }
+    {
+        ++g_decision_epoch;                      // only the leaf table carries over (the solve memo is epoch-scoped)
+        GameState c = state;
+        r.served = SimulateToEnd(std::move(c), 0, max_turns, nullptr, max_turns + 1, false, &tt);
+    }
+    heurarm::t_arm[heurarm::SOLVE_CHARGE] = prev_arm;
+    return r;
+}
 bool ChandraPaidCastOptionPayable(const GameState& state, int controller, const Card& card,
                                       const std::string& encoded)
 {
