@@ -175,6 +175,11 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
     hand, Rakdos Carnarium and City of Brass join the list (the search picks which; USER's guide: Carnarium
     with spare land drops and nothing else to play, City when we need the red this turn).
   * Diabolic Revelation stays a target (a replacement); no change.
+  USER (verbatim): *"But you are right, exploration when life is looking dicey could be a consideration. (say
+  if you had to play multiple grim tutors to get blood sun and Diabolic Revelation and pay life for lands at
+  the start) It doesn't help once fastbond is out, though and generally this wouldn't come up."*
+  -> Exploration IS a target again, but only (i) while no Fastbond is on our battlefield and (ii) when our life
+  is low (default threshold: life <= 10, a parent-chosen number surfaced to the USER), ordered after Fastbond.
 
 - B4 big lands wait for Blood Sun (USER 2026-11-20, verbatim): *"Generally Scorched Ruins and Lotuses wait for
   Blood Sun to drop. The only exception is when you fail to have the 3 mana or Red needed for Blood Sun. In
