@@ -235,3 +235,16 @@ it is surfaced rather than waved through.
 from all-on stays 7). On: 7 at b20 / b40 / b80, **6 at b160 / b320 and at d8 b0**; off 6 everywhere. Both are
 provider ORDER levers (tap order, Umbra host rank): they re-order what the budget reaches first, and the line is still
 found at a larger budget. **Verdict: budget re-pricing, recovers at d8 b0.**
+
+### Tiers (tiers7, smoke + regression on the chain7 binary) and the accepted GT
+
+Every aggregate is at or below its GT. Searched games: smoke 0 slower / 30 faster; regression 1 slower (gi143 above) /
+43 faster. d0 (depth-0 runner): 19 slower / 112 faster, all of them in Accomplished Alchemist's d0 cells, which the
+provider order levers reach (smoke d0 6.2230 -> 6.1180, regression d0 6.1850 -> 6.1050). Other movers, all faster or
+digest-only: Maze's End, Goblins (+2HG), EDF (+2HG), Melira Pod, Martyr Lifegain, Hydras, Shadowborn, Landfall,
+Landfall Elementals, Prevent Damage 2HG. Viewer protocol 930 refs, 0 drift. Accepted in `56b6be550`; the overnight
+GT is left for the periodic overnight run.
+
+Cost in units (ab7, same binary, held-out, on vs off): AA -3.0%; Goblins +12.9% and EDF +11.7% at equal or better
+play; every other deck +0.2% .. +3.8%. The increase is extra breakpoint work the levers admit (most plausibly site 9
+after deferred continuations, not bisected), i.e. search that was previously unreachable, not a degenerate shape.

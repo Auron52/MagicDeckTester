@@ -120,4 +120,6 @@ names; streams batch output to files; `--report <dir>` re-prints per-cell and pe
 - Cyclone dPb20 c120 gi126 (seed 911127): T4 off / T5 on; only MTG_SITE9_AFTER_DEFERRED moves it; recovers at d8 b0
   and at b40..b320 -> budget re-pricing (scratch build/scratch/alch-t3/a8/cyc/).
 - gi143: on 7 at b20/b40/b80, 6 at b160/b320/d8b0; moved by TAP_LAST alone and by LATE_BIND_RANK alone -> re-pricing.
-- No src change by agent 8. Next: tiers7 audit -> accept GT -> check_gt_logs -> commit -> backup push.
+- No src change by agent 8. tiers7 (23:49): every aggregate <= GT; searched slower 1 (gi143), d0 slower 19 (all AA d0
+  cells, net faster). GT accepted 56b6be550; check_gt_logs 1345 consistent. ab7 units: Goblins +12.9%, EDF +11.7%.
+  Branch READY TO LAND (parent). Overnight GT left for the periodic run.
