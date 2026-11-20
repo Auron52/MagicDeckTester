@@ -1928,3 +1928,74 @@ build/scratch/1db/pq/push_queue.py until the rebase brings it in. Waiter: `push_
 Do NOT rebase until the lease arrives. At the lease: fetch + rebase, check_references_safe, then under `push_queue.py hold --`
 run rebuild + unit + smoke + check_gt_logs, then `push_queue.py land` and the background CI watch. Meanwhile: finish the rebase-4
 smoke, then ./build.sh, mtg-test, commit the USER-item levers (they ride along), and the burnfloat A/B.
+
+### CHECKPOINT ~05:50 UTC 2026-11-20 -- LANDED 1eff08565 via the push queue; burnfloat A/B + TurnSolver compile diagnostic running
+- Landing validation on the rebased tree: BUILD/UNIT (3746/3746)/PGO rc=0, smoke 235/235 byte-identical, gt_logs 1345 consistent,
+  check_references_safe OK; `push_queue.py land` 05:42:59, lease passed to wip/maze-shared. CI run 44682864737 watched in background.
+- burnfloat A/B: logs/1dropburn/burnfloat_ab.log (out dir logs/mana_tap_ab/20261120_054338_overnight; 180 jobs, 146,880 games,
+  5 arms), THREADS=11 -- one core deliberately left for the compile diagnostic below (recorded exception to max concurrency).
+- USER 2026-11-20: the Release build "sounds like too much". Finding: 86 of its 87 min are ONE TU, src/ai/TurnSolver.cpp.o
+  (5177 s single-threaded; 138,612 lines, was 60,385 on 10-01; CollectActions ~13.3K lines, four more 6.4-9K-line functions).
+  The PGO (LTO) build compiles it in 817 s. Diagnostic: -O3 -ftime-report + /usr/bin/time -v alone ->
+  build/scratch/1db/tscompile/compile.err (DONE marker). Options to bring the USER: LTO for Release, the one exploding pass,
+  or split the TU (needs coordination: every session edits it). No shared build change without the USER.
+NEXT: A/B readout -> root-cause slower (d8 b0 bar) -> report all three levers (Fireblast-early is the USER's call) -> scoped
+smoke+regression accept for flips -> value leaf -> leaf_tiebreak --blocks 48 -> verify_deck --write-ledger -> Stage 6 ->
+check_references_safe -> CronDelete 01e1d807.
+
+### CHECKPOINT ~07:00 UTC 2026-11-20 -- burnfloat A/B DONE; all three levers flipped ON (uncommitted); build.sh memory cap
+- A/B (logs/mana_tap_ab/20261120_054338_overnight/paired.txt; 29,376 paired games per arm, overnight cells, PGO):
+  held -0.0003t (12 better / 3 worse); float -0.0422t (693/17); early(=float+early) -0.0476t (824/19); all -0.0479t (836/22).
+  Per deck: float moves Midrange Burn d0 -0.139t, d3 -0.019t, d5 -0.016t, 2HG -0.016t; 1 Drop Burn searched -0.0015t.
+  Fireblast-early adds 1 Drop Burn d0 -0.0186t, d3 -0.0015t, d5 -0.0010t beyond the float.
+- d8 b0 bar: all 22 distinct slower games (83 jobs, build/scratch/1db/d8b0/) TIE base at --depth 8 --budget-ms 0. 0 slower.
+- Flipped MTG_FIREBLAST_FLOAT, MTG_ONEDROPBURN_M2_HELD, MTG_ONEDROPBURN_FIREBLAST_EARLY default ON. Fireblast-early is
+  USER-owned (conditionally approved "if we float the red mana automatically"): REPORT it.
+- Only 1 Drop Burn and Midrange Burn hold Fireblast -> scoped smoke+regression accept:
+  --deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg.
+- build.sh: memory-aware job cap (TurnSolver.cpp 1257 s alone / 3.6 GB peak vs 5177 s in a 12-job swapping build).
+  First capped build: logs/1dropburn/build_flip.log (9 jobs), wall in logs/1dropburn/flip_chain.log.
+- USER 2026-11-20 (push rhythm on this slow box): "1-2 hours should be the maximum even for this slow machine";
+  "we shouldn't be running that [overnight] when other agents are waiting for us"; "Let's keep the 4-hour window for
+  this machine." -> CLAUDE.md lease rules (uncommitted edit; ungated, push straight after the build). Last land
+  05:43 UTC -> next queue JOIN no earlier than 09:43 UTC. Under the lease: Release build + unit + smoke only.
+
+### STOPPING POINT 2026-11-20 (USER: "get to a good stopping point ASAP in order to switch to a new deck"; "the push can wait until after I've switched. You can just get everything committed.")
+DONE: cards implemented and reviewed; deck in the suite; exhaustive keep + bottom table ADOPTED (b96527c02 -> e002706b4
+after rebase); USER cast order ON; the USER 2026-11-19 items measured and flipped ON (the A/B and d8 b0 bar above), smoke +
+regression GT accepted for onedropburn / onedropburn2hg / midrangeburn / midrangeburn2hg. Everything committed.
+
+NOT PUSHED (USER: wait until after the switch). The local commits after origin's 1eff08565 are the flips + GT, the
+CLAUDE.md lease rules, and this ledger. To push: on this slow box, `join` no earlier than 4 h after the last land
+(05:43 UTC 2026-11-20); under the lease only a Release build + unit + smoke (`MTG_PGO=0`) + check_gt_logs, then `land`
+and the background CI watch.
+
+PARKED (resume in this order, when the USER returns to the deck):
+1. Value leaf: `bash scripts/valueleaf.sh run "decks/1 Drop Burn"` (alone on the box; it builds PGO itself); then
+   GT re-accept if it adopts, then leaf_tiebreak_check.py --blocks 48.
+2. Viewer audit: `python3 scripts/verify_deck.py "decks/1 Drop Burn/1 Drop Burn.cod" --write-ledger` (its earlier FAIL was
+   the auditor's UnboundLocalError, fixed on origin).
+3. Stage 6 report: draft at build/scratch/1db/stage6_draft.md (cards / mulligan / win-rate table written; verification and
+   6a placeholders).
+4. build.sh memory-aware job cap. Measured 2026-11-20 on the 12-thread / 10.9 GB box: TurnSolver.cpp.o 1257 s and 3.6 GB
+   peak compiled alone, but 5177 s in a 12-job full rebuild that swapped (pswpin ~430 GB since boot). A trial cap of 9 jobs
+   (MemAvailable minus 3.7 GB for TurnSolver, then 0.7 GB per job) still swapped: the test TUs measured 0.6-1.1 GB each, and
+   swap reached 3.6 GB; that build took 3294 s (55 min) vs the 87 min baseline. The edit is REVERTED. Next try: ~1.0 GB per job plus ~1 GB of headroom (about 5 jobs here; every core
+   on a box with the memory), verified by a forced full rebuild timed against the 87 min baseline. Job count only; the binary
+   is identical.
+5. push_queue.py validate-while-waiting (a gated-tree fingerprint recorded at join, so the lease only lands) -- proposed to
+   the USER; and long-term build time (LTO in Release, or splitting TurnSolver.cpp, 138,612 lines) -- USER's call.
+
+OPEN FOR THE USER (non-blocking):
+- Fireblast early (MTG_ONEDROPBURN_FIREBLAST_EARLY) is ON. It is the USER's cast order, conditionally approved "if we float
+  the red mana automatically". Keep it, or return Fireblast to last (=0)?
+- Agent deferrals awaiting sign-off: the Needle Drop `not_verified` menu entry / searched-but-dropped fold; Fireblast
+  menu phantom drops (likely gone now that the float is ON -- recheck in the viewer); --validate-line rejects a legal line
+  ending in Fireblast; a lethal upkeep Rift Bolt does not end the game before main 1 (claude-play only, same win turn);
+  Midrange Burn's likely Fireblast-before-burn drop.
+- Perf findings: bottoming was ~89% of play work before the keep table; the screen picked d1 b1; the table cut search
+  cost ~15-20x.
+- GT accepted 2026-11-20 ~08:00 UTC (Release, scoped --deck=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg):
+  smoke searched slower 0 / faster 4, d0 slower 1 / faster 84; regression searched slower 0 / faster 12, d0 slower 1
+  (midrangeburn_regression_d0_s2002 gi345 5->6, greedy runner) / faster 84. 17 keys moved, all faster or equal.
+  check_gt_logs 1345 consistent. The overnight GT for these four decks is left to the periodic overnight run.

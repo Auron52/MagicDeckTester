@@ -647,6 +647,21 @@ the CPU if possible."*), checking memory (`free -g`) first.
     The same applies to pushes that skip the queue: a docs or checkpoint commit is not a reason to push on
     its own. Let it ride along with your next landing. (Exceptions: references, and an urgent fix for
     something troubling other sessions.)
+  * **A LEASE LASTS 1-2 HOURS AT MOST, EVEN ON THE SLOWEST MACHINE (USER 2026-11-20:** *"1-2 hours should
+    be the maximum even for this slow machine."*). 2026-11-20 a 12-thread / 10.9 GB box held the lease
+    3 h 41 min with two sessions waiting: 19 min rebase, an 87 min Release build (swapping), 61 min of PGO
+    built only so smoke could use it, and 49 min of smoke. So under the lease: build Release only and run
+    smoke on it (`MTG_PGO=0`). Never add a stage that the landing does not need: no PGO build (only the
+    generators need it, and they build it themselves), no overnight tier, no A/B. Run those after `land`,
+    or before you take the lease, never while other sessions are waiting on you.
+  * **ON A SLOW MACHINE, JOIN AT MOST ONCE EVERY 4 HOURS (USER 2026-11-20:** *"Let's keep the 4-hour window
+    for this machine. If we are going to hold up the queue it should be quite infrequent."*). The slow box is
+    the 12-thread / ~11 GB laptop (`nproc` 12, `free -g` ~10; a full Release build there is ~20+ min of
+    TurnSolver.cpp alone). Sessions on it keep the old rhythm: commit locally, and `join` the queue at most once
+    per 4 hours from that session's last `land`, so its long leases are rare. A push that touches no gated
+    path skips the queue and holds nobody up, so it does not count. A fix for something breaking other
+    sessions is exempt: `join --urgent`. If a validation will not fit in 2 h on your box, `requeue` and say so, rather
+    than holding the queue.
   * **What skips the queue:** a push that touches no GATED path goes straight to the shared branch,
     because it cannot make anyone rebuild. GATED = `src/ test/ decks/ cmake/`, the build files, and every
     `scripts/`/`tools/` file the build or a tier can reach. That last set is COMPUTED from the pushed commit
