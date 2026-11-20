@@ -86,8 +86,17 @@ Continues `logs/maze/RC1-handoff.md`. Scratch: `build/scratch/maze/rc2/` (RC-1's
 - Nothing else is running. The localization (task bjqcq7c91), d8 (in b9rogu492), verify chain (blelkd85f) and A/B
   (benw5dkef) all finished.
 
+## P5b fold re-run RESULT (landed 15:08 UTC, after the handoff was first written)
+`rc2/p5b/run.out` (11,200 jobs, exit 0), fold off vs on, on the wip/maze-rc1-p5b binary (fix included):
+TOTAL std n=2800 better=4 worse=2 **net -2**, units -0.29%; TOTAL 2HG n=2800 better=2 worse=1 **net -1**, units -0.56%.
+Per cell: 2hg-d1b1 +1 (0/1), 2hg-d1b3 -2 (2/0), 2hg-d3b10 0, 2hg-d5b20 0, std-d1b1 0, std-d1b3 -1 (3/2),
+std-d3b10 -1 (1/0), std-d5b20 0. SLOWER: 2hg-d1b1 g783 (6->7), std-d1b3 g686 (5->6), std-d1b3 g781 (5->6).
+Before the fix (P5b-4) it was std -3 / 2HG +1, which FAILED. With the fix both decks are net <= 0. The second half of
+the bar is still owed: d8 b0 on those 3 slower games (both arms, the rc1-p5b binary,
+MTG_FOLD_LAND_ORDER_SEEN false/true). NOT adopted. Adoption is the USER's call.
+
 ## What remains, in order
-1. When `rc2/p5b/DONE` lands: run p5b3/ana.py and report the std/2HG net. P5b-4 before the fix: std net -3 (4/1), 2HG
+1. DONE (see above). Owed: the d8 b0 check of the 3 P5b slower games. P5b-4 before the fix: std net -3 (4/1), 2HG
    net +1 (0/1), which FAILED the bar. **Do NOT adopt the fold** (report only).
 2. **Regression tier** on wip/maze-rc1 (the worktree build = b01b594fd, print-only vs e201e33a9):
    `cd .claude/worktrees/maze-rc1 && MTG_RSS_CAP_GB=20 bash scripts/heavy_run.sh bash test/regression.sh` (run ONCE).
