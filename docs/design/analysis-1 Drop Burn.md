@@ -1883,3 +1883,48 @@ Whenever this creature attacks, choose target Elemental creature card in your gr
   2 onedropburn2hg d5; all same win turn, same keep, same bottomed card). All 6 reproduce the table-OFF digest exactly with
   the table ON and MTG_EXHAUSTIVE_BOTTOM=0 (build/scratch/1db/residue) -- lookahead-bottom residue (the lookahead's
   searches change later search state), not a table leak; same finding as Boars gi65. GT accepted for all 3 tiers.
+
+### CHECKPOINT ~21:30 UTC 2026-11-19 -- adopted (a434c6365); 4th rebase clean; build chain RUNNING
+- Rebased onto origin (+28 commits) with no conflicts; check_gt_logs 1345 consistent; non-burn GT == origin.
+- RUNNING (setsid): logs/1dropburn/rebase4_chain.log -- ./build.sh -> mtg-test -> ./build.sh pgo -> full smoke (DONE marker).
+- NEXT: smoke byte-identical -> check_gt_logs -> check_references_safe -> push phase-1-2-deck-analyzer -> background
+  gh run watch --interval 60. If origin moves AGAIN meanwhile and only touches other decks' GT/data (no src), rebase and
+  push without another rebuild; if src moved, push anyway only after a rebuild + smoke (rule). Then: viewer audit, Stage 6
+  report, leaf_tiebreak --blocks 48, check_references_safe, CronDelete 01e1d807.
+
+### USER answers 2026-11-19 (~21:50 UTC) -- verbatim
+*"1. Good question. I suppose we should allow that. 2. Lavamancer forcing Needle Drop into main 1 is intended. Devil
+early is fine. Only very rarely are Devils allowed and, if they are, it is usually bad for us because we need to wait a
+turn cycle. For them to do 4 twice we need to wait 2 turns while not doing much else. That is a good point on Fireblast.
+Casting it before Needle Drop and Skewer could be okay if we float the red mana automatically."*
+- (1) Needle Drop clause: ADMIT in main 2 a HELD card that only the Needle-drawn land makes payable (to build).
+- (2a) Lavamancer ping forcing Needle Drop into main 1: intended. (2b) Devil rank 12: fine. Both CLOSED.
+- (2c) Fireblast: float the sacrificed untapped Mountains' {R} in autonomous play too (today human play only,
+  PayFireblastAlternative), then A/B Fireblast ranked before Needle Drop / Skewer. Measured, reported to the USER.
+- ORDER: the push of the verified rebase-4 tree first (chain running); then these play changes (build, unit, A/B,
+  scoped GT); the value leaf only AFTER they land (it is fitted to play).
+
+### CHECKPOINT ~00:20 UTC 2026-11-20 -- rebase-4 chain at smoke; USER items patched (uncommitted)
+- Rebase-4 chain (logs/1dropburn/rebase4_chain.log): BUILD rc=0, UNIT rc=0 (3733/3733), PGO rc=0 (src tree b382627fe);
+  full smoke RUNNING (DONE marker at the end).
+- APPLIED, UNCOMMITTED (src dirty -- push the COMMITTED tree first; stash nothing): build/scratch/1db/float/apply.py
+  (diff: build/scratch/1db/float/patch.diff) + tests appended to test/unit/test_needle_drop_vexing_devil.cpp +
+  ARMSET=burnfloat in test/mana_tap_order_ab.sh. Three new levers, ALL default OFF (byte-identical):
+  MTG_FIREBLAST_FLOAT (engine, SpellEffects.h PayFireblastAlternative floats untapped Mountains' {R} in autonomous play),
+  MTG_ONEDROPBURN_M2_HELD (main-2 held-card clause; snapshot also marks our lands via Main2SnapshotsLands),
+  MTG_ONEDROPBURN_FIREBLAST_EARLY (Fireblast rank 28). HeuristicArm slots inserted before SPECTACLE_CREDIT_HOIST.
+- NEXT: smoke byte-identical -> check_gt_logs -> check_references_safe -> push the committed HEAD (git push origin
+  HEAD:phase-1-2-deck-analyzer; rebase first if origin moved, autostash covers the dirty src) -> background gh run watch
+  --interval 60 -> ./build.sh -> mtg-test -> commit levers -> `ARMSET=burnfloat CASES=overnight
+  DECKS=onedropburn,onedropburn2hg,midrangeburn,midrangeburn2hg bash test/mana_tap_order_ab.sh` -> root-cause slower,
+  d8 b0 bar -> flip winners (report Fireblast-early to the USER) -> scoped smoke+regression accept -> value leaf
+  (valueleaf.sh run) -> leaf_tiebreak --blocks 48 -> verify_deck --write-ledger -> Stage 6 (draft
+  build/scratch/1db/stage6_draft.md) -> check_references_safe -> CronDelete 01e1d807.
+
+### CHECKPOINT ~00:45 UTC 2026-11-20 -- PUSH QUEUE replaces the 4-hour rule (origin 4098af045)
+Joined `push_queue.py` as `a7c2d36c718e:1dropburn-analyze` (position 2, behind stuffy-analysis and wip/maze-shared;
+the default id `<host>:<branch>` would collide with other sessions on this container). The script is run from a copy at
+build/scratch/1db/pq/push_queue.py until the rebase brings it in. Waiter: `push_queue.py --id ... wait` (re-arm on rc 75).
+Do NOT rebase until the lease arrives. At the lease: fetch + rebase, check_references_safe, then under `push_queue.py hold --`
+run rebuild + unit + smoke + check_gt_logs, then `push_queue.py land` and the background CI watch. Meanwhile: finish the rebase-4
+smoke, then ./build.sh, mtg-test, commit the USER-item levers (they ride along), and the burnfloat A/B.

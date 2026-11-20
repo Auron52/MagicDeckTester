@@ -575,3 +575,93 @@ TEST_CASE("Midrange Burn: Fireblast ranks after the other burn and before the sp
     CHECK(mb.CastOrderRank(s, NDef("Fireblast")) == mb.CastOrderRank(s, NDef("Lightning Bolt")));
     heurarm::t_arm[heurarm::MIDRANGE_FIREBLAST_ORDER] = -1;
 }
+
+// ---- USER 2026-11-19: the main-2 held-card clause (MTG_ONEDROPBURN_M2_HELD), the autonomous Fireblast float
+// (MTG_FIREBLAST_FLOAT), Fireblast before Needle Drop / Skewer (MTG_ONEDROPBURN_FIREBLAST_EARLY) ----------------
+namespace
+{
+struct ArmPin
+{
+    heurarm::Slot slot;
+    ArmPin(heurarm::Slot s, bool on) : slot(s) { heurarm::t_arm[slot] = on ? 1 : 0; }
+    ~ArmPin() { heurarm::t_arm[slot] = -1; }
+};
+// Post-combat, combat damage only, every Mountain tapped (spent in main 1); the main-2 Needle Drop has been cast
+// (stamped with the given arms) and has left the hand.
+GameState NHeldBoard(const std::vector<const char*>& hand, int mountains)
+{
+    std::vector<const char*> h = {"Needle Drop"};
+    h.insert(h.end(), hand.begin(), hand.end());
+    GameState s = NPostCombat(h);
+    s.battlefield.resize(static_cast<std::size_t>(mountains));
+    for (Permanent& p : s.battlefield) { p.tapped = true; }
+    s.MarkPlayerDealtDamage(1, 2, /*combat=*/true);
+    NoteMain2StagerCast(s, NDef("Needle Drop"));
+    s.players[0].hand.erase(s.players[0].hand.begin());
+    s.MarkPlayerDealtDamage(1, 1);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("1 Drop Burn main-2 held-card clause: a HELD card only the Needle-drawn land pays is admitted (lever ON only)")
+{
+    OrderPin on(true);
+    auto allowed = [&](const GameState& st, const char* name, int hi) { return OdbProv().Main2CastAllowed(st, NCastAt(name, hi)); };
+    {
+        ArmPin held(heurarm::ONEDROPBURN_M2_HELD, true);
+        CHECK(OdbProv().Main2SnapshotsLands());
+        GameState s = NHeldBoard({"Lightning Bolt"}, 3);
+        CHECK_FALSE(allowed(s, "Lightning Bolt", 0));        // no new land: the old rule
+        NPut(s, "Mountain", 40);                               // Needle Drop drew it; the land drop played it
+        CHECK(allowed(s, "Lightning Bolt", 0));               // only the new land pays the Bolt
+        GameState u = s;
+        u.battlefield[0].tapped = false;                       // an OLD Mountain still pays it -> a main-1 cast
+        CHECK_FALSE(allowed(u, "Lightning Bolt", 0));
+
+        // Fireblast's alternative cost: the drawn Mountain is the SECOND Mountain.
+        GameState f = NHeldBoard({"Fireblast"}, 1);
+        NPut(f, "Mountain", 40);
+        Action fb = NCastAt("Fireblast", 0);
+        fb.tutor_target = std::string("fireblast:70,40");
+        CHECK(OdbProv().Main2CastAllowed(f, fb));
+        GameState g = NHeldBoard({"Fireblast"}, 2);            // two Mountains already: payable before the draw
+        NPut(g, "Mountain", 40);
+        fb.tutor_target = std::string("fireblast:70,71");
+        CHECK_FALSE(OdbProv().Main2CastAllowed(g, fb));
+    }
+    ArmPin held(heurarm::ONEDROPBURN_M2_HELD, false);
+    CHECK_FALSE(OdbProv().Main2SnapshotsLands());
+    GameState s = NHeldBoard({"Lightning Bolt"}, 3);
+    NPut(s, "Mountain", 40);
+    CHECK_FALSE(allowed(s, "Lightning Bolt", 0));
+}
+
+TEST_CASE("Fireblast float: autonomous play floats {R} from each UNTAPPED Mountain it sacrifices (lever ON only)")
+{
+    for (int on = 0; on <= 1; ++on)
+    {
+        ArmPin fl(heurarm::FIREBLAST_FLOAT, on != 0);
+        GameState s = NBoard(3, {});
+        s.battlefield[0].tapped = true;                        // 70 tapped, 71 / 72 untapped
+        REQUIRE(PayFireblastAlternative(s, 0, "fireblast:70,71"));
+        CHECK(s.floating_mana.red == (on != 0 ? 1 : 0));      // only the untapped one makes mana
+        CHECK(s.battlefield.size() == 1);
+        CHECK(s.players[0].graveyard.size() == 2);
+    }
+}
+
+TEST_CASE("1 Drop Burn order: Fireblast-early ranks Fireblast after the burn and before Needle Drop (lever ON only)")
+{
+    OrderPin on(true);
+    GameState s = NBoard(2, {});
+    s.m_provider = &OdbProv();
+    {
+        ArmPin early(heurarm::ONEDROPBURN_FIREBLAST_EARLY, true);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Fireblast")) == 28);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Rift Bolt")) < 28);
+        CHECK(OdbProv().CastOrderRank(s, NDef("Needle Drop")) > 28);
+        CHECK(OdbProv().CastOrderTierName(28) != nullptr);
+    }
+    ArmPin early(heurarm::ONEDROPBURN_FIREBLAST_EARLY, false);
+    CHECK(OdbProv().CastOrderRank(s, NDef("Fireblast")) == 40);
+}

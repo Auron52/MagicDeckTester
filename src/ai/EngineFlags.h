@@ -1112,6 +1112,19 @@ inline bool SpectacleCreditEtbOppOn()
 // {ping, Skewer the Critics {R}} on two Mountains read Skewer at {3}{R} and was cut; the engine reached it only
 // via a main-2 Skewer, which the USER's main-2 rule bars after noncombat damage. Now a hoistable face ping in the
 // selection precedes every spectacle cast. Inert for every provider that does not hoist. =0 -> the old credit.
+// MTG_FIREBLAST_FLOAT (2026-11-19, USER on 1 Drop Burn: "Casting it before Needle Drop and Skewer could be okay if we
+// float the red mana automatically"): Fireblast's alternative cost (sacrifice two Mountains) floats {R} from each
+// chosen UNTAPPED basic Mountain before it leaves play -- in every world. Human play always did this; autonomous
+// play did not, so a plan that sacrificed an untapped Mountain lost its mana. Every world pays through
+// PayFireblastAlternative (the plan walk, the rollout's apply_one, the executor), so they stay in lockstep.
+// Unused floating mana costs nothing in a goldfish (no mana burn); the most-tapped pair fold stays sound (an
+// untapped land kept is never worse than its {R} floated for this phase only).
+inline bool FireblastFloatOn()
+{
+    static const bool env_on = EnvOn("MTG_FIREBLAST_FLOAT", false);
+    return heurarm::Flag(heurarm::FIREBLAST_FLOAT, env_on);
+}
+
 inline bool SpectacleCreditHoistOn()
 {
     static const bool env_on = EnvOn("MTG_SPECTACLE_CREDIT_HOIST", true);   // DEFAULT ON; =0 disables

@@ -3430,6 +3430,10 @@ public:
     // GameState::kDealtNoncombatDamage, so StampDeckTraits arms its write (deck_m2_tracks_noncombat). Both
     // default false -> byte-identical.
     virtual bool Main2StagerSnapshotsHand() const { return false; }
+    // Main2SnapshotsLands -- the hand snapshot also records the active player's lands, so the rule can tell a
+    // land the stager DREW (and that was then played) from one already in play (1 Drop Burn's held-card
+    // clause, MTG_ONEDROPBURN_M2_HELD). Default false -> byte-identical.
+    virtual bool Main2SnapshotsLands() const { return false; }
     virtual bool Main2RuleReadsNoncombatDamage() const { return false; }
 
     // RestrictsCollectedActions / CollectedActionAllowed -- a provider RESTRICTION of EITHER main's

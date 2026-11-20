@@ -67000,6 +67000,24 @@ static bool OneDropBurnOrderEnabled()
     return heurarm::Flag(heurarm::ONEDROPBURN_ORDER, on);    // per-job manifest override (A/B in one pool)
 }
 
+// MTG_ONEDROPBURN_FIREBLAST_EARLY (2026-11-19, USER: "That is a good point on Fireblast. Casting it before Needle
+// Drop and Skewer could be okay if we float the red mana automatically."): Fireblast at rank 28 -- after the burn,
+// BEFORE Needle Drop (29) and Skewer (30) -- so its 4 damage can turn on Skewer's spectacle and make Needle Drop
+// legal; with MTG_FIREBLAST_FLOAT the sacrificed untapped Mountains' {R} still pays for them.
+static bool OneDropBurnFireblastEarly()
+{
+    static const bool on = EnvOn("MTG_ONEDROPBURN_FIREBLAST_EARLY", false);
+    return heurarm::Flag(heurarm::ONEDROPBURN_FIREBLAST_EARLY, on);
+}
+
+// MTG_ONEDROPBURN_M2_HELD (2026-11-19): the USER's answer on the held-card question -- "I suppose we should allow
+// that" -- see Main2CastAllowed.
+static bool OneDropBurnM2HeldEnabled()
+{
+    static const bool on = EnvOn("MTG_ONEDROPBURN_M2_HELD", false);
+    return OneDropBurnOrderEnabled() && heurarm::Flag(heurarm::ONEDROPBURN_M2_HELD, on);
+}
+
 int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     const CardParams& p = def.params;
@@ -67024,7 +67042,7 @@ int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition&
     if (nm == "Rift Bolt")            { return 26; }
     if (nm == "Needle Drop")          { return 29; }
     if (nm == "Skewer the Critics")   { return 30; }
-    if (nm == "Fireblast")            { return 40; }
+    if (nm == "Fireblast")            { return OneDropBurnFireblastEarly() ? 28 : 40; }
     if (p.target_dealt_damage_this_turn)                               { return 129; }
     if (p.spectacle_cost.has_value())                                  { return 130; }
     if (p.sacrifice_mountains_alternative)                             { return 140; }
@@ -67052,6 +67070,7 @@ int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition&
 // (below). Human play is never narrowed (the CollectActions call site).
 bool OneDropBurnProvider::RestrictsMain2Casts() const           { return OneDropBurnOrderEnabled(); }
 bool OneDropBurnProvider::Main2RuleReadsNoncombatDamage() const { return OneDropBurnOrderEnabled(); }
+bool OneDropBurnProvider::Main2SnapshotsLands() const           { return OneDropBurnM2HeldEnabled(); }
 
 bool OneDropBurnProvider::Main2CastAllowed(const GameState& s, const Action& a) const
 {
@@ -67075,7 +67094,35 @@ bool OneDropBurnProvider::Main2CastAllowed(const GameState& s, const Action& a) 
         if (hc.m_number < 0 || hc.m_number >= 128) { return true; }
         if ((s.m2_prestaged_mask[hc.m_number >> 6] & (uint64_t{1} << (hc.m_number & 63))) == 0) { return true; }
     }
-    return false;
+    // THE HELD-CARD CLAUSE (USER 2026-11-19, MTG_ONEDROPBURN_M2_HELD). Asked: "admit a held card that only the
+    // Needle-drawn land makes payable?" -- "I suppose we should allow that." A card held at the snapshot is
+    // admitted when a land that arrived AFTER the snapshot (not in the mask: the stager drew it and it was then
+    // played) is on our battlefield and the card is NOT payable without that land:
+    //   * its live cost exceeds the pool with that land's contribution excluded (AvailableManaPool skip), or
+    //   * Fireblast's alternative cost: the new land is the second Mountain.
+    // A held card the old mana already paid stays a main-1 cast ("only when they couldn't be cast earlier").
+    // Mana value, not a colour-exact payment: every source in this list makes {R} and every cost is red/generic;
+    // the exact payment stays the cast's own check. Should the land have been tapped for the drawn card, the
+    // excluded contribution is already gone and the test can only ADMIT more, never fewer.
+    if (!OneDropBurnM2HeldEnabled()) { return false; }
+    const Permanent* fresh = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || !p.card.IsLand()) { continue; }
+        const int n = p.card.m_number;
+        if (n < 0 || n >= 128) { continue; }
+        if ((s.m2_prestaged_mask[n >> 6] & (uint64_t{1} << (n & 63))) != 0) { continue; }
+        fresh = &p;
+        break;
+    }
+    if (fresh == nullptr) { return false; }
+    if (IsFireblastAlternative(*d, a.tutor_target.str()))
+    {
+        if (!CardHasSubtype(fresh->card, "Mountain")) { return false; }
+        return FireblastMountains(s, s.active_player_index).size() == 2;   // the fresh one is the second
+    }
+    const int without = static_cast<int>(AvailableManaPool(s, fresh).Total());
+    return EffectiveSpellCost(*d, s).ManaValue() > without;
 }
 
 // THE USER'S ACTIVATION RULES (2026-11-18, with MTG_ONEDROPBURN_ORDER): "the activation for Grim Lavamancer
@@ -67163,6 +67210,7 @@ const char* OneDropBurnProvider::CastOrderTierName(int rank) const
         case 22: return "LAVA SPIKE ({R}, sorcery, players only)";
         case 23: return "LIGHTNING BOLT ({R}, the instant: last of the burn)";
         case 26: return "RIFT BOLT hardcast (MV 3)";
+        case 28: return "FIREBLAST (MTG_ONEDROPBURN_FIREBLAST_EARLY): after the burn, before Needle Drop / Skewer -- its 4 enables them; the sacrificed Mountains float their {R}";
         case 29: return "NEEDLE DROP, end of the main (main 2 only when combat is the only damage): after the burn";
         case 30: return "SKEWER THE CRITICS, end of the main, after Needle Drop (main 2 only when combat is the only damage)";
         case 40: return "FIREBLAST: last -- its alt cost sacrifices two Mountains after they have tapped";

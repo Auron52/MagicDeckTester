@@ -21,6 +21,7 @@
 #   onedropburn        base / draft                  -- 1 Drop Burn's draft cast order (MTG_ONEDROPBURN_ORDER)
 #   burnorders         base / on                     -- + Midrange Burn's Fireblast rank (MTG_MIDRANGE_FIREBLAST_ORDER)
 #   shedworst          base / worst / ncworst        -- 5i discard bound: shed ranking vs its inverse (cleanup / cost-trigger)
+#   burnfloat          base / held / float / early / all -- Fireblast float + Fireblast-early rank + Needle Drop held-card clause
 #
 # Usage:
 #   bash test/mana_tap_order_ab.sh                 # regression-tier cells, the `levers` arms
@@ -112,6 +113,16 @@ ARMSETS["burnorders2"] = {
 ARMSETS["burnhoist"] = {
     "base": {"MTG_SPECTACLE_CREDIT_HOIST": False},
     "fix":  {"MTG_SPECTACLE_CREDIT_HOIST": True},
+}
+# USER 2026-11-19 (1 Drop Burn): Fireblast floats the sacrificed untapped Mountains' {R} in autonomous play
+# (MTG_FIREBLAST_FLOAT, engine-wide: 1 Drop Burn + Midrange Burn), Fireblast ranked before Needle Drop / Skewer
+# (MTG_ONEDROPBURN_FIREBLAST_EARLY), and the main-2 held-card clause (MTG_ONEDROPBURN_M2_HELD). Singly and jointly.
+ARMSETS["burnfloat"] = {
+    "base":  {"MTG_FIREBLAST_FLOAT": False, "MTG_ONEDROPBURN_FIREBLAST_EARLY": False, "MTG_ONEDROPBURN_M2_HELD": False},
+    "held":  {"MTG_FIREBLAST_FLOAT": False, "MTG_ONEDROPBURN_FIREBLAST_EARLY": False, "MTG_ONEDROPBURN_M2_HELD": True},
+    "float": {"MTG_FIREBLAST_FLOAT": True,  "MTG_ONEDROPBURN_FIREBLAST_EARLY": False, "MTG_ONEDROPBURN_M2_HELD": False},
+    "early": {"MTG_FIREBLAST_FLOAT": True,  "MTG_ONEDROPBURN_FIREBLAST_EARLY": True,  "MTG_ONEDROPBURN_M2_HELD": False},
+    "all":   {"MTG_FIREBLAST_FLOAT": True,  "MTG_ONEDROPBURN_FIREBLAST_EARLY": True,  "MTG_ONEDROPBURN_M2_HELD": True},
 }
 # analyze-deck 5i discard BOUND: the shipped shed ranking vs its own inverse, for the rollout cleanup
 # (MTG_SHED_WORST) and the cost/trigger discards (MTG_NONCLEANUP_SHED_WORST). A zero delta closes the axis.

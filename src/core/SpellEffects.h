@@ -27067,9 +27067,10 @@ inline bool PayFireblastAlternative(GameState& state, int controller, const std:
     // A player may tap basic Mountains for mana while casting Fireblast, before
     // paying its sacrifice cost. Both chosen lands are about to leave play, so
     // floating their {R} is always useful and costs nothing in this goldfish.
-    // Do it only for human play: autonomous plans already allocate their mana
-    // before this payment, and their rollout/executor costs must stay in lockstep.
-    if (g_play_sacrifice_chooser)
+    // Human play always floats. Autonomous play floats too under MTG_FIREBLAST_FLOAT (EngineFlags.h):
+    // the plan walk, the rollout and the executor all pay through this function, so they stay in
+    // lockstep; =0 restores the old human-only float.
+    if (g_play_sacrifice_chooser || FireblastFloatOn())
     {
         for (int i : {a, b})
         {

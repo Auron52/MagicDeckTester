@@ -5151,6 +5151,14 @@ void NoteMain2StagerCast(GameState& state, const CardDefinition& def)
     {
         for (const Card& c : ap.hand) { mark(c); }
         for (const StagedCard& sc : ap.staged_cards) { mark(sc.card); }
+        // ...and our LANDS on the battlefield (MTG_ONEDROPBURN_M2_HELD, read by the provider): a land NOT in the
+        // mask then arrived after the snapshot, i.e. the main-2 Needle Drop drew it. Gated so the mask (folded
+        // into dominance) is byte-identical with the clause off.
+        if (prov.Main2SnapshotsLands())
+        {
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == state.active_player_index && p.card.IsLand()) { mark(p.card); } }
+        }
         return;
     }
     // The rollout stages straight into the hand; the executor parks resolved exile in staged_cards

@@ -1867,6 +1867,8 @@ public:
     bool Main2CastAllowed(const GameState& s, const Action& a) const override;
     bool Main2StagerSnapshotsHand() const override { return true; }
     bool Main2RuleReadsNoncombatDamage() const override;
+    // The USER's held-card clause (2026-11-19, MTG_ONEDROPBURN_M2_HELD): see Main2CastAllowed.
+    bool Main2SnapshotsLands() const override;
     // THE USER'S ACTIVATION RULES (2026-11-18), part of MTG_ONEDROPBURN_ORDER: Grim Lavamancer's ping runs
     // before Needle Drop / Skewer (HoistsFaceGraveyardDamage) and in main 1 only (CollectedActionAllowed);
     // Sunbaked Canyon's sacrifice-draw in main 1 only (ShouldConsiderDig / DigOfferAt).
