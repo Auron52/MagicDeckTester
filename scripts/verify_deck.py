@@ -563,6 +563,49 @@ def gate_suite(deck_path):
                   f"scripts/suite_gate.py --cost). See analyze-deck.md Stage 5j.")])
 
 
+def gate_provider_policy(deck_path, profile):
+    """Does the deck's provider implement every EXPECTED provider policy? BLOCKING (USER 2026-11-20).
+
+    "The default should be searched and probably the analysis should be given a warning if we don't override the
+    policy. The expectation is that we will override it and so this should be a red flag."
+    (docs/design/provider-heuristic-required.md.) A deck holding a registered card (Acclaimed Contender, Nykthos
+    Paragon, Genesis Wave, ...) whose provider has no policy for it PLAYS -- on the engine's searched default -- and the
+    engine prints a `[provider-required] RED-FLAG` line. This gate makes that line a visible FAIL, one finding per card,
+    so it cannot pass as a silent note. Signing a finding off (keeping the searched default) is the USER's call.
+    """
+    if not os.path.exists(BIN):
+        return Gate("provider_policy", ERROR, True, f"missing {BIN} -- run ./build.sh first")
+    stem = deck_stem(deck_path)
+    job = {"name": stem.replace(" ", "_"), "deck": str(deck_path), "games": 1, "seed": 1, "depth": 1,
+           "budget_ms": 10, "ignore_play_profile": True}
+    if profile:
+        job["profile"] = str(profile)
+    man = ROOT / "logs" / "verify_deck" / f"{stem.replace(' ', '_')}.provider_policy.manifest.json"
+    man.parent.mkdir(parents=True, exist_ok=True)
+    man.write_text(json.dumps({"jobs": [job]}, indent=1))
+    rc, out, err = run([BIN, "--batch", str(man)])
+    lines = (out + err).splitlines()
+    if rc != 0 and not any(l.startswith("[play]") for l in lines):
+        return Gate("provider_policy", ERROR, True, f"routing batch failed (exit {rc}): {err.strip()[-300:]}")
+    flagged = []
+    for line in lines:
+        m = re.match(r"\[provider-required\] RED-FLAG \S+ provider=(\w+): (.*?) -- ", line)
+        if m and "RED-FLAG (unnamed)" not in line:
+            prov = m.group(1)
+            flagged = [(c.strip(), prov) for c in m.group(2).split("], ")]
+    if not flagged:
+        return Gate("provider_policy", PASS, True, "every expected provider policy is implemented (or none applies)")
+    findings = []
+    for card, prov in flagged:
+        name = card.split(" [")[0]
+        findings.append((f"provider_policy:{name}",
+                         f"RED FLAG: {card}{']' if not card.endswith(']') else ''} -- provider {prov} has NO policy, "
+                         f"so the ENGINE DEFAULT plays it (searched, or the owed fallback the engine's message names). Draft a provider policy (restrict / order the "
+                         f"options) and measure it for the USER; see docs/design/provider-heuristic-required.md."))
+    return Gate("provider_policy", FAIL, True,
+                f"RED FLAG: {len(findings)} decision(s) with no deck provider policy", findings)
+
+
 def gate_claude_sweep(deck_path):
     """workstream 4b (judgment half): an external-agent play sweep (analyze-deck 5d)
     is recorded under '## Claude-play sweep' or '## Codex-play sweep' with its actual
@@ -753,6 +796,7 @@ def main():
         gate_play_invariants(deck, profile, seeds, args.games, args.no_sweep),
         gate_claude_sweep(deck),
         gate_suite(deck),
+        gate_provider_policy(deck, profile),
     ]
 
     approved = read_approved(deck)
