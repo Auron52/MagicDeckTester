@@ -80109,6 +80109,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); equipment-ETB draw
         // (Puresteel) => site 6 (searchable); plain cantrip => site 3 (pruned). See
         // deferred_site_index, where the precedence lives.
+        // SITE 9 AFTER THE DEFERRED CONTINUATION (MTG_SITE9_AFTER_DEFERRED; see the block after the continuation's
+        // activations below): the activation snapshot the post-entry delta is read against, taken before this
+        // occurrence is counted -- only for a plan whose choice could reach it (the first counted occurrence).
+        const bool s9d_on = !s_human_play && plan.bp_choice >= 0 && bp_seen == 0 && Site9AfterDeferredOn();
+        std::vector<uint64_t> s9d_keys;
+        if (s9d_on) { s9d_keys = TurnSolver::SnapshotActivatableAbilities(state); }
         const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);   // plan-carried, else EMPTY
         // Diagnostic (default off): what the deferred continuation solved, and from which arm.
         {
@@ -80195,6 +80201,63 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         apply_continuation_precasts(extra);
         apply_continuation_plan(extra);
         apply_continuation_activations(extra, out_breakpoint != nullptr);
+        // BREAKPOINT SITE 9 AFTER A DEFERRED CONTINUATION (MTG_SITE9_AFTER_DEFERRED, DEFAULT ON; AccomplishedAlchemist
+        // 2026-11-20, seed 12345681 T3). The main section's site 9 (above) runs BEFORE this loop, so a deferred
+        // continuation that casts a permanent with an activation -- Living Wish puts Brindle Boar in hand (site 10),
+        // the continuation casts the Boar and Crab Umbra -- never got the post-entry re-plan: the Boar's sacrifice and
+        // the Umbra's untaps were enumerated against the board the continuation STARTED from, so the line was
+        // unfindable at every budget (the same cards cast by a ROOT plan were found). Same delta rule, same
+        // searched-only applier and re-open chain as the main site, keyed against the snapshot taken before this
+        // continuation. The occurrence is opened only when the plan's choice TARGETS it (bp_all, or BpChoiceAt at the
+        // next index -- a deviation sequence, MTG_BP_DEV_SEQ, whose earlier entry picked this continuation); an
+        // untargeted one is recorded latent and never counted, so the wave walker reaches it in a later wave and
+        // the numbering stays the executor's. Applied INSIDE the continuation's sink, so a committed line records
+        // it and the executor's segment replay realises it verbatim; the no-commit twin is at the end of
+        // AIEngine's resolve_draw_breakpoint. Only as the FIRST counted occurrence's follow-up (bp_seen == 1: the
+        // deferred continuation was occurrence 0 and nothing nested counted), the main site's ordering guard.
+        if (s9d_on && bp_seen == 1 && !extra.actions.empty() && !OpponentHasLost(state)
+            && TurnSolver::PostEntryActivationPending(state, s9d_keys))
+        {
+            const bool s9_reopen = Site9ReopenEnabled();
+            const bool s9_cyc = s9_reopen && Site9CycleStopEnabled();
+            std::vector<uint64_t> s9_chain;
+            if (s9_cyc) { TurnSolver::Site9ChainRepeats(s9_chain, state); }
+            std::vector<uint64_t> s9_keys = s9d_keys;
+            for (int reopen = 0; reopen < kSite9ReopenCeiling; ++reopen)
+            {
+                if (reopen > 0 && !TurnSolver::PostEntryActivationPending(state, s9_keys)) { break; }
+                if (!(plan.bp_all || TurnSolver::BpChoiceAt(plan, bp_seen) >= 0))
+                {
+                    if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0)
+                    { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n;
+                      g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                    break;
+                }
+                s9_keys = TurnSolver::SnapshotActivatableAbilities(state);
+                TurnSolver::Site9Trace(reopen == 0 ? "rod" : "rod+", state, plan, is_pre_combat);
+                TurnSolver::Plan s9x;
+                if (!bp_searched_plan(9, s9x)) { break; }
+                {
+                    // Its own continuation traits, as the executor twin computes them per applied continuation.
+                    PlanTraits t9;
+                    if (PlanTraitsWanted())
+                    {
+                        t9 = TurnSolver::ComputeContinuationTraits(state, s9x);
+                        TurnSolver::CarryPendingActivations(t9, CurrentPlanTraits());
+                    }
+                    PlanTraitsScope  _t9_scope(PlanTraitsWanted() ? &t9 : nullptr);
+                    TapKeepLastScope _t9_keep(PumpTargetHoldEnabled() ? t9.pump_target_card : 0);
+                    ContPinFrame _cpf9(s9x, out_breakpoint);
+                    bp_play_searched_land(s9x, out_breakpoint);
+                    apply_continuation_precasts(s9x);
+                    apply_continuation_plan(s9x);
+                    apply_continuation_activations(s9x, out_breakpoint != nullptr);
+                }
+                if (!s9_reopen || s9x.actions.empty() || OpponentHasLost(state)
+                    || (s9_cyc && TurnSolver::Site9ChainRepeats(s9_chain, state)))
+                { break; }
+            }
+        }
         if (out_breakpoint) { bp_sink_pop(); }
     }
 
@@ -83151,61 +83214,8 @@ static bool TapTutorPutTargetTagged(const Action& act)
     return d != nullptr && d->params.tap_tutor_put_return_self;
 }
 
-// MTG_AURA_UNTAP_HOST_SEARCH (DEFAULT ON; =0 -> one host per plan class, the pre-2026-11-19 fold), heurarm
-// AURA_UNTAP_HOST_SEARCH. An Aura that untaps its host (AuraUntapsHost: Crab Umbra) has a host-dependent effect on
-// every host with a tap use (UntapHostHasTapUse), which the AURA CAST HOST RANKING (USER 2026-10-06) cannot see:
-// it ranks by combat damage, and its "fewer Auras on creature mana sources" tie-break points AWAY from the loop
-// host. AccomplishedAlchemist seed 12345681 T3: after "Living Wish -> Brindle Boar", no plan ever put the Umbra on
-// the Alchemist (only the Boar or the Arbor Elf), at b200, b2000 and --depth 8 --budget-ms 0 alike -- the Umbra on
-// the Alchemist is the whole combo. So each own host WITH a tap use is its own searched plan: the plan signature
-// keys it (#A, PlanSignatureFast + the legacy builder, lockstep) and the late-bind fold binds only the hosts
-// WITHOUT one (BuildAuraLateBind's KEEP / BIND partition). The ranking still decides among those (a goldfish-inert
-// untap: nothing blocks). Same shape as Curiosity / Guilty Conscience, whose hosts are searched for the same
-// reason. Widens what is searched; picks nothing. CollapseGreedyCreatureAuraHosts / RetargetSolveAuraHosts (the
-// permitted greedy beyond the horizon) and CreatureAuraHostInert are unchanged.
-static bool AuraUntapHostSearchOn()
-{
-    static const bool env = EnvOn("MTG_AURA_UNTAP_HOST_SEARCH", true);   // DEFAULT ON; =0 disables
-    return heurarm::Flag(heurarm::AURA_UNTAP_HOST_SEARCH, env);
-}
-// The hosts (card numbers: own battlefield creatures, creature cards in hand) whose untap-Aura plans are searched
-// one per host. Empty when the lever is off or no candidate casts an Aura that untaps its host -- so no other deck
-// computes anything here and every other signature is unchanged.
-static void UntapAuraKeepHosts(const GameState& state, const std::vector<Action>& cands, std::vector<int>& out)
-{
-    out.clear();
-    if (!AuraUntapHostSearchOn()) { return; }
-    bool any = false;
-    for (const Action& c : cands)
-    {
-        if (!IsCreatureAuraCast(c)) { continue; }
-        if (AuraUntapsHost(c.def ? c.def : CardDatabase::Instance().Lookup(c.card_name))) { any = true; break; }
-    }
-    if (!any) { return; }
-    const int me = state.active_player_index;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != me || p.def_absent || p.card.m_number == 0) { continue; }
-        if (!p.card.IsCreature() && !p.is_animated) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && UntapHostHasTapUse(d->params)) { out.push_back(p.card.m_number); }
-    }
-    for (const Card& c : state.players[me].hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && d->card.IsCreature() && UntapHostHasTapUse(d->params)) { out.push_back(c.m_number); }
-    }
-}
-// Does the plan signature key this creature-Aura cast's host (#A) because it is an untap Aura on a KEEP host?
-static bool UntapAuraHostKeyed(const CardDefinition* d, int host, const std::vector<int>* keep)
-{
-    return keep != nullptr && !keep->empty() && host > 0 && AuraUntapsHost(d)
-        && std::find(keep->begin(), keep->end(), host) != keep->end();
-}
-
 static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
-                                     bool cre_host_sig, bool rep_sig,
-                                     const std::vector<int>* untap_keep = nullptr)
+                                     bool cre_host_sig, bool rep_sig)
 {
     plansigfast::Scratch& w = plansigfast::t_scratch;
     w.arena.clear();
@@ -83308,8 +83318,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 // (|| sacfod_credit: a fodder-credited plan's land-Aura host never folds into another host --
                 // see TurnSolver::Plan::sacfod_credit; lockstep with plan_signature_legacy.)
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit)) { w.Put("#H"); w.Int(act.enchant_target); }
-                if ((cre_host_sig || (d && d->params.aura_host_damage_back)
-                     || UntapAuraHostKeyed(d, act.enchant_target, untap_keep))   // MTG_AURA_UNTAP_HOST_SEARCH
+                if ((cre_host_sig || (d && d->params.aura_host_damage_back))
                     && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
                 { w.Put("#A"); w.Int(act.enchant_target); }   // Guilty Conscience: always (see CreatureAuraHostInert)
                 if (d && act.rock_mana.Total() > 0 && LandSearchPutsUntapped(*d))
@@ -83644,8 +83653,7 @@ struct AuraLateBind
     bool Rep(int j) const { return any && off[static_cast<std::size_t>(j)] >= 0; }
 };
 static void BuildAuraLateBind(const GameState& state, const std::vector<Action>& cands,
-                              std::vector<std::vector<int>>& groups, AuraLateBind& lb,
-                              const std::vector<int>& untap_keep)
+                              std::vector<std::vector<int>>& groups, AuraLateBind& lb)
 {
     lb.off.assign(cands.size(), -1);
     lb.n.assign(cands.size(), 0);
@@ -83663,9 +83671,6 @@ static void BuildAuraLateBind(const GameState& state, const std::vector<Action>&
         return false;
     };
     std::vector<std::size_t> eligible;
-    // Per eligible group: the members the fold binds (all of them, except an untap Aura's KEEP hosts --
-    // MTG_AURA_UNTAP_HOST_SEARCH: each stays its own option, and the signature keys it).
-    std::vector<std::vector<int>> bind_of;
     long long product = 1;
     for (std::size_t gi = 0; gi < groups.size(); ++gi)
     {
@@ -83673,8 +83678,7 @@ static void BuildAuraLateBind(const GameState& state, const std::vector<Action>&
         if (gp.size() < 2) { continue; }
         const Action& a0 = cands[static_cast<std::size_t>(gp[0])];
         if (!IsCreatureAuraCast(a0) || a0.bestow) { continue; }
-        const CardDefinition* a0d = a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name);
-        if (!CreatureAuraHostInert(a0d)) { continue; }
+        if (!CreatureAuraHostInert(a0.def ? a0.def : CardDatabase::Instance().Lookup(a0.card_name))) { continue; }
         bool same = true;
         for (std::size_t i = 1; i < gp.size() && same; ++i)
         {
@@ -83685,45 +83689,21 @@ static void BuildAuraLateBind(const GameState& state, const std::vector<Action>&
             same = ExactFalseActionDiff(a0, bn).empty();
         }
         if (!same) { continue; }
-        std::vector<int> bind = gp;
-        if (!untap_keep.empty() && AuraUntapsHost(a0d))
-        {
-            bind.clear();
-            for (int j : gp)
-            {
-                const int h = cands[static_cast<std::size_t>(j)].enchant_target;
-                if (std::find(untap_keep.begin(), untap_keep.end(), h) == untap_keep.end()) { bind.push_back(j); }
-            }
-            if (bind.size() < 2) { continue; }   // nothing to fold: every host is its own option already
-        }
         eligible.push_back(gi);
-        product *= static_cast<long long>(bind.size());
-        bind_of.push_back(std::move(bind));
+        product *= static_cast<long long>(gp.size());
     }
     if (eligible.empty() || product > 4096) { return; }
-    for (std::size_t e = 0; e < eligible.size(); ++e)
+    for (std::size_t gi : eligible)
     {
-        std::vector<int>& gp = groups[eligible[e]];
-        const std::vector<int>& bind = bind_of[e];
-        int rep = bind[0];
-        for (int j : bind) { if (on_bf(cands[static_cast<std::size_t>(j)].enchant_target)) { rep = j; break; } }
+        std::vector<int>& gp = groups[gi];
+        int rep = gp[0];
+        for (int j : gp) { if (on_bf(cands[static_cast<std::size_t>(j)].enchant_target)) { rep = j; break; } }
         lb.off[static_cast<std::size_t>(rep)] = static_cast<int>(lb.hosts.size());
-        lb.n[static_cast<std::size_t>(rep)]   = static_cast<int>(bind.size());
-        for (int j : bind) { lb.hosts.push_back(cands[static_cast<std::size_t>(j)].enchant_target); }
-        auralatebind::t_dropped += static_cast<long long>(bind.size()) - 1;
-        auralatebind::g_dropped.fetch_add(static_cast<long long>(bind.size()) - 1, std::memory_order_relaxed);
-        if (bind.size() == gp.size()) { gp.assign(1, rep); }
-        else
-        {
-            // KEEP members (an untap Aura's tap-use hosts) + the representative, in the original option order.
-            std::vector<int> kept;
-            for (int j : gp)
-            {
-                const bool bound = std::find(bind.begin(), bind.end(), j) != bind.end();
-                if (!bound || j == rep) { kept.push_back(j); }
-            }
-            gp.swap(kept);
-        }
+        lb.n[static_cast<std::size_t>(rep)]   = static_cast<int>(gp.size());
+        for (int j : gp) { lb.hosts.push_back(cands[static_cast<std::size_t>(j)].enchant_target); }
+        auralatebind::t_dropped += static_cast<long long>(gp.size()) - 1;
+        auralatebind::g_dropped.fetch_add(static_cast<long long>(gp.size()) - 1, std::memory_order_relaxed);
+        gp.assign(1, rep);
         lb.any = true;
     }
     if (lb.any) { auralatebind::g_frames.fetch_add(1, std::memory_order_relaxed); }
@@ -83866,13 +83846,39 @@ static bool BindAuraLateHosts(const GameState& state, bool is_pre_combat, const 
     std::vector<int> fast_pick(reps.size(), 0);
     if (fast)
     {
+        // THE DECK'S HOST ORDER (DecisionProvider::CreatureAuraHostRank, the key's `combo` tier, ranked above the
+        // dork tie-break): a sum over the Auras, so each representative takes the first of its best-ranked hosts
+        // that is not a creature mana source, else the first of its best-ranked hosts -- still the first
+        // strictly-best combination of the odometer below. (Until 2026-11-20 this path read only the dork
+        // tie-break, so AccomplishedAlchemist's Crab Umbra-on-the-Alchemist term never reached a late-bound plan.)
+        // MTG_AURA_LATE_BIND_RANK (DEFAULT ON, heurarm AURA_LATE_BIND_RANK; =0 -> the dork tie-break only).
+        static const bool s_rank_env = EnvOn("MTG_AURA_LATE_BIND_RANK", true);
+        const DecisionProvider& prov = ResolveProvider(state);
+        const bool ranks = heurarm::Flag(heurarm::AURA_LATE_BIND_RANK, s_rank_env) && prov.RanksCreatureAuraHosts();
         for (std::size_t q = 0; q < reps.size(); ++q)
         {
+            const Action& ra = plan.actions[static_cast<std::size_t>(pos[q])];
+            const CardDefinition* rd = ra.def ? ra.def : CardDatabase::Instance().Lookup(ra.card_name);
+            int best_rank = 0;
+            std::vector<int> rank(alts[q].size(), 0);
+            if (ranks && rd != nullptr)
+            {
+                for (std::size_t k = 0; k < alts[q].size(); ++k)
+                {
+                    const CardDefinition* hd = host_def(alts[q][k]);
+                    rank[k] = hd != nullptr ? prov.CreatureAuraHostRank(state, *rd, *hd) : 0;
+                    best_rank = std::max(best_rank, rank[k]);
+                }
+            }
+            int first_best = -1;
             for (std::size_t k = 0; k < alts[q].size(); ++k)
             {
+                if (rank[k] != best_rank) { continue; }
+                if (first_best < 0) { first_best = static_cast<int>(k); }
                 const CardDefinition* hd = host_def(alts[q][k]);
-                if (hd == nullptr || hd->tmpl != CardTemplate::ManaDork) { fast_pick[q] = static_cast<int>(k); break; }
+                if (hd == nullptr || hd->tmpl != CardTemplate::ManaDork) { first_best = static_cast<int>(k); break; }
             }
+            fast_pick[q] = first_best < 0 ? 0 : first_best;
             plan.actions[static_cast<std::size_t>(pos[q])].enchant_target = alts[q][static_cast<std::size_t>(fast_pick[q])];
         }
         if (!s_verify) { return true; }
@@ -85017,14 +85023,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // LATE-BOUND CREATURE-AURA HOSTS (see BuildAuraLateBind): the walk carries one representative per
     // host-inert Aura slot; its plans bind the best-keyed legal host when they are built. Only where the
     // dedup would fold the hosts anyway (the autonomous, name-keyed signature).
-    // MTG_AURA_UNTAP_HOST_SEARCH: the hosts an untap Aura (Crab Umbra) is searched on, one plan each -- kept out of
-    // the fold here and keyed in the plan signature below (UntapAuraKeepHosts; empty on every other board).
-    std::vector<int> untap_keep_hosts;
-    UntapAuraKeepHosts(state, cands, untap_keep_hosts);
     AuraLateBind lb;
     if (AuraHostLateBindOn() && !HumanPlayActive() && !DecisionUnpruned() && !AuraHostBranchOn()
         && pre.aura_target && pre.aura_shroud_src.empty())
-    { BuildAuraLateBind(state, cands, groups, lb, untap_keep_hosts); }
+    { BuildAuraLateBind(state, cands, groups, lb); }
 
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
@@ -87896,9 +87898,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // distinct plan for the un-pruned oracle (MTG_UNPRUNED: the viewer's / claude-play's plan list),
     // for human play (keyed below), and for the proof's CONTROL arm (MTG_AURA_HOST_BRANCH=1).
     const bool cre_host_sig = AuraHostBranchOn() || DecisionUnpruned();
-    // MTG_AURA_UNTAP_HOST_SEARCH: an untap Aura's tap-use hosts are keyed (#A) in every signature below -- the
-    // same list BuildAuraLateBind kept out of its fold (computed once above, before the walk).
-    const std::vector<int>* const untap_keep = untap_keep_hosts.empty() ? nullptr : &untap_keep_hosts;
     const bool rep_sig = ReplicateSigEnabled();   // the #R key below (MTG_REPLICATE_SIG)
     bool range_hosts = false;
     if (!host_sig && !s_human_play_sig && EdfAuraRangeHostsOn())
@@ -88008,7 +88007,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     auto ds_key = [&](const TurnSolver::Plan& p) -> DsKey
     {
         DsKey k;
-        k.s = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig, untap_keep);
+        k.s = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
         k.siglen = static_cast<std::uint32_t>(k.s.size());
         if (range_hosts)
         {
@@ -88627,7 +88626,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         for (std::size_t i = ds_keys.size(); i < plans.size(); ++i)
         {
             DsKey k;
-            k.s = PlanSignatureFast(plans[i], s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig, untap_keep);
+            k.s = PlanSignatureFast(plans[i], s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
             k.siglen = static_cast<std::uint32_t>(k.s.size());
             ds_keys.push_back(std::move(k));
         }
@@ -88686,7 +88685,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // LOCKSTEP with PlanSignatureFast (MTG_PLAN_SIG_FAST, the default autonomous builder): every token
     // this legacy builder emits is mirrored there field for field. Edit both, then run
     // MTG_PLAN_SIG_FAST_VERIFY=1 (see PlanSigFastOn).
-    auto plan_signature_legacy = [s_human_play_sig, host_sig, cre_host_sig, rep_sig, untap_keep](const TurnSolver::Plan& p) -> std::string
+    auto plan_signature_legacy = [s_human_play_sig, host_sig, cre_host_sig, rep_sig](const TurnSolver::Plan& p) -> std::string
     {
         // Per-thread reusable buckets (P2 2026-10-19, byte-identical): a bucket keeps its strings (and
         // their capacity) across calls, so a signature no longer allocates a vector per non-empty bucket
@@ -88974,8 +88973,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // deck without land Auras moves; =0 restores the name-only fold.
                         if (cd && cd->params.is_land_aura && act.enchant_target > 0 && (host_sig || p.sacfod_credit))
                         { k += "#H"; k += std::to_string(act.enchant_target); }   // sacfod_credit: see PlanSignatureFast
-                        if ((cre_host_sig || (cd && cd->params.aura_host_damage_back)
-                             || UntapAuraHostKeyed(cd, act.enchant_target, untap_keep))   // lockstep: PlanSignatureFast
+                        if ((cre_host_sig || (cd && cd->params.aura_host_damage_back))
                             && cd && cd->params.is_aura && !cd->params.is_land_aura && act.enchant_target > 0)
                         { k += "#A"; k += std::to_string(act.enchant_target); }   // + Guilty Conscience: always
                         // LAND-PUT CREDIT (Search for Tomorrow): each credit class is a DIFFERENT
@@ -89315,11 +89313,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // human play keeps the legacy builder for its sub-decision suffix. Verify mode builds both and
     // returns the LEGACY string, so a mismatch is counted without moving play.
     const bool sig_fast = PlanSigFastOn() && !s_human_play_sig;
-    auto plan_signature = [&plan_signature_legacy, sig_fast, host_sig, cre_host_sig, rep_sig, untap_keep]
+    auto plan_signature = [&plan_signature_legacy, sig_fast, host_sig, cre_host_sig, rep_sig]
                           (const TurnSolver::Plan& p) -> std::string
     {
         if (!sig_fast) { return plan_signature_legacy(p); }
-        std::string f = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig, untap_keep);
+        std::string f = PlanSignatureFast(p, s_legacy_bestow_sig, host_sig, cre_host_sig, rep_sig);
         if (!PlanSigFastVerifyOn()) { return f; }
         std::string old = plan_signature_legacy(p);
         plansigfast::g_checked.fetch_add(1, std::memory_order_relaxed);

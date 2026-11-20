@@ -3983,6 +3983,13 @@ public:
     // board activations life -> untap loop (cheapest first) -> finish -> combat pumps.
     int  CastOrderActionRank(const GameState& s, const Action& a, int rank) const override;
     int  ActivationOrderRankForAction(const GameState& s, const CardDefinition& d, const Action& a) const override;
+    // THE UMBRA GOES ON THE ALCHEMIST (USER 2026-11-20: "Just have a heuristic specific to the deck and we are
+    // done. Obviously in this deck Accomplished Alchemist is the target."). An Aura that untaps its host
+    // (untap_enchanted_cost: Crab Umbra) ranks a life-scaled mana creature (mana_per_life_gained: Accomplished
+    // Alchemist) first whenever one is a legal host -- on our battlefield or cast earlier in the same plan; the
+    // USER's 2026-10-06 ranking decides otherwise. MTG_AA_UMBRA_HOST (DEFAULT ON; =0 -> the generic ranking).
+    bool RanksCreatureAuraHosts() const override;
+    int  CreatureAuraHostRank(const GameState& s, const CardDefinition& aura, const CardDefinition& host) const override;
 };
 
 // Landfall (mono-green ramp into landfall payoffs with a red splash: Avenger of Zendikar, Primeval

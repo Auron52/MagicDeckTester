@@ -2122,6 +2122,15 @@ inline bool Site9ReopenEnabled()
 // made a NEW ability activatable, so a real chain is a handful deep; this only stops a mis-modelled
 // ability that re-keys itself forever. Never a lever.
 constexpr int kSite9ReopenCeiling = 32;
+// MTG_SITE9_AFTER_DEFERRED (DEFAULT ON; heurarm SITE9_AFTER_DEFERRED; AccomplishedAlchemist 2026-11-20): breakpoint
+// site 9 also after a DEFERRED continuation (sites 3/5/6/10), so a continuation that casts an activated permanent gets
+// the post-entry re-plan -- ApplyPlanDirect's deferred loop and AIEngine::resolve_draw_breakpoint (the no-commit
+// twin; a committed line records it in the continuation's segment). Shared reader. =0 -> none (pre-2026-11-20).
+inline bool Site9AfterDeferredOn()
+{
+    static const bool env = EnvOn("MTG_SITE9_AFTER_DEFERRED", true);
+    return heurarm::Flag(heurarm::SITE9_AFTER_DEFERRED, env);
+}
 // MTG_SITE9_CYCLE_STOP (DEFAULT ON; =0 reverts to the snapshot-delta test alone) -- a re-open also stops
 // when the applied continuation returned the chain to a state it has ALREADY been at in this apply (full
 // mid-turn identity, TurnSolver::Site9ChainRepeats). The delta rule compares only against the snapshot

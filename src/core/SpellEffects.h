@@ -58464,16 +58464,6 @@ inline bool AuraHostIsManaCreature(const Permanent& p)
     return d != nullptr && d->tmpl == CardTemplate::ManaDork;
 }
 
-// AN AURA THAT UNTAPS ITS HOST (MTG_AURA_UNTAP_HOST_SEARCH; 2026-11-19). "{2}{U}: Untap enchanted creature" (Crab
-// Umbra, untap_enchanted_cost) re-uses the HOST's {T}: on a live mana creature (Accomplished Alchemist at X >= 4)
-// it is a self-funding loop, on a vanilla body it does nothing in a goldfish. So for such an Aura WHICH host matters
-// exactly when the host has a tap use -- the AURA CAST HOST RANKING above (combat damage) cannot see it, and its
-// "fewer Auras on mana sources" tie-break points AWAY from the loop host. Such hosts are searched (TurnSolver:
-// the plan signature's #A key + the late-bind fold's KEEP partition); the rest stay one ranked class.
-inline bool AuraUntapsHost(const CardDefinition* d)
-{
-    return d != nullptr && d->params.is_aura && !d->params.is_land_aura && d->params.untap_enchanted_cost.has_value();
-}
 // Does a creature have a {T} use an untap re-arms: a mana ability or a {T} activated ability? The untap
 // enumerator's own "may be tapped by the plan" test (TurnSolver's ActivateUntap target scan) -- one predicate.
 inline bool UntapHostHasTapUse(const CardParams& p)
@@ -58600,22 +58590,22 @@ inline AuraHostKey AuraHostBoardKey(GameState& t, int controller, bool attack_wi
             }
         }
     }
-    // Crab Umbra on Accomplished Alchemist is the deck's mana loop. Its untap
-    // ability is nearly blank on an ordinary dork; a combat-damage-only ranking
-    // otherwise prefers a ready Harbinger over the summoning-sick Alchemist.
-    static const bool s_aa_umbra_host = EnvOn("MTG_AA_UMBRA_HOST", true);
-    if (s_aa_umbra_host && t.deck_reads_lifegain_in_play)
+    // THE DECK'S HOST ORDER (DecisionProvider::CreatureAuraHostRank; AccomplishedAlchemist: Crab Umbra on the
+    // Alchemist, USER 2026-11-20). Summed over our attached creature Auras, in the same tier as the Niv loop term.
+    // Consulted only for a provider that ranks hosts, so no other deck walks this.
+    const DecisionProvider& host_prov = ResolveProvider(t);
+    if (host_prov.RanksCreatureAuraHosts())
     {
         for (const Permanent& a : t.battlefield)
         {
             if (a.controller_index != controller || a.def_absent || a.aura_attached_to == 0) { continue; }
             const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
-            if (ad == nullptr || !ad->params.untap_enchanted_cost) { continue; }
+            if (ad == nullptr || !ad->params.is_aura || ad->params.is_land_aura) { continue; }
             for (const Permanent& h : t.battlefield)
             {
                 if (h.card.m_number != a.aura_attached_to || h.def_absent) { continue; }
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
-                if (hd != nullptr && hd->params.mana_per_life_gained) { ++k.combo; }
+                if (hd != nullptr) { k.combo += host_prov.CreatureAuraHostRank(t, *ad, *hd); }
                 break;
             }
         }
