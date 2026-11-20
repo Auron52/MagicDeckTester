@@ -4632,8 +4632,9 @@ recovered nor failed.
   sides abandoned; d5 g780 lever 7, ship abandoned; d1b3 g110 both abandoned).
 - **revq2: 11 persist, all blind.** Clairvoyant 16/16 recovered. Blind d5: 21 recovered, 6 persist (g95 7 vs 6, g303
   6 vs 5, g412 5 vs 4, g427 6 vs 5, g600 8 vs 7, g654 9 vs 7), 5 UNRESOLVED (g628 g639 both abandoned; g704 lever
-  abandoned vs ship 9 = unwon, so the lever cannot be worse; g780 lever 7 and g814 lever 8 vs ship abandoned), g642
-  PENDING at writing. 2HG: 11 recovered, 2 persist (g6 6 vs 5, g296 7 vs 6). d3: 6 recovered, 2 persist (g222 8 vs 7,
+  abandoned vs ship 9 = unwon, so the lever cannot be worse; g780 lever 7 and g814 lever 8 vs ship abandoned), and g642
+  UNRESOLVED (both sides killed by the coordinator at 3.9 h, 20:37 UTC; it could not change the verdict, since revq2
+  already fails its d8 half). Per-game results: `logs/maze/p5d7/d8.out` and `d8_summary.txt` (235 of 237 jobs). 2HG: 11 recovered, 2 persist (g6 6 vs 5, g296 7 vs 6). d3: 6 recovered, 2 persist (g222 8 vs 7,
   g293 9 vs 6), 2 UNRESOLVED. d1b3: 7 recovered, 2 UNRESOLVED. d1b1: 9 recovered, 1 persists (g58 6 vs 5), 1
   UNRESOLVED. Net over the 11 persisters: +14 turns.
 - **The revq2 persisters are the q2 component.** At d8 b0 blind salt 1, d5 g427 / g303 / g412: rev alone = ship (5 / 5 /
