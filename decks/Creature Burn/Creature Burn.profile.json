@@ -1,0 +1,74 @@
+{
+  "card_scores": {
+    "Ball Lightning": [
+      0.18246485688346148,
+      -0.06070673512533986
+    ],
+    "Browbeat": [
+      0.08380686430496453
+    ],
+    "Cinder Pyromancer": [
+      -0.19521948369867648
+    ],
+    "Figure of Destiny": [
+      0.580405170506622
+    ],
+    "Fireblast": [
+      0.35822871124303113
+    ],
+    "Flame Javelin": [
+      -0.15687746815729486
+    ],
+    "Goblin Fireslinger": [
+      0.19011086431299162,
+      -0.19858156028368779
+    ],
+    "Hellspark Elemental": [
+      0.12664708935103697
+    ],
+    "Keldon Champion": [
+      -0.06232548707629437
+    ],
+    "Keldon Marauders": [
+      0.20164100846668287
+    ],
+    "Lightning Bolt": [
+      0.056914437521993655,
+      -0.10346585117227303
+    ],
+    "Magma Jet": [
+      -0.22204472843450507,
+      -0.4146341463414638
+    ],
+    "Price of Progress": [
+      0.04140235751610177
+    ],
+    "Rift Bolt": [
+      0.024099945131474065
+    ],
+    "Searing Blaze": [
+      -0.5473726514618713
+    ],
+    "Spark Elemental": [
+      0.02962489343563579
+    ],
+    "Teetering Peaks": [
+      0.08683944997184145
+    ],
+    "Vulshok Sorcerer": [
+      -0.152747891609474
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
