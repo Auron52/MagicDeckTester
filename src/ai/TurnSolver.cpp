@@ -12373,6 +12373,51 @@ static bool UnlockOrderDfsRun(UnlockOrderDfs& d, GameState& cp, std::vector<Acti
     (void)UnlockOrderDfsRec(d, cp, unlock_acts, step, finish, 0, 0);
     return d.found;
 }
+// MTG_PO_DAMAGE_ORDER (mana-clean gate claude-queue-20261120b: 1 Drop Burn APPLY-DROP-ORDER 2,232, Midrange Burn 541).
+// Three casts read the damage dealt earlier in the same main: Needle Drop's target must have been dealt damage this
+// turn (CR 601.2c -- with none it cannot be cast at all), a spectacle cost is live only once an opponent has lost life
+// (CR 702.137a), and Chandra's Incinerator costs {X} less for the noncombat damage dealt. The payable-order decider
+// (PayableCastOrderCoreImpl) admits orders only inside its producer domains and its walks know no damage, so a line
+// whose given order casts Needle Drop / Skewer the Critics BEFORE the line's only burn (1 Drop Burn ranks Fireblast
+// last, 40) realised that order and dropped the dependent cast -- e.g. s30000108 T2 {Mountain, Fireblast, suspend
+// Rift Bolt, Needle Drop}: Needle Drop had no target, while Fireblast first (its sacrificed Mountain's {R} floated,
+// MTG_FIREBLAST_FLOAT) makes it legal and pays it. The DAMAGE-ORDER domain prices orders with the enumeration's
+// sequential walk with that damage modelled (t_seq_walk_damage below), exactly as the unlock-order domain does for
+// a same-line haste: the given order is KEPT whenever it pays (the deck's cast order -- the USER's, for 1 Drop
+// Burn -- stands), else the nearest order the walk pays (UnlockOrderSearch's Kendall-nearest search over classes).
+// A realisation of the plan the search chose, never a pick: its casts are the plan's, only their order moves, and
+// only when the given order cannot pay them. Apply site only (TurnSolver::DamagePayableOrder).
+thread_local bool g_gy_damage_hoist_probe = false;
+void NoteGraveyardDamageDrop(const GameState& state, const Action& a)
+{
+    if (g_gy_damage_hoist_probe || (g_act_drop_sink == nullptr && !ActDropAuditOn())) { return; }
+    int why = 0;   // NoteActDrop's encoding: 0 gone, 1 tapped, 3 unpaid (fuel or mana)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != a.sac_source_id || p.controller_index != state.active_player_index) { continue; }
+        why = p.tapped ? 1 : 3;
+        break;
+    }
+    NoteActDrop(why, a.card_name.str().c_str(), state.turn_number, 1);
+}
+static bool PoDamageOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_PO_DAMAGE_ORDER", false);
+    return heurarm::Flag(heurarm::PO_DAMAGE_ORDER, env_on);
+}
+// While set, SeqWalkFixedOrder models same-line face damage: a face-burn cast (DirectDamage, direct_damage > 0) marks
+// the opponent damaged and losing life once paid, and a Needle Drop with no damaged target fails the walk before it
+// pays. Off (every caller but DamagePayableOrder), the walk is byte-identical. The noncombat-damage counter that
+// Chandra's Incinerator reads is already modelled by the walk (deck_tracks_noncombat_damage).
+static thread_local bool t_seq_walk_damage = false;
+struct SeqWalkDamageScope
+{
+    bool prev;
+    SeqWalkDamageScope() : prev(t_seq_walk_damage) { t_seq_walk_damage = true; }
+    ~SeqWalkDamageScope() { t_seq_walk_damage = prev; }
+    SeqWalkDamageScope(const SeqWalkDamageScope&) = delete;
+    SeqWalkDamageScope& operator=(const SeqWalkDamageScope&) = delete;
+};
 static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
                               const std::vector<int>& sel, const std::vector<int>& ord,
                               const std::vector<int>& seq_rv_charged, int* fail_at = nullptr,
@@ -12493,6 +12538,11 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // so the reduction applies to the summed cost (CR 601.2f order). Identity for every other
         // card and for an unkicked cast.
         const CardDefinition& def = *KickedFaceOr(a.def, a.kicked);
+        // MTG_PO_DAMAGE_ORDER: a Needle Drop with no target dealt damage this turn cannot be cast (the apply's
+        // DamagedTargetCastLegal refuses it before paying), so this order fails here.
+        if (t_seq_walk_damage && def.params.target_dealt_damage_this_turn
+            && !DamagedThisTurnTargetExists(cp, cp.active_player_index))
+        { if (fail_at != nullptr) { *fail_at = walk_pos; } return false; }
         if (IsFireblastAlternative(def, a.tutor_target.str()))
         {
             RevealLogPause quiet; // a mana feasibility probe never asks a human or emits events
@@ -12645,6 +12695,12 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // Every resolved burn earns the resource, including Fireblast's sacrifice
             // alternative and banked free casts. Payment never discounts its own spell.
             cp.noncombat_damage_received_this_turn[1 - cp.active_player_index] += a.direct_damage;
+        }
+        // MTG_PO_DAMAGE_ORDER: the burn's face damage turns spectacle on and gives Needle Drop its target.
+        if (t_seq_walk_damage && a.direct_damage > 0 && def.tmpl == CardTemplate::DirectDamage)
+        {
+            cp.opponent_lost_life_this_turn = true;
+            cp.MarkPlayerDealtDamage(1 - cp.active_player_index, a.direct_damage);
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
@@ -13881,6 +13937,40 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
     }
     if (!UnlockOrderHasHaste(*use, order, any_unlock)) { return false; }
     const std::vector<int> none;
+    if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
+    return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
+}
+
+// MTG_PO_DAMAGE_ORDER: see PoDamageOrderOn. The domain: hand casts only (no reveal surcharge), at least one cast whose
+// legality or cost reads same-turn damage that is NOT yet there, and at least one face-burn cast that would supply it.
+bool TurnSolver::DamagePayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    if (order.size() < 2 || !PoDamageOrderOn() || HumanPlayActive()) { return false; }
+    const std::vector<Action>* use = &acts;
+    std::vector<Action> filled;
+    if (std::any_of(acts.begin(), acts.end(), [](const Action& a) { return a.def == nullptr && !a.card_name.str().empty(); }))
+    {
+        filled = acts;
+        for (Action& a : filled) { if (a.def == nullptr) { a.def = CardDatabase::Instance().LookupInterned(a.card_name); } }
+        use = &filled;
+    }
+    const int me = state.active_player_index;
+    bool needs = false, burn = false;
+    for (int j : order)
+    {
+        const Action& a = (*use)[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || IsRevealCostCast(a)) { return false; }
+        const CardParams& p = a.def->params;
+        if (p.target_dealt_damage_this_turn && !DamagedThisTurnTargetExists(state, me)) { needs = true; }
+        if (p.spectacle_cost.has_value() && !a.alt_cost && !a.free_cast && !state.opponent_lost_life_this_turn)
+        { needs = true; }
+        if (p.cost_less_per_opponent_noncombat_damage && state.deck_tracks_noncombat_damage) { needs = true; }
+        if (a.direct_damage > 0 && a.def->tmpl == CardTemplate::DirectDamage) { burn = true; }
+    }
+    if (!needs || !burn) { return false; }
+    const SeqWalkDamageScope _dmg;
+    const std::vector<int> none;
+    const std::vector<int> sel = order;   // a copy: the search rewrites `order`
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
 }
@@ -62150,7 +62240,11 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
         for (std::size_t k = 0; k < m; ++k)
         {
             if (k == j || !out.trig[k]) { continue; }
-            const bool before = CastOrderLess(state, cands[k], cands[j])
+            // MTG_PO_DAMAGE_ORDER: when the rank order puts the burn after the spectacle cast, both apply worlds
+            // move the burn ahead whenever the rank order cannot pay (TurnSolver::DamagePayableOrder), so every
+            // face-burn cast of the selection can precede it (gate claude-queue-20261120b ENUM-GAP: 1 Drop Burn T2
+            // {Mountain, Skewer, Fireblast, suspend Rift Bolt}, Fireblast > Skewer pays every action).
+            const bool before = PoDamageOrderOn() || CastOrderLess(state, cands[k], cands[j])
                 || (!CastOrderLess(state, cands[j], cands[k]) && k < j);
             if (before) { out.prior_trig[j].push_back(static_cast<int>(k)); out.live = true; }
         }
@@ -81067,8 +81161,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.gy_exile_mode == 3)
             {
                 const MadnessPayFn payer = [](GameState& s, const ManaCost& c) { return TapForCostDirect(s, c, false); };
-                ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
-                                            a.tutor_target, a.enchant_target, payer);
+                if (!ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
+                                                 a.tutor_target, a.enchant_target, payer))
+                { NoteGraveyardDamageDrop(state, a); }   // reporting only (oracle / act-drop audit)
             }
             else if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
@@ -81583,7 +81678,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (first >= 0)
         {
             const Action& a = plan.actions[static_cast<std::size_t>(first)];
+            g_gy_damage_hoist_probe = true;    // a failed hoist retries in the trailing pass: not a drop yet
             apply_trailing_activations(std::vector<Action>{a});
+            g_gy_damage_hoist_probe = false;
             for (const Permanent& q : state.battlefield)
             { if (q.card.m_number == a.sac_source_id && q.tapped)
               { spectacle_hoisted_source = a.sac_source_id; break; } }
