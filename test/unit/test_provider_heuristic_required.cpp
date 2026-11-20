@@ -10,6 +10,7 @@
 #include "ai/DecisionProviders.h"
 #include "ai/ProviderHeuristicRequired.h"
 #include "cards/CardDatabase.h"
+#include "core/EnvFlags.h"
 #include "core/HeuristicDefaults.h"
 #include "deck/DeckLoader.h"
 #include "runner/GoldFishRunner.h"
@@ -92,6 +93,9 @@ TEST_CASE("provider-required: providers that already have a policy declare it")
     CHECK(MeliraPodProvider().ImplementsRequiredHeuristic(RequiredHeuristic::TutorHandPut));
     CHECK(MeliraPodProvider().ImplementsRequiredHeuristic(RequiredHeuristic::RevivePick));
     CHECK(PiratesProvider().ImplementsRequiredHeuristic(RequiredHeuristic::EtbDigPick));
+    // Knights: MTG_KN_ETBDIG_RANK default ON since 2026-11-20 (=0 is the searched default + RED FLAG).
+    if (EnvOn("MTG_KN_ETBDIG_RANK", true))
+    { CHECK(KnightsProvider().ImplementsRequiredHeuristic(RequiredHeuristic::EtbDigPick)); }
     CHECK_FALSE(MillProvider().ImplementsRequiredHeuristic(RequiredHeuristic::EtbDigPick));
 }
 
