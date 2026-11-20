@@ -104234,6 +104234,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     ApplyProviderPlanListFilter(state, is_pre_combat, all, pb_lazy);
     // A PROVIDER-DECLARED CAST / LAND DOMINANCE FOLD (DecisionProvider::CastDominanceLive / CastDominanceClass;
     // Maze's End P7). Every enumeration, root and continuation; it only removes plans that a kept sibling dominates.
+    // It runs AFTER the plan-list filter above, on purpose: the filter's provably-unpayable prune (Maze's End F5)
+    // has already removed every plan no payment order can pay, so a twin the fold keys on is a plan that really
+    // plays -- a subset P is never folded into an unpayable P' that the prune would then drop (the line lost).
+    // Swapping the two is that defect (test_mazes_end_f5.cpp, "F5 prune x P7 fold").
     if (all.size() > 1 && !HumanPlayActive() && !DecisionUnpruned() && sac_prov.CastDominanceLive(state))
     {
         if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
