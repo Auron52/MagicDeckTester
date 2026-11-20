@@ -117878,14 +117878,35 @@ namespace inwin
         return heurarm::Flag(heurarm::INWIN_CACHE, env);
     }
     inline bool Verify() { static const bool v = EnvOn("MTG_INWIN_CACHE_VERIFY"); return v; }
+    // MTG_INWIN_EXIT_GUARD (default ON; a soundness fix). The map's whole argument is that a stored answer is the
+    // node's MINIMUM in its window. The FIRST-VERIFIED-WIN horizon exit (FsHorizonExitOn) breaks that: a node that
+    // takes it returns the first in-window win it meets, which is the earliest only under the ID premise of the pass
+    // it ran in (every shallower pass refuted, so every in-window win sits at the edge). The map is depth-free, leaf-
+    // free and per GAME, so it hands that answer to passes and decisions where the premise does not hold -- a rollout
+    // ladder pass that runs after a shallower pass already found a win, a jump-laddered or root-cut pass -- and a
+    // non-minimal win, or the no-win bound "nothing before it", becomes a proof. Measured: Maze's End s3076 gi73 and
+    // Martyr Lifegain s2151 gi149 win T5 at d5 b0 and T6 at d6, d7 and d8 b0; under MTG_INWIN_CACHE_VERIFY=1 Martyr's
+    // d6 b0 game shows 4 MATERIAL disagreements (cached "no win by 5", fresh 5), and MTG_FS_HORIZON_EXIT=0 or
+    // MTG_INWIN_CACHE=0 each restore T5 with 0 disagreements. So a node whose subtree took an exit stores no no-win
+    // bound, and stores its win only when an existing proof already refutes every turn before it (then the first
+    // in-window win IS the earliest -- what keeps a leafless ID ladder's edge wins). Every budget; inert where no exit
+    // fires. A re-price at most: a refused store is re-searched, never answered wrong.
+    inline bool ExitGuardOn()
+    {
+        static const bool env = EnvOn("MTG_INWIN_EXIT_GUARD", true);
+        return heurarm::Flag(heurarm::INWIN_EXIT_GUARD, env);
+    }
     inline std::size_t CapBytes()
     { static const std::size_t v = static_cast<std::size_t>(std::max(1, EnvInt("MTG_INWIN_CACHE_MB", 24))) << 20; return v; }
     struct Entry { TurnSolver::SearchLine line; int win; int nowin_bound; std::uint64_t order_sig; };
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash> t_map;
+    struct StoreCtx { int turn, depth, cutoff, nest, leaf, sup, twop; long long hex; };   // DM1 diag (verify only)
+    inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
+    inline thread_local TranspositionTable::Key t_hit_key{};
     inline thread_local std::size_t t_bytes = 0;
     inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_win_stores{0}, g_nowin_stores{0}, g_widen{0}, g_full{0};
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_material{0}, g_ver_printed{0};
-    inline void Clear() { t_map.clear(); t_bytes = 0; }
+    inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; }
     inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
     inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
     // The key context: gamelc::Tag (leaf, beam, second-main, labeller), and under MTG_LEAFLESS_READS_LEAFED the same
@@ -118230,6 +118251,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             else
             {
                 auto in = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
+                if (inwin::Verify() && in != inwin::t_map.end()) { inwin::t_hit_key = in->first; }
                 // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
                 // this node's window would also count wins its leaf finds there, and the rollout plays lines a
                 // provider prunes from the menu (verify, 2026-11-10: FiveColour 2HG, turn 5 depth 1 cutoff 6 -- a
@@ -121274,7 +121296,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     {
                         std::cerr << "[inwin-cache] DISAGREE job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-")
                                   << " turn=" << state.turn_number << " depth=" << depth << " cutoff=" << cutoff
-                                  << " cached=" << inwin_hit_win << " fresh=" << best.win_turn << " nest=" << g_fsline_nest << "\n";
+                                  << " cached=" << inwin_hit_win << " fresh=" << best.win_turn << " nest=" << g_fsline_nest
+                                  << " leaf=" << gamelc::LeafCode(state);
+                        auto sc = inwin::t_ctx.find(inwin::t_hit_key);
+                        if (sc != inwin::t_ctx.end())
+                        { std::cerr << " | stored: turn=" << sc->second.turn << " depth=" << sc->second.depth << " cutoff=" << sc->second.cutoff
+                                    << " nest=" << sc->second.nest << " leaf=" << sc->second.leaf << " sup=" << sc->second.sup
+                                    << " twop=" << sc->second.twop << " hexits=" << sc->second.hex; }
+                        std::cerr << "\n";
                     }
                 }
             }
@@ -121283,12 +121312,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             const int we = state.turn_number + depth - 1;
             const bool win = best.win_turn <= std::min(cutoff, max_turns);
+            // MTG_INWIN_EXIT_GUARD: was this node's answer shaped by a first-verified-win exit (see ExitGuardOn)?
+            const bool exit_free = !inwin::ExitGuardOn() || g_fs_hexits == dvs_hex0;
+            const auto nowin_it = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
+            const bool earlier_refuted = nowin_it != inwin::t_map.end() && nowin_it->second.nowin_bound >= best.win_turn - 1;
             auto admit = [](std::size_t nb) -> bool
             {
                 if (inwin::t_bytes + nb > inwin::CapBytes()) { inwin::g_full.fetch_add(1, std::memory_order_relaxed); return false; }
                 inwin::t_bytes += nb; return true;
             };
-            if (win && best.win_turn <= we)
+            if (win && best.win_turn <= we && (exit_free || earlier_refuted))
             {
                 TranspositionTable::Key kw = key_base;
                 const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
@@ -121302,7 +121335,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             // No win at or before b, from in-window lines alone: a win at w proves none before it.
             const int b = std::min(win ? best.win_turn - 1 : std::min(cutoff, max_turns + 1), we);
-            if (b >= state.turn_number)
+            if (b >= state.turn_number && exit_free)
             {
                 const TranspositionTable::Key k = inwin::NowinKey(inwin::Ctx(key_base, state));
                 auto it = inwin::t_map.find(k);
@@ -121311,10 +121344,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (admit(sizeof(inwin::Entry) + 64))
                     {
                         inwin::t_map.emplace(k, inwin::Entry{ TurnSolver::SearchLine{ max_turns + 1, {} }, max_turns + 1, b, 0ull });
+                        if (inwin::Verify())
+                        { inwin::t_ctx[k] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<int>(gamelc::LeafCode(state)),
+                                              g_devseq_suppress, g_devseq_two_pass, g_fs_hexits - dvs_hex0 }; }
                         inwin::g_nowin_stores.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
-                else if (it->second.nowin_bound < b) { it->second.nowin_bound = b; inwin::g_widen.fetch_add(1, std::memory_order_relaxed); }
+                else if (it->second.nowin_bound < b)
+                {
+                    it->second.nowin_bound = b; inwin::g_widen.fetch_add(1, std::memory_order_relaxed);
+                    if (inwin::Verify())
+                    { inwin::t_ctx[k] = { state.turn_number, depth, cutoff, g_fsline_nest, static_cast<int>(gamelc::LeafCode(state)),
+                                          g_devseq_suppress, g_devseq_two_pass, g_fs_hexits - dvs_hex0 }; }
+                }
             }
         }
     }
