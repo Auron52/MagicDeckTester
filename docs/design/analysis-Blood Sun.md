@@ -51,7 +51,12 @@ first lotus for Exploration and then the second for Time wark. Technically it is
 Fastbond, though you will need the green held if you have no current land drop."* -> canonical scenario
 test for the bridge recognizer (Revelation X=5; colour matters: Scorched Ruins is colourless).
 USER (verbatim): *"And having these in hand makes it even easier, since you don't need to search pieces
-you already have."* -> the required set is net of hand and battlefield; X covers only the missing pieces.
+you already have."* -> the required set is net of HAND (cards); X covers only the missing pieces.
+USER (verbatim): *"To be clear, though, often you want multiple exploration or fastbond to go off in
+turns like these. Having an exploration out if often not enough since you need to spend the land drops
+earlier. You want to get to an extra turn with what you have remaining."* -> the recognizer's resource
+is the REMAINING land drops / mana / cards this turn; an Exploration in play does not satisfy the set
+by itself; extra Explorations (stacking) or Fastbond are often required picks.
 
 
 ## Standing decisions (pass to every subagent)
