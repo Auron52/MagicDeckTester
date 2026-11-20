@@ -1,5 +1,12 @@
 {
-  "value_play": {
-    "sampled_gate": 3
-  }
+ "value_play": {
+  "sampled_gate": 3,
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 1,
+  "expected_buckets": 18,
+  "target_depth": 6,
+  "budget_ms": 40,
+  "enabled": true,
+  "note": "E.7 play-setting stage 2026-11-19: d6b40 adopted by the USER 2026-11-20 (\"D6B40 seems okay for Boars.\") over the built-in default d5/20; grid VERDICT d6b40 delta -0.00125 t=-3.99 cost=1.070x (8 seeds x 1000 paired); the stage's own cheapest passing arm was d6b20 (0.94x, +0.00000)"
+ }
 }

@@ -213,14 +213,15 @@ SMOKE_CASES=(
   "mill 5 1001   5 20"
   "mill2hg 5 1001  5 20"
   # boars (Boars): ADDED 2026-11-13 by the analysis (docs/design/analysis-Boars.md), all three tiers at once, at
-  # martyr/galadriel's pre-keep-table ENTRY shape. Gruul creature ramp, BoarsProvider, no value_play block -> play
-  # rows are d5 b20. Exhaustive keep table ADOPTED 2026-11-19 (GT accepted with it live, all three tiers); no
-  # value leaf (the sampled-gate ladder plays), so GT moves again if one lands. boars2hg: Zhur-Taa Druid
+  # martyr/galadriel's pre-keep-table ENTRY shape. Gruul creature ramp, BoarsProvider. Exhaustive keep table
+  # ADOPTED 2026-11-19 (GT accepted with it live, all three tiers); no value leaf (the sampled-gate ladder plays).
+  # Play setting d6/b40 (USER 2026-11-20, "D6B40 seems okay for Boars.", Boars.value.json's enabled value_play
+  # block), so the d5 play rows run b40 in every tier (they were b20 under the built-in d5/b20 default). boars2hg: Zhur-Taa Druid
   # and Herald of Ilharg deal damage to EACH opponent, so heads matter.
   "boars      0  1001 1000  0"
   "boars      3  1001   50 10"
-  "boars      5  1001  100 20"
-  "boars2hg   5  1001   25 20"
+  "boars      5  1001  100 40"
+  "boars2hg   5  1001   25 40"
   # sea (Sea Creatures): ADDED 2026-11-17 by the analysis (docs/design/analysis-Sea Creatures.md), all three tiers at
   # once, at Boars' pre-keep-table ENTRY shape. Simic big-creature ramp (Sagas, Sin, Trench Gorger),
   # SeaCreaturesProvider, no value_play block -> play rows are d5 b20. No keep table and no value leaf yet, so GT
@@ -841,12 +842,12 @@ REGRESSION_CASES=(
   "mill 5 2002   5 20"
   "mill 5 3003   5 20"
   "mill2hg 5 2002 5 20"
-  # boars: see the SMOKE block (2026-11-13, pre-keep-table entry set).
+  # boars: see the SMOKE block (2026-11-13 entry set; play rows b40 since the 2026-11-20 d6/b40 play setting).
   "boars      0  2002 1000  0"
   "boars      3  2002   50 10"
-  "boars      5  2002  150 20"
-  "boars      5  3003  150 20"
-  "boars2hg   5  2002   75 20"
+  "boars      5  2002  150 40"
+  "boars      5  3003  150 40"
+  "boars2hg   5  2002   75 40"
   # sea: see the SMOKE block (2026-11-17, pre-keep-table entry set).
   "sea        0  2002 1000  0"
   "sea        3  2002   50 10"
@@ -1407,19 +1408,20 @@ OVERNIGHT_CASES=(
   # WITH the table d5 b20 costs ~0.27 s/game thread-wall (2hg ~0.70 s), ~1/5 of the table-absent search units, so
   # the full set projects to ~0.6 worker-h (~1.6% of the 2026-11-12 overnight tier's 37.4 worker-h) -- less than
   # the ENTRY set cost without the table (~2.1 worker-h).
+  # Play rows re-tuned b20 -> b40 on 2026-11-20 with the USER's d6/b40 play setting (Boars.value.json).
   "boars      0  4004 2000  0"
   "boars      0  6006 2000  0"
   "boars      0  8008 2000  0"
   "boars      0 10010 2000  0"
   "boars      3  4004  325 10"
-  "boars      5  4004 1425 20"
-  "boars      5  5005 1425 20"
-  "boars      5  6006 1425 20"
-  "boars      5  7007 1425 20"
-  "boars2hg   5  4004  175 20"
-  "boars2hg   5  5005  175 20"
-  "boars2hg   5  6006  175 20"
-  "boars2hg   5  7007  175 20"
+  "boars      5  4004 1425 40"
+  "boars      5  5005 1425 40"
+  "boars      5  6006 1425 40"
+  "boars      5  7007 1425 40"
+  "boars2hg   5  4004  175 40"
+  "boars2hg   5  5005  175 40"
+  "boars2hg   5  6006  175 40"
+  "boars2hg   5  7007  175 40"
   # sea: the overnight FULL set (2026-11-20, just before its keep-table adoption, accepted with the table ABSENT
   # first): the angels/pirates/galadriel/boars standard shape -- d0 4x2000, one d3 b10 sanity row, d5 4x1425 b20
   # (the play setting), sea2hg d5 4x175 b20. Entered 2026-11-17 at the ENTRY set (d3 125 b10, d5 4x300 b20, 2hg
