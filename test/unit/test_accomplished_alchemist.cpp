@@ -889,7 +889,9 @@ TEST_CASE("Crab Umbra: the search offers the untap with a searched count; execut
         CHECK(a->sac_victim_id == alch);
         CHECK(a->gy_exile_mode == kUntapEnchanted);
         ks.insert(a->chosen_x);
-        if (a->chosen_x == 2) { pick = p; found = true; }
+        // The BASE plan (bp_choice < 0): its site-9 continuation variants (MTG_BP_UNTAP_FLOAT) share the action
+        // list and would replay a continuation after the untaps, which is not what this test asserts.
+        if (a->chosen_x == 2 && p.bp_choice < 0) { pick = p; found = true; }
     }
     CHECK(ks == std::set<int>{ 1, 2 });     // affordable = (3 Islands + the Alchemist's 5) / 3
     REQUIRE(found);
@@ -2157,6 +2159,11 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         for (const TurnSolver::Plan& p : v) { o.push_back(GreedyPlanTextAa(p)); }
         return o;
     };
+    // The pre-2026-11-19 fold over EVERY host (MTG_AURA_UNTAP_HOST_SEARCH=0): with the lever on, these boards' hosts
+    // all have a tap use but the Galvanic Alchemist, so nothing is left to fold -- the partitioned fold has its own
+    // case ("Crab Umbra host search: ...").
+    const std::int8_t uh = heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH];
+    heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = 0;
     long long dropped = 0;
     for (int board = 0; board < 4; ++board)
     {
@@ -2178,6 +2185,7 @@ TEST_CASE("Late-bound Crab Umbra host (searched walk): the same plan list as wal
         { Arm a(false); off = TurnSolver::EnumerateMainPlans(s, true); }
         CHECK_MESSAGE(text(on) == text(off), "board ", board);
     }
+    heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = uh;
     CHECK(dropped > 0);
 }
 
@@ -4500,4 +4508,95 @@ TEST_CASE("Untap refund float: untap once, then the continuation casts a 5-drop 
         UntapFloatArmAa off(false);
         CHECK_FALSE(UntapThenHydraBothAa(s));   // the hole: no continuation, so the refund was never spendable
     }
+}
+
+TEST_CASE("Untap refund float: the key stops at the dearest thing the float could buy (a self-funding loop ends)")
+{
+    // Nothing to buy (empty hand, no mana-costed ability): a refund arms nothing, so a self-funding loop does not
+    // re-open site 9 on every activation (it used to: ~100 re-opens to MTG_SITE9_REOPEN's ceiling, float 202).
+    GameState s = FreshAa();
+    const int alch  = PutAa(s, "Accomplished Alchemist");
+    const int umbra = AttachAa(s, "Crab Umbra", alch);
+    s.players[0].life_gained_this_turn = 4;
+    s.m_provider = nullptr;
+    UntapFloatArmAa on(true);
+    const std::vector<uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState t = s;
+    REQUIRE(ApplyActivatedUntap(t, 0, kUntapEnchanted, umbra, alch, 1) == 1);
+    CHECK(t.floating_mana.Total() == 1);
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(t, pre));
+
+    // With a 5-drop in hand: each refund below 5 re-plans; at 5 the float buys everything it ever could, so a
+    // sixth mana arms nothing.
+    int a2 = 0, u2 = 0;
+    GameState h = UntapFloatBoardAa(&a2, &u2);
+    REQUIRE(ApplyActivatedUntap(h, 0, kUntapEnchanted, u2, a2, 5) == 5);
+    CHECK(h.floating_mana.Total() == 5);
+    const std::vector<uint64_t> pre5 = TurnSolver::SnapshotActivatableAbilities(h);
+    GameState h6 = h;
+    REQUIRE(ApplyActivatedUntap(h6, 0, kUntapEnchanted, u2, a2, 1) == 1);
+    CHECK_FALSE(TurnSolver::PostEntryActivationPending(h6, pre5));
+}
+
+// ---- AN AURA THAT UNTAPS ITS HOST (MTG_AURA_UNTAP_HOST_SEARCH; 2026-11-19, seed 12345681 T3) ----------------------
+// Crab Umbra's "{2}{U}: Untap enchanted creature" re-uses the HOST's {T}, so every own host with a tap use is its own
+// searched plan; the AURA CAST HOST RANKING (combat damage; "fewer Auras on mana sources") still decides among the
+// hosts without one. Before: one plan per class, and the ranking's tie-break kept the Umbra OFF the Alchemist.
+namespace
+{
+struct UntapHostArmAa
+{
+    std::int8_t prev;
+    explicit UntapHostArmAa(bool on) : prev(heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH])
+    { heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = on ? 1 : 0; }
+    ~UntapHostArmAa() { heurarm::t_arm[heurarm::AURA_UNTAP_HOST_SEARCH] = prev; }
+};
+struct LateBindArmAa
+{
+    std::int8_t prev;
+    explicit LateBindArmAa(bool on) : prev(heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND])
+    { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = on ? 1 : 0; }
+    ~LateBindArmAa() { heurarm::t_arm[heurarm::AURA_HOST_LATE_BIND] = prev; }
+};
+// The hosts of the plans that cast ONLY the Umbra (the class the ranking used to fold to one member).
+std::set<int> UmbraOnlyHostsAa(const std::vector<TurnSolver::Plan>& plans)
+{
+    std::set<int> hosts;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.bp_choice >= 0 || p.actions.size() != 1) { continue; }
+        const Action* a = CastOfAa(p, "Crab Umbra");
+        if (a != nullptr) { hosts.insert(a->enchant_target); }
+    }
+    return hosts;
+}
+}   // namespace
+
+TEST_CASE("Crab Umbra host search: every host with a tap use is its own plan; the rest stay one ranked class")
+{
+    GameState s = FreshAa();
+    s.m_provider = nullptr;                                  // GenericProvider: no deck rule involved
+    PutAa(s, "Island");
+    const int alch = PutAa(s, "Accomplished Alchemist");     // a live mana creature (the loop host)
+    const int elf  = PutAa(s, "Arbor Elf");                  // a mana creature
+    const int galv = PutAa(s, "Galvanic Alchemist");         // no {T} use: ranked
+    const int boar = PutAa(s, "Brindle Boar");               // no {T} use, TAPPED: ranked below the Galvanic
+    MutAa(s, boar)->tapped = true;
+    s.players[0].life_gained_this_turn = 4;
+    HandAa(s, "Crab Umbra");
+    std::vector<TurnSolver::Plan> on_lb, on_walk, off;
+    long long dropped = 0;
+    {
+        UntapHostArmAa u(true);
+        { LateBindArmAa lb(true); const long long d0 = AuraLateBindTestCount();
+          on_lb = TurnSolver::EnumerateMainPlans(s, true); dropped = AuraLateBindTestCount() - d0; }
+        { LateBindArmAa lb(false); on_walk = TurnSolver::EnumerateMainPlans(s, true); }
+    }
+    { UntapHostArmAa u(false); off = TurnSolver::EnumerateMainPlans(s, true); }
+    const std::set<int> want = { alch, elf, galv };
+    CHECK(UmbraOnlyHostsAa(on_lb) == want);
+    CHECK(UmbraOnlyHostsAa(on_walk) == want);                 // the fold binds only the {T}-less hosts
+    CHECK(dropped > 0);                                       // ...and still folds them (galv + boar -> one)
+    CHECK(UmbraOnlyHostsAa(off).size() == 1);                 // =0: the pre-2026-11-19 single class
+    CHECK(UmbraOnlyHostsAa(off).count(alch) == 0);            // ...which kept the Umbra off the Alchemist
 }
