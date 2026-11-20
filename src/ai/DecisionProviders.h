@@ -5069,6 +5069,8 @@ public:
     // P6 (USER 2026-11-18, ruling 6): the off-main Maze's End activation in response to Manabond / Burgeoning is
     // always taken and redeployed (the premises are at the definition).
     bool OffMainMazeRedeployForced(const GameState& s, int controller) const override;
+    // P5d-6 (USER Q2): Manabond's yes/no under the discard-value rule (premises at the definition).
+    int CrossingDumpYesOrder(const GameState& s, int controller, int lands_put) const override;
     // P7 (performance): the CAST / LAND DOMINANCE FOLD's premises (MTG_MAZE_CAST_DOMINANCE, MTG_MAZE_LAND_DOMINANCE).
     bool CastDominanceLive(const GameState& s) const override;
     int  CastDominanceClass(const GameState& s, const CardDefinition& d) const override;

@@ -1038,6 +1038,10 @@ enum Slot : int
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     MAZE_IDLE_FETCH,          // MTG_MAZE_IDLE_FETCH       Maze's End P5d (USER 2026-11-18: "Though, if there is idle mana we should use it."; "And that is fine, because not fetching would be dominated, but this would be assuming we can replay it."): a plan without a Maze's End activation is removed when the menu holds the same plan plus one fetch and Maze's End comes back (an open drop left for the replay, Manabond / Burgeoning, or the fetch wins). Default ON; =0 -> every such plan searched
     MAZE_IDLE_FETCH_REVEAL,   // MTG_MAZE_IDLE_FETCH_REVEAL  Maze's End P5d-5 (amends MAZE_IDLE_FETCH): prune (a) keeps a no-fetch plan whose land or PlayLand puts a Gate in under our draw-on-Gate-enter watcher (Guild Summit), or that casts such a watcher -- the fetch can follow the reveal in the breakpoint continuation, where (a) applies again with the draw known. Default OFF (USER decision pending); =1 -> guard on
+    MAZE_FETCH_TIER_FULL,     // MTG_MAZE_FETCH_TIER_FULL   Maze's End P5d-6 (C2; USER Q1 2026-11-20: "potentially A is okay"): TapTutorPutEval's lands-short / Manabond-ours tier is `full` (one spell's worth, 100) instead of kMazeFetchWins (1000). ORDER only (an eval). Default OFF; =1 -> on
+    MAZE_FETCH_RANK_COND,     // MTG_MAZE_FETCH_RANK_COND   Maze's End P5d-6 (USER Q1 2026-11-20, the conditional ranking): in that tier the fetch is kMazeFetchWins only NEAR THE WIN (this fetch leaves at most two names to go); otherwise `full`, and one below `full` while a Guild Summit is in hand (Summit first early). ORDER only. Default OFF; =1 -> on (overrides MAZE_FETCH_TIER_FULL)
+    MAZE_MANABOND_DISCARD,    // MTG_MAZE_MANABOND_DISCARD  Maze's End P5d-6 (USER Q2 2026-11-20): the Manabond DISCARD-VALUE rule (MazeDumpDiscards). Manabond's end-step yes/no: "no" pruned when every nonland card the yes discards is free; "no" ordered first when a tutor or a kept card would go for too few lands; and prune (a) / the fetch eval count Manabond as putting Maze's End back only when its discards are free. Default OFF; =1 -> on
+    MAZE_DISCARD_BURGEONING,  // MTG_MAZE_DISCARD_BURGEONING  sub-lever of MAZE_MANABOND_DISCARD (parent's proposal, UNCONFIRMED by the USER): Burgeoning counts as a droppable accelerator. Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> Burgeoning is a kept card
     COUNT
 };
 
@@ -2020,6 +2024,10 @@ inline const char* Name(int slot)
         "MTG_SUMMIT_TWIN_FOLD",
         "MTG_MAZE_IDLE_FETCH",
         "MTG_MAZE_IDLE_FETCH_REVEAL",
+        "MTG_MAZE_FETCH_TIER_FULL",
+        "MTG_MAZE_FETCH_RANK_COND",
+        "MTG_MAZE_MANABOND_DISCARD",
+        "MTG_MAZE_DISCARD_BURGEONING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

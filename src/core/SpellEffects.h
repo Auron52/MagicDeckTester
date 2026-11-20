@@ -54276,8 +54276,15 @@ inline void PerformEndStepManabond(GameState& state)
             && ResolveProvider(state).CrossingDumpAllLandsDominatesNo(state, me);
         // rank 0 = the default answer (yes with a land to put, else no; P6: yes for the all-land hand a response
         // makes of an empty one); rank 1 = the other.
-        const bool default_yes = lands > 0 || (resp > 0 && p.hand.empty());
-        bool yes = all_lands_yes ? true : (TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes);
+        // P5d-6: the provider's order / restriction when nonland cards would be discarded (Maze's End: the discard-value
+        // rule, MazesEndProvider::CrossingDumpYesOrder). 2 restricts to {yes} (no rank consumed, like all_lands_yes);
+        // +-1 swaps which answer is rank 0 (both still searched).
+        const int yes_order = (!all_lands_yes && lands + resp > 0 && !(g_play_dig_chooser && !g_tap_speculating))
+            ? ResolveProvider(state).CrossingDumpYesOrder(state, me, lands + resp) : 0;
+        const bool default_yes = yes_order == -1 ? false
+                               : (yes_order == 1 ? true : (lands > 0 || (resp > 0 && p.hand.empty())));
+        bool yes = (all_lands_yes || yes_order == 2) ? true
+                 : (TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes);
         if (g_play_dig_chooser && !g_tap_speculating)
         {
             std::vector<Card> ex;

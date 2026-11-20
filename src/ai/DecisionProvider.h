@@ -5175,6 +5175,13 @@ public:
     // drop, and the search's last-resort land tiebreak) plays ahead of its four passes, or -1 (the passes decide).
     // ORDER only. Default -1 -> byte-identical.
     virtual int GreedyLandFirst(const GameState&, int /*controller*/) const { return -1; }
+
+    // CrossingDumpYesOrder -- Manabond's end-step yes/no when the hand also holds NONLAND cards the "yes" would discard
+    // (the all-land hand is CrossingDumpAllLandsDominatesNo's). `lands_put` = lands the yes would put. 2 = "no" is
+    // dominated (RESTRICT the menu to {yes}); 1 = yes first; -1 = "no" first; 0 = the engine's default order (yes with
+    // a land to put). Both answers stay searched for every value but 2. Default 0 -> byte-identical. Never consulted
+    // in human play. First user: Maze's End P5d-6 (USER Q2, the discard-value rule).
+    virtual int CrossingDumpYesOrder(const GameState&, int /*controller*/, int /*lands_put*/) const { return 0; }
 };
 
 // ---------------------------------------------------------------------------------------------------
