@@ -4494,7 +4494,10 @@ g823 g892, 2HG g196 g254, d1b3 g64, d1b1 g46 g186). **Two persist blind: d5 g231
 Blind totals over salts 1-4 (`bl2/`): g231 ship 28, u2 28, u2+(a) 28, fix 29, shipped 30 (Amulet +1, plus +1 from (a) on
 top of it); g320 ship 25, u2 26, u2+(a) 29, fix 26, shipped 29. **g320 salt 4 is the first NON-clairvoyant prune (a)
 loss: 6 -> 9 blind on both bases** -- ROOT-CAUSE OWED (the USER's "never worse with idle mana" says it should not exist).
-The sample-wide blind A/B `blw/` (fixB / candB / shipB vs abb's u2B / idleB) was still queued at hand-off.
+**Sample-wide BLIND A/B** (`blw/`, blind_salt 1, same seeds and rows, net turns vs blind ship): shipped (fix + (a)) d5 -8,
+2HG -8, d3 -6, d1b3 -20, d1b1 -3 (**std -37, 2HG -8: better than ship on every row**); fix alone -7 / -11 / -9 / -18 / +6;
+u2 +6 / +2 / -3 / -17 / +2. So the Amulet tier is a blind win (fix vs u2: d5 -13, 2HG -13), and (a) on top of fix is
+std -9, 2HG +3 blind.
 
 **d0 (the depth-0 greedy, where TapTutorPutEval IS the policy) is worse, and the cause is the 1000 tier.** Fresh 20,000
 paired d0 games @310001: ship 6.8780, u2 6.9073 (+586 turns), shipped 6.9009 (+459); axis by axis on u2 only C2 helps
