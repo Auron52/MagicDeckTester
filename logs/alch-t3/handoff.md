@@ -343,3 +343,82 @@ Running (agent 3 launched): chain3b = `flock BOX.lock bash build/scratch/alch-t3
   are in; whether to keep them rests on ab4 (s9d is engine-wide).
 
 ### Running jobs: NONE from this agent (all probes finished; legacy-search probe bmdiep2p4 was stopped -- own experiment).
+
+## UPDATE (agent 6, 2026-11-20 ~15:40 UTC): inwin hole ROOT-CAUSED + FIXED (57b56d62c); acceptance T3; ab4 done; tiers queued
+### Root cause (not a missing read-taint: the HORIZON EXIT)
+The pass-4 T2 node (dlat=0) never read a dirty entry: it took the FIRST-VERIFIED-WIN HORIZON EXIT on a T4 win (cost 4).
+The exit's "no earlier win" is the ID premise = the shallower ladder passes' refutations, which in the dev-seq FIRST
+pass are ONE-DEVIATION refutations (pass 3 met the T3 latent occurrences). Untracked dependency -> node clean -> inwin
+widened "no win by T3", gamelc filed it plain, carry kept it. Same hole for all three consumers.
+### Fix: MTG_DEV_SEQ_HEXIT_TAINT (default ON, heurarm DEV_SEQ_HEXIT_TAINT), commit 57b56d62c
+FsHexit(state, win) replaces all 9 `++g_fs_hexits`; in a suppressed pass with a latent met before `win` (g_devseq_pass_lmt,
+pass-wide; DvsPassLmtScope at both Suppress scopes; every latent record folds in via DvsNotePassLatent) and win > own
+turn -> ++g_devseq_latent_n + node mlt. Unit "deviation sequences: a first-pass horizon exit past a latent turn is dirty"
+(DevSeqHexitTaintForTest). Design note: docs/design/devseq-hexit-taint.md (uncommitted draft).
+### Measurements
+- chain6 (build/scratch/alch-t3/chain6): units 3723/3723 pass; combo_off 51/51; aa scenarios as before.
+  acc_all (heur OFF, d8 b0, inwin ON) **T3**; acc_notaint T4; acc_inwin0 T3; play_off (d5 b20, heur OFF) **T3**;
+  play_heur T3; acc_notlast/norank/nofloat T4; nos9d/noburst T3. INWIN/GAME_LINE_CACHE_VERIFY on acceptance: DISAGREE=0;
+  DEV_SEQ_VERIFY: no TWO-PASS LATER; [dev-seq-hexit] tainted=3.
+- verify sample (iwv/: 59 smoke searched cells x 6 held-out games): inwin verified=950 DISAGREE=3 MATERIAL=0; gamelc
+  verified=5069 DISAGREE=196 MATERIAL=0 (kinds: cut 15 / later 1 / win-found-past-cutoff 180); tainted=34.
+- ab4 (d5 b20, 61001/63001 x1000, 200 chunks): rank -0.0665 t=-8.89 wall -25.1%; s9d -0.0010 t=-0.63; burst 0.0000;
+  prior -0.0075 t=-2.83; tlast -0.0100 t=-3.64 wall -5.1%; taint -0.0010 t=-1.42; all -0.0880 t=-10.99 wall -31.7%;
+  allnt -0.0845; all vs allnt (paired) -0.0035 t=-1.96 (9 better / 1 worse).
+### Running: tiers6 (smoke+regression --both) PID in build/scratch/alch-t3/tiers6.pid, out tiers6/both.txt, DONE tiers6/DONE
+### Next: classify movers; multi_ab.py (build/scratch/alch-t3/multi_ab.py) lever on/off for moving decks held-out ONE batch;
+audit slower searched games at d8 b0; accept GT in worktree; check_gt_logs.py; docs; push backup/2026-11-20/alch-t3 only.
+
+## UPDATE (agent 6, ~17:30 UTC): HANDOFF (context limit). Read the agent-6 section above first.
+### USER rulings (verbatim; bind the next agent)
+- "I would like to know why we can't find it at any budget." / "we should improve the heuristic and the search itself." / "the heuristic is our answer to this working at a lower budget, but the search should be capable at a high budget."
+- On the Crab Umbra host: "Why do we need branching here? Just have a heuristic specific to the deck and we are done. Obviously in this deck Accomplished Alchemist is the target."
+- On BurstPendingActColour: "Yes, we need to fix this."
+- CLAUDE.md hard rules: NO GREEDY PICK INSIDE THE SEARCH WINDOW (heuristics only in a DecisionProvider, only to restrict/order); A BUDGET MAY RE-PRICE WORK, IT MAY NOT MAKE A LINE UNFINDABLE (completeness at large budget is the invariant; a cache answering with an under-explored proof is a completeness hole).
+### Done (commits on alch-t3-1119, nothing pushed)
+- 57b56d62c MTG_DEV_SEQ_HEXIT_TAINT fix + unit (see agent-6 section). docs/design/devseq-hexit-taint.md = draft
+  (mechanism/fix/soundness written; "Measured" section still empty) -- committed with this handoff.
+- build/scratch/alch-t3/ab4.sh now has arms taint / allnt (results above).
+### Tiers (tiers6, binary = 57b56d62c build): smoke+regression --both rc=1, 349 pass / 19 FAIL (combined movers; GT here predates
+  ALL branch changes 163e81f56..57b56d62c, so movers are the whole branch, not only the taint). Output
+  build/scratch/alch-t3/tiers6/both.txt; per-game non-AA changes build/scratch/alch-t3/tiers6/changed.json.
+- AA cells all faster: smoke d0 6.2230->6.1180, d3 5.02->4.90, d5 4.94->4.84, 2hg d5 5.14->4.92; regression d0 6.185->6.105,
+  d3 4.90->4.80, d5_s2002 4.9543->4.8514, d5_s3003 5.0400->4.9371.
+- Non-AA movers (32 changed games, mostly digest-only): FASTER: cyclone2hg smoke gi10 6->5, cyclone reg d5_s3003 gi125 5->4,
+  goblins2hg smoke gi17 5->4, goblins reg d5_s2002 gi3 4->3, martyr reg d3/d5 gi5 6->5, mazesend reg d5_s2002 gi166 7->6
+  gi179 6->5, mazesend smoke gi55 6->5, melira reg d5_s2002 gi110 5->4, d5_s3003 gi126 5->4. SLOWER: snow smoke d5 gi81 6->7.
+- Searched SLOWER audit (build/scratch/alch-t3/audit6/out.txt; arms tier / tier_notaint / tier_base / d8b0 / d8b0_notaint / d8b0_base;
+  base = rank,s9d,burst,tlast,taint,float all 0):
+  | game | old tier | new tier | new d8b0 | base d8b0 | taint matters? |
+  | alch smoke d3 gi12 | 6 | 7 | 7 | 6 | no |
+  | snow smoke d5 gi81 | 6 | 7 | 6 (recovers) | 6 | no |
+  | alch reg d5_s3003 gi40 | 5 | 6 | 6 | 5 | no |
+  | alch reg d5_s3003 gi87 | 4 | 5 | 5 | 4 | no |
+  | alch reg d5_s3003 gi143 | 6 | 7 | 6 (recovers) | 6 | no |
+  => the taint moves NONE of the slower games; gi12/gi40/gi87 do NOT recover at d8 b0 and are caused by another branch
+  lever (AA provider/engine: rank, s9d, burst, tlast or float). Attribution running (below).
+### Running jobs (unlocked, light, own experiments; kill freely)
+- attr6: per-lever attribution of the 32 non-AA changed games at tier settings, arms on/taint0/s9d0/rank0/float0/burst0/base.
+  PID in build/scratch/alch-t3/attr6/pid, output attr6/out.txt (digest per job `<case>_gi<N>__<arm>`). No DONE marker: done when PID exits.
+- audit6b: gi12/gi40/gi87 at d8 b0, each lever off alone (`_off1_<LEVER>`) and each lever alone with taint on (`_only1_<LEVER>`).
+  PID audit6b/pid, output audit6b/out.txt.
+### Remaining, in order
+1. Read attr6 + audit6b: name the lever behind each non-AA mover (expected: s9d / rank / float are engine-wide; taint only
+   where a first pass met a latent) and behind gi12/gi40/gi87. ROOT-CAUSE the three AA games that stay slower at d8 b0
+   (they break the adoption bar "every slower game must recover at --depth 8 --budget-ms 0") and fix or report.
+2. Held-out pooled A/B of the moving decks, lever on/off: build/scratch/alch-t3/multi_ab.py (one lever per run, extend to
+   arms if several levers move). NOTE: d5 tier cells carry NO `depth` key (depth from play profile) -- multi_ab.py's filter
+   `depth <= 0 or budget_ms <= 0 -> skip` must be changed to skip only explicit depth 0 / budget 0 cells.
+3. After the audit is clean: `env -C <wt> bash test/regression.sh --both --accept` is NOT allowed to re-run -- accept promotes
+   tiers6's run (check that the harness's last run is tiers6; if a later run happened, re-run tiers first). Then
+   python3 test/check_gt_logs.py.
+4. Fill docs/design/devseq-hexit-taint.md "Measured", update docs/design/aa-staff-in-hand-loop-cast-draw.md (tap-last, the
+   hexit hole, acceptance), commit named paths, push ONLY backup/2026-11-20/alch-t3.
+### Open USER questions (with numbers)
+- MTG_AA_ALCH_TAP_LAST adoption (provider tap ORDER): ab4 tlast alone -0.0100 t=-3.64 (22 better / 4 worse chunks), wall -5.1%;
+  needed for the T3 acceptance (acc_notlast T4). Recommend adopt.
+- MTG_SITE9_AFTER_DEFERRED: ab4 -0.0010 t=-0.63 (6/4), wall -3.2%; not needed for seed 12345681 (acc_nos9d T3); engine-wide.
+  Recommend keep only if its attribution of the slower games is clean.
+- MTG_BURST_ACT_COLOUR_PENDING: ab4 exactly 0.0000 (200 chunks tied), wall -0.3%; not needed for the acceptance (acc_noburst T3).
+  The USER asked for it ("Yes, we need to fix this."), so it stays unless the USER says otherwise.
+- MTG_DEV_SEQ_HEXIT_TAINT: a soundness fix (default ON); ab4 alone -0.0010 t=-1.42, within all -0.0035 t=-1.96 (9/1).
