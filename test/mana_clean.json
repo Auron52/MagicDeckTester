@@ -11552,6 +11552,48 @@
      "seed": 30112000,
      "src": "34fb8c52119dc2ce39f5a1219cfc4814cb929379",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CAPPED": 111,
+      "CONTINUATION-DIFFERS": 38,
+      "DOMINATED-LAND": 9829,
+      "DOMINATED-LIFE": 17766,
+      "DROP-COVERED": 5,
+      "ORACLE-GAP": 2,
+      "PHANTOM": 8
+     },
+     "commit": "55fca4f7a7b16961c638391d8da14e1a0edd6cd3",
+     "date": "2026-11-20T17:15:49Z",
+     "decisions": 49395,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 117000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 113,
+     "life_breakpoints": [],
+     "ms_off": 4717209,
+     "ms_on": 23649448,
+     "report": "logs/mana_clean/claude-queue-20261119j/report.md",
+     "run": "claude-queue-20261119j",
+     "seed": 30117000,
+     "src": "31070f52fd9cbeedeae1f418caa1ba79a487d21a",
+     "verdict": "issues"
     }
    ]
   },
