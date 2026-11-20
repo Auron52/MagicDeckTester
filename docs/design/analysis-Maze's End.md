@@ -4642,8 +4642,9 @@ recovered nor failed.
 - **So q2 (Manabond discard rule) does NOT clear the d8 half of the bar** (at least 11 non-recoveries at salt 1,
   confirmed on 3 by attribution), on top of failing blind d1b1. **rev clears both halves** (net <= 0 on every row in
   both modes, 0 persisters, 4 unresolved).
-- The 4-salt ensemble from P5d-6 (d5 g219, 2HG g108 g161 g21: rev +9 over salts 1-4) was a d8 run of the reveal guard
-  over salts 2-4 on games picked from an EARLIER sample. In this held-out A/B none of those four games is slower under
-  rev. The question still stands: whether rev's 4-salt +9 on those games outweighs its clean held-out result here is
-  for the USER.
+- P5d-6's 4-salt ensemble (d5 g219, 2HG g108 g161 g21: rev +9 over salts 1-4 at d8 b0) ran on the pre-rebase
+  binary `mtg.p6`. On `mtg.q` (rebased onto origin 8fbbc5023, which brings F5) the same seeds tie at their d5 b20 blind
+  row (revB = shipB on all four), so they are not slower here and are not in this d8 set. The +9 was NOT re-measured
+  on `mtg.q`. Re-running those 4 games x 4 salts x 2 arms at d8 b0 (32 jobs, some multi-hour) would settle it. The
+  USER decides whether that is needed before deciding on rev.
 - Tier slower games (above): 13 recovered (11 at the old score, 2 equal to origin's own d8), s3003 g112 UNRESOLVED.
