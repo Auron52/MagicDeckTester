@@ -115,3 +115,9 @@ shadowborn 125.
 ## Commits
 See `git log origin/phase-1-2-deck-analyzer..wip/idgate`. That range holds a single WIP commit containing the src changes and the
 logs/idgate tooling (force-added).
+
+## ADDENDUM (after handoff): the clean smoke+regression A/B FINISHED
+build2 rc=0 (scoped trial). sr1 batch DONE rc=0 (build/scratch/idgate/sr1/{out,err,wins}). (The waiter's exit 1 was only `cat` of the
+absent chain_sr.STOP file.) `cmp_arms.py` -> logs/idgate/sr1_cmp.txt: off arm == GT on ALL 599 jobs (baseline clean); 90 jobs move;
+total units on/off = 766.1M / 678.2M = **1.130x**. Next agent: start at Remaining step 1 with sr1_cmp.txt (per-job turns + units), then
+ab_wall.py for wall, then the held-out A/B on the moved decks. Unit tests not yet re-run on build2.
