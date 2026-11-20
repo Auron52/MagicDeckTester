@@ -165,29 +165,30 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, 2026-11-20 ~12:00 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-20 ~15:20 UTC) — resume here after compaction
 
-* Done: Stage 1; Stage 2 batch 1 committed `0f09f66c6` (+ ledger `447af13b9`, Scryfall snapshot `28c9221fb`).
-  Browbeat policy A is USER-ruled (see item 1 above).
-* RUNNING: integrator 2 (subagent) — Goblin Fireslinger, Vulshok Sorcerer, Cinder Pyromancer + the Browbeat
-  pre-ping sub-decision; relabel Browbeat note/comment to USER-ruled (no behaviour change). Drafts:
-  `logs/creature-burn/stage2-drafts.md` (Batch 2, incl. the [ORCH] soundness amendment). Handoff, if any:
-  `logs/creature-burn/integrator2-handoff.md`. It commits locally, never pushes.
+* Done: Stage 1; Stage 2 batch 1 (`8245ff278` after rebase) and batch 2 (`85531beaa`, integrator 2; handoff
+  `logs/creature-burn/integrator2-handoff.md`). Browbeat policy A is USER-ruled (item 1 above).
+* Rebased onto origin 2026-11-20 ~14:00 UTC (114 commits incl. the USER's slow-reference fix `08b13f602`);
+  pre-rebase branch kept as `backup/cb-prerebase-20261120`. Conflicts: GT header line, `job_cost.tsv` (took the
+  replayed 1 Drop Burn accept), CLAUDE.md (kept both rulings), `scryfall_reference.json` (key-level union).
+  `check_gt_logs.py` 1345 consistent / 0 stale. Post-rebase Release EXIT 0; unit 3807/3807; scenarios 598/598.
+* RUNNING: post-rebase smoke subset (byte-identity of batches 1+2 on boars/pd/onedropburn/burn/landfall/hinata/
+  redelem/lhc/midrangeburn/goblins + 2HG), log `build/scratch/cb-orch/smoke.log`, marker
+  `build/scratch/cb-orch/SMOKE_DONE`. Integrator 3 (subagent; brief `logs/creature-burn/integrator3-brief.md`):
+  Teetering Peaks + `CreatureBurnProvider` + the pre-ping linebuild token check; waits on SMOKE_DONE before
+  building. Handoff, if any: `logs/creature-burn/integrator3-handoff.md`.
 * NEXT, in order:
-  1. When integrator 2 has committed: `git pull --rebase` onto origin (USER 2026-11-20: origin landed the
-     slow-reference fix `08b13f602`, pay-refine node cap; ~40 commits incl. GT accepts) -> `./build.sh` ->
-     unit + scenarios -> `python3 test/check_gt_logs.py`.
-  2. Integrator 3: Teetering Peaks (ETB target pump axis + land-position-after-haste-cast) + the deck's OWN
-     provider `CreatureBurnProvider`. NOTE: today the deck routes to **RedElementalsProvider** (Hellspark's
-     unearth_cost; pinned in test_pirates_provider.cpp) — derive from that per analyze-deck 4a, signature OR-ed
-     over the new params, `provider_audit.py --check`.
-  3. Stage 3 coverage (all full) -> Stage 4 `analyze_deck.py` profile -> 4-bis suite rows (all 3 tiers; copy the
-     onedropburn shape; `suite_gate.py --cost` vs Hinata 3x) -> Stage 5 (`verify_deck.py`, nonconv/fd-diverge,
-     multi-depth, leaf tie-break, claude-play sweep ~15-20 games, viewer audit 5h, discard buckets 5i).
-  4. Measure + surface: Browbeat's DeckUsesSecondMain cost (d3/d5 ms/game with vs without);
-     Keldon Champion echo boundary gap (`MTG_ECHO_AXIS_STATS=1`).
-* Status timer: session-only cron `7 */2 * * *` (fires 12:37, 14:37 UTC...). Push: slow 12-thread box — join the
-  push queue at most once per 4 h; subagents never push.
+  1. Integrator 3 commits -> Stage 3 coverage (all full) -> Stage 4 `analyze_deck.py` profile -> 4-bis suite rows
+     (all 3 tiers; copy the onedropburn shape; `suite_gate.py --cost` vs Hinata 3x) -> Stage 5 (`verify_deck.py`,
+     nonconv/fd-diverge, multi-depth, leaf tie-break, claude-play sweep ~15-20 games, viewer audit 5h, discard
+     buckets 5i).
+  2. Measure + surface: Browbeat's DeckUsesSecondMain cost (d3/d5 ms/game with vs without); Keldon Champion echo
+     boundary gap (`MTG_ECHO_AXIS_STATS=1`).
+  3. Full Scryfall `audit_card_fields.py --update` re-run (the 2026-11-20 run hit network errors; batch cards were
+     merged via subsets).
+* Status timer: session-only cron `7 */2 * * *`. Push: slow 12-thread box — join the push queue at most once per
+  4 h; subagents never push. Nothing pushed yet this session.
 
 Browbeat policy relabel (USER ruling 2026-11-20, relayed by the coordinator; NO behaviour change): the code comment
 and the cards.json bracket note now read USER-ruled, quoting *"I would probably do the same thing as devil, which
