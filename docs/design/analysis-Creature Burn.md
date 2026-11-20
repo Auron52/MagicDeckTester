@@ -231,3 +231,80 @@ unchanged (1712).
    before a main-2 Browbeat is the same as any attacker's.
 3. `BrowbeatFlipPrePings` assumes 1-damage pingers (all three cards) and does not withdraw while the damage-event
    layer or the noncombat-damage trackers are armed (no deck with a pinger arms them).
+
+## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
+
+Commit `3bb70b590`. Card: **Teetering Peaks** (Scryfall re-fetched; oracle verbatim). Plus the deck's own provider
+(`CreatureBurnProvider`, analyze-deck 4a) and the batch-2 viewer item (Browbeat pre-ping in the composer).
+
+| Card | Tier | cards.json | C++ |
+|---|---|---|---|
+| Teetering Peaks | 3 | `basic_land`, `produces [R]`, `enters_tapped`, `etb_target_creature_pump_power 2` | NEW `CardParams::etb_target_creature_pump_power` / `_toughness`; `ResolveLandEtbTargetPump`; `GameState::deck_has_land_etb_target`; `TurnSolver::LandSlotCounts` |
+
+C++ sites:
+* **The trigger** (`ResolveLandEtbTargetPump`, SpellEffects.h): ONE resolver called from both land-entry sites,
+  `PlayLandCore` (every land drop, both worlds) and `EnterLand` (an effect put), before landfall. Legal set = every
+  creature on the battlefield, either side, minus shroud and an opponent's hexproof creature. Empty -> the trigger is
+  removed (CR 603.3d) and the land just enters tapped. +2/+0 via `temp_power_bonus`.
+* **Sound folds** (`LandEtbPumpReps`): identity (`LandfallTargetFoldKey`), and the INERT class (an opponent's
+  creature, a summoning-sick non-haste creature, anything once `StealCombatOver`). Inert candidates are dropped while
+  an attack-capable candidate exists; otherwise all are one class. Tapped is NOT inert (`CanAttackFull` asked as if
+  untapped: Cinder Pyromancer untaps on a red cast). Pingers keep their own classes.
+* **Searched target**: `Plan::landfall_target_choice` / `LandfallTargetPinFor` reused, emitted in
+  `AppendSubdecisionAxes` on the `deck_has_land_etb_target` stamp (not `deck_has_landfall`) for a plan whose land
+  carries the pump; width = board classes + counted casts/unearths before a positioned land, capped at 4.
+* **Land position (missing capability closed)**: `TurnSolver::LandSlotCounts` counts a HASTE creature cast (hand,
+  graveyard, Vial) for a pump land on a stamped deck, so "Ball Lightning, then Peaks" is enumerable. One predicate for
+  the enumeration, `ApplyPlanDirect`'s slot hook and partitions, the executor's `exec_slot_hook` /
+  `exec_cont_land_hook` / six `LandSlotWatchersFirst` callers, the human `landat=<k>` mapping (CheckLine) and the plan
+  label. `LandOrderMatters` is untouched; the emission opens for `LandOrderMatters || deck_has_land_etb_target`.
+  Every position k = 1..w is emitted (a lossless superset of the brief's k=1), plus the after-the-casts clone for a
+  plan that UNEARTHS ("unearth Hellspark, then Peaks" was otherwise unfindable). Coordinator ruling: keep both (they
+  add search options; sound).
+* **Deck stamp** `deck_has_land_etb_target` (`StampDeckTraits`, default FALSE; a clear bit only withholds variants).
+  `sizeof(GameState)` stays 1712 (padding hole after `deck_has_tap_ping`; verified by compile).
+
+Provider (`CreatureBurnProvider`, DecisionProviders.h/.cpp): derives from `RedElementalsProvider` (the deck's
+previous routing, via Hellspark Elemental's Elemental `unearth_cost`), so every inherited hook is byte-for-byte the
+same. Signature OR over `tap_ping_damage`, `vanishing_counters`, `ltb_damage_any`, `etb_target_creature_pump_power`
+(five cards). **Browbeat's `opp_may_take_damage_instead_of_draw` is NOT in it** (coordinator ruling: a generic red
+burn staple that would capture other burn lists). Routed directly above `redelem`. `Certificate()` = NotAssessed.
+One addition: `LandEtbPumpTargetOrder` puts plain attackers first, pingers after, and the provider prune
+`MTG_CB_PEAKS_PLAIN_FOLD` (EnvOn default ON; off under human play or `MTG_UNPRUNE=peakstarget`) keeps one plain
+class (+2 on any plain attacker is the same +2 under attack-all against the never-blocking goldfish). Routing pin in
+`test_pirates_provider.cpp`: Creature Burn -> CreatureBurn.
+
+Viewer: Bucket A `target` via `g_play_loyalty_chooser` over the FULL legal set (engine pick preselected).
+`audit_viewer_decisions.py` MANIFEST `etb_target_creature_pump_power -> target`; `tools/play/DECISIONS.md` row.
+**Batch-2 item closed:** CheckLine now emits a `preping` sub for Browbeat on a tap-pinger deck (both flip values),
+so the composer's `cast=Browbeat` line asks the choose-variant dimension "Browbeat pre-ping". Before, the flip
+variant shared the base's dedup signature and the human could not pick it. No `linebuild.js` token needed.
+
+Tests: `test/unit/test_creature_burn_batch3.cpp` (8 cases: parse; 3 Mountains + Ball Lightning + Peaks -> the slot-1
+plan exists, BL +2, projected 8 (opp 20 -> 12) vs land-first 6, no slot-1 plan without the stamp; `LandSlotCounts`
+truth table; non-sick Fireslinger +2; only a sick Pyromancer -> one inert rep, no extra damage; no creature -> enters
+tapped, trigger removed, and the `EnterLand` route pumps; fold classes + provider order/prune + pin ranks; axis
+emission with/without the stamp and in main 2). Scenario `cb_teetering_peaks_after_ball_lightning_lethal` (opp 8,
+3 Mountains, BL + Peaks -> T3 win only via the position axis).
+
+Validation (Release, post-change):
+* **Unit 3815/3815; scenarios 599/599.**
+* `provider_audit.py --check` rc 0; routing output IDENTICAL before/after for every audited deck (no other deck
+  holds the signature params). Creature Burn itself is "NOT AUDITED" (no `.profile.json` yet); the unit pin covers it.
+* Coverage: **19/19 `full`.**
+* Audits: `audit_card_costs.py` on Peaks compares nothing (a land has no mana cost; rc 2 "nothing compared" is the
+  expected land result). `audit_card_fields.py --update --cards <Peaks subset>` added Peaks to
+  `scryfall_reference.json` (887 cards; the file was re-sorted by key, content otherwise identical). Offline
+  `audit_card_fields.py` rc 0 (oracle advisories = bracket notes). `audit_viewer_decisions.py --no-sweep` clean.
+* **Smoke byte-identity (no `--accept`)** on redelem, redelem2hg, burn, burn2hg, onedropburn, onedropburn2hg,
+  midrangeburn, midrangeburn2hg, landfall, boars, boars2hg, goblins, goblins2hg: **27/27 PASS, configs changed 0,
+  play-changed 0** (searched and d0).
+
+**Disclosed / surface to the USER:**
+1. Price of Progress cast before vs after Peaks changes OUR life by 2 (Peaks is a nonbasic land); inert in goldfish.
+2. INERT-class premise: nothing in the deck reads a creature's power outside combat damage. A Fling-type card added
+   later must revisit the fold.
+3. `MTG_CB_PEAKS_PLAIN_FOLD` is a provider prune, default ON (sound only under attack-all vs the never-blocking
+   goldfish). The coordinator surfaces it to the USER.
+4. Browbeat is kept out of the provider signature (generic staple).
+5. Land positions: all k plus the unearth clone (beyond the brief's "first haste cast"), kept per coordinator ruling.
