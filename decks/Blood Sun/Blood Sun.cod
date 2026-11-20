@@ -22,19 +22,6 @@
         <card number="1" name="Fastbond"/>
         <card number="2" name="Time Warp"/>
         <card number="4" name="City of Brass"/>
-        <card number="1" name="Worldfire"/>
-    </zone>
-    <zone name="side">
-        <card number="1" name="Comet Storm"/>
-        <card number="2" name="Primeval Titan"/>
-        <card number="2" name="Decree of Pain"/>
-        <card number="1" name="Summer Bloom"/>
-        <card number="1" name="Lotus Field"/>
-        <card number="1" name="Burgeoning"/>
-        <card number="1" name="Painter's Servant"/>
-        <card number="1" name="Grindstone"/>
-        <card number="1" name="Rude Awakening"/>
-        <card number="1" name="Toxic Deluge"/>
-        <card number="1" name="Ziatora's Proving Ground"/>
+        <card number="1" name="Overgrown Tomb"/>
     </zone>
 </cockatrice_deck>

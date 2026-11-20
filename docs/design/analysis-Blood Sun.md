@@ -2,10 +2,10 @@
 
 Deck: `decks/Blood Sun/Blood Sun.cod` (B/R/G/U big-mana land ramp into extra turns), 60 cards:
 4 Blood Sun, 4 Exploration, 2 Burgeoning, 1 Fastbond, 4 Diabolic Revelation, 4 Grim Tutor,
-2 Time Warp, 1 Worldfire, 2 Emrakul the Aeons Torn, 1 Ulamog the Ceaseless Hunger;
+2 Time Warp, 2 Emrakul the Aeons Torn, 1 Ulamog the Ceaseless Hunger;
 lands 4 Lotus Vale, 4 Scorched Ruins, 3 Lotus Field, 4 Golgari Rot Farm, 4 Rakdos Carnarium,
-2 Dimir Machinations, 4 Blooming Marsh, 4 Copperline Gorge, 2 Graven Cairns, 4 City of Brass.
-Sideboard (11 cards) is UNREACHABLE (no wish in the main) and is not scanned.
+2 Dimir Machinations, 4 Blooming Marsh, 4 Copperline Gorge, 2 Graven Cairns, 4 City of Brass, 1 Overgrown Tomb.
+Sideboard removed 2026-11-20 (USER permitted; it was unreachable, no wish in the main).
 
 The USER asked for the analysis on 2026-11-20 ("Let's analyze the Blood Sun deck.").
 
@@ -121,7 +121,10 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   pending from the USER. U2 (how Worldfire is used) is moot. Worldfire stays implemented in cards.json (step 5,
   68cf02b88: generic, tested, harmless to other decks); the decklist is NOT edited until the USER names the
   replacement. Nothing downstream of the list (profile, suite entry, generations) runs on the placeholder list.
+  USER (verbatim): *"I went through the list and it was a placeholder filled by an Overgrown Tomb. Please feel
+  free to update the decklist and even delete the "Sideboard" if you want or if you would really prefer I can
+  save over it."* -> DONE: Worldfire -> Overgrown Tomb (present: `etb_pay_life_to_untap` 2, gated under Blood
+  Sun by step 3), sideboard zone removed; worktree and primary copies identical, CRLF kept.
 
 ## Open USER decisions
-- B2 follow-up: which card replaces the Worldfire placeholder?
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
