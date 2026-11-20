@@ -301,11 +301,14 @@ int MaxGateChecks()
 // verdict still to come in the decision -- the plan being audited and every plan and gate-rejected plan after it
 // -- is reported as CAPPED-DECISION instead (Emit). That class FAILS the mana-clean gate exactly as CAPPED does:
 // a plan nobody checked is a plan nobody has shown clean. MTG_MANA_ORACLE_DECISION_S = the budget in priced
-// seconds (default 600); 0 = unbounded. The Gods 2026-11-15 cap repros
-// completed at 205/264/560 priced seconds; 300 truncated all three.
+// seconds (default 1300); 0 = unbounded. The Gods 2026-11-15 cap repros
+// completed at 205/264/560 priced seconds; 300 truncated all three. Raised 600 -> 1300 (USER 2026-11-20, "we can
+// do it if this is just the analyzer and won't take an incredible amount of time to run"): Goblins s30131075 T2
+// m2 concludes all 446 plans in ~2.1x the 600 budget after the goal fold (docs/design/goblins-oracle-eat-fold-
+// 2026-11-19.md section 5). The oracle never feeds play, so this moves only the gate's cost and verdicts.
 long long DecisionCapNs()
 {
-    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_DECISION_S", 600))) * 1000000000LL;
+    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_DECISION_S", 1300))) * 1000000000LL;
     return v;
 }
 thread_local long long t_dec_applies = 0;    // applies made by the decision being audited (reported)

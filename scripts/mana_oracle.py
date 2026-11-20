@@ -51,7 +51,7 @@ WHAT = {
     "ORACLE-GAP": "the oracle could not reproduce the engine's own outcome -- the oracle is incomplete here",
     "UNMODELED": "the oracle cannot drive something this plan needs, so it gives no verdict",
     "CAPPED": "the payment search hit MTG_MANA_ORACLE_NODES and then the _RETRY escalation (400000); the complete side is partial",
-    "CAPPED-DECISION": "the decision spent its priced work budget (MTG_MANA_ORACLE_DECISION_S, default 300 priced s) before this plan's audit "
+    "CAPPED-DECISION": "the decision spent its priced work budget (MTG_MANA_ORACLE_DECISION_S, default 1300 priced s) before this plan's audit "
                        "finished, so it has no verdict",
     "PHANTOM": "the menu offers a plan no order or payment realises (search noise, not a miss)",
     "CONTINUATION-DIFFERS": "the engine dropped a continuation cast; the oracle's payable lines continued differently",
