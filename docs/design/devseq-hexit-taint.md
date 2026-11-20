@@ -75,5 +75,6 @@ to be recorded where it is taken.
   cell): Accomplished Alchemist -0.0840 (t -10.68, 86/4 chunks); every other deck 0 or faster except Unpredictable
   Cyclone +0.0007 (one game), which is `MTG_SITE9_AFTER_DEFERRED` re-pricing the budget and recovers at b40 and at d8
   b0 (see `aa-staff-in-hand-loop-cast-draw.md`). Neither audited slower game (Cyclone gi126, AA gi143) moves with this lever.
+* **Tiers** (tiers7, all levers on): every smoke / regression aggregate at or below GT, accepted in `56b6be550`.
 * Units: unit test "deviation sequences: a first-pass horizon exit past a latent turn is dirty"; full suite 3784/3784
   (chain7).
