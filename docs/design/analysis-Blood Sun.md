@@ -64,6 +64,14 @@ entry: >= 4 remaining drops + 11 mana -> Revelation X=6 {Ruins x4 | Ruins x3 + L
 Revelation} -> 15-16 mana -> Emrakul -> loop. Scenario test.
 USER (verbatim): *"(naturally you can also get exploration or fastbond and play it if you have the mana
 to do so)"* -> drops can be bought inside the go-off turn ({G} per Exploration/Fastbond).
+USER (verbatim): *"(to make it possible to reach those land drops in one turn)"*; *"But if you cannot
+reach that, there is the extra time warp you can get in the same way to build up your lands."*
+Parent summarised the ladder: (1) reach Emrakul this turn -> go off; (2) else reach a Time Warp extra
+turn keeping a Revelation; (3) else ordinary search, ramp-first order. USER (verbatim): *"We will
+probably still heuristically prune the regular search case, but having this go-off should help. Note
+that 2 should also be included in the go-off. There is always a bridge to 1 if you can do 2."* ->
+go-off = (1) + (2); (3) gets a provider prune (prune-adoption bar). Design to check the "always a
+bridge" claim against the 2-Time-Warp limit and report any residual gap to the USER.
 
 
 ## Standing decisions (pass to every subagent)
