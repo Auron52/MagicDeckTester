@@ -117742,7 +117742,7 @@ namespace gamelc
     inline std::atomic<long long> g_ver_kind[5]{}, g_ver_printed{0}, g_ver_material{0};
     struct StoreCtx { int turn, depth, cutoff, nest; long long used; };   // verify-only diagnostics
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
-    inline thread_local TranspositionTable::Key t_hit_key{};
+
     inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; tier1::Set(tier1::kGameLc, 0); }
     // The leaf a node at `state` scores its depth-0 leaves with: 0 the heuristic rollout, 1 the value model, 2 NO
     // leaf (a forced constant leaf, or the no-leaf stand-in model). `vm` mirrors the leaf code in FSLineWin exactly.
@@ -118121,6 +118121,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool gamelc_hit = false; int gamelc_hit_win = 0;   // MTG_GAME_LINE_CACHE_VERIFY: the cached answer to check
     bool lf_hit = false;                               // ...and it was a P18f leaf-free answer
     bool inwin_hit = false; int inwin_hit_win = 0;     // MTG_INWIN_CACHE_VERIFY: the cached answer to check
+    TranspositionTable::Key inwin_hit_key{};           // ...and its no-win entry (store provenance, inwin::t_ctx)
     int pastcut_cached = 0;                            // MTG_FSL_PASTCUT_VERIFY: the memo win being re-searched
     struct GamelcUnreached { const bool& hit; bool done = false; ~GamelcUnreached()
         { if (hit && !done) { gamelc::g_ver_unreached.fetch_add(1, std::memory_order_relaxed); } } } gamelc_unreached{ gamelc_hit };
@@ -118251,7 +118252,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             else
             {
                 auto in = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
-                if (inwin::Verify() && in != inwin::t_map.end()) { inwin::t_hit_key = in->first; }
+                if (inwin::Verify() && in != inwin::t_map.end()) { inwin_hit_key = in->first; }
                 // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
                 // this node's window would also count wins its leaf finds there, and the rollout plays lines a
                 // provider prunes from the menu (verify, 2026-11-10: FiveColour 2HG, turn 5 depth 1 cutoff 6 -- a
@@ -121298,7 +121299,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                   << " turn=" << state.turn_number << " depth=" << depth << " cutoff=" << cutoff
                                   << " cached=" << inwin_hit_win << " fresh=" << best.win_turn << " nest=" << g_fsline_nest
                                   << " leaf=" << gamelc::LeafCode(state);
-                        auto sc = inwin::t_ctx.find(inwin::t_hit_key);
+                        auto sc = inwin::t_ctx.find(inwin_hit_key);
                         if (sc != inwin::t_ctx.end())
                         { std::cerr << " | stored: turn=" << sc->second.turn << " depth=" << sc->second.depth << " cutoff=" << sc->second.cutoff
                                     << " nest=" << sc->second.nest << " leaf=" << sc->second.leaf << " sup=" << sc->second.sup
