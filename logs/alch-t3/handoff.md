@@ -101,3 +101,15 @@ names; streams batch output to files; `--report <dir>` re-prints per-cell and pe
 - chain6: units 3723/3723, combo_off 51/51; acc_all T3, acc_notaint T4, nos9d/noburst T3, notlast/norank/nofloat T4.
 - tiers6 (57b56d62c): 349 pass / 19 FAIL vs stale GT; AA cells all faster (smoke d5 4.94->4.84, reg d5_s3003
   5.0400->4.9371 ...). Non-AA movers all s9d (attr6/out.txt).
+
+## UPDATE 19:04 UTC (agent 7, after handoff): chain7 PASSED the gate; A/B RUNNING (started 19:03:37)
+- Rebased build rc=0; units 3784/3784; acceptance acc_all / play_off / play_heur all **T3**; all 26 `aa_*` scenarios
+  PASS incl. the new `aa_s9d_replay_segments_staff_ezuri_t4` (T4).
+- d8 b0: gi12 6 (=s9d0 6, was 7), gi40 5 (=5, was 6), gi87 4 (=4, was 5) -> **all three recover** with the fix.
+- AA tier settings: gi12 6 (old GT 6), gi40 5 (5), gi87 4 (4), gi143 **7** (old 6; recovered 6 at d8 b0 in audit6).
+- 32 non-AA movers, tier settings, rebased binary (`chain7/verify.out` vs `attr6/out.txt`): none slower than s9d0;
+  still faster: goblins2hg gi17, goblins gi3, martyr d3/d5 gi5, mazesend gi166/gi179/smoke gi55, melira gi110/gi126;
+  newly faster mazesend smoke gi127 5->4; no longer faster cyclone2hg gi10 (6), cyclone d5_s3003 gi125 (5);
+  Snow smoke gi81 now 6 (was the one slower game). Rebase confounds the comparison (upstream changes).
+- NEXT AGENT: check the `[batch] heartbeat` in `a7/ab7/batch.stderr` (first one due ~19:13 UTC; none yet at 19:04),
+  then wait on `a7/chain7/DONE`; tiers7 follows automatically (`a7/tiers7/DONE`).
