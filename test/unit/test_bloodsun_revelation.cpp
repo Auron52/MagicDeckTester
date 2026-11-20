@@ -13,6 +13,7 @@
 #include "core/RevelationPackages.h"
 #include "core/SpellEffects.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
@@ -228,4 +229,89 @@ TEST_CASE("revelation generator-stop: a wave-0 win this round generates no wave 
     won = false;
     CHECK(run({ "Forest", "Island", "Plains", "Mountain", "Lightning Bolt" }, won) > 0);
     CHECK(won);
+}
+
+// ---- Step 6 part 2: every host reaches every package (completeness at an unlimited budget) --------------------------
+namespace
+{
+// 7 mana (six Swamps + a Mountain), opponent at 3: Revelation X = 1 for Lightning Bolt, then Bolt, is the only kill.
+// Bolt is ordinal 4 of X = 1 (the four lands rank first), so its package is WAVE 1: no host finds it from wave 0.
+GameState WaveOneBolt6()
+{
+    GameState s = Base6();
+    s.players[1].life = 3;
+    for (int k = 0; k < 6; ++k) { Put6(s, "Swamp", 10 + k); }
+    Put6(s, "Mountain", 20);
+    s.players[0].hand.push_back(Card6("Diabolic Revelation", 1));
+    const std::vector<std::string> lib = { "Forest", "Island", "Plains", "Mountain", "Lightning Bolt" };
+    for (std::size_t k = 0; k < lib.size(); ++k) { s.players[0].library.push_back(Card6(lib[k], 100 + static_cast<int>(k))); }
+    return s;
+}
+// A Revelation cast whose package holds the Bolt ({Bolt} at X = 1, or {Bolt, Mountain} at X = 2: the Mountain is the
+// land drop that pays for the Bolt), at wave >= min_wave.
+bool IsBoltPackage6(const Action& a, int min_wave)
+{
+    if (a.card_name.str() != "Diabolic Revelation" || !revpkg::IsPackage(a.tutor_target.str())) { return false; }
+    std::vector<std::string> names = revpkg::DecodePackage(a.tutor_target.str());
+    std::sort(names.begin(), names.end());
+    const bool kill = names == std::vector<std::string>{ "Lightning Bolt" }
+                   || names == std::vector<std::string>{ "Lightning Bolt", "Mountain" };
+    return revpkg::PackageWave(a.tutor_target.str()) >= min_wave && kill;
+}
+}   // namespace
+
+TEST_CASE("revelation waves, executor fallback host (SolveWithLookahead): a wave-1-only package is reached")
+{
+    const GameState s = WaveOneBolt6();
+    TurnSolver::ResetRevelationWaveCountersForTest();
+    int win = -1;
+    const TurnSolver::Plan p = TurnSolver::SolveWithLookahead(s, /*is_pre_combat=*/true, /*depth=*/1, /*max_turns=*/8,
+                                                              nullptr, /*enforce_budget=*/true, false, nullptr, &win);
+    bool bolt = false;
+    for (const Action& a : p.actions) { bolt = bolt || IsBoltPackage6(a, 1); }
+    CHECK(bolt);
+    CHECK(win == s.turn_number);
+    CHECK(TurnSolver::RevelationWavePackagesForTest() > 0);
+}
+
+TEST_CASE("revelation waves, exhaustive menu host (EnumerateMainPlansExhaustive): the wave-1 package is on the menu")
+{
+    const GameState s = WaveOneBolt6();
+    bool truncated = true;
+    int n_bolt = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, &truncated))
+    { for (const Action& a : p.actions) { if (IsBoltPackage6(a, 1)) { ++n_bolt; } } }
+    CHECK_FALSE(truncated);
+    CHECK(n_bolt >= 1);
+    // Wave 0 alone does not hold it (the package really is beyond wave 0).
+    int n_bolt0 = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    { for (const Action& a : p.actions) { if (IsBoltPackage6(a, 0)) { ++n_bolt0; } } }
+    CHECK(n_bolt0 == 0);
+}
+
+TEST_CASE("revelation waves, breakpoint continuation host: the wave-k continuation list holds the wave-k packages")
+{
+    // A continuation list (the one a breakpoint's continuation, in the rollout AND the executor, indexes) admits wave 0;
+    // the wave-k list (Plan::rv_cont_wave) holds exactly wave k's tranche. The kill package is wave 1 here.
+    const GameState s = WaveOneBolt6();
+    int kill0 = 0, kill1 = 0, other_wave1 = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateBreakpointPlans(s, true))
+    { for (const Action& a : p.actions) { if (IsBoltPackage6(a, 0)) { ++kill0; } } }
+    const std::vector<TurnSolver::Plan> w1 = TurnSolver::EnumerateBreakpointPlansAtWave(s, true, 1);
+    for (const TurnSolver::Plan& p : w1)
+    {
+        int maxw = -1;
+        for (const Action& a : p.actions)
+        {
+            if (IsBoltPackage6(a, 1)) { ++kill1; }
+            if (revpkg::IsPackage(a.tutor_target.str())) { maxw = std::max(maxw, revpkg::PackageWave(a.tutor_target.str())); }
+        }
+        if (maxw != 1) { ++other_wave1; }
+    }
+    CHECK(kill0 == 0);
+    CHECK(kill1 >= 1);
+    CHECK(other_wave1 == 0);   // the tranche filter: every wave-1 continuation carries a wave-1 package
+    // A different wave is a different (cached) list, and asking again serves the same one.
+    CHECK(TurnSolver::EnumerateBreakpointPlansAtWave(s, true, 1).size() == w1.size());
 }

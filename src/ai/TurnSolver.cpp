@@ -5768,6 +5768,9 @@ struct BpEnumEntry
     // MTG_BP_TUTOR_PIN_ALIAS: the derivation that built this list never read the searched tutor pin
     // (core/SpellEffects.h tutorpin), so the list is valid under EVERY pin value -- see BpEnumEntryFor.
     bool tutor_pin_unread = false;
+    // Blood Sun step 6 (revwave): a Diabolic Revelation in this list held packages past the wave it was derived at
+    // (a later continuation wave has more). False for every deck without a tutor_up_to_x card.
+    bool rv_more = false;
     // MTG_BP_ENUM_LIBCHECK stamps (diagnostic; written only under the flag -- see bplibcheck):
     // the PHYSICAL library order (card numbers) and the NAME order the entry was derived under, and
     // the thread's game ordinal. The key folds the name order already (BuildSimKey's ordered
@@ -5978,6 +5981,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
                            TranspositionTable::Key* out);
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key = nullptr);
+static BpEnumEntry* BpEnumEntryForWave(const GameState& state, bool is_pre_combat, int wave);   // Blood Sun step 6
 // (MTG_BP_EMPTY_ARM deleted 2026-09-30: the EMPTY continuation is always a wave-0 arm at every
 // breakpoint index -- see the emission site in the wave-0 fan-out.)
 
@@ -43036,6 +43040,40 @@ namespace revwave
         }
         return false;
     }
+    // The highest package wave among a plan's Revelation casts (-1: none). A wave-k tranche keeps exactly the plans
+    // whose value is k, so wave 0 and the tranches partition the package space (multi-Revelation plans included).
+    inline int PlanMaxWave(const TurnSolver::Plan& v)
+    {
+        int w = -1;
+        for (const Action& a : v.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || !revpkg::IsPackage(a.tutor_target.str())) { continue; }
+            w = std::max(w, revpkg::PackageWave(a.tutor_target.str()));
+        }
+        return w;
+    }
+    // ---- BREAKPOINT CONTINUATION waves (step 6 part 2) ----------------------------------------------------------
+    // A continuation list is derived (and cached) per state; a Revelation inside it admits wave 0 only. A plan whose
+    // Plan::rv_cont_wave = k > 0 reads its TARGETED occurrence (bp_at) from the wave-k list instead: the same
+    // derivation with waves 0..k admitted, keeping wave k's tranche only (BpDeriveContinuationList). `t_cont_wave`
+    // carries k into that derivation's own frame (a nested derivation sees 0); BpEnumBuildKey folds the admitted
+    // wave, so the wave-k list is its own cache entry. Hosts walk the waves (RevContWaves) only when one of their
+    // own searched applies read a list that held packages past its wave: ContPendScope counts those reads (a nested
+    // host pushes its own scope; a playout apply below the host's rollout nest is not counted).
+    inline thread_local int t_cont_wave = 0;
+    struct ContPendScope
+    {
+        long long n = 0;
+        int nest;
+        ContPendScope* prev;
+        explicit ContPendScope(int rollout_nest);
+        ~ContPendScope();
+    };
+    inline thread_local ContPendScope* t_cont_scope = nullptr;
+    inline ContPendScope::ContPendScope(int rollout_nest) : nest(rollout_nest), prev(t_cont_scope) { t_cont_scope = this; }
+    inline ContPendScope::~ContPendScope() { t_cont_scope = prev; }
+    inline void NoteContPending(int rollout_nest)
+    { if (t_cont_scope != nullptr && t_cont_scope->nest == rollout_nest) { ++t_cont_scope->n; } }
 }
 
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
@@ -75821,8 +75859,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // every apply, which perf put at 25.6% of a pathological Fungus label game.
             // The memo ENTRY, not just its list: the demoted list (MTG_BP_NEW_ONLY_DEMOTE) lives
             // beside it. Same lookup EnumerateBreakpointPlansRef makes, same lifetime contract.
+            // Blood Sun step 6: a continuation-wave variant (Plan::rv_cont_wave) reads its TARGETED occurrence from
+            // the wave-k list; every other occurrence, and every other plan, reads the ordinary one.
+            const int rv_w = (plan.rv_cont_wave > 0 && !plan.bp_all && seen_before == plan.rv_cont_at)
+                           ? static_cast<int>(plan.rv_cont_wave) : 0;
             BpEnumEntry* const bp_ent = [&]
-            { bpuse::ReasonScope _bu(bpuse::kEligible); return BpEnumEntryFor(state, is_pre_combat); }();
+            { bpuse::ReasonScope _bu(bpuse::kEligible);
+              return rv_w > 0 ? BpEnumEntryForWave(state, is_pre_combat, rv_w) : BpEnumEntryFor(state, is_pre_combat); }();
+            // A Revelation in this list held packages past its wave: the enclosing host walks the next wave.
+            if (bp_ent->rv_more) { revwave::NoteContPending(g_rollout_nest); }
             // M1: the list is read through its VIEW -- a lazy entry's put-back / Ponder / look-top clones are
             // synthesised per position (operator[]: a small ring; CopyTo: straight into `out`).
             const CandSeq cands = bp_ent->View();
@@ -96329,8 +96374,9 @@ public:
                  const TranspositionTable::Key* node_key,
                  const std::unordered_set<std::size_t>* no_bp,
                  bool host_pends,
-                 const std::unordered_set<std::size_t>* canon_bases = nullptr)
-        : m_known_n(known_n), m_node_key(node_key)
+                 const std::unordered_set<std::size_t>* canon_bases = nullptr,
+                 int rv_wave = 0)
+        : m_known_n(known_n), m_node_key(node_key), m_rv_wave(rv_wave)
     {
         // A SEARCHED apply: outside a playout and outside a continuation-list derivation, the two
         // places MTG_BP_BASE_CANON stands down (BpUnbranchedCanon). It is exactly where a base plan's
@@ -96344,6 +96390,11 @@ public:
         // the sequences are relative to. Rides on nested discovery, whose generalisation it is.
         m_devseq = searched_apply && BpDevSeqOn() && BpNestDiscover() && g_devseq_suppress == 0;
         m_devseq_all = m_devseq && BpDevSeqAllOn();
+        // Blood Sun step 6: a CONTINUATION-WAVE walker (rv_wave = k > 0; RevContWaves) hands out the wave-k ranks of
+        // each slot. The EMPTY arm and the demoted wave are the wave-0 walker's (they read the wave-0 list), so they
+        // stay there; the deviation sequences stay ON -- they are how a breakpoint NESTED after a wave-k continuation
+        // (the Revelation's own resolution) is branched with the wave-k choice held (Plan::rv_cont_at).
+        if (m_rv_wave > 0) { m_empty = false; m_demote = false; }
         const int  sites  = (!host_pends && searched_apply && BpWaveUnhostedSitesOn())
                           ? BpSiteMask() : BpWaveSiteMask(state);
         const bool dig_bp = BpDigFanoutPending(state, sites);
@@ -96458,7 +96509,18 @@ public:
     {
         for (;;)
         {
-            if (NextLive(plans, out)) { return true; }
+            if (NextLive(plans, out))
+            {
+                if (m_rv_wave > 0)   // Blood Sun step 6: the wave slot's occurrence = the first deviation
+                {
+                    int at = out.bp_at;
+                    for (std::size_t i = 0; i < out.bp_pre.size() && static_cast<int>(i) < out.bp_at; ++i)
+                    { if (out.bp_pre[i] >= 0) { at = static_cast<int>(i); break; } }
+                    out.rv_cont_wave = static_cast<std::int8_t>(m_rv_wave);
+                    out.rv_cont_at   = static_cast<std::int8_t>(at);
+                }
+                return true;
+            }
             if (m_deferred.empty()) { return false; }
             // Every slot of the previous deviation wave has retired. Keeping those Slots
             // made a long compound walk retain every old Plan prefix and scan them on each
@@ -96879,6 +96941,7 @@ private:
 
     const KnownLens*         m_known_n = nullptr;   // MTG_BP_WAVE_NSKIP; nullptr = off
     const TranspositionTable::Key* m_node_key = nullptr;   // MTG_BP_NSKIP_GLOBAL; nullptr = off
+    int                      m_rv_wave = 0;      // Blood Sun step 6: > 0 = a continuation-wave walker (RevContWaves)
     std::vector<Slot>        m_slots;
     std::size_t              m_slot_offset = 0;  // number of retired slots; compound cache ids stay unique
     std::vector<std::string> m_retired_desc;     // MTG_DEV_SEQ_STATS only
@@ -121246,6 +121309,79 @@ static bool LastPlyFoldHere(const GameState& s)
         && FsNextLeafConstant(s) && !OpponentHasLost(s);
 }
 
+// ---- DIABOLIC REVELATION PACKAGE WAVES: the shared host helpers (Blood Sun step 6; revwave, design §4.4) -------------
+// Every host that enumerates main-phase plans runs the same two phases after its own loop (FSLineWin,
+// SolveWithLookahead) or inside its enumeration (EnumerateMainPlansExhaustive), so the waves live here once.
+//
+// RevWaveTranche -- one wave of the HOST'S OWN plan list. Re-enumerates through the host's own call (`enumerate`,
+// which applies the host's parity guards) with waves 0..k admitted, keeps ONLY the plans whose highest-wave
+// Revelation cast is wave k (revwave::PlanMaxWave; wave 0 and the tranches partition the package space exactly),
+// and PRICES the wave: one decision unit per package its enumeration emitted. ChargeDecisionUnits returns at once
+// with no budget, so an unlimited budget drains every wave and a finite one reaches proportionally further.
+// `more`: the enumeration left packages for wave k+1.
+template <class EnumFn>
+static std::vector<TurnSolver::Plan> RevWaveTranche(int k, SearchBudget* budget, bool& more, EnumFn&& enumerate)
+{
+    const revwave::State saved = revwave::g_state;
+    revwave::g_state = revwave::State{ k, false, 0 };
+    std::vector<TurnSolver::Plan> tp = enumerate();
+    more = revwave::g_state.pending;
+    const long long emitted = revwave::g_state.admitted;
+    revwave::g_state = saved;
+    revwave::g_phase_packages.fetch_add(emitted, std::memory_order_relaxed);
+    TurnSolver::ChargeDecisionUnits(budget, static_cast<int>(std::min<long long>(emitted, INT_MAX)));
+    tp.erase(std::remove_if(tp.begin(), tp.end(),
+                            [k](const TurnSolver::Plan& v) { return revwave::PlanMaxWave(v) != k; }), tp.end());
+    return tp;
+}
+// RevContWaves -- the BREAKPOINT CONTINUATIONS' waves. A Revelation reached only after a breakpoint (Grim Tutor
+// finding it, a draw) is cast from the continuation list, which admits wave 0 only. Wave k hands out, for every
+// breakpoint slot of the host's base plans, the ranks of the wave-k continuation list (Plan::rv_cont_wave = k: the
+// targeted occurrence reads it, in the rollout and the executor alike), through the ordinary deferred walker, so
+// nested breakpoints and the dedup work as in every other wave. Runs only when one of the host's own searched applies
+// read a list that held packages past its wave (`pend`, revwave::ContPendScope), and the next wave only when a wave-k
+// list held more. Priced one decision unit per continuation handed out (inert with no budget); stops at AnytimeStop
+// and, THE GENERATOR-STOP, once `round_won()` (the node's best line wins this round: no package can improve it).
+// `score(v, won)`: the host's scorer (false = the budget stopped it; won = v wins outright, the host returns it).
+// Returns true with `won_plan` set on an outright win.
+template <class ScoreFn, class StopFn>
+static bool RevContWaves(const GameState& state, const CandSeq& plans, std::size_t limit, SearchBudget* budget,
+                         const revwave::ContPendScope& pend, ScoreFn&& score, StopFn&& round_won,
+                         TurnSolver::Plan& won_plan)
+{
+    if (pend.n == 0) { return false; }
+    std::vector<TurnSolver::Plan> bases;   // the base plans; bp_wave0 cleared so every slot opens at rank 0
+    const std::size_t lim = std::min(limit, plans.size());
+    for (std::size_t i = 0; i < lim; ++i)
+    {
+        if (plans[i].bp_choice >= 0) { continue; }
+        bases.push_back(plans[i]);
+        bases.back().bp_wave0 = false;
+    }
+    if (bases.empty()) { return false; }
+    for (int k = 1; k < 60; ++k)
+    {
+        if (round_won()) { revwave::g_phase_round_win_stops.fetch_add(1, std::memory_order_relaxed); break; }
+        if (AnytimeStop(budget)) { ++g_fs_trunc_events; break; }
+        const long long n0 = pend.n;
+        BpWaveWalker w(state, bases, bases.size(), nullptr, nullptr, nullptr, /*host_pends=*/false, nullptr, k);
+        TurnSolver::Plan v;
+        bool stop = false;
+        while (w.Next(bases, v))
+        {
+            TurnSolver::ChargeDecisionUnits(budget, 1);   // the price: one unit per wave-k continuation handed out
+            revwave::g_phase_packages.fetch_add(1, std::memory_order_relaxed);
+            bool won = false;
+            if (!score(v, won)) { stop = true; break; }
+            w.Report(bases, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last);
+            if (won) { won_plan = v; return true; }
+            if (round_won()) { break; }
+        }
+        if (stop || pend.n == n0) { break; }
+    }
+    return false;
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
@@ -122181,6 +122317,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                           // enumerations would otherwise leak into it)
     std::vector<TurnSolver::Plan> pre;
     bool rv_pending = false;   // Diabolic Revelation packages past wave 0 (the Revelation wave phase below)
+    revwave::ContPendScope rv_cont(g_rollout_nest);   // ...and in a breakpoint continuation (RevContWaves)
     // MTG_PB_LAZY_CANDS (see PbLazyLayout): this node's put-back clone block is held as one prototype per
     // fan, and the list is read through `pre_view` in the order the code below gives it (CandOrder).
     // Under DupeTraceOn / the census diagnostics the list stays whole.
@@ -124451,18 +124588,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // state at round R wins before R, so no later package can improve the objective (a this-turn kill returned
     // above already). Skipped at beam-cut nodes for the group waves' reason. Inert unless a tutor_up_to_x card was
     // enumerated with packages past wave 0 (rv_pending), i.e. for every deck without Diabolic Revelation.
-    if (rv_pending && !beam_here)
+    if ((rv_pending || rv_cont.n > 0) && !beam_here)
     {
-        auto max_rev_wave = [](const TurnSolver::Plan& v) -> int
-        {
-            int w = -1;
-            for (const Action& a : v.actions)
-            {
-                if (a.kind != Action::Kind::CastFromHand || !revpkg::IsPackage(a.tutor_target.str())) { continue; }
-                w = std::max(w, revpkg::PackageWave(a.tutor_target.str()));
-            }
-            return w;
-        };
         // Score one wave plan (the group-wave tranche scorer's contract: strictly-better only; a this-turn win
         // returns from the node). Returns false when the budget stopped the phase.
         auto score_rev_plan = [&](const TurnSolver::Plan& v, std::vector<Action>& bp_out, bool& won_now) -> bool
@@ -124514,27 +124641,23 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         };
         std::vector<Action> rv_bp;
         bool rv_won = false;
-        for (int k = 1; k < 60; ++k)
+        for (int k = 1; rv_pending && k < 60; ++k)
         {
             // THE GENERATOR-STOP: this node already wins this round -- no package can improve on it.
             if (best.win_turn <= state.turn_number)
             { revwave::g_phase_round_win_stops.fetch_add(1, std::memory_order_relaxed); break; }
             if (AnytimeStop(budget)) { ++g_fs_trunc_events; break; }
-            revwave::g_state = revwave::State{ k, false, 0 };
-            g_bp_root_enum = bp_root;
-            const bool fresh_prev = g_fresh_axis_enum;
-            g_fresh_axis_enum = true;   // wave 0's enumeration ran with the fresh axis open (the GwParity reason)
-            std::vector<TurnSolver::Plan> tp = EnumeratePlansWithLand(state, true);
-            g_fresh_axis_enum = fresh_prev;
-            g_bp_root_enum = false;
-            const bool more = revwave::g_state.pending;
-            const long long emitted = revwave::g_state.admitted;
-            revwave::g_state = revwave::State{};
-            revwave::g_phase_packages.fetch_add(emitted, std::memory_order_relaxed);
-            // The price: one decision unit per package the wave's enumeration emitted.
-            TurnSolver::ChargeDecisionUnits(budget, static_cast<int>(std::min<long long>(emitted, INT_MAX)));
-            tp.erase(std::remove_if(tp.begin(), tp.end(),
-                                    [&](const TurnSolver::Plan& v) { return max_rev_wave(v) != k; }), tp.end());
+            bool more = false;
+            std::vector<TurnSolver::Plan> tp = RevWaveTranche(k, budget, more, [&]
+            {
+                g_bp_root_enum = bp_root;
+                const bool fresh_prev = g_fresh_axis_enum;
+                g_fresh_axis_enum = true;   // wave 0's enumeration ran with the fresh axis open (the GwParity reason)
+                std::vector<TurnSolver::Plan> e = EnumeratePlansWithLand(state, true);
+                g_fresh_axis_enum = fresh_prev;
+                g_bp_root_enum = false;
+                return e;
+            });
             MoveOrderPlans(tp);
             bool rv_stop = false;
             for (const TurnSolver::Plan& v : tp)
@@ -124558,6 +124681,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
             if (rv_stop || !more) { break; }
+        }
+        // The BREAKPOINT CONTINUATIONS' waves (RevContWaves): a Revelation cast after a breakpoint, over this node's
+        // base plans (the bp walker's `scanned` limit: the beam's carve-out is respected).
+        if (best.win_turn > state.turn_number && BpWavesHere(budget))
+        {
+            TurnSolver::Plan rv_wp;
+            if (RevContWaves(state, pre_view, scanned, budget, rv_cont,
+                             [&](const TurnSolver::Plan& v, bool& won) { return score_rev_plan(v, rv_bp, won); },
+                             [&] { return best.win_turn <= state.turn_number; }, rv_wp))
+            { return won_line(rv_wp, rv_bp); }
         }
     }
 
@@ -130710,8 +130843,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // stay filtered; that is where the savings live. The 100-game census never saw an
         // executed-m2 root drop, so this is insurance for the tail, not a behaviour change.
         CondemnSuppressGuard _csg_root(enforce_budget);
+        revwave::g_state.pending = false;   // Blood Sun step 6: did a Revelation hold packages past wave 0?
         candidates = EnumeratePlansWithLand(state, is_pre_combat, pb_lazy_req ? &pb_lazy : nullptr);
     }
+    const bool rv_pending = revwave::g_state.pending;
+    revwave::ContPendScope rv_cont(g_rollout_nest);   // ...and in a breakpoint continuation (RevContWaves)
     g_bp_root_enum = false;
     const int gw_dropped = groupwave::g_state.max_dropped;
     CandSeq cands(candidates, &pb_lazy);   // reads pb_lazy live: a materialised layout falls back to the vector
@@ -130851,6 +130987,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // re-enumerating per pass and skips the repeated odometer walks.
     std::vector<std::vector<Plan>> gw_tranches;
     bool gw_built = false, gw_build_truncated = false;
+    // Revelation package-wave tranches (Blood Sun step 6; RevWaveTranche): built lazily, one wave at a time, by the
+    // first pass that reaches it, and rescored by every later pass at its sub_depth (the group-wave reason).
+    std::vector<std::vector<Plan>> rv_tranches;
+    bool rv_more_waves = rv_pending;
 
     const bool   gate         = enforce_budget && budget != nullptr;
     // A nested solve under a finite budget honours a tripped overrun ceiling (see LaNestedBailOn).
@@ -133026,6 +133166,80 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
         }
 
+        // Score one deferred plan/variant at this pass's sub_depth (the bp wave body's contract): the group-wave
+        // tranches and the Revelation package waves below share it.
+        // Returns false when the budget stopped the phase; won_out set => caller returns v.
+        auto score_gw = [&](const Plan& v, bool& won_out) -> bool
+        {
+            won_out = false;
+            if (AnytimeStop(budget))
+            { ++g_fs_trunc_events;
+              if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
+              return false; }
+            ConsumeAt(budget, unitsite::kLookaheadGroupWave);
+            nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
+            if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
+            PROF_INC(gamestate_copies);
+            GameState copy = state;
+            g_bp_cands_last = 0;
+            g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;   // MTG_BP_DEV_SEQ
+            if (is_pre_combat)
+            {
+                ApplyPlanDirect(copy, v, true);
+                // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
+                // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
+                {
+                    const TranspositionTable::Key raw = BuildDedupKey(copy);
+                    if (LandTwinDup(bp_seen_states, bp_twins, copy, raw, EotHoldFoldKey(raw, v),
+                                    [&](const TranspositionTable::Key& k) { return EotHoldFoldKey(k, v); }))
+                    { return true; }
+                }
+                if (EotHoldTwinInert(v, copy)) { return true; }   // an inert Soulstoke-hold twin
+                { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
+                if (OpponentHasLost(copy)) { won_out = true; return true; }
+                if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
+                    || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
+                {
+                    if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                second_main, tt, /*in_rollout=*/false))
+                    { won_out = true; return true; }
+                }
+            }
+            else
+            {
+                ApplyPlanDirect(copy, v, false);
+                RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
+                if (OpponentHasLost(copy)) { won_out = true; return true; }
+                if (LandTwinDup(bp_seen_states, bp_twins, copy)) { return true; }
+            }
+            if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
+            {
+                ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
+                return true;
+            }
+            if (ko) { ko_rolled = true; }
+            // The crossing-land digit (Maze's End I3b; see BoundaryChooseCrossingLandsByRollout).
+            const BoundaryChoice gw_bc = BoundaryChooseCrossingLandsByRollout(
+                copy, sub_depth, max_turns, budget, pass_has_best ? pass_best_win : max_turns + 1, second_main, tt);
+            if (!SimulateEndAndStartNextTurn(copy)) { return true; }
+            if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
+            { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } return true; }
+            const int gw_cutoff = (tie_prune_here && pass_has_best && LaTieTightenOn()
+                                   && pass_best_win <= max_turns)
+                                ? pass_best_win - 1 : pass_best_win;
+            const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
+                                               gw_cutoff, second_main, tt);
+            bp_twins.Close(true, win_turn);   // P5b-3: this tranche plan's evaluation ends here
+            // STRICTLY better only -- same reasoning as the bp wave phase above.
+            if (pass_has_best && win_turn >= pass_best_win) { return true; }
+            if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+            pass_best_win = win_turn;
+            pass_best     = v;
+            RecordBoundaryChoice(pass_best, gw_bc);
+            pass_has_best = true;
+            return true;
+        };
+
         // ---- DEFERRED GROUP WAVES (see groupwave / the FSLineWin twin phase) ---------------------
         // The breadth cap dropped groups from this node's enumeration; walk one tranche per dropped
         // group (tranche R admits AND requires the group ranked R, so the tranches exactly cover the
@@ -133074,79 +133288,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             }
             if (gw_build_truncated) { ++g_fs_trunc_events; }
 
-            // Score one tranche plan/variant at this pass's sub_depth (the bp wave body's contract).
-            // Returns false when the budget stopped the phase; won_out set => caller returns v.
             bool gw_stop = false;
-            auto score_gw = [&](const Plan& v, bool& won_out) -> bool
-            {
-                won_out = false;
-                if (AnytimeStop(budget))
-                { ++g_fs_trunc_events;
-                  if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
-                  return false; }
-                ConsumeAt(budget, unitsite::kLookaheadGroupWave);
-                nodekind::Scope _nk(v);   // MTG_NODE_KIND_ATTRIB (diagnostic)
-                if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
-                PROF_INC(gamestate_copies);
-                GameState copy = state;
-                g_bp_cands_last = 0;
-                g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;   // MTG_BP_DEV_SEQ
-                if (is_pre_combat)
-                {
-                    ApplyPlanDirect(copy, v, true);
-                    // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
-                    // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
-                    {
-                        const TranspositionTable::Key raw = BuildDedupKey(copy);
-                        if (LandTwinDup(bp_seen_states, bp_twins, copy, raw, EotHoldFoldKey(raw, v),
-                                        [&](const TranspositionTable::Key& k) { return EotHoldFoldKey(k, v); }))
-                        { return true; }
-                    }
-                    if (EotHoldTwinInert(v, copy)) { return true; }   // an inert Soulstoke-hold twin
-                    { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
-                    if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
-                        || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
-                    {
-                        if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                    second_main, tt, /*in_rollout=*/false))
-                        { won_out = true; return true; }
-                    }
-                }
-                else
-                {
-                    ApplyPlanDirect(copy, v, false);
-                    RunPostMain2ExtraCombats(copy);   // Moraug: main 2's queued combats
-                    if (OpponentHasLost(copy)) { won_out = true; return true; }
-                    if (LandTwinDup(bp_seen_states, bp_twins, copy)) { return true; }
-                }
-                if (ko && KillOnlySkippable(copy))   // kill-only: the tranche plan did not kill this turn (see LeafKillOnlyOn)
-                {
-                    ++t_ko_skipped_n; if (s_rollout_stats) { g_ko_skipped.fetch_add(1, std::memory_order_relaxed); }
-                    return true;
-                }
-                if (ko) { ko_rolled = true; }
-                // The crossing-land digit (Maze's End I3b; see BoundaryChooseCrossingLandsByRollout).
-                const BoundaryChoice gw_bc = BoundaryChooseCrossingLandsByRollout(
-                    copy, sub_depth, max_turns, budget, pass_has_best ? pass_best_win : max_turns + 1, second_main, tt);
-                if (!SimulateEndAndStartNextTurn(copy)) { return true; }
-                if (tie_prune_here && pass_has_best && pass_best_win <= copy.turn_number)
-                { if (s_rollout_stats) { g_la_wave_pruned.fetch_add(1, std::memory_order_relaxed); } return true; }
-                const int gw_cutoff = (tie_prune_here && pass_has_best && LaTieTightenOn()
-                                       && pass_best_win <= max_turns)
-                                    ? pass_best_win - 1 : pass_best_win;
-                const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
-                                                   gw_cutoff, second_main, tt);
-                bp_twins.Close(true, win_turn);   // P5b-3: this tranche plan's evaluation ends here
-                // STRICTLY better only -- same reasoning as the bp wave phase above.
-                if (pass_has_best && win_turn >= pass_best_win) { return true; }
-                if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
-                pass_best_win = win_turn;
-                pass_best     = v;
-                RecordBoundaryChoice(pass_best, gw_bc);
-                pass_has_best = true;
-                return true;
-            };
 
             for (const std::vector<Plan>& tp : gw_tranches)
             {
@@ -133171,6 +133313,66 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     }
                     if (gw_stop) { break; }
                 }
+            }
+        }
+
+        // ---- DIABOLIC REVELATION PACKAGE WAVES (Blood Sun step 6; the FSLineWin twin, RevWaveTranche /
+        // RevContWaves) ---------------------------------------------------------------------------------------------
+        // Wave 0 admitted the first K0 packages of every X; wave k's tranche holds the plans whose highest-wave
+        // package is k (an exact partition). Each wave is priced per package, budget-checked per plan (score_gw),
+        // and THE GENERATOR-STOP holds: no further wave once this pass's best line wins THIS round (win turn is the
+        // round; no line from round R wins before R). Then the breakpoint continuations' waves. Strictly-better only.
+        // Inert unless a tutor_up_to_x card held packages past wave 0, i.e. for every deck without Diabolic Revelation.
+        if (!pass_aborted && !(g_et_chain_trial_active && s_et_chain_top_n > 0) && (rv_pending || rv_cont.n > 0))
+        {
+            auto rv_round_won = [&] { return pass_has_best && pass_best_win <= state.turn_number; };
+            bool rv_stop = false;
+            for (std::size_t ti = 0; rv_pending && !rv_stop; ++ti)
+            {
+                if (rv_round_won()) { revwave::g_phase_round_win_stops.fetch_add(1, std::memory_order_relaxed); break; }
+                if (ti == rv_tranches.size())
+                {
+                    if (!rv_more_waves || ti + 1 >= 60) { break; }
+                    if (AnytimeStop(budget)) { ++g_fs_trunc_events; break; }
+                    bool more = false;
+                    rv_tranches.push_back(RevWaveTranche(static_cast<int>(ti) + 1, budget, more, [&]
+                    {
+                        g_bp_root_enum = enforce_budget;
+                        // ROOT-INSURANCE parity, as the group-wave tranches above.
+                        CondemnSuppressGuard _csg(enforce_budget && GwParityEnabled());
+                        std::vector<Plan> e = EnumeratePlansWithLand(state, is_pre_combat);
+                        g_bp_root_enum = false;
+                        return e;
+                    }));
+                    rv_more_waves = more;
+                }
+                const std::vector<Plan>& tp = rv_tranches[ti];
+                bool won = false;
+                for (const Plan& v : tp)
+                {
+                    if (!score_gw(v, won)) { rv_stop = true; break; }
+                    if (won) { report(state.turn_number, depth - 1); return v; }
+                    if (rv_round_won()) { break; }
+                }
+                // Deferred bp ranks OF the wave plans (the group-wave tranche reason).
+                if (!rv_stop && !rv_round_won() && BpWavesHere(budget))
+                {
+                    BpWaveWalker rv_walker(state, tp, tp.size(), nullptr, nullptr, nullptr, /*host_pends=*/false);
+                    Plan v;
+                    while (rv_walker.Next(tp, v))
+                    {
+                        if (!score_gw(v, won)) { rv_stop = true; break; }
+                        rv_walker.Report(tp, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last);
+                        if (won) { report(state.turn_number, depth - 1); return v; }
+                        if (rv_round_won()) { break; }
+                    }
+                }
+            }
+            if (!rv_stop && !rv_round_won() && BpWavesHere(budget))
+            {
+                Plan rv_wp;
+                if (RevContWaves(state, cands, cands.size(), budget, rv_cont, score_gw, rv_round_won, rv_wp))
+                { report(state.turn_number, depth - 1); return rv_wp; }
             }
         }
 
@@ -134065,10 +134267,35 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
     // max_dropped is an OUT accumulator (max over the per-land inner calls): reset, capture, restore.
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
+    // Blood Sun step 6: did a Diabolic Revelation hold packages past wave 0? (saved/restored: an OUT flag too)
+    const bool rv_pend_outer = revwave::g_state.pending;
+    revwave::g_state.pending = false;
     std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
+    const bool rv_pending = revwave::g_state.pending;
+    revwave::g_state.pending = rv_pend_outer;
     const int dropped = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = saved_md;
-    if (dropped <= 0 || !groupwave::Enabled()) { return plans; }
+    // THE REVELATION PACKAGE WAVES (RevWaveTranche): appended after the group tranches, wave by wave, each priced per
+    // package and budget-checked like them, so the exhaustive menu is the whole package space at an unlimited budget
+    // (no score here, so no generator-stop: nothing is proven). A capped regime (!tranches) keeps wave 0 and reports
+    // the truncation, the group tranches' contract.
+    auto append_rev_waves = [&](std::vector<Plan>& out)
+    {
+        if (!rv_pending) { return; }
+        if (!tranches) { if (truncated != nullptr) { *truncated = true; } return; }
+        bool more = true;
+        for (int k = 1; more && k < 60; ++k)
+        {
+            if (budget != nullptr && !budget->Unlimited() && (budget->Exhausted() || budget->Overrun()))
+            {
+                if (truncated != nullptr) { *truncated = true; }
+                break;
+            }
+            std::vector<Plan> tp = RevWaveTranche(k, budget, more, [&] { return EnumeratePlansWithLand(state, is_pre_combat); });
+            out.insert(out.end(), std::make_move_iterator(tp.begin()), std::make_move_iterator(tp.end()));
+        }
+    };
+    if (dropped <= 0 || !groupwave::Enabled()) { append_rev_waves(plans); return plans; }
     if (!tranches)
     {
         // A capped heuristic regime: wave 0 is the menu, and the caller learns that it was not the
@@ -134123,6 +134350,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlansExhaustive(const Gam
         plans.insert(plans.end(), std::make_move_iterator(tp.begin()), std::make_move_iterator(tp.end()));
     }
     groupwave::g_state.tranche_singles = saved_singles;
+    append_rev_waves(plans);
     return plans;
 }
 
@@ -135106,6 +135334,26 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointDemoted(const GameS
     return BpEnumEntryFor(state, is_pre_combat)->demoted;
 }
 
+// Blood Sun step 6: the wave-k continuation list (Plan::rv_cont_wave) -- the ordinary lookup with Revelation waves
+// 0..k admitted to the derivation's enumeration (revwave::g_state) and its tranche filter armed (revwave::t_cont_wave,
+// read by BpDeriveContinuationList's own frame only). BpEnumBuildKey folds both, so it is its own cache entry.
+static BpEnumEntry* BpEnumEntryForWave(const GameState& state, bool is_pre_combat, int wave)
+{
+    const revwave::State saved = revwave::g_state;
+    const int saved_cw = revwave::t_cont_wave;
+    revwave::g_state = revwave::State{ wave, false, 0 };
+    revwave::t_cont_wave = wave;
+    BpEnumEntry* const e = BpEnumEntryFor(state, is_pre_combat);
+    revwave::g_state = saved;
+    revwave::t_cont_wave = saved_cw;
+    return e;
+}
+std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlansAtWave(const GameState& state, bool is_pre_combat,
+                                                                         int wave)
+{
+    return BpEnumEntryForWave(state, is_pre_combat, wave)->View().Materialised();
+}
+
 // See the LIFETIME CONTRACT on the declaration: valid only until the next enumeration on this thread.
 const std::vector<TurnSolver::Plan>& TurnSolver::EnumerateBreakpointPlansRef(const GameState& state,
                                                                             bool is_pre_combat)
@@ -135643,6 +135891,11 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     }
     if (t_rollout_narrow) { Fold(key, kRolloutNarrowTag); }   // see MTG_ROLLOUT_FAN_NARROW
     FoldPhysicalCards(key, state);   // MTG_PLAN_CACHE_EXACT_KEY
+    // Blood Sun step 6: a list derived with Revelation waves 0..k admitted (and, in a continuation wave's own
+    // frame, wave k's tranche kept) is its own entry. Inert (no fold) at wave 0, i.e. for every other deck.
+    if (revwave::g_state.wave > 0 || revwave::t_cont_wave > 0)
+    { Fold(key, 0x52565700ull + static_cast<std::uint64_t>(revwave::g_state.wave) * 64u
+                + static_cast<std::uint64_t>(revwave::t_cont_wave)); }
     *out = key;
     return true;
 }
@@ -135847,6 +136100,11 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     if (interrupted_out != nullptr) { *interrupted_out = false; }
     bpreenum::t_last_kind = -1;
     routetape::Suspend _rts;   // a continuation DERIVATION is not a route link's own resolution
+    // Blood Sun step 6: a continuation WAVE's own frame (revwave::t_cont_wave = k: keep wave k's tranche below); a
+    // derivation nested inside this one sees 0. Restored on every exit.
+    const int rv_k = revwave::t_cont_wave;
+    struct RvContRestore { int v; ~RvContRestore() { revwave::t_cont_wave = v; } } rv_restore{ rv_k };
+    revwave::t_cont_wave = 0;
     const int  mode   = BpCondemnDropMode();
     const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
     const bool skip   = (mode == 3);   // condemned ENTRIES emptied in place (ranks preserved)
@@ -135902,7 +136160,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     if (lz_out != nullptr) { *lz_out = PbLazyLayout{}; }
     if (ord_out != nullptr) { *ord_out = CandOrder{}; }
     const bool lazy_req = lz_out != nullptr && ord_out != nullptr && BpLazyCandsOn() && !HumanPlayActive()
-                       && !skip && !front_only;
+                       && !skip && !front_only && rv_k == 0;   // a wave tranche is filtered below: materialised
     if (derived.empty())
     {
         // MTG_BP_REENUM_CENSUS (diagnostic; see bpreenum): fingerprint this enumeration before it runs.
@@ -135985,6 +136243,15 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         lz = PbLazyLayout{};
         bpmeter::g_interrupted.fetch_add(1, std::memory_order_relaxed);
         if (interrupted_out != nullptr) { *interrupted_out = true; }
+    }
+    // THE WAVE-k TRANCHE (Blood Sun step 6): the enumeration above admitted Revelation waves 0..k; keep only the
+    // continuations whose highest-wave Revelation cast is wave k, so the wave-0 list and the wave tranches partition
+    // the continuation package space exactly (the host-list tranche contract, revwave::PlanMaxWave).
+    if (rv_k > 0)
+    {
+        derived.erase(std::remove_if(derived.begin(), derived.end(),
+                                     [rv_k](const TurnSolver::Plan& v) { return revwave::PlanMaxWave(v) != rv_k; }),
+                      derived.end());
     }
     if (s_bp_slow_ms > 0)
     {
@@ -137512,10 +137779,16 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     const BpSide bp_side = BpSideBegin();
     BpChannels bp_chan;   // MTG_BP_DERIVE_ISOLATE
     bp_chan.Save();
+    // Blood Sun step 6: did this derivation's Revelation hold packages past its wave? Saved/restored, so a host's
+    // own enumeration flag (revwave::State::pending) never sees a continuation's.
+    const bool rv_pend_outer = revwave::g_state.pending;
+    revwave::g_state.pending = false;
     std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
                                                                   /*count_stats=*/true, &demoted,
                                                                   /*front_only=*/false, &bp_interrupted,
                                                                   &plans_lz, &plans_ord);
+    const bool rv_more = revwave::g_state.pending;
+    revwave::g_state.pending = rv_pend_outer;
     const long long bp_emitted = workctr::t_n[workctr::kPlanEmit] - bp_emit0;
     bp_chan.Restore();
     // MTG_BP_TUTOR_PIN_ALIAS: did the derivation read the watched tutor pin? (Closed here, before the
@@ -137794,6 +138067,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             ent.demoted = std::move(demoted);
             ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
             ent.tutor_pin_unread = pin_unread;   // MTG_BP_TUTOR_PIN_ALIAS
+            ent.rv_more = rv_more;               // Blood Sun step 6
             if (bpuse::On())
             {
                 ent.use_born     = static_cast<std::uint8_t>(bpuse::t_reason);
@@ -137885,6 +138159,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         BpEnumEntry& e = s_kept.back();
         e.lazy = std::move(plans_lz); e.ord = std::move(plans_ord);
         e.plans = std::move(plans); e.demoted = std::move(demoted);
+        e.rv_more = rv_more;
         return &e;
     }
     scratch = BpEnumEntry{};
@@ -137892,6 +138167,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     scratch.ord     = std::move(plans_ord);
     scratch.plans   = std::move(plans);
     scratch.demoted = std::move(demoted);
+    scratch.rv_more = rv_more;
     return &scratch;
 }
 

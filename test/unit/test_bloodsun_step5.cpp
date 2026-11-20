@@ -127,6 +127,15 @@ TEST_CASE("bloodsun step 5: card params as the design states them; own death and
             if (cd != nullptr && cd->card.IsLand()) { d.mainboard.push_back(c); continue; }
             if (std::find(keep.begin(), keep.end(), c.m_name.str()) != keep.end()) { d.mainboard.push_back(c); }
         }
+        // A kept card the list no longer holds (Worldfire left the list at 04b85bf21, USER; it stays implemented and
+        // generic) is added from the card data, so the per-card arming is still tested.
+        for (const std::string& nm : keep)
+        {
+            const bool held = std::any_of(d.mainboard.begin(), d.mainboard.end(),
+                                          [&](const Card& c) { return c.m_name.str() == nm; });
+            const CardDefinition* cd = CardDatabase::Instance().Lookup(nm);
+            if (!held && cd != nullptr) { d.mainboard.push_back(cd->card); }
+        }
         return d;
     };
     CHECK(GoldFishRunner::DeckTouchesOpponentZones(only({ "Dimir Machinations" })));
