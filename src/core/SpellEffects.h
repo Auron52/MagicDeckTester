@@ -58464,6 +58464,24 @@ inline bool AuraHostIsManaCreature(const Permanent& p)
     return d != nullptr && d->tmpl == CardTemplate::ManaDork;
 }
 
+// AN AURA THAT UNTAPS ITS HOST (MTG_AURA_UNTAP_HOST_SEARCH; 2026-11-19). "{2}{U}: Untap enchanted creature" (Crab
+// Umbra, untap_enchanted_cost) re-uses the HOST's {T}: on a live mana creature (Accomplished Alchemist at X >= 4)
+// it is a self-funding loop, on a vanilla body it does nothing in a goldfish. So for such an Aura WHICH host matters
+// exactly when the host has a tap use -- the AURA CAST HOST RANKING above (combat damage) cannot see it, and its
+// "fewer Auras on mana sources" tie-break points AWAY from the loop host. Such hosts are searched (TurnSolver:
+// the plan signature's #A key + the late-bind fold's KEEP partition); the rest stay one ranked class.
+inline bool AuraUntapsHost(const CardDefinition* d)
+{
+    return d != nullptr && d->params.is_aura && !d->params.is_land_aura && d->params.untap_enchanted_cost.has_value();
+}
+// Does a creature have a {T} use an untap re-arms: a mana ability or a {T} activated ability? The untap
+// enumerator's own "may be tapped by the plan" test (TurnSolver's ActivateUntap target scan) -- one predicate.
+inline bool UntapHostHasTapUse(const CardParams& p)
+{
+    return !p.produces.empty() || p.tap_damage_cost.has_value() || p.tap_draw_cost.has_value()
+        || p.tap_lifegain_cost.has_value() || p.tap_investigate_cost.has_value() || p.self_ping_cost.has_value();
+}
+
 // Silences the play-event sink (and the human choosers' reach) while the key performs attachments
 // on a COPY: the copy is a projection, never the game, and the viewer must not log its taps.
 struct AuraHostKeyQuiet
