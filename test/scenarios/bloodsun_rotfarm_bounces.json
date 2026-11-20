@@ -1,0 +1,38 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Golgari Rot Farm"
+ ],
+ "human_lines": [
+  "land=Golgari Rot Farm",
+  "pass",
+  "pass"
+ ],
+ "expect_history_contains": [
+  "in response to the bounce"
+ ],
+ "comment": "Blood Sun step 1: GOLGARI ROT FARM BOUNCES A LAND. Its ETB returns one of the two basics (the searched Karoo bounce; the human default here), which is tapped for its mana in response first (the shared Karoo float) -- the float event exists only if the bounce resolved."
+}

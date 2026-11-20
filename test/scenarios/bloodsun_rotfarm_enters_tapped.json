@@ -1,0 +1,34 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Golgari Rot Farm",
+  "Cultivate"
+ ],
+ "validate_line": "land=Golgari Rot Farm;landat=0;cast=Cultivate",
+ "expect_verdict": "illegal",
+ "expect_reason_contains": "can't pay {2}{G} for 'Cultivate'",
+ "comment": "Blood Sun step 1: GOLGARI ROT FARM ENTERS TAPPED (the Rakdos Carnarium shape: enters_tapped + etb_bounce_land). Swamp + Forest untapped; the Rot Farm is played FIRST (landat=0) so its bounce returns one basic, tapped for its mana in response (floating), leaving 2 mana. Cultivate {2}{G} needs 3: ILLEGAL. Had the Rot Farm entered untapped it would add {B}{G} (4 mana) and the line would be legal."
+}
