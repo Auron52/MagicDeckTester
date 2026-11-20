@@ -1,0 +1,90 @@
+{
+  "_comment": [
+    "Stuffy Doll, the split-lethal amendment MTG_STUFFY_SPLIT_LETHAL_M1 (PROPOSED, awaiting the USER) with its 2026-11-20 fix:",
+    "the gate credits the ATTACK that follows a main-1 sweep. Held-out d0 base 500000 gi1717, turn 5: Screaming Nemesis +",
+    "Shaman en-Kor against a 4/4 and four Spirits, opponent at 15. Chain Reaction X=7 deals 7 off Nemesis plus 7 the Shaman's",
+    "shield forwards to it = 14, Nemesis dies, and the shielded Shaman attacks for the last 1. The sweeper alone (14) is not",
+    "lethal, so a gate without the attack credit refuses the main-1 Chain and the depth-0 runner plays on to turn 6."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 16,
+  "opponent_life": 15,
+  "battlefield": [
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Mountain"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Shaman en-Kor"
+    },
+    {
+      "name": "Screaming Nemesis"
+    },
+    {
+      "token": true,
+      "power": 4,
+      "toughness": 4,
+      "subtypes": [],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    },
+    {
+      "token": true,
+      "power": 1,
+      "toughness": 1,
+      "subtypes": [
+        "Spirit"
+      ],
+      "controller": 1
+    }
+  ],
+  "hand": [
+    "Chain Reaction",
+    "Spiteful Sliver"
+  ],
+  "library_filler": "Plains",
+  "library_size": 40,
+  "depth": 0,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "expect_win_turn": 5,
+  "env": {
+    "MTG_STUFFY_SPLIT_LETHAL_M1": "1"
+  }
+}

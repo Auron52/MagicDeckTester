@@ -3176,6 +3176,9 @@ bool StuffyDollProvider::PlanMoveOrderBack(const GameState& s, const std::vector
 
 bool StuffyDollProvider::RestrictsCollectedActions() const { return StuffyMainSplitOn() || StuffyEscapeScryPruneOn(); }
 
+static int StuffyLethalProjection(const GameState& s, const std::vector<const CardDefinition*>& casting, bool credit_pulls,
+                                  bool credit_combat);
+
 bool StuffyDollProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
 {
     if (StuffyEscapeScryPruneOn() && StuffyEscapeCastIsScryOnly(s, a)) { return false; }   // arm P (DEFAULT OFF)
@@ -3188,7 +3191,24 @@ bool StuffyDollProvider::CollectedActionAllowed(const GameState& s, const Action
     // (the sweeper plus every nonland hand card, mana ignored) was measured and REJECTED: it admitted non-lethal
     // main-1 sweeps the greedy then cast (seed 10 gi 9 d0: Act on T4 with the opponent at 18, no win by turn 8) --
     // d0 5.62 vs this bound's 5.46 (step 9e 5.82), three games lost outright.
-    return ExtraLethalDamage(s, { d }) >= s.players[static_cast<std::size_t>(1 - s.active_player_index)].life;
+    // NO SHAMAN PULL CREDIT here (fix 2026-11-20). An unpinned pull choice is {stop} (dmgrx::AddPullRider's front:
+    // no pull, no mana), so the depth-0 runner and every beyond-horizon playout -- the greedy contexts this
+    // amendment exists for -- never pull, and a gate that credited the pull admitted main-1 sweeps short by exactly
+    // the pull's share (d0 base 500000 gi134: Chain Reaction X=4 projected 16 = 4 Nemesis + 8 shields + 4 pull vs
+    // 16 life, dealt 12, Nemesis died, T6 instead of A's T5). Under search nothing is lost: the same sweeper stays
+    // castable in main 2 that turn, where the pull IS searched, so the kill lands on the same turn.
+    // THE ATTACK THAT FOLLOWS IS CREDITED (same fix). A main-1 sweep is followed by this turn's combat, and nothing
+    // blocks in the goldfish, so every attack-eligible creature of ours that SURVIVES the sweep adds its power: the
+    // kill is still this turn, the same identity as above. Without it the pull credit had been standing in for the
+    // attack by accident -- held-out d0 base 500000 gi1717 (Nemesis + Shaman en-Kor, opponent at 15: Chain X=7 deals
+    // 7 reflected + 7 shield-forwarded = 14, then the shielded Shaman attacks for 1) and gi930 (the same with Spiteful
+    // Sliver) won only on the pull-crediting arm, though no pull was ever made.
+    // MTG_STUFFY_LETHAL_PULL_LEGACY=1 (heurarm, per-job; DEFAULT OFF) restores the old gate exactly -- the pull
+    // credit, no attack credit (measurement arm).
+    static const bool s_pull_legacy_env = EnvOn("MTG_STUFFY_LETHAL_PULL_LEGACY");
+    const bool legacy = heurarm::Flag(heurarm::STUFFY_LETHAL_PULL_LEGACY, s_pull_legacy_env);
+    return StuffyLethalProjection(s, { d }, legacy, !legacy)
+        >= s.players[static_cast<std::size_t>(1 - s.active_player_index)].life;
 }
 
 // The --cast-order-report's "main" column, and nothing in play: this deck opts into neither the classifier filter
@@ -3270,6 +3290,15 @@ bool StuffyDollProvider::HasAnyDigSource(const GameState& s) const
 }
 
 int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const
+{
+    return StuffyLethalProjection(s, casting, true, false);
+}
+
+// The projection behind ExtraLethalDamage (optimistic by contract: every affordable Shaman pull credited; combat is
+// its caller's) and the split-lethal gate (credit_pulls false: what the greedy contexts will actually deal; and
+// credit_combat true: the sweep's survivors' attack, see CollectedActionAllowed).
+static int StuffyLethalProjection(const GameState& s, const std::vector<const CardDefinition*>& casting, bool credit_pulls,
+                                  bool credit_combat)
 {
     constexpr int kHuge = 1 << 20;
     const int me = s.active_player_index, opp = 1 - me;
@@ -3400,11 +3429,33 @@ int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<
         if (reflect_mult > 0)
         {
             proj += static_cast<long long>(d) * enkors;   // F4: an en-Kor's own share forwarded to a reflector
-            if (shaman)
+            if (shaman && credit_pulls)
             {
                 const int left  = AvailableManaPool(s).Total() - cast_mv;
                 const int pulls = std::min(pull_targets + orchards, std::max(0, left / 2));
                 proj += static_cast<long long>(d) * pulls;
+            }
+        }
+        // The attack after a main-1 sweep (the gate only). Conservative: a creature counts only if it can attack now and
+        // survives the sweep -- indestructible, toughness above the damage it takes (a reflector is charged every
+        // en-Kor's forwarded share too), or an en-Kor whose shield forwards its share to a reflector. Creatures cast
+        // with the sweep are summoning sick and add nothing; power is the printed/counter value plus lord bonuses.
+        if (credit_combat)
+        {
+            for (const Permanent& q : s.battlefield)
+            {
+                if (q.controller_index != me || !q.card.IsCreature() || !CanAttackFull(q, s.battlefield, me)) { continue; }
+                const CardDefinition* cd = dmgrx::Def(q);
+                const std::pair<int, int> lord = ComputeLordBonus(q.card, s, me, q.AnimatedAllTypes(), &q);
+                const int power = q.EffectivePower() + lord.first;
+                if (power <= 0) { continue; }
+                const bool is_enkor = cd != nullptr && cd->params.redirect_shield;
+                const bool reflector = instances(q.card, cd, q.chosen_player) > 0;
+                const long long taken = static_cast<long long>(d) * (reflector ? 1 + enkors : 1);
+                const bool survives = q.HasKeyword(Keyword::Indestructible)
+                    || q.damage + taken < LethalToughness(q, s)
+                    || (is_enkor && !reflector && reflect_mult > 0);
+                if (survives) { proj += power; }
             }
         }
     }
