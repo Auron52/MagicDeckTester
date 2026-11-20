@@ -64,3 +64,43 @@ Smoke at lever=0: ALL PASS, 0 configs changed. GT not accepted (default OFF: pla
    boards. Residual ORDER s30126737 T2 m2 {Muxus + Chieftain} beside a live Skirk (probably the payer's fodder pick).
 
 Scratch: build/scratch/claude_sacfodder_menu/ (ab/, slow/, slice.sh, cls.py); handoff logs/sacfodder-menu/handoff.md.
+
+## Fix-up 3 (2026-11-19/20, wip/sacfodder-fix 7fac7389e) -- does NOT clear the bar; line parked
+
+Two changes, both default ON under the (still default-OFF) lever, TEMP `MTG_SFM_DUMP` removed:
+
+1. `MTG_SAC_FODDER_INERT_PRUNE` -- exact dominance. A body the plan CASTS from hand (no alt cost) whose card is
+   `fodder_inert` (every raw param key combat-only / static P/T lord / echo: Goblin Lackey, Piledriver, King,
+   Stingscourger) is not credited as fodder for a SINGLE-colour outlet when its cost holds >= `per` plain pips of
+   that colour; and a plan-cast `fodder_inert_outlet` (Skirk) whose own body is the only creditable one gets no
+   credit. Premises are audited from raw cards.json keys (CardDatabase.cpp): every battlefield permanent and every
+   candidate's card `fodder_board_audited`, every other card of the active player (hand, library, graveyard) and the
+   exile zone `fodder_deck_audited` (presence-only watchers such as Krenko, Pashalik, Three Tree City, Cavern are
+   fine off the battlefield). Proof at TurnSolver.cpp `FodderPipsCover`: P without B's cast reaches the same board
+   with B in hand, and the source that paid B's colour pip is held instead of eaten-for back. Never fires for Fungus
+   (Utopia Mycon makes any colour). Not covered: opponents' non-battlefield zones (no opponent acts in our main).
+2. `MTG_SAC_FODDER_WAVE` -- admission order. In MTG_BP_DEV_SEQ's FIRST pass a fodder-credited plan is dropped after
+   every gate and recorded as a dev-seq latent occurrence (so the node is dirty and the second pass runs, with root
+   cut = pass-1 win - 1); only where the two passes govern (`g_rollout_nest == 0 && g_bp_enum_depth == 0`).
+
+Dev seeds (gi 620000-624999 / 630000-634999, x5000, play settings, vs lever off, one pooled batch;
+build/scratch/claude_sacfodder_fix3/ab1):
+
+| arm | Goblins f/s net | units | Fungus f/s net | units |
+|---|---|---|---|---|
+| on (prune + wave) | 1/3 **+2** | x1.157 | 1/2 **+1** | x1.046 |
+| prune off, wave on | 1/3 +2 | x1.162 | 1/2 +1 | x1.046 |
+| prune on, wave off | 1/4 +3 | x1.092 | 0/3 +3 | x1.037 |
+
+Slower (on): Goblins 620594 (4->5), 622286 (3->4), 622411 (3->4); Fungus 630865, 633295 (4->5). d8 b0: Fungus both
+recover (4/4); Goblins see the handoff.
+
+**Residue (why it does not clear):** in every slower game the dev-seq second pass NEVER took a line
+(`MTG_DEV_SEQ_STATS`: pass2_better=0), and only 2-4 decisions per game route through FullSearchLine's two passes at
+all. So the losses come from lever effects the wave does not stage: (a) decisions that do not go through the two-pass
+root, (b) beyond-horizon playouts and breakpoint enumerations (`g_rollout_nest > 0` / `g_bp_enum_depth > 0`), which
+still see credited plans and so move leaf values, and (c) the apply's fodder order walk (`BuildPoSacFodder`).
+622286 diverges at T1 m1 (off casts Goblin Lackey, on casts Aether Vial) with no second pass taken. The wave also
+costs units (pass 2 spends what pass 1 leaves): x1.092 -> x1.157 on Goblins. The prune is sound but moves nothing
+measurable once the wave is on (credited plans are pass-2 only). Next would be a variant that stages (a)-(c), which
+the brief ruled out; the line is parked for the USER.
