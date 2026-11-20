@@ -1,0 +1,33 @@
+{
+ "_comment": [
+  "Blood Sun step 3 (design 9.4): BLOOD SUN'S ETB DRAW FIRES FOR A CAST ENCHANTMENT (etb_self_draw: 1, the Ice-Fang /",
+  "Astrolabe family on a non-creature, non-artifact permanent). Four Mountains, Blood Sun the only card in hand, every",
+  "draw a Lightning Bolt, the opponent at 3. The human casts Blood Sun ({2}{R}); its enter trigger draws the Bolt, and",
+  "the next frame casts that Bolt off the fourth Mountain -- the line exists only if the draw happened. The",
+  "autonomous twin (rollout + executor) is bloodsun_sun_then_karoo_untapped_funds_cast.json, whose kill needs the drawn Bolt."
+ ],
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 3,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "library_filler": "Lightning Bolt",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": { "MTG_HUMAN_PLAY": "1" },
+ "battlefield": [
+  { "name": "Mountain", "controller": 0, "tapped": false },
+  { "name": "Mountain", "controller": 0, "tapped": false },
+  { "name": "Mountain", "controller": 0, "tapped": false },
+  { "name": "Mountain", "controller": 0, "tapped": false }
+ ],
+ "hand": [ "Blood Sun" ],
+ "human_lines": [ "cast=Blood Sun", "cast=Lightning Bolt", "pass" ],
+ "expect_dropped": [],
+ "expect_human_summary_contains": "Lightning Bolt",
+ "expect_win_turn": 3
+}

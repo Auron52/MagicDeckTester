@@ -1,0 +1,44 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "City of Brass",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Blood Sun"
+ ],
+ "human_lines": [
+  "cast=Blood Sun",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_active_life": 19,
+ "comment": "Blood Sun step 3 (rules review, CR 603.2 / City ruling 3): CITY OF BRASS TAPPED TO PAY FOR BLOOD SUN STILL PINGS. City's trigger fires while Blood Sun is being cast -- Blood Sun is on the stack, not the battlefield, so the City still has the ability when it becomes tapped; Blood Sun's resolution later does not remove a trigger already waiting (CR 113.7a). City + two Mountains pay {2}{R}: we go 20 -> 19. Contrast bloodsun_sun_city_no_ping.json (City tapped with Blood Sun already on the battlefield: no ping)."
+}

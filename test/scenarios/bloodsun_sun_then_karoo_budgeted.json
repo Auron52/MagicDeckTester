@@ -1,0 +1,44 @@
+{
+ "_comment": [
+  "Budgeted twin of bloodsun_sun_then_karoo_untapped_funds_cast.json (same board; depth 3, budget 100): the Blood Sun -> untapped Gruul Turf -> Bolt, Bolt kill is found at a finite budget too (the tiers play budgeted games only)."
+ ],
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 6,
+ "resume_at": "main1",
+ "battlefield": [
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Blood Sun",
+  "Gruul Turf",
+  "Lightning Bolt"
+ ],
+ "library_filler": "Lightning Bolt",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 4,
+ "expect_win_turn": 3
+}

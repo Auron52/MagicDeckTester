@@ -1,0 +1,52 @@
+{
+ "_comment": [
+  "Blood Sun step 3 (parent ruling 2026-11-20, the Karoo gap): BLOOD SUN, THEN A KAROO PLAYED UNTAPPED, THEN ITS MANA",
+  "SPENT IN THE SAME TURN is found by the autonomous search. Four Mountains; hand Blood Sun, Gruul Turf, Lightning Bolt;",
+  "every draw is a Lightning Bolt; the opponent is at 6. The ONLY turn-3 kill: Blood Sun off three Mountains (its ETB",
+  "draws a Bolt), then Gruul Turf -- now a plain land: untapped, no bounce -- then Bolt + Bolt off the fourth Mountain",
+  "and the Turf's {R}. Without Blood Sun the Turf enters tapped and returns a land (3 mana after the float: one Bolt);",
+  "with the Turf played BEFORE Blood Sun the same (Blood Sun + one Bolt). The top-level plan enumerates a Karoo's casts",
+  "on the pre-Karoo board, so the Bolts after the Turf come from the Blood Sun draw breakpoint's continuation, which",
+  "runs after the deferred Karoo is played (ApplyPlanDirect / AIEngine::TakeTurn: deferred drop, then the re-solve).",
+  "Route proof: with MTG_BP_PUT_IN_HAND=0 (the draw's site-10 breakpoint off) this fixture wins on turn 4 instead. Unlimited budget here (completeness); the budgeted twin is bloodsun_sun_then_karoo_budgeted.json."
+ ],
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 6,
+ "resume_at": "main1",
+ "battlefield": [
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Blood Sun",
+  "Gruul Turf",
+  "Lightning Bolt"
+ ],
+ "library_filler": "Lightning Bolt",
+ "library_size": 30,
+ "depth": 2,
+ "budget_ms": 0,
+ "max_turns": 4,
+ "expect_win_turn": 3
+}
