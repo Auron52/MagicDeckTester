@@ -82,3 +82,10 @@ sure, but we are looking for better results overall." MTG_PAY_REFINE itself is a
 5. Push wip/maze-f5r3 only (never the shared branch); `gh run watch <id> --interval 60` in the background.
 Rules: every heavy command via `bash scripts/heavy_run.sh` (not executable here: call it with bash);
 `export MTG_RSS_CAP_GB=20`; no timeouts; hand off at ~250K.
+
+## UPDATE: the queued chain1 job FAILED (build rc=1, chain1.DONE = buildfail)
+The heavy_run job ran and the build failed on `test/unit/test_equip_host_fold.cpp`: `SpellEffects.h: Cannot allocate
+memory`. That is the known 9p order-4 allocation failure (a retry fixes it; it is not RAM and not a code error), so
+our sources were not the cause. No trace data exists yet. Re-queue it: `bash scripts/heavy_run.sh
+/workspaces/MagicDeckTester/build/scratch/maze/f5r3/tools/chain1.sh` (run_in_background), after deleting
+`build/scratch/maze/f5r3/{build.trc.DONE,chain1.DONE}`.
