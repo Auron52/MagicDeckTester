@@ -8,6 +8,14 @@
    "id": "8854e545ddab:stuffy-analysis",
    "joined": "2026-11-20T03:06:21Z",
    "note": "Mill replay fix: legacy shared shuffle ordinal (a9066ed26 + ledger; needs rebase+build+unit+smoke)"
+  },
+  {
+   "branch": "wip/refine-node-cap",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:wip/refine-node-cap",
+   "joined": "2026-11-20T10:14:02Z",
+   "note": "URGENT (USER-ordered): pay-refine Dfs node cap -- Galadriel reference s10 gi9 >40 min -> 2 s (F5R release layers unbounded); 1 commit; needs units+smoke",
+   "urgent": true
   }
  ]
 }
