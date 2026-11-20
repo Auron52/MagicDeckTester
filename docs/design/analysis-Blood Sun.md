@@ -156,6 +156,25 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Open readings surfaced to the USER: Blood Sun via Revelation when missing (kept allowed); transmute into
   Grim Tutor (excluded by the whitelist); "always get Fastbond" as Exploration-not-searched-while-Fastbond-
   in-library (built as an A/B arm, not the default).
+  USER revision (verbatim): *"I have never run out of Diabolic Revelation because you get to Emrakul and Emrakul
+  shuffles when you chain them. You might be able to drop Exploration from the list and just use Fastbond in
+  this goldfish. I like to use Exploration in real games when it seems workable, but this isn't so important
+  without an opponent. For Machinations there was one mistake there. We must be able to find Grim Tutor in
+  that case. Sometimes you need to chain it into Grim Tutor and then into Diabolic Revelation as an example. If
+  you have blood sun out or in hand, Grim Tutor should be the only target. I'm not 100 sure this is necessary,
+  but if you have a situation where you have 1BB but no Red and blood sun in hand we might want to leave in a
+  red producing land like Rakdos Carnarium (if we have extra land drops and nothing to play with it) or City
+  of Brass (if we have no land drops or something to play this turn). That is a pretty rare case, but we could
+  just add one or both of these to the list depending on the situation."*
+  -> AMENDED target list (supersedes (b) where they differ):
+  * Exploration is NOT a tutor target (default; an A/B arm keeps it). Accel = Fastbond only, none once a
+    Fastbond is on the battlefield or in hand.
+  * Machinations' transmute: Grim Tutor is a target (chain Machinations -> Grim -> Revelation); Blood Sun too
+    only while we have none; with Blood Sun on the battlefield or in hand, Grim Tutor is the ONLY target.
+  * Red-source exception: with Blood Sun in hand (none in play) and no red source on the battlefield or in
+    hand, Rakdos Carnarium and City of Brass join the list (the search picks which; USER's guide: Carnarium
+    with spare land drops and nothing else to play, City when we need the red this turn).
+  * Diabolic Revelation stays a target (a replacement); no change.
 
 - B4 big lands wait for Blood Sun (USER 2026-11-20, verbatim): *"Generally Scorched Ruins and Lotuses wait for
   Blood Sun to drop. The only exception is when you fail to have the 3 mana or Red needed for Blood Sun. In
