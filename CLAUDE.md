@@ -609,6 +609,12 @@ launch unless the user requests a restart.
     practice"*). The queue gives ONE session at a time the lease; origin cannot move under it, so one
     validation is enough, and since both containers share the host's CPU it also serialises the heavy
     validation runs.
+  * **STILL BATCH YOUR CHANGES (USER 2026-11-20: *"It seems that it wasn't clear to other agents that we
+    should still batch up changes. I still would like that."*).** The queue removes the fixed time limit,
+    not the batching. Each gated landing costs every other session a rebase, rebuild and re-smoke, so
+    land a session's ready work as ONE batch per turn. Do not join, land, and re-join for each fix.
+    Gather what is ready, join once, and let every commit made while waiting ride along in the same
+    landing. The one exception is `join --urgent` for a fix to something breaking other sessions (below).
   * **How (`scripts/push_queue.py`; the queue is `queue.json` on origin's `push-queue` branch):**
     1. Commit locally as you go. When you have something ready to land, `python3 scripts/push_queue.py
        join` (it also installs the pre-push hook in your clone).
