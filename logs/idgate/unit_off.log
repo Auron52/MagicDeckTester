@@ -1,0 +1,174 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3477:
+TEST CASE:  Cast order, PROPOSED: {Wild Growth, Living Wish} on two Forests -- realised only with the Aura before the Wish
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3529: MESSAGE: realised in worlds: off=2 on=2 on(domain off)=0 af=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3598:
+TEST CASE:  Cast order, PROPOSED: an Alchemist turn's two-card bootstrap (Nourish, then the Wish off the Alchemist) survives every arm
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3639: MESSAGE: both cast, worlds: generic wish-first-in-hand=2 generic nourish-first=2 proposed(af+wl)=2 wish_after_life=2 life_first=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3897:
+TEST CASE:  Cast order, WISH_LATE: {Living Wish, Galvanic Alchemist} off an Alchemist turn -- the mechanism probe
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3941: MESSAGE: forests=2 both cast, worlds: generic=2 walwl=2 wlate=2
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:3941: MESSAGE: forests=1 both cast, worlds: generic=2 walwl=2 wlate=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:4199:
+TEST CASE:  Weather flex: the USER's line realised as ONE cast list -- spell, Weather, the Alchemist's six blue for Crab Umbra, then the loop kills (both worlds)
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_accomplished_alchemist.cpp:4233: MESSAGE: plans 7/7 worlds won: gw=0 gwf=2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_attach_order.cpp:267:
+TEST CASE:  Attach (A): a Theft onto a hand-cast Lizard Blades the plan reconfigures is dropped; its twin realises the same board cheaper
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_attach_order.cpp:295: MESSAGE: seed-2100018 T7 board (autonomous menu): 58 plans; Theft onto the hand Lizard + its reconfigure: 0; Theft onto it kept without one: 5
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bruna_sweep.cpp:1719:
+TEST CASE:  bp continuation cache: an unpinned entry is never served to a combat-swap-pinned state
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bruna_sweep.cpp:1741: MESSAGE: unpinned list 4 plans, pinned list 2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:196:
+TEST CASE:  Equip host fold: two identical Speakers -- only mirror images are dropped, every line survives
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:201: MESSAGE: two-Speaker frame (autonomous menu): 12 distinct plans unfolded -> 10 folded
+  logged: unfolded 12 plans, folded 10
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:334:
+TEST CASE:  Equip host fold: the claude-play sweep's seed-2100003 T5 board, autonomous menu before / after
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:357: MESSAGE: seed-2100003 T5 board (autonomous menu): 49 distinc[gods-dredge-depth1] plans=24 budget_used=33
+t plans unfolded -> 35 folded
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:472:
+TEST CASE:  Equip host fold / Theft: only mirror images are dropped, every line survives -- Speakers AND Hammers
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:481: MESSAGE: two-Speaker / two-Hammer / two-Theft board (autonomous menu): 774 distinct plans unfolded -> 538 folded; 473 distinct lines up to relabelling
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:641:
+TEST CASE:  Hand-piece Thefts: only mirror images of the two copies are dropped; twins realise the same board in BOTH worlds
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:648: MESSAGE: two hand Hammers + two Thefts (autonomous menu): 12 distinct plans unfolded -> 10 folded
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:768:
+TEST CASE:  Unlanded hand copy: an Equip of a copy the subset never lands is dropped; a strictly cheaper twin stays on the menu
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:778: MESSAGE: two hand Hammers, one main-1 copy (autonomous menu): 10 distinct plans unfolded -> 8 folded; plans equipping copy #2 with <= 1 Hammer cast: 2 -> 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:796: MESSAGE: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>15/e0/m0;  -> twin |0:Colossus Hammer:0>0/e0/m0;
+  logged: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>15/e0/m0;
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:796: MESSAGE: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>57/e0/m0;  -> twin |0:Colossus Hammer:0>0/e0/m0;
+  logged: dropped |0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:63>57/e0/m0;
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:857:
+TEST CASE:  Unlanded hand copy: the greedy walker (Solve) keeps its pick and never takes a dead Equip
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:870: MESSAGE: greedy pick, fold 0: |0:Colossus Hammer:0>0/e0/m0;0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:61>15/e0/m0;
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_equip_host_fold.cpp:870: MESSAGE: greedy pick, fold 1: |0:Colossus Hammer:0>0/e0/m0;0:Colossus Hammer:0>0/e0/m0;17:Colossus Hammer:61>15/e0/m0;
+
+[keeptable] building deck.keepmodel.exhaustive.profile.json-89445bf788be2df1.keeptable from /tmp/mtg_keep_table_test/loader/deck.keepmodel.exhaustive.profile.json ...
+[keeptable] built 3000 compositions (0.73843 MB) in 0.0174632 s
+[keeptable] WARNING: keep_table_alias "Jorn, God of Winter" -> "Not A Card" is INERT: the table has no bucket for "Not A Card" either.
+[profile] WARNING: mulligan.keep_table_alias entry "Jorn, God of Winter" -> "Kaldring, the Rimestaff" has no "why" -- IGNORED.
+[provider-required] viewer BYPASSED (MTG_HUMAN_PLAY): the engine's menu, for measurement / human play only
+[provider-required] deck viewer holds a card whose decision REQUIRES a deck-specific provider heuristic, and its provider 'Generic' does not implement it:
+  * Trench Gorger [etb_exile_library_lands_set_base_pt]: "search your library for any number of land cards, exile them" -- WHICH lands to exile (the engine menu keeps 3+ lands only as one provider-ordered round-robin prefix per count, capped at 62 entries; the full keep-subset product is combinatorially huge). Implement: DecisionProvider::RestrictExileLibraryLandsMenu (and, for the beyond-horizon front, the same rule), then declare it with ImplementsRequiredHeuristic(RequiredHeuristic::ExileLibraryLands).
+  Neither the full searched menu nor the engine's generic shape is acceptable for normal play (USER 2026-11-18). Give the deck its own provider policy -- see docs/design/provider-heuristic-required.md.
+  Bypasses (never for normal play): human play (MTG_HUMAN_PLAY, the viewer); the unpruned measurement route (MTG_UNPRUNED, or MTG_UNPRUNE=heuristicrequired).
+[provider-required] measure BYPASSED (MTG_UNPRUNED): the engine's menu, for measurement / human play only
+[provider-required] deck measure holds a card whose decision REQUIRES a deck-specific provider heuristic, and its provider 'Generic' does not implement it:
+  * Trench Gorger [etb_exile_library_lands_set_base_pt]: "search your library for any number of land cards, exile them" -- WHICH lands to exile (the engine menu keeps 3+ lands only as one provider-ordered round-robin prefix per count, capped at 62 entries; the full keep-subset product is combinatorially huge). Implement: DecisionProvider::RestrictExileLibraryLandsMenu (and, for the beyond-horizon front, the same rule), then declare it with ImplementsRequiredHeuristic(RequiredHeuristic::ExileLibraryLands).
+  Neither the full searched menu nor the engine's generic shape is acceptable for normal play (USER 2026-11-18). Give the deck its own provider policy -- see docs/design/provider-heuristic-required.md.
+  Bypasses (never for normal play): human play (MTG_HUMAN_PLAY, the viewer); the unpruned measurement route (MTG_UNPRUNED, or MTG_UNPRUNE=heuristicrequired).
+[provider-required] measure BYPASSED (MTG_UNPRUNE=heuristicrequired): the engine's menu, for measurement / human play only
+[provider-required] deck measure holds a card whose decision REQUIRES a deck-specific provider heuristic, and its provider 'Generic' does not implement it:
+  * Trench Gorger [etb_exile_library_lands_set_base_pt]: "search your library for any number of land cards, exile them" -- WHICH lands to exile (the engine menu keeps 3+ lands only as one provider-ordered round-robin prefix per count, capped at 62 entries; the full keep-subset product is combinatorially huge). Implement: DecisionProvider::RestrictExileLibraryLandsMenu (and, for the beyond-horizon front, the same rule), then declare it with ImplementsRequiredHeuristic(RequiredHeuristic::ExileLibraryLands).
+  Neither the full searched menu nor the engine's generic shape is acceptable for normal play (USER 2026-11-18). Give the deck its own provider policy -- see docs/design/provider-heuristic-required.md.
+  Bypasses (never for normal play): human play (MTG_HUMAN_PLAY, the viewer); the unpruned measurement route (MTG_UNPRUNED, or MTG_UNPRUNE=heuristicrequired).
+[subtype-registry] 'ZzNotARealSubtypeZz' was first seen AFTER freeze and resolves to kNone. Add it to SubtypeRegistry::RuntimeLiterals().
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:497:
+TEST CASE:  INT-9 Jetmir kill: the enumeration collapses to the one verified killing plan
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:505: MESSAGE: plans on the kill turn: 2
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:606:
+TEST CASE:  INT-9 F: the Intent probe state -- searched (INT-8) vs the free-Intent ruling vs every INT-9 prune
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:611: MESSAGE: Intent variants at an unlimited root: searched 216, free Intent declined 8, INT-9 1
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:676:
+TEST CASE:  Sacrifice claims: two sacrifice costs never share the one creature the plan has
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_int9.cpp:699: MESSAGE: plans=7 culling-only=2 intent-only=2 both=0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:384:
+TEST CASE:  SB union plan: Ritual, Ritual, Stone, Apostle is one post-combat plan
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:414: MESSAGE: union plans: shipped order 4, USER order 4
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:503:
+TEST CASE:  SB ritual payoff: a granter that only the ritual's own ripple credit could pay is a phantom, pruned
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:521: MESSAGE: Stone plans on one Swamp: off 1, on 0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:538:
+TEST CASE:  SB ritual payoff: a sacrifice-six activation the six cannot reach is no sink for a ritual
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:555: MESSAGE: Ritual plans, one Apostle: off 1, on 0
+
+===============================================================================
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:666:
+TEST CASE:  SB order: Ritual-after-Stone is ONE arrangement per line -- the plan count does not grow
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:705: MESSAGE: 4 Swamps: plans off 14 on 14; Stone-before-Ritual lines off 0 on 0
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:705: MESSAGE: 6 Swamps: plans off 22 on 22; Stone-before-Ritual lines off 0 on 12
+
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_shadowborn_mainphase.cpp:705: MESSAGE: 7 Swamps: plans off 24 on 24; Stone-before-Ritual lines off 0 on 12
+
+===============================================================================
+[doctest] test cases:    3716 |    3716 passed | 0 failed | 0 skipped
+[doctest] assertions: 3631359 | 3631359 passed | 0 failed |
+[doctest] Status: SUCCESS!
+[inwin-cache] win_hits=0 nowin_hits=0 win_stores=3 nowin_stores=62 widened=1 full_refusals=0
+[game-line-cache] win_hits=2 nowin_hits=361 stores=103 full_refusals=0 leafless_reads=2
+[id-hint-game] lookups=14 cur_hits=2 prev_hits=0
+[rollout-game-cache] lookups=11421 hits=1769 win_hits=838 stores=16751 full_refusals=0
+[enum-memo] hits=0 misses=1403 clears=0
+[seed-walk-fold] folded=2 (whiff 1) | verify checked=0 MISMATCH=0
+[solve-memo] hits=92372 misses=373547 clears=11
+[m2-search-memo] hits=186 misses=324 clears=0
+[pb-xbase] F5 groups=6 folded=86 | verify ok=0 MISMATCH=0
+[pb-fold-x] tables=67 | F3 mirror: groups=2 folded=12 verify ok=0 MISMATCH=0 | F4 strand: groups=4 folded=10 verify same=0 payment-only=0 MISMATCH=0 unmatched=0
+[pb-exact-width] exact_fans=109 (of them tight-bound 2) bound_fans=92 exact_ranks=1546 (upper bound would emit 0) | verify resolutions=0 MISMATCH=0 (of them emitted > real: 0)
+[leaf-eval] published=145649 ties=126595 flips=9376 life-equal-ties=50967
+[pb-lazy-cands] lazy_lists=3147 clones_not_materialised=21793 materialised_on_demand=3133 | verify lists=0 entries=0 MISMATCH=0
+[pb-lazy-cands] bp-cache lazy_lists=6 entries_not_materialised=8 m2-memo lazy_lists=0 | bp verify lists=0 entries=0 MISMATCH=0
+
+=== PAY-ROLLBACK: tried=1 fired=0   REAL play: tried=0 fired=0 ===
+[enchant-retarget] 1 searched Aura target(s) illegal at resolution (fallback host used)
+rc=0

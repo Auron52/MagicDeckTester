@@ -1,0 +1,3 @@
+gods_regression_d3_s2002_gi16 off=6 on=7 downbown=6.0 RECOVERED rc=0
+martyr_regression_d5_s2002_gi149 off=5 on=6 downbown=5.0 RECOVERED rc=0
+mazesend_regression_d5_s3003_gi73 off=5 on=6 downbown=5.0 RECOVERED rc=0

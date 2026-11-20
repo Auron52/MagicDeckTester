@@ -1,0 +1,1396 @@
+{
+"jobs": [
+{
+"name": "mazesend_overnight_d3_s4004",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 25,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 0
+},
+{
+"name": "mazesend_overnight_d5_s4004",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "mazesend_overnight_d5_s5005",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "mazesend_overnight_d5_s6006",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "mazesend_overnight_d5_s7007",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"games": 357,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "mill_overnight_d3_s4004",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 194756
+},
+{
+"name": "mill_overnight_d5_s4004",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 238885
+},
+{
+"name": "mill_overnight_d5_s5005",
+"deck": "decks/Mill/Mill.cod",
+"profile": "decks/Mill/Mill.profile.json",
+"games": 5,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 193776
+},
+{
+"name": "boars_overnight_d3_s4004",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 7485
+},
+{
+"name": "boars_overnight_d5_s4004",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1425,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 6130
+},
+{
+"name": "boars_overnight_d5_s5005",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1425,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 6132
+},
+{
+"name": "boars_overnight_d5_s6006",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1425,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 5613
+},
+{
+"name": "boars_overnight_d5_s7007",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"games": 1425,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 5653
+},
+{
+"name": "boars2hg_overnight_d5_s4004",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 175,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 13548
+},
+{
+"name": "boars2hg_overnight_d5_s5005",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 175,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 13621
+},
+{
+"name": "boars2hg_overnight_d5_s6006",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 175,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 14303
+},
+{
+"name": "boars2hg_overnight_d5_s7007",
+"deck": "decks/Boars/Boars.cod",
+"profile": "decks/Boars/Boars.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 175,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 13244
+},
+{
+"name": "sea_overnight_d3_s4004",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 35742
+},
+{
+"name": "sea_overnight_d5_s4004",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 69434
+},
+{
+"name": "sea_overnight_d5_s5005",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 72129
+},
+{
+"name": "sea_overnight_d5_s6006",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 64775
+},
+{
+"name": "sea_overnight_d5_s7007",
+"deck": "decks/Sea Creatures/Sea Creatures.cod",
+"profile": "decks/Sea Creatures/Sea Creatures.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 76362
+},
+{
+"name": "stuffy_overnight_d3_s4004",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 0
+},
+{
+"name": "stuffy_overnight_d5_s4004",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy_overnight_d5_s5005",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy_overnight_d5_s6006",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy_overnight_d5_s7007",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy2hg_overnight_d5_s4004",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy2hg_overnight_d5_s5005",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy2hg_overnight_d5_s6006",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "stuffy2hg_overnight_d5_s7007",
+"deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+"profile": "decks/Stuffy Doll/Stuffy Doll.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 0
+},
+{
+"name": "morph_overnight_d3_s4004",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4268
+},
+{
+"name": "morph_overnight_d5_s4004",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 5308
+},
+{
+"name": "morph_overnight_d5_s5005",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 5708
+},
+{
+"name": "morph_overnight_d5_s6006",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 4807
+},
+{
+"name": "morph_overnight_d5_s7007",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 5948
+},
+{
+"name": "morph2hg_overnight_d5_s4004",
+"deck": "decks/Morph/Morph.cod",
+"profile": "decks/Morph/Morph.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 18874
+},
+{
+"name": "hydras_overnight_d3_s4004",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 8306
+},
+{
+"name": "hydras_overnight_d5_s4004",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 11496
+},
+{
+"name": "hydras_overnight_d5_s5005",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 14330
+},
+{
+"name": "hydras_overnight_d5_s6006",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 12917
+},
+{
+"name": "hydras_overnight_d5_s7007",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 15771
+},
+{
+"name": "hydras2hg_overnight_d5_s4004",
+"deck": "decks/Hydras/Hydras.cod",
+"profile": "decks/Hydras/Hydras.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 27231
+},
+{
+"name": "gods_overnight_d3_s4004",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 75,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 24497
+},
+{
+"name": "gods_overnight_d5_s4004",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"games": 75,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 25021
+},
+{
+"name": "gods2hg_overnight_d5_s4004",
+"deck": "decks/Gods/Gods.cod",
+"profile": "decks/Gods/Gods.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 50,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 22323
+},
+{
+"name": "knights_overnight_d3_s4004",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2946
+},
+{
+"name": "knights_overnight_d5_s4004",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1925,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 1087
+},
+{
+"name": "knights_overnight_d5_s5005",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1925,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 1106
+},
+{
+"name": "knights_overnight_d5_s6006",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1925,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 1155
+},
+{
+"name": "knights_overnight_d5_s7007",
+"deck": "decks/Knights/Knights.cod",
+"profile": "decks/Knights/Knights.profile.json",
+"games": 1925,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 1138
+},
+{
+"name": "antilife_overnight_d3_s4004",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 4389
+},
+{
+"name": "antilife_overnight_d5_s4004",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1925,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 3564
+},
+{
+"name": "antilife_overnight_d5_s5005",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1925,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 3461
+},
+{
+"name": "antilife_overnight_d5_s6006",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1925,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 3373
+},
+{
+"name": "antilife_overnight_d5_s7007",
+"deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+"profile": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+"games": 1925,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 3355
+},
+{
+"name": "hinata_overnight_d3_s4004",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 50509
+},
+{
+"name": "hinata_overnight_d5_s4004",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 425,
+"seed": 4004,
+"budget_ms": 30,
+"weight": 70234
+},
+{
+"name": "hinata_overnight_d5_s5005",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 425,
+"seed": 5005,
+"budget_ms": 30,
+"weight": 55408
+},
+{
+"name": "hinata_overnight_d5_s6006",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 425,
+"seed": 6006,
+"budget_ms": 30,
+"weight": 69067
+},
+{
+"name": "hinata_overnight_d5_s7007",
+"deck": "decks/Hinata/Hinata.cod",
+"profile": "decks/Hinata/Hinata.profile.json",
+"games": 425,
+"seed": 7007,
+"budget_ms": 30,
+"weight": 62304
+},
+{
+"name": "shadowborn_overnight_d3_s4004",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 12023
+},
+{
+"name": "shadowborn_overnight_d5_s4004",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 425,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 16897
+},
+{
+"name": "shadowborn_overnight_d5_s5005",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 425,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 17450
+},
+{
+"name": "shadowborn_overnight_d5_s6006",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 425,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 16831
+},
+{
+"name": "shadowborn_overnight_d5_s7007",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"games": 425,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 17945
+},
+{
+"name": "creature_giving_overnight_d3_s4004",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 8556
+},
+{
+"name": "creature_giving_overnight_d5_s4004",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1425,
+"seed": 4004,
+"budget_ms": 30,
+"weight": 8930
+},
+{
+"name": "creature_giving_overnight_d5_s5005",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1425,
+"seed": 5005,
+"budget_ms": 30,
+"weight": 9190
+},
+{
+"name": "creature_giving_overnight_d5_s6006",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1425,
+"seed": 6006,
+"budget_ms": 30,
+"weight": 9055
+},
+{
+"name": "creature_giving_overnight_d5_s7007",
+"deck": "decks/Creature Giving/Creature Giving.cod",
+"profile": "decks/Creature Giving/Creature Giving.profile.json",
+"games": 1425,
+"seed": 7007,
+"budget_ms": 30,
+"weight": 9397
+},
+{
+"name": "fivecolour_overnight_d3_s4004",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 14910
+},
+{
+"name": "fivecolour_overnight_d5_s4004",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 550,
+"seed": 4004,
+"budget_ms": 40,
+"weight": 27118
+},
+{
+"name": "fivecolour_overnight_d5_s5005",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 550,
+"seed": 5005,
+"budget_ms": 40,
+"weight": 23099
+},
+{
+"name": "fivecolour_overnight_d5_s6006",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 550,
+"seed": 6006,
+"budget_ms": 40,
+"weight": 23165
+},
+{
+"name": "fivecolour_overnight_d5_s7007",
+"deck": "decks/Five Colour/Five Colour.cod",
+"profile": "decks/Five Colour/Five Colour.profile.json",
+"games": 550,
+"seed": 7007,
+"budget_ms": 40,
+"weight": 27486
+},
+{
+"name": "kittyv3_overnight_d3_s4004",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 175,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 6100
+},
+{
+"name": "kittyv3_overnight_d5_s4004",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 700,
+"seed": 4004,
+"budget_ms": 14,
+"weight": 7445
+},
+{
+"name": "kittyv3_overnight_d5_s5005",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 700,
+"seed": 5005,
+"budget_ms": 14,
+"weight": 6860
+},
+{
+"name": "kittyv3_overnight_d5_s6006",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 700,
+"seed": 6006,
+"budget_ms": 14,
+"weight": 7429
+},
+{
+"name": "kittyv3_overnight_d5_s7007",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"games": 700,
+"seed": 7007,
+"budget_ms": 14,
+"weight": 6389
+},
+{
+"name": "critter_overnight_d3_s4004",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 2830
+},
+{
+"name": "critter_overnight_d5_s4004",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1425,
+"seed": 4004,
+"budget_ms": 80,
+"weight": 916
+},
+{
+"name": "critter_overnight_d5_s5005",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1425,
+"seed": 5005,
+"budget_ms": 80,
+"weight": 927
+},
+{
+"name": "critter_overnight_d5_s6006",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1425,
+"seed": 6006,
+"budget_ms": 80,
+"weight": 943
+},
+{
+"name": "critter_overnight_d5_s7007",
+"deck": "decks/Critter Lifegain/Critter Lifegain.cod",
+"profile": "decks/Critter Lifegain/Critter Lifegain.profile.json",
+"games": 1425,
+"seed": 7007,
+"budget_ms": 80,
+"weight": 995
+},
+{
+"name": "pd_overnight_d3_s4004",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 75,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 19633
+},
+{
+"name": "pd_overnight_d5_s4004",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 425,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 28051
+},
+{
+"name": "pd_overnight_d5_s5005",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 425,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 25880
+},
+{
+"name": "pd_overnight_d5_s6006",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 425,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 27136
+},
+{
+"name": "pd_overnight_d5_s7007",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"games": 425,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 30983
+},
+{
+"name": "bruna_overnight_d3_s4004",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 10175
+},
+{
+"name": "bruna_overnight_d5_s4004",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 500,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 14808
+},
+{
+"name": "bruna_overnight_d5_s5005",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 500,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 15680
+},
+{
+"name": "bruna_overnight_d5_s6006",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 500,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 15849
+},
+{
+"name": "bruna_overnight_d5_s7007",
+"deck": "decks/Bruna/Bruna.cod",
+"profile": "decks/Bruna/Bruna.profile.json",
+"games": 500,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 15425
+},
+{
+"name": "pd2hg_overnight_d5_s4004",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 39326
+},
+{
+"name": "pd2hg_overnight_d5_s5005",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 33322
+},
+{
+"name": "pd2hg_overnight_d5_s6006",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 39447
+},
+{
+"name": "pd2hg_overnight_d5_s7007",
+"deck": "decks/Prevent Damage/Prevent Damage.cod",
+"profile": "decks/Prevent Damage/Prevent Damage.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 39759
+},
+{
+"name": "vampires_overnight_d3_s4004",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 325,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 5191
+},
+{
+"name": "vampires_overnight_d5_s4004",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1425,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 4993
+},
+{
+"name": "vampires_overnight_d5_s5005",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1425,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 4408
+},
+{
+"name": "vampires_overnight_d5_s6006",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1425,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 4403
+},
+{
+"name": "vampires_overnight_d5_s7007",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"games": 1425,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 4750
+},
+{
+"name": "vampires2hg_overnight_d5_s4004",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 150,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 33038
+},
+{
+"name": "vampires2hg_overnight_d5_s5005",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 150,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 34675
+},
+{
+"name": "vampires2hg_overnight_d5_s6006",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 150,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 24684
+},
+{
+"name": "vampires2hg_overnight_d5_s7007",
+"deck": "decks/Vampires/Vampires.cod",
+"profile": "decks/Vampires/Vampires.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 150,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 36812
+},
+{
+"name": "elementals_overnight_d3_s4004",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 18362
+},
+{
+"name": "elementals_overnight_d5_s4004",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 525,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 21193
+},
+{
+"name": "elementals_overnight_d5_s5005",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 525,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 21839
+},
+{
+"name": "elementals_overnight_d5_s6006",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 525,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 24199
+},
+{
+"name": "elementals_overnight_d5_s7007",
+"deck": "decks/Landfall Elementals/Landfall Elementals.cod",
+"profile": "decks/Landfall Elementals/Landfall Elementals.profile.json",
+"games": 525,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 24319
+},
+{
+"name": "martyr_overnight_d3_s4004",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13515
+},
+{
+"name": "martyr_overnight_d5_s4004",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 18767
+},
+{
+"name": "martyr_overnight_d5_s5005",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 18756
+},
+{
+"name": "martyr_overnight_d5_s6006",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 21816
+},
+{
+"name": "martyr_overnight_d5_s7007",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 18883
+},
+{
+"name": "martyr2hg_overnight_d5_s4004",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 23854
+},
+{
+"name": "martyr2hg_overnight_d5_s5005",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 22553
+},
+{
+"name": "martyr2hg_overnight_d5_s6006",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 29342
+},
+{
+"name": "martyr2hg_overnight_d5_s7007",
+"deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+"profile": "decks/Martyr Lifegain/Martyr Lifegain.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 75,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 24728
+},
+{
+"name": "spirits_overnight_d3_s4004",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 400,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 22888
+},
+{
+"name": "spirits_overnight_d3_s5005",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 400,
+"seed": 5005,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 26931
+},
+{
+"name": "spirits_overnight_d3_s6006",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 400,
+"seed": 6006,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 28119
+},
+{
+"name": "spirits_overnight_d3_s7007",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 400,
+"seed": 7007,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 26317
+},
+{
+"name": "spirits_overnight_d5_s4004",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 425,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 37291
+},
+{
+"name": "spirits_overnight_d5_s5005",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 425,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 43502
+},
+{
+"name": "spirits_overnight_d5_s6006",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 425,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 40048
+},
+{
+"name": "spirits_overnight_d5_s7007",
+"deck": "decks/Spirits/Spirits.cod",
+"profile": "decks/Spirits/Spirits.profile.json",
+"games": 425,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 38680
+},
+{
+"name": "merfolkturns_overnight_d3_s4004",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 125,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 56449
+},
+{
+"name": "merfolkturns_overnight_d5_s4004",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 300,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 96128
+},
+{
+"name": "merfolkturns_overnight_d5_s5005",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 300,
+"seed": 5005,
+"budget_ms": 20,
+"weight": 76767
+},
+{
+"name": "merfolkturns_overnight_d5_s6006",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 300,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 85768
+},
+{
+"name": "merfolkturns_overnight_d5_s7007",
+"deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+"profile": "decks/Merfolk Turns/Merfolk Turns.profile.json",
+"games": 300,
+"seed": 7007,
+"budget_ms": 20,
+"weight": 73835
+},
+{
+"name": "mazesend2hg_heldout_d5_s4004",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"budget_ms": 20,
+"weight": 103617
+},
+{
+"name": "mazesend2hg_heldout_d5_s6006",
+"deck": "decks/Maze's End/Maze's End.cod",
+"profile": "decks/Maze's End/Maze's End.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 6006,
+"budget_ms": 20,
+"weight": 103617
+},
+{
+"name": "shadowborn2hg_heldout_d3_s4004",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13471
+},
+{
+"name": "shadowborn2hg_heldout_d3_s6006",
+"deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+"profile": "decks/Shadowborn Apostle/Shadowborn Apostle.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 6006,
+"depth": 3,
+"budget_ms": 10,
+"ignore_play_profile": true,
+"weight": 13471
+},
+{
+"name": "kittyv32hg_heldout_d5_s4004",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 4004,
+"budget_ms": 14,
+"weight": 13364
+},
+{
+"name": "kittyv32hg_heldout_d5_s6006",
+"deck": "decks/Kitty Equipment/Kitty Equipment.cod",
+"profile": "decks/Kitty Equipment/Kitty Equipment.profile.json",
+"starting_life": 30,
+"opponent_heads": 2,
+"games": 100,
+"seed": 6006,
+"budget_ms": 14,
+"weight": 13364
+}
+]
+}

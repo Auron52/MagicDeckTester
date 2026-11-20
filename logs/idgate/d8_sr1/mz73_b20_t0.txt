@@ -1,0 +1,17 @@
+Loaded 60 mainboard card(s)
+Loaded profile from decks/Maze's End/Maze's End.profile.json
+[play] depth=5 budget=20ms source=default(depth)+cli(budget)
+[goldfish] workers=1 (hw_concurrency=32, affinity=32, requested=1)
+[search] T1 pass=1 done win=6 cost=7556 used=7556
+[search] T2 pass=1 done win=6 cost=7938 used=7938
+[search] T3 pass=1 done win=6 cost=6899 used=6899
+[search] T4 pass=1 done win=5 cost=11729 used=11729
+[search] T5 pass=1 done win=5 cost=745 used=745
+Seed          : 3076
+Games played  : 1
+avg (turns)   : 5.0000    [mean turn-to-win, unwon = max_turns+1; lower is better]
+[game-line-cache] win_hits=0 nowin_hits=0 stores=0 full_refusals=0 leafless_reads=0
+[rollout-game-cache] lookups=47 hits=5 win_hits=5 stores=121 full_refusals=0
+[enum-memo] hits=0 misses=0 clears=0
+[solve-memo] hits=90 misses=2665 clears=0
+[leaf-eval] published=5 ties=3 flips=0 life-equal-ties=3

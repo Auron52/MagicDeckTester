@@ -7,5 +7,5 @@ mkdir -p "$O/wins"
 BIN=${BIN:-build/Release/mtg}
 cp "$BIN" "$O/mtg.bin"
 export MTG_RSS_CAP_GB=20 MTG_DUMP_UNITS=1
-env "$@" "$O/mtg.bin" --batch "$M" --threads "$(nproc)" --game-log-dir "$O/wins" > "$O/out" 2> "$O/err"
+env "$@" "$O/mtg.bin" --batch "$M" --threads "$(nproc)" --game-log-dir "$O/wins" ${RESUME:+--resume} >> "$O/out" 2>> "$O/err"
 echo "rc=$?" > "$O/DONE"

@@ -1,0 +1,4 @@
+off {'consult': 102209, 'refused': 16793, 'refused_rem': 134128902}
+on {'consult': 98749, 'trial': 11633, 'trial_rem': 96418687, 'done': 5069, 'done_units': 17564981, 'better': 367, 'abort': 6564, 'abort_units': 48238229, 'rescued': 387, 'refused': 3772, 'refused_rem': 0}
+  trials 11633: finished 5069 (43.6%, 367 with a better win), aborted 6564 (387 rescued)
+  refused-pass budget (rem at the gate) 96,418,687 units: 17,564,981 (18.2%) spent in FINISHED passes, 48,238,229 (50.0%) in aborted trials

@@ -1,0 +1,549 @@
+>>> build/ -> /workspaces/MagicDeckTester/build/wt/idgate (ext4 build volume; compile output stays off the 9p host mount)
+>>> configuring build/ (preset: linux -- Ninja Multi-Config)
+CMake Deprecation Warning at build/_deps/doctest-src/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.5 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value or use a ...<max> suffix to tell
+  CMake that the project does not need compatibility with older versions.
+
+
+>>> build: Release on 12 jobs -> build/Release/
+[1/362] Computing engine fingerprint (MTG_ENGINE_FP)
+[2/362] Generating MTG_* flag registry
+[3/362] Building CXX object _deps/pugixml-build/CMakeFiles/pugixml-static.dir/Release/src/pugixml.cpp.o
+[4/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/deck/DeckLoader.cpp.o
+[5/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/ProviderHeuristicRequired.cpp.o
+[6/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/PlanContext.cpp.o
+[7/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/GameLogger.cpp.o
+[8/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/KeepModel.cpp.o
+[9/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/runner/GoldFishRunner.cpp.o
+[10/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/runner/BatchPartial.cpp.o
+[11/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/ManaOracle.cpp.o
+[12/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/NameRegistry.cpp.o
+[13/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/PoolAllocator.cpp.o
+[14/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/FlagRegistry.cpp.o
+[15/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/MemBudget.cpp.o
+[16/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/Tier2Overflow.cpp.o
+[17/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/LandPlay.cpp.o
+[18/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/cards/CardDatabase.cpp.o
+[19/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/runner/BatchRunner.cpp.o
+[20/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/Combat.cpp.o
+[21/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/SpellEffects.cpp.o
+[22/362] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/AnalyzerEngine.cpp.o
+[23/362] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/EquivalenceDiscovery.cpp.o
+[24/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/EffectHandler.cpp.o
+[25/362] Linking CXX static library _deps/pugixml-build/Release/libpugixml.a
+[26/362] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/KeepModelTrainer.cpp.o
+[27/362] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/main.cpp.o
+[28/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/core/GameEngine.cpp.o
+[29/362] Building CXX object CMakeFiles/mtg-test.dir/Release/cmake_pch.hxx.gch
+[30/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_odo_flat_gate_cut.cpp.o
+[31/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mana_payment.cpp.o
+[32/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/ManaPayment.cpp.o
+[33/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hand_demand_pay.cpp.o
+[34/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_batch_partial.cpp.o
+[35/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sac_land_class_pin.cpp.o
+[36/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mana_oracle.cpp.o
+[37/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dup_action_fold.cpp.o
+[38/362] Building CXX object CMakeFiles/mtg-analyze.dir/Release/src/analyzer/ExhaustiveKeep.cpp.o
+[39/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_kitty_discard.cpp.o
+[40/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_escalation_budget.cpp.o
+[41/362] Building CXX object CMakeFiles/mtg.dir/Release/src/main.cpp.o
+[42/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/AIEngine.cpp.o
+[43/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bucket_policy.cpp.o
+[44/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_subtype_registry.cpp.o
+[45/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_greedy_window.cpp.o
+[46/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fit_gate.cpp.o
+[47/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_deeproot_pilgrimage.cpp.o
+[48/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sampled_gate.cpp.o
+[49/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rollout_from.cpp.o
+[50/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_upkeep_tutor_search.cpp.o
+[51/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_lakeprof.cpp.o
+[52/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sac_rank_hook.cpp.o
+[53/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_m2_land_drop.cpp.o
+[54/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_provider_prunes.cpp.o
+[55/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_staged_lockstep.cpp.o
+[56/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sac_mana_act_demand.cpp.o
+[57/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cost_reducers.cpp.o
+[58/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sac_outlet_pay.cpp.o
+[59/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bp_resume_line_hold.cpp.o
+[60/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_counter_list.cpp.o
+[61/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rollout_land_act_color.cpp.o
+[62/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_morph_doubler_exalted.cpp.o
+[63/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_opponent_deck.cpp.o
+[64/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cumulative_upkeep.cpp.o
+[65/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_terastodon_k.cpp.o
+[66/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_swords_redirect.cpp.o
+[67/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_provider_relocations.cpp.o
+[68/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_held_fetch_crack_first.cpp.o
+[69/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirit_labyrinth.cpp.o
+[70/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_breaching_clauses.cpp.o
+[71/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_kithkin_cards.cpp.o
+[72/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_midrange_burn_permanents.cpp.o
+[73/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_fetch_rule.cpp.o
+[74/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_martyr_lifegain_cards.cpp.o
+[75/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_cards.cpp.o
+[76/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_figure_of_destiny.cpp.o
+[77/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_discard.cpp.o
+[78/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mill_rules.cpp.o
+[79/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_souls.cpp.o
+[80/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_d0_play.cpp.o
+[81/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lurrus.cpp.o
+[82/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_millicent.cpp.o
+[83/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_geist_wanderer.cpp.o
+[84/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_selesnya_lifegain.cpp.o
+[85/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_skyclave_orchid.cpp.o
+[86/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_karoo_tap_in_response.cpp.o
+[87/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cont_unseen_pending.cpp.o
+[88/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bottom_pref_order.cpp.o
+[89/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_karoo_bounce_search.cpp.o
+[90/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_karoo_position.cpp.o
+[91/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_blink_target.cpp.o
+[92/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/DecisionProviders.cpp.o
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/src/ai/DecisionProviders.cpp: In function 'constexpr bool {anonymous}::AaV2EveryStepOnce()':
+/workspaces/MagicDeckTester/.claude/worktrees/idgate/src/ai/DecisionProviders.cpp:56196:35: warning: arithmetic between different enumeration types '{anonymous}::AaOrderSlot' and '{anonymous}::AaV2Act' is deprecated [-Wdeprecated-enum-enum-conversion]
+56196 |     return kAaV2Steps == kAaSlots + kAaActs;
+      |                          ~~~~~~~~~^~~~~~~~~
+[93/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spirits_usher.cpp.o
+[94/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_human_sequence_pin.cpp.o
+[95/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hinata_crackle_count.cpp.o
+[96/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_restrictor_order.cpp.o
+[97/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_badger_grant_sites.cpp.o
+[98/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_paradise_mantle.cpp.o
+[99/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hinata_cast_order.cpp.o
+In file included from /usr/include/c++/13/bits/stl_algobase.h:64,
+                 from /usr/include/c++/13/string:51,
+                 from /workspaces/MagicDeckTester/.claude/worktrees/idgate/build/CMakeFiles/mtg-test.dir/Release/cmake_pch.hxx:5,
+                 from <command-line>:
+In constructor 'constexpr std::pair<_T1, _T2>::pair(_U1&&, _U2&&) [with _U1 = int&; _U2 = signed char&; _T1 = int; _T2 = signed char]',
+    inlined from 'constexpr decltype (::new(void*(0)) _Tp) std::construct_at(_Tp*, _Args&& ...) [with _Tp = pair<int, signed char>; _Args = {int&, signed char&}]' at /usr/include/c++/13/bits/stl_construct.h:97:14,
+    inlined from 'static constexpr void std::allocator_traits<std::allocator<_CharT> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = std::pair<int, signed char>; _Args = {int&, signed char&}; _Tp = std::pair<int, signed char>]' at /usr/include/c++/13/bits/alloc_traits.h:540:21,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {int&, signed char&}; _Tp = std::pair<int, signed char>; _Alloc = std::allocator<std::pair<int, signed char> >]' at /usr/include/c++/13/bits/vector.tcc:117:30,
+    inlined from 'void {anonymous}::HoArms::Set(int, bool)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_hinata_cast_order.cpp:68:53,
+    inlined from '{anonymous}::HoArms::HoArms(bool, bool)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_hinata_cast_order.cpp:73:12:
+/usr/include/c++/13/bits/stl_pair.h:317:42: warning: writing 1 byte into a region of size 0 [-Wstringop-overflow=]
+  317 |         : first(std::forward<_U1>(__x)), second(std::forward<_U2>(__y))
+      |                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/x86_64-linux-gnu/c++/13/bits/c++allocator.h:33,
+                 from /usr/include/c++/13/bits/allocator.h:46,
+                 from /usr/include/c++/13/string:43:
+In member function '_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = std::pair<int, signed char>]',
+    inlined from 'constexpr _Tp* std::allocator< <template-parameter-1-1> >::allocate(std::size_t) [with _Tp = std::pair<int, signed char>]' at /usr/include/c++/13/bits/allocator.h:198:40,
+    inlined from 'static constexpr _Tp* std::allocator_traits<std::allocator<_CharT> >::allocate(allocator_type&, size_type) [with _Tp = std::pair<int, signed char>]' at /usr/include/c++/13/bits/alloc_traits.h:482:28,
+    inlined from 'constexpr std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = std::pair<int, signed char>; _Alloc = std::allocator<std::pair<int, signed char> >]' at /usr/include/c++/13/bits/stl_vector.h:381:33,
+    inlined from 'constexpr void std::vector<_Tp, _Alloc>::_M_realloc_insert(iterator, _Args&& ...) [with _Args = {int&, signed char&}; _Tp = std::pair<int, signed char>; _Alloc = std::allocator<std::pair<int, signed char> >]' at /usr/include/c++/13/bits/vector.tcc:459:44,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::emplace_back(_Args&& ...) [with _Args = {int&, signed char&}; _Tp = std::pair<int, signed char>; _Alloc = std::allocator<std::pair<int, signed char> >]' at /usr/include/c++/13/bits/vector.tcc:123:21,
+    inlined from 'void {anonymous}::HoArms::Set(int, bool)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_hinata_cast_order.cpp:68:53,
+    inlined from '{anonymous}::HoArms::HoArms(bool, bool)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_hinata_cast_order.cpp:72:12:
+/usr/include/c++/13/bits/new_allocator.h:151:55: note: at offset 20 into destination object of size 16 allocated by 'operator new'
+  151 |         return static_cast<_Tp*>(_GLIBCXX_OPERATOR_NEW(__n * sizeof(_Tp)));
+      |                                                       ^
+[100/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mass_death_sba.cpp.o
+[101/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_critter_lifegain.cpp.o
+[102/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cache_read_guard.cpp.o
+[103/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hydras_cast_order.cpp.o
+[104/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hydras_discard.cpp.o
+[105/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_jumbo_cactuar.cpp.o
+[106/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lifegain_instants.cpp.o
+[107/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_domain_widen_partial.cpp.o
+[108/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_ramp_filter_c_feed.cpp.o
+[109/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_land_aura_order_hold.cpp.o
+[110/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_domain_open_exact.cpp.o
+[111/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_land_aura_domain.cpp.o
+[112/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dork_atk_provider_hold.cpp.o
+[113/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_kicker_additional_cost.cpp.o
+[114/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fetch_crack_first.cpp.o
+[115/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_zhurtaa.cpp.o
+[116/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_land_tap_bonus.cpp.o
+[117/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_hydras_walkers.cpp.o
+[118/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_x_hydras.cpp.o
+[119/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_accomplished_alchemist.cpp.o
+[120/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_decimator.cpp.o
+[121/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fungus_revision.cpp.o
+[122/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_fetch_rank.cpp.o
+[123/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_cards.cpp.o
+[124/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_herald.cpp.o
+[125/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_morph_pumps.cpp.o
+[126/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_endraze.cpp.o
+[127/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_raggadragga.cpp.o
+[128/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_provider_heuristic_required.cpp.o
+[129/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_morph.cpp.o
+[130/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_ilharg.cpp.o
+[131/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_creatures_mana.cpp.o
+[132/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_game_work_meter.cpp.o
+[133/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_keyword_mask.cpp.o
+[134/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_keep_table.cpp.o
+[135/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vial_target_from_decklist.cpp.o
+[136/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_boars_i5b.cpp.o
+[137/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_combat.cpp.o
+[138/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_sagas.cpp.o
+[139/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_bounce.cpp.o
+[140/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_sin.cpp.o
+[141/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_gorger.cpp.o
+[142/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_pirates_provider.cpp.o
+[143/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_sin_dies.cpp.o
+[144/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_angels_tribal.cpp.o
+[145/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int6.cpp.o
+[146/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int8.cpp.o
+[147/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_discard.cpp.o
+[148/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_pirates.cpp.o
+[149/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_mainphase.cpp.o
+[150/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sea_main_phase.cpp.o
+[151/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_etb_dig_breakpoint.cpp.o
+[152/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_etb_target_carriage.cpp.o
+[153/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_payable_order.cpp.o
+[154/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int2.cpp.o
+[155/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int5.cpp.o
+[156/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int4.cpp.o
+[157/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int3.cpp.o
+[158/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_jorn_untap.cpp.o
+[159/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_snow_prepay.cpp.o
+[160/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_passive_opponent_lands.cpp.o
+[161/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int9.cpp.o
+[162/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_equip_all_free.cpp.o
+[163/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_begin_combat_attach.cpp.o
+[164/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_etb_treasure_spend.cpp.o
+[165/362] Building CXX object CMakeFiles/mtg-core.dir/Release/src/ai/TurnSolver.cpp.o
+[166/362] Linking CXX static library Release/libmtg-core.a
+[167/362] Linking CXX executable Release/mtg
+[168/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_shadowborn_int1.cpp.o
+[169/362] Linking CXX executable Release/mtg-analyze
+[170/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_in_place_rename.cpp.o
+[171/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_battle_cry.cpp.o
+[172/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_sweep.cpp.o
+[173/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_combat.cpp.o
+[174/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_convoke.cpp.o
+[175/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_payer.cpp.o
+[176/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_order_discard.cpp.o
+[177/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_leaf_kill_only.cpp.o
+[178/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_leafless_reads_leafed.cpp.o
+[179/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_perf_p.cpp.o
+[180/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_po_w0_fold.cpp.o
+[181/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_stompy_order.cpp.o
+[182/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_double_strike_grants.cpp.o
+[183/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_madness_arms.cpp.o
+[184/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cast_riders.cpp.o
+[185/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_site9_cycle_stop.cpp.o
+[186/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_remand_self_target.cpp.o
+[187/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_madness.cpp.o
+[188/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_magnetic_theft.cpp.o
+[189/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_d0_epoch.cpp.o
+[190/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_reconfigure.cpp.o
+[191/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_equip_route_key.cpp.o
+[192/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_attach_order.cpp.o
+[193/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_outlets.cpp.o
+[194/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_perf.cpp.o
+[195/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prevent_damage_discard.cpp.o
+[196/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_vampires_lords.cpp.o
+[197/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sigardas_aid.cpp.o
+[198/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prevent_damage_wish.cpp.o
+[199/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_soldiers_vial_order.cpp.o
+[200/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_soldiers_breach_cast_order.cpp.o
+[201/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_kitty_cast_order.cpp.o
+[202/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dork_growth_x.cpp.o
+[203/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_attach_folds.cpp.o
+[204/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_snow_scry.cpp.o
+[205/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_equip_host_fold.cpp.o
+[206/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_attack_attach_equipment.cpp.o
+[207/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_forge_anew.cpp.o
+[208/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bruna_sweep.cpp.o
+[209/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_red_elementals.cpp.o
+[210/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prevent_damage_creatures.cpp.o
+[211/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_soldiers_cathar.cpp.o
+[212/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prevent_damage.cpp.o
+[213/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prevent_damage_spells.cpp.o
+[214/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_combat_staged_out.cpp.o
+[215/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sac_fodder_menu.cpp.o
+[216/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_kessig_wolf_run.cpp.o
+[217/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bruna.cpp.o
+[218/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mycotyrant.cpp.o
+[219/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_courser.cpp.o
+[220/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_scute_cub.cpp.o
+[221/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_moraug.cpp.o
+[222/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_landfall.cpp.o
+[223/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_tutor_fail_to_find.cpp.o
+[224/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bruna_sideboard.cpp.o
+[225/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mossborn_hydra.cpp.o
+[226/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_colossus_cast_order.cpp.o
+[227/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_giants_discard.cpp.o
+[228/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lfe_enum_fixes.cpp.o
+[229/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_antilife_tutor.cpp.o
+[230/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_galadriel.cpp.o
+[231/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lfe_etb.cpp.o
+[232/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_martyr_tutor_prune.cpp.o
+[233/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fluctuator_discard.cpp.o
+[234/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_melira_pod_discard.cpp.o
+[235/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fluctuator_order.cpp.o
+[236/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fetched_land_entry.cpp.o
+[237/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_landfall_self_payoffs.cpp.o
+[238/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_auras_cast_order.cpp.o
+[239/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_auras_discard.cpp.o
+[240/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_equip_one_host_ds_gate.cpp.o
+[241/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_auras_restricted_new_creature.cpp.o
+[242/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_eldrazi_flicker_discard.cpp.o
+[243/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_land_search_gaps.cpp.o
+[244/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_burn_cast_order.cpp.o
+[245/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_goblins_discard.cpp.o
+[246/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_combat_stable_sources.cpp.o
+[247/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_tectonic_axis.cpp.o
+[248/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dragonstorm_ritual_order.cpp.o
+[249/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_land_search.cpp.o
+[250/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lackey_axis.cpp.o
+[251/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_line_reducer_keep.cpp.o
+[252/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dragonstorm_user_order.cpp.o
+[253/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_line_keep_all.cpp.o
+[254/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_angels_discard.cpp.o
+[255/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dragonstorm_followups.cpp.o
+[256/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_angels_cast_order.cpp.o
+[257/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_critterlifegain_discard.cpp.o
+[258/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_fungus_discard.cpp.o
+[259/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lhc_rules.cpp.o
+[260/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_critterlifegain_cast_order.cpp.o
+[261/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_selesnyalifegain_discard.cpp.o
+[262/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_knights_discard.cpp.o
+[263/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_discard_distance.cpp.o
+[264/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_whiteknights_discard.cpp.o
+[265/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_slivers_discard.cpp.o
+[266/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_slivers_replicate_searched.cpp.o
+[267/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_prospective_null.cpp.o
+[268/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_selesnya_d0_defects.cpp.o
+[269/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_creature_giving_discard.cpp.o
+[270/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_untap_credit.cpp.o
+[271/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_attack_projection.cpp.o
+[272/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_prepay_energy.cpp.o
+[273/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_midrange_burn_spells.cpp.o
+[274/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prepay_c_not_wild.cpp.o
+[275/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_aura_payer.cpp.o
+[276/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_pay_refine.cpp.o
+[277/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prepay_colours.cpp.o
+[278/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_route_board_deploy.cpp.o
+[279/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_line_generic.cpp.o
+[280/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dragonstorm_discard.cpp.o
+[281/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_goff_verify.cpp.o
+[282/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_aura_payer_as_executed.cpp.o
+[283/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_prepay_wild_true.cpp.o
+[284/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_freecast_x_zero.cpp.o
+[285/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_pay_rescue.cpp.o
+[286/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_burn_discard.cpp.o
+[287/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dev_seq_tail_skip.cpp.o
+[288/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bp_wave_empty.cpp.o
+[289/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_dig_searched_choice.cpp.o
+[290/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_th_held_drop.cpp.o
+[291/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_tapahead_pending_pip.cpp.o
+[292/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_breaching_dragonstorm_discard.cpp.o
+[293/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_bp_dev_seq.cpp.o
+In file included from /usr/include/c++/13/string:51,
+                 from /workspaces/MagicDeckTester/.claude/worktrees/idgate/build/CMakeFiles/mtg-test.dir/Release/cmake_pch.hxx:5,
+                 from <command-line>:
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_12()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:177:5:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:124:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:130:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:131:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:132:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:133:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+In function 'constexpr int std::__memcmp(const _Tp*, const _Up*, size_t) [with _Tp = int; _Up = int]',
+    inlined from 'static constexpr bool std::__equal<true>::equal(const _Tp*, const _Tp*, const _Tp*) [with _Tp = int]' at /usr/include/c++/13/bits/stl_algobase.h:1185:27,
+    inlined from 'constexpr bool std::__equal_aux1(_II1, _II1, _II2) [with _II1 = const int*; _II2 = const int*]' at /usr/include/c++/13/bits/stl_algobase.h:1219:43,
+    inlined from 'constexpr bool std::__equal_aux(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1227:31,
+    inlined from 'constexpr bool std::equal(_II1, _II1, _II2) [with _II1 = __gnu_cxx::__normal_iterator<const int*, vector<int> >; _II2 = __gnu_cxx::__normal_iterator<const int*, vector<int> >]' at /usr/include/c++/13/bits/stl_algobase.h:1557:30,
+    inlined from 'constexpr bool std::operator==(const vector<_Tp, _Alloc>&, const vector<_Tp, _Alloc>&) [with _Tp = int; _Alloc = allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:2042:21,
+    inlined from 'bool {anonymous}::HasStep(const std::vector<TurnSolver::DevSeqStep>&, const std::vector<int>&, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:77:17,
+    inlined from 'void DOCTEST_ANON_FUNC_7()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_bp_dev_seq.cpp:158:9:
+/usr/include/c++/13/bits/stl_algobase.h:108:32: warning: argument 2 null where non-null expected [-Wnonnull]
+  108 |         return __builtin_memcmp(__first1, __first2, sizeof(_Tp) * __num);
+      |                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_algobase.h:108:32: note: in a call to built-in function 'int __builtin_memcmp(const void*, const void*, long unsigned int)'
+[294/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_human_line_joint_pay.cpp.o
+[295/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_human_prepay_demand.cpp.o
+[296/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_edf_cast_order.cpp.o
+[297/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rock_seq_credit.cpp.o
+[298/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rock_feed_order.cpp.o
+[299/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sulfur_falls_probe.cpp.o
+[300/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_seq_free_attach.cpp.o
+[301/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_servant_haste_keep.cpp.o
+[302/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_niv_cast_order.cpp.o
+[303/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_echo_staged_gas.cpp.o
+[304/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_echo_axis.cpp.o
+[305/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_doth_axis.cpp.o
+[306/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_manual_tap_sources.cpp.o
+[307/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_placeholder_reads.cpp.o
+[308/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_replenish.cpp.o
+[309/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_speaker_of_the_heavens.cpp.o
+[310/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_path_to_exile.cpp.o
+[311/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_opponent_draw_targets.cpp.o
+[312/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_garth_lotus_crack.cpp.o
+[313/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_generator_servant.cpp.o
+[314/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_brainstorm.cpp.o
+In file included from /usr/include/x86_64-linux-gnu/c++/13/bits/c++allocator.h:33,
+                 from /usr/include/c++/13/bits/allocator.h:46,
+                 from /usr/include/c++/13/string:43,
+                 from /workspaces/MagicDeckTester/.claude/worktrees/idgate/build/CMakeFiles/mtg-test.dir/Release/cmake_pch.hxx:5,
+                 from <command-line>:
+In member function 'void std::__new_allocator<_Tp>::deallocate(_Tp*, size_type) [with _Tp = int]',
+    inlined from 'constexpr void std::allocator< <template-parameter-1-1> >::deallocate(_Tp*, std::size_t) [with _Tp = int]' at /usr/include/c++/13/bits/allocator.h:210:35,
+    inlined from 'static constexpr void std::allocator_traits<std::allocator<_CharT> >::deallocate(allocator_type&, pointer, size_type) [with _Tp = int]' at /usr/include/c++/13/bits/alloc_traits.h:517:23,
+    inlined from 'constexpr void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(pointer, std::size_t) [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:390:19,
+    inlined from 'constexpr std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:369:15,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::~vector() [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:738:7,
+    inlined from 'int PutBackSeqCount(const int*, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51236:1,
+    inlined from 'int PutBackClassCounter::Count(int) const' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51468:31,
+    inlined from 'int PutBackCandidateCount(const GameState&, const std::vector<Card>&, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51475:20,
+    inlined from 'void DOCTEST_ANON_FUNC_20()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_brainstorm.cpp:383:13:
+/usr/include/c++/13/bits/new_allocator.h:172:33: warning: 'void operator delete(void*, std::size_t)' called on pointer '<unknown>' with nonzero offset [1, 8589934588] [-Wfree-nonheap-object]
+  172 |         _GLIBCXX_OPERATOR_DELETE(_GLIBCXX_SIZED_DEALLOC(__p, __n));
+      |                                 ^
+In member function '_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = int]',
+    inlined from 'constexpr _Tp* std::allocator< <template-parameter-1-1> >::allocate(std::size_t) [with _Tp = int]' at /usr/include/c++/13/bits/allocator.h:198:40,
+    inlined from 'static constexpr _Tp* std::allocator_traits<std::allocator<_CharT> >::allocate(allocator_type&, size_type) [with _Tp = int]' at /usr/include/c++/13/bits/alloc_traits.h:482:28,
+    inlined from 'constexpr std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:381:33,
+    inlined from 'constexpr void std::vector<_Tp, _Alloc>::_M_range_initialize(_ForwardIterator, _ForwardIterator, std::forward_iterator_tag) [with _ForwardIterator = const int*; _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:1692:25,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with _InputIterator = const int*; <template-parameter-2-2> = void; _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:711:23,
+    inlined from 'int PutBackSeqCount(const int*, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51224:44,
+    inlined from 'int PutBackClassCounter::Count(int) const' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51468:31,
+    inlined from 'int PutBackCandidateCount(const GameState&, const std::vector<Card>&, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51475:20,
+    inlined from 'void DOCTEST_ANON_FUNC_20()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_brainstorm.cpp:383:13:
+/usr/include/c++/13/bits/new_allocator.h:151:55: note: returned from 'void* operator new(std::size_t)'
+  151 |         return static_cast<_Tp*>(_GLIBCXX_OPERATOR_NEW(__n * sizeof(_Tp)));
+      |                                                       ^
+In member function 'void std::__new_allocator<_Tp>::deallocate(_Tp*, size_type) [with _Tp = int]',
+    inlined from 'constexpr void std::allocator< <template-parameter-1-1> >::deallocate(_Tp*, std::size_t) [with _Tp = int]' at /usr/include/c++/13/bits/allocator.h:210:35,
+    inlined from 'static constexpr void std::allocator_traits<std::allocator<_CharT> >::deallocate(allocator_type&, pointer, size_type) [with _Tp = int]' at /usr/include/c++/13/bits/alloc_traits.h:517:23,
+    inlined from 'constexpr void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(pointer, std::size_t) [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:390:19,
+    inlined from 'constexpr std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:369:15,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::~vector() [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:738:7,
+    inlined from 'int PutBackSeqCount(const int*, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51236:1,
+    inlined from 'int PutBackClassCounter::Count(int) const' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51468:31,
+    inlined from 'int PutBackCandidateCount(const GameState&, const std::vector<Card>&, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51475:20,
+    inlined from 'void DOCTEST_ANON_FUNC_20()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_brainstorm.cpp:383:13:
+/usr/include/c++/13/bits/new_allocator.h:172:33: warning: 'void operator delete(void*, std::size_t)' called on pointer '<unknown>' with nonzero offset [1, 8589934588] [-Wfree-nonheap-object]
+  172 |         _GLIBCXX_OPERATOR_DELETE(_GLIBCXX_SIZED_DEALLOC(__p, __n));
+      |                                 ^
+In member function '_Tp* std::__new_allocator<_Tp>::allocate(size_type, const void*) [with _Tp = int]',
+    inlined from 'constexpr _Tp* std::allocator< <template-parameter-1-1> >::allocate(std::size_t) [with _Tp = int]' at /usr/include/c++/13/bits/allocator.h:198:40,
+    inlined from 'static constexpr _Tp* std::allocator_traits<std::allocator<_CharT> >::allocate(allocator_type&, size_type) [with _Tp = int]' at /usr/include/c++/13/bits/alloc_traits.h:482:28,
+    inlined from 'constexpr std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:381:33,
+    inlined from 'constexpr void std::vector<_Tp, _Alloc>::_M_range_initialize(_ForwardIterator, _ForwardIterator, std::forward_iterator_tag) [with _ForwardIterator = const int*; _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:1692:25,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with _InputIterator = const int*; <template-parameter-2-2> = void; _Tp = int; _Alloc = std::allocator<int>]' at /usr/include/c++/13/bits/stl_vector.h:711:23,
+    inlined from 'int PutBackSeqCount(const int*, int, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51224:44,
+    inlined from 'int PutBackClassCounter::Count(int) const' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51468:31,
+    inlined from 'int PutBackCandidateCount(const GameState&, const std::vector<Card>&, int)' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/src/core/SpellEffects.h:51475:20,
+    inlined from 'void DOCTEST_ANON_FUNC_20()' at /workspaces/MagicDeckTester/.claude/worktrees/idgate/test/unit/test_brainstorm.cpp:383:13:
+/usr/include/c++/13/bits/new_allocator.h:151:55: note: returned from 'void* operator new(std::size_t)'
+  151 |         return static_cast<_Tp*>(_GLIBCXX_OPERATOR_NEW(__n * sizeof(_Tp)));
+      |                                                       ^
+[315/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_careful_study.cpp.o
+[316/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_niv_draw_trigger.cpp.o
+[317/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_depletion_sba.cpp.o
+[318/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rollout_burn_kill.cpp.o
+[319/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_nc_scry_unseen.cpp.o
+[320/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_izzet_mana_fidelity.cpp.o
+[321/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_niv_payment_holes.cpp.o
+[322/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_timing.cpp.o
+[323/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_depletion_hold.cpp.o
+[324/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_coliseum.cpp.o
+[325/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_targeted.cpp.o
+[326/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lfe_fixpay.cpp.o
+[327/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_phase1.cpp.o
+[328/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_gods_dredge.cpp.o
+[329/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_sacdraw_refind.cpp.o
+[330/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_phase5.cpp.o
+[331/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_niv_brainstorm_rule.cpp.o
+[332/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_stage5.cpp.o
+[333/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_owner_graveyard.cpp.o
+[334/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_cantrip_order.cpp.o
+[335/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_refs.cpp.o
+[336/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lfe_fury.cpp.o
+[337/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_lfe_integration.cpp.o
+[338/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_remand_chain.cpp.o
+[339/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_spell_copy_id.cpp.o
+[340/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_extra_turns_permanents.cpp.o
+[341/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_cast_order.cpp.o
+[342/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_cantrip_plans.cpp.o
+[343/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_phase3.cpp.o
+[344/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_phase4.cpp.o
+[345/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_extra_turns_big_spells.cpp.o
+[346/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_tier2_overflow.cpp.o
+[347/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_phase2.cpp.o
+[348/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_rfx_pipeline.cpp.o
+[349/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_sound_folds.cpp.o
+[350/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_known_library.cpp.o
+[351/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_cyclone_discard_buckets.cpp.o
+[352/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_greedy_tie_scoring.cpp.o
+[353/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_p1d.cpp.o
+[354/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_merfolk_turns.cpp.o
+[355/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_i4.cpp.o
+[356/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end.cpp.o
+[357/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_i2.cpp.o
+[358/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_i3.cpp.o
+[359/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_p5.cpp.o
+[360/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_f1.cpp.o
+[361/362] Building CXX object CMakeFiles/mtg-test.dir/Release/test/unit/test_mazes_end_p6.cpp.o
+[362/362] Linking CXX executable Release/mtg-test
+>>> done: build/Release/  (config=Release, optimized)
