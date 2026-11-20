@@ -61,7 +61,25 @@ below it was refuted), and a miss leaves the ladder untouched.
 
 ## Which shapes run the heuristic ladder
 
-(Filled from the 2026-11-19 census; see the next section.)
+Census 2026-11-20: every shipping deck, 30 games at its shipped settings (seeds 17,500,000 + 1000 x deck index), binary
+`mtg_c0` = wip/p18j-int 02c7044e2, `MTG_P16_TRACE=1`. Per top-level decision the trace lists each pass (kind, units,
+rollout units). "Superseded rollouts" = rollout units in every rollout pass of a decision except its last (the passes a
+deeper rollout pass replaced), as a share of all decision units. Tools: `build/scratch/p18j-int/tools/census.py`.
+
+| shape (value_play) | how it searches (code) | decks | superseded rollouts / units |
+|---|---|---|---|
+| no sidecar, or play-only sidecar (bare) | `FullSearchLine` rollout ladder 1..K, start gate `c_k^2/c_{k-1} <= 1.1 x rem` | Hydras, Martyr Lifegain, Maze's End, Merfolk Turns, Mill, Sea Creatures, Shadowborn Apostle, Stuffy Doll | 14.6, 9.9, 2.5, 6.2, 5.1, 29.2, 13.8, 17.2 % |
+| `sampled_gate: 3` | leafless passes 1..depth; a proven in-window win commits; else the bare ladder | Boars, Morph, Spirits | 3.8, 1.2, 4.3 % |
+| `ladder: emulated` | warm-up passes on the model (or leafless with `leaf: none`), committing rollout pass(es) at the emulated depth, stepping down on overrun | Landfall, Melira Pod, Modern RW Burn, NivMizzetCombo | 0.9, 2.3, 7.9, 4.7 % |
+| learned model, no ladder key (escalation hybrid) | value-leaf probe; an unverified line escalates to PATH 2 = `FullSearchLine` under `ForceHeuristicLeafGuard(true)`: a full rollout ladder from pass 1 (TurnSolver.cpp ~124288) | Gods, Landfall Elementals, Prevent Damage, Vampires (the others escalated on no rollout in 30 games: Anti-Lifegain, Breaching Dragonstorm, Burn, Critter Lifegain, Five Colour, Hinata, Knights, White Knights) | 1.1, 0.8, 1.0, 0.3 % |
+| `ladder: escalation, leaf: none` | leafless probe ladder; an unverified line escalates exactly as above (path 2 heur ladder) | Bruna, Extra Turns, Kitty Equipment (Creature Giving: no rollout) | 2.2, 0.4, 5.3 % |
+| `ladder: single, leaf: none` (FIT) | leafless probe as deep as its gate allows, then ONE rollout pass at the fitted depth (shallower only on overrun) | Accomplished Alchemist, Angels, Auras, Colossus Hammer, Dragons, Eldrazi Displacer Flicker, Fungus, Galadriel, Giants, Goblins, Jumbo Cactuar, Kithkin, Lifegain Heliod Combo, Merfolk, Midrange Burn, Minotaur, Mirrorwing Dragon, Pirates, Red Elementals, Selesnya Lifegain, Slivers, Snow, Soldiers, Treasure Hunt, Unpredictable Cyclone; `leaf: none` without ladder (Dragonstorm, Fluctuator, Stompy Surprise): leafless only | 0.0 % on every deck |
+
+So the leafless FIT single pass is the one shape that never runs a superseded rollout. The two escalation shapes run
+the heuristic ladder inside their escalation, where no sampled gate acts (`p18_on` requires `!g_force_heuristic_leaf`).
+The sparse ladder composes only with the bare and mode-3 shapes as they stand; for an emulated deck the sparse arm
+sets the deck's model aside (a shape change, the model is then unused), and for the escalation shapes it would need
+the gate admitted inside the escalation (not done; a USER question).
 
 ## Measurements
 

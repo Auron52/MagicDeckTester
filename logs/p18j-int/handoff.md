@@ -14,8 +14,11 @@ Scratch: `/workspaces/MagicDeckTester/build/scratch/p18j-int/` (tools/, chain lo
   (live vs sparse, 8 seeds x 500 from 7,705,000; adopt iff units < 1 and net paired turns <= 0).
 - 02c7044e2 RESEARCH sampled gate mode 5 = mode 4, then mode 2's priced sampled gate on a miss (screen arm sg5).
 - docs/design/sparse-heuristic-ladder.md (canonical doc; taxonomy + measurements sections still to fill).
-- NOTHING built or tested yet: every heavy job is queued behind BOX.lock (adopt-1119 A/B ~2 batches x 128 jobs,
-  then alch-t3 chain2b).
+- chain1 DONE 2026-11-20 05:34 UTC on binary build/scratch/p18j-int/mtg_c0 (= 02c7044e2 src): build ok; unit tests
+  3718/3718 pass; smoke 231 passed / 0 failed, per-game audit 0 changed configs (default play byte-identical to
+  origin GT: rebase + strip clean); census done -> taxonomy table in docs/design/sparse-heuristic-ladder.md.
+- AB1 is GATED by the parent: tools/chain2gate.sh (PID in chain2.pid) waits for build/scratch/p18j-int/AB1.GO, then
+  execs chain2.sh unchanged.
 
 ## Running (queued) jobs
 - chain1 (PID file build/scratch/p18j-int/chain1.pid; flock-wrapped `tools/chain1.sh`): ./build.sh -> copies
