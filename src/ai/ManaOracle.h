@@ -75,7 +75,9 @@ namespace manaoracle
         // oracle's options is "keep the engine's first k mana decisions, redo everything after".
         bool     engine = false;
         bool     batch_skip = false; // leave a possible joint prepay to the ordered cast payments
-        std::string what;        // display only: the bill this option paid ("{1}{U}", "tap-ahead")
+        std::string what;        // display only: the bill this option paid ("{1}{U}", "tap-ahead"); "tap-choice" =
+                                 // a NON-MANA tap choice (OracleTapChoice): `taps` names the permanents to tap
+                                 // (num only, no face), and the hook -- not a payer -- serves it
     };
 
     // The payment script for ONE oracle apply. Consulted by TapForCostShared for the OUTERMOST payment
@@ -123,6 +125,11 @@ namespace manaoracle
         std::uint64_t          cont_sig = 0;
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
+        // > 0: the frontier is a NON-MANA TAP CHOICE (OracleTapChoice): tap exactly this many of `f_tc_elig` (card
+        // numbers, the provider's order) for Guild Summit's ETB (kind 0) or a "tap an untapped Gate" cost (kind 1).
+        int                    f_tapchoice = 0;
+        int                    f_tc_kind = 0;
+        std::vector<int>       f_tc_elig;
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
         std::vector<int>       tapped_by_script;
         std::size_t            f_tapped_n = 0;   // tapped_by_script's size when the frontier was taken
@@ -282,6 +289,16 @@ namespace manaoracle
     // False only for a SAFE hook (RealPayScope) whose entry did not fit: the board is put back, the hook
     // gives up its script, and the caller runs the engine's own tap-ahead -- as it does for every later step.
     bool ScriptedTapAhead(GameState& state, int count, bool lands_only);
+
+    // THE NON-MANA TAP CHOICE (g_oracle_tap_choice, SpellEffects.h; MTG_ORACLE_TAP_CHOICE, default ON, oracle-only):
+    // Guild Summit's ETB taps / a "tap an untapped Gate" cost on the oracle's copy. `elig` = the eligible battlefield
+    // indices in the provider's order, `n` = how many it taps. When the eligible permanents fall in two or more
+    // resource classes and 0 < n < |elig| the choice is a SCRIPTED STEP like a payment: the next script entry
+    // (what == kTapChoiceWhat) names the n to tap and `elig` is reordered to put them first (true); past the
+    // script's end the frontier is captured (its options: every distinct class multiset of size n); an ENGINE step
+    // keeps the provider's order. Anything else -- another state, no choice, the flag off -- leaves `elig` (false).
+    inline constexpr const char* kTapChoiceWhat = "tap-choice";
+    bool OracleTapChoice(GameState& state, std::vector<int>& elig, int n, int kind);
 
     // The oracle's joint pre-cast mana choice on a damage-triggered board. The
     // taps float for later casts; the caller flushes their damage triggers.

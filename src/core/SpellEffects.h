@@ -9434,6 +9434,15 @@ inline thread_local bool g_summit_tap_last_pinned = false;
 // reached every breakpoint AFTER the count was decided (the fold's breakpoint-after-resolution case).
 inline thread_local unsigned long long g_bp_event_epoch = 0;
 inline thread_local unsigned long long g_summit_tap_last_bp_epoch = 0;
+// THE MANA ORACLE'S NON-MANA TAP CHOICE (ManaOracle.cpp OracleTapChoice; the oracle registers it at static init).
+// Two effects tap permanents for something other than mana and pick WHICH ones by the provider's EtbTapSubtypeOrder
+// (the mana-payment exemption's ordering, Maze's End ledger decisions 2/10/30): Guild Summit's ETB "tap any number
+// of untapped Gates" (kind 0) and Heap Gate's "tap an untapped Gate" cost (PayActivationOtherTap, kind 1). WHICH
+// Gates go is a mana choice -- a tapped Gate cannot pay later -- so the oracle drives it on its own state copy as it
+// drives a payment: handed the eligible battlefield indices in the provider's order and the count `n`, it may reorder
+// `elig` so its first `n` entries are the ones to tap (true), or leave the provider's order (false). Off the oracle's
+// copy (every real game, every search) it returns false without touching anything, so play is byte-identical.
+inline bool (*g_oracle_tap_choice)(GameState& state, std::vector<int>& elig, int n, int kind) = nullptr;
 struct ScriptedEtbCounter
 {
     explicit ScriptedEtbCounter(int k) : saved(g_etb_counter_pin) { g_etb_counter_pin = k; }
@@ -14366,6 +14375,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
               : ResolveProvider(state).EtbTapSubtypeDrawDefault(state, controller, *def, avail);
         n = std::clamp(n, 0, avail);
         const bool human = g_play_x_value_chooser != nullptr && !g_tap_speculating && avail > 0;
+        if (!human && g_oracle_tap_choice != nullptr) { (*g_oracle_tap_choice)(state, elig, n, /*kind=*/0); }
         if (human)
         {
             const int h = (*g_play_x_value_chooser)(state, controller, def->card.m_name.str(),
@@ -39333,6 +39343,7 @@ inline int PayActivationOtherTap(GameState& state, int controller, int source_id
     if (elig.empty()) { return -1; }
     ResolveProvider(state).EtbTapSubtypeOrder(state, controller, elig);
     int pick = 0;
+    if (g_oracle_tap_choice != nullptr) { (*g_oracle_tap_choice)(state, elig, 1, /*kind=*/1); }
     if (g_play_loyalty_chooser != nullptr && !g_tap_speculating && elig.size() > 1)
     {
         const int h = (*g_play_loyalty_chooser)(state, controller, def.card.m_name.str(),
