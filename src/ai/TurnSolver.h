@@ -3273,6 +3273,17 @@ public:
     static long long FslEdgeNoReachCountForTest();
     static SpentTwice SimulateToEndSpentTwiceForTest(const GameState& state, int depth, int max_turns,
                                                       int cutoff, bool second_main, long long limit);
+    // RC-1 test hooks: a budget-CUT computation must not be stored as the budget-free answer.
+    // CutSolveMemo: the greedy Solve of `state` with the charged walk's budget already spent (the walk stops at
+    // its best-so-far), then the same Solve with no budget host, in one decision scope; `full` is a memo-free,
+    // uncharged SolveUncached. served == full is the fix (MTG_SOLVE_MEMO_BIND_GUARD); served == cut was the hole.
+    struct CutMemoProbe { bool cut_differs = false; bool served_is_full = false; bool served_is_cut = false; };
+    static CutMemoProbe SolveMemoCutProbeForTest(const GameState& state, bool is_pre_combat);
+    // CutLeafWin: a depth-0 rollout of `state` under a spent budget with the greedy-walk charge on (`cut`), then
+    // the same rollout unbudgeted on the SAME leaf table in a fresh decision scope (`served`); `fresh` is the
+    // unbudgeted rollout with no table. served == fresh is the fix (MTG_LEAF_WIN_BIND_GUARD).
+    struct CutLeafProbe { int fresh = 0; int cut = 0; int served = 0; };
+    static CutLeafProbe LeafWinCutProbeForTest(const GameState& state, int max_turns);
     // ...the same projection for a PROVIDER pick that must agree with how the search prices the turn
     // (ColossusHammerProvider's Sigarda's Aid host: "lethal this turn" first). Read-only.
     static int ProjectedAttackDamage(const GameState& state);
