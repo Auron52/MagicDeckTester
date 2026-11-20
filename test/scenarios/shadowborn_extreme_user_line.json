@@ -1,0 +1,58 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 8,
+ "budget_ms": 0,
+ "max_turns": 8,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Dark Ritual",
+  "Dark Ritual",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Thrumming Stone",
+  "Culling the Weak"
+ ],
+ "library_top": [
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Abhorrent Overlord",
+  "Reaper from the Abyss",
+  "Jetmir, Nexus of Revels",
+  "Sire of Insanity"
+ ],
+ "expect_log_sequence": [
+  "CAST_SPELL Dark Ritual",
+  "CAST_SPELL Dark Ritual",
+  "CAST_SPELL Shadowborn Apostle",
+  "CAST_SPELL Culling the Weak",
+  "CAST_SPELL Thrumming Stone",
+  "CAST_SPELL Shadowborn Apostle",
+  "ABILITY Shadowborn Apostle"
+ ],
+ "_comment": [
+  "USER extreme case (2026-11-20): 'In the worst case you might have just 1 swamp out and Dark ritual x 2,",
+  "Shadowborn x 2, Thrumming stone and Culling the Weak in your hand. In theory it should be possible to Dark Ritual x2",
+  "Shadowborn + Culling Thrumming Stone, Shadowborn to go off. ... You cannot cast the Shadowborn first in this example.'",
+  "Mana: Swamp B (1) -> Ritual (3) -> Ritual (5) -> Apostle (4) -> Culling eating it (7) -> Stone {5} (2) -> Apostle (1);",
+  "the second Apostle ripples 4 into six library Apostles (7 bodies), leaving {B} for the six-Apostle activation.",
+  "Apostle first strands the Rituals (the Swamp is the only B). GOING-OFF library: six Apostles on top, then the Demons.",
+  "max_turns 8: with max_turns 3 (the game ends with T3) every T3 line ties at an unlimited budget and the search casts nothing.",
+  "docs/design/shadowborn-extreme-case-2026-11-20.md"
+ ]
+}
