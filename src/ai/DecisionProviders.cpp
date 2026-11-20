@@ -2566,10 +2566,15 @@ bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Act
 //        without GC every damage event is a pure tree, so routing N through T yields T's one reflection of
 //        the same N, whose every option the current trigger can take directly, plus T's damage. The one
 //        target T can reach that the source cannot (a Nemesis source itself, "any OTHER target") only
-//        re-triggers that source with the same N: a delay. Any GC on the board breaks the tree (a host
-//        deals damage back to itself), so then every such T stays searched.
+//        re-triggers that source with the same N: a delay. A GC breaks the tree only through the SOURCE
+//        (2026-11-20, USER: "we should prune the much more common cases that don't fall into those buckets"):
+//        routed S -> T -> X, the source S still deals N exactly once (to T instead of X), so a GC on S fires
+//        the same once, and a GC on any other host H fires the same whether S or T hits H (S reaches every
+//        such H directly; T has no GC, or it would be kept as a host). The one route that adds a GC trigger
+//        is T sending the damage BACK to a GC'd source (S -> T -> S: S deals damage again). So F2c holds while
+//        a GC is out as long as the source carries no GC; with a GC'd source every such T stays searched.
 // Kept: the faces, every own creature with >= 2 instances (Spiteful k), every own GC host, opponent
-// creatures (unless MTG_STUFFY_OPP_CREATURE_PRUNE), and every F2c candidate while a GC is out.
+// creatures (unless MTG_STUFFY_OPP_CREATURE_PRUNE), and every F2c candidate while the SOURCE carries a GC.
 //
 // HEURISTIC restriction (design 4.1 / Stage 5e), ADOPTED by the USER 2026-11-20, DEFAULT ON (=0 lifts it):
 // MTG_STUFFY_OPP_CREATURE_PRUNE drops opponent creatures (Forbidden Orchard Spirits). Killing one never adds damage now; it can only lower
@@ -2579,7 +2584,7 @@ bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Act
 // ORDER: an indestructible own GC host with a reflection instance (the unbounded loop) moves to the FRONT.
 // The front is read only where a one-shot pick is permitted (beyond the horizon, the depth-0 runner);
 // inside the window every admitted option is branched by the fan.
-void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_number*/, int controller,
+void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int src_number, int controller,
                                                  int /*amount*/, int /*kind*/, std::vector<int>& io) const
 {
     if (DecisionUnpruned(UnprunedGate::ReflectTarget)) { return; }
@@ -2588,6 +2593,8 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
     const int opp_face = dmgrx::PlayerId(1 - controller);
     const bool face_in = std::find(io.begin(), io.end(), opp_face) != io.end();
     const bool any_gc  = dmgrx::AnyAuraHostDamageBack(s);
+    // F2c's only GC exception: a GC on the SOURCE (a GC'd source re-fed through T fires its GC again).
+    const bool src_gc  = any_gc && dmgrx::AuraHostDamageBackOn(s, src_number) > 0;
     // The en-Kor riders on a reflection's event (step 9b) break F2a-F3's "N dealt to T reaches nobody else" premise;
     // they are admitted there only when the window prune is lifted.
     bool folds_hold = true;
@@ -2621,7 +2628,7 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
         {
             if (inst == 0) { continue; }                                      // F2a
             if (inst == 1 && dmgrx::ReflectsFaceOnly(s, *q)) { continue; }   // F2b
-            if (inst == 1 && !any_gc) { continue; }                           // F2c / F3
+            if (inst == 1 && !src_gc) { continue; }                           // F2c / F3 (GC only via the source)
         }
         if (gc && inst >= 1 && q->HasKeyword(Keyword::Indestructible)) { front.push_back(id); }
         else { rest.push_back(id); }

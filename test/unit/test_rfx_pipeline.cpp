@@ -1721,18 +1721,34 @@ TEST_CASE("rfx step 10: the provider's SOUND folds F2/F3 drop mult-0 and mult-1 
     std::vector<int> io = AllIds();
     p.ReflectTargetCandidates(s, 2104, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyTarget), io);
     // Face first; the Doll (F2b), Maniac (F2b), Nomads (F2a, no instance) and Reckoner (F3, no GC on board)
-    // are folded; the two Slivers (two granted instances each) and the opponent Spirit stay searched.
-    CHECK(io == std::vector<int>{ -2, 2105, 2106, 2107 });
+    // are folded; the two Slivers (two granted instances each) stay searched. The opponent Spirit is dropped by
+    // MTG_STUFFY_OPP_CREATURE_PRUNE (default ON since 2026-11-20).
+    CHECK(io == std::vector<int>{ -2, 2105, 2106 });
 }
 
-TEST_CASE("rfx step 10: a GC on the board keeps the Reckoner (F2c lifted); a GC'd indestructible Doll moves to the FRONT")
+TEST_CASE("rfx step 10: a GC elsewhere does not lift F2c (the source has none); a GC'd indestructible Doll moves to the FRONT")
 {
     GameState s = FoldBoard();
     AttachGc(s, 2110, 2101);   // Guilty Conscience on the Doll: the unbounded amplifier
     const StuffyDollProvider p;
     std::vector<int> io = AllIds();
     p.ReflectTargetCandidates(s, 2104, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyTarget), io);
-    CHECK(io == std::vector<int>{ 2101, -2, 2104, 2105, 2106, 2107 });
+    // The Reckoner source carries no GC, so routing through itself (F3) only delays the same 3: folded
+    // (2026-11-20; before, any GC on the board kept it).
+    CHECK(io == std::vector<int>{ 2101, -2, 2105, 2106 });
+}
+
+TEST_CASE("rfx F2c: a GC on the SOURCE keeps a one-instance own reflector (S -> T -> S fires the source's GC again)")
+{
+    GameState s = FoldBoard();
+    PutRfx(s, "Screaming Nemesis", 2108);
+    AttachGc(s, 2111, 2108);   // Guilty Conscience on the Nemesis that is reflecting
+    const StuffyDollProvider p;
+    std::vector<int> io = { -2, 2101, 2102, 2103, 2104, 2105, 2106, 2107 };   // "any OTHER target": not 2108
+    p.ReflectTargetCandidates(s, 2108, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyOtherTarget), io);
+    // Doll / Maniac (F2b) and Nomads (F2a) still fold; the Reckoner stays (it can send the 3 back into the GC'd
+    // Nemesis, which then deals damage again); Slivers stay (k = 2); the Spirit is pruned.
+    CHECK(io == std::vector<int>{ -2, 2104, 2105, 2106 });
 }
 
 TEST_CASE("rfx step 10: with no opponent face in the list, nothing is dominated and nothing is folded")
