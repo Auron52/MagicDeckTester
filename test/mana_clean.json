@@ -8088,6 +8088,60 @@
     }
    ]
   },
+  "maze_s_end": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 1909,
+      "APPLY-DROP-ORDER": 29,
+      "CAPPED": 13729,
+      "CAPPED-DECISION": 131360,
+      "CONTINUATION-DIFFERS": 7420,
+      "DECISION-COST": 1282,
+      "DOMINATED-LAND": 33186,
+      "DOMINATED-LIFE": 2686,
+      "DOMINATED-ONESHOT": 48,
+      "DROP-COVERED": 7605,
+      "ENUM-GAP": 617,
+      "HIDDEN-INFO": 39,
+      "ORACLE-GAP": 410,
+      "PHANTOM": 18403,
+      "UNMODELED": 139380
+     },
+     "commit": "32c1daf3199505562d0f4197fe401f8f91ca5d04",
+     "date": "2026-11-20T14:31:22Z",
+     "decisions": 54355,
+     "deck": "decks/Maze's End/Maze's End.cod",
+     "deck_sha": "e8b0492206a91ba87c9fcf6e33ee9d4401af1781",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 287482,
+     "life_breakpoints": [],
+     "ms_off": 15265881,
+     "ms_on": 1471609223,
+     "report": "logs/mana_clean/claude-queue-20261119i/report.md",
+     "run": "claude-queue-20261119i",
+     "seed": 30000000,
+     "src": "8deb2c9336d160172d58fd12fb17e414ed93c395",
+     "verdict": "issues"
+    }
+   ]
+  },
   "melira_pod": {
    "runs": [
     {
@@ -8466,6 +8520,53 @@
      "seed": 30125000,
      "src": "f7cce0693b6a16d779df5ac756af16100e3b677d",
      "verdict": "clean"
+    }
+   ]
+  },
+  "merfolk_turns": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 6952,
+      "APPLY-DROP-ORDER": 161,
+      "CONTINUATION-DIFFERS": 21641,
+      "DOMINATED-LAND": 91774,
+      "DROP-COVERED": 57064,
+      "ENUM-GAP": 937,
+      "ORACLE-GAP": 7903,
+      "PHANTOM": 10647
+     },
+     "commit": "32c1daf3199505562d0f4197fe401f8f91ca5d04",
+     "date": "2026-11-20T14:31:22Z",
+     "decisions": 53989,
+     "deck": "decks/Merfolk Turns/Merfolk Turns.cod",
+     "deck_sha": "fb70e14d89942648ca722a1d9c8387f5a1e60194",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 15953,
+     "life_breakpoints": [],
+     "ms_off": 14718451,
+     "ms_on": 19496300,
+     "report": "logs/mana_clean/claude-queue-20261119i/report.md",
+     "run": "claude-queue-20261119i",
+     "seed": 30000000,
+     "src": "8deb2c9336d160172d58fd12fb17e414ed93c395",
+     "verdict": "issues"
     }
    ]
   },
