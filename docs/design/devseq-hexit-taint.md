@@ -64,4 +64,16 @@ to be recorded where it is taken.
 
 ## Measured
 
-(filled in below as the runs land)
+* **Acceptance** (chain6, 2026-11-20, binary 57b56d62c): seed 12345681 game 0 keep 7, heuristic off, d8 b0 -- **T3**
+  with the lever, **T4** with `MTG_DEV_SEQ_HEXIT_TAINT=0` (`acc_notaint`). `MTG_INWIN_CACHE_VERIFY=1` /
+  `MTG_GAME_LINE_CACHE_VERIFY=1` on the acceptance game: DISAGREE 0.
+* **Verify sample** (59 smoke searched cells x 6 held-out games, both cache verifiers on): in-window cache verified 950,
+  DISAGREE 3, MATERIAL 0; game-line cache verified 5069, DISAGREE 196 (cut 15 / later 1 / win-found-past-cutoff 180),
+  MATERIAL 0; 34 nodes tainted by the new dependency. No disagreement moved a game.
+* **ab4** (pre-rebase, d5 b20, 2000 held-out AA games, 200 chunks): this lever alone -0.0010 turns, t = -1.42.
+* **ab7** (rebased, all seven AA levers together vs all off, 13 decks / 37 searched cells / 500 games per arm per
+  cell): Accomplished Alchemist -0.0840 (t -10.68, 86/4 chunks); every other deck 0 or faster except Unpredictable
+  Cyclone +0.0007 (one game), which is `MTG_SITE9_AFTER_DEFERRED` re-pricing the budget and recovers at b40 and at d8
+  b0 (see `aa-staff-in-hand-loop-cast-draw.md`). Neither audited slower game (Cyclone gi126, AA gi143) moves with this lever.
+* Units: unit test "deviation sequences: a first-pass horizon exit past a latent turn is dirty"; full suite 3784/3784
+  (chain7).

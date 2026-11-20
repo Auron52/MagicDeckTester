@@ -113,3 +113,11 @@ names; streams batch output to files; `--report <dir>` re-prints per-cell and pe
   Snow smoke gi81 now 6 (was the one slower game). Rebase confounds the comparison (upstream changes).
 - NEXT AGENT: check the `[batch] heartbeat` in `a7/ab7/batch.stderr` (first one due ~19:13 UTC; none yet at 19:04),
   then wait on `a7/chain7/DONE`; tiers7 follows automatically (`a7/tiers7/DONE`).
+
+## UPDATE 22:00 UTC (agent 8): ab7 DONE=OK; slower games audited; waiting on tiers7
+- ab7 per deck: AA -0.0840 (t -10.68, 86/4); Melira -0.0033; Goblins -0.0013; Landfall -0.0010; EDF 0 (1/1);
+  Cyclone +0.0007 (one game); rest 0. Table + audits in docs/design/aa-staff-in-hand-loop-cast-draw.md (end).
+- Cyclone dPb20 c120 gi126 (seed 911127): T4 off / T5 on; only MTG_SITE9_AFTER_DEFERRED moves it; recovers at d8 b0
+  and at b40..b320 -> budget re-pricing (scratch build/scratch/alch-t3/a8/cyc/).
+- gi143: on 7 at b20/b40/b80, 6 at b160/b320/d8b0; moved by TAP_LAST alone and by LATE_BIND_RANK alone -> re-pricing.
+- No src change by agent 8. Next: tiers7 audit -> accept GT -> check_gt_logs -> commit -> backup push.
