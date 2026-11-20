@@ -182,3 +182,65 @@ Running (agent 3 launched): chain3b = `flock BOX.lock bash build/scratch/alch-t3
   x1000, d5 b20 -> build/scratch/alch-t3/ab2/report.txt, per-game MTG_DUMP_WINS in ab2/batch.stderr) then tiers.sh
   (smoke+regression --both -> build/scratch/alch-t3/tiers/both.txt). DONE marker build/scratch/alch-t3/chain3b/DONE.
   It tests 163e81f56 only; a third fix needs its own A/B + tiers again.
+
+## UPDATE (agent 4, 2026-11-20 ~08:05 UTC): tasks 1-3 CODED, committed a227a482b, NOT YET BUILT; chain4 queued
+### USER rulings (verbatim; all earlier ones above still stand)
+- 2026-11-20, on the generic MTG_AURA_UNTAP_HOST_SEARCH branching: "Why do we need branching here? Just have a heuristic specific to the deck and we are done. Obviously in this deck Accomplished Alchemist is the target."
+- 2026-11-20, on BurstPendingActColour (burst floated WHITE, Umbra {2}{U} unpayable, Combo Off route rolls back): "Yes, we need to fix this." (supersedes the "leave it as is" open question above)
+- Earlier (11-19): "I would like to know why we can't find it at any budget." / "we should improve the heuristic and the search itself." / "the heuristic is our answer to this working at a lower budget, but the search should be capable at a high budget."
+
+### What a227a482b does (unbuilt)
+1. Generic MTG_AURA_UNTAP_HOST_SEARCH DELETED (heurarm slot, UntapAuraKeepHosts, UntapAuraHostKeyed, #A clause in
+   PlanSignatureFast + legacy, BuildAuraLateBind KEEP/BIND partition, AuraUntapsHost). Kept: refund-float cap
+   (UntapFloatSpendCap), UntapHostHasTapUse (used by the ActivateUntap target scan).
+   ROOT CAUSE found: an engine term already ranked Umbra-on-Alchemist (MTG_AA_UMBRA_HOST in AuraHostBoardKey, 11-10,
+   AuraHostKey::combo) but BindAuraLateHosts' FAST PATH (taken for host-inert Auras) read only the dork tie-break, so
+   late-bound plans bound Arbor Elf / the Boar. Fix: the term moved to the provider -- DecisionProvider::
+   RanksCreatureAuraHosts()/CreatureAuraHostRank(s, aura, host) (DecisionProvider.h, after DamageBackAuraHostCandidates);
+   AccomplishedAlchemistProvider returns 1 for untap_enchanted_cost Aura on mana_per_life_gained host (EnvOn
+   MTG_AA_UMBRA_HOST default ON). AuraHostBoardKey sums it (every ranking consumer: dedup, late bind, Solve collapse,
+   ResolveEnchantTarget). Fast path now picks first non-dork among best-ranked hosts: lever MTG_AURA_LATE_BIND_RANK
+   (heurarm AURA_LATE_BIND_RANK, default ON; =0 = origin fast path). Units: new "Crab Umbra host: the deck's provider
+   puts it on the Alchemist..." and "...an Alchemist cast earlier in the same plan takes it..."; the late-bind
+   equivalence case now runs with the provider term live (it checks fast path == full key).
+2. Hole (b): MTG_SITE9_AFTER_DEFERRED (EngineFlags.h reader Site9AfterDeferredOn, heurarm SITE9_AFTER_DEFERRED, default
+   ON). Rollout (TurnSolver.cpp deferred while-loop, ~80115 snapshot before bp_searched_plan(deferred_site_index()),
+   block after apply_continuation_activations, INSIDE the sink so a committed line records it and the executor's
+   replay_segment realises it): when bp_seen was 0 before the deferred and == 1 after, PostEntryActivationPending vs the
+   pre-continuation snapshot -> site-9 chain (targeted only; untargeted -> g_bp_seen_latent for MTG_BP_DEV_SEQ), own
+   PlanTraits scope per continuation. Executor no-commit twin: AIEngine resolve_draw_breakpoint, snapshot at entry
+   (s9d_on: bp_depth 0, choice, bp_seen_exec 0, !fd_plan_committed), the continuation-apply block wrapped in
+   `for (s9d_pass...)`, chain test + cands resolution at its end. Known small asymmetry: rollout's s9 traits carry from
+   the deferred continuation's scope, executor's from the main scope.
+3. MTG_BURST_ACT_COLOUR_PENDING (heurarm BURST_ACT_COLOUR_PENDING, default ON) in ManaPayment.cpp: helper
+   BurstBoardUntapColour -- the first coloured pip (that the source makes) of an own untap ability aimed at the burst
+   source (CollectCreatureUntapAbilities + UntapUnitCost), used when no plan act-pip shortfall and no line demand
+   (LineDemandAnyPipColor with a Colorless sentinel); also now reached with no plan-traits scope. Callers pass &bp/&p.
+   Decks it can move: only AA (burst sources: Alchemist, Somberwald Sage; Boars/Bruna hold Sage but no untapper).
+   Site 9 after deferred is ENGINE-WIDE (any deck with a deferred continuation casting an activated permanent):
+   expect other decks to move in the tiers.
+
+### Running job
+- chain4: launcher PID 1576839 = `flock BOX.lock bash build/scratch/alch-t3/chain4.sh` (queued behind adopt-1119's
+  run_attr.sh, flock PID 1547503). Does: ./build.sh, units, combo_off, aa_* scenarios, acceptance arms at d8 b0 heur OFF
+  (acc_all, acc_norank, acc_nos9d, acc_noburst, acc_nofloat, acc_heur, acc_verify = MTG_AURA_LATE_BIND_VERIFY=1),
+  hand-offs ho8/ho10, play-setting runs play_off/play_heur/play_base. Output build/scratch/alch-t3/chain4/
+  (summary.txt, runs.txt, units_fail.txt, *.out/*.err). DONE marker: build/scratch/alch-t3/chain4/DONE
+  (contains FAILED if the build failed -> fix compile errors, re-run with the same command).
+  (All build/scratch paths are under /workspaces/MagicDeckTester/.)
+
+### Remaining, in order
+1. Read chain4: fix compile/unit failures (watch: HeuristicArm slot order, AIEngine loop braces, ManaPayment includes).
+   Acceptance = acc_all must be T3 (heuristic OFF, d8 b0); report play setting (play_off / play_heur). acc_verify.err
+   must show no `[aura-late-bind-verify] MISMATCH`. If still T4: bisect (bisect2.sh shape, MTG_SITE9_TRACE=3 looks for
+   "rod"/"exd" lines) and check hole (a) (payer taps the Alchemist for the Boar) -- a ManaPayment order rule with its
+   own flag is allowed.
+2. A/B: `flock BOX.lock bash build/scratch/alch-t3/ab4.sh` (written; 6 arms base/rank/s9d/burst/prior/all, seeds
+   61001/63001 x1000, d5 b20 -> build/scratch/alch-t3/ab4/report.txt, DONE marker ab4/DONE).
+3. smoke + regression --both (tiers.sh shape); s9d may move other decks -> A/B those decks s9d on/off; per-game audit of
+   every slower searched game at --depth 8 --budget-ms 0; accept GT in the worktree only after; check_gt_logs.py.
+4. Update docs/design/aa-staff-in-hand-loop-cast-draw.md + this file; commit; push backup/2026-11-20/alch-t3 only.
+
+### Measurements so far
+- ab2 (163e81f56, generic host search): search -0.0695 t=-8.91 wall -12.5%; nohost -0.0075; heur +0.0000.
+  The deck-rule replacement should reproduce most of the "search" gain (the host choice) -- to be measured by ab4.
