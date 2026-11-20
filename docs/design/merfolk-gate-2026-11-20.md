@@ -74,6 +74,26 @@ Merfolk first). The second is a deck cast-order policy, which is the USER's call
 | 30000557 | T6 | ORACLE-GAP 564 -> 452 |
 | 30000762 | T4 | ENUM-GAP 4 -> 4 (not addressed by these levers) |
 
+(30000557 and 30001289 read 290 / 0 after the prepay half of `MTG_PAY_REFINE_SCALED`, below; 452 / 4 before it.)
+
+### 4.2 Held-out A/B (both levers on vs both off, one pooled batch, small-job lane, 3 threads)
+
+Seeds 33000000 + gi, gi 0-1999 Merfolk Turns and Goblins, 0-399 Maze's End, play settings from each profile (d5
+b20; the current tree, keep tables live), loss = 9. `build/scratch/claude_merfolk_gate/ab/` (manifest, ab.out, logs).
+
+| deck | pairs | faster | slower | net turns | digest-only | units on/off | cpu on/off (order-balanced) |
+|---|---|---|---|---|---|---|---|
+| Merfolk Turns | 2,000 | 0 | 0 | 0 | 8 | 0.9999 | 1.018 |
+| Goblins | 2,000 | 0 | 0 | 0 | 0 | 1.0000 | 0.984 (byte-identical: noise floor) |
+| Maze's End | 400 | 1 | 1 | 0 | 13 | 1.0010 | 1.074 |
+
+Whole batch (`scripts/ab_wall.py`, BALANCED): ms off/on 0.976, cpu 0.970, units 1.000. The one slower game is Maze's
+End gi126 (T5 -> T6); its d8 b0 replay on both arms is queued (`build/scratch/claude_merfolk_gate/d8b0/`).
+
+Reading: the levers realise plans the menu already offered (the oracle's APPLY-DROP / ORACLE-GAP counts fall sharply on
+the repro games) but the search rarely CHOSE those plans, so win turns do not move on Merfolk Turns. Maze's End pays
+for Baldur's Gate's trials: ~+7% CPU for no measured gain (USER rule: a fix's CPU cost is to be cut, not justified).
+
 
 ## 5. Open items
 
