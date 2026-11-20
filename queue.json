@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/maze-shared",
-   "head_since": "2026-11-20T05:42:44Z",
-   "heartbeat": "2026-11-20T06:29:45Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/maze-shared",
-   "joined": "2026-11-20T02:01:42Z",
-   "note": "Maze's End fix batch (F5/F5R/F7/Summit/SHUF/P5c/P7 + GT; needs rebuild+unit+smoke+reg)"
-  },
-  {
    "branch": "stuffy-analysis",
+   "head_since": "2026-11-20T06:32:42Z",
    "host": "8854e545ddab",
    "id": "8854e545ddab:stuffy-analysis",
    "joined": "2026-11-20T03:06:21Z",
