@@ -2000,6 +2000,12 @@ struct GameState
     // neighbours -- because a clear bit only withholds a variant: an unstamped state (the scenario harness)
     // plays exactly as before. A deck constant: never folded.
     bool                     deck_has_tap_ping                 = false;
+    // ...and a LAND WITH A TARGETED ETB PUMP (CardParams::etb_target_creature_pump_power: Teetering Peaks; Creature
+    // Burn batch 3, 2026-11-20), same padding: gates the Peaks target axis (Plan::landfall_target_choice reused,
+    // AppendSubdecisionAxes) and the land-POSITION emission for such a land (Plan::land_slot 1, after the first
+    // haste-creature cast). DEFAULT FALSE: a clear bit only withholds variants (the trigger itself resolves
+    // regardless), so an unstamped state (a unit test) plays exactly as before. A deck constant: never folded.
+    bool                     deck_has_land_etb_target          = false;
     // ...and an END-STEP REANIMATOR (CardParams::endstep_modal_reanimate_mv, Abiding Grace), same
     // padding: gates PerformEndStepAbidingGrace's walk at both end-step sites and the plan axis's
     // consumer scan, so a clear bit PROVES both find nothing. Same DEFAULT TRUE rule. A deck constant:

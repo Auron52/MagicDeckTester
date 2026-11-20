@@ -53818,6 +53818,110 @@ inline bool ResolveEtbSacUnlessPay(GameState& state, int controller, int card_nu
     return false;
 }
 
+// ---- TEETERING PEAKS: "When this land enters, target creature gets +2/+0 until end of turn." ----------------
+// (CardParams::etb_target_creature_pump_power / _toughness; Creature Burn batch 3, 2026-11-20.) ONE resolver for
+// both land-entry sites -- the land drop (LandPlay.cpp PlayLandCore, every caller's world) and the effect put
+// (EnterLand) -- so the executor and the rollout resolve it identically.
+//
+//   * LEGAL SET: every creature on the battlefield, either side (an animated land included), minus shroud
+//     (CreatureHasShroud) and an opponent's hexproof creature. EMPTY -> the trigger had no legal target when it
+//     would have been put on the stack and is removed (CR 603.3d): the land simply enters (tapped).
+//   * SOUND FOLDS (LandEtbPumpReps, below): (1) IDENTITY -- LandfallTargetFoldKey's "identical in all state" bar,
+//     one representative per class; (2) the INERT class -- a creature that cannot deal combat damage for us this
+//     turn whatever we do: an OPPONENT's creature, a summoning-sick creature without haste, and ANY creature once
+//     this turn's combat is over (StealCombatOver). +N/+0 until end of turn on such a body changes nothing that
+//     any card in the deck reads (PREMISE, checked for the one list holding the card, Creature Burn: nothing in it
+//     reads a creature's power outside combat damage -- a deck adding a Fling-type card must revisit this). So
+//     while ANY attack-capable candidate exists the inert ones are dominated and dropped; when none exists every
+//     candidate is inert and they are ONE class. "Tapped" is deliberately NOT inert: Cinder Pyromancer untaps on a
+//     red cast, so a tapped creature may still attack this turn (CanAttackFull is asked as if untapped). Pingers
+//     keep their own classes through the identity key (a pumped Pyromancer attacks for 2 but loses its ping).
+//   * BRANCHING: the provider ORDERS (and MAY restrict -- a named, A/B-able prune) the representatives
+//     (DecisionProvider::LandEtbPumpTargetOrder); the SEARCH picks the rank through Plan::landfall_target_choice
+//     (the shared whole-turn pin, LandfallTargetPinFor; emitted in AppendSubdecisionAxes on the
+//     GameState::deck_has_land_etb_target stamp). Rank 0 is the default for every path with no plan (the d0
+//     runner, rollout leaves beyond the horizon). An out-of-range rank clamps to the last class.
+//   * HUMAN PLAY re-asks over the FULL legal set (never the folded list) through the shared board-click `target`
+//     decision (g_play_loyalty_chooser), the engine's pick preselected. Nulled by RevealLogPause.
+inline bool LandEtbPumpCanStillAttack(const GameState& state, const Permanent& q, int controller)
+{
+    if (q.controller_index != controller || StealCombatOver(state)) { return false; }
+    Permanent u = q;      // asked as if UNTAPPED (see above); one copy per candidate per land entry
+    u.tapped = false;
+    return CanAttackFull(u, state.battlefield, controller);
+}
+inline bool LandEtbPumpTargetable(const GameState& state, const Permanent& q, int controller)
+{
+    if (!q.card.IsCreature() && !q.is_animated) { return false; }
+    if (CreatureHasShroud(q, state)) { return false; }
+    if (q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+// The legal targets (battlefield indices, battlefield order) and the folded, provider-ordered class
+// representatives. Shared by the resolver and the search axis's width count, so the two can never disagree.
+inline void LandEtbPumpReps(const GameState& state, int controller, std::vector<int>& legal, std::vector<int>& reps)
+{
+    legal.clear();
+    reps.clear();
+    std::vector<int> live, inert;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!LandEtbPumpTargetable(state, q, controller)) { continue; }
+        legal.push_back(i);
+        (LandEtbPumpCanStillAttack(state, q, controller) ? live : inert).push_back(i);
+    }
+    if (legal.empty()) { return; }
+    if (live.empty()) { reps.push_back(inert.front()); return; }   // every candidate inert: ONE class
+    std::vector<std::uint64_t> seen;
+    std::vector<int>           linked;
+    LandfallTargetLinks(state, linked);
+    for (int i : live)
+    {
+        std::uint64_t k = 0;
+        if (LandfallTargetFoldKey(state, state.battlefield[static_cast<std::size_t>(i)], k, &linked))
+        {
+            if (std::find(seen.begin(), seen.end(), k) != seen.end()) { continue; }
+            seen.push_back(k);
+        }
+        reps.push_back(i);
+    }
+    ResolveProvider(state).LandEtbPumpTargetOrder(state, controller, reps);
+    if (reps.empty()) { reps.push_back(live.front()); }   // a provider may restrict, never empty
+}
+inline void ResolveLandEtbTargetPump(GameState& state, int controller, const CardDefinition& land_def)
+{
+    const CardParams& lp = land_def.params;
+    if (lp.etb_target_creature_pump_power <= 0 && lp.etb_target_creature_pump_toughness <= 0) { return; }
+    std::vector<int> legal, reps;
+    LandEtbPumpReps(state, controller, legal, reps);
+    if (legal.empty()) { return; }   // CR 603.3d: no legal target -> the trigger is removed
+    int pick = reps.front();
+    const int pin = LandfallTargetPinFor(state);
+    if (pin >= 0) { pick = reps[std::min<std::size_t>(static_cast<std::size_t>(pin), reps.size() - 1)]; }
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        int def_opt = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        { if (legal[static_cast<std::size_t>(k)] == pick) { def_opt = k; break; } }
+        const std::string prompt = "gets +" + std::to_string(lp.etb_target_creature_pump_power) + "/+"
+                                 + std::to_string(lp.etb_target_creature_pump_toughness) + " until end of turn";
+        const int chosen = (*g_play_loyalty_chooser)(state, controller, land_def.card.m_name.str() + " (enters)",
+                                                     prompt, legal, def_opt);
+        if (chosen >= 0 && chosen < static_cast<int>(legal.size())) { pick = legal[static_cast<std::size_t>(chosen)]; }
+    }
+    Permanent& t = state.battlefield[static_cast<std::size_t>(pick)];
+    t.temp_power_bonus += lp.etb_target_creature_pump_power;
+    t.temp_tough_bonus += lp.etb_target_creature_pump_toughness;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xE2\x9B\xB0 " + land_def.card.m_name.str() + " (enters): " + t.card.m_name.str() + " gets +"
+                      + std::to_string(lp.etb_target_creature_pump_power) + "/+"
+                      + std::to_string(lp.etb_target_creature_pump_toughness) + " until end of turn");
+    }
+}
+
 // ---- The land-entry ETBs the FETCH/PUT path historically dropped ------------------------------
 //
 // EnterLand resolves enters-tapped / depletion / scry / surveil / energy but NOT etb_bounce_land
@@ -54003,6 +54107,9 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     { (void)ResolveEtbSacUnlessPay(state, ctrl, perm.card.m_number, entry_pin); }
     // Landfall (route 2). Captured by number, not by slot: a bounce extra above may already have
     // moved or returned the land, and landfall still triggered on the entry.
+    // Teetering Peaks' targeted enter trigger (param-gated: a no-op for every other land). Before landfall, as in
+    // the land drop -- no landfall payload in the pool can observe the order of two simultaneous triggers.
+    ResolveLandEtbTargetPump(state, ctrl, def);
     if (fire_landfall) { OnLandEntered(state, perm.controller_index, perm.card.m_number); }
 }
 

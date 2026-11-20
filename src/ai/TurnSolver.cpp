@@ -37883,6 +37883,36 @@ void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vec
                           [&acts](int i) { return PutsLandfallWatcher(acts[static_cast<std::size_t>(i)]); });
 }
 
+void TurnSolver::LandSlotWatchersFirst(const GameState& state, const std::vector<Action>& acts,
+                                       std::vector<int>& order, const std::string& land)
+{
+    if (!state.deck_has_land_etb_target || !LandCarriesEtbPump(land)) { LandSlotWatchersFirst(acts, order); return; }
+    std::stable_partition(order.begin(), order.end(), [&](int i)
+    { return LandSlotCounts(state, acts[static_cast<std::size_t>(i)], land); });
+}
+
+bool TurnSolver::LandCarriesEtbPump(const std::string& land)
+{
+    if (land.empty()) { return false; }
+    const CardDefinition* ld = CardDatabase::Instance().Lookup(land);
+    return ld != nullptr && (ld->params.etb_target_creature_pump_power > 0
+                             || ld->params.etb_target_creature_pump_toughness > 0);
+}
+
+bool TurnSolver::LandSlotCounts(const GameState& state, const Action& a, const std::string& land)
+{
+    if (PutsLandfallWatcher(a)) { return true; }
+    if (!state.deck_has_land_etb_target || !LandCarriesEtbPump(land)) { return false; }
+    // A HASTE creature cast (hand / graveyard cast, a Vial put): the only cast after which the land's pump can land
+    // on a body that attacks THIS turn and was not already on the battlefield. A non-haste creature cast is
+    // summoning-sick (the inert class), and a noncreature cast adds no target -- so a land moved past either reaches
+    // the same pump outcome as the land-first order (Peaks enters tapped: no position costs mana).
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+        && a.kind != Action::Kind::ActivateVial) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    return d != nullptr && d->card.IsCreature() && d->card.HasKeyword(Keyword::Haste);
+}
+
 bool TurnSolver::KarooSlotCounts(const GameState& state, const Action& a, bool every)
 {
     // The actions the cast sections DISPATCH one at a time (the ones slot_hook / exec_slot_hook see):
@@ -79188,10 +79218,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool cont_pending = slot_cont && cont_land.pending && cont_land.slot > 0;
             const bool acts_pending = slot_top && plan.land_search_act_slot > 0 && !ls_act_done;
             if (!land_pending && !cont_pending && !acts_pending) { return; }
-            if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
-            if (land_pending && ++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
-            if (cont_pending && ++cont_land.seen == cont_land.slot) { play_cont_land(); }
-            if (acts_pending && ++ls_act_seen == plan.land_search_act_slot)
+            // A LAND position counts by LandSlotCounts (a haste creature cast too, for a Teetering Peaks drop --
+            // the executor's exec_slot_hook / exec_cont_land_hook are the twins); an activation position counts
+            // watchers only. Identical to the watcher test for every deck without the stamp.
+            const bool watcher = TurnSolver::PutsLandfallWatcher(a);
+            if (!watcher && !state.deck_has_land_etb_target) { return; }
+            if (land_pending && (watcher || TurnSolver::LandSlotCounts(state, a, karoo_land_name))
+                && ++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
+            if (cont_pending && (watcher || TurnSolver::LandSlotCounts(state, a, cont_land.name))
+                && ++cont_land.seen == cont_land.slot) { play_cont_land(); }
+            if (acts_pending && watcher && ++ls_act_seen == plan.land_search_act_slot)
             {
                 for (const Action& la : plan.actions) { if (TurnSolver::IsLandSearchActivation(la)) { line_order_trace("landsearch", la); } }
                 TurnSolver::ApplyLandSearchActs(state, plan.actions);
@@ -79216,6 +79252,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool slot_order = (slot_top && land_after_deferred && deferred_land_slot > 0)
                              || (slot_cont && cont_land.pending && cont_land.slot > 0)
                              || (slot_top && plan.land_search_act_slot > 0);
+        // The POSITIONED land the partition counts for (LandSlotCounts; empty = watchers only -- the activation
+        // position, and every deck without the Peaks stamp). The executor's twins pass the same name.
+        const std::string slot_order_land = (slot_top && land_after_deferred && deferred_land_slot > 0) ? karoo_land_name
+                                          : (slot_cont && cont_land.pending && cont_land.slot > 0) ? cont_land.name
+                                          : std::string();
         // Indices of sac-land casts already applied by the Spectacle hoist (opaque branch); the
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.
@@ -79876,7 +79917,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // integrator E2): only when this opaque set IS rank-sorted -- in plan order they trail, as
                 // before. Lockstep twin: AIEngine::TakeTurn's opaque loop.
                 if (OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, acts, ord); }
-                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, ord); }   // land position: ties
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(state, acts, ord, slot_order_land); }   // land position: ties
                 if (OpaqueCastOrderActive(state))
                 {
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
@@ -79939,7 +79980,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(acts[i]) || is_put(acts[i]) || GyCastRidesCastSequence(state, acts[i]))
                     { order.push_back(i); }
                 }
-                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, order); }   // land position: ties
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(state, acts, order, slot_order_land); }   // land position: ties
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
                 { return CastOrderLess(state, acts[x], acts[y]); });
                 ApplyDeckCastArrangement(state, acts, order);   // the deck's set-level order (lockstep: TakeTurn)
@@ -99299,6 +99340,53 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // SEARCHED LAND-ETB PUMP TARGET (Teetering Peaks: "When this land enters, target creature gets +2/+0 until end
+    // of turn"; Creature Burn batch 3, 2026-11-20). The target resolves inside the land's enter trigger
+    // (ResolveLandEtbTargetPump, both worlds), so it rides the SAME whole-turn rank policy as the landfall target
+    // (Plan::landfall_target_choice -> LandfallTargetPinFor) over the classes LandEtbPumpReps folds and the
+    // provider orders. Rank 0 -- the provider's front -- is the base plan. WIDTH = the classes on THIS board, plus
+    // one per counted cast / unearth the plan makes BEFORE a positioned land (each can add a class), capped at 4; a
+    // rank past the real count clamps and dedups onto its base. Nothing once combat is over (every candidate is the
+    // one inert class). GATED on the deck stamp (deck_has_land_etb_target) and a plan whose land carries the pump.
+    // A plan already carrying a landfall-target rank is not re-fanned (one axis at a time; the policy is shared).
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_land_etb_target && !StealCombatOver(state))
+    {
+        const int me = state.active_player_index;
+        std::vector<int> legal_now, reps_now;
+        LandEtbPumpReps(state, me, legal_now, reps_now);
+        const int board_classes = static_cast<int>(reps_now.size());
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.landfall_target_choice >= 0 || p.cast_trigger_target_choice >= 0
+                || p.scry_choice >= 0 || p.bp_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
+                || p.tutor_choice >= 0 || p.discard_choice >= 0 || p.etbcounter_choice >= 0
+                || !p.sac_pins.empty()) { continue; }
+            if (!p.land_decided || !TurnSolver::LandCarriesEtbPump(p.land_to_play)) { continue; }
+            int headroom = 0;
+            if (p.land_slot != 0)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind == Action::Kind::Unearth || TurnSolver::LandSlotCounts(state, a, p.land_to_play))
+                    { ++headroom; }
+                }
+            }
+            const int width = std::min(4, board_classes + headroom);
+            for (const int k : StatePinVariantRanks(LandfallTargetPinFor(state), width))
+            {
+                TurnSolver::Plan v = p;
+                v.landfall_target_choice = k;
+                extra.push_back(std::move(v));
+            }
+        }
+        TRACE("landetbtgt", "T%d land-ETB pump target axis -> %zu variants (board classes %d)",
+              state.turn_number, extra.size(), board_classes);
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // Hedron Crab uses the provider's searched periodic target policy. Its bits
     // select self (1) or opponent (0) independently for each trigger
     // in the cycle, including separate Crabs on the same land entry. This is a
@@ -106052,7 +106140,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
             }
         }
-        if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop && !float_old_city)
+        // ...and a Teetering Peaks drop (the land-ETB pump stamp): its after-the-casts clone is the position after an
+        // UNEARTH (a trailing activation -- "unearth Hellspark, then Peaks" pumps the Hellspark).
+        if ((LandOrderMatters(state)
+             || (state.deck_has_land_etb_target && TurnSolver::LandCarriesEtbPump(land_name)))
+            && !land_name.empty() && !karoo_drop && !float_old_city)
         { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top, entry_pin }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
@@ -106426,13 +106518,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // every re-derived continuation loop, and its commit-the-line replay walks the record, which holds
     // the PlayLand where it was played). Breakpoint candidate lists only grow for a deck with a
     // landfall card, so every other deck's bp_choice numbering is byte-identical.
-    if (LandOrderMatters(state))
+    // TEETERING PEAKS (CardParams::etb_target_creature_pump_power; Creature Burn batch 3, 2026-11-20) opens the same
+    // two positions for ITS drop, through the deck stamp (GameState::deck_has_land_etb_target) -- LandOrderMatters
+    // stays false for that deck, so nothing landfall-keyed moves. Its k positions count HASTE CREATURE casts
+    // (TurnSolver::LandSlotCounts -- the land's pump can then land on a body that attacks this turn); its
+    // after-the-casts clone is offered for a plan that UNEARTHS (the trailing pass runs before a deferred land in
+    // both worlds, so the unearthed body is there). Every position is emitted (1..w); Peaks enters tapped, so a later
+    // position never costs mana and never drops a cast for want of it.
+    if (LandOrderMatters(state) || state.deck_has_land_etb_target)
     {
         const auto watchers_in = [](const TurnSolver::Plan& p)
         {
             int n = 0;
             for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++n; } }
             return n;
+        };
+        // The land-position count for a LAND-FIRST plan: watchers, plus haste casts under a Peaks drop.
+        const auto slots_in = [&state, &watchers_in](const TurnSolver::Plan& p)
+        {
+            if (!state.deck_has_land_etb_target || !TurnSolver::LandCarriesEtbPump(p.land_to_play)) { return watchers_in(p); }
+            int n = 0;
+            for (const Action& a : p.actions) { if (TurnSolver::LandSlotCounts(state, a, p.land_to_play)) { ++n; } }
+            return n;
+        };
+        const auto unearths = [&state](const TurnSolver::Plan& p)
+        {
+            if (!state.deck_has_land_etb_target) { return false; }
+            for (const Action& a : p.actions) { if (a.kind == Action::Kind::Unearth) { return true; } }
+            return false;
         };
         // Vampires A2: a plan whose ACTIVATION puts a graveyard-landfall card (Bloodghast) into our
         // graveyard -- a discard or a sacrifice -- is offered "land after the activations" too: the
@@ -106450,9 +106563,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             {
                 const TurnSolver::Plan& p = all[i];
                 if (p.actions.empty()) { continue; }   // nothing cast: land-after == land-first
-                if (watchers_in(p) == 0 && !feeds_gy(p)) { continue; }
+                const bool landfall_after = watchers_in(p) != 0 || feeds_gy(p);
+                if (!landfall_after && !unearths(p)) { continue; }
                 for (const LandOption& lo : offered_lands)
                 {
+                    // An unearth-only plan: the after-the-casts position matters to a Peaks drop alone.
+                    if (!landfall_after && !TurnSolver::LandCarriesEtbPump(lo.land)) { continue; }
                     TurnSolver::Plan v = p;
                     v.land_decided  = true;
                     v.land_to_play  = lo.land;
@@ -106511,7 +106627,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             { continue; }
             const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
             if (ld != nullptr && ld->params.etb_bounce_land) { continue; }   // a Karoo: after-all already
-            const int w = std::min(watchers_in(p), 127);
+            const int w = std::min(slots_in(p), 127);
             int payable = w;   // positions 1..payable have a payable prefix
             const PrefixProbeGuard guard = (w > 0 && slot_probe_on) ? PositionPrefixProbeGuard(state, p)
                                                                    : PrefixProbeGuard::Blanket;
@@ -137264,7 +137380,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             Action probe;
             probe.kind      = Action::Kind::CastFromHand;
             probe.card_name = spec.casts[static_cast<std::size_t>(i)];
-            kth_is_watcher  = PutsLandfallWatcher(probe);
+            kth_is_watcher  = LandSlotCounts(state, probe, wantLand);   // the enumeration's own count (Peaks: haste casts)
             if (kth_is_watcher) { ++m; }
         }
         wantSlot = (kth_is_watcher && spec.land_at_cast <= static_cast<int>(spec.casts.size()))
@@ -138477,6 +138593,19 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                     addSub(a.card_name + " replicate+" + std::to_string(a.replicate_count),
                            a.card_name + " replicate", "+" + std::to_string(a.replicate_count),
                            a.card_name, "replicate");
+                }
+                // BROWBEAT PRE-PING (Action::browbeat_flip; Creature Burn batch 2/3). The flip variant is a CastFromHand of
+                // the same card, so with no sub it shared the base's signature and the dedup kept whichever was
+                // enumerated first -- the human could not choose "ping first, so the opponent declines" (or "withhold
+                // the Pyromancer's response ping, so it takes") from the composer at all. Emitted for BOTH values on a
+                // tap-pinger deck (deck_has_tap_ping), so every variant carries the dimension and a lone base plan is
+                // a single-valued key the choose-walk never asks. No other deck's signature moves.
+                if (state.deck_has_tap_ping && adef && adef->params.opp_may_take_damage_instead_of_draw > 0)
+                {
+                    const std::string ch = a.browbeat_flip != 0 ? "pre-ping: flip the opponent's take/decline"
+                                                                : "no pre-ping";
+                    addSub(a.card_name + (a.browbeat_flip != 0 ? " preping+1" : " preping+0"),
+                           a.card_name + " pre-ping", ch, a.card_name, "preping");
                 }
                 // DEVOUR COUNT (CR 702.81, Mycoloth "Devour 2"): how many creatures the cast eats on
                 // the way in. Same shape and same failure as splice/replicate above -- every k

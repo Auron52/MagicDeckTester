@@ -1356,6 +1356,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"fixedburntarget", UnprunedGate::FixedBurnTarget},
     {"champion", UnprunedGate::Champion},
     {"championmain2", UnprunedGate::ChampionMain2},
+    {"peakstarget", UnprunedGate::PeaksTarget},
     {"seawave",    UnprunedGate::SeaWave},
     {"seabounce",  UnprunedGate::SeaBounce},
     {"sagasteal",  UnprunedGate::SagaSteal},
@@ -2447,6 +2448,38 @@ void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::ve
         if (na != nb) { return na < nb; }
         return a < b;
     });
+}
+
+// ---- CreatureBurnProvider (Stage 4a, 2026-11-20; the class note in DecisionProviders.h) ---------------------------
+// Teetering Peaks' target ORDER and PRUNE. The arriving reps are the engine's sound classes (LandEtbPumpReps): when an
+// attack-capable candidate exists they are all attack-capable (the inert class was dropped), else there is one rep and
+// nothing to do. Plain attackers (no tap_ping_damage) first, then the pingers, each group in battlefield order; with
+// the lever on, the plain group keeps its first member only (the class note has the argument -- attack-all against
+// the never-blocking goldfish makes +2 on any plain attacker the same +2 to the face).
+void CreatureBurnProvider::LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const
+{
+    (void)controller;
+    if (class_reps.size() < 2) { return; }
+    auto pinger = [&s](int bi)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(bi)].card);
+        return d != nullptr && d->params.tap_ping_damage > 0;
+    };
+    std::stable_partition(class_reps.begin(), class_reps.end(), [&](int bi) { return !pinger(bi); });
+    static const bool s_plain_fold = EnvOn("MTG_CB_PEAKS_PLAIN_FOLD", true);   // DEFAULT ON; =0 keeps every class
+    if (!s_plain_fold || HumanPlayActive() || DecisionUnpruned(UnprunedGate::PeaksTarget)) { return; }
+    std::vector<int> out;
+    bool plain_kept = false;
+    for (int bi : class_reps)
+    {
+        if (!pinger(bi))
+        {
+            if (plain_kept) { continue; }
+            plain_kept = true;
+        }
+        out.push_back(bi);
+    }
+    class_reps.swap(out);
 }
 
 // ---- RedElementalsProvider (Stage 4a, 2026-11-14; the class note in DecisionProviders.h) ----------------------
@@ -27598,6 +27631,7 @@ namespace
     const BoarsProvider          g_boars;
     const SeaCreaturesProvider   g_sea_creatures;
     const RedElementalsProvider  g_red_elementals;
+    const CreatureBurnProvider   g_creature_burn;
     const StuffyDollProvider     g_stuffy_doll;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
@@ -30348,6 +30382,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // an ELEMENTAL card (unearth alone is a generic mechanic other lists may add). Never Soulstoke / Metallic
     // Mimic (Landfall Elementals), Bladewhirl's reveal_or_pay_subtype (Kithkin, Pirates) or Sunspine Lynx.
     bool redelem = false;
+    // CREATURE BURN (mono-R creature burn; CreatureBurnProvider, Stage 4a 2026-11-20). MUST return ABOVE `redelem`:
+    // Hellspark Elemental's unearth_cost on an Elemental sets that signature alone (the deck rode RedElementals until
+    // this flag existed). Signature = params no other card carries, OR-ed across FIVE cards: the tap pingers'
+    // tap_ping_damage (Goblin Fireslinger, Vulshok Sorcerer, Cinder Pyromancer), Keldon Marauders' vanishing_counters /
+    // ltb_damage_any and Teetering Peaks' etb_target_creature_pump_power. Browbeat's
+    // opp_may_take_damage_instead_of_draw is deliberately NOT in it: Browbeat is a generic red burn staple, and a
+    // burn list that adds it must not be captured here (coordinator ruling 2026-11-20).
+    // Verified 2026-11-20: no other list under decks/ holds any of those cards.
+    bool cburn = false;
     // STUFFY DOLL (damage reflection into a sweeper). FIRST of all: it must beat `anti && modern_rw_burn` (Arid
     // Mesa's fetch_land_types + the name "Inspiring Vantage" sent it to ModernRwBurnProvider) and anything a later
     // card trips. Signature = params no other card carries, OR-ed across FOUR cards (design section 8): Stuffy
@@ -30590,6 +30633,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (!p.champion_subtype.empty() || p.attack_trigger_reanimate
             || (p.unearth_cost.has_value() && CardHasSubtype(def->card, "Elemental")))
         { redelem = true; }
+        if (p.tap_ping_damage > 0 || p.vanishing_counters > 0 || p.ltb_damage_any > 0
+            || p.etb_target_creature_pump_power > 0)
+        { cburn = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
         { gods = true; }
@@ -31157,6 +31203,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (mazes_end)   { return g_mazes_end; }
     // Stuffy Doll: above everything (see the flag); its signature is carried by no other deck.
     if (stuffy)      { return g_stuffy_doll; }
+    // Creature Burn: above `redelem` (see the flag); its signature is carried by no other deck.
+    if (cburn)       { return g_creature_burn; }
     if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).

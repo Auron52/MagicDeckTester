@@ -1255,6 +1255,15 @@ public:
     // lowest battlefield index (the oldest). Restricts nothing.
     virtual void LandfallCounterTargetOrder(const GameState& s, int controller,
                                             std::vector<int>& class_reps) const;
+    // LandEtbPumpTargetOrder -- a LAND's targeted enter pump ("target creature gets +2/+0 until end of turn",
+    // Teetering Peaks; ResolveLandEtbTargetPump). The LandfallCounterTargetOrder contract: `class_reps` arrives as
+    // battlefield indices, one per class after the engine's SOUND folds (identity + the inert class -- see
+    // LandEtbPumpReps), and the provider ORDERS it in place (entry 0 = the default for rollout leaves past the
+    // horizon, the d0 runner and the human's preselection; the search branches over the rest through
+    // Plan::landfall_target_choice). It MAY restrict (a named, A/B-able prune) but must leave it non-empty and
+    // never add. Base: battlefield order, restricts nothing (byte-identical -- no other deck holds such a land).
+    virtual void LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const
+    { (void)s; (void)controller; (void)class_reps; }
     // LandfallDoubleTargetOrder -- the same contract, for a resolution that DOUBLES the target's +1/+1
     // counters instead of putting N (Scythecat Cub's second landfall resolution each turn). Base rule
     // (out-of-line): a body that can attack RIGHT NOW first (LandfallCounterTargetOrder's first key), then

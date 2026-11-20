@@ -1727,6 +1727,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool counter_ping = false;
         // Creature Burn's tap pingers (GameState::deck_has_tap_ping): Fireslinger / Vulshok / Pyromancer.
         bool tap_ping = false;
+        // Teetering Peaks' targeted land-ETB pump (GameState::deck_has_land_etb_target).
+        bool land_etb_target = false;
         // Abiding Grace's end-step mode/return (GameState::deck_has_endstep_reanimate).
         bool endstep_reanimate = false;
         // Tectonic Giant's modal attack trigger: the Tectonic axis's cast route (GameState::deck_has_attack_modal).
@@ -1836,6 +1838,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.attack_attach_equipment)        { attack_attach = true; }
                 if (d->params.remove_counter_ping_damage > 0) { counter_ping = true; }
                 if (d->params.tap_ping_damage > 0) { tap_ping = true; }
+                if (d->params.etb_target_creature_pump_power > 0 || d->params.etb_target_creature_pump_toughness > 0)
+                { land_etb_target = true; }
                 if (d->params.endstep_modal_reanimate_mv >= 0) { endstep_reanimate = true; }
                 if (d->params.attack_trigger_modal)            { attack_modal = true; }
                 if (!d->params.combat_damage_puts_subtype_from_hand.empty()) { combat_put = true; }
@@ -1933,6 +1937,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Same reasoning, no lever: a clear bit proves no tap pinger can exist, so the Browbeat pre-ping
         // variant is never emitted and the opt-ping record is never written.
         state.deck_has_tap_ping            = garth || tap_ping;
+        // Same reasoning, no lever: a clear bit proves no targeted land-ETB pump can exist, so its target axis
+        // and its land-position variant are never emitted.
+        state.deck_has_land_etb_target     = garth || land_etb_target;
         // Same reasoning, no lever: a clear bit proves no end-step reanimator can exist, so the end-step
         // Grace walk (both worlds) and the plan axis's consumer scan are dead code for that deck.
         state.deck_has_endstep_reanimate   = garth || endstep_reanimate;

@@ -285,6 +285,10 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // simultaneous triggers that no landfall payload in the pool can observe. Keyed by the played
     // card's NUMBER and our controller, never by slot, so a Karoo that bounced ITSELF still triggers
     // (the trigger exists from the entry). Gated per game inside -> byte-identical without landfall.
+    // TEETERING PEAKS: "When this land enters, target creature gets +2/+0 until end of turn" (face definition;
+    // param-gated -> a no-op for every other land). THE land drop for all three callers, so this is
+    // executor/rollout lockstep; EnterLand (an effect put) resolves the same trigger through the same function.
+    ResolveLandEtbTargetPump(state, state.active_player_index, fdef);
     OnLandEntered(state, state.active_player_index, perm.card.m_number);
     DrawForPlayedLand(state, state.active_player_index, opts.logger);
     return true;

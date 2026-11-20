@@ -18877,6 +18877,24 @@
     "tap_ping_target": "player",
     "cast_color_untap_self": "R"
    }
+  },
+  {
+   "name": "Teetering Peaks",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, target creature gets +2/+0 until end of turn.\n{T}: Add {R}. [FULLY MODELED (Creature Burn batch 3, 2026-11-20). enters_tapped + produces R + etb_target_creature_pump_power 2: the trigger resolves at BOTH land-entry sites (the land drop and an effect put -- ResolveLandEtbTargetPump), +2/+0 until end of turn through temp_power_bonus. MANDATORY target, any creature on either side; with no creature the trigger is removed (CR 603.3d) and the land just enters tapped. TARGET = a SEARCHED rank (Plan::landfall_target_choice) over sound-folded classes: identical creatures are one target, and an INERT class (an opponent's creature, a summoning-sick creature without haste, any creature once this turn's combat is over) is dropped while a creature that can still attack this turn exists (tapped is NOT inert: Cinder Pyromancer untaps on a red cast); pingers keep their own classes (a pumped Pyromancer attacks but loses its ping). PROVIDER PRUNE (CreatureBurnProvider, MTG_CB_PEAKS_PLAIN_FOLD, default ON): the plain non-pinger attackers are interchangeable under attack-all against the never-blocking goldfish, so one stands for all. POSITION: the land drop is also searched right after EACH haste-creature cast (Plan::land_slot k -- 'Ball Lightning, then Peaks' pumps the Ball Lightning) and after an unearth (the after-the-casts clone -- 'unearth Hellspark, then Peaks'); Peaks enters tapped, so a later position never costs mana. Disclosed: Price of Progress cast before vs after Peaks changes OUR life by 2 (inert in goldfish). HUMAN PLAY: the board-click `target` decision over the full legal set.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R"
+    ],
+    "enters_tapped": true,
+    "etb_target_creature_pump_power": 2
+   }
   }
  ]
 }

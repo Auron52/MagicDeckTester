@@ -2627,6 +2627,20 @@ public:
     // worlds call it at the same point for the same plans (the rollout's apply_plan_actions, the
     // executor's main and continuation loops).
     static void LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order);
+    // ...the same partition by LandSlotCounts' rule for the POSITIONED land `land` (the plan's or a
+    // continuation's; empty = none -> exactly the overload above).
+    static void LandSlotWatchersFirst(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order,
+                                      const std::string& land);
+    // THE LAND-POSITION COUNT (Plan::land_slot k >= 1 = "right after the k-th counted cast"): a landfall-watcher
+    // put (PutsLandfallWatcher) -- and, when the positioned `land` carries a targeted enter pump (Teetering Peaks,
+    // CardParams::etb_target_creature_pump_power; Creature Burn batch 3), a HASTE CREATURE cast too: "Ball Lightning,
+    // then Peaks" is the line that pumps the Ball Lightning, and with no landfall watcher it was unfindable (every plan
+    // played the land first). ONE predicate for the enumeration (how many positions), both worlds' slot hooks and
+    // cast partitions, the human `landat=<k>` mapping (CheckLine) and the plan label -- lockstep by construction.
+    // Identical to PutsLandfallWatcher for every land without the param, so every other deck is byte-identical.
+    // Gated on the deck stamp (GameState::deck_has_land_etb_target), so no other deck ever pays the land lookup.
+    static bool LandSlotCounts(const GameState& state, const Action& a, const std::string& land);
+    static bool LandCarriesEtbPump(const std::string& land);
     // Were this plan's casts enumerated on the board WITH its land already played -- so its
     // hand_index values index the POST-drop hand? True for a hand land played first or at a
     // position (a position-k plan is a clone of a land-first plan) and for a hand Karoo (removed from

@@ -801,6 +801,11 @@ MANIFEST = {
     # ResolveLandfallTargetCounters, over EVERY legal Plant; the engine's searched pick
     # (Plan::landfall_target_choice) is preselected. A single legal Plant is forced (not prompted).
     "landfall_target_counters": ("target",            positive),
+    # Teetering Peaks (Creature Burn batch 3, 2026-11-20): "When this land enters, target creature gets +2/+0
+    # until end of turn" -- the target rides the shared `target` board-click (g_play_loyalty_chooser) at
+    # ResolveLandEtbTargetPump over EVERY legal creature (either side); the engine's searched pick
+    # (Plan::landfall_target_choice) is preselected. A single legal creature is forced (not prompted).
+    "etb_target_creature_pump_power": ("target",      positive),
     # ---- Unpredictable Cyclone phase 2 (2026-10-27): the Ulamogs' targeted CAST triggers ----
     # "exile two target permanents" / "destroy target permanent": WHICH permanents (either side) is asked
     # through the shared `target` board-click (g_play_loyalty_chooser) at ChooseCastTriggerTargets -- the
@@ -2628,6 +2633,9 @@ def modeled_tokens(card):
         t.add("target")
     # Creature Burn's tap pingers (Vulshok Sorcerer's "any target"): every ping asks the shared `target` decision.
     if isinstance(p.get("tap_ping_damage"), int) and p.get("tap_ping_damage") > 0:
+        t.add("target")
+    # Teetering Peaks' "target creature gets +2/+0" -- the same shared `target` board-click.
+    if isinstance(p.get("etb_target_creature_pump_power"), int) and p.get("etb_target_creature_pump_power") > 0:
         t.add("target")
     return t
 

@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Creature Burn (2026-11-20, Stage 2 batch 3). Teetering Peaks' land POSITION: the opponent is at 8, we have",
+    "three untapped Mountains and hold Ball Lightning + Teetering Peaks. Played first, Peaks has no creature to",
+    "target (the trigger is removed, CR 603.3d) and Ball Lightning swings for 6 -- the opponent survives. Cast",
+    "Ball Lightning FIRST, then play Peaks (Plan::land_slot 1, counted by TurnSolver::LandSlotCounts: a haste",
+    "creature cast), and the trigger gives it +2/+0: 8 trample damage, a turn-3 win. Unfindable before batch 3",
+    "(with no landfall watcher every plan played its land first)."
+  ],
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 8,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Mountain" }
+  ],
+  "hand": ["Ball Lightning", "Teetering Peaks"],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 200, "max_turns": 6,
+  "expect_win_turn": 3,
+  "expect_opponent_life": 0
+}

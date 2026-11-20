@@ -1686,6 +1686,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         { throw std::runtime_error("cast_color_untap_self must be one of W/U/B/R/G, got \"" + c + "\""); }
         p.cast_color_untap_self = static_cast<int>(at - kColours);
     }
+    // Teetering Peaks (Creature Burn batch 3): "When this land enters, target creature gets +N/+M until end of turn."
+    p.etb_target_creature_pump_power     = params.value("etb_target_creature_pump_power", 0);
+    p.etb_target_creature_pump_toughness = params.value("etb_target_creature_pump_toughness", 0);
     p.creature_cast_trigger_plus_counters = params.value("creature_cast_trigger_plus_counters", 0);
     p.creature_cast_counter_damage_min_mv = params.value("creature_cast_counter_damage_min_mv", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))

@@ -1829,6 +1829,16 @@ struct CardParams
     // (an untapped creature dominates a tapped one vs the passive goldfish), and an untapped able-to-tap
     // pinger pings IN RESPONSE first (TapPingCastUntap: ping, then untap -- +1 damage, same board).
     int  cast_color_untap_self = -1;    // a Color ordinal
+    // TEETERING PEAKS (Creature Burn batch 3, 2026-11-20): "When this land enters, target creature gets +2/+0
+    // until end of turn." A LAND enter trigger with a MANDATORY target -- any creature on either side; none ->
+    // the trigger is removed (CR 603.3d). Resolved by ResolveLandEtbTargetPump (SpellEffects.h) at BOTH land-entry
+    // sites (the land drop PlayLandCore, the effect put EnterLand), so executor and rollout are one code path.
+    // The target is a SEARCHED rank (Plan::landfall_target_choice, gated on GameState::deck_has_land_etb_target)
+    // over the sound-folded classes (LandEtbPumpReps); human play board-clicks the full legal set. The land's
+    // POSITION is searched too (Plan::land_slot k = 1: right after the first haste-creature cast,
+    // TurnSolver::LandSlotCounts). 0 for every other card.
+    int  etb_target_creature_pump_power     = 0;
+    int  etb_target_creature_pump_toughness = 0;
 
     // Fetchland (Windswept Heath etc.): "{T}, pay 1 life, sacrifice this land: search your
     // library for a land whose subtype is in this list, put it onto the battlefield, then

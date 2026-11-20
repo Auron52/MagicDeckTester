@@ -187,6 +187,8 @@ enum class UnprunedGate
     Champion,        // Red Elementals: CHAMPION's exile pick restored to every candidate + the decline
                      // (RedElementalsProvider::PruneChampionCandidates' doomed-attacker prune)
     ChampionMain2,   // Red Elementals: a no-haste champion card's PRE-combat hardcast restored
+    PeaksTarget,     // Creature Burn: Teetering Peaks' pump target restored to every class
+                     // (CreatureBurnProvider::LandEtbPumpTargetOrder's plain-attacker prune)
                      // (RedElementalsProvider::CollectedActionAllowed, the USER's Nova Chaser main-2 rule)
     SeaWave,         // Sea Creatures: Whelming Wave's cast restored (SeaCreaturesProvider::NeverCast, USER 2026-11-16)
     SeaBounce,       // Sea Creatures: Hullbreaker Horror's / Brinelin's bounce-trigger targets restored (SeaCreaturesProvider::BounceTriggerDeclineOnly, USER 2026-11-16)
@@ -4290,6 +4292,35 @@ public:
                "toughness below the Awakener's from the graveyard, the Soulstoke +1/+1 lord, Metallic Mimic counters, Legion "
                "Leadership's power doubling on the largest attacker, trample, and the Bolts in hand." }; }
     const char* Name() const override { return "RedElementals"; }
+};
+
+// CREATURE BURN (mono-R creature burn: tap pingers, Keldon Champion / Marauders, Browbeat, Teetering Peaks; Stage 4a,
+// 2026-11-20). The deck rode RedElementalsProvider (Hellspark Elemental's unearth_cost on an Elemental sets `redelem`
+// alone), so this DERIVES from it: every judgement hook it lived on is inherited byte-for-byte (play is unchanged at
+// the split). Signature = gated params no other card carries, OR-ed across FIVE cards (Goblin Fireslinger / Vulshok
+// Sorcerer / Cinder Pyromancer's tap_ping_damage, Keldon Marauders' vanishing_counters + ltb_damage_any, Teetering
+// Peaks' etb_target_creature_pump_power), routed ABOVE `redelem`. Browbeat's opp_may_take_damage_instead_of_draw is
+// NOT in it (a generic red burn staple another burn list could add).
+// One addition:
+//   * LandEtbPumpTargetOrder -- ORDER + a tested PRUNE (MTG_CB_PEAKS_PLAIN_FOLD, DEFAULT ON; =0 keeps every class):
+//     Teetering Peaks' +2/+0 on a PLAIN attacker (no tap ping) is worth exactly +2 combat damage whichever plain
+//     attacker carries it, because the engine attacks with every able plain creature and the goldfish never blocks.
+//     So one plain class stands for all of them (the first, battlefield order), and the pingers keep their own
+//     classes after it (a pumped 0/1 Pyromancer attacks for 2 but gives up its ping). Human play and
+//     MTG_UNPRUNE=peakstarget see every class (the human board-clicks the full legal set regardless).
+class CreatureBurnProvider : public RedElementalsProvider
+{
+public:
+    void LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Damage is combat (hasty bodies: Ball Lightning, Spark / Hellspark Elemental with unearth, "
+               "Keldon Champion; Figure of Destiny's pumps; Teetering Peaks' +2/+0), the burn in hand (Lightning Bolt, "
+               "Rift Bolt off suspend, Magma Jet, Flame Javelin, Searing Blaze's landfall 3, Fireblast's free 4, Price of "
+               "Progress), Keldon Champion's ETB 3 and Marauders' 1 + 1, every ready tap pinger's 1 (Fireslinger, "
+               "Vulshok, Cinder Pyromancer re-untapped per red cast), and Browbeat's 5 under the USER-ruled opponent "
+               "policy. A winless-this-turn bound must price all of them against the life and the mana left." }; }
+    const char* Name() const override { return "CreatureBurn"; }
 };
 
 // STUFFY DOLL (damage reflection into a sweeper; docs/design/damage-reflection-pipeline.md section 8,

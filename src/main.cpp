@@ -681,7 +681,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             int seen = 0; std::string after_name;
             for (const Action& a : plan.actions)
             {
-                if (!TurnSolver::PutsLandfallWatcher(a)) { continue; }
+                // The enumeration's own count (TurnSolver::LandSlotCounts: a haste cast for a Teetering Peaks drop).
+                if (!TurnSolver::LandSlotCounts(s, a, plan.land_to_play)) { continue; }
                 if (++seen == plan.land_slot) { after_name = a.card_name.str(); break; }
             }
             os << " (after " << (after_name.empty() ? "landfall cast #" + std::to_string(plan.land_slot)
