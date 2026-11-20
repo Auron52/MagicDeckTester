@@ -99,3 +99,20 @@ Expect those two CHECK_FALSEs to fail in units.f5.txt; replace them with a sourc
   expected, so do not touch it. Push wip/* only, never the shared branch. No timeouts. Do not kill runs you did not
   start. Hand off at ~250K.
 - The 9p "Cannot allocate memory" build failure is a flake: retry it.
+
+## CORRECTION after bdx3i2g0h finished (f5 built rc=0; stage3 done)
+- The "root cause" above is probably WRONG. The trace's `float -` field prints the PRE-payment float
+  (`PoolText(pre.floating_mana)` in RefinePaymentImpl's trace), NOT the engine's post-payment float. run/rbtdbg/err.txt
+  shows the engine's payment DOES float, e.g. `released=4 ... float {W}{W}{U}{B} vs {W}{W}{W}{W}`. That fits Baldur's
+  Gate's {2},{T} X-of-one-colour mode: four different Gates cannot remake WWWW, so the layer-5 refusals are likely
+  GENUINE. The payments the uncapped eager accepts all tap Baldur's Gate itself, in lower-release layers (5-7 taps) that
+  the 4,096-probe cap never reaches, because layer 5's ~4k first-pass face variants eat it.
+  So RBT_SUBSET probably does NOT fix the 50 (its no-tap test needs e's float covered). It may still be a valid
+  completeness change for untappable released sources, but it is unproven: measure it, or drop it.
+  The lever that matters for the 50 is the BUDGET_CAP (more probes, priced), or a sound collapse of layer 5's face
+  variants. A suggestion: in a layer where every set is refused, a candidate's acceptance depends only on its result.
+  Also: ReachesByTapping could fold the released Gates by colour.
+- Diagnostic to settle it: print e's float + the candidate's taps for the capped {9}{G}/{11}{U} refines (gate the
+  MTG_RBT_DEBUG print on released==4 && T>=9; the first-400-lines limit was spent on released=1 colour mismatches).
+- Units f5: only the two expected CHECK_FALSE lines fail (test_pay_refine.cpp:422-423, Cascade Bluffs has a free {C}).
+  Fix that test. The other new tests pass.
