@@ -34986,6 +34986,17 @@ static thread_local unsigned long long g_devseq_latent_n = 0;   // every latent 
 static thread_local unsigned long long g_devseq_hard_n = 0;
 static thread_local int  g_devseq_two_pass = 0;   // inside a two-pass FullSearchLine (a nested one runs plain)
 static thread_local int  g_devseq_latent_min_turn = INT_MAX;   // the earliest turn a latent occurrence was met at
+// ...and the same over the WHOLE suppressed pass so far, never scoped per node (DvsMltFrame resets the one above at every
+// node). MTG_DEV_SEQ_HEXIT_TAINT reads it: a horizon exit rests on the shallower ladder passes, not on its own subtree.
+// Reset by DvsPassLmtScope at every suppressed-pass entry; every latent record above folds into it (DvsNotePassLatent).
+static thread_local int  g_devseq_pass_lmt = INT_MAX;
+static inline void DvsNotePassLatent(int turn) { g_devseq_pass_lmt = std::min(g_devseq_pass_lmt, turn); }
+struct DvsPassLmtScope
+{
+    int prev;
+    DvsPassLmtScope() : prev(g_devseq_pass_lmt) { g_devseq_pass_lmt = INT_MAX; }
+    ~DvsPassLmtScope() { g_devseq_pass_lmt = prev; }
+};
 // MTG_DEV_SEQ_DIRTY_READ (DEFAULT ON; =0 skips the carry-map probe marking): a first-pass node that READS a dirty node's memo
 // answer is dirty itself. Before, only a node whose own walk met a latent occurrence was marked (g_devseq_latent_n
 // moved under it), so a node that answered from a dirty node's entry -- a transposition, reached by another path --
@@ -35057,6 +35068,7 @@ namespace devseqstats
     inline std::atomic<long long> g_cmp_n[3][2], g_cmp_u[3][2], g_cmp_fresh[3][2], g_cmp_u_fresh[3][2];
     inline std::atomic<long long> g_m2_redo{0}, g_m2_redo_u{0}, g_m2_redo_lat{0}, g_m2_miss_unsup{0}, g_m2_miss_unsup_u{0};
     inline std::atomic<long long> g_p2_skippable{0}, g_p2_skippable_u{0}, g_m2_hidden_latent{0}, g_p2_exhausted{0}, g_p2_shallower{0};
+    inline std::atomic<long long> g_hexit_taint{0};   // MTG_DEV_SEQ_HEXIT_TAINT: first-pass horizon exits marked dirty
     inline std::atomic<long long> g_tail_rec{0}, g_tail_skip{0}, g_tail_seen{0}, g_tail_looser{0}, g_tail_inwin{0}, g_tail_latent{0};   // MTG_DEV_SEQ_TAIL_SKIP
     inline std::atomic<long long> g_node_kept{0}, g_node_erased{0}, g_apply_skip{0}, g_clean_read_dirty{0};
     // compound hand-out outcome census (m1 host): 0 retired, 1 dup of a loop/wave-0/node state, 2 dup of an ordinary
@@ -35091,7 +35103,8 @@ namespace devseqstats
                           << "\n[dev-seq-m2memo] p2_redo_of_p1_state=" << g_m2_redo.load() << " units=" << g_m2_redo_u.load()
                           << " of_which_p1_met_latent=" << g_m2_redo_lat.load()
                           << " unsup_misses=" << g_m2_miss_unsup.load() << " units=" << g_m2_miss_unsup_u.load()
-                          << " p1_hits_hiding_latent=" << g_m2_hidden_latent.load();
+                          << " p1_hits_hiding_latent=" << g_m2_hidden_latent.load()
+                          << "\n[dev-seq-hexit] tainted=" << g_hexit_taint.load();
                 for (int h = 0; h < 2; ++h)
                 {
                     std::cerr << "\n[dev-seq-cls] " << (h ? "m2" : "m1") << " retired/dup_loop/dup_ord/dup_same/dup_othercmp/fresh:";
@@ -74498,6 +74511,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 g_bp_canon_drop_mask |= (std::uint64_t{1} << seen_before);
                 g_devseq_latent_hit = true; ++g_devseq_latent_n;   // NOT hard (g_devseq_hard_n)
                 g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+                DvsNotePassLatent(state.turn_number);   // MTG_DEV_SEQ_HEXIT_TAINT: every latent record folds in
                 break;
             }
         }
@@ -81186,7 +81200,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0
                     && TurnSolver::PostEntryActivationPending(state, s9_keys))
                 { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n; ++g_devseq_hard_n;
-                  g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                  g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
                 break;
             }
             if (!TurnSolver::PostEntryActivationPending(state, s9_keys)) { break; }
@@ -81517,7 +81531,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                    g_fsline_nest, g_rollout_nest, g_bp_enum_depth, g_devseq_suppress, g_devseq_two_pass); }
                     if (BpDevSeqOn() && g_rollout_nest == 0 && g_bp_enum_depth == 0)
                     { g_bp_seen_latent = std::max(g_bp_seen_latent, bp_seen + 1); g_devseq_latent_hit = true; ++g_devseq_latent_n;
-                      g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                      g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
                     break;
                 }
                 s9_keys = TurnSolver::SnapshotActivatableAbilities(state);
@@ -114124,6 +114138,7 @@ static void ReplaySearchedM2Latent(const solvememo::Entry& e, const GameState& s
     g_devseq_latent_hit = true; ++g_devseq_latent_n;
     if (e.dvs_hard) { ++g_devseq_hard_n; }   // a canon-drop-only solve passes on its provenance (DevSeqDeferredP2)
     g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+    DvsNotePassLatent(state.turn_number);
 }
 
 // Local line-memo hits are completed node answers, including their deviation-sequence provenance.
@@ -114142,6 +114157,7 @@ static const TurnSolver::SearchLine& LocalFslMemoHit(const FSLineEntry& e,
         // Tail/node reuse also needs the time of that discovery. A missing time must
         // conservatively disarm the skip, never look like a latent-free subtree.
         g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, earliest_latent);
+        DvsNotePassLatent(earliest_latent);
     }
     return e.line;
 }
@@ -114368,6 +114384,39 @@ static bool FsHorizonExitOn()
 {
     static const bool on = EnvOn("MTG_FS_HORIZON_EXIT", true);
     return (valuearm::t_arm.fs_horizon_exit >= 0) ? (valuearm::t_arm.fs_horizon_exit != 0) : on;
+}
+
+// MTG_DEV_SEQ_HEXIT_TAINT (DEFAULT ON; soundness): A HORIZON EXIT INSIDE MTG_BP_DEV_SEQ's FIRST PASS IS A READ OF THE
+// SHALLOWER PASSES. The exit's "no earlier win" is the ID premise above -- every shallower ladder pass refuted every win
+// before this one's edge -- and in the first (one-deviation) pass those refutations are ONE-DEVIATION refutations. A node
+// that exits on such a win met no latent occurrence of its own, so it was CLEAN (g_devseq_latent_n unmoved): the carry
+// kept it for the second pass, and MTG_INWIN_CACHE filed its "no win before w" as a full-tree proof that any later search
+// reads at any depth. Accomplished Alchemist seed 12345681 keep 7 (d8 b0, MTG_AA_LOOP_CAST_DRAW=0): ladder pass 3 met the
+// T3 latent occurrences (the Umbra re-open), pass 4's T2 node took the exit on a T4 win in 4 units and widened the inwin
+// "no win by T3" proof; the second pass then read it at T2 depth 2 (MTG_INWIN_CACHE_VERIFY: cached=11 fresh=3) and never
+// walked the two-deviation T3 kill. The game won T4 at every budget, and T3 with the cache off.
+// So the exit counts as a dependency on the pass's latent occurrences: when the pass has met one BEFORE the win turn
+// (a later one cannot hide an earlier win) and the win lies past the node's own turn (a this-turn win needs no premise),
+// the node is dirty, exactly as if it had read a dirty node's answer (MTG_DEV_SEQ_DIRTY_READ), with that turn as its
+// earliest latent turn. Inert outside a first pass and in a first pass that met no latent occurrence -- every deck whose
+// search has no site-9 re-open (or no MTG_BP_DEV_SEQ) is byte-identical. =0 restores the hole.
+static bool DvsHexitTaintOn()
+{
+    static const bool v = EnvOn("MTG_DEV_SEQ_HEXIT_TAINT", true);
+    return heurarm::Flag(heurarm::DEV_SEQ_HEXIT_TAINT, v);
+}
+static inline void FsHexit(const GameState& state, int win_turn)
+{
+    ++g_fs_hexits;
+    if (g_devseq_suppress > 0 && win_turn > state.turn_number && g_devseq_pass_lmt < win_turn && DvsHexitTaintOn())
+    {
+        g_devseq_latent_hit = true; ++g_devseq_latent_n;
+        g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, g_devseq_pass_lmt);
+        if (devseqstats::On()) { devseqstats::g_hexit_taint.fetch_add(1, std::memory_order_relaxed); }
+        if (DvsTraceOn())
+        { std::fprintf(stderr, "[dvs] hexit-taint T%d win=%d pass_lmt=%d fsnest=%d\n", state.turn_number, win_turn,
+                       g_devseq_pass_lmt, g_fsline_nest); }
+    }
 }
 
 // ---- GENERAL EOT STATE CLOSURE (MTG_FSW_EOT_DEDUP, default OFF = byte-identical) -------------
@@ -116942,7 +116991,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                            cont.phases.begin(), cont.phases.end());
                         best.truncated = best.truncated || cont.truncated;
                         if (FsHorizonExitOn() && cont.win_turn <= state.turn_number + depth)
-                        { ++g_fs_hexits; ret = best; return kM2FixReturn; }
+                        { FsHexit(state, cont.win_turn); ret = best; return kM2FixReturn; }
                     }
                     return kM2FixHandled;   // the recursion scored the empty continuation == the plain tail
                 }
@@ -117314,7 +117363,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                             // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
-                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { FsHexit(state, sub.win_turn); return best; }
                         }
                     }
                 }
@@ -117423,7 +117472,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     // with `depth` more turns, so its horizon edge is state.turn_number+depth.
                     if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
                     {
-                        ++g_fs_hexits;
+                        FsHexit(state, sub.win_turn);
                         return best;
                     }
                 }
@@ -117549,7 +117598,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                             // Same horizon edge as the base loop's first-verified-win shortcut.
-                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                            if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { FsHexit(state, sub.win_turn); return best; }
                         }
                     }
                 }
@@ -117717,7 +117766,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
                         {
-                            ++g_fs_hexits;
+                            FsHexit(state, sub.win_turn);
                             return best;
                         }
                     }
@@ -117790,7 +117839,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_dredge = fan.DredgePins();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
-                    if (FsHorizonExitOn() && best_tail.win_turn <= state.turn_number + depth) { ++g_fs_hexits; break; }
+                    if (FsHorizonExitOn() && best_tail.win_turn <= state.turn_number + depth) { FsHexit(state, best_tail.win_turn); break; }
                 }
             }
             best_tail.boundary_doth = best_doth;
@@ -118325,7 +118374,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
             if (dvs_read_dirty && DvsDirtyReadOn())
-            { g_devseq_latent_hit = true; ++g_devseq_latent_n; if (dvs_read_hard) { ++g_devseq_hard_n; } }
+            { g_devseq_latent_hit = true; ++g_devseq_latent_n; if (dvs_read_hard) { ++g_devseq_hard_n; } DvsNotePassLatent(dvs_read_mlt); }
         }
         // P18f LEAF-FREE ANSWERS (see gamelc::LeafFreeOn): a completed no-leaf refutation answers any leaf kind.
         if (gamelc::On() && g_fsline_nest > 0 && g_devseq_suppress == 0 && gamelc::LeafFreeOn())
@@ -118355,7 +118404,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
                 if (p17::On()) { ++p17::t_glc_w; }
-                if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
                 if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
             }
@@ -118367,7 +118416,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (p17::On()) { ++p17::t_glc_n; }
-                    if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
+                    if (gt >= 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_hard_n += (gt == 1); g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); DvsNotePassLatent(state.turn_number); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
                 }
@@ -120333,7 +120382,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
                         if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
                         {
-                            ++g_fs_hexits;
+                            FsHexit(state, tail.win_turn);
                             if (idh_hold_for(p_pos, tail.win_turn))   // held for the lower-index plans (static tie-break)
                             {
                                 idh_pending = true; idh_pending_break = BpWaveCompleteNodes() && BpWavesHere(budget);
@@ -120773,7 +120822,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // standalone earliest-win finder.
             if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
             {
-                ++g_fs_hexits;
+                FsHexit(state, tail.win_turn);
                 if (idh_hold_for(p_pos, tail.win_turn))   // held for the lower-index plans (static tie-break)
                 {
                     idh_pending = true; idh_pending_break = BpWaveCompleteNodes() && BpWavesHere(budget);
@@ -121037,7 +121086,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     // on its own when the slots retire or the budget runs out.
                     if (FsHorizonExitOn() && !BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
-                        ++g_fs_hexits;
+                        FsHexit(state, tail.win_turn);
                         FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
                         return best;
                     }
@@ -122038,6 +122087,65 @@ int DevSeqMemoCarryForTest(bool win, bool replay, bool replay_min, bool searched
     return result;
 }
 
+// Unit-only probe of MTG_DEV_SEQ_HEXIT_TAINT, in the shape the AA seed 12345681 trace showed: inside a first
+// (suppressed) pass, an earlier ladder pass records a latent occurrence at `latent_turn` (the walk's record, through the
+// same pass-wide fold); then a node at `node_turn` takes the horizon exit on a win at `win_turn` (FsHexit, the real
+// call every exit site makes) without meeting a latent occurrence of its own. Returns a mask: 1 = the node is dirty (the
+// test the in-window cache and game-line cache stores apply: g_devseq_latent_n moved under it); 2 = its earliest latent
+// turn is latent_turn; 4 = the carry eraser drops its refutation for a second pass cut at win_turn - 1.
+int DevSeqHexitTaintForTest(int latent_turn, int node_turn, int win_turn, bool suppressed)
+{
+    const int old_sup = g_devseq_suppress;
+    const bool old_hit = g_devseq_latent_hit;
+    const unsigned long long old_n = g_devseq_latent_n;
+    const int old_min = g_devseq_latent_min_turn;
+    auto* const old_dirty = g_devseq_dirty;
+    auto* const old_keys = g_devseq_dirty_keys;
+    struct Restore
+    {
+        int sup; bool hit; unsigned long long n; int min_turn;
+        std::vector<TranspositionTable::Key>* dirty; DevSeqDirtyKeys* keys;
+        ~Restore()
+        { g_devseq_suppress = sup; g_devseq_latent_hit = hit; g_devseq_latent_n = n;
+          g_devseq_latent_min_turn = min_turn; g_devseq_dirty = dirty; g_devseq_dirty_keys = keys; }
+    } restore{ old_sup, old_hit, old_n, old_min, old_dirty, old_keys };
+    const DvsPassLmtScope plmt;
+    std::vector<TranspositionTable::Key> dirty;
+    DevSeqDirtyKeys keys;
+    g_devseq_suppress = suppressed ? 1 : 0; g_devseq_latent_hit = false; g_devseq_latent_n = 0;
+    g_devseq_latent_min_turn = INT_MAX;
+    g_devseq_dirty = &dirty; g_devseq_dirty_keys = &keys;
+    FSLineCache cache;
+    // The shallower pass: a node whose walk met the latent occurrence (the walk's own record).
+    {
+        const DvsMltFrame f;
+        g_devseq_latent_hit = true; ++g_devseq_latent_n;
+        g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, latent_turn); DvsNotePassLatent(latent_turn);
+    }
+    // The deeper pass: the node takes the exit on its first in-horizon win and meets nothing itself.
+    GameState node;
+    node.turn_number = node_turn;
+    const TranspositionTable::Key k{ 21, 201 };
+    const unsigned long long at_entry = g_devseq_latent_n;
+    int mlt = INT_MAX;
+    {
+        const DvsMltFrame f;
+        FsHexit(node, win_turn);
+        mlt = f.Mine();
+    }
+    int result = 0;
+    const bool node_dirty = g_devseq_suppress > 0 && g_devseq_latent_n != at_entry;
+    if (node_dirty) { result |= 1; }
+    if (node_dirty && mlt == latent_turn) { result |= 2; }
+    FSLineStoreNoWin(&cache, k, TurnSolver::SearchLine{ 99, {} }, win_turn - 1);
+    DvsRecordDirtyKeys(&cache, k, k, at_entry);
+    std::vector<DvsNodeMeta> meta;
+    for (std::size_t i = 0; i < dirty.size(); i += 2) { meta.push_back({ mlt, true, win_turn - 1 }); }
+    FslEraseDirty(&cache, dirty, meta, win_turn - 1);
+    if (cache.count(k) == 0) { result |= 4; }
+    return result;
+}
+
 static thread_local const GameState* g_current_full_search_root_state = nullptr;
 
 const GameState* TurnSolver::CurrentFullSearchRootState()
@@ -122134,6 +122242,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         SearchLine line1;
         {
             struct Suppress { Suppress() { ++g_devseq_suppress; } ~Suppress() { --g_devseq_suppress; } } _sup;
+            const DvsPassLmtScope _plmt;   // MTG_DEV_SEQ_HEXIT_TAINT: this first pass's own earliest latent turn
             g_devseq_lc_handoff = &carry;
             g_devseq_dirty      = &dirty;
             const bool dvs_ts   = DvsTailSkipOn();
@@ -126265,6 +126374,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 {
                     struct Suppress { Suppress() { ++g_devseq_suppress; }
                                       ~Suppress() { --g_devseq_suppress; } } _sup;
+                    const DvsPassLmtScope _plmt;   // MTG_DEV_SEQ_HEXIT_TAINT (see FsHexit)
                     for (std::size_t i = 0; i < pre.size(); ++i)
                     {
                         if (gamework::Poll()) { break; }
