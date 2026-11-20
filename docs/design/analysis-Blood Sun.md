@@ -111,8 +111,10 @@ Scryfall JSONs + rulings: `build/scratch/bloodsun/scry/collection.json` (primary
 `docs/design/blood-sun-pipeline.md` + step plan; USER guidance above relayed to it verbatim. Then one
 fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue autonomously overnight.
 
+## Decided by the USER
+- B1 own death (USER 2026-11-20, verbatim): *"Yes, running out of life is a loss, so the deck should not
+  fastbond so much that it loses."* -> `own_death_live` armed for this deck by a deck-level stamp; search,
+  playout and go-off recognizer all respect it.
+
 ## Open USER decisions
-- B1 own death: arm `own_death_live` for this deck (Fastbond pings, City of Brass, Grim Tutor, Worldfire
-  life 1)? Recommended: a deck-level stamp keyed on those params so no other deck's play moves. Default taken
-  provisionally: arm it for this deck.
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
