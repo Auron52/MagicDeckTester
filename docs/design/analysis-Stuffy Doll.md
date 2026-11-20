@@ -283,3 +283,35 @@ deferrals provisional.
   resolution), `reflect_player_cant_gain_life` (Nemesis rider; the recipient is already the `target` choice).
 - Side finding R7: two rollout-only kill paths (TurnSolver.cpp ~73041/~73148) ignore indestructible
   and skip death triggers — not on this deck's paths; separate fix.
+
+## Claude-play sweep
+
+Stage 5d, 2026-11-20. Driver: Claude (Opus agents, one per seed, via the Workflow tool), `--claude-play --max-turns 8
+--reveal 6`, shipped profile; bench = the shipped search (d5 b20) on the same seeds.
+
+commit: `8c18a5163` (src = aba70f7ff)
+seeds: 930000-930015
+games: 16
+flags: 1 unresolved (E: a USER decision, below)
+
+Result: Claude's win turn = the search's in 15 of 16 games (T3-T6). 930012: Claude T5, search T6. Verified as a
+BUDGET effect, not a lost line: the search holds the T1 Arid Mesa and finds the T5 kill at b200+ and at
+`--depth 8 --budget-ms 0`. No engine or card defect, no fix.
+
+12 flags, every one reproduced by an independent Opus verifier (results + verdicts:
+build/scratch/stuffy/sweep/results.json). They reduce to 7 issues:
+
+| id | seeds | classification | fix |
+|----|-------|----------------|-----|
+| A | 930006, 930009, 930014, 930015 | engine bug | Full-order human menus (DecisionUnpruned SearchOrder) offered `Loran's Escape -> X, X` with X still in HAND. Realised order cast the Escape first, with no legal target (CR 601.2c), so it fizzled and spent its {W} with no prompt. TurnSolver's ordering expansion filtered that shape (OrderingPlacesTrickBeforeHandTarget) only for rfx plans; it now filters every plan. New check test/claude_play_trick_order_check.py walks the 4 recorded games: 50 main-phase menus, 0 violations (it fails on the unfixed tree). FIXED |
+| B | 930007, 930008 | protocol defect | The multi-ordering drop probe ran ApplyPlanDirect on a plan with the land undecided, so it played the GREEDY land (e.g. the second Sacred Foundry) and labelled an unpayable line `not_verified` with no drops (Mind Stone after Maniac with 1 mana left). The single-ordering probe already pinned `land_decided`. The ordering probe now pins it too, human play only, so search is untouched. human_plan_realised_check: 712 committed plans, 0 realised differently from their label. FIXED |
+| C | 930004 | protocol defect | Stuffy Doll's as-enters choose_player listed creatures. Picking one was silently dropped, and "opponent" stood. The legal set is now players only (main.cpp choose_player legal set). FIXED |
+| D | 930005 | protocol defect | A `divide` reply (en-Kor shield, Fury, fixed-damage divide) that did not sum to the total was silently replaced by the engine's allocation, and the trace recorded the rejected amounts. Now a stderr `[claude-play] WARNING`, and the trace records the APPLIED allocation, with the reply under `rejected`. FIXED |
+| E | 930004 | viewer defect, USER decision | When Boros Garrison bounces an untapped dual, the engine taps it "in response" and picks the float colour itself (SpellEffects FloatLandBeforeSacrifice); human play is never asked. In 930004 {W} would have cast Guilty Conscience. Options: (a) pip-aware human default, (b) a viewer setting that asks, (c) both (recommended). Any option needs a new `karoo_float` rule stamp plus a legacy replay flag so older references replay as recorded. OPEN, USER |
+| F | 930011 | viewer defect | The simultaneous-trigger order prompt listed two Guilty Conscience triggers as just "Guilty Conscience". Entries now read `<name> on <host>: deals N to it` / `<name>: reflects N` (dmgrx::t_viewer_dig_labels; claude-play `label`, viewer panel). FIXED |
+| G | 930011 | cosmetic | The combat event's life arrow was read after damage triggers had resolved: "7 to opponent (9->-1)" with 3 of it from Reckoner's reflection. The event now appends "+ N from damage triggers" (viewer text only; LogAttack unchanged). FIXED |
+
+Fixes: 6cace895c. Validation: build, unit, scenarios, trick-order check, human_plan_realised_check,
+viewer_protocol_check --strict over 909 refs (0 play-drift / board-diverged / enum-gap; 1 beaten suboptimal ref),
+test/viewer_checks.sh (re-run on the rebased binary; its two pre-existing failures are listed in the Stage 6 report). Search play is unchanged: B is human-only; A removes only orders that cannot execute; C, D, F
+and G are protocol/viewer text.
