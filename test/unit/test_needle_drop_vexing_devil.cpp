@@ -665,3 +665,66 @@ TEST_CASE("1 Drop Burn order: Fireblast-early ranks Fireblast after the burn and
     ArmPin early(heurarm::ONEDROPBURN_FIREBLAST_EARLY, false);
     CHECK(OdbProv().CastOrderRank(s, NDef("Fireblast")) == 40);
 }
+
+// ---- MTG_PO_DAMAGE_ORDER: the payable-order fallback orders a damage-dependent cast after the burn that enables it --
+namespace
+{
+Action NFireblast(int m1, int m2)
+{
+    Action a = NCast("Fireblast");
+    a.tutor_target  = "fireblast:" + std::to_string(m1) + "," + std::to_string(m2);
+    a.cost          = ManaCost{};
+    a.direct_damage = 4;
+    return a;
+}
+}   // namespace
+
+TEST_CASE("Damage order: Needle Drop before the line's only burn moves after it, only when the given order cannot pay")
+{
+    // s30000108 T2 shape: two Mountains, Needle Drop ranked before Fireblast. Needle Drop has no target until
+    // Fireblast resolves; Fireblast first floats both sacrificed Mountains' {R} (MTG_FIREBLAST_FLOAT).
+    ArmPin fl(heurarm::FIREBLAST_FLOAT, true);
+    GameState s = NBoard(2, {"Needle Drop", "Fireblast"});
+    Action nd = NCast("Needle Drop"); nd.direct_damage = 1;
+    const std::vector<Action> acts = {nd, NFireblast(70, 71)};
+    {
+        ArmPin dmg(heurarm::PO_DAMAGE_ORDER, true);
+        std::vector<int> order = {0, 1};
+        CHECK(TurnSolver::DamagePayableOrder(s, acts, order));
+        CHECK(order == std::vector<int>{1, 0});
+        std::vector<int> given = {1, 0};                       // already burn-first: kept
+        CHECK_FALSE(TurnSolver::DamagePayableOrder(s, acts, given));
+        CHECK(given == std::vector<int>{1, 0});
+        GameState dealt = s;                                   // a target already exists: no domain, kept
+        dealt.MarkPlayerDealtDamage(1, 2);
+        std::vector<int> kept = {0, 1};
+        CHECK_FALSE(TurnSolver::DamagePayableOrder(dealt, acts, kept));
+        CHECK(kept == std::vector<int>{0, 1});
+    }
+    ArmPin dmg(heurarm::PO_DAMAGE_ORDER, false);               // lever off: never moves
+    std::vector<int> order = {0, 1};
+    CHECK_FALSE(TurnSolver::DamagePayableOrder(s, acts, order));
+    CHECK(order == std::vector<int>{0, 1});
+}
+
+TEST_CASE("Damage order: a spectacle cast moves after the burn only when its printed cost cannot be paid first")
+{
+    ArmPin fl(heurarm::FIREBLAST_FLOAT, true);
+    ArmPin dmg(heurarm::PO_DAMAGE_ORDER, true);
+    const std::vector<Action> acts = {NCast("Skewer the Critics"), NFireblast(70, 71)};
+    {
+        // Two Mountains: Skewer's {2}{R} cannot pay first; Fireblast first floats {R}{R} and Skewer costs {R}.
+        GameState s = NBoard(2, {"Skewer the Critics", "Fireblast"});
+        std::vector<int> order = {0, 1};
+        CHECK(TurnSolver::DamagePayableOrder(s, acts, order));
+        CHECK(order == std::vector<int>{1, 0});
+    }
+    {
+        // Four Mountains: the printed cost pays first and Fireblast then takes two tapped Mountains -- the given
+        // order (the deck's) pays every cast, so it stands.
+        GameState s = NBoard(4, {"Skewer the Critics", "Fireblast"});
+        std::vector<int> order = {0, 1};
+        CHECK_FALSE(TurnSolver::DamagePayableOrder(s, acts, order));
+        CHECK(order == std::vector<int>{0, 1});
+    }
+}

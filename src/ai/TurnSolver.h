@@ -1326,6 +1326,17 @@ struct CastRiders
 // 2026-10-01: "We either do not consider the main at all, or we search it."
 #include "../core/GreedyWindow.h"   // namespace greedywindow (moved there verbatim; core resolvers read it)
 
+// MANA-ORACLE / ACT-DROP AUDIT (mana-clean gate claude-queue-20261120b, 1 Drop Burn ORACLE-GAP 4,881): a trailing
+// face / self Grim Lavamancer ping (GraveyardExileAbility mode 3) that did not resolve was never reported as a dropped
+// activation, so the oracle read the engine as realising the whole plan and flagged ORACLE-GAP where the engine had
+// dropped the ping (e.g. {Fireblast, suspend Rift Bolt, gy-exile Lavamancer}: Fireblast took the Mountain whose {R}
+// the ping needed). NoteGraveyardDamageDrop names it to the act-drop sink (armed only by the oracle / plan dump) and
+// the MTG_ACT_DROP_AUDIT counters; both apply worlds call it from their trailing pass. g_gy_damage_hoist_probe is set
+// around the pre-cast HOIST (SpectacleGraveyardDamageFirst), whose failure only defers the ping to the trailing pass.
+// Reporting only: no play reads either, so every game is byte-identical with the oracle off.
+extern thread_local bool g_gy_damage_hoist_probe;
+void NoteGraveyardDamageDrop(const GameState& state, const Action& a);
+
 class TurnSolver
 {
 public:
@@ -3552,6 +3563,12 @@ public:
     // unlock equips fired as the apply fires them) pays it; else the nearest permutation that walk pays replaces
     // it. True iff `order` moved. Called by PayableCastOrderCore (ManaPayment.cpp) at the apply site only.
     static bool UnlockPayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
+    // MTG_PO_DAMAGE_ORDER -- the payable-order fallback for a line holding a cast that needs same-turn DAMAGE (Needle
+    // Drop's "target that was dealt damage this turn", a spectacle cost not yet live, Chandra's Incinerator's discount)
+    // beside a face-burn cast that would supply it. The given order is kept when the sequential walk -- with that
+    // damage modelled -- pays it; else the nearest permutation the walk pays replaces it. True iff `order` moved.
+    // Called by PayableCastOrderCore (ManaPayment.cpp) at the apply site only, after UnlockPayableOrder.
+    static bool DamagePayableOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
     // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
     // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
     // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"

@@ -7267,8 +7267,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const MadnessPayFn payer = [this](GameState& s, const ManaCost& c) {
                     ManaPool pool = AvailableManaPool(s); return TapForCost(s, c, pool, false);
                 };
-                ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
-                                            a.tutor_target, a.enchant_target, payer);
+                if (!ApplyGraveyardDamageAbility(state, state.active_player_index, a.sac_source_id,
+                                                 a.tutor_target, a.enchant_target, payer))
+                { NoteGraveyardDamageDrop(state, a); }   // reporting only (rollout twin)
             }
             else if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
@@ -8772,7 +8773,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (const int first = TurnSolver::SpectacleGraveyardDamageFirst(state, plan.actions); first >= 0)
     {
         const Action& a = plan.actions[static_cast<std::size_t>(first)];
+        g_gy_damage_hoist_probe = true;    // a failed hoist retries in the trailing pass (rollout twin)
         exec_trailing_activations(std::vector<Action>{a});
+        g_gy_damage_hoist_probe = false;
         for (const Permanent& q : state.battlefield)
         { if (q.card.m_number == a.sac_source_id && q.tapped)
           { spectacle_hoisted_source = a.sac_source_id; break; } }
