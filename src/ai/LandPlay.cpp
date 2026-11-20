@@ -343,6 +343,10 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     if (hand_index >= ap.hand.size()) { return false; }
     auto it = ap.hand.begin() + static_cast<std::ptrdiff_t>(hand_index);
     const bool played = PlayLandCore(state, *it, def, opts, [&ap, it]() { ap.hand.erase(it); });
+    // FASTBOND (Blood Sun step 4): its trigger on the land PLAY, after the land's own enter triggers (every
+    // PlayLandCore path, a fetch cracked on play and a Lake / Lotus Vale played into the graveyard included -- R1:
+    // the special action happened). Deck-gated inside: one bool for every deck without a drop-maker.
+    if (played) { ResolveLandPlayDamage(state, state.active_player_index); }
     // CR 704.3: SBAs are checked before the player receives priority after the land play, so a second legendary
     // land (The Grey Havens) is legend-ruled NOW, not at the next beginning of combat (LegendRuleSbaCheckpoint).
     // THE land drop for every caller, so this is executor/rollout lockstep.
@@ -360,6 +364,7 @@ bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const L
     LandPlayOptions o = opts;
     o.from_library_top = true;   // the log records the source (GameLogger::LogPlayLand)
     const bool played = PlayLandCore(state, top, def, o, []() {});
+    if (played) { ResolveLandPlayDamage(state, state.active_player_index); }   // Fastbond, as PlayLandFromHand
     if (played) { LegendRuleSbaCheckpoint(state); }   // CR 704.3, as PlayLandFromHand
     return played;
 }

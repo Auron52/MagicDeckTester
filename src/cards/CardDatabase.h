@@ -28,6 +28,10 @@ enum class Targeting
                       // becomes a legal (self-tuck) target.
 };
 
+// Fastbond (CardParams::unlimited_land_plays): the extra land drops ONE copy grants. Exact, not a cap: no decklist
+// holds this many lands (the Blood Sun list holds 33), so a turn can never run out of Fastbond drops.
+constexpr int kUnlimitedDrops = 64;
+
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
 struct CardParams
 {
@@ -5510,6 +5514,21 @@ struct CardParams
     // (copies stack, CR 305.2). Folded into Player::bonus_land_drops_this_turn: both untap resets set it to the
     // controlled-copy total (StaticExtraLandDrops), and a copy entering mid-turn adds its count that turn.
     int                      static_extra_land_drops = 0;
+    // BLOOD SUN step 4 -- Fastbond: "You may play any number of lands on each of your turns." A static, like
+    // Exploration's, represented EXACTLY as kUnlimitedDrops extra drops per copy: the load folds it into
+    // static_extra_land_drops above (so the untap seed, the mid-turn entry, the leave recompute, the deck stamp
+    // and all 86 LandDropsAvailable() readers see it unchanged). Not a cap -- no decklist holds 64 lands.
+    bool                     unlimited_land_plays = false;
+    // ...and "Whenever you play a land, if it wasn't the first land you played this turn, this enchantment deals
+    // 1 damage to you." A TRIGGER on the land-PLAY special action only (CR 305.1; ruling 1: every play, whatever
+    // permission it used; ruling 2: never a land PUT onto the battlefield): ResolveLandPlayDamage, called by every
+    // land-play body (PlayLandFromHand / PlayLandFromLibraryTop / the graveyard-play ability). One event per copy.
+    int                      land_play_damage_after_first = 0;
+    // BLOOD SUN step 4 -- the CODE SHAPE of two own-death terms (design §7); their cards and consumers land in
+    // step 5. Grim Tutor: "You lose 3 life" on resolution (0 = none). Worldfire: "Each player's life total becomes
+    // N" (-1 = absent). Parsed, read today only by the own-death arming (GoldFishRunner::StampDeckTraits).
+    int                      lose_life_on_resolve = 0;
+    int                      set_all_life_totals = -1;
     // Burgeoning: "Whenever an opponent plays a land, you may put a land card from your hand onto the
     // battlefield." One trigger per copy per opponent land PLAYED (ResolvePassiveOpponentLandTurn); which land
     // (or none) is the searched crossing-land pin (GameState::scripted_crossing_lands).

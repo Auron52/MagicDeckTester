@@ -2484,6 +2484,15 @@
     "toughness": "2",
     "type_line": "Creature — Minotaur Shaman"
   },
+  "Fastbond": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "You may play any number of lands on each of your turns.\nWhenever you play a land, if it wasn't the first land you played this turn, this enchantment deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Fatal Push": {
     "cmc": 1.0,
     "keywords": [

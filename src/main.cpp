@@ -10941,6 +10941,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         }
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }
+        // A "resume_at" frame skips the untap step, which is what seeds the static extra land drops (Exploration,
+        // Fastbond: StaticExtraLandDrops) -- so seed them here from the staged board, as the untap step would have.
+        // Without resume_at the untap step does it. 0 for every fixture with no drop-maker on the battlefield.
+        if (!resume_at.empty())
+        { state.players[0].bonus_land_drops_this_turn = StaticExtraLandDrops(state, 0); }
 
         // Optional exact top-of-library ("library_top": ["A","B",...] -- index 0 drawn first), so a
         // fixture can pin the draw sequence the interaction under test depends on (a kill turn that

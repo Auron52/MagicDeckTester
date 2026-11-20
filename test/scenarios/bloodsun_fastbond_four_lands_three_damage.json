@@ -1,0 +1,40 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Fastbond",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Forest",
+  "Forest",
+  "Forest",
+  "Forest"
+ ],
+ "human_lines": [
+  "land=Forest",
+  "land=Forest",
+  "land=Forest",
+  "land=Forest",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_active_life": 17,
+ "comment": "Blood Sun step 4: FASTBOND, four lands played in one main phase -> three damage (the first play is free; 'if it wasn't the first land you played this turn'). Human path: every land is the main menu's land drop."
+}

@@ -38459,6 +38459,12 @@ int TurnSolver::LandDropSnapshot(const GameState& state)
     return (ap.LandDropsAvailable() << 8) | (ap.lands_played_this_turn & 0xFF);
 }
 
+bool TurnSolver::DropRearmUnbounded(const GameState& state)
+{
+    return state.deck_has_static_land_drops
+        && state.players[state.active_player_index].LandDropsAvailable() > kUnlimitedDrops;
+}
+
 bool TurnSolver::LandDropNewlyOpen(int snapshot, const GameState& state, bool drop_reserved)
 {
     if (!state.deck_has_static_land_drops || drop_reserved) { return false; }
@@ -82801,8 +82807,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // that re-arm to be discarded, breaking the line at the second cantrip. Truncating the tail and
     // refusing to re-resolve it are contradictory; the partition has to carry both halves.
     const bool partition_loop = BpPartitionCantripEnabled();
+    // The pass cap does not bind an extra-drop re-arm under a Fastbond (DropRearmUnbounded: the lands bound it).
     while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm || deferred_drop_rearm || partition_loop)
-           && top_reset_passes++ <= 4)
+           && (top_reset_passes++ <= 4 || (deferred_drop_rearm && TurnSolver::DropRearmUnbounded(state))))
     {
         top_first_pass    = false;
         deferred_top_rearm = false;
@@ -84894,7 +84901,9 @@ static std::string SimulateLandPlay(GameState& state)
 {
     std::string first = SimulateLandPlayOne(state);
     if (!state.deck_has_static_land_drops || first.empty()) { return first; }
-    for (int guard = 0; guard < 8; ++guard)
+    // Bounded by the drops themselves (Blood Sun step 4: was `guard < 8`, which capped a Fastbond turn at nine
+    // lands); every pass consumes one land card, so it also ends when they run out. Identical below ten drops.
+    for (int guard = 0; guard < state.ActivePlayer().LandDropsAvailable(); ++guard)
     {
         const Player& ap = state.ActivePlayer();
         if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { break; }
@@ -84923,6 +84932,11 @@ static std::string SimulateLandPlayOne(GameState& state)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable())
+    { landdrop::Record(std::string(), 0, 0); return std::string(); }
+    // FASTBOND (Blood Sun step 4, USER D1): never play a land whose land-play damage kills us with own death live --
+    // a sound dominance (a loss is the worst outcome), the twin of AIEngine::TryPlayLand's. False for every deck
+    // without own death or a land-play damage source.
+    if (LandPlayWouldKill(state, state.active_player_index))
     { landdrop::Record(std::string(), 0, 0); return std::string(); }
 
     // Does the active player control another land (one a Karoo could bounce)?

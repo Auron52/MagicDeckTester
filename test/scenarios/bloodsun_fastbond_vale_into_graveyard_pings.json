@@ -1,0 +1,44 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Fastbond",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": true
+  }
+ ],
+ "hand": [
+  "Forest",
+  "Lotus Vale"
+ ],
+ "human_lines": [
+  "land=Forest",
+  "land=Lotus Vale",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_active_life": 19,
+ "expect_graveyard_contains": [
+  "Lotus Vale"
+ ],
+ "comment": "Blood Sun step 4, R1 (design §11): a Lotus Vale PLAYED with fewer than two untapped lands goes to the graveyard (its replacement fails) -- but it WAS played (CR 305.1: playing a land is the special action; the drop is spent, CR 305.2), so Fastbond's trigger (ruling 1: 'You take damage when you play a land using the play a land action') fires for it as the second land: 20 -> 19."
+}

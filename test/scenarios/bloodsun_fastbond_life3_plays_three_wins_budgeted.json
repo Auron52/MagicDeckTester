@@ -1,0 +1,39 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 3,
+ "resume_at": "main1",
+ "library_filler": "Mountain",
+ "library_size": 30,
+ "opponent_life": 12,
+ "battlefield": [
+  {
+   "name": "Fastbond",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Lightning Bolt",
+  "Lightning Bolt",
+  "Lightning Bolt",
+  "Lightning Bolt"
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 5,
+ "expect_win_turn": 3,
+ "expect_active_life": 1,
+ "comment": "Blood Sun step 4 (USER D1: 'running out of life is a loss, so the deck should not fastbond so much that it loses'): life 3, Fastbond + one Mountain out, five Mountains and four Bolts in hand, opponent at 12. The only turn-3 kill plays exactly THREE more lands (two pings, 3 -> 1) and casts four Bolts; a fourth land would kill us. d3, budget 100."
+}

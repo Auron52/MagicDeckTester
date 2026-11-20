@@ -3057,6 +3057,96 @@ inline int StaticExtraLandDrops(const GameState& state, int player)
     }
     return n;
 }
+
+// FASTBOND (Blood Sun step 4): the damage the NEXT land PLAY by `player` would deal to `player` -- the sum of
+// CardParams::land_play_damage_after_first over the permanents it controls, or 0 while no land has been played
+// this turn ("if it wasn't the first land you played this turn"). Deck-gated on the same stamp as the drops
+// (Fastbond's unlimited_land_plays IS a static extra drop, so every Fastbond deck carries it): one bool for every
+// deck without a drop-maker, one walk per land play for an Exploration deck.
+inline int LandPlayDamageNext(const GameState& state, int player)
+{
+    if (!state.deck_has_static_land_drops) { return 0; }
+    if (state.players[static_cast<std::size_t>(player)].lands_played_this_turn < 1) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != player || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr) { n += d->params.land_play_damage_after_first; }
+    }
+    return n;
+}
+
+// Would the next land play kill us? The beyond-horizon greedy drop and the land-choice folds stop on it (with own
+// death live a loss is the worst outcome, so a land whose Fastbond damage takes our life to 0 is dominated by not
+// playing it -- USER D1: "the deck should not fastbond so much that it loses"). False for every deck without own
+// death or without a land-play damage source.
+inline bool LandPlayWouldKill(const GameState& state, int player)
+{
+    if (!state.own_death_live) { return false; }
+    const int dmg = LandPlayDamageNext(state, player);
+    return dmg > 0 && state.players[static_cast<std::size_t>(player)].life - dmg <= 0;
+}
+
+// Fastbond's trigger, resolved after a land PLAY (CR 305.1: the special action; ruling 1 -- every play, the
+// regular drop, Fastbond's own or Exploration's alike; ruling 2 -- a land PUT onto the battlefield by an effect
+// never triggers it, so EnterLand / Burgeoning / the land tutors never call this). Called by every land-play body
+// AFTER the land's own enter triggers: the two trigger on the same event and we order them (CR 603.3b), and
+// putting Fastbond's last is never worse (a Kazandu Refuge's gain resolves first). R1 (design §11): a Lotus Vale
+// PLAYED into the graveyard (its replacement failed) was still PLAYED -- the special action happened and the drop
+// is spent (CR 305.1, 305.2) -- so it triggers too. One damage event per Fastbond (each is its own trigger).
+// The source is an enchantment: armed decks route it through dmgev (Purity, Tamanoa, the SBA); unarmed decks take
+// the raw `life -=` like every unarmed self-damage, and own death (StampDeckTraits arms it from this very param)
+// ends the game at 0 through OpponentHasLost / the executor's and rollout's own-death exits.
+inline void ResolveLandPlayDamage(GameState& state, int player)
+{
+    if (!state.deck_has_static_land_drops) { return; }
+    if (state.players[static_cast<std::size_t>(player)].lands_played_this_turn < 2) { return; }
+    // Collect first: a damage event's SBA can never reshape the battlefield here, but be exact.
+    int events[8]; int n_ev = 0; int extra = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != player || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.land_play_damage_after_first <= 0) { continue; }
+        if (n_ev < 8) { events[n_ev++] = d->params.land_play_damage_after_first; }
+        else          { extra += d->params.land_play_damage_after_first; }
+    }
+    if (extra > 0 && n_ev > 0) { events[n_ev - 1] += extra; }   // > 8 copies: never reached (4-of)
+    for (int k = 0; k < n_ev; ++k)
+    {
+        const int dmg = events[k];
+        if (state.dmg_events_armed)
+        {
+            dmgev::DealDamageEvent(state, player, /*src_is_creature=*/false, /*combat=*/false,
+                                   /*to_self=*/dmg, 0, 0, "Fastbond");
+            continue;
+        }
+        Player& pl = state.players[static_cast<std::size_t>(player)];
+        if (state.own_death_live && pl.life <= 0) { break; }   // the game is already over
+        pl.life -= dmg;
+        state.MarkPlayerDealtDamage(player, dmg);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "lifeloss",
+                          "\xF0\x9F\xA9\xB8 Fastbond deals " + std::to_string(dmg) + " damage to you (a land played "
+                          "after the first this turn)");
+        }
+    }
+}
+
+// A static extra-drop source (Exploration, Fastbond) LEFT the battlefield: "Fastbond's permission ends when it
+// leaves" -- the drops it granted are gone for the rest of the turn (nothing retroactive: lands already played
+// stay played). Its count is in bonus_land_drops_this_turn only on its controller's own turn (seeded at the untap
+// step, or added as it entered mid-turn), so only then is it taken back; the next untap reseeds from the board
+// anyway. Called from FireLeavesBattlefieldTriggers (dies, sacrifice, exile, bounce) and DestroyAllEnchantments.
+// Deck-gated: one bool for every deck without a drop-maker.
+inline void OnStaticLandDropSourceLeft(GameState& state, int controller, const CardDefinition* d)
+{
+    if (!state.deck_has_static_land_drops || d == nullptr || d->params.static_extra_land_drops <= 0) { return; }
+    if (controller != state.active_player_index || controller < 0) { return; }
+    state.players[static_cast<std::size_t>(controller)].bonus_land_drops_this_turn -= d->params.static_extra_land_drops;
+}
 // Burgeoning's triggers on the opponent's land play (defined with the crossing land puts, after EnterLand).
 inline void ResolveBurgeoningTriggers(GameState& state);
 
@@ -6176,6 +6266,9 @@ inline void DestroyAllEnchantments(GameState& state)
     {
         if (it->card.HasType(CardType::Enchantment))
         {
+            // An Exploration / Fastbond destroyed here takes its drops with it (Blood Sun step 4; deck-gated).
+            OnStaticLandDropSourceLeft(state, it->controller_index,
+                                       it->def_absent ? nullptr : CardDatabase::Instance().LookupCached(it->card));
             state.players[it->owner_index].graveyard.push_back(it->card);
             it = state.battlefield.erase(it);
         }
@@ -16305,6 +16398,7 @@ inline void ReturnMerfolkChampion(GameState& state, int source_number)
 inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, const Card& left)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
+    OnStaticLandDropSourceLeft(state, controller, d);   // Exploration / Fastbond: its drops end with it (step 4)
     if (d && d->params.champion_merfolk) { ReturnMerfolkChampion(state, left.m_number); }
     // Brutal Cathar // Moonrage Brute (either face): "until this creature leaves the battlefield"
     // ends NOW (CR 610.3) -- the linked card returns at the leave, not at the next day/night turn
@@ -20047,6 +20141,9 @@ inline bool ApplyGraveyardPlayAbility(GameState& state, int controller, int sour
     FireEtbWatchers(state, controller, entered);       // snow-enter scry fires here too
     FireOwnEtbTriggers(state, controller, entered, std::string(), kEtbKxHeuristic);
     EnforceLegendRule(state, controller);
+    // A land played this way IS a land play (it spends the drop): Fastbond triggers after the land's own enter
+    // triggers, as in PlayLandFromHand (Blood Sun step 4). Deck-gated: one bool for every other deck.
+    if (is_land) { ResolveLandPlayDamage(state, controller); }
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "ability",

@@ -1519,6 +1519,8 @@ INERT_PARAMS = {
     "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
     "tap_self_damage_is_trigger": "classification of City of Brass's ping (a triggered ability, removed by Blood Sun); no choice",
     "lands_lose_nonmana_abilities": "static (Blood Sun, layer 6): changes how lands enter / tap, offers no choice; the land-position axis it opens is the existing land= / landat= queue",
+    "unlimited_land_plays": "Fastbond -- static unlimited land drops (folded into the static extra drops); HOW MANY lands to play is the main_phase land drop the viewer already offers while a drop remains, one land per click, no choice of its own",
+    "land_play_damage_after_first": "Fastbond's trigger -- automatic damage to you on each land play after the first; no choice (the human chooses how many lands to play through the land drop)",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",
     "lord_excludes_self": "lord effect detail", "affinity_for_subtype": "cost reduction",

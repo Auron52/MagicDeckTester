@@ -9831,7 +9831,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the rollout recorded each pass as its own segment and the catch-all below replays every ordinal.)
     auto exec_drop_rearm_loop = [&]()
     {
-        for (int pass = 0; pass < 4; ++pass)
+        // Under a Fastbond the cap does not bind (DropRearmUnbounded): the return below ends it once no land was
+        // played or none is left, the rollout loop's twin.
+        for (int pass = 0; pass < 4 || TurnSolver::DropRearmUnbounded(state); ++pass)
         {
             if (!BpHandEntryEnabled() || !BpDropRearmEnabled() || HumanPlayActive()
                 || !TurnSolver::LandDropNewlyOpen(exec_drops_at_section, state, karoo_deferred)) { return; }
@@ -10115,7 +10117,10 @@ bool AIEngine::TryPlayLand(GameState& state)
     {
         t_try_land_one = true;
         const bool any = TryPlayLand(state);
-        for (int guard = 0; any && guard < 8; ++guard)
+        // Bounded by the drops themselves (Blood Sun step 4: was `guard < 8`, which capped a Fastbond turn at nine
+        // lands): every pass plays one land card out of hand / off the top, so the loop also ends when they run
+        // out. Identical for every deck with fewer than ten drops.
+        for (int guard = 0; any && guard < state.ActivePlayer().LandDropsAvailable(); ++guard)
         {
             const Player& lp = state.ActivePlayer();
             if (lp.lands_played_this_turn >= lp.LandDropsAvailable() || !TryPlayLand(state)) { break; }
@@ -10125,6 +10130,10 @@ bool AIEngine::TryPlayLand(GameState& state)
     }
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    // FASTBOND (Blood Sun step 4, USER D1: "the deck should not fastbond so much that it loses"): with own death live
+    // a land whose land-play damage takes our life to 0 loses the game, so it is never played -- a sound dominance
+    // (a loss is the worst outcome). False for every deck without own death or a land-play damage source.
+    if (LandPlayWouldKill(state, state.active_player_index)) { return false; }
 
     auto play_land_iter = [&](std::vector<Card>::iterator it, const CardDefinition& def) -> bool
     {
