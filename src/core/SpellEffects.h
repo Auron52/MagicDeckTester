@@ -4830,7 +4830,8 @@ inline bool ConvokeBodyTapAbilityLive(const GameState& s, const Permanent& p, co
         || (pp.ping_all_cost.has_value()        && PermAbilityTaps(PermAbilityMode::PingAll))
         || (pp.tap_lifegain_cost.has_value()    && PermAbilityTaps(PermAbilityMode::TapLifegain))
         || (pp.activated_dig_cost.has_value()   && PermAbilityTaps(PermAbilityMode::ActivatedDig))
-        || (pp.self_ping_cost.has_value()       && PermAbilityTaps(PermAbilityMode::SelfPing));   // Stuffy Doll
+        || (pp.self_ping_cost.has_value()       && PermAbilityTaps(PermAbilityMode::SelfPing))    // Stuffy Doll
+        || pp.tap_ping_damage > 0;   // Creature Burn's free {T} pingers (Fireslinger / Vulshok / Pyromancer)
     // Bloodline Keeper / Lord of Lineage (Vampires B): "{T}: Create a 2/2 black Vampire token with
     // flying" -- tapping the body for convoke forfeits its token, so a live one is COSTLY (the A1 hand-off
     // note). TapTokenSourceLive is the family's one predicate (untapped, summoning sickness, Speaker's
@@ -7077,6 +7078,7 @@ inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::
 // resolved in place (defined with ReturnPermanentToOwnersHand below; see FireBounceTriggerInstance's note).
 inline void FireBounceTriggerInstance(GameState& state, int controller, const CardDefinition& src,
                                       const char* which);                                       // defined below
+inline void TapPingCastUntap(GameState& state, int active, const CardDefinition& cast_def);   // defined below
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
     g_cast_trigger_mana_spent_probe = mana_spent;
@@ -7133,6 +7135,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     // Hullbreaker Horror / Brinelin's cast-trigger bounces (Sea Creatures I4), deferred past the loop: a bounce ERASES
     // a battlefield permanent. One entry per source permanent whose trigger fires.
     std::vector<const CardDefinition*> bounces;
+    bool cast_untap_self = false;   // a Cinder Pyromancer of ours sees this cast
 
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -7255,6 +7258,11 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
         if (def->params.cast_trigger_untap_pump_target_min_spent > 0 && p.controller_index == active
             && mana_spent >= def->params.cast_trigger_untap_pump_target_min_spent)
         { untap_pumps.push_back(def); }
+        // Cinder Pyromancer ("Whenever you cast a red spell, you may untap this creature"): resolved after the
+        // loop (TapPingCastUntap -- it taps and untaps bodies). A colour test on the CAST spell only.
+        if (def->params.cast_color_untap_self >= 0 && p.controller_index == active
+            && cast_def.card.HasColor(static_cast<Color>(def->params.cast_color_untap_self)))
+        { cast_untap_self = true; }
         // Hullbreaker Horror ("Whenever you cast a spell, choose up to one -- ...") and Brinelin ("... whenever you cast
         // a spell with mana value 6 or greater, you may return target nonland permanent ..."). The PRINTED mana value
         // (`mv`, the Herald precedent: a reduction never changes MV). Each is on the stack during its own cast, so
@@ -7433,6 +7441,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     // call. [OWED: the nested free-cast callers (cascade / suspend / ripple / Remand) are not audited for held
     // battlefield indices -- no list with a free cast holds a bounce source.]
     for (const CardDefinition* bd : bounces) { FireBounceTriggerInstance(state, active, *bd, "cast trigger"); }
+    // Cinder Pyromancer's untap (and the ping in response to it), after the other cast triggers: the order of
+    // simultaneous cast triggers is the controller's (CR 603.3b) and inert here (no list holds both kinds).
+    if (cast_untap_self) { TapPingCastUntap(state, active, cast_def); }
     // Every cast trigger above has resolved (they sit above the spell); the draw triggers of any card
     // one of them drew (Parun, Kor Spiritdancer, Sram) resolve now, still before the spell -- the Niv
     // loop. One bool test for every deck without it. Shared by every cast site in both worlds.
@@ -15056,16 +15067,16 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
 // ---- BROWBEAT (CardParams::opp_may_take_damage_instead_of_draw) ------------------------------------------
 // "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards."
 //
-// THE OPPONENT POLICY -- the ONE place it lives. PROVISIONAL POLICY A (2026-11-20, Creature Burn Stage 2):
-// a USER-OWNED decision not yet ruled on, modelled as the analog of the USER's Vexing Devil ruling above
-// (VexingDevilOpponentTakesDamage): the opponent TAKES the N damage iff its life (the opposing TEAM's shared
-// life in 2HG, players[opponent]) is > N + (we hold any card ? 3 : 0) -- i.e. it declines (we draw three)
-// once N would leave it within reach of our hand, guessing from our hand SIZE only, never its contents.
-// N = 5 for the only card, so it takes above 5 with our hand empty and above 8 while we hold a card. The
-// contrast policy B (take unless life <= N) is the other candidate surfaced to the USER. Like the Devil it
-// is an ENVIRONMENT model of the passive goldfish opponent: the choice is THEIRS, so it is neither a search
-// branch nor a viewer decision, and no option of OURS is collapsed (CLAUDE.md "NO GREEDY PICK"). Our own
-// "take 5" option is never used: it is dominated (no draw, no damage to the opponent).
+// THE OPPONENT POLICY -- the ONE place it lives. USER-RULED 2026-11-20 (Creature Burn Stage 2), the analog of
+// the USER's Vexing Devil ruling above (VexingDevilOpponentTakesDamage): *"I would probably do the same thing as
+// devil, which is take the damage unless it puts you within 3 life."* and *"No, your idea is good. (hand empty =
+// take the damage unless lethal)"*. The opponent TAKES the N damage iff its life (the opposing TEAM's shared life
+// in 2HG, players[opponent]) is > N + (we hold any card ? 3 : 0) -- i.e. it declines (we draw three) once N
+// would leave it within reach of our hand, guessing from our hand SIZE only, never its contents. N = 5 for the
+// only card, so it takes above 5 (unless lethal) with our hand empty and at 9 or more while we hold a card. Like
+// the Devil it is an ENVIRONMENT model of the passive goldfish opponent: the choice is THEIRS, so it is neither
+// a search branch nor a viewer decision, and no option of OURS is collapsed (CLAUDE.md "NO GREEDY PICK"). Our
+// own "take 5" option is never used: it is dominated (no draw, no damage to the opponent).
 //
 // HELD CARDS = our hand excluding STAGED (exiled-playable) cards, which are not in the hand: the rollout
 // keeps staged cards in the hand vector (m_is_staged) and the executor in Player::staged_cards, so counting
@@ -15077,9 +15088,10 @@ inline int HeldCardCount(const GameState& s, int who)
     for (const Card& c : s.players[static_cast<std::size_t>(who)].hand) { if (!c.m_is_staged) { ++n; } }
     return n;
 }
+inline int BrowbeatTakeThreshold(int amount, bool we_hold_cards) { return amount + (we_hold_cards ? 3 : 0); }
 inline bool BrowbeatOpponentTakesDamage(const GameState& s, int opponent, int amount, bool we_hold_cards)
 {
-    return s.players[static_cast<std::size_t>(opponent)].life > amount + (we_hold_cards ? 3 : 0);
+    return s.players[static_cast<std::size_t>(opponent)].life > BrowbeatTakeThreshold(amount, we_hold_cards);
 }
 // The shared resolver, called at the TOP of both draw resolutions (EffectHandler::ResolveDrawSpell and the
 // rollout's apply_one DrawSpell branch, lockstep). Taken: N damage from the spell (a red noncombat source --
@@ -15087,13 +15099,17 @@ inline bool BrowbeatOpponentTakesDamage(const GameState& s, int opponent, int am
 // damage-event layer through DealPermanentAbilityDamage) and the caller draws NOTHING. Declined: returns
 // false and the caller draws params.draw for us ("target player" -- ourselves: the passive opponent's
 // library is never worth drawing from three at a time, bracket-noted). Returns whether the damage was taken.
-inline bool ResolveDamageInsteadOfDraw(GameState& state, int controller, const CardDefinition& def)
+inline void BrowbeatFlipPrePings(GameState& state, int controller, int amount, bool holding);   // defined below
+// `flip` = the searched pre-ping sub-decision (Action::browbeat_flip; BrowbeatFlipPrePings): 0 = Browbeat reads the
+// life as it stands (every deck); 1 = the other outcome at the least cost, applied just before the opponent chooses.
+inline bool ResolveDamageInsteadOfDraw(GameState& state, int controller, const CardDefinition& def, bool flip = false)
 {
     const int amount = def.params.opp_may_take_damage_instead_of_draw;
     if (amount <= 0) { return false; }
     const int  opp     = 1 - controller;
-    const int  before  = state.players[static_cast<std::size_t>(opp)].life;
     const bool holding = HeldCardCount(state, controller) > 0;
+    if (flip && state.deck_has_tap_ping) { BrowbeatFlipPrePings(state, controller, amount, holding); }
+    const int  before  = state.players[static_cast<std::size_t>(opp)].life;
     if (!BrowbeatOpponentTakesDamage(state, opp, amount, holding))
     {
         if (g_play_event_sink && !g_tap_speculating)
@@ -15102,7 +15118,7 @@ inline bool ResolveDamageInsteadOfDraw(GameState& state, int controller, const C
                           "\xF0\x9F\x98\xA0 " + def.card.m_name.str() + ": the opponent DECLINES the "
                           + std::to_string(amount) + " damage (life " + std::to_string(before)
                           + (holding ? " while we hold cards" : " with our hand empty")
-                          + ") -- we draw " + std::to_string(def.params.draw) + " [PROVISIONAL policy A]");
+                          + ") -- we draw " + std::to_string(def.params.draw));
         }
         return false;
     }
@@ -15116,7 +15132,7 @@ inline bool ResolveDamageInsteadOfDraw(GameState& state, int controller, const C
                       "\xF0\x9F\x98\xA0 " + def.card.m_name.str() + ": the opponent TAKES "
                       + std::to_string(amount) + " (" + std::to_string(before) + "\xE2\x86\x92"
                       + std::to_string(state.players[static_cast<std::size_t>(opp)].life)
-                      + ") -- no cards drawn [PROVISIONAL policy A]");
+                      + ") -- no cards drawn");
     }
     return true;
 }
@@ -38312,7 +38328,69 @@ inline bool PingDorkReady(const GameState& state, const Permanent& q, int active
     if (out) { *out = d; }
     return true;
 }
-// Taps every ready ping dork (stopping once the opponent is dead); returns how many it tapped.
+// ---- TAP PINGERS (CardParams::tap_ping_damage; Creature Burn batch 2, 2026-11-20) ----
+// Goblin Fireslinger / Cinder Pyromancer ("{T}: This creature deals 1 damage to target player or
+// planeswalker") and Vulshok Sorcerer ("... to any target"). An own, untapped pinger that may {T} now.
+// They share the Druid's two whole-turn folds below (same call sites, same battlefield walk -- a Druid is
+// still tapped exactly where it always was, so every Druid deck is byte-identical).
+//
+// WHY THE FOLDS ARE SOUND FOR THESE CARDS. Against the passive goldfish a ping's only effects are 1 damage
+// to the opponent (the face: no opposing creature or planeswalker ever exists; our own permanents and our
+// own face are never worth damaging) and the pinger becoming tapped. Damage dealt earlier rather than at
+// the end step matters only to something that READS the opponent's life (or damage dealt) before then.
+// Re-checked over all 19 cards of Creature Burn: Browbeat's opponent policy is the ONE such reader
+// (Fireblast, Searing Blaze's landfall, Price of Progress, Rift Bolt, Magma Jet, Flame Javelin, Keldon
+// Champion / Marauders, Ball Lightning, the Elementals, Figure of Destiny and Teetering Peaks read
+// nothing of the kind), and it gets its own searched sub-decision (Action::browbeat_flip,
+// BrowbeatFlipPrePings). The tapped body matters only to an attack (the AttackWith hold keeps a pinger
+// whose attack deals less than its ping home; a 1-power pinger attacks for exactly its ping -- the
+// standing attack-all exemption) and to Cinder Pyromancer's untap (TapPingCastUntap, below).
+inline bool TapPingerReady(const GameState& state, const Permanent& q, int active, const CardDefinition** out)
+{
+    if (q.controller_index != active || q.tapped || q.def_absent || !q.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    if (d == nullptr || d->params.tap_ping_damage <= 0) { return false; }
+    if (!CanTapNow(q, state.battlefield)) { return false; }
+    if (out) { *out = d; }
+    return true;
+}
+// ONE tap ping: {T} the pinger at battlefield index `i` and deal its damage. Autonomous play hits the
+// opponent's face ("target player" = ONE head, x1 in 2HG -- the team's shared life); human play asks the
+// board-click `target` decision (players only for "target player or planeswalker", the full legal set for
+// Vulshok's "any target"), routed through the shared DealPermanentAbilityDamage. Returns the life the
+// OPPONENT lost (0 when the human aimed elsewhere).
+inline int ResolveTapPing(GameState& state, int active, std::size_t i, const CardDefinition& d, bool ask_human)
+{
+    state.battlefield[i].tapped = true;
+    const std::size_t opp = static_cast<std::size_t>(1 - active);
+    const int before = state.players[opp].life;
+    {
+        NoncombatTriggerScope noncombat_scope(state);
+        if (ask_human && g_play_target_chooser != nullptr && !d.params.tap_ping_any_target)
+        {
+            CardDefinition players_only = d;   // human play only: the chooser reads params.targeting
+            players_only.params.targeting = Targeting::Player;
+            DealPermanentAbilityDamage(state, active, players_only, d.params.tap_ping_damage, 0, true);
+        }
+        else { DealPermanentAbilityDamage(state, active, d, d.params.tap_ping_damage, 0, ask_human); }
+    }
+    FlushNoncombatTriggersAtPriorityBoundary(state);
+    const int dealt = before - state.players[opp].life;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xF0\x9F\x94\xA5 " + d.card.m_name.str() + " taps: "
+                      + (dealt > 0 ? std::to_string(dealt) + " damage to the opponent ("
+                                         + std::to_string(before) + "\xE2\x86\x92"
+                                         + std::to_string(state.players[opp].life) + ")"
+                                   : std::string("1 damage")));
+    }
+    return dealt;
+}
+// Taps every ready ping dork AND tap pinger (stopping once the opponent is dead), in battlefield order;
+// returns how many it tapped. A Druid pings through ApplyTapManaPing exactly as before; a pinger through
+// ResolveTapPing (a human aiming one at a creature may shrink the battlefield, so the walk restarts then --
+// an already-tapped pinger is not ready, so nothing pings twice).
 inline int TapReadyPingDorks(GameState& state, int active)
 {
     int n = 0;
@@ -38320,10 +38398,18 @@ inline int TapReadyPingDorks(GameState& state, int active)
     {
         if (state.players[1 - active].life <= 0) { break; }
         const CardDefinition* d = nullptr;
-        if (!PingDorkReady(state, state.battlefield[i], active, &d)) { continue; }
-        state.battlefield[i].tapped = true;
-        ApplyTapManaPing(state, active, *d);
+        if (PingDorkReady(state, state.battlefield[i], active, &d))
+        {
+            state.battlefield[i].tapped = true;
+            ApplyTapManaPing(state, active, *d);
+            ++n;
+            continue;
+        }
+        if (!TapPingerReady(state, state.battlefield[i], active, &d)) { continue; }
+        const std::size_t size_before = state.battlefield.size();
+        ResolveTapPing(state, active, i, *d, /*ask_human=*/true);
         ++n;
+        if (state.battlefield.size() != size_before) { i = static_cast<std::size_t>(-1); }   // restart the walk
     }
     return n;
 }
@@ -38334,6 +38420,8 @@ inline int TapReadyPingDorks(GameState& state, int active)
 // no cost -- tapping weakly dominates not tapping. (It is NOT at end of main 1, where the drip/pain
 // sweeps sit: a Druid there may still attack, or be untapped by Raggadragga's attack trigger and tap
 // again.) A lethal sweep wins THIS turn: the rollout's caller returns before the turn counter advances.
+// The tap pingers ride the same sweep on the same argument (no mana at all; nothing after the last main
+// reads the opponent's life or the body). In human play a pinger's sweep ping asks its `target`.
 inline int PingDorkEndSweep(GameState& state, int active)
 {
     if (state.players[1 - active].life <= 0 || state.players[active].life <= 0) { return 0; }
@@ -38343,6 +38431,7 @@ inline int PingDorkEndSweep(GameState& state, int active)
 // the ready ping dorks' pings alone cover the opponent's remaining life, tap them right after combat
 // damage -- a proven kill at the check point the search already reads, so the win is seen at combat
 // rather than only at the end step. Autonomous play only (the human's end step sweeps them anyway).
+// A tap pinger adds its ping (x1: "target player") to the reach.
 inline void PingDorkFinish(GameState& state, int active)
 {
     if (HumanPlayActive()) { return; }
@@ -38354,9 +38443,117 @@ inline void PingDorkFinish(GameState& state, int active)
         const CardDefinition* d = nullptr;
         if (PingDorkReady(state, q, active, &d))
         { reach += d->params.tap_mana_damage_each_opponent * gamesetup::OpponentHeads(); }
+        else if (TapPingerReady(state, q, active, &d)) { reach += d->params.tap_ping_damage; }
     }
     if (reach == 0 || reach < opp_life) { return; }
     TapReadyPingDorks(state, active);
+}
+
+// CINDER PYROMANCER'S CAST TRIGGER (CardParams::cast_color_untap_self): "Whenever you cast a red spell, you
+// may untap this creature." Called at the end of FireOnCastTriggers (every cast site in both worlds: a hand
+// cast, Fireblast's alternative cost, a cast off suspend in the upkeep -- a suspended card IS cast; the
+// suspend special action and an unearth activation are not casts and never reach here). Per own copy:
+//   * TAPPED -> untap (the "may" is always taken: an untapped body dominates a tapped one vs the goldfish).
+//   * UNTAPPED and able to {T} -> it pings IN RESPONSE (the trigger is on the stack above the spell), then
+//     the trigger untaps it: +1 damage and the SAME board as not pinging -- a dominance fold, except that the
+//     ping lands BEFORE the spell resolves. Its only reader is Browbeat's opponent policy, so each such ping
+//     is recorded as WITHDRAWABLE (GameState::opt_pings) and the Browbeat flip may take it back
+//     (BrowbeatFlipPrePings). Human play pings through the `target` decision like every other ping.
+//   * summoning sick (cannot {T}) and untapped -> nothing (it is already untapped).
+inline void TapPingCastUntap(GameState& state, int active, const CardDefinition& cast_def)
+{
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.controller_index != active || q.def_absent || !q.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || d->params.cast_color_untap_self < 0
+            || !cast_def.card.HasColor(static_cast<Color>(d->params.cast_color_untap_self))) { continue; }
+        if (q.tapped) { q.tapped = false; continue; }
+        if (d->params.tap_ping_damage <= 0 || !CanTapNow(q, state.battlefield)) { continue; }
+        if (state.players[1 - active].life <= 0) { return; }
+        const int num = q.card.m_number;
+        const std::size_t size_before = state.battlefield.size();
+        const int dealt = ResolveTapPing(state, active, i, *d, /*ask_human=*/true);
+        if (dealt > 0 && state.deck_has_tap_ping)
+        {
+            const int have = state.OptPingsLive();
+            state.opt_pings      = static_cast<std::uint8_t>(std::min(255, have + 1));
+            state.opt_pings_turn = static_cast<std::int16_t>(state.TurnSeq());
+        }
+        if (state.battlefield.size() != size_before)
+        {
+            for (std::size_t j = 0; j < state.battlefield.size(); ++j)
+            { if (state.battlefield[j].card.m_number == num) { i = j; break; } }
+        }
+        if (i < state.battlefield.size() && state.battlefield[i].card.m_number == num)
+        { state.battlefield[i].tapped = false; }   // the trigger resolves: untap
+    }
+}
+
+// THE BROWBEAT PRE-PING SUB-DECISION (Action::browbeat_flip; the [ORCH] soundness amendment of Creature
+// Burn Stage 2). Browbeat's opponent policy (BrowbeatOpponentTakesDamage) reads the opponent's LIFE as it
+// resolves, so pings fired just before it can turn TAKE into DECLINE, and Pyromancer pings already fired
+// this turn could have been withheld to turn DECLINE into TAKE. Its outcome is BINARY in that life
+// (take iff life > T, T = 5 + (we hold a card ? 3 : 0); pings change neither the hand nor T), so TWO
+// variants cover every reachable outcome, each with its maximum-damage allocation:
+//   * flip = 0 (the base cast, every deck): no pre-ping, nothing withdrawn -- Browbeat reads the life as
+//     it stands. Every ready pinger still pings later (end step), so no damage is lost.
+//   * flip = 1 (emitted only for a deck with a tap pinger): the OTHER outcome, at the least cost --
+//       - base outcome TAKE: fire the FEWEST ready pings that bring life to <= T (life - T of them). A ping
+//         fired now instead of at the end step loses nothing, except a pinger that could still attack this
+//         turn; so the pingers fire in ascending combat power (a 0-power Pyromancer first -- its attack is
+//         worth nothing), the min-loss order. Too few ready pingers -> nothing fires (no flip exists).
+//       - base outcome DECLINE: withdraw the FEWEST withdrawable pings (T + 1 - life of them, at most
+//         GameState::opt_pings): the world in which Pyromancer did not ping in response to those earlier
+//         red casts -- the identical board with that much more opponent life and that much less damage.
+//         Too few -> nothing (no flip exists). Not available while the damage-event layer or the
+//         noncombat-damage trackers are armed (their records cannot be withdrawn; no such deck has a pinger).
+// Any other pre-ping count k gives one of these two outcomes with no more damage, so it is dominated; the
+// fold is sound, and a no-op flip simply duplicates its base (the post-apply dedup absorbs it).
+inline void BrowbeatFlipPrePings(GameState& state, int controller, int amount, bool holding)
+{
+    const std::size_t opp = static_cast<std::size_t>(1 - controller);
+    const int life      = state.players[opp].life;
+    const int threshold = BrowbeatTakeThreshold(amount, holding);
+    if (life > threshold)
+    {
+        const int need = life - threshold;
+        std::vector<std::pair<int, int>> ready;   // (combat power, card number), battlefield order
+        for (const Permanent& q : state.battlefield)
+        {
+            const CardDefinition* d = nullptr;
+            if (TapPingerReady(state, q, controller, &d) && d->params.tap_ping_damage == 1)
+            { ready.emplace_back(CombatPowerOf(q, state), q.card.m_number); }
+        }
+        if (static_cast<int>(ready.size()) < need) { return; }
+        std::stable_sort(ready.begin(), ready.end(),
+                         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
+        for (int k = 0; k < need; ++k)
+        {
+            for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+            {
+                if (state.battlefield[i].card.m_number != ready[static_cast<std::size_t>(k)].second) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+                if (d != nullptr) { ResolveTapPing(state, controller, i, *d, /*ask_human=*/false); }
+                break;
+            }
+        }
+        return;
+    }
+    if (state.dmg_events_armed || state.deck_tracks_noncombat_damage) { return; }
+    const int need = threshold + 1 - life;
+    const int have = state.OptPingsLive();
+    if (need > have) { return; }
+    state.players[opp].life += need;
+    state.opt_pings = static_cast<std::uint8_t>(have - need);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xF0\x9F\x94\xA5 Browbeat line: Cinder Pyromancer's " + std::to_string(need)
+                      + " earlier response ping" + (need > 1 ? "s were" : " was") + " withheld (life "
+                      + std::to_string(life) + "\xE2\x86\x92" + std::to_string(state.players[opp].life) + ")");
+    }
 }
 
 // K counter pings beyond the first (the repeatable CounterPing's K-1, both worlds' repeat dispatch).

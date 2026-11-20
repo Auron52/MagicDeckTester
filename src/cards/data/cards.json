@@ -18807,11 +18807,75 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards. [PROVISIONAL opponent model (policy A, USER-owned decision pending, 2026-11-20; ONE place: BrowbeatOpponentTakesDamage in SpellEffects.h, the analog of the USER's Vexing Devil ruling): the opponent takes the 5 damage iff its life (the shared team life in 2HG) is > 5 with our hand empty, or > 8 while we hold any card (it guesses from our hand SIZE, never its contents; Browbeat itself and staged exiled cards are not counted). Taken: 5 noncombat damage from Browbeat to the opponent (marks it dealt damage / lost life this turn) and NO cards drawn. Declined: we draw three (draw_spell draw 3; an over-draw loses, CR 104.3c). The choice is the OPPONENT's, so it is neither a search branch nor a viewer decision; executor and rollout resolve it through the same ResolveDamageInsteadOfDraw. Our OWN 'take 5' option is never used: it is dominated (no draw and no damage to the opponent). 'Target player draws' targets US: the passive opponent's library is never worth handing three cards. SECOND-MAIN RELEVANT (PROVISIONAL, surfaced to the USER): the choice reads the opponent's life at resolution, which combat changes, so the param is in GoldFishRunner::DeckUsesSecondMain and the cast classifies to either main.]",
+   "oracle_text": "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards. [USER-ruled passive-opponent model of the opponent's choice (2026-11-20; ONE place: BrowbeatOpponentTakesDamage in SpellEffects.h, the analog of the USER's Vexing Devil ruling -- 'I would probably do the same thing as devil, which is take the damage unless it puts you within 3 life.' and 'No, your idea is good. (hand empty = take the damage unless lethal)'): the opponent takes the 5 damage iff its life (the shared team life in 2HG) is > 5 with our hand empty (unless lethal), or > 8 while we hold any card (it guesses from our hand SIZE, never its contents; Browbeat itself and staged exiled cards are not counted). Taken: 5 noncombat damage from Browbeat to the opponent (marks it dealt damage / lost life this turn) and NO cards drawn. Declined: we draw three (draw_spell draw 3; an over-draw loses, CR 104.3c). The choice is the OPPONENT's, so it is neither a search branch nor a viewer decision; executor and rollout resolve it through the same ResolveDamageInsteadOfDraw. Our OWN 'take 5' option is never used: it is dominated (no draw and no damage to the opponent). PRE-PING (Creature Burn batch 2): a cast of Browbeat in a deck with a tap pinger carries a searched sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings): fire the fewest ready pings first so the opponent declines, or withhold the fewest Cinder Pyromancer response pings so it takes -- the outcome is binary in the life, so the base cast plus that one variant cover every reachable outcome at maximum damage. 'Target player draws' targets US: the passive opponent's library is never worth handing three cards. SECOND-MAIN RELEVANT (PROVISIONAL, surfaced to the USER): the choice reads the opponent's life at resolution, which combat changes, so the param is in GoldFishRunner::DeckUsesSecondMain and the cast classifies to either main.]",
    "template": "draw_spell",
    "parameters": {
     "draw": 3,
     "opp_may_take_damage_instead_of_draw": 5
+   }
+  },
+  {
+   "name": "Goblin Fireslinger",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: This creature deals 1 damage to target player or planeswalker. [FULLY MODELED (Creature Burn batch 2, 2026-11-20). tap_ping_damage 1 + tap_ping_target player: a free {T} ability (summoning sickness applies -- CanTapNow). 'Target player or planeswalker' is the opponent's FACE in autonomous play (no opposing planeswalker ever exists; pinging ourselves never helps) and ONE head in 2HG (x1 to the team's shared life). FOLDS (both worlds, shared with Zhur-Taa Druid's): the END-STEP SWEEP (PingDorkEndSweep -- every ready pinger pings first thing in our end step; nothing after the last main can use the body, so tapping weakly dominates) and the POST-COMBAT LETHAL FINISH (PingDorkFinish -- autonomous play taps them right after combat damage when their pings alone are lethal, so the kill is seen at combat). Timing is otherwise inert: the only card in the list that reads the opponent's life before the end step is Browbeat, and a Browbeat cast carries the searched PRE-PING sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings: fire the fewest pings first so the opponent declines, or withhold the fewest Pyromancer response pings so it takes -- the outcome is binary, so two variants are complete). ATTACK: a 1/1 attacks for exactly its ping (the standing attack-all exemption). HUMAN PLAY: every ping asks the board-click `target` decision, players only.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_ping_damage": 1,
+    "tap_ping_target": "player"
+   }
+  },
+  {
+   "name": "Vulshok Sorcerer",
+   "mana_cost": "{1}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Shaman",
+    "Sorcerer"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Haste\n{T}: This creature deals 1 damage to any target. [FULLY MODELED (Creature Burn batch 2, 2026-11-20). Haste is Keyword::Haste (it may attack or {T} the turn it lands). tap_ping_damage 1 + tap_ping_target any: 'any target' collapses to the opponent's FACE in autonomous play -- the passive goldfish has no creature or planeswalker, and damaging our own permanents or face never helps (the etb_damage_any precedent); x1 in 2HG. FOLDS (both worlds, shared with Zhur-Taa Druid's): the END-STEP SWEEP (PingDorkEndSweep -- every ready pinger pings first thing in our end step; nothing after the last main can use the body, so tapping weakly dominates) and the POST-COMBAT LETHAL FINISH (PingDorkFinish -- autonomous play taps them right after combat damage when their pings alone are lethal, so the kill is seen at combat). Timing is otherwise inert: the only card in the list that reads the opponent's life before the end step is Browbeat, and a Browbeat cast carries the searched PRE-PING sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings: fire the fewest pings first so the opponent declines, or withhold the fewest Pyromancer response pings so it takes -- the outcome is binary, so two variants are complete). ATTACK: a 1/1 attacks for exactly its ping (the standing attack-all exemption). HUMAN PLAY: every ping asks the board-click `target` decision over the FULL legal set (default: the opponent's face).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_ping_damage": 1,
+    "tap_ping_target": "any"
+   }
+  },
+  {
+   "name": "Cinder Pyromancer",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "{T}: This creature deals 1 damage to target player or planeswalker.\nWhenever you cast a red spell, you may untap this creature. [FULLY MODELED (Creature Burn batch 2, 2026-11-20). tap_ping_damage 1 + tap_ping_target player: as Goblin Fireslinger (the face; x1 in 2HG). cast_color_untap_self R: on every cast of a RED spell (FireOnCastTriggers -- a hand cast, Fireblast's alternative cost, Flame Javelin's twobrid cost, a Rift Bolt cast off suspend in the upkeep; suspending a card and Hellspark's unearth are not casts) a TAPPED Pyromancer untaps (the 'may' is always taken: untapped dominates vs the goldfish) and an UNTAPPED one able to {T} pings IN RESPONSE, then untaps (TapPingCastUntap: +1 damage, the same board). Each such response ping is recorded as WITHDRAWABLE (GameState::opt_pings) for Browbeat's flip, since not pinging was the other legal line. FOLDS (both worlds, shared with Zhur-Taa Druid's): the END-STEP SWEEP (PingDorkEndSweep -- every ready pinger pings first thing in our end step; nothing after the last main can use the body, so tapping weakly dominates) and the POST-COMBAT LETHAL FINISH (PingDorkFinish -- autonomous play taps them right after combat damage when their pings alone are lethal, so the kill is seen at combat). Timing is otherwise inert: the only card in the list that reads the opponent's life before the end step is Browbeat, and a Browbeat cast carries the searched PRE-PING sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings: fire the fewest pings first so the opponent declines, or withhold the fewest Pyromancer response pings so it takes -- the outcome is binary, so two variants are complete). ATTACK: a 0/1 attacking deals 0 and forfeits its ping, so it is HELD (DecisionProvider::AttackWith, dominated) unless its attack would deal at least its ping (a pumped Pyromancer attacks). HUMAN PLAY: every ping asks the board-click `target` decision, players only.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_ping_damage": 1,
+    "tap_ping_target": "player",
+    "cast_color_untap_self": "R"
    }
   }
  ]

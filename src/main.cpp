@@ -1419,6 +1419,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         if (a.twobrid_colored > 0)
         { tag += " (pay " + std::to_string(a.twobrid_colored) + " twobrid pip"
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
+        // Browbeat pre-ping variant (Action::browbeat_flip): the other opponent outcome -- ping first so the
+        // opponent declines, or hold Cinder Pyromancer's response pings so it takes (BrowbeatFlipPrePings).
+        if (a.browbeat_flip != 0) { tag += " (pre-ping: flip the opponent's take/decline)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
         // EMERGE (Decimator): one variant per victim, each a different bill -- name the victim.
@@ -2345,6 +2348,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.twobrid_colored)
                      + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
+                     + (a.browbeat_flip != 0 ? "|bb" + std::to_string(a.browbeat_flip) : std::string())
                      + (a.emerge ? "|em" + std::to_string(a.soulfire_own_targets) : std::string())
                      + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str())
                      + (a.remand_chain_by.empty() ? "" : "|rc:" + a.remand_chain_by.str())
@@ -2595,6 +2599,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                       + "/" + std::to_string(static_cast<int>(a.convoke_plan_other)) : std::string())
                  + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                  // PITCH EVOKE: Fury evoked exiling X and exiling Y are different payloads.
+                 + (a.browbeat_flip != 0 ? "|bb" + std::to_string(a.browbeat_flip) : std::string())
                  + (a.pitch_name.empty() ? std::string() : "|px" + a.pitch_name.str())
                  + "|" + tgt;
         };
@@ -3421,6 +3426,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.phyrexian_life > 0)            { os << ", \"phyrexian_life\": " << ac.phyrexian_life; }
             // Twobrid variant ({2/B}): how many pips this cast pays with their coloured side.
             if (ac.twobrid_colored > 0)           { os << ", \"twobrid_colored\": " << ac.twobrid_colored; }
+            // Browbeat pre-ping variant: the other opponent outcome (BrowbeatFlipPrePings).
+            if (ac.browbeat_flip != 0)            { os << ", \"browbeat_flip\": " << static_cast<int>(ac.browbeat_flip); }
             // "Target player draws X" (Stroke of Genius): who draws -- the searched target player.
             {
                 const CardDefinition* dd = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);

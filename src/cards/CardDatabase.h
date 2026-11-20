@@ -1814,6 +1814,22 @@ struct CardParams
     // a lethal set is tapped right after combat damage (PingDorkFinish). 0 for every other card.
     int tap_mana_damage_each_opponent = 0;
 
+    // TAP PINGERS (Creature Burn batch 2, 2026-11-20): "{T}: This creature deals N damage to target player or
+    // planeswalker" (Goblin Fireslinger, Cinder Pyromancer) / "... to any target" (Vulshok Sorcerer). A free
+    // {T} ability with NO mana: it rides Zhur-Taa Druid's two whole-turn folds (TapReadyPingDorks -- the
+    // end-step sweep PingDorkEndSweep and the post-combat lethal finish PingDorkFinish, both worlds) plus the
+    // Browbeat pre-ping sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings). "Target player" is ONE
+    // head (x1 in 2HG; the Druid's "each opponent" keeps x heads). tap_ping_target ("player" | "any") is a
+    // DEDICATED targeting key -- deliberately NOT `targeting`, which ~29 readers treat as a SPELL's target --
+    // and only shapes the human `target` decision (players-only vs the full legal set). 0 for every other card.
+    int  tap_ping_damage     = 0;
+    bool tap_ping_any_target = false;   // tap_ping_target == "any"
+    // Cinder Pyromancer: "Whenever you cast a red spell, you may untap this creature." The colour of the
+    // spell that triggers it (cast_color_untap_self: "R"); -1 = no such trigger. The "may" is always taken
+    // (an untapped creature dominates a tapped one vs the passive goldfish), and an untapped able-to-tap
+    // pinger pings IN RESPONSE first (TapPingCastUntap: ping, then untap -- +1 damage, same board).
+    int  cast_color_untap_self = -1;    // a Color ordinal
+
     // Fetchland (Windswept Heath etc.): "{T}, pay 1 life, sacrifice this land: search your
     // library for a land whose subtype is in this list, put it onto the battlefield, then
     // shuffle." When non-empty the land is resolved by PerformFetch (SpellEffects.h) instead
@@ -3306,8 +3322,9 @@ struct CardParams
     // does, target player draws three cards." A PUNISHER on a draw_spell: the value is N (5). The choice that
     // matters is the OPPONENT's, an ENVIRONMENT model of the passive goldfish opponent (no search branch, no
     // viewer decision): BrowbeatOpponentTakesDamage (SpellEffects.h) is the ONE place the policy lives --
-    // PROVISIONAL policy A, a USER-owned decision (the analog of the USER's Vexing Devil ruling): the opponent
-    // takes the N iff its life > N + (we hold any card ? 3 : 0). Taken -> N damage to the opponent and NO
+    // USER-ruled 2026-11-20 (the analog of the USER's Vexing Devil ruling: "take the damage unless it puts you
+    // within 3 life" / "hand empty = take the damage unless lethal"): the opponent takes the N iff its life >
+    // N + (we hold any card ? 3 : 0). Taken -> N damage to the opponent and NO
     // draw; declined -> the normal draw (params.draw). Resolved at the top of both draw resolutions
     // (EffectHandler::ResolveDrawSpell and the rollout's apply_one DrawSpell branch, through the shared
     // ResolveDamageInsteadOfDraw). Our OWN "take 5" option is never used (it is dominated: it neither

@@ -10860,6 +10860,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     if (riders.player_target != 0) { entry.player_target = riders.player_target; }
     // Unite the Coalition: the opponent's share of the draw picks (a count, 0 = all ours).
     if (def->params.modal_choose_n > 0 && riders.draw_target > 0) { entry.modal_opp_draw_picks = riders.draw_target; }
+    // Browbeat's pre-ping sub-decision (Action::browbeat_flip); the rollout twin passes apply_one's rider.
+    if (riders.browbeat_flip != 0) { entry.browbeat_flip = riders.browbeat_flip; }
     entry.dies_tuck = riders.dies_tuck;   // Ilharg's death "may" for this spell's resolution (legend-rule loser)
     entry.legend_keep = riders.legend_keep;   // the CR 704.5j keep for this spell's resolution (I5b item 4)
     if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite

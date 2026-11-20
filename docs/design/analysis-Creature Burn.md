@@ -188,3 +188,45 @@ exemption, unchanged by this batch.
      Keldon Champion echo boundary gap (`MTG_ECHO_AXIS_STATS=1`).
 * Status timer: session-only cron `7 */2 * * *` (fires 12:37, 14:37 UTC...). Push: slow 12-thread box — join the
   push queue at most once per 4 h; subagents never push.
+
+Browbeat policy relabel (USER ruling 2026-11-20, relayed by the coordinator; NO behaviour change): the code comment
+and the cards.json bracket note now read USER-ruled, quoting *"I would probably do the same thing as devil, which
+is take the damage unless it puts you within 3 life."* and *"No, your idea is good. (hand empty = take the damage
+unless lethal)"* -- policy A exactly as batch 1 (take iff life > 5 + (holding ? 3 : 0)). The play-event strings
+dropped their "[PROVISIONAL policy A]" suffix; `BrowbeatTakeThreshold(amount, holding)` names the same value.
+
+Scripts / viewer: `audit_viewer_decisions.py` MANIFEST `tap_ping_damage -> target`, INERT_PARAMS `tap_ping_target`
+and `cast_color_untap_self`, the oracle cross-check counts a tap pinger as modelling `target` (static audit clean);
+`tools/play/DECISIONS.md` rows for the pinger `target` reuse and the Browbeat `main_phase` "pre-ping" variant.
+
+Tests: `test/unit/test_creature_burn_batch2.cpp` (12 cases: parse; end-step sweep -- ready / summoning sick /
+haste, nothing twice; 2HG x1 per ping; post-combat finish only when lethal; Pyromancer two red casts = two response
+pings + one end-step ping in BOTH worlds with `opt_pings` 2; summoning-sick copy pings nothing, tapped copy just
+untaps; a cast off suspend (Rift Bolt) triggers it and a non-red spell does not; the 0-power attack hold, a 1/1
+pinger attacks, a pumped Pyromancer attacks; Browbeat flip base TAKE -> one ping first -> DECLINE in both worlds,
+the second pinger still pings at the end step; base DECLINE -> withhold the response ping -> TAKE in both worlds;
+no-flip-exists cases equal the base; emission only with the stamp and a live pinger). Scenarios
+`cb_cinder_pyromancer_response_ping_lethal` (opp 5, Bolt + response ping + held Pyromancer's finish = T3 win) and
+`cb_cinder_pyromancer_held_finish_lethal` (opp 2, Fireslinger attacks, held Pyromancer's finish = T3 win). Test
+seam `MtgTestSeam::CastBrowbeatFlipFromHand`. **Unit 3775/3775, scenarios 593/593** on the post-change Release
+build.
+
+Audits: `audit_card_costs.py` on the batch's cards (3 + Browbeat) rc 0, 4/4 compared; `audit_card_fields.py
+--update` merged the three into `scryfall_reference.json`; offline diff rc 0 (oracle advisories = bracket notes).
+Coverage: all three `full`; only Teetering Peaks missing.
+
+**Byte-identity of other decks: NOT YET RUN** (integrator handed off on the context rule). Owed: `bash
+test/regression.sh --smoke --deck=boars,pd,onedropburn,burn,landfall,hinata,redelem,lhc,midrangeburn,goblins`,
+play-changed must be 0 (pre-change binary kept at `build/scratch/cb2/mtg.base`). Expected 0 by construction: every
+new path is gated on `tap_ping_damage` / `cast_color_untap_self` / `deck_has_tap_ping` / a nonzero
+`browbeat_flip`, the Druid branch of `TapReadyPingDorks` is tested first and unchanged, and sizeof(GameState) is
+unchanged (1712).
+
+**PROVISIONAL / disclosed (surface to the USER):**
+1. Human play: Cinder Pyromancer's response ping is always fired (with its `target` decision); a human withholds
+   it only through the Browbeat "pre-ping" plan variant, whose withdraw is an accounting un-ping (life restored).
+   The 5h viewer check of that variant (and whether `tools/play/linebuild.js` needs a composer token) is owed.
+2. A 1-power pinger attacking vs pinging is the standing attack-all exemption (equal damage); its combat damage
+   before a main-2 Browbeat is the same as any attacker's.
+3. `BrowbeatFlipPrePings` assumes 1-damage pingers (all three cards) and does not withdraw while the damage-event
+   layer or the noncombat-damage trackers are armed (no deck with a pinger arms them).

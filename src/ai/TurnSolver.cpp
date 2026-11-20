@@ -3658,6 +3658,8 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         { k += "/MT" + std::to_string(a.attach_equip_id) + ">" + std::to_string(a.enchant_target); }
         // Stroke of Genius's target player: "draw X" and "make them draw X" are a substitution.
         if (a.draw_target != 0)       { k += "/DT" + std::to_string(a.draw_target); }
+        // Browbeat's pre-ping sub-decision: the other opponent outcome is a substitution, not a subset.
+        if (a.browbeat_flip != 0)     { k += "/BB" + std::to_string(a.browbeat_flip); }
         // Spellskite's redirect of a trick: a different line from the same cast unredirected.
         if (a.trick_redirect != 0)    { k += "/RD" + std::to_string(a.trick_redirect); }
         // A trick's own searched scry (Loran's Escape, step 9d): keep vs bottom are two lines. Set-gated.
@@ -16618,7 +16620,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
 
     if (def.tmpl == CardTemplate::DrawSpell)
     {
-        // Browbeat: worth its N damage when the opponent's (PROVISIONAL policy A) choice takes it, else its
+        // Browbeat: worth its N damage when the opponent's (USER-ruled 2026-11-20) choice takes it, else its
         // draws. Evaluated IN HAND, so this copy is not one of the cards we would still hold.
         if (def.params.opp_may_take_damage_instead_of_draw > 0)
         {
@@ -21468,6 +21470,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.free_cast ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.phyrexian_life));
     if (a.twobrid_colored > 0) { FoldMix(h, 0x7B2Cu + static_cast<std::uint64_t>(a.twobrid_colored)); }
+    if (a.browbeat_flip != 0) { FoldMix(h, 0xB0B0Fu + static_cast<std::uint64_t>(a.browbeat_flip)); }   // Browbeat pre-ping
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_green));
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_other));
     // Vampires sweep item B: a plan-body convoke arm (folded only when set -> every other key unchanged).
@@ -30949,6 +30952,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         // Stroke of Genius's target player: a must-fold like devour_count (self vs opponent draw are
         // two plays). Folded only when set, so every other plan's fingerprint is unchanged.
         if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
+        // Browbeat's pre-ping sub-decision: a must-fold (two outcomes are two plays). Set-gated.
+        if (a.browbeat_flip != 0) { fold(0x4242ull + static_cast<uint64_t>(a.browbeat_flip) * 1019); }   // "BB"
         // Spellskite's trick redirect: a must-fold (redirected vs not are two plays). Set-gated.
         if (a.trick_redirect != 0) { fold(0x5244ull + static_cast<uint64_t>(a.trick_redirect) * 1009); }   // "RD"
         if (a.scry_pin >= 0) { fold(0x5343ull + static_cast<uint64_t>(a.scry_pin) * 1013); }   // "SC": a trick's own scry (9d)
@@ -31243,6 +31248,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
            std::to_string(static_cast<long long>(y.free_cast))); }
     if (x.twobrid_colored != y.twobrid_colored)
     { add("twobrid_colored", std::to_string(x.twobrid_colored), std::to_string(y.twobrid_colored)); }
+    if (x.browbeat_flip != y.browbeat_flip)
+    { add("browbeat_flip", std::to_string(x.browbeat_flip), std::to_string(y.browbeat_flip)); }
     if (static_cast<long long>(x.phyrexian_life) != static_cast<long long>(y.phyrexian_life))
     { add("phyrexian_life", std::to_string(static_cast<long long>(x.phyrexian_life)),
            std::to_string(static_cast<long long>(y.phyrexian_life))); }
@@ -54925,6 +54932,49 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // BROWBEAT PRE-PING post-pass (Action::browbeat_flip; Creature Burn 2026-11-20, the [ORCH] soundness
+    // amendment). Browbeat's opponent policy reads the opponent's life as it resolves, and the tap pingers'
+    // folds (end-step sweep, Pyromancer's response ping) fix WHEN their damage lands, so without this the
+    // "ping first, then Browbeat" and "hold the Pyromancer ping, then Browbeat" lines were unfindable at any
+    // budget. The outcome is binary, so ONE variant per Browbeat cast -- flip = 1, the other outcome at the
+    // least cost (BrowbeatFlipPrePings has the dominance argument) -- covers it; it shares the base's group
+    // key (mutually exclusive) and plan_signature's #BB keeps the dedup from folding it. DECISION SPACE only
+    // (searched collect, executor, human play -- the human picks it as a plan variant); a rollout leaf keeps
+    // the base (beyond-horizon greedy). Gated on deck_has_tap_ping AND a tap pinger on our battlefield or in
+    // our hand (one cast earlier in the plan can still ping), so every other deck emits nothing.
+    if (state.deck_has_tap_ping && (g_search_candidate_enum || g_condemn_root_turn < 0))
+    {
+        const int me = state.active_player_index;
+        int pinger = -1;   // lazily: is a tap pinger on our battlefield or in our hand?
+        auto pinger_live = [&]() -> bool {
+            if (pinger >= 0) { return pinger != 0; }
+            pinger = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me || q.def_absent) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd != nullptr && qd->params.tap_ping_damage > 0) { pinger = 1; return true; }
+            }
+            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd != nullptr && hd->params.tap_ping_damage > 0) { pinger = 1; return true; }
+            }
+            return false;
+        };
+        const std::size_t bb_n = actions.size();
+        for (std::size_t i = 0; i < bb_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].browbeat_flip != 0) { continue; }
+            const CardDefinition* bd = actions[i].def != nullptr ? actions[i].def
+                                     : CardDatabase::Instance().LookupInterned(actions[i].card_name);
+            if (bd == nullptr || bd->params.opp_may_take_damage_instead_of_draw <= 0 || !pinger_live()) { continue; }
+            Action v = actions[i];           // copy BEFORE push_back (reallocation)
+            v.browbeat_flip = 1;
+            actions.push_back(std::move(v));
+        }
+    }
+
     // CREATURE-SPELL CONVOKE post-pass (Vampires A1, design_A1 §2.7; Markov Baron). A creature spell
     // with convoke is cast with an explicit tap set (Action::convoke_green = bodies of the spell's PIP
     // colour, convoke_other = the rest; the reduced cost rides on Action::cost -- the Chord idiom, so
@@ -61130,6 +61180,7 @@ namespace solvememo
                 || x.seed_pay_split != y.seed_pay_split
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
+                || x.browbeat_flip != y.browbeat_flip
                 || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target
                 || x.trick_redirect != y.trick_redirect || x.scry_pin != y.scry_pin)
             { return false; }
@@ -76486,6 +76537,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.ripple_free_tutor  = riders.ripple_free_tutor;
             rec.ripple_free_victim = riders.ripple_free_victim;
             rec.twobrid_colored    = cast_twobrid;
+            rec.browbeat_flip      = riders.browbeat_flip;   // Browbeat's pre-ping sub-decision rides the replay too
             rec.rock_mana          = cast_put_credit;
             rec.loyalty_ability    = cast_loyalty;
             // MAGNETIC THEFT's Equipment target (the consume-once CastRiders::attach_equip_id) must ride the
@@ -77443,7 +77495,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // drawn (n = 0, so every breakpoint below sees the hand unchanged, exactly as the executor's).
             // Lockstep twin: EffectHandler::ResolveDrawSpell (both through ResolveDamageInsteadOfDraw).
             if (!is_ei && def.params.opp_may_take_damage_instead_of_draw > 0
-                && ResolveDamageInsteadOfDraw(state, state.active_player_index, def))
+                && ResolveDamageInsteadOfDraw(state, state.active_player_index, def, riders.browbeat_flip != 0))
             { n = 0; }
             if (def.params.stages_cards)
             { n = std::min(n, static_cast<int>(ap.library.size())); }
@@ -85217,6 +85269,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.loyalty_start > 0 && act.loyalty_ability >= 0) { w.Put("#L"); w.Int(act.loyalty_ability); }
                 if (act.phyrexian_life > 0) { w.Put("#P"); w.Int(act.phyrexian_life); }
                 if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
+                if (act.browbeat_flip != 0) { w.Put("#BB"); w.Int(act.browbeat_flip); }   // Browbeat pre-ping (set-gated)
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
@@ -90845,6 +90898,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         // DISTINCT plans (different sources spent; core invariant). Gated on the
                         // field, so no existing deck's signature moves.
                         if (act.twobrid_colored > 0) { k += "#W"; k += std::to_string(act.twobrid_colored); }
+                        // Browbeat's pre-ping sub-decision: a different outcome of the same cast. Set-gated.
+                        if (act.browbeat_flip != 0) { k += "#BB"; k += std::to_string(act.browbeat_flip); }
                         // Rolling Earthquake: X decides which of OUR creatures die and how much
                         // every player takes -- distinct X are DISTINCT plans (the #X precedent).
                         if (cd && cd->params.x_damage_each_creature_and_player) { k += "#Q"; k += std::to_string(act.chosen_x); }
@@ -109251,6 +109306,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     // DAY / NIGHT (CR 726, Brutal Cathar): which face every daybound permanent shows and whether a
     // transform trigger fires next turn. Nonzero-gated -> every other deck keeps its exact key.
     if (state.day_night != 0) { Fold(k, 0xDA1A0); Fold(k, static_cast<uint64_t>(state.day_night)); }
+    // THE OPT-PING RECORD (Cinder Pyromancer's withdrawable free pings, GameState::opt_pings): a later Browbeat
+    // flip may withdraw them, so two same-life states with different records play differently. Value- and
+    // turn-gated (OptPingsLive) -> every other deck and every turn without one keeps its exact key.
+    if (state.OptPingsLive() != 0) { Fold(k, 0x0F791); Fold(k, static_cast<uint64_t>(state.OptPingsLive())); }
     // COMBAT HAND ARRIVALS (Adaptive Omnitool's attack dig): which cards the restricted second main
     // is allowed to consider. THIS IS NOT IMPLIED BY THE ZONE CONTENTS, which is exactly why it has
     // to be folded -- two states can hold the IDENTICAL hand and still differ here, one having dug

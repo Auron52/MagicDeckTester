@@ -402,6 +402,7 @@ add_executable(mtg-test
     test/unit/test_boars_herald.cpp
     test/unit/test_needle_drop_vexing_devil.cpp
     test/unit/test_creature_burn_batch1.cpp
+    test/unit/test_creature_burn_batch2.cpp
     test/unit/test_boars_endraze.cpp
     test/unit/test_boars_raggadragga.cpp
     test/unit/test_boars_decimator.cpp

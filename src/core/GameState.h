@@ -237,6 +237,8 @@ struct StackEntry
     std::int8_t         scry_pin       = -1;        // a spell's own searched scry (Action::scry_pin via CastRiders;
                                         // Loran's Escape): EffectHandler installs a ScriptedTopChoice over the
                                         // solo-target trick's resolution. -1 = unpinned (the provider's pick).
+    std::int8_t         browbeat_flip = 0;   // Browbeat's searched pre-ping sub-decision (Action::browbeat_flip via
+                                        // the CastRiders rider), read by EffectHandler::ResolveDrawSpell.
     int                 modal_opp_draw_picks = 0;   // Unite the Coalition: how many of the split's "target
                                         // player draws a card" picks target the OPPONENT (Action::draw_target
                                         // via the CastRiders rider; 0 = all ours). Stamped by the executor's
@@ -1685,6 +1687,18 @@ struct GameState
     static constexpr int             kCombatHandCap = 2;
     std::array<std::uint8_t, kCombatHandCap> combat_hand{};   // card numbers; 0 = empty slot
     std::int16_t                     combat_hand_turn = -1;
+    // THE OPT-PING RECORD (Cinder Pyromancer, Creature Burn 2026-11-20; BrowbeatFlipPrePings): how many of THIS
+    // turn's tap pings at the opponent were OPTIONAL in the sense the Browbeat flip can withdraw -- the
+    // "ping in response to the red-cast untap trigger" free pings (TapPingCastUntap), each of which leaves the
+    // board EXACTLY as not pinging would (the creature untaps either way) and differs only in the opponent's
+    // life. Browbeat's opponent policy is the ONE reader of that life before the end step, so the flip variant
+    // may withdraw up to this many to make the opponent TAKE (the "did not ping" world). Turn-gated by
+    // opt_pings_turn (== TurnSeq() while live; no clearing pass). FUTURE-DETERMINING within the turn: folded
+    // value- and turn-gated into the mid-turn sim key; dead at every turn boundary (Dominance compares only
+    // end-of-turn states). Written only when deck_has_tap_ping, so every other deck keeps its exact keys.
+    std::uint8_t                     opt_pings = 0;
+    std::int16_t                     opt_pings_turn = -1;
+    int  OptPingsLive() const { return opt_pings_turn == static_cast<std::int16_t>(TurnSeq()) ? opt_pings : 0; }
     // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
     // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER
     // (lifegain_to_loss) must be considerable in the phase of its opponent-lifegain payloads, and a
@@ -1980,6 +1994,12 @@ struct GameState
     // nothing. Same DEFAULT TRUE rule (an unstamped GameState -- the scenario harness -- keeps them).
     // A deck constant: never folded.
     bool                     deck_has_counter_ping             = true;
+    // ...and a TAP PINGER (CardParams::tap_ping_damage: Goblin Fireslinger, Vulshok Sorcerer, Cinder Pyromancer;
+    // Creature Burn 2026-11-20), same padding if it fits: gates the Browbeat pre-ping variant's emission
+    // (Action::browbeat_flip, CollectActions) and the OPT-PING record below. DEFAULT FALSE -- unlike its
+    // neighbours -- because a clear bit only withholds a variant: an unstamped state (the scenario harness)
+    // plays exactly as before. A deck constant: never folded.
+    bool                     deck_has_tap_ping                 = false;
     // ...and an END-STEP REANIMATOR (CardParams::endstep_modal_reanimate_mv, Abiding Grace), same
     // padding: gates PerformEndStepAbidingGrace's walk at both end-step sites and the plan axis's
     // consumer scan, so a clear bit PROVES both find nothing. Same DEFAULT TRUE rule. A deck constant:

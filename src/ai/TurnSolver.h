@@ -583,6 +583,14 @@ struct Action
                                        // CollectActions' phyrexian post-pass emits one extra
                                        // variant per life-paid pip count, sharing the base's
                                        // group key (mutually exclusive). 0 = pay full mana.
+    std::int8_t browbeat_flip = 0;     // BROWBEAT PRE-PING SUB-DECISION (Creature Burn, 2026-11-20): 1 = this
+                                       // cast of an opp_may_take_damage_instead_of_draw spell resolves with the
+                                       // OTHER opponent outcome at the least cost (BrowbeatFlipPrePings: fire
+                                       // the fewest tap pings to make it decline, or withdraw the fewest
+                                       // Pyromancer response pings to make it take). CollectActions emits it as
+                                       // a mutually exclusive variant beside the base for a deck with a tap
+                                       // pinger (GameState::deck_has_tap_ping). Folded into every plan/action
+                                       // signature, set-gated. 0 for every other action and every other deck.
     int         twobrid_colored = 0;   // TWOBRID pips ({2/B} -- Beseech the Queen): how many of the
                                        // cast's twobrid pips this variant pays with their COLOURED
                                        // side ({B}) instead of {2}. `cost` is emitted already
@@ -1195,6 +1203,7 @@ struct CastRiders
                                      // the cast having been paid)
     int      devour_count    = -1;   // Action::devour_count (Mycoloth)
     int      twobrid_colored = 0;    // Action::twobrid_colored (Beseech the Queen)
+    std::int8_t browbeat_flip = 0;   // Action::browbeat_flip (Browbeat's pre-ping sub-decision)
     int      attach_equip_id = 0;    // Action::attach_equip_id (Magnetic Theft's Equipment target)
     ManaPool land_put{};             // Action::rock_mana on a LandSearchPutsUntapped cast (Search for Tomorrow)
     int      draw_target     = 0;    // Action::draw_target (Stroke of Genius: 0 self, 1 opponent)
@@ -1258,6 +1267,7 @@ struct CastRiders
         r.loyalty_ability = a.loyalty_ability;
         r.devour_count    = a.devour_count;
         r.twobrid_colored = a.twobrid_colored;
+        r.browbeat_flip   = a.browbeat_flip;
         r.attach_equip_id = a.attach_equip_id;
         r.land_put        = a.rock_mana;
         r.free_cast       = a.free_cast;

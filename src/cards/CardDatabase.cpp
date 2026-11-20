@@ -3,6 +3,7 @@
 #include "../core/EnvFlags.h"
 #include <fstream>
 #include <stdexcept>
+#include <cstring>
 #include <functional>
 #include <nlohmann/json.hpp>
 
@@ -1668,6 +1669,23 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
     p.tap_mana_damage_each_opponent = params.value("tap_mana_damage_each_opponent", 0);
+    p.tap_ping_damage = params.value("tap_ping_damage", 0);
+    if (params.contains("tap_ping_target"))
+    {
+        const std::string t = params["tap_ping_target"].get<std::string>();
+        if (t != "player" && t != "any")
+        { throw std::runtime_error("tap_ping_target must be \"player\" or \"any\", got \"" + t + "\""); }
+        p.tap_ping_any_target = (t == "any");
+    }
+    if (params.contains("cast_color_untap_self"))
+    {
+        const std::string c = params["cast_color_untap_self"].get<std::string>();
+        static const char kColours[] = "WUBRG";
+        const char* at = c.size() == 1 ? std::strchr(kColours, c[0]) : nullptr;
+        if (at == nullptr || *at == '\0')
+        { throw std::runtime_error("cast_color_untap_self must be one of W/U/B/R/G, got \"" + c + "\""); }
+        p.cast_color_untap_self = static_cast<int>(at - kColours);
+    }
     p.creature_cast_trigger_plus_counters = params.value("creature_cast_trigger_plus_counters", 0);
     p.creature_cast_counter_damage_min_mv = params.value("creature_cast_counter_damage_min_mv", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))

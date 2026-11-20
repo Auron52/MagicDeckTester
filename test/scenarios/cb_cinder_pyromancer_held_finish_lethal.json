@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Creature Burn (2026-11-20, Stage 2 batch 2). The 0-power attack HOLD and the post-combat lethal FINISH in the",
+    "real game: the opponent is at 2; an un-sick Goblin Fireslinger and an un-sick Cinder Pyromancer are untapped",
+    "and we hold nothing. The Fireslinger attacks for 1 (a 1-power pinger attacks for exactly its ping); the 0/1",
+    "Pyromancer is HELD home (DecisionProvider::AttackWith -- attacking would deal 0 and forfeit the ping), so",
+    "right after combat damage its ping covers the last point (PingDorkFinish) -- a turn-3 win. Had it attacked,",
+    "nothing would be left to ping on turn 3 and the game would go to turn 4."
+  ],
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "turn": 3, "on_the_play": true, "active_life": 20, "opponent_life": 2,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Goblin Fireslinger" },
+    { "name": "Cinder Pyromancer" }
+  ],
+  "hand": [],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 3,
+  "expect_opponent_life": 0
+}

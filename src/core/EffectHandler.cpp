@@ -1129,7 +1129,7 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
     // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's choice first -- taken, nothing is drawn.
     // Lockstep twin: the rollout's apply_one DrawSpell branch (both through ResolveDamageInsteadOfDraw).
     if (def.params.opp_may_take_damage_instead_of_draw > 0
-        && ResolveDamageInsteadOfDraw(state, entry.controller_index, def))
+        && ResolveDamageInsteadOfDraw(state, entry.controller_index, def, entry.browbeat_flip != 0))
     { n = 0; }
 
     // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /

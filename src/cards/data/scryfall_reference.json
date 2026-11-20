@@ -1315,6 +1315,15 @@
     "toughness": "2",
     "type_line": "Legendary Creature — Human Warrior Pilot"
   },
+  "Cinder Pyromancer": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "{T}: This creature deals 1 damage to target player or planeswalker.\nWhenever you cast a red spell, you may untap this creature.",
+    "power": "0",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Shaman"
+  },
   "Citadel Gate": {
     "cmc": 0.0,
     "keywords": [],
@@ -3029,6 +3038,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Goblin"
+  },
+  "Goblin Fireslinger": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "{T}: This creature deals 1 damage to target player or planeswalker.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Goblin Warrior"
   },
   "Goblin Guide": {
     "cmc": 1.0,
@@ -8220,6 +8238,17 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Satyr Druid"
+  },
+  "Vulshok Sorcerer": {
+    "cmc": 3.0,
+    "keywords": [
+      "Haste"
+    ],
+    "mana_cost": "{1}{R}{R}",
+    "oracle_text": "Haste\n{T}: This creature deals 1 damage to any target.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Shaman Sorcerer"
   },
   "Walk the Aeons": {
     "cmc": 6.0,

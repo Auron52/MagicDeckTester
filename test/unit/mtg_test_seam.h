@@ -26,6 +26,17 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, false, false, false, riders);
     }
 
+    // The executor's hand cast carrying Browbeat's PRE-PING sub-decision (CastRiders::browbeat_flip = 1) --
+    // exactly what cast_by_name passes for an Action::browbeat_flip variant. Pushes the StackEntry; the caller
+    // resolves it (EffectHandler::Resolve -> ResolveDrawSpell -> ResolveDamageInsteadOfDraw's flip).
+    static void CastBrowbeatFlipFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.browbeat_flip = 1;
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, 0, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
     // The executor's hand cast in MORPH FACE-DOWN mode (CastRiders::face_down: 1 = face down, 2 = face down
     // and turned face up at once) -- exactly what cast_by_name passes for a face-down Action. Pushes the
     // StackEntry; the caller resolves it.

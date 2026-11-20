@@ -8603,6 +8603,19 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(attacker.card);
         if (ad && ad->params.must_attack) { return true; }
     }
+    // CREATURE BURN TAP PINGERS (CardParams::tap_ping_damage, 2026-11-20): a pinger whose attack would deal LESS
+    // than its ping stays home (Cinder Pyromancer, a 0/1). Attacking taps it (no vigilance), and a tapped
+    // pinger cannot fire the end-step ping (PingDorkEndSweep) -- so vs the passive, never-blocking goldfish
+    // the attack is DOMINATED by holding, unless it carries non-power value (AttackHasNonPowerValue). A
+    // 1-power pinger attacks for exactly its ping (the standing attack-all exemption decides it); a pumped
+    // Pyromancer (Teetering Peaks: 2/1) attacks. Shared by every declaration and projection, so both worlds
+    // hold it alike. Param-gated -> no deck without a tap pinger moves.
+    {
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(attacker.card);
+        if (pd != nullptr && pd->params.tap_ping_damage > 0 && !attacker.card.HasKeyword(Keyword::Vigilance)
+            && CombatPowerOf(attacker, s) < pd->params.tap_ping_damage && !AttackHasNonPowerValue(s, attacker))
+        { return false; }
+    }
     // Step 9c: a SEARCHED attack hold of a Guilty-Conscience-enchanted creature (dmgrx::AttackHeld; the plan's
     // combat suffix on the state). Read by every declaration and projection, so both worlds hold it alike.
     if (dmgrx::AttackHeld(s, attacker.card.m_number)) { return false; }

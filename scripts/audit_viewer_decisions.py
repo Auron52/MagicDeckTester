@@ -409,6 +409,12 @@ MANIFEST = {
     # (ResolveCounterPing -> g_play_target_chooser, CollectDamageTargets); the X of its {X}{X} is a
     # `main_phase` plan variant (chosen_x, every X 0..max), and the {4} counter is a main-phase activation.
     "remove_counter_ping_damage": ("target",          positive),
+    # Creature Burn batch 2 (2026-11-20): Goblin Fireslinger / Cinder Pyromancer ("{T}: 1 damage to target player or
+    # planeswalker") and Vulshok Sorcerer ("... any target"). Every ping -- the end-step sweep, Pyromancer's
+    # response ping -- asks the shared board-click `target` decision through DealPermanentAbilityDamage
+    # (players only for "target player or planeswalker", the full legal set for Vulshok). The Browbeat
+    # pre-ping is a `main_phase` plan variant (Action::browbeat_flip).
+    "tap_ping_damage":       ("target",               positive),
     "enters_with_x_plus_counters": ("main_phase",     truthy),
     "self_counter_cost":     ("main_phase",           truthy),
     "figure_two_cost":      ("main_phase",           truthy),
@@ -1422,6 +1428,8 @@ INERT_PARAMS = {
     "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
     "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",
     "tap_mana_damage_each_opponent": "automatic on tap (end-step free ping: no decision)",
+    "tap_ping_target": "shapes tap_ping_damage's `target` decision (players only vs any target) -- no decision of its own",
+    "cast_color_untap_self": "Cinder Pyromancer's 'may untap' on a red cast -- always taken (untapped dominates); the ping in response asks tap_ping_damage's `target`",
     "creature_cast_trigger_plus_counters": "automatic on-cast trigger (Herald of Ilharg: mandatory, untargeted, fixed count; Boars I2b)",
     "creature_cast_counter_damage_min_mv": "trigger threshold (Herald of Ilharg: damage to EACH opponent, no target; Boars I2b)",
     "etb_other_creatures_pump_power": "automatic ETB team pump (End-Raze Forerunners: mandatory, untargeted, every OTHER own creature; Boars I3a)",
@@ -2617,6 +2625,9 @@ def modeled_tokens(card):
         t.add("target")
     # Thunderkin Awakener's attack trigger "choose target Elemental creature card" -- the `gy_return_one` pick.
     if p.get("attack_trigger_reanimate"):
+        t.add("target")
+    # Creature Burn's tap pingers (Vulshok Sorcerer's "any target"): every ping asks the shared `target` decision.
+    if isinstance(p.get("tap_ping_damage"), int) and p.get("tap_ping_damage") > 0:
         t.add("target")
     return t
 
