@@ -2571,10 +2571,10 @@ bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Act
 // Kept: the faces, every own creature with >= 2 instances (Spiteful k), every own GC host, opponent
 // creatures (unless MTG_STUFFY_OPP_CREATURE_PRUNE), and every F2c candidate while a GC is out.
 //
-// HEURISTIC restriction (default OFF, PROVISIONAL, design 4.1 / Stage 5e): MTG_STUFFY_OPP_CREATURE_PRUNE=1
-// drops opponent creatures (Forbidden Orchard Spirits). Killing one never adds damage now; it can only lower
+// HEURISTIC restriction (design 4.1 / Stage 5e), ADOPTED by the USER 2026-11-20, DEFAULT ON (=0 lifts it):
+// MTG_STUFFY_OPP_CREATURE_PRUNE drops opponent creatures (Forbidden Orchard Spirits). Killing one never adds damage now; it can only lower
 // a later same-turn Chain's X / raise a later Act's cost, but "fewer creatures" can keep one of ours alive
-// in contrived lines, so it is not a proof. Off until a held-out A/B (a USER decision).
+// in contrived lines, so it is not a proof. Held-out A/B: play-identical outcomes, d3 gi7 a turn faster, units 0.96x.
 //
 // ORDER: an indestructible own GC host with a reflection instance (the unbounded loop) moves to the FRONT.
 // The front is read only where a one-shot pick is permitted (beyond the horizon, the depth-0 runner);
@@ -2583,7 +2583,7 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
                                                  int /*amount*/, int /*kind*/, std::vector<int>& io) const
 {
     if (DecisionUnpruned(UnprunedGate::ReflectTarget)) { return; }
-    static const bool s_opp_prune_env = EnvOn("MTG_STUFFY_OPP_CREATURE_PRUNE");   // DEFAULT OFF; =1 drops opp creatures
+    static const bool s_opp_prune_env = EnvOn("MTG_STUFFY_OPP_CREATURE_PRUNE", true);   // DEFAULT ON (USER 2026-11-20); =0 keeps opp creatures
     const bool s_opp_prune = heurarm::Flag(heurarm::STUFFY_OPP_CREATURE_PRUNE, s_opp_prune_env);
     const int opp_face = dmgrx::PlayerId(1 - controller);
     const bool face_in = std::find(io.begin(), io.end(), opp_face) != io.end();
@@ -3113,7 +3113,8 @@ bool StuffyCastOrderOn()
     return StuffyMainSplitOn() && heurarm::Flag(heurarm::STUFFY_CAST_ORDER, on);
 }
 
-// PROPOSED AMENDMENT (step 11 root cause, NOT the USER's rule; DEFAULT OFF until the USER rules). Under the plain
+// AMENDMENT to the USER's main split (step 11 root cause), ADOPTED by the USER 2026-11-20 ("I see, so this is a d0
+// fix. I guess that is okay"), DEFAULT ON; held-out d0 -0.476 turns (956 faster / 0 slower), d3 -0.008, d5 identical. Under the plain
 // split the GREEDY policy (the depth-0 runner, the beyond-horizon playout) plans main 1 without knowing main 2 will
 // want mana for a sweeper: scenario stuffy_d0_runner_finds_act_kill (Doll + four opponent Spirits, opponent at 13,
 // hand Act + Nemesis, five lands) casts Nemesis in main 1 and then cannot pay the main-2 Act (opponent left at 9),
@@ -3124,7 +3125,7 @@ bool StuffyCastOrderOn()
 // regains the 9e kill. Inert while the split is off.
 bool StuffySplitLethalM1On()
 {
-    static const bool on = EnvOn("MTG_STUFFY_SPLIT_LETHAL_M1");   // DEFAULT OFF (proposal); =1 arms it
+    static const bool on = EnvOn("MTG_STUFFY_SPLIT_LETHAL_M1", true);   // DEFAULT ON (USER 2026-11-20); =0 disarms it
     return StuffyMainSplitOn() && heurarm::Flag(heurarm::STUFFY_SPLIT_LETHAL_M1, on);
 }
 

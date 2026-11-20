@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Stuffy Doll step 11, the PROPOSED amendment MTG_STUFFY_SPLIT_LETHAL_M1 (DEFAULT OFF, awaiting the USER): the board of",
+    "Stuffy Doll step 11, the amendment MTG_STUFFY_SPLIT_LETHAL_M1 (ADOPTED by the USER 2026-11-20, DEFAULT ON): the board of",
     "stuffy_d0_runner_finds_act_kill.json under the USER's main split. Main 1 admits Blasphemous Act because its own",
     "reflection off the indestructible Doll (13) is projected lethal against the opponent's 13, so the depth-0 runner casts",
     "it and wins turn 4 -- the step-9e result. Without the amendment the plain split's greedy main 1 casts Screaming",

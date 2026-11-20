@@ -4256,7 +4256,7 @@ public:
 // NAME "Inspiring Vantage" sets `modern_rw_burn`). DeckProvider (== Generic) plus three things:
 //   * ReflectTargetCandidates: the SOUND folds F2 / F3 of design 4.1 (stated at the definition), the
 //     opponent-creature restriction behind MTG_STUFFY_OPP_CREATURE_PRUNE (a HEURISTIC narrowing, default
-//     OFF until measured -- design 4.1's PROVISIONAL Stage 5e item), and the ORDER "indestructible Guilty
+//     ON -- ADOPTED by the USER 2026-11-20 after the held-out A/B), and the ORDER "indestructible Guilty
 //     Conscience host first" (the infinite amplifier; only the FRONT is read, and only where a one-shot
 //     policy is permitted -- beyond the horizon and in the depth-0 runner). MTG_UNPRUNE=reflecttarget and
 //     human play (the engine does not consult the hook there) see every legal target.
@@ -4319,7 +4319,7 @@ public:
 bool StuffyMainSplitOn();
 // MTG_STUFFY_CAST_ORDER (heurarm STUFFY_CAST_ORDER, DEFAULT ON) AND the split: the step-11 cast order is live.
 bool StuffyCastOrderOn();
-// MTG_STUFFY_SPLIT_LETHAL_M1 (heurarm STUFFY_SPLIT_LETHAL_M1, DEFAULT OFF -- a PROPOSED amendment awaiting the USER)
+// MTG_STUFFY_SPLIT_LETHAL_M1 (heurarm STUFFY_SPLIT_LETHAL_M1, DEFAULT ON -- amendment ADOPTED by the USER 2026-11-20)
 // AND the split: main 1 admits a sweeper whose own reflection is projected lethal now.
 bool StuffySplitLethalM1On();
 // A creature sweeper by PARAM (never by name): "deals N damage to each creature" (Blasphemous Act) or "deals X

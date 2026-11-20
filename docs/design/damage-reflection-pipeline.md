@@ -1668,7 +1668,7 @@ Where the code departs from the sections above, and why. Each entry names the sy
   out keeps F2c's candidates searched (a host deals damage back to itself, so routing can change how often it is hit).
   Kept: the faces, own creatures with >= 2 instances, own GC hosts, opponent creatures. The deck has no death payoff and
   nothing else triggers on a creature being dealt damage (shields / pulls ride only our sweeper), which F2a/F2b rely on.
-* **The Spirit prune is a HEURISTIC, default OFF** (`MTG_STUFFY_OPP_CREATURE_PRUNE=1` drops opponent creatures). Design
+* **The Spirit prune is a HEURISTIC, default ON since the USER adopted it 2026-11-20** (`MTG_STUFFY_OPP_CREATURE_PRUNE=0` keeps opponent creatures). Design
   4.1 calls it PROVISIONAL / Stage 5e; the COLLAPSE rule puts a heuristic narrowing OFF until a quality A/B. Owed: the
   held-out A/B and the USER's call.
 * **ORDER:** an own indestructible GC host with a reflection instance (the unbounded loop) moves to the FRONT -- read
@@ -2074,8 +2074,8 @@ Where the code departs from the sections above, and why. Each entry names the sy
   Sliver and wins T5 with a main-2 Chain Reaction. gi 2: 9e T4 GC + Act; the split casts Sliver, T5. gi 30: 9e T4 Act
   ({3}{R}); the split casts Reckoner + GC, T6. The searched window does not have this blind spot (main-1 plans are
   scored with their searched main 2), which is why d3 is unchanged.
-* **PROPOSED AMENDMENT (not the USER's rule; `MTG_STUFFY_SPLIT_LETHAL_M1`, heurarm `STUFFY_SPLIT_LETHAL_M1`, DEFAULT
-  OFF until the USER rules).** Main 1 also admits a sweeper whose OWN reflection, on the board as it stands, is
+* **AMENDMENT, ADOPTED by the USER 2026-11-20 (`MTG_STUFFY_SPLIT_LETHAL_M1`, heurarm `STUFFY_SPLIT_LETHAL_M1`, DEFAULT
+  ON; =0 disarms it).** Main 1 also admits a sweeper whose OWN reflection, on the board as it stands, is
   projected to kill the opponent now (`ExtraLethalDamage({sweeper}) >= opponent life`). A sweep that ends the game in
   main 1 wins on the same turn as any main-2 line, and the reason for main 2 (attack first) is moot when the sweep
   alone is lethal. It only adds an option. Measured in the same pooled batch: d0 **5.46** (9e 5.82, plain split
