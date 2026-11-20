@@ -184,6 +184,9 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Sun + 2 Grim Tutor 6, so you end up at 7 life and can only play 6 lands with fastbond. In this extreme case it
   would probably have been better to use Exploration, but this is difficult to hit."* -> the USER's worst case
   (life 7) sits inside the life <= 10 threshold; threshold kept.
+  USER (verbatim): *"But even in this worst case you still get your normal land drop before taking damage, so
+  it's probably possible to win at one life."* -> Fastbond's first land is free (7 lands at 7 life). Exploration
+  stays a low-life target (rarely live; cheap); the A/B arms report whether it ever matters.
 
 - B4 big lands wait for Blood Sun (USER 2026-11-20, verbatim): *"Generally Scorched Ruins and Lotuses wait for
   Blood Sun to drop. The only exception is when you fail to have the 3 mana or Red needed for Blood Sun. In
