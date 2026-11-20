@@ -1,0 +1,41 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 8,
+ "budget_ms": 0,
+ "max_turns": 8,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Dark Ritual",
+  "Dark Ritual",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Thrumming Stone",
+  "Culling the Weak"
+ ],
+ "library_top": [
+  "Abhorrent Overlord",
+  "Reaper from the Abyss",
+  "Jetmir, Nexus of Revels",
+  "Sire of Insanity"
+ ],
+ "_comment": [
+  "CONTROL for shadowborn_extreme_user_line.json: the same hand and board, no Apostle anywhere in the library",
+  "(ripple reveals nothing castable), so the line cannot go off. At d3 b10, d5 b20 and d8 b0 the search casts one Apostle in T3 and keeps the Rituals (win T7).",
+  "docs/design/shadowborn-extreme-case-2026-11-20.md"
+ ],
+ "expect_log_sequence": [
+  "T3 MAIN_2 CAST_SPELL Shadowborn Apostle"
+ ]
+}

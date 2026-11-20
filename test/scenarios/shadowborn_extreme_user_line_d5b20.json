@@ -1,0 +1,52 @@
+{
+ "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swords to Plowshares",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Dark Ritual",
+  "Dark Ritual",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Thrumming Stone",
+  "Culling the Weak"
+ ],
+ "library_top": [
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Shadowborn Apostle",
+  "Abhorrent Overlord",
+  "Reaper from the Abyss",
+  "Jetmir, Nexus of Revels",
+  "Sire of Insanity"
+ ],
+ "expect_log_sequence": [
+  "CAST_SPELL Dark Ritual",
+  "CAST_SPELL Dark Ritual",
+  "CAST_SPELL Shadowborn Apostle",
+  "CAST_SPELL Culling the Weak",
+  "CAST_SPELL Thrumming Stone",
+  "CAST_SPELL Shadowborn Apostle",
+  "ABILITY Shadowborn Apostle"
+ ],
+ "_comment": [
+  "Play-settings twin (d5 b20, the deck's deep regression shape) of shadowborn_extreme_user_line.json (d8 b0).",
+  "docs/design/shadowborn-extreme-case-2026-11-20.md"
+ ]
+}
