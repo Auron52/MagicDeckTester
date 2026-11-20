@@ -377,6 +377,20 @@ TEST_CASE("Maze's End F2 (gi1): Talon's {4} is paid so Maze's End's {3} stays pa
     const GameState s = F2Gi1Board(maze);
     const TurnSolver::Plan p = F2Gi1Plan(s, maze);
 
+    // MTG_PAY_REFINE_SCALED (2026-11-20, Merfolk gate): Talon's {4} off four sources that include Baldur's Gate's
+    // plain {C} is now refined to the Gate's fed mode (four other Gates: {2} -> four mana), which keeps a Gate up, and
+    // Maze's End's {3} stays payable without the owed-aware hold. The hold is still the mechanism under test, so its
+    // premise (the usual payment strands the activation) is pinned with the refine trigger off; the default is checked
+    // separately below.
+    {
+        const PlanSourceReserveScope maze_held(TurnSolver::ActivationTapReserveUnion(s, p.actions));
+        GameState c = s;
+        REQUIRE(TurnSolver::ApplyChannelStepDirect(c, p.actions[0]));
+        for (Permanent& q : c.battlefield) { if (q.card.m_number == maze) { q.tapped = true; } }
+        ManaCost three{}; three.generic = 3;
+        CHECK(TapForCostDirect(c, three, false));
+    }
+    heurarm::t_arm[heurarm::PAY_REFINE_SCALED] = 0;
     // The trailing pass holds Maze's End's own {T} source (ActivationTapReserve) around every step; so here.
     {
         const PlanSourceReserveScope maze_held(TurnSolver::ActivationTapReserveUnion(s, p.actions));
@@ -408,6 +422,7 @@ TEST_CASE("Maze's End F2 (gi1): Talon's {4} is paid so Maze's End's {3} stays pa
             CHECK(TapForCostDirect(c, three, false));
         }
     }
+    heurarm::t_arm[heurarm::PAY_REFINE_SCALED] = -1;
 
     // Rollout world: the whole plan applies -- Talon put, Maze's End activated (back in hand, a Gate fetched).
     {
