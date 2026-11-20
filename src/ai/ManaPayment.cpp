@@ -7856,8 +7856,12 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // MTG_PO_UNLOCK_ORDER: nothing above moved the order, and a same-line haste may unlock a mana creature whose
     // mana this decider's walk cannot see -- price the orders with the enumeration's walk (TurnSolver.cpp,
     // UnlockOrderSearch). The enumeration site runs the same search inside SubsetPayableSequentialTail.
+    // MTG_PO_DAMAGE_ORDER: ...and a cast that needs same-turn damage (Needle Drop, spectacle, Incinerator) ordered
+    // before the burn that supplies it -- the same walk with the damage modelled (TurnSolver::DamagePayableOrder).
     if (!PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site) && site == 0)
-    { (void)TurnSolver::UnlockPayableOrder(state, acts, order); }
+    {
+        if (!TurnSolver::UnlockPayableOrder(state, acts, order)) { (void)TurnSolver::DamagePayableOrder(state, acts, order); }
+    }
 }
 
 // Does cast `c` satisfy a dependent Theft's same-plan target of name `nm`? `equipment` selects which
