@@ -116,5 +116,12 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   fastbond so much that it loses."* -> `own_death_live` armed for this deck by a deck-level stamp; search,
   playout and go-off recognizer all respect it.
 
+- B2 Worldfire (USER 2026-11-20, verbatim): *"Oh crud. Worldfire should not be in the list. that was a
+  placeholder and we'll need to correct it."* -> the 1 Worldfire slot is a PLACEHOLDER; the real card is
+  pending from the USER. U2 (how Worldfire is used) is moot. Worldfire stays implemented in cards.json (step 5,
+  68cf02b88: generic, tested, harmless to other decks); the decklist is NOT edited until the USER names the
+  replacement. Nothing downstream of the list (profile, suite entry, generations) runs on the placeholder list.
+
 ## Open USER decisions
+- B2 follow-up: which card replaces the Worldfire placeholder?
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
