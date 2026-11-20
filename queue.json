@@ -1,20 +1,19 @@
 {
  "entries": [
   {
-   "branch": "wip/maze-shared",
-   "head_since": "2026-11-20T01:25:41Z",
-   "heartbeat": "2026-11-20T02:01:17Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/maze-shared",
-   "joined": "2026-11-20T00:42:44Z",
-   "note": "Maze's End fix batch (F5/F5R/F7/Summit/SHUF/P5c/P7 + GT; needs rebuild+unit+smoke+reg)"
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-20T02:01:42Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:1dropburn-analyze",
    "joined": "2026-11-20T00:43:14Z",
    "note": "1 Drop Burn keep table + ledger (21 commits; needs rebuild+unit+smoke+check_gt_logs)"
+  },
+  {
+   "branch": "wip/maze-shared",
+   "host": "550a08fdc1f3",
+   "id": "550a08fdc1f3:wip/maze-shared",
+   "joined": "2026-11-20T02:01:42Z",
+   "note": "Maze's End fix batch (F5/F5R/F7/Summit/SHUF/P5c/P7 + GT; needs rebuild+unit+smoke+reg)"
   }
  ]
 }
