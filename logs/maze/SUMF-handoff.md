@@ -133,3 +133,13 @@ MTG_TURN_CENSUS=1 writes a file named `1` into the cwd's repo root: move it out,
 - "the top priority are optimizations and fixes"
 - "Wasted work is wasted work regardless of the situation."
 - "Naturally, I'm expecting that this means we are matching the references and all other bars. If not, we should focus on doing so first."
+
+### SUMF-2 FINAL (chain2 DONE)
+- ref_bench maze_s_end, shipped policy, MTG_BIN=mtg.stf: 11/11 tie the USER (human 5.818 = search 5.818, 0 short;
+  s1 NO-WIN on both sides). refbench2.json / refbench2.log in build/scratch/sumf.
+- d8 b0: all 12 A/B-slower games (11 stf-vs-base + 2HG g273 stf-vs-fix) RECOVER (stf <= ref at d8 b0); no abandonment.
+- Verdict: meets the bar (per-deck net <= 0 vs base: d5 -20, 2HG 0, d3 -10, d0 0; every slower game recovers; refs
+  tie; verify 0 MISMATCH). Ready for the parent to integrate 5ac113fe1; GT NOT accepted (Maze keys move; the tree's
+  GT is also stale for non-Maze keys from earlier maze-shared work).
+- Untracked COPIES of the 11 Maze references sit in this worktree's references/Maze_s_End (for ref_bench only).
+  Originals are in the primary checkout. Do not delete them without running check_references_safe.py.
