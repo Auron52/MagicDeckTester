@@ -69078,6 +69078,7 @@ MAZE_P5_LEVER(MazeCastDomWindowsOn,   MAZE_CASTDOM_WINDOWS,    "MTG_MAZE_CASTDOM
 MAZE_P5_LEVER(MazeCastDomPerPlanOn,   MAZE_CASTDOM_PERPLAN,    "MTG_MAZE_CASTDOM_PERPLAN",    true)    // P7c (b)
 MAZE_P5_LEVER(MazeCastDomKeepAOnlyOn, MAZE_CASTDOM_KEEP_A_ONLY,"MTG_MAZE_CASTDOM_KEEP_A_ONLY",true)    // P7c (c)
 MAZE_P5_LEVER(MazeWinlessCertOn,     MAZE_WINLESS_CERT,       "MTG_MAZE_WINLESS_CERT",       true)    // P7d
+MAZE_P5_LEVER(MazeWinlessOrderOn,    MAZE_WINLESS_ORDER,      "MTG_MAZE_WINLESS_ORDER",      true)    // P7-8 (O)
 #undef MAZE_P5_LEVER
 bool MazeAutonomous() { return !HumanPlayActive() && !DecisionUnpruned(); }
 
@@ -69790,6 +69791,151 @@ bool MazesEndProvider::ProvenWinlessThisTurn(const GameState& s, int controller)
     g_cert_verdict = MazeWinlessBound(s);
     return g_cert_verdict > 0;
 }
+// (O) THE LIBRARY-ORDER SUMMIT BOUND (P7-8; MTG_MAZE_WINLESS_ORDER, DEFAULT ON). USER 2026-11-20, asked whether the
+// Guild Summit decline needed a clairvoyant/heuristic narrowing: "Don't we already run clairvoyantly or are you talking
+// about in a heuristic?" -- the search already reads the known library ORDER (its draws are the real game's, and every
+// reshuffle a search makes is the deterministic keyed one: ShuffleAfterSearch -> Library::ShuffleByKey over
+// (game_seed, search ordinal, salt, m_number)). A bound that reads the same order therefore removes nothing the search
+// could find: a SOUND fold relative to the search's own information. It must never know MORE than the search, so it
+// falls back to the library-agnostic (S) count when the node's view is not that order: a blind search
+// (gamesetup::BlindSearchSalt() >= 0), no mid-game shuffle (MTG_NO_SEARCH_SHUFFLE), or the legacy content-dependent
+// shuffle (MTG_LEGACY_SHUFFLE).
+//
+// THE ARGUMENT. Under Summit the only draws this turn are Summit's (one per Gate entry per Summit controlled, plus a cast
+// Summit's ETB: at most one per Gate controlled then); the only reshuffles are searches (a Maze's End fetch, a Sylvan
+// Scrying, an Archdruid's Charm). Given E >= Gate entries (the (S) count, which bounds every Manabond-free line):
+//   T = draws <= k_all * E + k_cast * (Gates now + E)    (k_all: Summits controlled / in hand / drawable; k_cast: cast)
+//   S = reshuffles <= E + Scryings + Charms              (a Maze's End activation is one of E's sources; a whiff too)
+//   R = cards removed from the library <= T + S          (draws + searched cards; nothing in the list adds one)
+// Before the first reshuffle a draw is one of the top T cards of the CURRENT order. After the j-th reshuffle (ordinal
+// search_count + j - 1) the library is the rest of today's library sorted by ShuffleKey, and removing cards leaves the
+// others' relative order unchanged (common random numbers), so a card drawn then has every card above it in the FULL
+// keyed order already removed: its rank is < R. D = top-T(order 0) U top-R(order j), j = 1..S, holds every card the
+// line can draw. A library Exploration / Burgeoning / Charm / Summit / Scrying outside D is not reachable, so E shrinks
+// to the sources in hand, in play and in D (a Talon stays counted: Maze's End fetches it). Iterating is sound by
+// induction (entries <= E_k => drawn within D_k => entries <= E_{k+1}). A library Manabond inside D voids the count
+// (its dump needs no source); outside D it is never drawn -- the line up to its draw would be Manabond-free, so that
+// draw is within D. Proof (code 4) when Gates now + E < ten.
+static bool MazeOrderBoundView()
+{
+    return gamesetup::BlindSearchSalt() < 0 && SearchShuffleEnabled() && StableShuffleEnabled();
+}
+// Census of (O)'s outcomes (print-only, counted only under MTG_LASTPLY_NOWIN_CENSUS): why the order bound did not prove.
+namespace mazeorder
+{
+inline std::atomic<long long> g_calls{0}, g_full0{0}, g_fulln{0}, g_manabond{0}, g_open{0}, g_proof{0}, g_gap[6];
+struct Printer
+{
+    ~Printer()
+    {
+        if (g_calls.load() == 0) { return; }
+        std::fprintf(stderr, "[maze-order] calls=%lld proof=%lld | every card drawable: round0=%lld later=%lld | "
+                     "Manabond drawable=%lld | count open at the fixed point=%lld\n", g_calls.load(), g_proof.load(),
+                     g_full0.load(), g_fulln.load(), g_manabond.load(), g_open.load());
+        std::fprintf(stderr, "[maze-order] round-0 R - library: <-10=%lld -10..-6=%lld -5..-1=%lld 0..4=%lld 5..9=%lld >=10=%lld\n",
+                     g_gap[0].load(), g_gap[1].load(), g_gap[2].load(), g_gap[3].load(), g_gap[4].load(), g_gap[5].load());
+    }
+};
+inline Printer g_printer;
+inline bool On() { return heurarm::Flag(heurarm::LASTPLY_NOWIN_CENSUS, EnvInt("MTG_LASTPLY_NOWIN_CENSUS", 0) > 0); }
+}   // namespace mazeorder
+static bool MazeOrderSummitProofImpl(const GameState& s, int me, int need, int g0, int fixed_e, int& why);
+static bool MazeOrderSummitProof(const GameState& s, int me, int need, int g0, int fixed_e)
+{
+    int why = 0;
+    const bool r = MazeOrderSummitProofImpl(s, me, need, g0, fixed_e, why);
+    if (mazeorder::On())
+    {
+        using namespace mazeorder;
+        g_calls.fetch_add(1, std::memory_order_relaxed);
+        (r ? g_proof : why == 1 ? g_full0 : why == 2 ? g_fulln : why == 3 ? g_manabond : g_open).fetch_add(1, std::memory_order_relaxed);
+    }
+    return r;
+}
+static bool MazeOrderSummitProofImpl(const GameState& s, int me, int need, int g0, int fixed_e, int& why)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const std::size_t n = pl.library.size();
+    if (n == 0) { return g0 + fixed_e < need; }
+    enum : std::uint8_t { kOther, kExpl, kBurg, kCharm, kSummit, kScry, kManabond };
+    static thread_local std::vector<std::uint8_t> kind;
+    static thread_local std::vector<std::int32_t> num;
+    kind.assign(n, kOther); num.assign(n, 0);
+    {
+        std::size_t i = 0;
+        for (const Card& c : pl.library)
+        {
+            const std::string& nm = c.m_name.str();
+            kind[i] = nm == "Exploration" ? kExpl : nm == "Burgeoning" ? kBurg : nm == "Archdruid's Charm" ? kCharm
+                    : nm == "Guild Summit" ? kSummit : nm == "Sylvan Scrying" ? kScry : nm == "Manabond" ? kManabond
+                    : kOther;
+            num[i] = c.m_number; ++i;
+        }
+    }
+    int summit_bf = 0, gates_now = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        if (q.card.m_name.str() == "Guild Summit") { ++summit_bf; }
+        if (MazeDefIsGate(CardDatabase::Instance().LookupCached(q.card))) { ++gates_now; }
+    }
+    int summit_h = 0, scry_h = 0, charm_h = 0;
+    for (const Card& c : pl.hand)
+    {
+        const std::string& nm = c.m_name.str();
+        if (nm == "Guild Summit") { ++summit_h; }
+        else if (nm == "Sylvan Scrying") { ++scry_h; }
+        else if (nm == "Archdruid's Charm") { ++charm_h; }
+    }
+    const uint64_t salt = g_shuffle_eval ? s.shuffle_salt_search : s.shuffle_salt;
+    static thread_local std::vector<std::uint8_t> in_d;
+    static thread_local std::vector<std::pair<std::uint64_t, std::int32_t>> keyed;
+    in_d.assign(n, 1);                       // round 0: every library card drawable (the agnostic (S) count)
+    long long e_prev = -1;
+    for (int round = 0; round < 16; ++round)
+    {
+        int lib_src = 0, lib_summit = 0, lib_scry = 0, lib_charm = 0;
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (!in_d[i]) { continue; }
+            const std::uint8_t k = kind[i];
+            lib_src += (k == kExpl || k == kBurg || k == kCharm) ? 1 : 0;
+            lib_summit += k == kSummit ? 1 : 0;
+            lib_scry += k == kScry ? 1 : 0;
+            lib_charm += k == kCharm ? 1 : 0;
+        }
+        const long long e = fixed_e + lib_src;
+        if (e == e_prev) { break; }          // fixed point: D below is the one this E produced
+        e_prev = e;
+        const long long k_cast = summit_h + lib_summit;
+        const long long t = (summit_bf + k_cast) * e + k_cast * (gates_now + e);
+        const long long sh = e + scry_h + lib_scry + charm_h + lib_charm;
+        const long long r = t + sh;
+        if (round == 0 && mazeorder::On())
+        {
+            const long long g = r - static_cast<long long>(n);
+            mazeorder::g_gap[g < -10 ? 0 : g < -5 ? 1 : g < 0 ? 2 : g < 5 ? 3 : g < 10 ? 4 : 5].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (r >= static_cast<long long>(n)) { why = round == 0 ? 1 : 2; return false; }   // every card drawable
+        std::vector<std::uint8_t> nd(n, 0);
+        for (std::size_t i = 0; i < n && static_cast<long long>(i) < t; ++i) { nd[i] = 1; }
+        for (long long j = 0; j < sh; ++j)
+        {
+            const uint64_t seed = SaltSeed(SearchShuffleSeed(s.game_seed, s.search_count + static_cast<uint64_t>(j)), salt);
+            keyed.clear();
+            for (std::size_t i = 0; i < n; ++i) { keyed.emplace_back(Library::ShuffleKey(seed, num[i]), num[i]); }
+            std::vector<std::pair<std::uint64_t, std::int32_t>> top(keyed);
+            std::nth_element(top.begin(), top.begin() + (r - 1), top.end());
+            const std::pair<std::uint64_t, std::int32_t> cut = top[static_cast<std::size_t>(r - 1)];
+            for (std::size_t i = 0; i < n; ++i) { if (!(cut < keyed[i])) { nd[i] = 1; } }
+        }
+        in_d.swap(nd);
+    }
+    for (std::size_t i = 0; i < n; ++i) { if (in_d[i] && kind[i] == kManabond) { why = 3; return false; } }
+    why = 4;
+    return g0 + e_prev < need;
+}
+
 int MazesEndProvider::MazeWinlessBound(const GameState& s)
 {
     static const CardDefinition* maze = CardDatabase::Instance().Lookup("Maze's End");
@@ -69854,12 +70000,20 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
             // narrowing decision): -1 Manabond controlled / in hand, (S) count open as well; -6 the same but the (S)
             // count alone would close; -5 Manabond in the library only, count open; -7 library only, count would
             // close; -4 no Manabond, (S) count open.
+            if (mb == 0 && s_closes) { return 3; }
+            // (O): the library order the search sees (above). A Manabond controlled or in hand voids it.
+            if (mb_lib == mb && MazeWinlessOrderOn() && MazeOrderBoundView())
+            {
+                const int lib_src = [&] { int k = 0; for (const Card& c : pl.library) { const std::string& n = c.m_name.str();
+                    k += (n == "Exploration" || n == "Burgeoning" || n == "Archdruid's Charm") ? 1 : 0; } return k; }();
+                if (MazeOrderSummitProof(s, me, need, g0, bound_s - lib_src)) { return 4; }
+            }
             if (mb > 0)
             {
                 const bool lib_only = mb_lib == mb;
                 return lib_only ? (s_closes ? -7 : -5) : (s_closes ? -6 : -1);
             }
-            return s_closes ? 3 : -4;
+            return -4;
         }
     }
     int me_bf = 0, amulet = 0, burg = 0, manabond = 0;

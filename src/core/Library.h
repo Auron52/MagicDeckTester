@@ -384,6 +384,18 @@ public:
     // re-permutation. That holds the realized future consistent across an A/B while still
     // being a genuine (non-game-start, non-clairvoyant) reshuffle. m_number is unique per
     // live card, so the key is a total order (tie-break on m_number for hash collisions).
+    // ShuffleByKey's per-card priority (the order is ascending (ShuffleKey, m_number)). Public so a reader that
+    // must PREDICT a future keyed reshuffle exactly (MazesEndProvider's library-order winless bound) shares the
+    // one definition instead of a copy.
+    static std::uint64_t ShuffleKey(std::uint64_t seed, std::int32_t number)
+    {
+        std::uint64_t x = seed * 0x9E3779B97F4A7C15ull
+                        + (static_cast<std::uint64_t>(number) + 1) * 0xD1B54A32D192ED03ull;
+        x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
+        x ^= x >> 27; x *= 0x94D049BB133111EBull;
+        x ^= x >> 31;
+        return x;
+    }
     void ShuffleByKey(uint64_t seed)
     {
         m_bottom_known = 0;   // a shuffle forgets the known bottom pile
@@ -391,15 +403,7 @@ public:
         m_known_top = 0;
         const std::size_t n = size();
         if (n < 2) { return; }
-        auto key = [seed](std::int32_t number) -> std::uint64_t
-        {
-            std::uint64_t x = seed * 0x9E3779B97F4A7C15ull
-                            + (static_cast<std::uint64_t>(number) + 1) * 0xD1B54A32D192ED03ull;
-            x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
-            x ^= x >> 27; x *= 0x94D049BB133111EBull;
-            x ^= x >> 31;
-            return x;
-        };
+        auto key = [seed](std::int32_t number) -> std::uint64_t { return ShuffleKey(seed, number); };
         // Decorate-sort-undecorate. The sort key is a PURE function of (seed, m_number), so it was
         // wastefully recomputed inside every comparison -- O(n log n) splitmix64 evaluations -- while
         // stable_sort also shuffled heavy Card objects through its merge buffer. Instead compute each

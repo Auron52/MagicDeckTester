@@ -118063,19 +118063,21 @@ inline std::atomic<long long> g_fold{0};
 // Maze's End's Guild Summit declines are split (P7-8, for the USER's narrowing decision): [4] -4 no Manabond, (S) count
 // open; [5] -5 Manabond in the library only, count open; [6] -6 Manabond controlled / in hand, count would close; [7] -7
 // Manabond in the library only, count would close. [1] -1 is then Manabond controlled / in hand with the count open.
-inline std::atomic<long long> g_n[8], g_u[8], g_unsound{0}, g_win[8];
-inline int Slot(int v) { return v > 0 ? 0 : v == -1 ? 1 : v == -2 ? 2 : (v <= -4 && v >= -7) ? -v : 3; }
+// [8] PROOF-O: a proof by the library-order Summit bound (Maze's End proof code 4; [0] holds every other proof).
+inline std::atomic<long long> g_n[9], g_u[9], g_unsound{0}, g_win[9];
+inline int Slot(int v) { return v == 4 ? 8 : v > 0 ? 0 : v == -1 ? 1 : v == -2 ? 2 : (v <= -4 && v >= -7) ? -v : 3; }
 struct Printer
 {
     ~Printer()
     {
         const long long f = g_fold.load();
         long long un = 0, uu = 0;
-        for (int i = 0; i < 8; ++i) { un += g_n[i].load(); uu += g_u[i].load(); }
+        for (int i = 0; i < 9; ++i) { un += g_n[i].load(); uu += g_u[i].load(); }
         if (f > 0) { std::fprintf(stderr, "[lastply] folded=%lld\n", f); }
         if (un == 0) { return; }
-        static const char* const kName[8] = { "PROOF", "CODE-1", "CODE-2", "OTHER", "CODE-4", "CODE-5", "CODE-6", "CODE-7" };
-        for (int i = 0; i < 8; ++i)
+        static const char* const kName[9] = { "PROOF", "CODE-1", "CODE-2", "OTHER", "CODE-4", "CODE-5", "CODE-6", "CODE-7",
+                                              "PROOF-O" };
+        for (int i = 0; i < 9; ++i)
         {
             if (i >= 4 && g_n[i].load() == 0) { continue; }
             std::fprintf(stderr, "[lastply] census %-6s nodes=%lld (%.1f%%) units=%lld (%.1f%%) won=%lld\n", kName[i],
@@ -118250,7 +118252,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         CertClearVerdictCode();
         const bool proven = ResolveProvider(state).ProvenWinlessThisTurn(state, state.active_player_index);
         const int vcode = CertLastVerdictCode();
-        const int proof = proven ? 1 : std::min(0, vcode);
+        const int proof = proven ? std::max(1, vcode) : std::min(0, vcode);
         if (lastply::Census() > 0)
         {
             const int sl = lastply::Slot(proof);
