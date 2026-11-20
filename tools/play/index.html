@@ -5135,8 +5135,8 @@ function digPanelHtml(d){
     h+=`<div class="tutgrid">`;
     (d.examined||[]).forEach(c=>{
       const def=c.index===d.heuristic_default;
-      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — resolves next">`+
-         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.label||c.name)} — resolves next">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.label||c.name)}</em>`+
          (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
     });
     h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+

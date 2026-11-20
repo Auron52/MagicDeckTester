@@ -1388,9 +1388,16 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
         { names += (i ? ", " : "") + combat.attacker_descs[i]; }
         if (trigger_life_loss > 0)
         { names += (names.empty() ? "" : " + ") + std::to_string(trigger_life_loss) + " (attack triggers)"; }
+        // Damage triggers raised by the combat damage (a Boros Reckoner / Guilty Conscience reflection) resolve
+        // inside ResolveCombatDamage, so the arrow's after-life already includes them: name that part, or the event
+        // reads '7 to opponent (9->-1)' (Stuffy Doll claude-play sweep 2026-11-20, seed 930011). Viewer text only.
+        const int other_loss = opp_life_before - opp.life - total_combat_dmg - trigger_life_loss;
+        const std::string other = other_loss > 0
+            ? " + " + std::to_string(other_loss) + " from damage triggers" : std::string();
         EmitPlayEvent(state.turn_number, "combat",
                       "⚔ attacked: " + names + " — " + std::to_string(total_combat_dmg)
-                      + " to opponent (" + std::to_string(opp_life_before) + "→" + std::to_string(opp.life) + ")");
+                      + " to opponent" + other + " (" + std::to_string(opp_life_before) + "→"
+                      + std::to_string(opp.life) + ")");
     }
 
     CheckStateBasedActions(state);

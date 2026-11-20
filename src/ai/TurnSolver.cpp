@@ -23816,7 +23816,7 @@ static bool IndestructibleGrantTargetInert(const GameState& state, int controlle
 // target, so rejecting it there is dedup, not deletion.
 // A searched ordering (Plan::searched_order, vector order realised verbatim) that casts a trick whose target is a
 // SAME-PLAN HAND card (trick_hand_target, a name) before any cast of that name: the trick has no target when it is
-// cast. Used by the rfx order expansion (step 7) only.
+// cast. Used by every ordering expansion (rfx step 7 and the full-order menu, 2026-11-20).
 static bool OrderingPlacesTrickBeforeHandTarget(const std::vector<Action>& acts)
 {
     for (std::size_t i = 0; i < acts.size(); ++i)
@@ -91707,9 +91707,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // ...or a plan-body convoke arm before the creatures it convokes with (Vampires item B; the
             // explicit route plays this order verbatim, so its bodies would not exist). No-op without one.
             if (OrderingPlacesConvokeBeforeArrivals(cand.actions)) { continue; }
-            // ...or (an rfx plan) a trick before the same-plan hand creature it targets: the Escape would have no
-            // target yet (fizzle), the same line as the plan without it. Sound; rfx plans only.
-            if (rfx_plan && OrderingPlacesTrickBeforeHandTarget(cand.actions)) { continue; }
+            // ...or a trick before the same-plan hand creature it targets: the trick has no target when it is cast
+            // (CR 601.2c), so the executor spends the card and its mana on a fizzle -- never a legal line. EVERY
+            // plan, not only rfx plans: the full-order expansion (MTG_SEARCH_ORDER, the unpruned human /
+            // claude-play menu) offered 'Loran's Escape -> Mogg Maniac, Mogg Maniac' with the Maniac still in
+            // hand, and picking it silently lost the Escape (Stuffy Doll claude-play sweep 2026-11-20, seeds
+            // 930006/930009/930014/930015). Autonomous play reaches this loop only through the rfx expansion,
+            // which already filtered it, and Dragonstorm's opt-in, which has no same-plan hand-target trick.
+            if (OrderingPlacesTrickBeforeHandTarget(cand.actions)) { continue; }
             // ...or (STUFFY DOLL step 11, the USER's fixed order) a sweeper before a same-plan Loran's Escape.
             if (rfx_plan && fix_grant && OrderingPlacesSweeperBeforeGrant(cand.actions)) { continue; }
             // ...or a target-less Path BEFORE a Theft whose piece an Equip in this plan needs freed again
@@ -91723,11 +91728,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             if (g_order_drop_label) { g_enum_drop_names = &dropped; }
             GameState copy = state;
             bool attach_stranded = false;
+            // The human menu's drop label must judge the plan the COMMIT plays. As in the single-ordering probe above,
+            // `state` already holds this plan's land, but an undecided plan makes ApplyPlanDirect play the GREEDY land
+            // first, so the probe borrowed a land the commit never plays and read no drops (Stuffy Doll claude-play
+            // sweep 2026-11-20: seed 930007 T3 'land=Boros Garrison' after GC + Mind Stone read not_verified on 2
+            // sources, seed 930008 T4 'land=none; Mogg Maniac, Mind Stone' likewise, both dropping Mind Stone).
+            // Human menu only: autonomous enumeration (the rfx expansion, Dragonstorm) dedups on this apply as before.
+            TurnSolver::Plan human_probe;
+            const bool pin_land = HumanPlayActive() && HumanDropProbeAllOn() && !cand.land_decided;
+            if (pin_land) { human_probe = cand; human_probe.land_decided = true; human_probe.land_to_play.clear(); }
             {
                 // The attach-order probe (see attach_order_illegal): a forced Path into the Theft's only
                 // legal creature makes this ordering's Theft uncastable -- not offered.
                 AttachCastProbeScope _acp(probe_attach);
-                ApplyPlanDirect(copy, cand, is_pre_combat);
+                ApplyPlanDirect(copy, pin_land ? human_probe : cand, is_pre_combat);
                 attach_stranded = g_attach_cast_probe.stranded;
             }
             g_enum_drop_names = nullptr;

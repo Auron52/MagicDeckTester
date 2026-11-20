@@ -4652,6 +4652,15 @@ static void WriteTreasurifyDecisionJson(std::ostream& os, const GameState& s, co
              " stops being a creature), or -1 for none (\"up to one\"). Default = the AI's pick.");
 }
 
+// A divide reply that does not sum to the total is replaced by the engine's allocation (the shield, Fury and
+// divided-damage prompts). Say so on stderr: silently, a mistyped human / claude-play allocation became a different
+// play with nothing to show it (Stuffy Doll claude-play sweep 2026-11-20, seed 930005).
+static void WarnDivideFallback(const std::string& card, int sum, int total)
+{
+    std::cerr << "[claude-play] WARNING: the " << card << " divide reply sums to " << sum << ", not " << total
+              << "; the engine's allocation was used instead\n";
+}
+
 // ETB-dig decision (Acclaimed Contender): the player picks WHICH examined card enters hand (or
 // declines). Emits the examined cards as image options with a `legal` flag (only legal candidates
 // are takeable); the reply is the examined index to take, or -1 to take nothing.
@@ -4670,7 +4679,11 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     d.Array("examined", examined.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
-           << ", \"name\": "; JsonStr(os, examined[i].m_name.str()); os << " }";
+           << ", \"name\": "; JsonStr(os, examined[i].m_name.str());
+        // The trigger-order prompt's per-entry label (host + amount; dmgrx::t_viewer_dig_labels), absent elsewhere.
+        if (dmgrx::t_viewer_dig_labels != nullptr && i < dmgrx::t_viewer_dig_labels->size())
+        { os << ", \"label\": "; JsonStr(os, (*dmgrx::t_viewer_dig_labels)[i]); }
+        os << " }";
     });
     // The shared dig chooser serves two destinations: ETB digs put the pick INTO HAND
     // (Acclaimed Contender), the Skyhunter attack-dig and the Turntimber "(put)" look put it
@@ -7728,14 +7741,26 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     if (!log_dir.empty())
                     {
                         std::ostringstream ss;
+                        // A reply that does not sum is replaced by the engine's allocation (`defaults`): the trace records
+                        // what was APPLIED, with the bad reply kept under "rejected" (sweep 930005, 2026-11-20).
+                        const bool applied_reply = (sum == total);
+                        const std::vector<int>& applied = applied_reply ? amts : defaults;
                         ss << "{ \"chosen\": [";
-                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
-                        ss << "], \"decision\": ";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << applied[i]; }
+                        ss << "]";
+                        if (!applied_reply)
+                        {
+                            ss << ", \"rejected\": [";
+                            for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                            ss << "]";
+                        }
+                        ss << ", \"decision\": ";
                         WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
                                                 /*allow_none=*/false, note);
                         ss << "}";
                         trace.push_back(ss.str());
                     }
+                    if (sum != total) { WarnDivideFallback(def.card.m_name.str(), sum, total); }
                     return sum == total ? built : heuristic;
                 }
                 std::cout << "<<<CLAUDE_DECISION>>>\n";
@@ -7786,14 +7811,26 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     if (!log_dir.empty())
                     {
                         std::ostringstream ss;
+                        // A reply that does not sum is replaced by the engine's allocation (`defaults`): the trace records
+                        // what was APPLIED, with the bad reply kept under "rejected" (sweep 930005, 2026-11-20).
+                        const bool applied_reply = (ok);
+                        const std::vector<int>& applied = applied_reply ? amts : defaults;
                         ss << "{ \"chosen\": [";
-                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
-                        ss << "], \"decision\": ";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << applied[i]; }
+                        ss << "]";
+                        if (!applied_reply)
+                        {
+                            ss << ", \"rejected\": [";
+                            for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                            ss << "]";
+                        }
+                        ss << ", \"decision\": ";
                         WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
                                                 /*allow_none=*/true);
                         ss << "}";
                         trace.push_back(ss.str());
                     }
+                    if (!ok) { WarnDivideFallback(def.card.m_name.str(), sum, total); }
                     return ok ? built : heuristic;
                 }
                 std::cout << "<<<CLAUDE_DECISION>>>\n";
@@ -7905,7 +7942,10 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const std::string choose_player_desc = (dmgrx::t_viewer_legal != nullptr && def.params.etb_choose_player)
                 ? std::string("this creature deals the damage it is dealt to") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (dmgrx::t_viewer_legal != nullptr && dmgrx::t_viewer_reflection)
+            // The Doll's as-enters choice reads the same engine list (its two players). It used to fall through to
+            // the generic target list, offering creatures that EtbChoosePlayer then silently turned into 'the
+            // opponent' (Stuffy Doll claude-play sweep 2026-11-20, seed 930004).
+            if (dmgrx::t_viewer_legal != nullptr && (dmgrx::t_viewer_reflection || !choose_player_desc.empty()))
             {
                 // (Keyed on the resolver's flag, not on def.params.reflect_dealt_damage: a Spiteful Sliver's
                 // GRANTED reflection resolves with the damaged Sliver's def, which carries no own reflection.)
@@ -8135,13 +8175,25 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     if (!log_dir.empty())
                     {
                         std::ostringstream ss;
+                        // A reply that does not sum is replaced by the engine's allocation (`defaults`): the trace records
+                        // what was APPLIED, with the bad reply kept under "rejected" (sweep 930005, 2026-11-20).
+                        const bool applied_reply = (ok);
+                        const std::vector<int>& applied = applied_reply ? amts : defaults;
                         ss << "{ \"chosen\": [";
-                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
-                        ss << "], \"decision\": ";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << applied[i]; }
+                        ss << "]";
+                        if (!applied_reply)
+                        {
+                            ss << ", \"rejected\": [";
+                            for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                            ss << "]";
+                        }
+                        ss << ", \"decision\": ";
                         WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di);
                         ss << "}";
                         trace.push_back(ss.str());
                     }
+                    if (!ok) { WarnDivideFallback(def.card.m_name.str(), sum, total); }
                     return ok ? built : heur_alloc;
                 }
                 std::cout << "<<<CLAUDE_DECISION>>>\n";

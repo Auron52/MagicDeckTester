@@ -869,6 +869,11 @@ inline thread_local const std::vector<int>* t_viewer_legal = nullptr;
 // as-enters choice. main.cpp cannot tell them apart by the def: a Spiteful Sliver's GRANTED reflection
 // resolves with the damaged Sliver's def, whose own reflect_dealt_damage is None.
 inline thread_local bool t_viewer_reflection = false;
+// Per-entry labels for the trigger-ORDER prompt (OrderSimultaneousTriggers), read by main.cpp's dig emitter while set.
+// Two Guilty Conscience triggers share a card name; only the host and the amount tell them apart (claude-play sweep
+// 2026-11-20, seed 930011: one GC on Boros Reckoner for 3, one on Spiteful Sliver for 2, both listed as 'Guilty
+// Conscience').
+inline thread_local const std::vector<std::string>* t_viewer_dig_labels = nullptr;
 
 // Probe ownership follows the plan VECTOR (IncineratorTargetProbeScope): a nested continuation with its
 // own pins searches its own targets and cannot add speculative choices to its parent's fan.
@@ -2130,6 +2135,7 @@ inline void OrderSimultaneousTriggers(GameState& s, std::vector<PendingTrig>& ra
             {
                 std::vector<Card> examined;
                 std::vector<int> idx;
+                std::vector<std::string> labels;
                 int dflt = 0;
                 for (std::size_t k = 0; k < cls_of.size(); ++k)
                 {
@@ -2137,10 +2143,23 @@ inline void OrderSimultaneousTriggers(GameState& s, std::vector<PendingTrig>& ra
                     examined.push_back(t.src.card);
                     idx.push_back(static_cast<int>(k));
                     if (cls_of[k] == pick_c) { dflt = static_cast<int>(k); }
+                    std::string lab = t.src.card.m_name.str();
+                    if (t.aura_host != 0)
+                    {
+                        std::string host = "#" + std::to_string(t.aura_host);
+                        for (const Permanent& q : s.battlefield)
+                        { if (q.card.m_number == t.aura_host) { host = q.card.m_name.str(); break; } }
+                        lab += " on " + host + ": deals " + std::to_string(t.amount) + " to it";
+                    }
+                    else { lab += ": reflects " + std::to_string(t.amount); }
+                    labels.push_back(std::move(lab));
                 }
                 const PendingTrig& first = raised[classes[cls_of.front()][took[cls_of.front()]]];
+                const std::vector<std::string>* saved_labels = t_viewer_dig_labels;
+                t_viewer_dig_labels = &labels;
                 const int got = (*g_play_dig_chooser)(s, first.src.controller,
                                                       std::string("Damage triggers") + kOrderPromptTag, examined, idx, dflt);
+                t_viewer_dig_labels = saved_labels;
                 if (got >= 0 && got < static_cast<int>(cls_of.size())) { pick_c = cls_of[static_cast<std::size_t>(got)]; }
                 else { ask = false; }   // -1: the AI's order for the rest
             }
