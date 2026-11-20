@@ -318,6 +318,7 @@ add_executable(mtg-test
     test/unit/test_board_identity.cpp
     test/unit/test_sac_land_class_pin.cpp
     test/unit/test_bloodsun_fastbond.cpp
+    test/unit/test_bloodsun_step5.cpp
     test/unit/test_bloodsun_lotus.cpp
     test/unit/test_bloodsun_suppression.cpp
     test/unit/test_counter_list.cpp

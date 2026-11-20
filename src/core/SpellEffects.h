@@ -3135,6 +3135,37 @@ inline void ResolveLandPlayDamage(GameState& state, int player)
     }
 }
 
+// GRIM TUTOR (Blood Sun step 5): "You lose N life" as the last part of a spell's resolution
+// (CardParams::lose_life_on_resolve), after its search. LIFE LOSS, not damage (CR 120.3 / 119.3): prevention (Purity)
+// and damage watchers do not see it, and nothing is "dealt". With own death live (armed from this very param,
+// GoldFishRunner::StampDeckTraits) a total at or below 0 ends the game through SelfHasLost / OpponentHasLost's
+// own-death clause; an armed deck parks the loss through the SBA checkpoint exactly as its other life changes do.
+// Called by BOTH worlds' tutor resolution (TurnSolver apply_one, EffectHandler), right after PerformTutor.
+inline void ApplyLoseLifeOnResolve(GameState& state, int controller, const CardDefinition& def)
+{
+    const int n = def.params.lose_life_on_resolve;
+    if (n <= 0) { return; }
+    Player& pl = state.players[static_cast<std::size_t>(controller)];
+    if (state.own_death_live && pl.life <= 0) { return; }   // the game is already over
+    pl.life -= n;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "lifeloss",
+                      "\xF0\x9F\xA9\xB8 " + def.card.m_name.str() + ": you lose " + std::to_string(n) + " life");
+    }
+    if (state.dmg_events_armed && controller == state.active_player_index) { dmgev::SbaCheckpoint(state); }
+}
+
+// Would casting `def` now kill its caster at resolution? Own death live, and the spell's own "you lose N life" takes
+// the total to 0 or below. Nothing in the spell can win before the loss lands (the search puts a card in HAND), so
+// the cast is dominated by not casting it: a loss is the worst outcome (USER D1). CollectActions drops it in every
+// autonomous world (a sound dominance prune, the LandPlayWouldKill twin); a human is still offered it.
+inline bool CastLoseLifeWouldKill(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (!state.own_death_live || def.params.lose_life_on_resolve <= 0) { return false; }
+    return state.players[static_cast<std::size_t>(controller)].life - def.params.lose_life_on_resolve <= 0;
+}
+
 // A static extra-drop source (Exploration, Fastbond) LEFT the battlefield: "Fastbond's permission ends when it
 // leaves" -- the drops it granted are gone for the rest of the turn (nothing retroactive: lands already played
 // stay played). Its count is in bonus_land_drops_this_turn only on its controller's own turn (seeded at the untap
@@ -6387,6 +6418,65 @@ inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
     }
     // The exiled permanents' leaves-the-battlefield triggers, after the whole spell (see the block note).
     PermanentsLeftBattlefieldTogether(state, departed);
+}
+
+// WORLDFIRE (Blood Sun step 5, design §9.3): "Exile all permanents. Exile all cards from all hands and graveyards.
+// Each player's life total becomes 1." In that ORDER, with no trigger resolving in between (ruling 1):
+//   1. every permanent of BOTH sides -- the opponent's lands and spawns, every token -- leaves to exile (a token
+//      ceases to exist). Exiled, never put into a graveyard: Emrakul's "put into a graveyard from anywhere" shuffle
+//      does NOT trigger.
+//   2. every card in every hand and graveyard (both players, and a 2HG second head's hand) goes to exile.
+//   3. each life total becomes N (set_all_life_totals): for a player above N that is LIFE LOSS (ruling 2) -- the
+//      opponent's counts toward its total like any loss; nothing is "dealt".
+// Then, after the resolution, the leaves-the-battlefield consequences (ruling 1: they wait until Worldfire is done):
+// FireLeavesBattlefieldTriggers per nontoken card that left -- which recomputes the land drops of a leaving
+// Exploration / Fastbond (OnStaticLandDropSourceLeft, step 4). Pending extra turns, the floating mana pool and the
+// spell itself are not objects on the battlefield / in a hand: untouched (the caller moves Worldfire to the
+// graveyard as the final part of its resolution, ruling 3). Lockstep: both worlds call this one body.
+inline void ResolveWorldfire(GameState& state, int controller, const CardDefinition& def)
+{
+    const CardParams& pp = def.params;
+    std::vector<std::pair<int, Card>> left;   // (controller, card) of every nontoken permanent exiled
+    if (pp.exile_all_permanents)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.is_token) { continue; }   // a token in exile ceases to exist (CR 111.7)
+            state.exile.push_back(p.card);
+            left.emplace_back(p.controller_index, p.card);
+        }
+        state.battlefield.clear();
+    }
+    if (pp.exile_all_hands_and_graveyards)
+    {
+        for (Player& pl : state.players)
+        {
+            for (Card& c : pl.hand)      { state.exile.push_back(std::move(c)); }
+            for (Card& c : pl.graveyard) { state.exile.push_back(std::move(c)); }
+            pl.hand.clear();
+            pl.graveyard.clear();
+        }
+        for (Card& c : state.opponent2_hand) { state.exile.push_back(std::move(c)); }
+        state.opponent2_hand.clear();
+    }
+    if (pp.set_all_life_totals >= 0)
+    {
+        for (std::size_t i = 0; i < state.players.size(); ++i)
+        {
+            Player& pl = state.players[i];
+            if (pl.life > pp.set_all_life_totals && static_cast<int>(i) != controller)
+            { state.opponent_lost_life_this_turn = true; }
+            pl.life = pp.set_all_life_totals;
+        }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      def.card.m_name.str() + ": every permanent, hand and graveyard is exiled; each life total "
+                      "becomes " + std::to_string(pp.set_all_life_totals));
+    }
+    for (const std::pair<int, Card>& lc : left) { FireLeavesBattlefieldTriggers(state, lc.first, lc.second); }
+    (void)controller;
 }
 
 // ==================== Auras (attach-to-creature enchantments) =========================
@@ -52178,6 +52268,10 @@ inline void ApplyTopDisposition(GameState& state, std::vector<Card>& looked,
     }
 }
 
+// Dimir Machinations (LookTopExileReorder): the look being disposed of is the OPPONENT's library. Set for the
+// duration of that one resolution, read by DefaultTopDisposition (whose card judgement is ours) -- false elsewhere.
+inline thread_local bool g_look_target_opponent = false;
+
 // The provider-heuristic disposition -- reproduces the ORIGINAL ScryTop/SurveilTop/
 // ReorderTopOrShuffle behaviour so the autonomous search and normal play stay byte-identical.
 // keep_decision applies to Reorder only (-1 legacy heuristic, 0 forced shuffle, 1 forced keep).
@@ -52205,7 +52299,20 @@ inline TopDisposition DefaultTopDisposition(const GameState& state, const std::v
         disp.top_order.insert(disp.top_order.end(), rest.begin(), rest.end());
         return disp;
     }
-    // Scry / Surveil: keep the wanted cards on top in LOOK order; the rest are bottomed / binned.
+    // Dimir Machinations on the OPPONENT's library (g_look_target_opponent): its lands are what it plays -- each
+    // one a Burgeoning put for us -- and every card exiled is one nearer its deck-out, so the default keeps its
+    // lands on top (look order) and exiles the rest. Our own ScryKeepOnTop says nothing about its cards.
+    if (kind == LookKind::ExileThenReorder && g_look_target_opponent)
+    {
+        for (int i = 0; i < m; ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[static_cast<std::size_t>(i)]);
+            if (d != nullptr && d->card.IsLand()) { disp.top_order.push_back(i); }
+        }
+        return disp;
+    }
+    // Scry / Surveil / ExileThenReorder (our library): keep the wanted cards on top in LOOK order; the rest are
+    // bottomed / binned / exiled.
     for (int i = 0; i < m; ++i)
     { if (ResolveProvider(state).ScryKeepOnTop(state, looked[i])) { disp.top_order.push_back(i); } }
     return disp;
@@ -52559,7 +52666,8 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     std::vector<TopOption> opts;
     auto name = [&](int i) { return looked[i].m_name.str(); };
     const char* away = (kind == LookKind::Surveil) ? "graveyard"
-                     : (kind == LookKind::Scry)     ? "bottom" : "below";
+                     : (kind == LookKind::Scry)     ? "bottom"
+                     : (kind == LookKind::ExileThenReorder) ? "exile" : "below";
     if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
     {
         std::vector<int> perm(m);
@@ -52579,7 +52687,8 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
         }
         return opts;
     }
-    // Scry / Surveil: ordered subsets kept on top.
+    // Scry / Surveil / ExileThenReorder (Dimir Machinations): ordered subsets kept on top, the rest away --
+    // sum_k C(m,k) k! of them (16 for three cards).
     for (int mask = 0; mask < (1 << m); ++mask)
     {
         std::vector<int> sub;
@@ -52837,6 +52946,28 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
             if (violates) { continue; }
         }
         out.push_back(o.disp);
+    }
+    // FOLD M1 (Dimir Machinations, design §9.2), SOUND: copies are interchangeable, so two dispositions that put
+    // the same NAME sequence on top (and so exile the same multiset of names) are one outcome -- the
+    // real-information identity of same-name copies. The first (the heuristic's, at index 0) is kept.
+    if (kind == LookKind::ExileThenReorder && out.size() > 1)
+    {
+        std::vector<std::string> seen;
+        std::vector<TopDisposition> folded;
+        folded.reserve(out.size());
+        for (TopDisposition& d : out)
+        {
+            std::string key;
+            for (int idx : d.top_order)
+            {
+                if (idx >= 0 && idx < static_cast<int>(looked.size()))
+                { key += looked[static_cast<std::size_t>(idx)].m_name.str(); key += '\x1f'; }
+            }
+            if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+            seen.push_back(std::move(key));
+            folded.push_back(std::move(d));
+        }
+        out.swap(folded);
     }
     return out;
 }
@@ -53141,6 +53272,75 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     }
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::Reorder);
+}
+
+// DIMIR MACHINATIONS (CardParams::look_top_target_player_exile_reorder; Blood Sun step 5, design §9.2): "Look at the
+// top N cards of target player's library. Exile any number of those cards, then put the rest back in any order."
+// `target_player` is the TARGET (Action::player_target / StackEntry::player_target: our index, or the opponent's).
+// R2: a library with fewer than N cards is looked at whole. The opponent's library exists only when it was dealt
+// (DeckTouchesOpponentZones reads this param); an exile that empties it decks it at the end of this turn, exactly as
+// TakeFromTop does. THE DISPOSITION IS SEARCHED, at full width: the Ponder ORDER pin (g_scripted_reorder_choice,
+// Plan::ponder_choice -- the PonderOrderAxis fan sizes every disposition of LookKind::ExileThenReorder) indexes
+// TopDispositionCandidates (the provider default first, then every other ordered subset kept on top, fold M1 for
+// same-name copies). Unpinned: the human chooser (the `exile_reorder` decision), else the provider default --
+// beyond the horizon only. It does NOT read the scry pin (g_scripted_top_choice): that belongs to the plan's scry.
+// Lockstep: TurnSolver apply_one and EffectHandler both call this one body.
+inline void LookTopExileReorder(GameState& state, int target_player, int n, const std::string& source)
+{
+    if (n <= 0 || target_player < 0 || target_player > 1) { return; }
+    const bool opp = target_player != state.active_player_index;
+    if (opp && !state.opponent_library_dealt) { return; }
+    Library& lib = state.players[static_cast<std::size_t>(target_player)].library;
+    const int look = std::min(n, static_cast<int>(lib.size()));
+    if (look <= 0) { return; }
+    std::vector<Card> looked(lib.begin(), lib.begin() + look);
+    struct OppScope
+    {
+        bool saved;
+        explicit OppScope(bool o) : saved(g_look_target_opponent) { g_look_target_opponent = o; }
+        ~OppScope() { g_look_target_opponent = saved; }
+    } opp_scope(opp);
+    TopDisposition disp;
+    if (g_scripted_reorder_choice >= 0)
+    {
+        const int k = g_scripted_reorder_choice;
+        g_scripted_reorder_choice = -1;              // consumed by this look
+        const std::vector<TopDisposition> cands = TopDispositionCandidates(state, looked, LookKind::ExileThenReorder);
+        disp = cands[static_cast<std::size_t>(k) < cands.size() ? static_cast<std::size_t>(k) : cands.size() - 1];
+    }
+    else if (g_play_top_chooser)
+    {
+        disp = (*g_play_top_chooser)(state, source + (opp ? " (opponent's library)" : ""), looked,
+                                     LookKind::ExileThenReorder);
+    }
+    else
+    {
+        disp = HeuristicTopDisposition(state, looked, LookKind::ExileThenReorder);
+    }
+    std::vector<char> on_top(static_cast<std::size_t>(look), 0);
+    std::vector<int>  top_seq;
+    for (int idx : disp.top_order)
+    {
+        if (idx >= 0 && idx < look && !on_top[static_cast<std::size_t>(idx)])
+        { on_top[static_cast<std::size_t>(idx)] = 1; top_seq.push_back(idx); }
+    }
+    if (RevealVisible())
+    {
+        std::vector<int> seen_nums, kept_nums, away_nums; std::vector<std::string> seen_names;
+        for (const Card& c : looked) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        for (int idx : top_seq) { kept_nums.push_back(looked[static_cast<std::size_t>(idx)].m_number); }
+        for (int i = 0; i < look; ++i) { if (!on_top[static_cast<std::size_t>(i)]) { away_nums.push_back(looked[static_cast<std::size_t>(i)].m_number); } }
+        EmitReveal(state.turn_number, source + (opp ? " (opponent's library; rest exiled)" : " (rest exiled)"),
+                   seen_nums, seen_names, kept_nums, away_nums);
+    }
+    for (int e = 0; e < look; ++e) { lib.erase(lib.begin()); }
+    for (std::vector<int>::reverse_iterator it = top_seq.rbegin(); it != top_seq.rend(); ++it)
+    { lib.insert(lib.begin(), std::move(looked[static_cast<std::size_t>(*it)])); }
+    for (int i = 0; i < look; ++i)
+    {
+        if (!on_top[static_cast<std::size_t>(i)]) { state.exile.push_back(std::move(looked[static_cast<std::size_t>(i)])); }
+    }
+    if (opp && lib.empty()) { state.opponent_decked = true; }
 }
 
 // Mirri's Guile: "At the beginning of your upkeep, you may look at the top three cards of your

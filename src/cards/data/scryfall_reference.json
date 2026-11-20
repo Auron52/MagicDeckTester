@@ -1944,6 +1944,17 @@
     "toughness": "3",
     "type_line": "Creature — Skeleton"
   },
+  "Dimir Machinations": {
+    "cmc": 3.0,
+    "keywords": [
+      "Transmute"
+    ],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Look at the top three cards of target player's library. Exile any number of those cards, then put the rest back in any order.\nTransmute {1}{B}{B} ({1}{B}{B}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Dina, Soul Steeper": {
     "cmc": 2.0,
     "keywords": [],
@@ -3407,6 +3418,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Wizard"
+  },
+  "Grim Tutor": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{B}",
+    "oracle_text": "Search your library for a card, put that card into your hand, then shuffle. You lose 3 life.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Grove of the Burnwillows": {
     "cmc": 0.0,

@@ -671,6 +671,9 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             if (def->params.grants_tap_mill_toughness) { return true; }
             if (def->params.attack_defending_player_reveal_land_to_hand) { return true; }
             if (def->params.attack_exile_defender_top > 0) { return true; }
+            // Dimir Machinations may target the opponent: its look reads and exiles the opponent library's top
+            // cards card by card (Blood Sun step 5).
+            if (def->params.look_top_target_player_exile_reorder > 0) { return true; }
             if (def->params.spell_mill_opponent > 0
                 || def->params.spell_exile_opponent_until_mv > 0
                 || def->params.landfall_mill_opponent > 0

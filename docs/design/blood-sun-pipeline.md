@@ -1526,3 +1526,74 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
   235/235 PASS, **0 moved digests** vs `impl3/smoke-step3-batch.log` (Maze's End's Exploration rows included); own death
   stays unarmed elsewhere (no other decklist holds Fastbond; the three params appear only on Fastbond's entry). Saved as
   `build/scratch/bloodsun/impl4/smoke-step4-batch.log`.
+
+### Implementation notes (step 5)
+**Commit:** `git log --grep "Blood Sun step 5:"`.
+- **Params** (`CardParams`): `look_top_target_player_exile_reorder` (Machinations), `exile_all_permanents`,
+  `exile_all_hands_and_graveyards` (Worldfire); step 4's `lose_life_on_resolve` / `set_all_life_totals` now have their
+  cards and consumers. `lose_life_on_resolve` is on the Overlord audited whitelist.
+- **Grim Tutor.** `ApplyLoseLifeOnResolve` (SpellEffects.h) right after `PerformTutor` in both worlds: life LOSS
+  (no `MarkPlayerDealtDamage`, no prevention); armed decks park a loss through `dmgev::SbaCheckpoint`.
+  `CastLoseLifeWouldKill`: with own death live, a cast whose own life loss takes us to 0 is dropped from
+  `CollectActions` in every autonomous world -- a SOUND dominance prune (a loss is the worst outcome and the fetched
+  card only reaches hand; the LandPlayWouldKill twin); a human is still offered it.
+  **Deviation (encoding):** `TutorCastTimeAxis` is NOT a cast-time (CollectActions) fan of one cast Action per class.
+  That shape would need a plan-signature term (the autonomous signature keys a tutor cast on its NAME only, so the
+  dedup would fold the classes back to one) and would put ~19 actions per Grim Tutor into every rollout / d0 `Solve`
+  odometer. Instead the hook opts the tutor out of the resolve-mode INDEX axis (`Plan::tutor_choice`) and into a
+  post-dedup PER-CAST NAMED axis (EnumeratePlansWithLand, beside the index axis): every Grim Tutor cast of a base plan
+  carries its own `Action::tutor_target`, the cross product over the TutorCandidates names (width
+  `BloodSunProvider::TutorSearchWidth` = 64 = complete), the first combination written in place. Sound fold: the
+  picks of same-name copies are a MULTISET (both orders give the same hand, and the library after both searches is the
+  one keyed shuffle of the same remaining set at the same ordinal -- the U7 copy identity). This closes the
+  one-tutor-per-plan gap (A4/C6) for this deck and is what the design asked of the hook; the executor honours
+  `entry.tutor_target` unchanged. Beyond the horizon (Solve) the tutor resolves to the provider's front -- the
+  sanctioned greedy. Inert for every provider without the hook (byte-identical; smoke below).
+- **Dimir Machinations.** `LookKind::ExileThenReorder`; `LookTopExileReorder(state, target, n, source)` (SpellEffects.h,
+  both worlds): the TARGET's library (R2: fewer cards = all of them), kept cards back on top in the chosen order, the
+  rest to exile; an opponent library emptied by it decks the opponent (the TakeFromTop rule). The candidates are
+  `EnumerateTopDispositions`' ordered subsets (16 for three) with **fold M1** in `TopDispositionCandidates` (same NAME
+  sequence on top = one outcome). **The disposition pin is the Ponder ORDER pin** (`g_scripted_reorder_choice` /
+  `Plan::ponder_choice`): the PonderOrderAxis fan sizes Machinations at full width (sum_k C(m,k) k! - 1 variants, sized
+  off the TARGET's library) and never applies a provider's Ponder narrowing, so every existing route that carries
+  `ponder_choice` (executor install, lazy put-back layout, plan keys, continuation pins) carries it. It does not read
+  the scry pin. One look varied per plan (a second Machinations takes the default), the Ponder precedent -- disclosed.
+  Provider default: our library -> ScryKeepOnTop in look order, exile the rest; the opponent's -> its lands on top,
+  exile the rest (`g_look_target_opponent`). **Target player:** a CollectActions post-pass appends the opponent copy
+  (`Action::player_target = 1`, eval <= 0, LAST -- an order, U3 default) when the opponent library is dealt;
+  `AIEngine` cast targeting carries it to `StackEntry::player_target` and asks a human through the target chooser
+  (players only, the extra-turn shape). `DeckTouchesOpponentZones` reads the param. The library-reader predicates of
+  the put-back axis (`PutBackPredictionUnsafe`, `PbCastLibraryBlind`, the cycle-seed purity test) and
+  `BpCanonFrontPays` include it. Transmute: the existing `transmute_cost` precedent (no change).
+- **Worldfire.** `ResolveWorldfire` (SpellEffects.h, both worlds) in ruling 1's order: every permanent of both sides to
+  exile (tokens cease to exist), then every hand and graveyard (2HG second head's hand too), then each total becomes
+  `set_all_life_totals` (the opponent's drop sets `opponent_lost_life_this_turn`). After it,
+  `FireLeavesBattlefieldTriggers` per nontoken card that left -- which runs `OnStaticLandDropSourceLeft`, so a leaving
+  Exploration / Fastbond takes its drops back (the step-4 note). Emrakul is exiled, never put into a graveyard: no
+  shuffle. Pending extra turns and floating mana are untouched; the caller moves Worldfire to the graveyard last
+  (ruling 3). U2 default: cast-enumerated normally, ORDERED LAST through the no-gain eval (`kNoGainCastEval`), no
+  restriction.
+- **Viewer:** `WriteTopDecisionJson` emits `type` "exile_reorder", `away_zone` "exile"; `lookPanelHtml` / `commitLook`
+  and `SUBDECISIONS` gain the `exile_reorder` branch; DECISIONS.md rows for the look, the players-only target and Grim
+  Tutor's `tutor`; `audit_viewer_decisions.py` maps `look_top_target_player_exile_reorder` -> `exile_reorder` and
+  classifies `lose_life_on_resolve` and Worldfire's three params as INERT_PARAMS (USER sign-off to collect).
+- **Card data:** cards.json entries for Grim Tutor, Dimir Machinations, Worldfire; Scryfall snapshot appended (no other
+  entry touched). `audit_card_costs.py` rc 0 (3/3 match); `audit_card_fields.py` rc 0 (oracle bracket-note advisories
+  only); `audit_viewer_decisions.py "decks/Blood Sun/Blood Sun.cod" --no-sweep` rc 0 (expected types now include
+  `exile_reorder`).
+- **Test change:** step 4's "own death: City of Brass alone does not arm it" test now strips all three armers (Fastbond,
+  Grim Tutor, Worldfire) -- with step 5's params either of the other two arms it, as designed.
+- **Not done / disclosed:** (1) one Machinations look varied per plan (the Ponder precedent); (2) the named tutor axis
+  is on base plans only (a variant of another axis -- scry, breakpoint -- resolves its Grim Tutor to the provider's front
+  at resolution, exactly as the index axis behaves); (3) the cross product over four Grim Tutors is multiplicative
+  (multisets of 19 names) -- unmeasured; the deck is not in the suite yet. Cost belongs to the Stage 4-bis measurement.
+- **Measurements (step 5 tree):** `mtg-test` 3821 cases, 3821 pass (7 new in `test_bloodsun_step5.cpp`: params + arming +
+  DeckTouchesOpponentZones; Grim Tutor at 3 life not offered / life loss not damage; executor fetch + 3 life; the named
+  axis -- 3 singles and all 6 two-copy multisets, never the index axis; Machinations self -- 16 candidates, 16 distinct
+  outcomes under the pin and all 16 reached by the plan menu + rollout apply, M1 = 9 for {A, A, B}; Machinations at the
+  opponent moves its next land play (Bolt -> Forest drawn and played) and the 9 folded dispositions are all reached;
+  Worldfire in both worlds -- Emrakul exiled, library unshuffled, both totals 1, extra turn kept, Exploration's drop
+  gone). `test/scenarios.sh` 624/624 (6 new `bloodsun_grimtutor_*` / `bloodsun_machinations_*`, each at budget 0 and d3
+  b100: life 3 -> never cast, life stays 3; life 4 -> fetch the bottom Bolt and kill this turn at 1 life; Machinations
+  exiles two Swamps to draw the Bolt for a turn-4 kill). Smoke: 235/235 PASS, **0 moved digests** vs
+  `impl4/smoke-step4-batch.log`; saved as `build/scratch/bloodsun/impl5/smoke-step5-batch.log`.

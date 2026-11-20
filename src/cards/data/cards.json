@@ -18896,6 +18896,41 @@
    }
   },
   {
+   "name": "Grim Tutor",
+   "mana_cost": "{1}{B}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a card, put that card into your hand, then shuffle. You lose 3 life. [Tutor for ANY card (tutor_to_hand, no type filter), then shuffle; the 3 life is LIFE LOSS applied right after the search in both worlds (lose_life_on_resolve; not damage, so prevention does not apply). Ruling 1 (the card is not revealed): inert. Target: SEARCHED over every distinct library name -- in the Blood Sun list the provider opts it into the per-cast named axis (DecisionProvider::TutorCastTimeAxis, TutorSearchWidth complete), so every Grim Tutor of a plan carries its own pick; elsewhere the generic tutor axis. Own death is LIVE in a deck holding this card (armed from this param, USER D1): at 3 life or less the cast kills us at resolution, so it is never cast autonomously (a sound dominance: a loss is the worst outcome, and the fetched card only reaches hand); a human is still offered it. Human play: every legal library card at the tutor prompt (re-asked at resolution).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true,
+    "lose_life_on_resolve": 3
+   }
+  },
+  {
+   "name": "Dimir Machinations",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Transmute"
+   ],
+   "oracle_text": "Look at the top three cards of target player's library. Exile any number of those cards, then put the rest back in any order.\nTransmute {1}{B}{B} ({1}{B}{B}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.) [look_top_target_player_exile_reorder 3: LookTopExileReorder on the TARGET player's library (fewer than three cards: all of them), LookKind::ExileThenReorder -- every ordered subset kept on top, the rest exiled (16 dispositions for three cards; same-name copies fold). Both targets are offered and neither is inert: our own look sets up our draws; the opponent's decides which cards the goldfish opponent draws (its land plays -- Burgeoning puts for us) and exiles toward its deck-out. The opponent target is ordered LAST (an order, not a restriction; U3 default). The DISPOSITION is SEARCHED at full width through the Ponder order pin (PonderOrderAxis fans every disposition; one look varied per plan, a second resolves by the provider's default: keep wanted cards on top in look order and exile the rest; on the opponent's library keep its lands on top and exile the rest). Human play: the target player at cast time (board click, players only), then the `exile_reorder` look decision. TRANSMUTE {1}{B}{B}: the Dimir House Guard shape (a from-hand Channel activation, ApplyTransmute -> PerformTutor, exact mana value 3: Blood Sun, Grim Tutor, Dimir Machinations in this list); the found card is a searched axis, one variant per distinct legal name.]",
+   "template": "custom",
+   "parameters": {
+    "look_top_target_player_exile_reorder": 3,
+    "targeting": "player",
+    "transmute_cost": "{1}{B}{B}"
+   }
+  },
+  {
    "name": "Keldon Champion",
    "mana_cost": "{2}{R}{R}",
    "types": [

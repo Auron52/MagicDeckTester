@@ -11007,6 +11007,22 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
                 t.player_index = riders.player_target != 0 ? opp_index : state.active_player_index;
                 entry.player_target = riders.player_target;
             }
+            else if (def->params.look_top_target_player_exile_reorder > 0)
+            {
+                // Dimir Machinations (Blood Sun step 5): the searched target player (Action::player_target), or the
+                // human's board click over the two players (the extra-turn shape; the default is the plan's).
+                t.player_index = riders.player_target != 0 ? opp_index : state.active_player_index;
+                if (g_play_target_chooser != nullptr)
+                {
+                    const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+                        state, *def, state.active_player_index, 1, 0,
+                        { ChosenTarget{ 0, t.player_index, 0 } });
+                    if (!picked.empty() && picked[0].kind == 0
+                        && (picked[0].index == state.active_player_index || picked[0].index == opp_index))
+                    { t.player_index = picked[0].index; }
+                }
+                entry.player_target = t.player_index == opp_index ? 1 : 0;
+            }
             else if (def->params.draw_target_player)
             { t.player_index = riders.draw_target != 0 ? opp_index : state.active_player_index; }
             entry.targets.push_back(t);

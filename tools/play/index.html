@@ -2494,7 +2494,7 @@ function legendKeepLabel(o){
   if (Array.isArray(o.attached) && o.attached.length) bits.push('with '+o.attached.join(', '));
   return bits.join(' · ');
 }
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','champion','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','creature_type','attack_mode','lifegain_counters','madness','x_value','gy_return_one','eot_put'];
+const SUBDECISIONS = ['scry','reorder','surveil','exile_reorder','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','champion','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','creature_type','attack_mode','lifegain_counters','madness','x_value','gy_return_one','eot_put'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -4752,7 +4752,7 @@ function wireDivideBoard(d){
 
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
-  const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
+  const isLook = dec==='scry'||dec==='surveil'||dec==='reorder'||dec==='exile_reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='dredge' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_creature_type' || dec==='choose_abilities' || dec==='creature_type'
@@ -4898,11 +4898,12 @@ function cardMini(name, extraCls, ver){ return `<span class="cardmini ${extraCls
 // kept on top (left, numbered in their final order) then a divider and the cards binned to the
 // bottom/graveyard (right, dimmed). The AI's pick is tagged. Reveal-then-decide; no blind shuffle gate.
 function lookPanelHtml(d, dec){
-  const awayWord = d.away_zone==='graveyard'?'graveyard':d.away_zone==='bottom'?'bottom':'shuffle';
-  const verb = dec==='scry'?'Scry':dec==='surveil'?'Surveil':'Reorder';
+  const awayWord = d.away_zone==='graveyard'?'graveyard':d.away_zone==='bottom'?'bottom':d.away_zone==='exile'?'exile':'shuffle';
+  const verb = dec==='scry'?'Scry':dec==='surveil'?'Surveil':dec==='exile_reorder'?'Look (exile any)':'Reorder';
   let h=`<h3>${verb} — ${esc(d.source||'')}</h3>`;
   h+=`<div class="sub">${dec==='scry'?'Pick how the top cards end up: kept cards (left) stay on top in that order; the rest (right) go to the bottom.'
      :dec==='surveil'?'Kept cards (left) stay on top; the rest (right) go to the graveyard.'
+     :dec==='exile_reorder'?'Kept cards (left) go back on top in that order; the rest (right) are exiled.'
      :'Choose the order to put them back on top (left→right), or shuffle them away.'}</div>`;
   h+=`<div class="optgrid">`;
   (d.options||[]).forEach(o=>{
@@ -6094,7 +6095,7 @@ function wireDecisionPanel(d, dec){
     const ag=panel.querySelector('#pullagain');
     if (ag) ag.onclick=()=>pushChoice(d, d.pull_ask_again, `${d.source}: no pull now (ask again)`);
   }
-  if (dec==='scry'||dec==='surveil'||dec==='reorder')
+  if (dec==='scry'||dec==='surveil'||dec==='reorder'||dec==='exile_reorder')
     panel.querySelectorAll('button[data-opt]').forEach(b=>b.onclick=()=>commitLook(d, +b.dataset.opt));
   else if (dec==='vial_charge')
     panel.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>commitVial(d, +b.dataset.v));
@@ -6259,8 +6260,8 @@ function pushChoices(d, arr, lab){
 }
 function commitLook(d, oi){
   const o=(d.options||[]).find(x=>x.index===oi)||{};
-  const verb=d.type==='scry'?'Scry':d.type==='surveil'?'Surveil':'Reorder';
-  const awayWord=d.away_zone==='graveyard'?'graveyard':d.away_zone==='bottom'?'bottom':'shuffle';
+  const verb=d.type==='scry'?'Scry':d.type==='surveil'?'Surveil':d.type==='exile_reorder'?'Look':'Reorder';
+  const awayWord=d.away_zone==='graveyard'?'graveyard':d.away_zone==='bottom'?'bottom':d.away_zone==='exile'?'exile':'shuffle';
   const lab=o.shuffle?`${verb}: shuffle`:`${verb}: ${(o.top||[]).join(' > ')}${(o.away&&o.away.length)?'  | '+awayWord+': '+o.away.join(', '):''}`;
   pushChoice(d, oi, lab);
 }

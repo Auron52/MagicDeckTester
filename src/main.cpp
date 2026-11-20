@@ -4101,8 +4101,10 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
                                  const std::vector<TopOption>& opts, int heuristic_default,
                                  int decision_index)
 {
-    const char* kindstr   = kind == LookKind::Scry ? "scry" : kind == LookKind::Surveil ? "surveil" : "reorder";
-    const char* away_zone = kind == LookKind::Surveil ? "graveyard" : kind == LookKind::Scry ? "bottom" : "none";
+    const char* kindstr   = kind == LookKind::Scry ? "scry" : kind == LookKind::Surveil ? "surveil"
+                          : kind == LookKind::ExileThenReorder ? "exile_reorder" : "reorder";
+    const char* away_zone = kind == LookKind::Surveil ? "graveyard" : kind == LookKind::Scry ? "bottom"
+                          : kind == LookKind::ExileThenReorder ? "exile" : "none";
     const int   m         = static_cast<int>(looked.size());
 
     DecisionJson dj(os, decision_index);
@@ -4143,6 +4145,7 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     os << "  \"note\": \"reply an option index. "
        << (kind == LookKind::Scry    ? "Kept cards stay on top (listed order); the rest go to the bottom."
          : kind == LookKind::Surveil ? "Kept cards stay on top; the rest go to the graveyard."
+         : kind == LookKind::ExileThenReorder ? "Kept cards go back on top in the listed order; the rest are exiled."
          : kind == LookKind::ReorderNoShuffle ? "Order all cards on top (no shuffle option)."
          :                             "Order all cards on top, or shuffle them away.")
        << "\"\n";
