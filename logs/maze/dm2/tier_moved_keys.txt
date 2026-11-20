@@ -1,0 +1,22 @@
+  FAIL  midrangeburn_smoke_d5_s1001 exp=4.3800/72571e24f249d2b4 got=4.3800/cee2ab31d08f6726
+  FAIL  creature_giving_smoke_d3_s1001 exp=4.6200/72bb06e1342bb88e got=4.6200/0463cae9da9cdcbe
+  FAIL  creature_giving_smoke_d5_s1001 exp=4.6400/79630a86a400bd6a got=4.6400/7b7cdfda9f9b71a3
+  FAIL  creature_giving2hg_smoke_d5_s1001 exp=4.8800/1972bbf4bd319ac9 got=4.8800/e85bc252de679164
+  FAIL  alchemist_smoke_d5_s1001   exp=4.9400/bf4dcbaa00ebf492 got=4.9333/7f1cf453aed084bd
+  FAIL  alchemist2hg_smoke_d5_s1001 exp=5.1400/8dfdf176a8b56b26 got=5.1200/aa1047a29d009bf9
+  FAIL  mazesend_regression_d3_s30121 exp=5.0000/d5017d8764559343 got=5.0000/e551d37342f9f086
+  FAIL  mazesend_regression_d5_s30121 exp=5.0000/d5017d8764559343 got=5.0000/e551d37342f9f086
+  FAIL  mazesend_regression_d5_s30081 exp=5.0000/b68b21fc754a1757 got=4.0000/03186c5673236c69
+  FAIL  creature_giving_regression_d3_s30001 exp=4.7500/e1d02f29aeb5f2bb got=4.7500/8caa146aae825501
+  FAIL  creature_giving_regression_d5_s30001 exp=4.7500/e1d02f29aeb5f2bb got=4.7500/8c8cbd8257e74088
+  FAIL  creature_giving_regression_d3_s2002 exp=4.5400/90619fae5b3bcdd8 got=4.5400/e4e91e60cb394689
+  FAIL  creature_giving_regression_d5_s2002 exp=4.6024/2b58e6c296f363ec got=4.6000/ab48d2fe11af1b3a
+  FAIL  creature_giving_regression_d5_s3003 exp=4.5929/8e10d2d772c2fe64 got=4.5929/51879f86afbdf4e3
+  FAIL  midrangeburn_regression_d5_s2002 exp=4.3867/33c2e517efc5fdba got=4.3867/a9618460faa56a67
+  FAIL  midrangeburn2hg_regression_d5_s2002 exp=5.6533/4d51e7ebfac4c900 got=5.6533/26029ee0b53c4af2
+  [searched] slower=0  faster=2  play-changed=23  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+  [d0      ] slower=0  faster=0  play-changed=0  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+Result: 229 passed, 6 failed, 0 new   (batch makespan 1376s = 22m56s)
+  [searched] slower=0  faster=2  play-changed=96  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+  [d0      ] slower=0  faster=0  play-changed=0  (slower/faster by loss-penalized score; a win becoming unwon is just the maximal slowdown)
+Result: 365 passed, 10 failed, 0 new   (batch makespan 1376s = 22m56s)

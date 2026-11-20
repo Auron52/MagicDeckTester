@@ -1,0 +1,12 @@
+  ok            Midrange_Burn/claude_s4_gi3.json: replay won=True win_turn=5 vs ref won=True win_turn=5
+  ok            Midrange_Burn/claude_s5_gi4.json: replay won=True win_turn=5 vs ref won=True win_turn=5
+  ok            Midrange_Burn/claude_s6_gi5.json: replay won=False win_turn=-1 vs ref won=False win_turn=-1
+  ok            Midrange_Burn/claude_s7_gi6.json: replay won=True win_turn=4 vs ref won=True win_turn=4
+  ok            Midrange_Burn/claude_s8_gi7.json: replay won=True win_turn=4 vs ref won=True win_turn=4
+  ok            Midrange_Burn/claude_s9_gi8.json: replay won=True win_turn=4 vs ref won=True win_turn=4
+
+Viewer protocol: 15 ok, 27 repaired, 0 beaten, 0 play-drift, 0 shuffle-dead, 0 board-diverged, 0 enum-gap, 0 mull-drift, 0 contract-fail  (42 refs)
+Interactive replay: 0 stateless fallbacks in 952 steps
+  repaired     = recorded line REPRODUCED after repairing stale indices / answering decision
+                 points the reference predates. Not a regression; no action (never ask the user to re-save)
+rc=0
