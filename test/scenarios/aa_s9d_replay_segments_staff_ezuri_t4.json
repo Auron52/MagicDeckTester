@@ -1,0 +1,82 @@
+{
+  "_comment": [
+    "SITE 9 AFTER A DEFERRED CONTINUATION: THE REPLAY DISPATCHES EACH SEGMENT'S ACTIVATIONS AT ITS END (alch-t3, 2026-11-20).",
+    "",
+    "Regression d5_s3003 gi87 (seed 3090), turn 4: Stroke of Genius X=1 draws Staff of Domination (deferred site-3",
+    "continuation casts it); two MTG_SITE9_AFTER_DEFERRED continuations follow -- [Staff untaps the Alchemist (loop),",
+    "Ezuri pump] then [Staff loop, Ezuri pump, Ezuri pump]. The rollout applies each continuation's activations at",
+    "its end and scores the turn lethal (Alchemist untapped, Alchemist + Ezuri attack). The committed line's records",
+    "hold all of them in ONE list; replay_recorded pooled every activation into a single trailing pass, whose provider",
+    "sort ran both Staff loops ahead of all three pumps -- the Alchemist ended tapped, Ezuri attacked alone, the",
+    "opponent was left at 4 and the game ran on to turn 5 (committed T4 kill, realised T5). Same class: smoke d3 gi12,",
+    "regression d5_s3003 gi40 (a Stroke cast recorded AFTER a segment's activations was replayed BEFORE them).",
+    "",
+    "Verified DISCRIMINATING: the pre-fix binary (57b56d62c) gets win_turn 5 with the identical committed line;",
+    "MTG_SITE9_AFTER_DEFERRED=0 never finds the T4 line (win_turn 5). Fix: Action::rec_s9d_seg (TurnSolver.h)."
+  ],
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 25,
+  "opponent_life": 18,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Utopia Sprawl",
+      "controller": 0,
+      "equips": "Forest",
+      "color": "G"
+    },
+    {
+      "name": "Arbor Elf",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Accomplished Alchemist",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Ezuri, Renegade Leader",
+      "controller": 0,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Stroke of Genius",
+    "Nourish",
+    "Forest"
+  ],
+  "library_top": [
+    "Staff of Domination",
+    "Arbor Elf",
+    "Feed the Clan",
+    "Forest",
+    "Utopia Sprawl",
+    "Living Wish",
+    "Accomplished Alchemist",
+    "Arbor Elf",
+    "Forest",
+    "Stroke of Genius",
+    "Feed the Clan",
+    "Weather the Storm"
+  ],
+  "library_filler": "Forest",
+  "library_size": 48,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}
