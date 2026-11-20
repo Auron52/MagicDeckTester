@@ -28693,8 +28693,53 @@ inline void ApplySuspend(GameState& state, int controller, const std::string& na
 // dominated by HOLDING it (the drop can take any other land; the held Lake can be played once a Swamp
 // lands, and is a free cleanup discard), so the AUTONOMOUS land choices skip it -- the Karoo
 // self-bounce precedent. Human play still offers it (a legal move): every caller exempts it.
+// THE LOTUS LANDS (Lotus Vale / Scorched Ruins: etb_replace_sacrifice_untapped_lands, a REPLACEMENT that eats N
+// UNTAPPED lands or sends the land to the graveyard; Lotus Field: etb_sacrifice_lands, an enter TRIGGER that eats N
+// lands, itself included). The count of lands the entry sacrifices; 0 = neither. No card carries both.
+inline int LandLotusSacrificeCount(const CardParams& p)
+{
+    return p.etb_replace_sacrifice_untapped_lands > 0 ? p.etb_replace_sacrifice_untapped_lands : p.etb_sacrifice_lands;
+}
+inline bool LakeDropWithoutVictim(const GameState& state, const CardDefinition& def);
+// FOLDS V1 and F-L2 (docs/design/blood-sun-pipeline.md 3.1 / 3.2): a Lotus drop that cannot do what makes it worth
+// playing is strictly dominated by HOLDING it, so the autonomous land choices never make it (the Lake / Karoo
+// self-bounce precedent; human play still offers it -- every caller of LakeDropWithoutVictim exempts it).
+//   V1 (the replacement, fewer than N UNTAPPED lands): the land goes to the graveyard and never enters. Holding
+//      leaves the same battlefield and library, keeps the card in HAND (a weak superset of the graveyard: a cleanup
+//      discard still puts it there, and an Emrakul shuffle would only return it to the library) and keeps the land
+//      drop. The ONLY thing the play itself buys is a "whenever a player plays a land" upside (Horn of Greed's draw,
+//      DrawForPlayedLand -- the land IS played), so the fold stands down while one is active.
+//   F-L2 (the trigger, fewer than N OTHER lands): the Field enters tapped and then every land we control is
+//      sacrificed, itself included. Holding keeps those lands (each can still tap for the same mana this turn: the
+//      sacrifice would only float it), the drop and the card. Here the land DOES enter and lands ARE sacrificed, so
+//      the fold also stands down for a landfall watcher (deck_has_landfall), a revolt reader (deck_has_revolt) and a
+//      "whenever you sacrifice" watcher we control (sacrifice_watch_pump_power) -- every upside the entry and the
+//      sacrifices can buy in this engine. Caveat (as the Lake's): a card that reads lands in the graveyard would
+//      break both; none is in the pool that runs a Lotus land.
+inline bool LotusDropDominated(const GameState& state, const CardDefinition& def)
+{
+    const int need = LandLotusSacrificeCount(def.params);
+    if (need <= 0 || ActiveHornCount(state) > 0) { return false; }
+    const int me = state.active_player_index;
+    const bool replacement = def.params.etb_replace_sacrifice_untapped_lands > 0;
+    int lands = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (!replacement && !p.def_absent)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.sacrifice_watch_pump_power > 0) { return false; }
+        }
+        if (p.card.IsLand() && (!replacement || !p.tapped)) { ++lands; }
+    }
+    if (lands >= need) { return false; }
+    if (!replacement && (state.deck_has_landfall || state.deck_has_revolt)) { return false; }
+    return true;
+}
 inline bool LakeDropWithoutVictim(const GameState& state, const CardDefinition& def)
 {
+    if (LandLotusSacrificeCount(def.params) > 0) { return LotusDropDominated(state, def); }
     const std::string& sub = def.params.etb_replace_sacrifice_land_subtype;
     if (sub.empty()) { return false; }
     for (const Permanent& p : state.battlefield)
@@ -55125,7 +55170,10 @@ inline void AdvanceSagas(GameState& state)
 // THE LAND-ENTRY PIN. A land with an as-enters CHOICE carries it as ONE int whose meaning is the land's:
 //   * a colour chooser (etb_choose_color land): the Color ordinal (0..4) to lock;
 //   * Gateway Plaza (etb_sacrifice_unless_pay): 1 = pay, 0 = sacrifice;
-//   * Mariposa Military Base (etb_optional_tapped_rad): 1 = rad, 0 = no rad (the original user).
+//   * Mariposa Military Base (etb_optional_tapped_rad): 1 = rad, 0 = no rad (the original user);
+//   * a Lotus land (LandLotusSacrificeCount: Lotus Vale / Scorched Ruins' replacement, Lotus Field's trigger): the
+//     index k of LotusSacrificePicks -- WHICH lands it sacrifices -- computed on the state AT the sacrifice, clamped
+//     to the last (the duplicate-not-whiff rule of the index axes).
 // No land carries two of these, so the land drop's LandPlayOptions::rad_mode / Plan::rad_mode carry the
 // searched pin through every land route that already threads them (deferred, Karoo, breakpoint
 // continuation, executor); an effect PUT reads g_land_entry_pin (set by the putting action's apply --
@@ -55148,7 +55196,8 @@ inline bool LandHasEntryPinChoice(const CardDefinition& def)
 {
     if (!def.card.IsLand()) { return false; }
     const CardParams& p = def.params;
-    return (p.etb_choose_color && !EtbColorChoiceIsNonSource(p)) || p.etb_sacrifice_unless_pay.has_value();
+    return (p.etb_choose_color && !EtbColorChoiceIsNonSource(p)) || p.etb_sacrifice_unless_pay.has_value()
+        || LandLotusSacrificeCount(p) > 0;
 }
 inline int TakeLandEntryPin(const CardDefinition& def)
 {
@@ -55451,11 +55500,36 @@ inline void ResolveLandEtbTargetPump(GameState& state, int controller, const Car
 //      Sands' 1 life is a gain EVENT that an Ageless Entity entering alongside it must see; a
 //      Selesnya Sanctuary's bounce is MANDATORY (skipping it gifts a free Karoo). So
 //      PerformGenesisWave calls THIS in its second pass and leaves EnterLand's flag false.
-inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& def, int self_index)
+// THE LOTUS LANDS' sacrifices (defined after SacLandTwins; see LandLotusSacrificeCount).
+//   LotusSacrificePicks -- every distinct choice of WHICH lands, as battlefield-index lists, in provider order
+//     (front = the unpinned default). `self_index` = the entering Field's slot (-1 for the replacement, whose land
+//     is not on the battlefield yet).
+//   LotusSacrificePickCount -- an UPPER BOUND on that list's size for a land not yet played (the enumeration's
+//     fan width on the node state; the Field counts itself as one more class).
+//   ResolveLotusEntryReplacement -- Vale / Ruins: sacrifice N untapped lands (pin = the pick index); false when
+//     fewer than N are untapped (the caller puts the land into the graveyard).
+//   ResolveLotusFieldSacrifice -- Field's trigger: tap-first float, then sacrifice the pick (every land when
+//     there are no more than N).
+inline std::vector<std::vector<int>> LotusSacrificePicks(const GameState& state, int controller,
+                                                         const CardDefinition& def, int self_index);
+inline int  LotusSacrificePickCount(const GameState& state, int controller, const CardDefinition& def);
+inline bool ResolveLotusEntryReplacement(GameState& state, int controller, const CardDefinition& def, int pin);
+inline void ResolveLotusFieldSacrifice(GameState& state, int controller, const CardDefinition& def, int self_index,
+                                       int pin);
+
+// `entry_pin` = the land-entry pin of THIS entry (Lotus Field's pick; -1 = the provider's front).
+inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& def, int self_index, int entry_pin = -1)
 {
     if (self_index < 0 || self_index >= static_cast<int>(state.battlefield.size())) { return; }
     if (def.params.etb_bounce_land)
     { BounceKarooLand(state, state.battlefield[self_index].controller_index, self_index); }
+    // Lotus Field's "When this land enters, sacrifice two lands" (a trigger, so here with the Karoo bounce; no card
+    // is both, so the bounce above never moved `self_index`).
+    if (def.params.etb_sacrifice_lands > 0)
+    {
+        ResolveLotusFieldSacrifice(state, state.battlefield[static_cast<std::size_t>(self_index)].controller_index,
+                                   def, self_index, entry_pin);
+    }
     // GainLife bumps life_gained_this_turn and fires every "whenever you gain life" watcher --
     // ONE gain event, exactly as the land drop does it.
     if (def.params.etb_lifegain > 0)
@@ -55559,6 +55633,27 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     else { tapped = LandEntersTapped(state, def, true, ctrl); }
     // The land-entry pin (colour / pay) for THIS entry, taken before anything below can enter another land.
     const int entry_pin = TakeLandEntryPin(def);
+    // LOTUS VALE / SCORCHED RUINS (etb_replace_sacrifice_untapped_lands): "If this land would enter, sacrifice two
+    // untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's
+    // graveyard." A REPLACEMENT of THIS entry (CR 614.1c), so it applies to a put exactly as to a drop (Burgeoning),
+    // before the land exists: no tap-first float (a tapped land is not a legal victim), and when it cannot be paid
+    // the land never enters -- no landfall, no ETB, no land_entered_this_turn. The caller has already taken the
+    // card from its zone; it goes to its owner's graveyard here. Param-gated -> byte-identical for every other land.
+    if (def.params.etb_replace_sacrifice_untapped_lands > 0
+        && !ResolveLotusEntryReplacement(state, ctrl, def, entry_pin))
+    {
+        Card gone = def.card;
+        if (card_number >= 0) { gone.m_number = card_number; }
+        state.players[static_cast<std::size_t>(ctrl)].graveyard.push_back(RevealedCard(gone));
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "land",
+                          gone.m_name.str() + " -- fewer than "
+                          + std::to_string(def.params.etb_replace_sacrifice_untapped_lands)
+                          + " untapped lands to sacrifice: put into the graveyard");
+        }
+        return;
+    }
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }
@@ -55610,7 +55705,7 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     { state.players[static_cast<std::size_t>(ctrl)].energy_counters += def.params.etb_energy; }
     if (resolve_full_etb)
     {
-        ResolveLandEnterEtbExtras(state, def, static_cast<int>(state.battlefield.size()) - 1);
+        ResolveLandEnterEtbExtras(state, def, static_cast<int>(state.battlefield.size()) - 1, entry_pin);
     }
     // Gateway Plaza's "sacrifice it unless you pay {1}" (pipeline step 3). Resolved for every SINGLE put
     // (fire_landfall); a SIMULTANEOUS multi-put (fire_landfall = false: Genesis Wave, Manabond's dump)
@@ -56879,6 +56974,188 @@ inline int ChooseSubtypeLandSacrifice(GameState& state, int controller, const st
     return pick;
 }
 
+// ---- THE LOTUS LANDS: which lands Lotus Vale / Scorched Ruins / Lotus Field sacrifice ----------------------------
+// (docs/design/blood-sun-pipeline.md 3.1 / 3.2; declared above ResolveLandEnterEtbExtras.)
+//
+// THE MENU (LotusSacrificePicks) is every distinct MULTISET of N victims over land CLASSES, searched through the
+// land-entry pin (Plan::rad_mode on a drop, the put routes' pins on an EnterLand) -- never a pick the search did not
+// branch on. Eligible: our lands; for the REPLACEMENT (Vale / Ruins) only the UNTAPPED ones (the land itself is not
+// on the battlefield yet, so it is never a victim); for the TRIGGER (Field) every land, the Field itself included.
+// Two SOUND folds shape it, stated here because they are what keeps it from being a greedy pick:
+//   * IDENTITY (SacLandTwins): two lands that differ only in their tapped flag leave the same board once one of
+//     them is gone, so a class is one option per victim count. For the replacement every victim is untapped, so
+//     the fold is exact.
+//   * F-L1, TAPPED FIRST within a class (Field): sacrificing the tapped copy of two twins keeps the untapped one,
+//     which can still make the same mana this turn -- an untapped victim's mana only floats until the phase ends.
+// Order = the provider's LotusSacrificeRanking of the classes (ORDER only: every multiset is offered),
+// generated lexicographically, so the front is the ranking's own pick. With no more than N eligible lands there
+// is nothing to choose: the replacement takes them all when there are exactly N (and fails below N), the trigger
+// takes every land (the ruling: fewer than two OTHER lands -> each land, the Field included).
+// The menu is at most C(k+N-1, N) over k classes -- C(k+1, 2) for the printed N = 2.
+inline std::vector<std::vector<int>> LotusSacrificePicksImpl(const GameState& state, int controller,
+                                                             const CardDefinition& def, int self_index,
+                                                             bool virtual_self)
+{
+    std::vector<std::vector<int>> out;
+    const int need = LandLotusSacrificeCount(def.params);
+    if (need <= 0) { return out; }
+    const bool replacement = def.params.etb_replace_sacrifice_untapped_lands > 0;
+    std::vector<int> elig;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        if (replacement && p.tapped) { continue; }
+        elig.push_back(i);
+    }
+    (void)self_index;   // the entering Field is ON the battlefield, so it is already in `elig`
+    const bool vself = virtual_self && !replacement;   // count-only: the Field that has not entered yet
+    const int total = static_cast<int>(elig.size()) + (vself ? 1 : 0);
+    if (total <= need)
+    {
+        if (replacement && total < need) { return out; }
+        std::vector<int> all = elig;
+        if (vself) { all.push_back(-1); }
+        out.push_back(std::move(all));
+        return out;
+    }
+    const std::vector<int> ranked = ResolveProvider(state).LotusSacrificeRanking(state, controller, elig);
+    std::vector<std::vector<int>> classes;
+    for (int i : ranked)
+    {
+        bool placed = false;
+        for (std::vector<int>& c : classes)
+        {
+            if (SacLandTwins(state, state.battlefield[static_cast<std::size_t>(c.front())],
+                             state.battlefield[static_cast<std::size_t>(i)]))
+            { c.push_back(i); placed = true; break; }
+        }
+        if (!placed) { classes.push_back({ i }); }
+    }
+    for (std::vector<int>& c : classes)   // F-L1: tapped copies first, ranking order within each band
+    {
+        std::stable_partition(c.begin(), c.end(),
+                              [&](int i) { return state.battlefield[static_cast<std::size_t>(i)].tapped; });
+    }
+    if (vself) { classes.push_back({ -1 }); }
+    std::vector<int> counts(classes.size(), 0);
+    // Lexicographic multisets: class index non-decreasing, each class capped at its size.
+    auto rec = [&](auto&& self_rec, std::size_t from, int left) -> void
+    {
+        if (left == 0)
+        {
+            std::vector<int> pick;
+            for (std::size_t c = 0; c < classes.size(); ++c)
+            { for (int m = 0; m < counts[c]; ++m) { pick.push_back(classes[c][static_cast<std::size_t>(m)]); } }
+            out.push_back(std::move(pick));
+            return;
+        }
+        for (std::size_t c = from; c < classes.size(); ++c)
+        {
+            if (counts[c] >= static_cast<int>(classes[c].size())) { continue; }
+            ++counts[c];
+            self_rec(self_rec, c, left - 1);
+            --counts[c];
+        }
+    };
+    rec(rec, 0, need);
+    return out;
+}
+inline std::vector<std::vector<int>> LotusSacrificePicks(const GameState& state, int controller,
+                                                         const CardDefinition& def, int self_index)
+{
+    return LotusSacrificePicksImpl(state, controller, def, self_index, /*virtual_self=*/false);
+}
+inline int LotusSacrificePickCount(const GameState& state, int controller, const CardDefinition& def)
+{
+    // The Field is not on the node's battlefield yet: it counts as one more class of one. That is never below the
+    // truth (a twin of an older Field folds into that class at resolution), and an index past the resolution
+    // menu clamps onto a sibling, which the post-apply dedup drops.
+    return static_cast<int>(LotusSacrificePicksImpl(state, controller, def, -1, /*virtual_self=*/true).size());
+}
+
+// The victims of one Lotus sacrifice: pin k of the menu (clamped; -1 = the front), or -- in human play -- the
+// `sacrifice` board clicks, N of them, each over EVERY remaining eligible land (unfolded; the menu's pick is the
+// default). Battlefield indices.
+inline std::vector<int> ChooseLotusVictims(GameState& state, int controller, const CardDefinition& def,
+                                           int self_index, int pin)
+{
+    const std::vector<std::vector<int>> picks = LotusSacrificePicks(state, controller, def, self_index);
+    if (picks.empty()) { return {}; }
+    std::vector<int> v = picks[pin < 0 ? 0 : std::min<std::size_t>(static_cast<std::size_t>(pin), picks.size() - 1)];
+    if (g_play_sacrifice_chooser != nullptr && picks.size() > 1)
+    {
+        const bool replacement = def.params.etb_replace_sacrifice_untapped_lands > 0;
+        std::vector<int> elig;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == controller && p.card.IsLand() && !(replacement && p.tapped)) { elig.push_back(i); }
+        }
+        std::vector<int> chosen;
+        for (std::size_t k = 0; k < v.size() && !elig.empty(); ++k)
+        {
+            int def_opt = 0;
+            for (int j = 0; j < static_cast<int>(elig.size()); ++j) { if (elig[j] == v[k]) { def_opt = j; break; } }
+            int c = elig.size() > 1
+                  ? (*g_play_sacrifice_chooser)(state, controller, def.card.m_name.str(), elig, def_opt) : 0;
+            if (c < 0 || c >= static_cast<int>(elig.size())) { c = def_opt; }
+            chosen.push_back(elig[static_cast<std::size_t>(c)]);
+            elig.erase(elig.begin() + c);
+            // Keep the menu's later defaults on lands still offered.
+            for (std::size_t r = k + 1; r < v.size(); ++r)
+            {
+                if (std::find(elig.begin(), elig.end(), v[r]) == elig.end() && !elig.empty()) { v[r] = elig.front(); }
+            }
+        }
+        v = chosen;
+    }
+    return v;
+}
+
+// Sacrifice `victims` (battlefield indices) highest index first, so each erase leaves the rest in place.
+inline void SacrificeLotusVictims(GameState& state, int controller, const CardDefinition& def,
+                                  std::vector<int> victims, const char* how)
+{
+    std::sort(victims.begin(), victims.end(), std::greater<int>());
+    std::string names;
+    for (int i : victims)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        names += (names.empty() ? "" : ", ") + state.battlefield[static_cast<std::size_t>(i)].card.m_name.str();
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "sacrifice",
+                      "\xF0\x9F\x94\xAA " + def.card.m_name.str() + " -- sacrificed " + names + " " + how);
+    }
+    for (int i : victims) { SacrificeLandAt(state, controller, i); }
+}
+
+inline bool ResolveLotusEntryReplacement(GameState& state, int controller, const CardDefinition& def, int pin)
+{
+    const int need = def.params.etb_replace_sacrifice_untapped_lands;
+    if (need <= 0) { return true; }
+    const std::vector<int> v = ChooseLotusVictims(state, controller, def, /*self_index=*/-1, pin);
+    if (static_cast<int>(v.size()) < need) { return false; }
+    // NO tap-first float: the victims must be UNTAPPED as the replacement applies, so tapping one for mana first
+    // would make it an illegal victim (unlike Lake of the Dead's "sacrifice a Swamp" or Lotus Field's trigger).
+    SacrificeLotusVictims(state, controller, def, v, "as it entered");
+    return true;
+}
+
+inline void ResolveLotusFieldSacrifice(GameState& state, int controller, const CardDefinition& def, int self_index,
+                                       int pin)
+{
+    if (def.params.etb_sacrifice_lands <= 0) { return; }
+    const std::vector<int> v = ChooseLotusVictims(state, controller, def, self_index, pin);
+    // TAP-FIRST: the trigger uses the stack, so each untapped victim is tapped for its mana in response first
+    // (CR 605.3a; the mana floats until the phase ends) -- the Lake / Karoo float. Floats never move a permanent,
+    // so the indices stay valid until the sacrifices, which run highest first.
+    for (int i : v) { FloatLandBeforeSacrifice(state, controller, i, "in response to the sacrifice"); }
+    SacrificeLotusVictims(state, controller, def, v, "(its enter trigger)");
+}
+
 // THE LAND A SACRIFICE-A-LAND CAST IS ABOUT TO SACRIFICE PAYS FIRST (MTG_PAY_PAIN_LAST's companion;
 // payer A/B 2026-10-18, creature_giving std d0 block B gi24, T4 -> T5). The m_number to publish as
 // g_pay_sac_victim (PaySacVictimScope) around a sacrifice_land cast's payment, or 0.
@@ -57895,9 +58172,20 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // a pinned scope, so every other deck is byte-identical); EnterLand's TakeLandEntryPin consumes it. A pin
         // off the found land's menu (the resolution-state list drifted from the enumeration's) falls back to
         // the provider's default -- a duplicate of the base, never a whiff.
-        const LandEntryPinScope _entry_pin(entry_pin >= 0 ? entry_pin : g_land_entry_pin);
+        const int put_pin = entry_pin >= 0 ? entry_pin : g_land_entry_pin;
+        const LandEntryPinScope _entry_pin(put_pin);
         EnterLand(state, *def, lc.m_number, false, true,
                   pp.tutor_land_enters_tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, -1, &looks);
+        // Lotus Field's enter trigger is MANDATORY on every entry; this put keeps resolve_full_etb off for the Karoo
+        // reason above, so the Field's sacrifice is resolved here (param-gated: no other land is touched).
+        if (def->params.etb_sacrifice_lands > 0)
+        {
+            for (int li = static_cast<int>(state.battlefield.size()) - 1; li >= 0; --li)
+            {
+                if (state.battlefield[static_cast<std::size_t>(li)].card.m_number == lc.m_number)
+                { ResolveLotusFieldSacrifice(state, controller_index, *def, li, put_pin); break; }
+            }
+        }
         if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
     }
     else

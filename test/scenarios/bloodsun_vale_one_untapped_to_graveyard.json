@@ -1,0 +1,47 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": true
+  }
+ ],
+ "hand": [
+  "Lotus Vale",
+  "Mountain",
+  "Lightning Bolt"
+ ],
+ "human_lines": [
+  "land=Lotus Vale",
+  "land=Mountain;cast=Lightning Bolt",
+  "pass",
+  "pass"
+ ],
+ "expect_history_contains": [
+  "Lotus Vale -- fewer than 2 untapped lands to sacrifice: put into the graveyard (the land drop is used)"
+ ],
+ "expect_graveyard_contains": [
+  "Lotus Vale"
+ ],
+ "expect_opponent_life": 20,
+ "comment": "Blood Sun step 2: LOTUS VALE WITH ONE UNTAPPED LAND GOES TO THE GRAVEYARD AND SPENDS THE DROP (human path only -- fold V1 keeps the autonomous land choice from ever making this drop). Swamp untapped, Forest tapped: the replacement needs two UNTAPPED lands, so the Vale never enters (oracle ruling: it goes directly to the graveyard). Playing it was the special action (CR 305.1), so the Mountain can no longer be played this turn and Lightning Bolt has no {R}: the opponent stays at 20. Nothing is sacrificed."
+}

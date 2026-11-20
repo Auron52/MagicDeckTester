@@ -4484,6 +4484,16 @@ struct CardParams
     // this land onto the battlefield. If you don't, put it into its owner's graveyard." Resolved in
     // the shared land drop (PlayLandCore) BEFORE the land enters. Empty = no such replacement.
     std::string etb_replace_sacrifice_land_subtype;
+    // Lotus Vale / Scorched Ruins: "If this land would enter, sacrifice two untapped lands instead. If you do,
+    // put this land onto the battlefield. If you don't, put it into its owner's graveyard." The count of
+    // UNTAPPED lands the entry REPLACEMENT eats (CR 614.1c: applied before the land exists, so no tap-first
+    // float -- a tapped land is not a legal victim). 0 = no such replacement. Which ones = the land-entry pin
+    // (LotusSacrificePicks, SpellEffects.h).
+    int etb_replace_sacrifice_untapped_lands = 0;
+    // Lotus Field: "When this land enters, sacrifice two lands." A TRIGGER (ResolveLandEnterEtbExtras / the land
+    // drop's trigger step): any lands, itself included, tapped or not -- an untapped victim is tapped for its
+    // mana in response first (FloatLandBeforeSacrifice); with fewer than N lands, every land. 0 = none.
+    int etb_sacrifice_lands = 0;
     // Lake of the Dead's crack: "{T}, Sacrifice a <subtype>: Add ..." -- with this set, the
     // sac_for_mana ability TAPS the source (it stays) and sacrifices ANOTHER land with this subtype
     // instead of the source itself (ApplySacForMana). Empty = the Lotus / Dwarven Ruins self-sac.

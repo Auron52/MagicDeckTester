@@ -712,6 +712,12 @@ MANIFEST = {
     # basic-subset dominance).
     "etb_replace_sacrifice_land_subtype": ("sacrifice", truthy),
     "sac_for_mana_victim_land_subtype":   ("sacrifice", truthy),
+    # --- Blood Sun (step 2, 2026-11-20) ---
+    # Lotus Vale / Scorched Ruins (entry replacement: two UNTAPPED lands) and Lotus Field (enter trigger: two
+    # lands, itself included): WHICH lands = two `sacrifice` board clicks over every eligible land
+    # (ChooseLotusVictims); the autonomous side searches the multiset menu through the land-entry pin.
+    "etb_replace_sacrifice_untapped_lands": ("sacrifice", positive),
+    "etb_sacrifice_lands":                  ("sacrifice", positive),
     # --- Shadowborn Apostle (INT-2, 2026-11-03) ---
     # Shadowborn Apostle: "{B}, Sacrifice six creatures named ~: search for a Demon creature card, put it
     # onto the battlefield". WHICH Demon (or fail to find) = a main_phase plan variant (verb sacnamed=);
@@ -2617,7 +2623,9 @@ def modeled_tokens(card):
     # all surfaced through the `sacrifice` board click (see MANIFEST).
     if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
             or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands") \
-            or p.get("emerge_cost"):   # + Decimator's emerge victim (Boars I4)
+            or p.get("emerge_cost") \
+            or p.get("etb_replace_sacrifice_untapped_lands", 0) > 0 \
+            or p.get("etb_sacrifice_lands", 0) > 0:   # + Decimator's emerge victim (Boars I4); the Lotus lands
         t.add("sacrifice")
     # Shadowborn INT-2: the Apostle's six (and its Demon search, a plan variant) and the Overlord's upkeep
     # sacrifice are `sacrifice` board clicks; Reaper's morbid destroy is a `target` board click.

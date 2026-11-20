@@ -1342,3 +1342,63 @@ suite entry (3x rule), 4a routing, and Stage 5.
 Steps are executed one fresh agent per step, from this document. Each implementer appends a short
 "Implementation notes (step N)" section below this one: commit hash, what deviated, measurements. That
 follows the `damage-reflection-pipeline.md` §14 convention.
+
+### Implementation notes (steps 1-2)
+**Step 1** (commit `f86b28103`): cards.json for Golgari Rot Farm, Copperline Gorge, Graven Cairns in the existing shapes
+exactly (§3.3). Seven scenarios (`test/scenarios/bloodsun_rotfarm_*`, `bloodsun_gorge_*`, `bloodsun_cairns_*`). No
+engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
+
+**Step 2** (commit: see `git log --grep "Blood Sun step 2"`):
+- Params `etb_replace_sacrifice_untapped_lands` (Vale, Ruins) and `etb_sacrifice_lands` (Field) in `CardParams`;
+  `LandLotusSacrificeCount` reads either.
+- **The searched axis is the existing LAND-ENTRY PIN** (`Plan::rad_mode` / `LandPlayOptions::rad_mode` on a drop,
+  `g_land_entry_pin` on a put; Maze's End I2). `LandHasEntryPinChoice` now includes the Lotus lands, and the base
+  `DecisionProvider::LandEntryPinCandidates` returns one index per entry of the menu (`LotusSacrificePicks`). This
+  reuses every route that already threads the pin (deferred drop, Karoo-position, breakpoint continuation, executor,
+  Burgeoning's crossing pin, land-tutor puts), and each pin is its OWN land option, so the casts are enumerated on
+  the board that sacrifice leaves (never re-pinned afterwards). No new `Plan` field.
+- **The menu** (`LotusSacrificePicksImpl`, SpellEffects.h after `SacLandTwins`): every multiset of N victims over
+  land classes (identity fold = `SacLandTwins`), lexicographic over the provider's NEW `LotusSacrificeRanking`
+  hook (ORDER only; base = lowest per-tap yield first, then `SacrificeLandCandidates`' tapped-first order -- with
+  the plain tapped-first ranking the front pick sacrificed the just-entered, tapped Field itself). Vale/Ruins: untapped lands only; Field: every land, itself included; F-L1 = tapped copies
+  first within a class. With <= N eligible lands there is no choice (Vale: exactly N -> both, fewer -> fails;
+  Field -> every land, the ruling). Width bound before the drop (`LotusSacrificePickCount`): the Field counts itself
+  as one extra class (never below the truth; an over-wide pin clamps, the duplicate-not-whiff rule).
+- **Vale/Ruins replacement** in `PlayLandCore` (beside the Lake's, before the land exists; on failure: graveyard,
+  drop spent, `DrawForPlayedLand` as for the Lake) and in `EnterLand` (after the pin is taken, before the permanent
+  is built; on failure the card goes to its owner's graveyard and nothing enters). No tap-first float.
+- **Field trigger** in `PlayLandCore` (right after the Karoo bounce step, re-found by number) and in
+  `ResolveLandEnterEtbExtras` (new defaulted `entry_pin` arg; `EnterLand` passes its pin through). Tap-first float
+  of every untapped victim (`FloatLandBeforeSacrifice`, "in response to the sacrifice"), then the sacrifices,
+  highest index first. **Deviation:** `PerformLandTutorToBattlefield` keeps `resolve_full_etb = false` (the Creature
+  Giving Karoo reason), so the Field's trigger is resolved there explicitly, param-gated.
+- **Folds V1 / F-L2** extend `LakeDropWithoutVictim` (every autonomous land-choice site already calls it; the
+  enumeration exempts human play). The "generic upside" checks: V1 stands down under an active Horn
+  (`ActiveHornCount`: the land IS played); F-L2 also under `deck_has_landfall`, `deck_has_revolt` or an own
+  `sacrifice_watch_pump_power` permanent (the Field DOES enter and lands ARE sacrificed).
+- Hand-land signature (`land_sig`): `lv<N>` / `lf<N>` (+ `o1` for one-colour production) so a Lotus never folds with
+  a plain land. Plan label `[sacK]`; claude-play menu note "(sacrifice pick K)".
+- Viewer: two `sacrifice` board clicks (`ChooseLotusVictims`, each over every remaining eligible land, unfolded;
+  the menu's front pick as the defaults); `tools/play/DECISIONS.md` row; `scripts/audit_viewer_decisions.py` maps
+  both params to `sacrifice`.
+- **Known limits (disclosed, not fixed here):** (1) Burgeoning's crossing pin caps a decision at 32 ranks
+  (`kCrossingLandPinBits`), so a Lotus put by Burgeoning with > 32 menu entries loses the tail -- unreachable under
+  Blood Sun (no sacrifice at all) and with the deck's land count; (2) a SIMULTANEOUS multi-put (Genesis Wave /
+  Manabond's dump) resolves a Field's trigger only where that put's second pass calls `ResolveLandEnterEtbExtras`
+  (unpinned, the front); neither card is in the Blood Sun list; (3) R1 (Fastbond and a Vale played into the
+  graveyard) is step 4's; the Vale failure path already calls `DrawForPlayedLand`, i.e. treats it as PLAYED.
+- (cont.) (4) a Lotus land found by a LAND SEARCH put (`LandSearch.h`: Primeval Titan, sideboard only) takes the menu's
+  front -- the land-search pick pin does not carry an entry pin; (5) declining the Vale's sacrifice while two
+  untapped lands exist is collapsed, as the Lake's (it is the graveyard outcome with the lands kept -- no better
+  than holding the Vale; fold V1's argument), so the human is not offered it either.
+- Scryfall snapshot: the six new lands were fetched into `src/cards/data/scryfall_reference.json` (appended in the
+  file's order; no other entry touched). `audit_card_fields.py` rc 0 (oracle-text divergence advisory only: the
+  bracket notes).
+- **Measurements (step 2 tree):** `mtg-test` 3790 cases, 3789 pass -- the one failure is PRE-EXISTING and not ours:
+  `Pirates routing: every deck in decks/ resolves exactly as before` counts 61 decklist folders against 60 pinned,
+  because `decks/Blood Sun/` (ledger stage) has no routing row yet; step 3 adds `BloodSunProvider` and its row.
+  New `test_bloodsun_lotus.cpp`: 15 cases pass (menu, folds, drop/put resolution, 4 Ruins -> {15}, one Lotus
+  cannot pay {U}{G}, two Lotus pay {U}{U}{G}, a 22-mana Emrakul + Titan + Mystic line through
+  `BatchPrepayMainCasts` and back out with 0 left -- R3's 8-slot overflow did not bite on this line).
+  `test/scenarios.sh` 600/600 (10 new `bloodsun_*`). Smoke: 235/235 PASS, **0 moved digests** vs
+  `build/scratch/bloodsun/impl0/smoke-step0-batch.log` (saved as `impl2/smoke-step2-batch.log`).

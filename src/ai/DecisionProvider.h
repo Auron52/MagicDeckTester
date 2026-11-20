@@ -203,6 +203,10 @@ struct DigOffer
     bool Any() const { return (no_dig || while_affordable) && plans != Plans::None; }
 };
 
+// The Lotus lands' sacrifice-menu width for a land not yet played (LotusSacrificePickCount, core/SpellEffects.h --
+// defined in SpellEffects.cpp: this header cannot include SpellEffects.h). Read by LandEntryPinCandidates.
+int LotusSacrificePickCountFor(const GameState& s, int controller, const CardDefinition& def);
+
 class DecisionProvider
 {
 public:
@@ -5155,6 +5159,33 @@ public:
             }
         }
         else if (p.etb_sacrifice_unless_pay.has_value()) { out = { 1, 0 }; }
+        else if (p.etb_replace_sacrifice_untapped_lands > 0 || p.etb_sacrifice_lands > 0)
+        {
+            // A Lotus land (Lotus Vale / Scorched Ruins / Lotus Field): WHICH lands it sacrifices -- every index
+            // of the multiset menu (LotusSacrificePicks, SpellEffects.h; its ORDER is this provider's
+            // LotusSacrificeRanking order, below). One option = no choice = no fan.
+            const int n = LotusSacrificePickCountFor(s, controller, def);
+            for (int k = 0; n > 1 && k < n; ++k) { out.push_back(k); }
+        }
+        return out;
+    }
+
+    // LotusSacrificeRanking -- the ORDER of the land classes a Lotus land's sacrifice menu is generated over
+    // (LotusSacrificePicks, core/SpellEffects.h: every multiset is offered whatever this returns -- ORDER only, so
+    // it moves which pick is the front: the beyond-horizon playout's, the d0 runner's and the human default).
+    // Battlefield indices of `land_indices`, best victim first. Base: the lowest per-tap yield first (a basic before
+    // a Karoo before a Lotus -- otherwise the tapped-first ranking below put the just-entered, tapped Lotus Field
+    // itself at the front), then SacrificeLandCandidates' order (tapped first, spawn lands last).
+    virtual std::vector<int> LotusSacrificeRanking(const GameState& s, int controller,
+                                                   const std::vector<int>& land_indices) const
+    {
+        std::vector<int> out = SacrificeLandCandidates(s, controller, land_indices);
+        auto yield = [&](int i) -> int
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[static_cast<std::size_t>(i)].card);
+            return (d != nullptr && d->params.produces_amount > 1) ? d->params.produces_amount : 1;
+        };
+        std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return yield(a) < yield(b); });
         return out;
     }
 

@@ -18798,6 +18798,73 @@
    }
   },
   {
+   "name": "Lotus Vale",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If this land would enter, sacrifice two untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add three mana of any one color. [ENTRY REPLACEMENT (etb_replace_sacrifice_untapped_lands: 2; CR 614.1c), the Lake of the Dead shape: resolved in the shared land drop (PlayLandCore) and in EnterLand for a put (Burgeoning) BEFORE the land exists. Two UNTAPPED lands are sacrificed -- NO tap-first float (a tapped land is not a legal victim). With fewer than two untapped lands it goes to the graveyard, never enters (no landfall, no ETB) and a played one still spends the land drop (CR 305.1). WHICH two: the land-entry pin (Plan::rad_mode) over LotusSacrificePicks -- every multiset of two untapped-land classes (identity fold SacLandTwins), provider-ordered, SEARCHED; human play: two `sacrifice` board clicks over every untapped land. Fold V1 (sound dominance): the autonomous land choice never plays it with fewer than two untapped lands (holding it dominates; stands down under a Horn-of-Greed played-land watcher); human play still offers it. {T}: three mana of ONE colour = produces WUBRG + produces_amount 3 + produces_one_color (the single-colour burst shape). Under Blood Sun (step 3) the replacement does not exist.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "produces_amount": 3,
+    "produces_one_color": true,
+    "etb_replace_sacrifice_untapped_lands": 2
+   }
+  },
+  {
+   "name": "Scorched Ruins",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If this land would enter, sacrifice two untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add {C}{C}{C}{C}. [ENTRY REPLACEMENT (etb_replace_sacrifice_untapped_lands: 2), exactly Lotus Vale's (see it): two UNTAPPED lands sacrificed with no tap-first float, else the graveyard and the drop spent; WHICH two is the searched land-entry pin (two `sacrifice` clicks for a human); fold V1. {T}: Add {C}{C}{C}{C} = produces C + produces_amount 4.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "produces_amount": 4,
+    "etb_replace_sacrifice_untapped_lands": 2
+   }
+  },
+  {
+   "name": "Lotus Field",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Hexproof"
+   ],
+   "oracle_text": "Hexproof\nThis land enters tapped.\nWhen this land enters, sacrifice two lands.\n{T}: Add three mana of any one color. [ENTER TRIGGER (etb_sacrifice_lands: 2), resolved beside the Karoo bounce in the land drop (PlayLandCore) and in ResolveLandEnterEtbExtras for a put: sacrifice two lands -- ANY two, tapped or not, the Field itself included. TAP-FIRST: an untapped victim is tapped for its mana in response first (FloatLandBeforeSacrifice; floats until the phase ends), the 'tap two lands, then play Field and sacrifice them' line. Ruling: with fewer than two OTHER lands, every land is sacrificed, the Field included. WHICH two: the land-entry pin (Plan::rad_mode) over LotusSacrificePicks -- every multiset over land classes (identity fold SacLandTwins; F-L1: a TAPPED copy goes before an untapped twin), provider-ordered, SEARCHED; human play: two `sacrifice` board clicks over every land. Fold F-L2 (sound dominance): the autonomous land choice never plays it with fewer than two other lands (stands down for a landfall / revolt / sacrifice watcher or a played-land watcher). Hexproof: inert in goldfish (nothing targets our lands). enters_tapped. {T}: three mana of ONE colour = produces WUBRG + produces_amount 3 + produces_one_color. Under Blood Sun (step 3) it enters untapped and sacrifices nothing.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "produces_amount": 3,
+    "produces_one_color": true,
+    "enters_tapped": true,
+    "etb_sacrifice_lands": 2
+   }
+  },
+  {
    "name": "Keldon Champion",
    "mana_cost": "{2}{R}{R}",
    "types": [

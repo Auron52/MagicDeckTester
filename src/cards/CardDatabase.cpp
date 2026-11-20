@@ -2404,6 +2404,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.creature_count_anthem_keywords.push_back(s);
     p.etb_replace_sacrifice_land_subtype =
         params.value("etb_replace_sacrifice_land_subtype", std::string{});
+    p.etb_replace_sacrifice_untapped_lands = params.value("etb_replace_sacrifice_untapped_lands", 0);
+    p.etb_sacrifice_lands                  = params.value("etb_sacrifice_lands", 0);
     p.sac_for_mana_victim_land_subtype =
         params.value("sac_for_mana_victim_land_subtype", std::string{});
     p.tutor_to_battlefield_single   = params.value("tutor_to_battlefield_single", false);

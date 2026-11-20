@@ -130,6 +130,29 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
         }
         SacrificeLandAt(state, state.active_player_index, vic);
     }
+    // LOTUS VALE / SCORCHED RUINS (etb_replace_sacrifice_untapped_lands): "If this land would enter, sacrifice two
+    // untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's
+    // graveyard." The Lake's shape -- a REPLACEMENT resolved before the land exists, the drop spent either way
+    // (CR 305.1) -- except that the victims must be UNTAPPED, so there is NO tap-first float. WHICH lands is the
+    // land-entry pin (opts.rad_mode = an index of LotusSacrificePicks; -1 = the provider's front; the human clicks).
+    // The autonomous land choice never plays one that cannot sacrifice (fold V1, LakeDropWithoutVictim).
+    if (fdef.params.etb_replace_sacrifice_untapped_lands > 0
+        && !ResolveLotusEntryReplacement(state, state.active_player_index, fdef, opts.rad_mode))
+    {
+        const Card gone = card;
+        leave_zone();
+        ++ap.lands_played_this_turn;
+        ap.graveyard.push_back(RevealedCard(gone));
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "land",
+                          gone.m_name.str() + " -- fewer than "
+                          + std::to_string(fdef.params.etb_replace_sacrifice_untapped_lands)
+                          + " untapped lands to sacrifice: put into the graveyard (the land drop is used)");
+        }
+        DrawForPlayedLand(state, state.active_player_index, opts.logger);
+        return true;
+    }
 
     // Resolve "as this land enters" choices (shock life payment, reveal-untap) while the card is
     // still in hand; this also tells us whether it enters tapped.
@@ -253,6 +276,19 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     {
         BounceKarooLand(state, state.active_player_index,
                         static_cast<int>(state.battlefield.size()) - 1);
+    }
+    // LOTUS FIELD (etb_sacrifice_lands): "When this land enters, sacrifice two lands" -- an enter TRIGGER, beside
+    // the Karoo's (ResolveLotusFieldSacrifice: tap-first float, then the pick; every land with no more than two).
+    // The pick is the land-entry pin (opts.rad_mode). Re-found by number: the ETBs above can append a permanent.
+    if (fdef.params.etb_sacrifice_lands > 0)
+    {
+        for (int li = static_cast<int>(state.battlefield.size()) - 1; li >= 0; --li)
+        {
+            const Permanent& lp = state.battlefield[static_cast<std::size_t>(li)];
+            if (!lp.is_token && lp.card.m_number == perm.card.m_number
+                && lp.controller_index == state.active_player_index)
+            { ResolveLotusFieldSacrifice(state, state.active_player_index, fdef, li, opts.rad_mode); break; }
+        }
     }
     // "When this land enters, you gain N life" (Kazandu Refuge). Plain controller lifegain --
     // no gain-reversal enabler interaction (OpponentGainsLife is for the OPPONENT's gain).

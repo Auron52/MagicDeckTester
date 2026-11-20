@@ -1497,6 +1497,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Soldier"
   },
+  "Copperline Gorge": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {R} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Corsair Captain": {
     "cmc": 3.0,
     "keywords": [
@@ -3316,6 +3325,15 @@
     "toughness": null,
     "type_line": "Land — Gate"
   },
+  "Golgari Rot Farm": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {B}{G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Gond Gate": {
     "cmc": 0.0,
     "keywords": [],
@@ -3341,6 +3359,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{T}: Add one mana of any color. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Graven Cairns": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{B/R}, {T}: Add {B}{B}, {B}{R}, or {R}{R}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
@@ -4646,6 +4673,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Lotus Field": {
+    "cmc": 0.0,
+    "keywords": [
+      "Hexproof"
+    ],
+    "mana_cost": "",
+    "oracle_text": "Hexproof\nThis land enters tapped.\nWhen this land enters, sacrifice two lands.\n{T}: Add three mana of any one color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Lotus Vale": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "If this land would enter, sacrifice two untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add three mana of any one color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Loxodon Warhammer": {
     "cmc": 3.0,
@@ -6540,6 +6587,15 @@
     "power": "1",
     "toughness": "4",
     "type_line": "Creature — Human Cleric"
+  },
+  "Scorched Ruins": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "If this land would enter, sacrifice two untapped lands instead. If you do, put this land onto the battlefield. If you don't, put it into its owner's graveyard.\n{T}: Add {C}{C}{C}{C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Scourge of Valkas": {
     "cmc": 5.0,

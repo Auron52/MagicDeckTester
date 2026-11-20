@@ -3191,6 +3191,11 @@ void ResolveExpressiveIteration(GameState& state)
 // so the land-selection search correctly avoids playing a Karoo as your only land -- the old code
 // bounced NOTHING here, which masked that cost and let the AI play a lone Karoo (a rules-illegal
 // free land; see Hinata seed 1009 T1).
+int LotusSacrificePickCountFor(const GameState& s, int controller, const CardDefinition& def)
+{
+    return LotusSacrificePickCount(s, controller, def);
+}
+
 void BounceKarooLand(GameState& state, int controller, int self_index)
 {
     // Depletion-sack timing parity (fd-diverge root cause, Mirrorwing 2026-08-11): the EXECUTOR
