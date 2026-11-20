@@ -1872,6 +1872,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Diabolic Revelation": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{X}{3}{B}{B}",
+    "oracle_text": "Search your library for up to X cards, put those cards into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Dimensional Infiltrator": {
     "cmc": 2.0,
     "keywords": [

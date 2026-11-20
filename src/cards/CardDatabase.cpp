@@ -197,6 +197,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "tutor_to_hand", "tutor_types", "tutor_shuffle_after", "tutor_required_subtype",
                 // ...and Grim Tutor's "You lose 3 life" (our life total only; no creature reader)
                 "lose_life_on_resolve",
+                // ...and Diabolic Revelation's "up to X cards" (the LIBRARY only; X is the cast's own)
+                "tutor_up_to_x",
                 // a creature as sacrifice FODDER (any creature; the victim is searched)
                 "sac_additional_creature", "upkeep_sacrifice_creature",
                 // a NAME count (Shadowborn Apostle: creatures named like the source)
@@ -1712,6 +1714,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tutor_types.push_back(s);
     p.tutor_to_battlefield      = params.value("tutor_to_battlefield", false);
     p.tutor_shuffle_after       = params.value("tutor_shuffle_after", false);
+    p.tutor_up_to_x             = params.value("tutor_up_to_x", false);
     p.tutor_max_mv              = params.value("tutor_max_mv", -1);
     p.tutor_max_toughness       = params.value("tutor_max_toughness", -1);
     p.etb_tutor_hand_count      = params.value("etb_tutor_hand_count", 0);

@@ -18913,6 +18913,23 @@
    }
   },
   {
+   "name": "Diabolic Revelation",
+   "mana_cost": "{X}{3}{B}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for up to X cards, put those cards into your hand, then shuffle. [tutor_to_hand + tutor_up_to_x (+ tutor_shuffle_after): the cast-time PACKAGE axis (core/RevelationPackages.h). Autonomous play: one cast per multiset of library cards (X = the package size; copies of a card, and Lotus Vale / Lotus Field while a Blood Sun nothing can end is out, are one class), every multiset and every X findable at an unlimited budget; the packages are admitted in budget WAVES (the provider's class order first) and generation stops once a win this round is proven. X larger than the package is never cast (it only spends mana) and X = 0 is not cast autonomously (a bare shuffle). The cards go to hand, then ONE shuffle (PerformTutorPackageToHand, both worlds). Human play: X at the cast (every legal X, 0 included, the x_value decision), then the cards at resolution (the dragon multi-pick: up to X library cards, copies allowed, fewer allowed).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true,
+    "tutor_up_to_x": true
+   }
+  },
+  {
    "name": "Dimir Machinations",
    "mana_cost": "{2}{B}",
    "types": [

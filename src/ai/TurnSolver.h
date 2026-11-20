@@ -3929,6 +3929,11 @@ public:
     // The raw candidate list CollectActions emits for `state` (test hook; what both subset walkers index).
     static Action ChandraNestedCastOption(const std::string& option);
     static std::vector<Action> CollectActionsForTest(const GameState& state, bool is_pre_combat);
+    // Blood Sun step 6: the Diabolic Revelation wave phase's instrumentation (revwave, TurnSolver.cpp) -- packages
+    // emitted by wave phases, and wave phases the generator-stop ended. Reset zeroes both.
+    static long long RevelationWavePackagesForTest();
+    static long long RevelationRoundWinStopsForTest();
+    static void      ResetRevelationWaveCountersForTest();
     static void FinalizeFoldTagsForTest(const GameState& state, std::vector<Action>& actions);
     // ...inside an open decision ROOT with `budget` (nullptr = unlimited): the budget-staged admissions
     // (the ripple late / deep waves) read the root's budget.

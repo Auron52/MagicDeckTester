@@ -1750,6 +1750,13 @@ struct CardParams
     // deterministic CRN reshuffle (Library::ShuffleByKey via ShuffleAfterSearch) exactly like a
     // fetch, so post-Dragonstorm draws come from a shuffled deck. Off -> no reshuffle.
     bool                     tutor_shuffle_after  = false;
+    // DIABOLIC REVELATION ("Search your library for up to X cards, put those cards into your hand, then shuffle";
+    // Blood Sun step 6, docs/design/blood-sun-pipeline.md §4). A modifier on tutor_to_hand: the cast carries its whole
+    // PACKAGE (chosen_x = |S|, the names on Action::tutor_target, core/RevelationPackages.h), emitted by
+    // CollectActions' {X} block as one cast per package (lazy waves, folds F-R1..F-R4), resolved by
+    // PerformTutorPackageToHand (ONE shuffle) in both worlds, never by PerformTutor. The single-target tutor axes
+    // (Plan::tutor_choice, the per-cast named axis) skip it. False = byte-identical.
+    bool                     tutor_up_to_x        = false;
     // WISH (Living Wish, "reveal a creature or land card you own from OUTSIDE THE GAME and put it
     // into your hand"). A wish is mechanically a tutor whose search ZONE is the sideboard rather
     // than the library (CR 400.11b: in constructed, a sideboard card is outside the game), so it

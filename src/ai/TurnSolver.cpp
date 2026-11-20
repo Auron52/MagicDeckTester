@@ -29,6 +29,7 @@
 #include "../core/MemBudget.h"
 #include "AIEngine.h"
 #include "../core/SpellEffects.h"
+#include "../core/RevelationPackages.h"   // Blood Sun step 6: the Diabolic Revelation package axis
 #include "../core/Trace.h"
 #include <algorithm>
 #include <array>
@@ -42659,6 +42660,37 @@ static int XPotentialFromSamePlanProducers(const GameState& state, int self_hand
     return total;
 }
 
+// ---- DIABOLIC REVELATION PACKAGE WAVES (Blood Sun step 6; core/RevelationPackages.h, design §4.4) -------------
+// Thread-local plumbing between a HOST's Revelation wave phase and the CollectActions calls its enumeration makes
+// (the groupwave shape): the host scopes `wave` strictly around its own enumeration call, so every nested
+// enumeration during SCORING (rollouts, FSLineTail recursion) runs in normal mode (wave 0).
+namespace revwave
+{
+    struct State
+    {
+        int       wave     = 0;       // the highest wave admitted (0 = normal mode)
+        bool      pending  = false;   // OUT: an enumerated Revelation had packages past the admitted waves
+        long long admitted = 0;       // OUT: packages emitted since the host reset it (the wave's price)
+    };
+    inline thread_local State g_state;
+    // Instrumentation (unit tests): packages emitted BY wave phases, and wave phases the generator-stop ended (a node
+    // whose best line already wins this round enumerates no further package).
+    inline std::atomic<long long> g_phase_packages{0};
+    inline std::atomic<long long> g_phase_round_win_stops{0};
+    // Does the active player's hand hold a package tutor? Such a node's enumeration is never memoised (a memo hit
+    // would skip CollectActions and so the `pending` flag the host's wave phase reads). One hand walk; false for
+    // every deck without the card.
+    inline bool HandHoldsPackageTutor(const GameState& state)
+    {
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.tutor_up_to_x) { return true; }
+        }
+        return false;
+    }
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -43724,6 +43756,84 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.is_noncreature = !def.card.IsCreature();
                     a.card_mv        = def.card.m_mana_cost.ManaValue();
                     actions.push_back(std::move(a));
+                }
+                continue;
+            }
+            // DIABOLIC REVELATION ({X}{3}{B}{B}: search for up to X cards, put them into your hand, then shuffle --
+            // tutor_up_to_x; Blood Sun step 6, docs/design/blood-sun-pipeline.md §4). WITHOUT THIS BRANCH THE CARD IS
+            // UNCASTABLE (the terminal `continue` below). The cast carries its whole PACKAGE: one CastFromHand per
+            // multiset S of library classes, chosen_x = |S|, the names on tutor_target (revpkg::EncodePackage), all
+            // sharing hand_index (mutually exclusive). Folds (core/RevelationPackages.h): F-R1 copies, F-R2 Lotus
+            // twins under a Blood Sun nothing can end, F-R3 X = |S| (a larger X only spends mana: dominated), F-R4
+            // X >= 1 (X = 0 is a bare shuffle, useful only through clairvoyance; the LandSearch.h standard). For
+            // each X the packages come in rank-lex order over the provider's RevelationClassOrder; a normal
+            // enumeration admits WAVE 0 (the first K0 of each X) and flags revwave::g_state.pending when an X has
+            // more; a host's Revelation wave phase (FSLineWin) re-enumerates with waves 0..k admitted and keeps the
+            // plans whose highest-wave cast is wave k. So every multiset and every X is findable at an unlimited
+            // budget, and a budget only prices how far the waves get (ChargeDecisionUnits, per package). Beyond the
+            // horizon (no wave phase) wave 0 is the sanctioned greedy front. Human play: one cast per legal X
+            // (0..max, the x_value decision), the cards picked at resolution (PerformTutorPackageToHand's dragon
+            // multi-pick).
+            if (def.params.tutor_up_to_x)
+            {
+                const ManaCost rbase = EffectiveCost(def, state);   // {3}{B}{B}; ManaValue ignores X
+                ManaPool rpool = turn_pool();
+                rpool.AddPool(state.floating_mana);
+                int rpips = def.card.m_mana_cost.x_pips; if (rpips < 1) { rpips = 1; }
+                const int rx   = XSpellUnabsorbedReduction(def, state);   // CR 601.2f excess (0: no reducer)
+                const int rmax = (rpool.Total() + DorkGrowthXPotential(state, i) - rbase.ManaValue() + rx) / rpips;
+                if (rmax < 0) { continue; }   // cannot pay even the base -> uncastable now
+                auto emit = [&](int xv, std::string enc, int ev)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    ManaCost c = rbase; c.generic = std::max(0, c.generic + xv * rpips - rx);
+                    a.cost           = c;
+                    a.chosen_x       = xv;
+                    a.tutor_target   = enc;
+                    a.eval           = ev;
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    a.def            = &def;
+                    actions.push_back(std::move(a));
+                };
+                if (HumanPlayActive())
+                {
+                    for (int xv = 0; xv <= rmax; ++xv) { emit(xv, std::string(), 0); }
+                    continue;
+                }
+                const int xmax = std::min(rmax, static_cast<int>(ap.library.size()));
+                if (xmax < 1) { continue; }   // F-R4
+                const std::vector<revpkg::Class> classes = revpkg::BuildClasses(state, state.active_player_index);
+                std::vector<const CardDefinition*> cdefs;
+                for (const revpkg::Class& k : classes) { cdefs.push_back(k.def); }
+                std::vector<int> ranked(classes.size());
+                for (std::size_t k = 0; k < ranked.size(); ++k) { ranked[k] = static_cast<int>(k); }
+                ResolveProvider(state).RevelationClassOrder(state, cdefs, ranked);
+                std::vector<int> caps, cls_eval;
+                for (int r : ranked)
+                {
+                    const revpkg::Class& k = classes[static_cast<std::size_t>(r)];
+                    caps.push_back(k.cap);
+                    cls_eval.push_back(k.def != nullptr ? EvalCard(*k.def, state) : 0);
+                }
+                const long long end = revpkg::WaveEnd(revwave::g_state.wave);
+                std::vector<int> c;
+                for (int xv = xmax; xv >= 1; --xv)
+                {
+                    if (!revpkg::FirstFill(c, caps, xv)) { continue; }
+                    long long o = 0;
+                    do
+                    {
+                        if (o >= end) { revwave::g_state.pending = true; break; }
+                        int ev = 0;
+                        for (std::size_t r = 0; r < c.size(); ++r) { ev += c[r] * cls_eval[r]; }
+                        emit(xv, revpkg::EncodePackage(revpkg::WaveOf(o), revpkg::PackageNames(classes, ranked, c)), ev);
+                        ++revwave::g_state.admitted;
+                        ++o;
+                    } while (revpkg::NextLex(c, caps));
                 }
                 continue;
             }
@@ -78302,6 +78412,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // live zone with the plan's baked target as the default (one frame per cast instance, in
             // cast order). The chooser is null in every search / rollout / enumeration scope
             // (RevealLogPause), so autonomous play is byte-identical.
+            // Diabolic Revelation (tutor_up_to_x): the cast's whole package, ONE shuffle (lockstep with
+            // EffectHandler; Blood Sun step 6). Param-gated: every other tutor is PerformTutor, unchanged.
+            if (def.params.tutor_up_to_x)
+            { PerformTutorPackageToHand(state, state.active_player_index, def, chosen_x, tutor_target); }
+            else
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name,
                          /*human_repick=*/true);
             // Grim Tutor's "You lose 3 life" (Blood Sun step 5; lockstep with EffectHandler). Param-gated.
@@ -85579,6 +85694,9 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 { w.Put("#BC"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.enchant_target); }
                 if (d && d->params.tooth_and_nail)
                 { w.Put("#TN"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
+                // Diabolic Revelation's package (X + the names): distinct packages are distinct plays (gated).
+                if (d && d->params.tutor_up_to_x)
+                { w.Put("#DR"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.finale_of_devastation)
                 { w.Put("#FD"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.return_up_to_gy_lands > 0)
@@ -91084,6 +91202,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         { k += "#BC"; k += std::to_string(act.chosen_x); k += '/'; k += std::to_string(act.enchant_target); }
                         if (cd && cd->params.tooth_and_nail)
                         { k += "#TN"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
+                        if (cd && cd->params.tutor_up_to_x)
+                        { k += "#DR"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         if (cd && cd->params.finale_of_devastation)
                         { k += "#FD"; k += std::to_string(act.chosen_x); k += act.tutor_target.str(); }
                         if (cd && cd->params.return_up_to_gy_lands > 0)
@@ -97971,6 +98091,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 // A per-cast NAMED tutor (DecisionProvider::TutorCastTimeAxis) is searched by the named axis below,
                 // never by this index pin (it would only duplicate one of its names).
                 if (!put_tutor && ResolveProvider(state).TutorCastTimeAxis(d->params)) { continue; }
+                // Diabolic Revelation's package is its own cast-time axis (tutor_up_to_x): never index-pinned.
+                if (d->params.tutor_up_to_x) { continue; }
                 // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
                 if (d->params.modal_exile_target_artifact_enchantment
                     && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
@@ -98127,6 +98249,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
                 if (ResolveProvider(state).TutorCastTimeAxis(d->params)) { continue; }   // the named axis below
+                if (d->params.tutor_up_to_x) { continue; }   // the package axis (CollectActions)
                 // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
                 if (d->params.modal_exile_target_artifact_enchantment
                     && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
@@ -98231,7 +98354,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const Action& act = all[pi].actions[ai];
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
-                if (d == nullptr || !IsLibraryTutor(d->params) || !tprov.TutorCastTimeAxis(d->params)) { continue; }
+                if (d == nullptr || !IsLibraryTutor(d->params) || !tprov.TutorCastTimeAxis(d->params)
+                    || d->params.tutor_up_to_x) { continue; }   // a Revelation's package is its own axis
                 auto it = nm_cache.find(act.card_name);
                 if (it == nm_cache.end())
                 {
@@ -108470,6 +108594,7 @@ static std::uint64_t PlanCacheCtxBits()
     put(t_rollout_narrow); put(g_fresh_axis_enum); put(g_condemn_suppress);
     put(EquipRouteInProgress()); put(EquipRouteDfsActive()); put(AlchemistComboRouteInProgress());
     put(gamework::Abandoned());
+    put(revwave::g_state.wave > 0);   // Blood Sun step 6 (last: earlier bits keep their positions)
     return b;
 }
 // MTG_PLAN_CACHE_COST_VERIFY + MTG_BP_ENUM_VERIFY: a wider state fingerprint than the enum memo's, for
@@ -108936,7 +109061,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       // its own route plan back).
                       && !AlchemistComboRouteInProgress()
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0)
-                      && !t_rollout_narrow;
+                      && !t_rollout_narrow
+                      // Blood Sun step 6: a Revelation wave enumeration (or a node whose list would flag
+                      // revwave pending) is never memoised -- a hit would skip CollectActions and lose the flag.
+                      && revwave::g_state.wave == 0 && !revwave::HandHoldsPackageTutor(state);
     if (!memo_ok)
     {
         if (enummemo::StatsOn() && enummemo::Enabled() && !HumanPlayActive())
@@ -109228,7 +109356,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
                       && groupwave::g_state.tranche_rank < 0
                       && g_search_candidate_enum
                       && g_cantrip_order_site == nullptr
-                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0)
+                      && revwave::g_state.wave == 0 && !revwave::HandHoldsPackageTutor(state);
     if (!memo_ok) { return EnumerateM2PlansBody(state); }
 
     auto& cache = enummemo::t_cache;
@@ -120909,6 +121038,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
                                           // enumerations would otherwise leak into it)
     std::vector<TurnSolver::Plan> pre;
+    bool rv_pending = false;   // Diabolic Revelation packages past wave 0 (the Revelation wave phase below)
     // MTG_PB_LAZY_CANDS (see PbLazyLayout): this node's put-back clone block is held as one prototype per
     // fan, and the list is read through `pre_view` in the order the code below gives it (CandOrder).
     // Under DupeTraceOn / the census diagnostics the list stays whole.
@@ -120927,7 +121057,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // this one cannot observe a stale true.
         const bool fresh_prev = g_fresh_axis_enum;
         g_fresh_axis_enum = true;
+        revwave::g_state.pending = false;   // Blood Sun step 6: did a Revelation hold packages past wave 0?
         pre = EnumeratePlansWithLand(state, true, pre_lazy_req ? &pre_lazy : nullptr);
+        rv_pending = revwave::g_state.pending;
         g_fresh_axis_enum = fresh_prev;
         g_bp_root_enum = false;
         // MTG_BP_WAVE_NSKIP correctness (see Plan::bp_base / Plan::bp_self). bp_base is stamped by
@@ -123163,6 +123295,127 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
                 if (gw_stop) { break; }
             }
+        }
+    }
+
+    // ---- DIABOLIC REVELATION PACKAGE WAVES (Blood Sun step 6; revwave, core/RevelationPackages.h, design §4.4) ------
+    // Wave 0's enumeration admitted the first K0 packages of every X; wave k re-enumerates with waves 0..k admitted
+    // and keeps ONLY the plans whose highest-wave Revelation cast is wave k, so wave 0 and the waves partition the
+    // whole package space exactly (the group-wave tranche shape: no overlap, nothing missing). Each wave is PRICED per
+    // package (ChargeDecisionUnits: returns at once with no budget, so an unlimited budget drains every wave and a
+    // finite one reaches proportionally further) and stops at AnytimeStop. THE GENERATOR-STOP (USER G1: "once X is
+    // high enough the game is over"): no wave is enumerated once this node's best line wins THIS ROUND
+    // (best.win_turn <= state.turn_number) -- win turn is the round, extra turns do not advance it, and no line from a
+    // state at round R wins before R, so no later package can improve the objective (a this-turn kill returned
+    // above already). Skipped at beam-cut nodes for the group waves' reason. Inert unless a tutor_up_to_x card was
+    // enumerated with packages past wave 0 (rv_pending), i.e. for every deck without Diabolic Revelation.
+    if (rv_pending && !beam_here)
+    {
+        auto max_rev_wave = [](const TurnSolver::Plan& v) -> int
+        {
+            int w = -1;
+            for (const Action& a : v.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || !revpkg::IsPackage(a.tutor_target.str())) { continue; }
+                w = std::max(w, revpkg::PackageWave(a.tutor_target.str()));
+            }
+            return w;
+        };
+        // Score one wave plan (the group-wave tranche scorer's contract: strictly-better only; a this-turn win
+        // returns from the node). Returns false when the budget stopped the phase.
+        auto score_rev_plan = [&](const TurnSolver::Plan& v, std::vector<Action>& bp_out, bool& won_now) -> bool
+        {
+            won_now = false;
+            if (AnytimeStop(budget)) { ++g_fs_trunc_events; return false; }
+            ConsumeAt(budget, unitsite::kFsGroupWave);   // one interior node (plan applied)
+            GameState s = state;
+            bp_out.clear();
+            g_bp_cands_last = 0;
+            g_bp_seen_last  = 0; g_bp_demoted_last = 0; g_bp_seen_latent = 0; g_bp_canon_drop_mask = 0;
+            ApplyPlanDirect(s, v, true, &bp_out);
+            // Disjoint from wave 0 and the other waves BY PLAN, so a hit is a genuine same-state collapse.
+            if (!bp_seen_states.insert(BuildDedupKey(s)).second) { return true; }
+            if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard
+            SimulateCombat(s);
+            if (OpponentHasLost(s)) { won_now = true; return true; }
+            TurnSolver::SearchLine tail{ max_turns + 1, {} };
+            {
+                const int dvs_cut = FsChildCut(s, cutoff, best.win_turn, max_turns, budget);
+                DvsTailGate dvs_g(lc, &dvs_tails, key_win, s, 0, !rec_vals);
+                if (!dvs_g.Skip(dvs_cut))
+                {
+                    tail = FSLineTail(s, depth - 1, max_turns, dvs_cut, second_main, tt, lc, budget, nullptr, eot_ptr);
+                    dvs_g.Done(tail, dvs_cut);
+                }
+            }
+            if (v.freshmode_choice == 1 && tail.win_turn > max_turns) { return true; }
+            if (tail.win_turn < best.win_turn)
+            {
+                best.win_turn = tail.win_turn;
+                best.phases.clear();
+                TurnSolver::Plan p_rec = v;
+                p_rec.breakpoint_actions = bp_out;
+                StampBoundaryPins(p_rec, tail);
+                best.phases.push_back({ true, std::move(p_rec) });
+                best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                best.truncated = best.truncated || tail.truncated;
+            }
+            return true;
+        };
+        auto won_line = [&](const TurnSolver::Plan& v, std::vector<Action>& bp_out) -> TurnSolver::SearchLine
+        {
+            TurnSolver::Plan p_rec = v;
+            p_rec.breakpoint_actions = std::move(bp_out);
+            TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+            FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
+            return win;
+        };
+        std::vector<Action> rv_bp;
+        bool rv_won = false;
+        for (int k = 1; k < 60; ++k)
+        {
+            // THE GENERATOR-STOP: this node already wins this round -- no package can improve on it.
+            if (best.win_turn <= state.turn_number)
+            { revwave::g_phase_round_win_stops.fetch_add(1, std::memory_order_relaxed); break; }
+            if (AnytimeStop(budget)) { ++g_fs_trunc_events; break; }
+            revwave::g_state = revwave::State{ k, false, 0 };
+            g_bp_root_enum = bp_root;
+            const bool fresh_prev = g_fresh_axis_enum;
+            g_fresh_axis_enum = true;   // wave 0's enumeration ran with the fresh axis open (the GwParity reason)
+            std::vector<TurnSolver::Plan> tp = EnumeratePlansWithLand(state, true);
+            g_fresh_axis_enum = fresh_prev;
+            g_bp_root_enum = false;
+            const bool more = revwave::g_state.pending;
+            const long long emitted = revwave::g_state.admitted;
+            revwave::g_state = revwave::State{};
+            revwave::g_phase_packages.fetch_add(emitted, std::memory_order_relaxed);
+            // The price: one decision unit per package the wave's enumeration emitted.
+            TurnSolver::ChargeDecisionUnits(budget, static_cast<int>(std::min<long long>(emitted, INT_MAX)));
+            tp.erase(std::remove_if(tp.begin(), tp.end(),
+                                    [&](const TurnSolver::Plan& v) { return max_rev_wave(v) != k; }), tp.end());
+            MoveOrderPlans(tp);
+            bool rv_stop = false;
+            for (const TurnSolver::Plan& v : tp)
+            {
+                if (!score_rev_plan(v, rv_bp, rv_won)) { rv_stop = true; break; }
+                if (rv_won) { return won_line(v, rv_bp); }
+                if (best.win_turn <= state.turn_number) { break; }   // the generator-stop, inside the wave
+            }
+            // Deferred bp ranks OF THE WAVE PLANS (the group-wave tranche reason: otherwise a wave plan's deep
+            // continuation stays unreachable at an unlimited budget).
+            if (!rv_stop && best.win_turn > state.turn_number && BpWavesHere(budget))
+            {
+                BpWaveWalker rv_walker(state, tp, tp.size(), nullptr, nullptr, nullptr, /*host_pends=*/false);
+                TurnSolver::Plan v;
+                while (rv_walker.Next(tp, v))
+                {
+                    if (!score_rev_plan(v, rv_bp, rv_won)) { rv_stop = true; break; }
+                    rv_walker.Report(tp, g_bp_cands_last, g_bp_seen_last, g_bp_demoted_last);
+                    if (rv_won) { return won_line(v, rv_bp); }
+                    if (best.win_turn <= state.turn_number) { break; }
+                }
+            }
+            if (rv_stop || !more) { break; }
         }
     }
 
@@ -142256,6 +142509,10 @@ std::vector<PaidExileCastOption> CollectChandraPaidCastOptions(const GameState& 
     return out;
 }
 
+long long TurnSolver::RevelationWavePackagesForTest() { return revwave::g_phase_packages.load(); }
+long long TurnSolver::RevelationRoundWinStopsForTest() { return revwave::g_phase_round_win_stops.load(); }
+void TurnSolver::ResetRevelationWaveCountersForTest()
+{ revwave::g_phase_packages.store(0); revwave::g_phase_round_win_stops.store(0); }
 std::vector<Action> TurnSolver::CollectActionsForTest(const GameState& state, bool is_pre_combat)
 {
     return CollectActions(state, is_pre_combat);
