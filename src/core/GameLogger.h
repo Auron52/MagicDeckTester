@@ -1638,6 +1638,14 @@ inline bool g_play_legacy_pain_pay = false;
 // MTG_GSZ_SHUFFLE_COPY_ID (heurarm slot GSZ_SHUFFLE_COPY_ID), DEFAULT ON; inert without a
 // shuffles_self_into_library_on_resolve card (only Green Sun's Zenith).
 inline bool g_play_legacy_gsz_shuffle = false;
+
+// OPPONENT SHUFFLE ORDINAL (2ad8c3d41, 2026-11-19) -- the passive opponent's library shuffles on its OWN
+// ordinal (GameState::opponent_search_count, ShuffleAfterSearch), so an opponent shuffle cannot move OUR
+// later reshuffles. Before that, a Mill game whose Surgical Extraction / Archive Trap shuffled the
+// opponent bumped the shared search_count, and every later fetch of ours shuffled on the next ordinal.
+// A reference recorded since carries `opponent_shuffle_ordinal`; one recorded before (Mill/claude_s2_gi1,
+// s6_gi5) replays under --legacy-shared-shuffle-ordinal -- the draws it was actually played with.
+inline bool g_play_legacy_shared_shuffle_ordinal = false;
 inline bool GszShuffleCopyIdOn()
 {
     static const bool s_env = EnvOn("MTG_GSZ_SHUFFLE_COPY_ID", true);

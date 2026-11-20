@@ -494,6 +494,11 @@ def recording_rule_args(ref):
     always did, not the template (m_number 0) -- which an Eldrazi's graveyard shuffle dealt back as tied,
     duplicate-number cards. A recording made before carries no key and replays with --legacy-spell-copy.
 
+    `opponent_shuffle_ordinal` (2026-11-19, 2ad8c3d41): from then on the passive opponent's library shuffles
+    on its own ordinal, so its shuffle (Surgical Extraction, Archive Trap) no longer moves the ordinal of our
+    later fetch reshuffles. A recording made before carries no key and replays with
+    --legacy-shared-shuffle-ordinal. Mill/claude_s2_gi1 and s6_gi5 otherwise go shuffle-dead.
+
     `combat_damage_steps` (2026-10-18, CR 510.4): from then on a combat with a first or double striker
     deals damage in two steps, so first-step lifelink reaches Thune / Pridemate / Serra Ascendant's
     30-life threshold before the regular step. A recording made before carries no key and replays with
@@ -512,6 +517,8 @@ def recording_rule_args(ref):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
         args.append("--legacy-gsz-shuffle")
+    if not ref.get("opponent_shuffle_ordinal"):
+        args.append("--legacy-shared-shuffle-ordinal")
     if not ref.get("spell_copy_id"):
         args.append("--legacy-spell-copy")
     if not ref.get("combat_damage_steps"):

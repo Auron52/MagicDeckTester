@@ -340,3 +340,34 @@ TEST_CASE("opponent lands enter as one front block, so the battlefield order is 
     CHECK(a.battlefield[0].controller_index == 1);
     CHECK(a.battlefield[1].controller_index == 1);
 }
+
+TEST_CASE("a reference recorded before the opponent's own ordinal replays on the shared one")
+{
+    // Mill/claude_s2_gi1 + s6_gi5: recorded with the opponent-lands model (opponent_plays_lands true)
+    // but before 2ad8c3d41, so a Surgical Extraction shuffle of the opponent bumped OUR ordinal.
+    // --legacy-shared-shuffle-ordinal (no `opponent_shuffle_ordinal` stamp) restores exactly that.
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+    Decklist plain;
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(forest != nullptr);
+    for (int i = 0; i < 40; ++i) { plain.mainboard.push_back(forest->card); }
+
+    GameState s = GoldFishRunner::SetupGame(plain, 7, 6);
+    REQUIRE(s.opponent_plays_lands);
+    const auto before = s.search_count;
+    g_play_legacy_shared_shuffle_ordinal = true;
+    ShuffleAfterSearch(s, 1);
+    g_play_legacy_shared_shuffle_ordinal = false;
+    CHECK(s.search_count == before + 1);
+    CHECK(s.opponent_search_count == 0);
+
+    // Off (every live game and every stamped reference): the opponent keeps its own ordinal.
+    GameState t = GoldFishRunner::SetupGame(plain, 7, 6);
+    ShuffleAfterSearch(t, 1);
+    CHECK(t.search_count == before);
+    CHECK(t.opponent_search_count == 1);
+}
