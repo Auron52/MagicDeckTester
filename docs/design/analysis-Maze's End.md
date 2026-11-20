@@ -4523,3 +4523,102 @@ regression 6.8960 -> 6.9060 (the C2 finding above).
 
 **Cost notes for P7:** d0 g237 (ship) > 0.6 h at d8 b0, abandoned at 50M; blind 2HG g196 and d1b3 g64 abandon at 50M on
 both arms; b2000 replays: d1b3 g4 u2 5 vs ship 6, d0 g270 5 = 5.
+
+## P5d-6/7 (2026-11-20): the USER's Q1/Q2 levers, the reveal guard, and Burgeoning, measured
+
+Branch `wip/maze-p5d` on origin 8fbbc5023 (rebased, no merge). Code `9f815199b` (reveal guard), `b1b836b3b` (Q1/Q2
+levers), `42ff28a4d` (Q2 tutor hold), `90126b284` (census, diagnostic only), GT `070ff8061`. Every lever is default
+OFF; nothing below is adopted. Hand-offs `logs/maze/P5d6-handoff.md` and `P5d7-handoff.md`; scratch
+`build/scratch/maze/p5d{6,7}/`.
+
+**Tiers (binary 42ff28a4d, VPC_SKIP=1).** Only the 10 Maze keys moved, because P5d is not on origin and the rebase
+dropped its earlier GT commit. Accepted with `--deck=mazesend,mazesend2hg`; `check_gt_logs` reports 0 stale. Searched
+keys: smoke d5 5.6742 -> 5.6515, 2HG 5.3333 -> 5.3000, d3 equal; regression d5 s2002 5.5598 -> 5.5435, s3003
+5.5867 -> 5.5933, d3 s2002 5.7333 -> 5.8000, refs equal. d0: 6.8650 -> 6.8720 and 6.8640 -> 6.8650. There were 14
+searched slower games (smoke 3, regression 11). At d8 b0, 11 reach the old tier score. Two more (s2002 g11, g42: old 5,
+new 6) come in at 6 on the origin binary too: the primary checkout's build/Release at 8fbbc5023 reproduces their old
+d5 b20 5s, so the old 5s were budget luck, not a P5d loss. Prune (a) off gives 6 as well. s3003 g112 is UNRESOLVED (it
+hits the 50M ceiling). Maze VPC: 11 refs, 1 ok and 10 repaired. "Repaired" means content-resolved index shifts plus,
+in s5_gi4 and s7_gi6, the newer off-main Maze's End activation answered by the engine default. No file changed, and
+every recorded line reproduces its outcome and win turn.
+
+**Pooled A/B** (`p5d6/m_ab.json`, 26,900 games, one batch; seeds 201001.. (std) and 202001.. (2HG); every arm on the
+same seeds; clairvoyant AND blind (`blind_salt` 1); net = loss-penalized turns vs ship, + = slower; units = mean
+units per game vs ship):
+
+| arm | d5 b20 x1000 | 2HG d5 x300 | d3 b10 x300 | d1b3 x200 | d1b1 x200 | d0 x400 | units d5 / 2HG |
+|---|---|---|---|---|---|---|---|
+| rev (reveal guard) clairv. | -9 (9/0) | 0 | 0 | -2 | -1 | -- | 0.999 / 0.999 |
+| rev blind | -2 | 0 | -1 | -2 | 0 | -- | 1.008 / 1.010 |
+| revq2 clairv. | -9 (17/9) | -1 | -3 | -5 | -2 | -- | 0.965 / 0.971 |
+| revq2 blind | **-40** (64/33) | -1 | -8 | -9 | 0 | -- | 0.998 / 1.000 |
+| q2 (Manabond discard rule) clairv. | -2 | -1 | -3 | -3 | -1 | **-32** | 0.966 / 0.965 |
+| q2 blind | -37 | 0 | -6 | -7 | **+5** (5/9) | -- | 0.988 / 0.989 |
+| q2nb (q2, Burgeoning KEPT) blind | -33 | **+1** | | | | | 0.998 / 1.000 |
+| cond (fetch 1000 only near the win) clairv. | **+1** | -4 | -2 | -1 | -3 | **+3** | 0.986 / 1.005 |
+| cond blind | -39 | -24 | -1 | -1 | -10 | -- | 0.987 / 1.007 |
+| c2 (lands-short tier `full`) clairv. | **+3** | -3 | 0 | -2 | -2 | **+4** | 0.985 / 1.012 |
+| c2 blind | -10 | -6 | **+14** | **+4** | -5 | -- | 0.994 / 1.007 |
+
+**Net bar (every row <= 0, clairvoyant and blind):** rev and revq2 PASS. q2 FAILS on blind d1b1 only (+5, 5 better /
+9 worse; about 1.2 se). cond FAILS on clairvoyant d5 (+1) and d0 (+3), but is the best blind arm on 2HG (-24). c2 FAILS
+on clairvoyant d5 (+3), d0 (+4), blind d3 (+14) and d1b3 (+4). q2nb FAILS on blind 2HG (+1).
+
+**Root causes of the failing arms' worst games** (single-game repros with logs, `p5d7/rp/`; each reproduces the batch's
+win turn):
+- *c2 / cond, d5 g81 (5 -> 6, the same digest for both; most of their d5 slower games are shared: g81 g194 g400 g459
+  g557 g560 g653 g674 g722 g797 g831 g897 g950 g938).* These levers change only the playout's activation-fetch rank.
+  That shifts the leaf values of a searched T3 choice: ship's two Sylvan Scryings take Maze's End + Baldur's Gate (a
+  new name), while c2 / cond take Maze's End + a SECOND Maze's End. The second copy adds no name, and the win slips a
+  turn.
+- *c2 blind d3 g61 (7 -> unwon).* The line diverges at the T1 land. At T6 the activation fetches without a replay, so
+  the land drop goes unused and three Maze's Ends end up stranded in hand. This is the failure the USER's Q1 caveat
+  names ("as long as you don't strand the Maze's end in hand"). Lowering the lands-short tier to `full` lets the
+  low-budget playout delay the replay.
+- *q2 blind d1b1 g76 (6 -> 8).* At d1 the root is decided almost entirely by the playout, whose Manabond answer is rank
+  0. With q2 the "no first" class becomes the playout's answer, the root T1 choice flips (Cliffgate instead of Gond
+  Gate + Amulet), Amulet is held until T4, and Guild Summit's draws diverge. This is a low-depth policy shift, not a
+  rules defect.
+- *q2 / q2nb blind 2HG g22 (4 -> 7, the same digest).* T2 casts Manabond before Sylvan Scrying (ship casts Scrying
+  first and fetches Maze's End). At that end step the SEARCH takes Manabond's yes, which discards the only Scrying with
+  no Maze's End in hand or play, so Maze's End is not drawn until T7. This is the g21 s3 mechanism again: the Q2 hold
+  ORDERS "no" first, but both answers are still searched, and the yes wins on leaf value. A "tutor held, no Maze's End
+  anywhere" restriction (a prune of yes rather than an order) would cover it. It is not built: whether that case counts
+  as "clear" is the USER's call under the governing principle.
+
+**Q2 class counts** (`MTG_MAZE_DUMP_CENSUS=1`, q2B arm, blind d5 b20, the A/B's first seeds; RelWithDebInfo build of
+`90126b284`, which plays identically; one Manabond end-step yes/no with nonland cards to discard = one count):
+
+| class (CrossingDumpYesOrder) | std REAL (400 games) | std search | 2HG REAL (300 games) | 2HG search |
+|---|---|---|---|---|
+| CLEAR, pruned to yes (every discard free) | 136 (50%) | 1,688,880 (46%) | 98 (51%) | 2,150,395 (15%) |
+| CLOSE, "no" first: land tutor held | 47 (17%) | 591,170 (16%) | 54 (28%) | 414,578 (3%) |
+| CLOSE, "no" first: kept card for 1 land | 27 (10%) | 300,806 (8%) | 12 (6%) | 206,225 (1%) |
+| CLOSE, default order (other) | 63 (23%) | 1,104,206 (30%) | 29 (15%) | 11,431,146 (80%) |
+
+So about half of the real Manabond decisions that discard a nonland card are the clear class, which the lever prunes.
+In 2HG search the default-order close class dominates (80%). Those are mostly hands holding a kept card while two or
+more lands go in.
+
+**Burgeoning per format** (q2nbB = q2 with Burgeoning KEPT vs q2B = Burgeoning a free discard; blind d5 b20; per-game
+difference in turns, + = keeping Burgeoning is slower):
+
+| | std x1000 | 2HG x300 |
+|---|---|---|
+| mean (se) | +0.0040 (0.0035) | +0.0033 (0.0075) |
+| sd of the per-game difference | 0.110 | 0.129 |
+| games moved (better / worse) | 12 (4 / 8) | 5 (2 / 3) |
+| moved by >= 2 turns | 0 | 0 |
+| histogram | -1: 4, 0: 988, +1: 8 | -1: 2, 0: 295, +1: 3 |
+| q2nbB vs ship: mean, worse >= 2 / better >= 2 | -0.0330, 5 / 8 | +0.0033, 3 / 2 |
+| win-turn sd: ship / q2 / q2nb | 1.199 / 1.190 / 1.192 | 1.204 / 1.201 / 1.190 |
+| P(win <= T5): ship / q2 / q2nb | 0.200 / 0.212 / 0.211 | 0.277 / 0.283 / 0.277 |
+| P(win >= T8 or unwon): ship / q2 / q2nb | 0.187 / 0.175 / 0.176 | 0.127 / 0.130 / 0.130 |
+
+How Burgeoning is classified at Manabond is null in both formats. About 1% of games move, never by more than one
+turn, and the mean is within 1.1 se (std) and 0.4 se (2HG) of zero. The spread does not differ either: the per-game
+sd is 0.11 vs 0.13, and the win-turn sd and tail shares are the same to within 0.01. This measures only the
+discard-value rule, NOT Burgeoning's worth as a card. The USER's "too unreliable / better in 2HG" question is a
+deck-list question, and only a deck_compare screen (Burgeoning -> each candidate replacement, std and 2HG, blind) can
+answer it. That screen has not been run. A list change belongs BEFORE the deck's
+mulligan profile, since no new keep table should be built until the list recommendation is settled.
