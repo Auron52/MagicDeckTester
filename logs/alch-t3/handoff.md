@@ -244,3 +244,18 @@ Running (agent 3 launched): chain3b = `flock BOX.lock bash build/scratch/alch-t3
 ### Measurements so far
 - ab2 (163e81f56, generic host search): search -0.0695 t=-8.91 wall -12.5%; nohost -0.0075; heur +0.0000.
   The deck-rule replacement should reproduce most of the "search" gain (the host choice) -- to be measured by ab4.
+
+### chain4 RESULT (landed 10:25 UTC; build of a227a482b rc=0)
+- Units 3722: 1 FAILED -- test_accomplished_alchemist.cpp:416 "Crab Umbra chooses Accomplished Alchemist over an
+  attacking Harbinger" (AuraCastHostByRank != alchemist). Cause: that test relied on the OLD engine term (gated on
+  deck_reads_lifegain_in_play); the rank now comes from the provider, so the test board needs the AA provider
+  (s.m_provider = &AaProv(); AaProv is defined ~line 1127, later in the file -- move/forward-declare it). Not fixed.
+- combo_off 51/51 PASS; aa_* scenarios ran (see chain4/summary.txt).
+- ACCEPTANCE STILL FAILS: full game seed 12345681 keep 7 at d8 b0 heur OFF = T4 in EVERY arm (acc_all, norank, nos9d,
+  noburst, nofloat, heur, verify); play setting T4 (play_off, play_heur, play_base). Hand-off ho10 (after Forest +
+  Living Wish -> Boar) T3; ho8 (T3 start) T4. acc_verify.err: check for `[aura-late-bind-verify] MISMATCH` (none in
+  summary). So the T3-decision hole remains with all three fixes on: next step is a trace at n=8
+  (MTG_FS_ROOT_DUMP=3 MTG_SITE9_TRACE=3; look for "rod"/"exd" site-9-after-deferred lines -- if none, the
+  Wish-alone variant never reaches the deferred s9 (check the DEV_SEQ latent record / bp_seen==1 guard / whether site
+  10 is counted for that plan), and check hole (a) (payer taps the Alchemist for the Boar on the Umbra+Wish root route).
+- ab4 NOT run (pointless until acceptance passes, though it would still measure the rank/burst changes).
