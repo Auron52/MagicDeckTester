@@ -201,10 +201,12 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         const char* const lib[4] = { "Boros Guildgate", "Izzet Guildgate", "Sea Gate", "Citadel Gate" };
         for (int k = 0; k < 4; ++k) { Card c = C(lib[k], 40 + k); c.m_type_mask = 0; s.players[0].library.push_back(c); }
         CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 6 + 4 names = 10: no proof
-        Card h = C("Selesnya Guildgate", 50); h.m_type_mask = 0; s.players[0].hand.push_back(h);
-        s.players[0].library.pop_back();
-        s.players[0].library.pop_back();
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == 2);    // 6 + Boros + Izzet + Selesnya = 9: the names bound proves
+        GameState t = Board(prov, 6, true, false);
+        Put(t, "Guild Summit", 30);
+        Put(t, "Manabond", 31);
+        for (int k = 0; k < 2; ++k) { Card c = C(lib[k], 40 + k); c.m_type_mask = 0; t.players[0].library.push_back(c); }
+        Card h = C("Selesnya Guildgate", 50); h.m_type_mask = 0; t.players[0].hand.push_back(h);
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == 2);    // 6 + Boros + Izzet + Selesnya = 9: the names bound proves
     }
     {
         // Already ten names: never a proof (an activation wins).
