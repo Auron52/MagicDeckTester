@@ -1419,21 +1419,25 @@ OVERNIGHT_CASES=(
   "boars2hg   5  5005  175 20"
   "boars2hg   5  6006  175 20"
   "boars2hg   5  7007  175 20"
-  # sea: overnight ENTRY set before its keep table (2026-11-17; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
-  # play rows, sea2hg d5 4x75 b20). Expand to the FULL set just before the keep table is adopted.
+  # sea: the overnight FULL set (2026-11-20, just before its keep-table adoption, accepted with the table ABSENT
+  # first): the angels/pirates/galadriel/boars standard shape -- d0 4x2000, one d3 b10 sanity row, d5 4x1425 b20
+  # (the play setting), sea2hg d5 4x175 b20. Entered 2026-11-17 at the ENTRY set (d3 125 b10, d5 4x300 b20, 2hg
+  # 4x75 b20). Sized from the 2026-11-20 held-out adoption A/B (PGO, 24/24 workers busy): WITH the table d5 b20
+  # costs ~0.70 s/game thread-wall (2hg ~1.43 s), 0.13x the table-absent search units, so the full set projects
+  # to ~1.5 worker-h (Hinata's d5 rows ~2.3).
   "sea        0  4004 2000  0"
   "sea        0  6006 2000  0"
   "sea        0  8008 2000  0"
   "sea        0 10010 2000  0"
-  "sea        3  4004  125 10"
-  "sea        5  4004  300 20"
-  "sea        5  5005  300 20"
-  "sea        5  6006  300 20"
-  "sea        5  7007  300 20"
-  "sea2hg     5  4004   75 20"
-  "sea2hg     5  5005   75 20"
-  "sea2hg     5  6006   75 20"
-  "sea2hg     5  7007   75 20"
+  "sea        3  4004  325 10"
+  "sea        5  4004 1425 20"
+  "sea        5  5005 1425 20"
+  "sea        5  6006 1425 20"
+  "sea        5  7007 1425 20"
+  "sea2hg     5  4004  175 20"
+  "sea2hg     5  5005  175 20"
+  "sea2hg     5  6006  175 20"
+  "sea2hg     5  7007  175 20"
   # Boars unlimited backstop (2026-11-13): 30101..30105 finished every game at d3 and d5 (budget 0,
   # abandon_units 2e6), each under 15 s. Disjoint from the regression block (30261).
   "boars            3 30101   5 0"
