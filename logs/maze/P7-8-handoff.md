@@ -57,12 +57,15 @@ are on wip/maze-p7). Scratch: `build/scratch/maze/p7g/` (tools in `tools/`). Bin
 - cen11 (heavy_run PID 2345850): Snow + EDF census (400 games each of d5b20 / d3b10, + Snow gi961) -- soundness of their certificates
   under the fold; read `grep lastply p7g/cen11/run.err` (UNSOUND must be 0); DONE marker `p7g/cen11/DONE`.
 
+- **cen11 DONE: EDF + Snow census UNSOUND=0** (1601 games: 400 each of EDF/Snow d5b20 + d3b10, + Snow gi961; PROOF 19,433
+  nodes, none won; OTHER 492,049). Their certificates are sound under the fold.
+
 ## Remaining, in order
 1. When chain4.DONE lands: read smoke4/reg4 (moved keys; expect mazesend*, and edf*/snow* if the fold moves them), d8 b0 every
    PERSISTS slower game, then scoped accepts (`--deck=` every deck that moves, incl. `<deck>2hg`), `python3 test/check_gt_logs.py`.
    VPC: "full corpus held (Galadriel s10 / F5R, owned elsewhere); Maze_s_End strict = <vpc4 result>".
 2. Root-cause Snow gi961 (above) and fix, or the USER/coordinator decides on the +1 (bar: "+1 is not neutral. 0 is neutral.").
-3. cen11 verdict (EDF/Snow UNSOUND = 0).
+3. (done) cen11: EDF/Snow UNSOUND = 0.
 4. (O): optional mana-aware reshuffle bound if more Summit proofs are wanted; otherwise (O) stays as a sound, inert default.
 5. Then READY FOR BATCH 2 (push wip/* only; the parent lands it).
 
