@@ -2,7 +2,9 @@
 
 Status: BUILT 2026-11-18 as a setup-time THROW (branch `sea-sin-gorger`, Trench Gorger only). REWORKED 2026-11-20
 (branch `provreg-1120`) per the USER ruling below: no throw; the engine default is the searched menu; a deck with no
-policy gets a RED FLAG. Eight decisions registered.
+policy gets a RED FLAG. Eight decisions registered. 2026-11-20 late: Knights' Contender policy `MTG_KN_ETBDIG_RANK`
+is default ON (the parent's default; the USER may overrule). The Paragon / Genesis Wave searched defaults are OWED
+(WIP on `backup/2026-11-20/provreg`; see "Owed").
 
 ## Why
 
@@ -54,7 +56,7 @@ All in `src/ai/ProviderHeuristicRequired.{h,cpp}`.
 | Decision (id) | Card(s) carrying the param | Engine default with NO policy | Decks / policy |
 |---|---|---|---|
 | ExileLibraryLands | Trench Gorger | the engine's Gorger menu (every count; 3+ kept lands = one round-robin prefix per count, cap 62 -- the full keep-subset product is not built) | Sea Creatures: policy (USER rule) |
-| EtbDigPick | Acclaimed Contender, Staunch Crewmate | **SEARCHED: the ETB-dig axis over EVERY legal match** (was: the 3 front matches in library order). Beyond the horizon the playout still takes the first match in library order | Pirates: policy (name fold). **Knights: RED FLAG** (draft `MTG_KN_ETBDIG_RANK`, below) |
+| EtbDigPick | Acclaimed Contender, Staunch Crewmate | **SEARCHED: the ETB-dig axis over EVERY legal match** (was: the 3 front matches in library order). Beyond the horizon the playout still takes the first match in library order | Pirates: policy (name fold). Knights: policy `MTG_KN_ETBDIG_RANK` (default ON 2026-11-20; `=0` = searched default + RED FLAG) |
 | LifegainCountersSpend | Nykthos Paragon | **NOT YET SEARCHED** -- the old greedy (spend every use on the first gain). A searched axis is a new plan pin in both worlds; owed (see "Owed") | **Selesnya Lifegain: RED FLAG** |
 | GenesisWavePut | Genesis Wave | **NOT YET SEARCHED** -- the disclosed rule (every legal permanent except a creature whose mandatory ETB destroys one of ours). Full menu = 2^L subsets of the L legal reveals; owed | **Landfall, Selesnya Lifegain: RED FLAG** |
 | TutorHandPut | Ranger of Eos, Squadron Hawk | library order, truncated (no searched axis; owed, unexercised) | Melira Pod, Martyr Lifegain: policy |
@@ -65,19 +67,60 @@ All in `src/ai/ProviderHeuristicRequired.{h,cpp}`.
 "Owed, unexercised": every deck holding the card has a policy, so the engine default never plays; a new deck holding
 one would carry the RED FLAG, and its searched default must be built before its policy is measured against it.
 
-## Candidates (survey 2026-11-18, NOT registered -- for the USER)
+## Measurements (2026-11-20)
 
-Decisions whose engine/root default is a disclosed generic shape (library order, a capped or round-robin prefix, a
-single greedy pick) or whose full menu is combinatorially huge. None is registered; each would make the decks that
-hold the card refuse to run until their providers add a policy.
+**Knights, Acclaimed Contender's dig.** ONE pooled `mtg --batch`, 18,000 games, 134 s wall; held-out seeds
+61001..64000, paired (`game_index 0`), d5 b20, std + 2HG; arms `old` (`MTG_REQHEUR_OLD_DEFAULT=1`, the 3-cap = the
+pre-2026-11-20 play), `searched` (every legal match), `policy` (`MTG_KN_ETBDIG_RANK=1`).
 
-| Card / hook | Engine or root default today | Why it fits the pattern |
-|---|---|---|
-| Genesis Wave -- `DecisionProvider::GenesisWavePutPicks` ("any number" of revealed permanents) | A disclosed rule, not a searched subset: put every legal revealed permanent except a creature whose mandatory ETB destroys one of ours; X = max (GenericProvider) | A searched subset is 2^X plan variants -- the precedent the Gorger menu cites |
-| Ranger of Eos -- `TutorHandPutList` (multi-tutor to hand) | Library order over the legal cards, truncated to `max_puts` ("deliberately unopinionated") | Literally "in library order" |
-| Dragonstorm -- `TutorToBattlefieldPutOrder` | Empty -> the engine's library-order enumeration of TutorCandidates | Library order decides which Dragons enter |
-| Acclaimed Contender -- `EtbDigCandidates` | The FIRST legal match in look order (= library order); the header calls it "poor and retained only for byte-identity" | Library order |
-| Nykthos Paragon -- `LifegainCountersSpendCount` | One greedy pick (spend every copy), deliberately not searched | A per-event spend axis is a Cartesian explosion |
-| Activation counts -- `BlinkActivationCounts`, ActivatePump / ActivateRevealTop K | Generic 1..min(3, affordable) | A self-funding loop needs a deck provider to propose the go-off count |
-| Hedron Crab -- `HedronMillTargetPolicyPeriod` | 0 = no narrowing policy (the comment: "the solver must not silently use a bounded sequence") | Per-trigger self/opponent targets are 2^N; Mill supplies period 4 |
-| Reveillark -- `ReviveCandidates` | A deck-agnostic ranking (printed MV desc) | Weaker fit: ranked, not library order |
+| fmt | arm | wins | avg | delta vs searched | t | faster / slower | units/g | units x |
+|---|---|---|---|---|---|---|---|---|
+| std | old | 2999 | 4.3357 | +0.0013 | 2.00 | 0 / 4 | 1062 | 0.986 |
+| std | policy | 2999 | 4.3343 | +0.0000 | 0.00 | 0 / 0 | 1060 | 0.984 |
+| std | searched | 2999 | 4.3343 | -- | -- | -- | 1077 | 1.000 |
+| 2hg | old | 2997 | 5.0000 | +0.0010 | 1.73 | 0 / 3 | 3774 | 0.968 |
+| 2hg | policy | 2997 | 4.9990 | +0.0000 | 0.00 | 0 / 0 | 3827 | 0.982 |
+| 2hg | searched | 2997 | 4.9990 | -- | -- | -- | 3899 | 1.000 |
+
+* The policy plays IDENTICALLY to the searched default on all 6000 paired games, at ~1.6% (std) / ~1.8% (2HG) fewer
+  units; so it is ON by default. Versus the OLD 3-cap (today's play before this change) both are 7 games faster in
+  6000 and 0 slower -- so Knights' play does move, slightly, in the right direction.
+* Census (`MTG_ETBDIG_CENSUS`): the dig fires in ~30% of games; the search deviates from look-order index 0 in 51 of
+  901 digs; no win turn moves between searched and policy. Library-order picking does NOT explain Contender's poor
+  screens: the card itself is weak at a T4-T5 kill.
+* Files (worktree `provreg`): `logs/provreg/kn_main_results.txt`, `kn_main_slower.txt`, `kn_main_manifest.json`,
+  `ab.py`, `census.py`.
+
+## Owed
+
+1. **Nykthos Paragon (LifegainCountersSpend) and Genesis Wave (GenesisWavePut) searched defaults.** Built as WIP on
+   `backup/2026-11-20/provreg` (commit `96b47813e`, branch `provreg-1120`), NOT landed:
+   * Paragon pin `Plan::paragon_spend_pins` (one spend count per eligible main-phase gain event; past the list = 0),
+     Wave pin `Plan::wave_skip_choice` (skip mask over the first Wave's legal reveals, per-name subsets), consumed in
+     `ResolveLifegainCountersOnceBudget` / `PerformGenesisWave`, installed in both ApplyPlanDirect and the executor,
+     fanned out in `AppendSubdecisionAxes` off one probe apply per base plan.
+   * Draft deck policies (default OFF): `MTG_SL_PARAGON_POLICY` (Selesnya: the old greedy as a one-option restriction)
+     and `MTG_WAVE_RULE_POLICY` (Selesnya + Landfall: the disclosed rule). Rule: default ON only if no worse on the
+     A/B AND cheaper; otherwise the searched default stands and the deck keeps its RED FLAG.
+   * Unit file `test/unit/test_searched_paragon_wave.cpp`. Its two executor-lockstep failures were the TEST's no-op
+     stack resolver (`TakeTurn`'s third argument resolves the stack; a `[](GameState&){}` leaves every cast spell on
+     it), not the pins -- fixed on the backup branch; the full unit suite still has to run there.
+   * The pooled A/B is READY, not run: manifest `build/scratch/provreg/pw_main/manifest.json` (copy
+     `logs/provreg/pw_main_manifest.json` in the `provreg` worktree), runner `build/scratch/provreg/run_pw_main.sh`,
+     13 jobs x 3000 games (Selesnya std + 2HG: old / searched / polpara / polwave / policy; Landfall std: old / searched
+     / policy), seeds 61001.., d5 b20. Analyse with `python3 logs/provreg/ab.py analyze build/scratch/provreg/pw_main
+     searched`.
+   * Known limits of the axes: main-phase applies only (combat gains keep the greedy), E <= 12 events, the event
+     count comes from the base plan's probe, the Wave mask covers only the first Wave and the first 31 reveals, the
+     axes do not cross other axes or ride continuations.
+   * Until it lands, Selesnya Lifegain (Paragon, Wave) and Landfall (Wave) carry the RED FLAG and play the OLD engine
+     default (the registry fallback text says NOT YET SEARCHED).
+2. Searched axes for TutorHandPut, TutorToBattlefieldPut and RevivePick ("owed, unexercised": every deck holding
+   the card has a policy today).
+
+## Open USER questions
+
+* Knights: `MTG_KN_ETBDIG_RANK` is default ON (one revertable commit). Overrule? Numbers above: play-identical to the
+  searched default, ~1.6-1.8% cheaper; 7 games in 6000 faster than the old 3-cap.
+* Should the Contender re-open stay closed? Library-order picking is not the cause of its poor screens.
+* Selesnya / Landfall draft policies: pending the pw_main A/B.
