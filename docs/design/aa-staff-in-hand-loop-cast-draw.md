@@ -198,3 +198,40 @@ T1 search COMMITTED a line whose winning turn holds an s9d continuation, and the
   continuation's traits, as the rollout does (agent 4's recorded asymmetry).
 * **Scenario:** `test/scenarios/aa_s9d_replay_segments_staff_ezuri_t4.json` (gi87's T4 board): the pre-fix binary
   commits the identical line and wins T5; `MTG_SITE9_AFTER_DEFERRED=0` never finds the T4 line.
+
+**Measured after the replay fix (chain7, rebased tree, 2026-11-20):** units 3784/3784; all 26 `aa_*` scenarios pass
+(the new one wins T4); acceptance heuristic off d8 b0 **T3**, play setting heuristic off **T3** and on **T3**. At d8 b0
+gi12 6, gi40 5, gi87 4, each equal to `MTG_SITE9_AFTER_DEFERRED=0`: all three recover.
+
+### Held-out A/B (ab7): all seven levers on vs all off
+
+13 decks, 37 searched cells (d3 b10, the play setting, and 2HG where the tiers have it), 500 games per arm per cell,
+chunks of 10, seed offset 910000 (disjoint from every tier). Per deck, all cells pooled and chunk-paired:
+
+| deck | delta (turns) | t | better/worse chunks | wall |
+|---|---|---|---|---|
+| Accomplished Alchemist | -0.0840 | -10.68 | 86/4 | -19.2% |
+| Melira Pod | -0.0033 | -2.27 | 5/0 | +2.4% |
+| Goblins | -0.0013 | -1.42 | 2/0 | +8.7% |
+| Landfall | -0.0010 | -1.00 | 1/0 | -0.4% |
+| Eldrazi Displacer Flicker | 0.0000 | 0.00 | 1/1 | +7.0% |
+| Unpredictable Cyclone | +0.0007 | +1.00 | 0/1 | +0.4% |
+| the other 7 | 0.0000 | - | 0/0 | -0.1% .. +3.4% |
+
+Wall is noisy (the box is shared with another container); cost is judged in units.
+
+**The one slower Cyclone game** (cell d6 b20, chunk 120, game 126, seed 911127): T4 off, T5 on. Bisect: only
+`MTG_SITE9_AFTER_DEFERRED` moves it (each lever alone off/on). It recovers at **d8 b0 (T4 = T4, identical digest)** and
+at **b40, b80, b160, b320 (all T4)**; units at b20 18,000 off vs 61,248 on. Mechanism: inside T3 rollouts a Brainstorm
+draw breakpoint's deferred continuation leaves a newly activatable ability (the re-plan menus offer Myriad Landscape's
+activation), so site 9 opens after the continuation (107 opens on T3, `MTG_SITE9_TRACE=3`) -- the same delta rule the
+main section uses. The extra, legitimate breakpoint work spends the b20 budget and the T3 choice moves from Brainstorm
+to Seething Song + Brainsurge. **Verdict: budget re-pricing, findable from b40 up and at unlimited budget; not a
+defect.** It still leaves the deck at +0.0007 on 1,500 games (one game); the USER's bar reads that as not neutral, so
+it is surfaced rather than waved through.
+
+**gi143** (regression d5_s3003, seed 3146): 7 at the tier setting vs 6 with all levers off. Moved by
+`MTG_AA_ALCH_TAP_LAST` alone and by `MTG_AURA_LATE_BIND_RANK` alone (each lever alone on -> 7; every single lever off
+from all-on stays 7). On: 7 at b20 / b40 / b80, **6 at b160 / b320 and at d8 b0**; off 6 everywhere. Both are
+provider ORDER levers (tap order, Umbra host rank): they re-order what the budget reaches first, and the line is still
+found at a larger budget. **Verdict: budget re-pricing, recovers at d8 b0.**
