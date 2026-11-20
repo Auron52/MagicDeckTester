@@ -759,6 +759,28 @@ inline bool PayRefineOn()
     return heurarm::Flag(heurarm::PAY_REFINE, env_on);
 }
 
+// MTG_PAY_REFINE_SCALED (2026-11-20; DEFAULT ON; =0 -> the refine's two triggers only): MTG_PAY_REFINE also looks at an
+// exact payment of four or more taps that tapped a scaled land (Three Tree City, Baldur's Gate) whose fed mode makes at
+// least {feeder} + 2 -- the backtracker's plain-{C}-first order can pay off more sources than the fed mode needs (Merfolk
+// Turns gate claude-queue-20261119i s30001289 T5, ORACLE-GAP: Emperor Mihail II's {1} stranded). The refine's own
+// dominance test decides; this only widens when it runs (PayRefineAfter, ManaPayment.cpp).
+inline bool PayRefineScaledOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_SCALED", true);
+    return heurarm::Flag(heurarm::PAY_REFINE_SCALED, env_on);
+}
+
+// MTG_SCALED_LAND_ROUTE (2026-11-20; DEFAULT ON; =0 -> the greedy payment): a payment of an applying line that leaves an
+// untapped scaled land (Three Tree City, Baldur's Gate) unable to fund the rest of the line -- its plain {C} spent on a
+// generic pip, or its feeders spent -- is re-made with one of the greedy's sources held out, when that keeps the rest
+// payable (ScaledLandRouteHold, ManaPayment.cpp). Merfolk Turns gate claude-queue-20261119i: Sol Ring's {1} off City's
+// {C} dropped Wanderwine Prophets (APPLY-DROP x220 / x200 / x180). Shared payer: executor, rollout and walks together.
+inline bool ScaledLandRouteOn()
+{
+    static const bool env_on = EnvOn("MTG_SCALED_LAND_ROUTE", true);
+    return heurarm::Flag(heurarm::SCALED_LAND_ROUTE, env_on);
+}
+
 // MTG_PAY_EXCESS_RELEASE (2026-11-11, item 5d of the mana-clean chain; DEFAULT ON, =0 -> as before): release a source
 // a payment's mana exceeded its bill by, where the release is a dominance. Read by the whole-turn prepay's give-back
 // (TurnSolver BatchPrepayMainCasts, MTG_PREPAY_SHRINK). The per-cast refine's half is MTG_PAY_REFINE_C_FOLD.

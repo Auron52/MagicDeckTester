@@ -1076,6 +1076,8 @@ enum Slot : int
     PD_CASTLESS_LINE_NO_HOLD, // MTG_PD_CASTLESS_LINE_NO_HOLD  Prevent Damage: the Earthquake/Spellshock-in-hand red hold stands down while the current plan names no mana cast and opens nothing unseen (an activation-only line: no step of it can spend the held red; s6006 gi47 T7). Default ON; =0 holds on every armed bill
     LINE_KEEP_ROCK,           // MTG_LINE_KEEP_ROCK  the line-keep rung (LineReducerKeepHold, ManaPayment.cpp) on every applying line of two or more held casts that CASTS A MANA ROCK (the lines the joint prepay declines with PP_PRODUCER, so the per-cast greedy pays them with no joint allocation), and the rung's rest judged with the rock being paid for on the board (it enters untapped; the later casts meet its mana). Stuffy Doll s30003847 T4 {Guilty Conscience + Mind Stone + Loran's Escape}: Mind Stone's {2} took Boros Garrison's {R}{W} and Loran's Escape's {W} met two Mind Stones. =0 -> byte-identical
     LKR_NO_SAC_ACTION,        // MTG_LKR_NO_SAC_ACTION  the line-keep rung's repair table holds no DIRECT-ACTION sacrifice source (Generator Servant; manaoracle::NoSacActionRouteScope), so a repair never sacrifices one the plan did not (NivMizzetCombo d0 smoke gi82 / gi373), and such a source is then no guard on the rock's tight test. DEFAULT ON; =0 restores the 9379d1fd9 rung byte for byte
+    PAY_REFINE_SCALED,        // MTG_PAY_REFINE_SCALED  the payment refine (MTG_PAY_REFINE) also runs after an exact payment of four or more taps that tapped a scaled land (Three Tree City, Baldur's Gate) whose fed mode makes >= {feeder} + 2: the plain-{C}-first backtracker can pay off more sources than the fed mode needs. Merfolk Turns gate claude-queue-20261119i s30001289 T5 (ORACLE-GAP: Prophets off four Islands + City's {C}, Mihail's {1} stranded). Default ON; =0 -> the refine's two triggers only
+    SCALED_LAND_ROUTE,        // MTG_SCALED_LAND_ROUTE  a payment of an applying line that leaves an untapped scaled land (Three Tree City, Baldur's Gate) unable to fund the rest of the line is re-made with one of the greedy's sources held out when that keeps the rest payable (ScaledLandRouteHold, ManaPayment.cpp; the rock being cast is credited, the rest is net of the line's reducer credit). Merfolk Turns gate claude-queue-20261119i s30000073 T7: Sol Ring's {1} off City's {C} dropped Wanderwine Prophets. Default ON; =0 -> the greedy payment
     COUNT
 };
 
@@ -2096,6 +2098,8 @@ inline const char* Name(int slot)
         "MTG_PD_CASTLESS_LINE_NO_HOLD",
         "MTG_LINE_KEEP_ROCK",
         "MTG_LKR_NO_SAC_ACTION",
+        "MTG_PAY_REFINE_SCALED",
+        "MTG_SCALED_LAND_ROUTE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
