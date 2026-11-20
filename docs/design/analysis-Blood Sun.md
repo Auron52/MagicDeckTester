@@ -141,6 +141,9 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Parent's reading -> provider RESTRICTION (USER-authored, ON by default, one `MTG_` lever so it can be A/B'd
   and reported against the unrestricted search; adoption stays the USER's):
   (a) Revelation is not cast at X <= 1 unless another Revelation is in hand (5 mana = X 0 is already folded);
+      USER clarification (verbatim): *"Right at 5 mana the Revelation is useless and should never be cast. My
+      guidance on duplicates is for when you have 6 mana."* -> X = 0 is NEVER cast (no exception); X = 1 only
+      with another Revelation in hand; X >= 2 unrestricted by this rule;
   (b) tutor targets (Revelation packages, Grim Tutor, Machinations' transmute) are limited to: Blood Sun only
       while we have none (battlefield or hand); lands only Lotus Vale / Lotus Field / Scorched Ruins; accel
       enchantments only Exploration and Fastbond, none once a Fastbond is on the battlefield or in hand,
