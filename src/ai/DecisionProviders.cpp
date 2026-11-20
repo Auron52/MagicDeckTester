@@ -69087,6 +69087,10 @@ MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABON
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
 MAZE_P5_LEVER(MazeIdleFetchOn,        MAZE_IDLE_FETCH,         "MTG_MAZE_IDLE_FETCH",         true)   // P5d
 MAZE_P5_LEVER(MazeIdleFetchRevealOn,  MAZE_IDLE_FETCH_REVEAL,  "MTG_MAZE_IDLE_FETCH_REVEAL",  false)   // P5d-5 amendment of (a)
+MAZE_P5_LEVER(MazeFetchTierFullOn,    MAZE_FETCH_TIER_FULL,    "MTG_MAZE_FETCH_TIER_FULL",    false)   // P5d-6 Q1 (C2)
+MAZE_P5_LEVER(MazeFetchRankCondOn,    MAZE_FETCH_RANK_COND,    "MTG_MAZE_FETCH_RANK_COND",    false)   // P5d-6 Q1
+MAZE_P5_LEVER(MazeManabondDiscardOn,  MAZE_MANABOND_DISCARD,   "MTG_MAZE_MANABOND_DISCARD",   false)   // P5d-6 Q2
+MAZE_P5_LEVER(MazeDiscardBurgeoningOn, MAZE_DISCARD_BURGEONING, "MTG_MAZE_DISCARD_BURGEONING", true)   // P5d-6 Q2 sub-lever
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
@@ -70137,6 +70141,108 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
     return DeckProvider::ManaSourceRank(s, def);
 }
 
+// P5d-6 (USER Q2 2026-11-20, VERBATIM: "I think this case depends more on whether we care about the cards discarded. For
+// example a Gates Ablaze does nothing in goldfish and can be freely discarded. An extra Guild Summit is usually not
+// needed. 1 Exploration is possibly worth keeping if we don't have one out, but otherwise we can probably drop all of the
+// other accelerators since Manabond can drop multiple lands in a turn. Amulets are usually good to keep if you can because
+// of how they interact with Maze's End so they would prefer to be kept."; "Archdruid's Charm and Sylvan Scrying are
+// droppable when the manabond is high-impact (multiple lands) or sets us up to win. If we have only 1 land and the
+// Scrying or Charm it would be best to cast it first if you can."; "I guess with two lands and multiple scrying you would
+// consider again. In that case, unless we are close to the win you may want to delay one turn."; and the governing
+// principle: "any of the close cases here should be searched and any that are not are considerations for pruning.").
+// THE MANABOND DISCARD-VALUE RULE: what a Manabond "yes" putting `lands_put` lands would discard from the hand (less the
+// hand indices in `skip`, the cards a plan casts first). Classes, read off card parameters:
+//  * FREE always: a card that does nothing in goldfish (Gates Ablaze: damage to creatures per Gate).
+//  * Guild Summit (draw on Gate entry): free when one is ours on the battlefield, else all but one in hand.
+//  * Accelerators (extra land drop: Exploration; Manabond; Burgeoning under MTG_MAZE_DISCARD_BURGEONING): free when an
+//    Exploration is ours on the battlefield, else all but ONE Exploration (the others are free).
+//  * Land tutors (Sylvan Scrying, Archdruid's Charm): free when the yes is high-impact -- three or more lands, or two
+//    with a single tutor -- or sets up the win (the put leaves at most one Gate name to go); otherwise HELD.
+//  * Everything else (Amulet of Vigor, a deck change) is KEPT.
+struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; };
+static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, const std::vector<int>* skip = nullptr)
+{
+    MazeDumpView v;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    bool expl_out = false, summit_out = false;
+    const CardDefinition* maze = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        expl_out   = expl_out || d->params.static_extra_land_drops > 0;
+        summit_out = summit_out || !d->params.draw_on_other_subtype_enter.empty();
+        if (MazeIsMazeDef(d)) { maze = d; }
+    }
+    int summits = 0, accels = 0, expls = 0, tutors = 0;
+    int new_names = 0;
+    std::vector<std::string> seen;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        if (skip != nullptr && std::find(skip->begin(), skip->end(), i) != skip->end()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]);
+        if (d == nullptr) { ++v.nonland; ++v.kept; continue; }
+        if (d->card.IsLand())
+        {
+            if (MazeIsMazeDef(d)) { maze = d; }
+            const std::string nm = d->card.m_name.str();
+            if (MazeNameIsGate(nm) && !MazeControlsGateNamed(s, me, nm)
+                && std::find(seen.begin(), seen.end(), nm) == seen.end()) { seen.push_back(nm); ++new_names; }
+            continue;
+        }
+        ++v.nonland;
+        const CardParams& q = d->params;
+        if (!q.damage_all_creatures_x_per_subtype.empty()) { ++v.free; }
+        else if (!q.draw_on_other_subtype_enter.empty()) { ++summits; }
+        else if (q.static_extra_land_drops > 0) { ++accels; ++expls; }
+        else if (q.endstep_may_dump_hand_lands_discard_hand) { ++accels; }
+        else if (q.opponent_land_play_put_land_from_hand && MazeDiscardBurgeoningOn()) { ++accels; }
+        else if ((q.tutor_to_hand || q.tutor_land_to_battlefield)
+                 && std::find(q.tutor_types.begin(), q.tutor_types.end(), "Land") != q.tutor_types.end()) { ++tutors; }
+        else { ++v.kept; }
+    }
+    v.free += summit_out ? summits : std::max(0, summits - 1);
+    v.kept += summit_out ? 0 : std::min(summits, 1);
+    const int keep_expl = (!expl_out && expls > 0) ? 1 : 0;
+    v.free += accels - keep_expl;
+    v.kept += keep_expl;
+    const int need = maze != nullptr ? maze->params.alt_win_distinct_named_count : 10;
+    const std::string sub = maze != nullptr ? maze->params.alt_win_distinct_named_subtype : std::string("Gate");
+    const bool sets_up_win = CountDistinctNamedLandsWithSubtype(s, me, sub, need) + new_names + 1 >= need;
+    const bool tutors_free = lands_put >= 3 || (lands_put == 2 && tutors <= 1) || sets_up_win;
+    if (tutors_free) { v.free += tutors; } else { v.held_tutors = tutors; }
+    return v;
+}
+// Does Manabond put a held Maze's End back before our next turn without discarding a card we care about (P5d-6 Q2)?
+// `extra_lands` = lands the hand will hold beyond its current lands at the end step (the fetched-away Maze's End).
+static bool MazeManabondReturnsFree(const GameState& s, int me, int extra_lands, const std::vector<int>* skip)
+{
+    if (!MazeManabondOurs(s, me)) { return false; }
+    int lands = extra_lands;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        if (skip != nullptr && std::find(skip->begin(), skip->end(), i) != skip->end()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(i)]);
+        if (d != nullptr && d->card.IsLand()) { ++lands; }
+    }
+    const MazeDumpView v = MazeDumpDiscards(s, me, lands, skip);
+    return v.free == v.nonland;
+}
+// MazeHandReturnsBeforeNextTurn under the Q2 lever: Burgeoning still counts; Manabond only with free discards.
+static bool MazeHandReturnsQ2(const GameState& s, int me, int extra_lands, const std::vector<int>* skip)
+{
+    if (!MazeManabondDiscardOn()) { return MazeHandReturnsBeforeNextTurn(s, me); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.opponent_land_play_put_land_from_hand) { return true; }
+    }
+    return MazeManabondReturnsFree(s, me, extra_lands, skip);
+}
+
 // P5d: is `a` a Maze's End activation fetching a Gate name `me` does not control (the progress fetch)?
 static bool MazeNewNameFetch(const GameState& s, int me, const Action& a)
 {
@@ -70198,7 +70304,7 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
         const int need = source.params.alt_win_distinct_named_count;
         const bool wins = CountDistinctNamedLandsWithSubtype(s, me, source.params.alt_win_distinct_named_subtype, need)
                           + 1 >= need;
-        return (wins || MazeHandReturnsBeforeNextTurn(s, me) || MazeAmuletOurs(s, me)) ? full : 0;
+        return (wins || MazeHandReturnsQ2(s, me, 1, nullptr) || MazeAmuletOurs(s, me)) ? full : 0;
     }
     // Lands SHORT of full rate (USER: "there is a point at which we don't have enough lands in hand to keep playing
     // them at full rate this or next turn. If that is the case it should win out over other effects."): the hand's
@@ -70210,7 +70316,32 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
     // then scores the winning fetch). The I3 three-drop board: Maze's End, two hand Gates, fetch the tenth name.
     if (MazeFillThenFetchWins(s, me, source, drops_open, target) && !MazeFillThenFetchWins(s, me, source, 0, target))
     { return 0; }
-    if (MazeManabondOurs(s, me)) { return kMazeFetchWins; }
+    // P5d-6 (USER Q1 2026-11-20, VERBATIM: "I don't think activating strictly beats or loses to spells. Both are good and
+    // better in certain circumstances. That means that potentially A is okay, but the best answer is conditional. If you
+    // need to deploy more lands from hand Exploration, Manabond and maybe even Burgeoning are better. If you need more
+    // lands in hand activation or Guild Summit are better. Guild Summit is typically better relatively early or when you
+    // have the means to drop a number of gates, whereas the activation is better late, especially when you are nearing
+    // the win (and in fact you need to activate to win) as long as you don't strand the Maze's end in hand."). The tier
+    // below is the "need lands in hand" case. MTG_MAZE_FETCH_TIER_FULL (C2, "A"): one spell's worth (`full`).
+    // MTG_MAZE_FETCH_RANK_COND: kMazeFetchWins only NEAR THE WIN (after this fetch at most two names to go); otherwise
+    // `full`, one below it while a Guild Summit is in hand so the Summit is cast first. ORDER only: an eval.
+    auto short_tier = [&]()
+    {
+        if (MazeFetchRankCondOn())
+        {
+            const int need = source.params.alt_win_distinct_named_count;
+            const int names = CountDistinctNamedLandsWithSubtype(s, me, source.params.alt_win_distinct_named_subtype, need);
+            if (names + 1 >= need - 2) { return kMazeFetchWins; }
+            for (const Card& c : pl.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && !d->card.IsLand() && !d->params.draw_on_other_subtype_enter.empty()) { return full - 1; }
+            }
+            return full;
+        }
+        return MazeFetchTierFullOn() ? full : kMazeFetchWins;
+    };
+    if (MazeManabondOurs(s, me)) { return short_tier(); }
     int hand_lands = 0;
     for (const Card& c : pl.hand)
     {
@@ -70218,7 +70349,7 @@ int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& 
         if (d != nullptr && d->card.IsLand() && LandPlayOffered(s, me, *d)) { ++hand_lands; }
     }
     const int next_drops = 1 + StaticExtraLandDrops(s, me);
-    if (hand_lands < drops_open + next_drops) { return kMazeFetchWins; }
+    if (hand_lands < drops_open + next_drops) { return short_tier(); }
     // Plenty of lands in hand, no Manabond: fetch + replay takes the same names as playing a hand land in that drop and
     // keeps the land for later, at the cost of {3} -- taken whenever the {3} has nothing else to do (USER: "I don't
     // think it should be ever worse ... if we have nothing to do with the mana"), outranked by any spell competing for
@@ -70399,6 +70530,25 @@ bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int c
         if (d != nullptr && d->card.IsLand() && !MazePlazaPayable(s, controller, *d, 0)) { return false; }
     }
     return true;
+}
+
+// P5d-6 (USER Q2; rulings at MazeDumpDiscards), lever MTG_MAZE_MANABOND_DISCARD. CLASSIFIED per the governing principle
+// ("any of the close cases here should be searched and any that are not are considerations for pruning"):
+//  * CLEAR -> prune: every nonland card the yes discards is FREE (with at least one land to put) -- "no" keeps nothing
+//    we care about and forgoes the lands, the all-land hand's premise (CrossingDumpAllLandsDominatesNo) with discards
+//    that do nothing in goldfish. Returns 2.
+//  * CLOSE -> order "no" first, both searched: a land tutor is HELD (one land, or two with several tutors and not
+//    setting up the win: "cast it first" / "delay one turn"), or a KEPT card (Amulet, the one Exploration with none out,
+//    the one Guild Summit with none out) would go for a single land. Returns -1.
+//  * CLOSE -> the engine's default order (yes first): anything else (a kept card for two or more lands). Returns 0.
+int MazesEndProvider::CrossingDumpYesOrder(const GameState& s, int controller, int lands_put) const
+{
+    if (!MazeManabondDiscardOn() || !MazeAutonomous() || lands_put <= 0) { return 0; }
+    const MazeDumpView v = MazeDumpDiscards(s, controller, lands_put);
+    if (v.nonland == 0) { return 0; }
+    if (v.free == v.nonland) { return 2; }
+    if (v.held_tutors > 0 || (v.kept > 0 && lands_put < 2)) { return -1; }
+    return 0;
 }
 
 // P6 (USER 2026-11-18, ruling 6, VERBATIM: "It's especially easy if we can respond to a trigger from Manabond or
@@ -70929,7 +71079,17 @@ static void MazeIdleFetchAdmit(const GameState& s, const std::vector<DecisionPro
         const bool plays = !plans[i].land->empty();
         const int open_after = drops_open - (plays ? 1 : 0);
         const int hand_after = std::max(0, hand_lands - (plays ? 1 : 0));
-        if (open_after >= hand_after + 1 || returns || wins_now) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
+        // P5d-6 Q2 (MTG_MAZE_MANABOND_DISCARD): Manabond counts as putting Maze's End back only when the cards its yes
+        // would discard -- the hand less this plan's casts -- are all free (MazeDumpDiscards).
+        bool returns_i = returns;
+        if (MazeManabondDiscardOn())
+        {
+            std::vector<int> cast_idx;
+            for (const Action& a : *plans[i].actions)
+            { if (a.kind == Action::Kind::CastFromHand && a.hand_index >= 0) { cast_idx.push_back(a.hand_index); } }
+            returns_i = MazeHandReturnsQ2(s, me, plays ? 0 : 1, &cast_idx);
+        }
+        if (open_after >= hand_after + 1 || returns_i || wins_now) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
     }
     if (covered.empty()) { return; }
     // P5d-5 REVEAL GUARD (MTG_MAZE_IDLE_FETCH_REVEAL, default OFF): a plan whose land or actions REVEAL a card this turn
