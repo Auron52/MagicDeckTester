@@ -166,19 +166,19 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         Lib(s, "Exploration", 32);
         CHECK(MazesEndProvider::MazeWinlessBound(s) == 3);    // + two Explorations (drawn, cast) = 9
         Lib(s, "Archdruid's Charm", 33);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // + the Charm = 10: no proof
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -4);   // + the Charm = 10: no proof (-4: no Manabond, count open)
         GameState t = Board(prov, 5, true);
         Put(t, "Guild Summit", 30);
         Put(t, "Burgeoning", 31);
         Lib(t, "Burgeoning", 32);
         CHECK(MazesEndProvider::MazeWinlessBound(t) == 3);    // 5 + fetch + drop + two Burgeoning puts = 9
         Lib(t, "Talon Gates of Madara", 33);
-        CHECK(MazesEndProvider::MazeWinlessBound(t) == -1);   // + the Talon put = 10
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == -4);   // + the Talon put = 10
         // A Manabond anywhere (here the library) dumps the hand with no source: give up.
         GameState u = Board(prov, 1, false);
         Put(u, "Guild Summit", 30);
         Lib(u, "Manabond", 31);
-        CHECK(MazesEndProvider::MazeWinlessBound(u) == -1);
+        CHECK(MazesEndProvider::MazeWinlessBound(u) == -7);   // -7: library-only Manabond; the count alone would close
     }
     {
         // (N) NAMES: whatever Summit / Manabond do, a Gate name that is in neither hand nor library cannot enter.
@@ -190,7 +190,7 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         Hand(s, "Citadel Gate", 34);
         CHECK(MazesEndProvider::MazeWinlessBound(s) == 2);    // 6 + 3 names = 9
         Lib(s, "Sea Gate", 35);
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 10 names reachable; Summit + Manabond: give up
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -6);   // 10 names reachable; Summit + Manabond controlled: give up (-6: the count would close)
     }
     {
         // In play a hand / library Card instance carries NO type bits (Card::IsLand() is false there): the bound
@@ -200,7 +200,7 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         Put(s, "Manabond", 31);
         const char* const lib[4] = { "Boros Guildgate", "Izzet Guildgate", "Sea Gate", "Citadel Gate" };
         for (int k = 0; k < 4; ++k) { Card c = C(lib[k], 40 + k); c.m_type_mask = 0; s.players[0].library.push_back(c); }
-        CHECK(MazesEndProvider::MazeWinlessBound(s) == -1);   // 6 + 4 names = 10: no proof
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -6);   // 6 + 4 names = 10: no proof (Manabond controlled)
         GameState t = Board(prov, 6, true, false);
         Put(t, "Guild Summit", 30);
         Put(t, "Manabond", 31);
