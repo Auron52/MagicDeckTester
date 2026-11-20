@@ -117870,10 +117870,11 @@ namespace inwin
     // it ran in (every shallower pass refuted, so every in-window win sits at the edge). The map is depth-free, leaf-
     // free and per GAME, so it hands that answer to passes and decisions where the premise does not hold -- a rollout
     // ladder pass that runs after a shallower pass already found a win, a jump-laddered or root-cut pass -- and a
-    // non-minimal win, or the no-win bound "nothing before it", becomes a proof. Measured: Maze's End s3076 gi73 and
-    // Martyr Lifegain s2151 gi149 win T5 at d5 b0 and T6 at d6, d7 and d8 b0; under MTG_INWIN_CACHE_VERIFY=1 Martyr's
-    // d6 b0 game shows 4 MATERIAL disagreements (cached "no win by 5", fresh 5), and MTG_FS_HORIZON_EXIT=0 or
-    // MTG_INWIN_CACHE=0 each restore T5 with 0 disagreements. So a node whose subtree took an exit stores no no-win
+    // non-minimal win, or the no-win bound "nothing before it", becomes a proof. Measured on 8fbbc5023: Martyr Lifegain
+    // s2151 gi149 wins T5 at d5 b0; at d6 b0 it is T6 with the guard OFF and T5 with it ON, and under
+    // MTG_INWIN_CACHE_VERIFY=1 the guard-off game shows 2 MATERIAL disagreements (cached "no win by 5", fresh 5), both
+    // stored by nodes whose subtree took exits (hexits 4 and 5). (Maze's End s3076 gi73, first blamed on this, is a
+    // different defect: a leafless depth-0 frame scoring an already-won state, MTG_LEAF_GAME_OVER.) So a node whose subtree took an exit stores no no-win
     // bound, and stores its win only when an existing proof already refutes every turn before it (then the first
     // in-window win IS the earliest -- what keeps a leafless ID ladder's edge wins). Every budget; inert where no exit
     // fires. A re-price at most: a refused store is re-searched, never answered wrong.
@@ -117919,6 +117920,13 @@ namespace inwin
     inline Reporter g_reporter;
 }
 static void InWinCacheClear() { inwin::Clear(); }
+// MTG_LEAF_GAME_OVER (heurarm LEAF_GAME_OVER): see the depth-0 frame in FSLineWin. Default ON (a soundness fix);
+// =0 is the A/B hatch only.
+static inline bool LeafGameOverOn()
+{
+    static const bool env = EnvOn("MTG_LEAF_GAME_OVER", true);
+    return heurarm::Flag(heurarm::LEAF_GAME_OVER, env);
+}
 
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
@@ -117987,6 +117995,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                           : g_force_heuristic_leaf ? 1
                           : !(UseValueModel() || g_force_value_leaf) ? 2 : 3;
             m2yield::g_fsleaf[why].fetch_add(1, std::memory_order_relaxed);
+        }
+        // A GAME ALREADY OVER IS NOT A LEAF (MTG_LEAF_GAME_OVER, heurarm LEAF_GAME_OVER; default ON, a soundness fix).
+        // SimulateEndAndStartNextTurn does not advance the turn counter when the game ended at the boundary -- Maze's
+        // End's off-main win at our end step or their turn (won_by_effect), a deck-out at their draw -- so the caller
+        // hands this frame a state already won AT state.turn_number, the turn of the frame that called it. That win is
+        // inside the caller's window, an exact result rather than a horizon estimate. The no-leaf constant used to
+        // answer "no win" here and the value model an estimate, so a leafless node at turn T with depth 1 missed T's
+        // end-step win while the same node at depth 2 (whose child frame is interior) found it: the answer depended on
+        // the remaining depth, which breaks the in-window cache's premise (MTG_INWIN_CACHE: "the menu inside the
+        // window does not depend on the remaining depth") -- it stored the depth-1 "no win by T" and served it to the
+        // depth-2 node. Maze's End s3076 gi73: T5 at d5 b0, T6 at d6/d8 b0 (logs/maze/DM2-handoff.md). The rollout
+        // leaf is left as it was: it already plays the won state to T (SimulateToEndImpl), so its answer is right.
+        if ((g_force_constant_leaf || vm) && OpponentHasLost(state) && LeafGameOverOn())
+        {
+            g_fs_leaf_wt_sum += state.turn_number;
+            return { state.turn_number, {} };
         }
         // NO-LEAF applies with or WITHOUT a model attached. It used to be written `vm && (...)`,
         // which silently made g_force_constant_leaf a no-op on the pure-HEURISTIC arm -- the arm
@@ -140265,6 +140289,21 @@ std::uint64_t TurnSolver::PerGameCacheDigestForTest()
 
 // Test seam for MTG_LEAFLESS_READS_LEAFED (see gamelc::LeaflessReadsLeafed): one rollout pass at `depth` fills the
 // game line cache, then the leafless pass runs twice from that same cache state -- the read pinned OFF, then ON.
+int TurnSolver::LeaflessFrameWinForTest(const GameState& state, int depth, int max_turns, int arm)
+{
+    ClearPerGameCaches();
+    const std::int8_t prev = heurarm::t_arm[heurarm::LEAF_GAME_OVER];
+    heurarm::t_arm[heurarm::LEAF_GAME_OVER] = static_cast<std::int8_t>(arm);
+    int w;
+    {
+        ForceConstantLeafGuard _c(true);
+        FSLineCache c;
+        w = FSLineWin(state, depth, max_turns, max_turns + 1, false, nullptr, &c, nullptr).win_turn;
+    }
+    heurarm::t_arm[heurarm::LEAF_GAME_OVER] = prev;
+    ClearPerGameCaches();
+    return w;
+}
 TurnSolver::LeaflessReadProbe TurnSolver::LeaflessReadProbeForTest(const GameState& state, int depth, int max_turns,
                                                                   bool second_main)
 {

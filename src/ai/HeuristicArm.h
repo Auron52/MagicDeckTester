@@ -1037,6 +1037,7 @@ enum Slot : int
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     INWIN_EXIT_GUARD,         // MTG_INWIN_EXIT_GUARD      the in-window proof cache (MTG_INWIN_CACHE) stores only MINIMA: a node whose subtree took a FIRST-VERIFIED-WIN horizon exit (MTG_FS_HORIZON_EXIT) returned the first in-window win, not the earliest, so it stores no no-win bound and stores its win only when an existing proof already refutes every earlier turn. The exit's ID premise holds only inside the pass that took it; the depth- and leaf-free map served those answers to other passes and decisions (Maze's End s3076 gi73 / Martyr s2151 gi149: T5 at d5 b0, T6 at d6-d8 b0). A soundness fix; default ON; =0 -> the old store
+    LEAF_GAME_OVER,           // MTG_LEAF_GAME_OVER        a depth-0 frame whose game is ALREADY WON (a turn-boundary win: Maze's End's off-main win at our end step / their turn, a deck-out at their draw -- SimulateEndAndStartNextTurn returns without advancing the counter) answers that win at state.turn_number instead of scoring the state as a horizon leaf. The no-leaf constant answered "no win" and the value model an estimate, so a leafless node at turn T with depth 1 missed T's end-step win that the same node at depth 2 finds: the menu depended on the remaining depth, and the depth-free in-window cache (MTG_INWIN_CACHE) served that "no win by T" to deeper nodes (Maze's End s3076 gi73: T5 at d5 b0, T6 at d6-d8 b0). The rollout leaf already plays the won state out to T. A soundness fix; default ON; =0 -> the old leaf (A/B hatch only)
     COUNT
 };
 
@@ -2018,6 +2019,7 @@ inline const char* Name(int slot)
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
         "MTG_INWIN_EXIT_GUARD",
+        "MTG_LEAF_GAME_OVER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
