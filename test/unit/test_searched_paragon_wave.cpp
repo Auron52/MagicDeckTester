@@ -15,6 +15,7 @@
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/EffectHandler.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
@@ -106,6 +107,19 @@ bool CastsPw(const TurnSolver::Plan& p, const std::string& name)
     for (const Action& a : p.actions)
     { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { return true; } }
     return false;
+}
+
+// TakeTurn's third argument IS the stack resolver: the executor casts onto the stack and relies on the caller to
+// resolve it (the game loop does; a no-op lambda leaves every cast spell unresolved on the stack).
+void ResolveAllPw(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
 }
 
 struct SearchedPlayOn
@@ -241,7 +255,8 @@ TEST_CASE("searched Paragon: the fan-out emits the spend vectors, and the execut
     AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
     MtgTestSeam::CommitPhasePlan(eng, pinned, true);
     GameState exec = s;
-    eng.TakeTurn(exec, true, [](GameState&) {});
+    eng.TakeTurn(exec, true, ResolveAllPw);
+    CHECK(exec.stack.empty());
     CHECK(PlusPw(exec, 2) == PlusPw(rv, 2));
     CHECK(PlusPw(exec, 1) == PlusPw(rv, 1));
 }
@@ -294,7 +309,8 @@ TEST_CASE("searched Wave: the fan-out emits every per-name subset of the probe's
     AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
     MtgTestSeam::CommitPhasePlan(eng, pinned, true);
     GameState exec = s;
-    eng.TakeTurn(exec, true, [](GameState&) {});
+    eng.TakeTurn(exec, true, ResolveAllPw);
+    CHECK(exec.stack.empty());
     CHECK(CountPw(exec, "Llanowar Elves") == 0);
     CHECK(CountPw(exec, "Forest") == 8);
 }
