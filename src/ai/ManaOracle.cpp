@@ -22,6 +22,10 @@ extern thread_local int g_tapdbg_oracle_apply;   // TEMP DIAG (claude1115)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#if !defined(_WIN32)
+#include <time.h>
+#endif
 #include <deque>
 #include <functional>
 #include <map>
@@ -317,13 +321,25 @@ thread_local long long t_dec_limit   = 0;    // > 0 inside AuditDecision: its bu
 thread_local bool t_dec_forced_cap   = false; // an in-derivation poll stopped before its deferred charge posted
 thread_local bool t_dec_wall_cap     = false; // the oracle-only wall backstop caught unpriced repeated derivations
 thread_local unsigned t_dec_wall_polls = 0;
-thread_local std::chrono::steady_clock::time_point t_dec_wall_start{};
+// The backstop clock: this THREAD's CPU time where POSIX has it (Windows: steady wall clock). Not wall time: the
+// gate runs 32 workers on a full box (plus the small-job lane), and a wall-clock backstop turned the SAME decision
+// clean or CAPPED by box load (2026-11-20, Goblins s30131075 T2 m2: 1,087 s CPU, 1,304 s wall -> CAPPED at 1300).
+static long long BackstopNowNs()
+{
+#if defined(_WIN32)
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
+    timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#endif
+}
+thread_local long long t_dec_wall_start = 0;
 inline long long DecisionSpentNs() { return workctr::t_priced - t_dec_start; }
 inline bool DecisionOut() { return t_dec_forced_cap || (t_dec_limit > 0 && DecisionSpentNs() >= t_dec_limit); }
 std::string DecisionCapLabel()
 {
     const std::string n = std::to_string(t_dec_limit / 1000000000LL);
-    return t_dec_wall_cap ? "oracle audit wall backstop (" + n + " elapsed s)"
+    return t_dec_wall_cap ? "oracle audit backstop (" + n + " thread-CPU s)"
                           : "decision work budget (MTG_MANA_ORACLE_DECISION_S=" + n + " priced s)";
 }
 std::atomic<long long> g_dec_capped{0}, g_dec_capped_plans{0};
@@ -6351,7 +6367,7 @@ bool DecisionBudgetExceededWithOdo(long long pending_visits, bool force_wall_pol
     if (force_wall_poll || ++t_dec_wall_polls >= 4096)
     {
         t_dec_wall_polls = 0;
-        if (std::chrono::steady_clock::now() - t_dec_wall_start >= std::chrono::nanoseconds(t_dec_limit))
+        if (BackstopNowNs() - t_dec_wall_start >= t_dec_limit)
         { t_dec_wall_cap = true; t_dec_forced_cap = true; return true; }
     }
     return false;
@@ -6620,13 +6636,13 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
         long long saved_n, saved_start, saved_lim;
         bool saved_forced, saved_wall;
         unsigned saved_polls;
-        std::chrono::steady_clock::time_point saved_wall_start;
+        long long saved_wall_start;
         DecBudgetScope() : saved_n(t_dec_applies), saved_start(t_dec_start), saved_lim(t_dec_limit),
                            saved_forced(t_dec_forced_cap), saved_wall(t_dec_wall_cap),
                            saved_polls(t_dec_wall_polls), saved_wall_start(t_dec_wall_start)
         { t_dec_applies = 0; t_dec_start = workctr::t_priced; t_dec_limit = DecisionCapNs();
           t_dec_forced_cap = false; t_dec_wall_cap = false; t_dec_wall_polls = 0;
-          t_dec_wall_start = std::chrono::steady_clock::now(); }
+          t_dec_wall_start = BackstopNowNs(); }
         ~DecBudgetScope()
         { t_dec_applies = saved_n; t_dec_start = saved_start; t_dec_limit = saved_lim;
           t_dec_forced_cap = saved_forced; t_dec_wall_cap = saved_wall;
