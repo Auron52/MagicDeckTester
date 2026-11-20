@@ -45,3 +45,11 @@ commit on the same base; its rerere entry deleted. Backups: backup/maze-shared-p
 * "It seems that it wasn't clear to other agents that we should still batch up changes. I still would like that."
 * (F5R, from its handoff) "For 4 it seems like we need to have something like the refine, but make it cheaper? I'm not
   entirely sure, but we are looking for better results overall."
+
+## At our turn (DONE 2026-11-20 06:30 UTC)
+Rebased over 1dropburn (origin 1eff08565). Conflicts: HeuristicArm.h append list (unioned; enum/name aligned) and
+test/job_cost.tsv (scheduling only; rebuilt as upstream's value where 1dropburn changed a row, else this batch's
+accepted value; 0 duplicate keys). regression_gt.txt and gt_logs merged cleanly (disjoint keys).
+check_references_safe OK. Validated 9007948bc under `push_queue.py hold` + heavy_run: build 0, units 3774/3774,
+scenarios 589/589, smoke 235 passed / 0 failed (NOTHING moved), check_gt_logs 1345 consistent / 0 stale / 0 missing.
+Note: scripts/heavy_run.sh is not executable in git (mode 100644): call it as `bash scripts/heavy_run.sh`.
