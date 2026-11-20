@@ -47,16 +47,18 @@ const std::vector<RequiredHeuristicSpec>& RequiredHeuristicRegistry()
         { RequiredHeuristic::LifegainCountersSpend, "lifegain_counters_once_each_turn",
           "\"you may put that many +1/+1 counters on each creature you control. Do this only once each turn\" -- WHICH "
           "life-gain event of the turn spends the unused uses",
-          "NOT YET SEARCHED (owed, 2026-11-20 handoff): the old greedy still runs -- every unused use is spent on the "
-          "first gain of the turn",
+          "SEARCHED: every per-event spend vector over the main-phase apply's gains (Plan::paragon_spend_pins); the "
+          "old greedy (every unused use on the first gain) is the base plan. Combat and the playout beyond the horizon "
+          "keep the greedy",
           "DecisionProvider::LifegainCountersSpendCount (a per-event count), then "
           "ImplementsRequiredHeuristic(LifegainCountersSpend)",
           &CarriesLifegainCountersOnce },
         { RequiredHeuristic::GenesisWavePut, "reveal_x_put_permanents",
           "\"put any number of permanent cards with mana value X or less from among them onto the battlefield\" -- "
           "WHICH revealed permanents to put",
-          "NOT YET SEARCHED (owed, 2026-11-20 handoff; the full menu is 2^L subsets of the L legal reveals): the "
-          "disclosed rule still runs -- every legal permanent except a creature whose mandatory ETB destroys one of ours",
+          "SEARCHED: every subset of the first Wave's legal reveals, identical copies folded (Plan::wave_skip_choice); "
+          "the disclosed rule (every legal permanent except a creature whose mandatory ETB destroys one of ours) is the "
+          "base plan and the playout's answer beyond the horizon",
           "DecisionProvider::GenesisWavePutPicks (the subset), then "
           "ImplementsRequiredHeuristic(GenesisWavePut)",
           &CarriesGenesisWave },

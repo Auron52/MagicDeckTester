@@ -5419,6 +5419,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedEtbCounter _sec_exec(plan.etbcounter_choice);   // lockstep: optional ETB counter payment
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
+    // Executor/rollout lockstep for the searched Paragon spend list / Wave subset (bound to the REAL state
+    // object, the rollout's ApplyPlanDirect rule). Optional so a searched breakpoint re-solve's adopted
+    // candidate can re-install its own (adopt_resolve_post_apply).
+    std::optional<ScriptedParagonSpend> paragon_exec;
+    std::optional<ScriptedWaveSkip>     wave_exec;
+    std::vector<int>                    paragon_rs_pins;   // the adopted re-solve candidate's list (stable storage)
+    paragon_exec.emplace(plan.paragon_spend_pins, static_cast<const void*>(&state));
+    wave_exec.emplace(plan.wave_skip_choice, static_cast<const void*>(&state));
     ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
                                                     // sac-land picks (one entry per sac ordinal,
                                                     // resolved at the true state); empty inert
@@ -5508,6 +5516,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // nothing (the committed plan's policy stays) -- the same rule here.
         if (x.landfall_target_choice >= 0)
         { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.TurnSeq()); }
+        // ...and its searched Paragon spend list / Wave subset, scored by ApplyPlanDirect from THIS state with a
+        // fresh cursor: the same here. Empty / -1 keeps the committed plan's.
+        if (!x.paragon_spend_pins.empty())
+        {
+            paragon_exec.reset();
+            paragon_rs_pins = x.paragon_spend_pins;
+            paragon_exec.emplace(paragon_rs_pins, static_cast<const void*>(&state));
+        }
+        if (x.wave_skip_choice >= 0)
+        { wave_exec.reset(); wave_exec.emplace(x.wave_skip_choice, static_cast<const void*>(&state)); }
         if (x.cast_trigger_target_choice >= 0)
         { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq(), state.cast_target_trigger_ordinal); }
         rs_last = x;

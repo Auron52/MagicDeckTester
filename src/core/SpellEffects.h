@@ -9875,6 +9875,112 @@ inline int DefaultLifegainCountersSpendCount(const GameState& state, int control
     return copies_unused;
 }
 
+// SEARCHED NYKTHOS PARAGON SPEND (Plan::paragon_spend_pins; "a provider heuristic is EXPECTED",
+// ProviderHeuristicRequired.h, USER 2026-11-20: "The default should be searched"). ONE ENTRY PER
+// ELIGIBLE LIFE-GAIN EVENT of the pinned apply, in apply order: entry e = how many unused copies event
+// e spends (clamped to the copies unused then); an event PAST the list's end spends 0 -- the list is
+// the WHOLE answer for the apply, so an all-zero list is "decline every gain this main phase" (the
+// bank-it-for-combat line). An EVENT is one call of ResolveLifegainCountersOnceBudget, i.e. one gain
+// for `player` while a Paragon watcher is live -- counted whether or not a copy is still unused, so
+// the ordinals do not move with the spend decisions before them.
+// LIVE ONLY ON THE PINNED STATE OBJECT (g_paragon_pin_state): a nested re-solve scores its candidates
+// on COPIES, whose gains must not consume the outer plan's list (and the outer apply must not see the
+// copies' events), while a continuation applied in place on the same object -- in either world --
+// keeps consuming it. Installed only by a plan that carries a list (an empty list installs nothing,
+// so a continuation without pins keeps the outer plan's list). Scoped to the main-phase apply in both
+// worlds (ApplyPlanDirect / AIEngine::TakeTurn); combat and the playout beyond the horizon take the
+// provider's / generic default.
+inline thread_local const std::vector<int>* g_paragon_pins      = nullptr;
+inline thread_local const void*             g_paragon_pin_state = nullptr;
+inline thread_local int                     g_paragon_cursor    = 0;
+struct ScriptedParagonSpend
+{
+    bool installed = false;
+    const std::vector<int>* saved = nullptr;
+    const void* saved_state = nullptr;
+    int saved_cursor = 0;
+    ScriptedParagonSpend(const std::vector<int>& pins, const void* state)
+    {
+        if (pins.empty()) { return; }
+        installed    = true;
+        saved        = g_paragon_pins;
+        saved_state  = g_paragon_pin_state;
+        saved_cursor = g_paragon_cursor;
+        g_paragon_pins      = &pins;
+        g_paragon_pin_state = state;
+        g_paragon_cursor    = 0;
+    }
+    ~ScriptedParagonSpend()
+    {
+        if (!installed) { return; }
+        g_paragon_pins      = saved;
+        g_paragon_pin_state = saved_state;
+        g_paragon_cursor    = saved_cursor;
+    }
+    ScriptedParagonSpend(const ScriptedParagonSpend&) = delete;
+    ScriptedParagonSpend& operator=(const ScriptedParagonSpend&) = delete;
+};
+// The cursor as a breakpoint snapshot must carry it: the live value for `state`, else 0.
+inline int ParagonPinCursorFor(const void* state)
+{ return (g_paragon_pins != nullptr && g_paragon_pin_state == state) ? g_paragon_cursor : 0; }
+
+// SEARCHED GENESIS WAVE PUT SUBSET (Plan::wave_skip_choice; "a provider heuristic is EXPECTED",
+// ProviderHeuristicRequired.h, USER 2026-11-20: "The default should be searched"). A SKIP MASK over the
+// Wave's LEGAL candidates in reveal order (PerformGenesisWave's `candidates`): bit i set = candidate i
+// goes to the graveyard, clear = it is put. Mask 0 = put every legal card. A candidate past bit 30 is
+// put. Consumed by the FIRST Wave resolution of the pinned apply on the pinned state object (the
+// g_paragon_pin_state rule above: a nested re-solve's copies never consume it; a continuation applied
+// in place does); a later Wave in the same apply takes the provider's subset. -1 installs nothing.
+inline thread_local int         g_wave_skip_pin       = -1;
+inline thread_local const void* g_wave_skip_pin_state = nullptr;
+struct ScriptedWaveSkip
+{
+    bool installed = false;
+    int saved = -1;
+    const void* saved_state = nullptr;
+    ScriptedWaveSkip(int mask, const void* state)
+    {
+        if (mask < 0) { return; }
+        installed   = true;
+        saved       = g_wave_skip_pin;
+        saved_state = g_wave_skip_pin_state;
+        g_wave_skip_pin       = mask;
+        g_wave_skip_pin_state = state;
+    }
+    ~ScriptedWaveSkip()
+    {
+        if (!installed) { return; }
+        g_wave_skip_pin       = saved;
+        g_wave_skip_pin_state = saved_state;
+    }
+    ScriptedWaveSkip(const ScriptedWaveSkip&) = delete;
+    ScriptedWaveSkip& operator=(const ScriptedWaveSkip&) = delete;
+};
+// The live mask for `state`, consumed (-1 if none). The one reader is PerformGenesisWave.
+inline int ConsumeWaveSkipPin(const void* state)
+{
+    if (g_wave_skip_pin < 0 || g_wave_skip_pin_state != state) { return -1; }
+    const int m = g_wave_skip_pin;
+    g_wave_skip_pin = -1;
+    return m;
+}
+// Breakpoint snapshot: the live (unconsumed) mask for `state`, else -1.
+inline int WaveSkipPinFor(const void* state)
+{ return g_wave_skip_pin_state == state ? g_wave_skip_pin : -1; }
+
+// THE FAN-OUT'S PIN CENSUS (TurnSolver's searched Paragon / Wave axes). While installed, the resolutions
+// ON THE PROBED STATE OBJECT record what the axes need to size their menus off ONE probe apply of a base
+// plan: the eligible Paragon events (counted regardless of any pin), and the FIRST Wave's legal
+// candidates by name, in reveal order. Diagnostic-free: nothing else reads it.
+struct PinProbeCensus
+{
+    const void* state = nullptr;
+    int  paragon_events = 0;
+    bool wave_seen = false;
+    std::vector<std::string> wave_cands;
+};
+inline thread_local PinProbeCensus* g_pin_probe = nullptr;
+
 // How many unused Nykthos Paragons to spend on THIS life-gain event. Decided ONCE FOR THE WHOLE
 // EVENT rather than once per copy, which is a RULES-EQUIVALENT COLLAPSE and not a simplification:
 // each copy's trigger resolves separately, but every unused copy puts the SAME `amount` on the SAME
@@ -9901,7 +10007,19 @@ inline int ResolveLifegainCountersOnceBudget(const GameState& state, int player,
         if (src_name.empty()) { src_name = nm; } else if (src_name != nm) { mixed = true; }
         ++unused;
     }
+    // THE SEARCHED SPEND (Plan::paragon_spend_pins, above): this event's ordinal is taken BEFORE the
+    // unused test, so every eligible event -- spendable or not -- advances the list exactly once.
+    if (g_pin_probe != nullptr && g_pin_probe->state == static_cast<const void*>(&state)) { ++g_pin_probe->paragon_events; }
+    const bool pinned = g_paragon_pins != nullptr && g_paragon_pin_state == static_cast<const void*>(&state);
+    int pin_budget = 0;
+    if (pinned)
+    {
+        const int e = g_paragon_cursor++;
+        pin_budget = e < static_cast<int>(g_paragon_pins->size()) ? (*g_paragon_pins)[static_cast<std::size_t>(e)] : 0;
+    }
     if (unused <= 0) { return 0; }
+    if (pinned && g_play_lifegain_counters_chooser == nullptr)
+    { return std::max(0, std::min(pin_budget, unused)); }
     // NEGATIVE from the provider = no override -> the generic greedy default. It must NOT be clamped
     // to 0, because 0 is a real answer here (DECLINE, which does not consume a use) -- conflating
     // "no opinion" with "decline" would silently turn every provider that has not overridden this

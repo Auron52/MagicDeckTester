@@ -3911,6 +3911,10 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? Note this deck answers NO to the second half -- Craterhoof Behemoth grants itself haste and Wirewood Lodge untaps an Elf -- so a winless-this-turn bound must price a same-turn Craterhoof (team +X/+X where X is the creature count) and the Lodge's extra activation. See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "SelesnyaLifegain"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): DRAFT policies for USER review, DEFAULT OFF
+    // until measured -- MTG_SL_PARAGON_POLICY (Nykthos Paragon: the old greedy spend) and MTG_WAVE_RULE_POLICY
+    // (Genesis Wave: the disclosed put rule). Off -> the engine's searched menus (and the RED FLAG).
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override;
 
     // Cleanup discard: THE USER-SETTLED buckets (2026-10-09, docs/design/
     // selesnyalifegain-discard-policy.md) -- LANDS 3 counting the board (two W sources while holding
@@ -4679,6 +4683,9 @@ int CycloneCycleOrderMode();
 class LandfallProvider : public DeckProvider
 {
 public:
+    // "A provider heuristic is EXPECTED": DRAFT Genesis Wave policy (MTG_WAVE_RULE_POLICY, DEFAULT OFF until
+    // measured) -- the disclosed put rule. Off -> the engine's searched subset (and the RED FLAG).
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override;
     bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat AND "

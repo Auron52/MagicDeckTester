@@ -401,6 +401,7 @@ add_executable(mtg-test
     test/unit/test_sea_gorger.cpp
     test/unit/test_sea_sin_dies.cpp
     test/unit/test_provider_heuristic_required.cpp
+    test/unit/test_searched_paragon_wave.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp

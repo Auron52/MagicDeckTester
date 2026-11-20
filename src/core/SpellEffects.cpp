@@ -895,7 +895,21 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
     // "You may put ANY NUMBER" -- ONE provider call per resolution (never per entrant). Indices into
     // `candidates`. Not a searched axis: see DecisionProvider::GenesisWavePutPicks.
     std::vector<int> picks;
-    if (!candidates.empty())
+    // THE SEARCHED SUBSET (Plan::wave_skip_choice, SpellEffects.h ScriptedWaveSkip): a live skip mask
+    // replaces the provider's subset for this one resolution. Consumed even when there is no candidate,
+    // so a later Wave in the same apply never inherits it.
+    const int wave_skip = ConsumeWaveSkipPin(static_cast<const void*>(&state));
+    if (g_pin_probe != nullptr && !g_pin_probe->wave_seen && g_pin_probe->state == static_cast<const void*>(&state))
+    {
+        g_pin_probe->wave_seen = true;
+        for (const Card& c : candidates) { g_pin_probe->wave_cands.push_back(c.m_name.str()); }
+    }
+    if (!candidates.empty() && wave_skip >= 0)
+    {
+        for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+        { if (i > 30 || ((wave_skip >> i) & 1) == 0) { picks.push_back(i); } }
+    }
+    else if (!candidates.empty())
     { picks = ResolveProvider(state).GenesisWavePutPicks(state, controller, candidates, x); }
 
     // Human-play multi-pick, reusing the generic `dragon` chooser (already reused by Bilbo for "any

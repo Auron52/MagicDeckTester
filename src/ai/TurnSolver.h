@@ -1762,6 +1762,18 @@ public:
         // See docs/design/searched-choice-audit.md.
         std::vector<int> sac_pins;
 
+        // SEARCHED NYKTHOS PARAGON SPEND (ScriptedParagonSpend, core/SpellEffects.h; the "provider heuristic
+        // EXPECTED" registry's LifegainCountersSpend, USER 2026-11-20 "The default should be searched"). One
+        // entry per eligible life-gain event of the main-phase apply, in apply order: how many unused copies
+        // that event spends; an event past the end spends 0. Empty == the provider's / generic default (spend
+        // every unused copy on the first gain), byte-identical to no axis. Fanned by AppendSubdecisionAxes'
+        // SEARCHED PARAGON SPEND block only for a deck with no policy of its own.
+        std::vector<int> paragon_spend_pins;
+        // SEARCHED GENESIS WAVE SUBSET (ScriptedWaveSkip, core/SpellEffects.h; the registry's GenesisWavePut):
+        // a skip mask over the first Wave's legal candidates in reveal order, consumed by that resolution.
+        // -1 == the provider's subset (byte-identical to no axis).
+        int wave_skip_choice = -1;
+
         // SEARCHED LAND-SEARCH PICKS (core/LandSearch.h). Which complete pick of the provider-ordered
         // LandSearchPicks list -- computed AT RESOLUTION -- each land search takes:
         //   land_search_pins -- the in-plan resolutions (Rampant Growth / Search for Tomorrow /

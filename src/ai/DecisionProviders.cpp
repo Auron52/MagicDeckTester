@@ -15674,6 +15674,29 @@ std::vector<int> KnightsProvider::CleanupDiscardCandidates(
 
 bool KnightsProvider::CleanupDiscardShedStable() const { return !KnightsBucketDiscardEnabled(); }
 
+// ---- SelesnyaLifegain / Landfall: DRAFT required-heuristic policies (2026-11-20; provider-heuristic-required.md) ----
+// Each one RESTRICTS a searched engine menu to the rule the deck played before the menu existed (a one-option
+// prune, measured against the searched default before it may default on).
+static bool SlParagonPolicyOn()
+{
+    static const bool on = EnvOn("MTG_SL_PARAGON_POLICY");   // DEFAULT OFF until the A/B; =1 -> the draft
+    return heurarm::Flag(heurarm::SL_PARAGON_POLICY, on);
+}
+static bool WaveRulePolicyOn()
+{
+    static const bool on = EnvOn("MTG_WAVE_RULE_POLICY");    // DEFAULT OFF until the A/B; =1 -> the draft
+    return heurarm::Flag(heurarm::WAVE_RULE_POLICY, on);
+}
+bool SelesnyaLifegainProvider::ImplementsRequiredHeuristic(RequiredHeuristic h) const
+{
+    return (h == RequiredHeuristic::LifegainCountersSpend && SlParagonPolicyOn())
+        || (h == RequiredHeuristic::GenesisWavePut && WaveRulePolicyOn());
+}
+bool LandfallProvider::ImplementsRequiredHeuristic(RequiredHeuristic h) const
+{
+    return h == RequiredHeuristic::GenesisWavePut && WaveRulePolicyOn();
+}
+
 // ---- KnightsProvider: Acclaimed Contender's dig (DRAFT, MTG_KN_ETBDIG_RANK; see the header) ----------------------
 static bool KnightsEtbDigRankOn()
 {

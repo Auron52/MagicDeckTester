@@ -30946,6 +30946,10 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
     fold(static_cast<uint64_t>(p.putback_choice + 2) * 53);
+    // The searched Paragon spend / Wave subset: folded only when set, so every other plan keeps its fingerprint.
+    if (!p.paragon_spend_pins.empty())
+    { fold(0x50415241ull); for (int v : p.paragon_spend_pins) { fold(static_cast<uint64_t>(v + 3) * 61); } }   // "PARA"
+    if (p.wave_skip_choice >= 0) { fold(0x57415645ull); fold(static_cast<uint64_t>(p.wave_skip_choice) + 1); }   // "WAVE"
     fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
     // Abiding Grace's packed end-step mode/target ranks: must-fold (two ranks are two plans), gated on
     // the non-default value so every plan of every deck without the card keeps its exact fingerprint.
@@ -31402,6 +31406,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
+        && p.paragon_spend_pins.empty() && p.wave_skip_choice == -1
         && p.champion_pins.empty() && p.prophets_sac_choice.empty()
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
@@ -31446,6 +31451,9 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
     return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
         || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
         || p.putback_choice >= 0   // Brainstorm put-back: a clamped (too-wide) rank lands on a sibling's state
+        // The searched Paragon spend / Wave subset: a list whose events never happened, or a mask over cards that
+        // were not revealed, lands on a sibling's state -- one apply, not a rollout.
+        || !p.paragon_spend_pins.empty() || p.wave_skip_choice >= 0
         || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0
         || p.bounce_choice >= 1
         // A landfall-target rank that turned out inert (one class at resolution, or no targeted
@@ -60448,6 +60456,7 @@ namespace solvememo
             || a.rad_mode != b.rad_mode || a.etbdig_choice != b.etbdig_choice
             || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
+            || a.paragon_spend_pins != b.paragon_spend_pins || a.wave_skip_choice != b.wave_skip_choice
             || a.land_search_pins != b.land_search_pins
             || a.champion_pins != b.champion_pins
             || a.prophets_sac_choice != b.prophets_sac_choice
@@ -70544,6 +70553,8 @@ struct BpPrefixSnap
                                      // at its head, so false at every capture (kept for exactness)
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1, pin_putback = -1;   // scripted-pin state
     int  pin_sagach1 = -1;                                                  // ... incl. chapter I
+    int  pin_paragon_cursor = 0;     // the Paragon spend list's consumption point (the list is the plan's own)
+    int  pin_wave_skip = -1;         // the Wave mask as the prefix left it (-1 once its Wave resolved)
     int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
@@ -73011,6 +73022,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                        ~LeFirePin() { g_le_fire_pin = saved; } } _lefp(plan.le_fire_choice);
     ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
                                                // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
+    // The searched Paragon spend list / Wave subset (core/SpellEffects.h), bound to THIS state object: a nested
+    // re-solve's copies never consume them; a continuation applied in place does. Empty / -1 installs nothing.
+    ScriptedParagonSpend _sps(plan.paragon_spend_pins, static_cast<const void*>(&state));
+    ScriptedWaveSkip     _sws(plan.wave_skip_choice, static_cast<const void*>(&state));
     ScriptedSacLand _ssac(plan.sac_pins);      // searched sac-land picks, one per sac ordinal,
                                                // resolved at the true mid-plan state (MTG_SAC_AXIS);
                                                // empty inert
@@ -80642,6 +80657,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
         g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
+        if (g_paragon_pin_state == static_cast<const void*>(&state)) { g_paragon_cursor = bp_resume->pin_paragon_cursor; }   // list by _sps
+        if (g_wave_skip_pin_state == static_cast<const void*>(&state)) { g_wave_skip_pin = bp_resume->pin_wave_skip; }   // mask by _sws
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
         g_prophets_champion_cursor = bp_resume->pin_champion_cursor;
         g_incinerator_pin_cursor = bp_resume->pin_incinerator_cursor;
@@ -81226,6 +81243,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
+            bp_capture->pin_paragon_cursor = ParagonPinCursorFor(static_cast<const void*>(&state));
+            bp_capture->pin_wave_skip = WaveSkipPinFor(static_cast<const void*>(&state));
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
@@ -81272,6 +81291,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
+            bp_capture->pin_paragon_cursor = ParagonPinCursorFor(static_cast<const void*>(&state));
+            bp_capture->pin_wave_skip = WaveSkipPinFor(static_cast<const void*>(&state));
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
             bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
@@ -102902,6 +102923,144 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // ---- SEARCHED NYKTHOS PARAGON SPEND + GENESIS WAVE SUBSET (2026-11-20) -------------------------------------
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h). USER 2026-11-20: "The default should be
+    // searched and probably the analysis should be given a warning if we don't override the policy." So a deck
+    // whose provider has NO policy for these decisions searches the FULL menu here, and carries the RED FLAG:
+    //   * Paragon (LifegainCountersSpend): which life-gain event of this main-phase apply spends how many unused
+    //     copies -- every count vector over the apply's eligible events summing to at most the copies available
+    //     (Plan::paragon_spend_pins). The old engine default (spend every copy on the FIRST gain) is the base plan.
+    //   * Genesis Wave (GenesisWavePut): which of the first Wave's legal reveals are put -- every per-name count
+    //     (identical copies are interchangeable, so skipping the LAST k of a name is the identity fold of every
+    //     k-subset of it), as a skip mask (Plan::wave_skip_choice). The provider's subset is the base plan.
+    // The menus are sized off ONE probe apply of each base plan (PinProbeCensus): the events and reveals are
+    // known only at resolution, and the probe is the base line itself, so no cast, draw or X has to be predicted.
+    // A count past what the variant's own line reaches (a spend that changed a later amount but not the event
+    // count) is still a legal line; one whose events never happen lands on a sibling's state (the post-apply
+    // dedup, PlanIsAxisVariantExceptOrder). Base plans only (one axis at a time, the etbdig/scry trade). Ordered
+    // so a finite budget reaches the simplest lines first: decline-all / one event, then splits; put-most first.
+    // Searched decision space only (the legend fan's gate): the d0 runner and the playout beyond the horizon keep
+    // the provider's / generic answer, the permitted playout policy. A deck with a policy, or the measurement arm
+    // MTG_REQHEUR_OLD_DEFAULT=1, emits nothing here (byte-identical to before the axis existed).
+    if (!cont_axes_only && !HumanPlayActive() && g_searched_play && (g_search_candidate_enum || g_condemn_root_turn < 0)
+        && !all.empty() && !RequiredHeuristicOldDefault())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        const int me = state.active_player_index;
+        const bool paragon_on = !RequiredHeuristicPolicyLive(prov, RequiredHeuristic::LifegainCountersSpend);
+        const bool wave_on    = !RequiredHeuristicPolicyLive(prov, RequiredHeuristic::GenesisWavePut);
+        int unused_now = 0;
+        if (paragon_on)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me || q.lifegain_counters_used_this_turn) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd != nullptr && qd->params.lifegain_counters_once_each_turn) { ++unused_now; }
+            }
+        }
+        std::vector<TurnSolver::Plan> extra;
+        for (std::size_t pi = 0, n0 = all.size(); pi < n0 && (paragon_on || wave_on); ++pi)
+        {
+            const TurnSolver::Plan& p = all[pi];
+            if (PlanIsAxisVariantExceptOrder(p) || !p.paragon_spend_pins.empty() || p.wave_skip_choice >= 0) { continue; }
+            int paragon_casts = 0;
+            bool casts_wave = false;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (d == nullptr) { continue; }
+                if (d->params.lifegain_counters_once_each_turn) { ++paragon_casts; }
+                if (d->params.reveal_x_put_permanents) { casts_wave = true; }
+            }
+            const int copies = unused_now + paragon_casts;
+            const bool want_paragon = paragon_on && copies > 0;
+            const bool want_wave    = wave_on && casts_wave;
+            if (!want_paragon && !want_wave) { continue; }
+            PinProbeCensus census;
+            {
+                GameState copy = state;
+                census.state = static_cast<const void*>(&copy);
+                PinProbeCensus* const saved = g_pin_probe;
+                g_pin_probe = &census;
+                RevealLogPause pause;
+                ApplyPlanDirect(copy, p, is_pre_combat);
+                g_pin_probe = saved;
+            }
+            if (want_paragon && census.paragon_events > 0)
+            {
+                const int E = std::min(census.paragon_events, 12);
+                std::vector<std::vector<int>> vecs;
+                std::vector<int> cur(static_cast<std::size_t>(E), 0);
+                // Every vector with entries >= 0 summing to <= copies (odometer over the events).
+                std::function<void(int, int)> rec = [&](int e, int left)
+                {
+                    if (e == E) { vecs.push_back(cur); return; }
+                    for (int c = 0; c <= left; ++c)
+                    { cur[static_cast<std::size_t>(e)] = c; rec(e + 1, left - c); }
+                    cur[static_cast<std::size_t>(e)] = 0;
+                };
+                rec(0, copies);
+                auto nonzero = [](const std::vector<int>& v)
+                { int n = 0; for (int c : v) { n += c > 0 ? 1 : 0; } return n; };
+                std::stable_sort(vecs.begin(), vecs.end(), [&](const std::vector<int>& a, const std::vector<int>& b)
+                { return nonzero(a) < nonzero(b); });
+                for (const std::vector<int>& v : vecs)
+                {
+                    // The base plan's own line (every copy on the first gain) when no copy enters mid-plan.
+                    if (paragon_casts == 0 && v[0] == copies && nonzero(v) == 1) { continue; }
+                    TurnSolver::Plan q = p;
+                    q.paragon_spend_pins = v;
+                    q.bp_wave0 = false;
+                    extra.push_back(std::move(q));
+                }
+            }
+            if (want_wave && census.wave_seen && !census.wave_cands.empty())
+            {
+                const int L = std::min(static_cast<int>(census.wave_cands.size()), 31);
+                // Name classes in first-appearance order; each class's positions in reveal order.
+                std::vector<std::vector<int>> cls;
+                std::vector<std::string> cls_name;
+                for (int i = 0; i < L; ++i)
+                {
+                    const std::string& nm = census.wave_cands[static_cast<std::size_t>(i)];
+                    std::size_t c = 0;
+                    while (c < cls_name.size() && cls_name[c] != nm) { ++c; }
+                    if (c == cls_name.size()) { cls_name.push_back(nm); cls.emplace_back(); }
+                    cls[c].push_back(i);
+                }
+                std::vector<std::pair<int, int>> masks;   // (cards skipped, mask)
+                std::vector<int> k(cls.size(), 0);
+                while (true)
+                {
+                    int mask = 0, skipped = 0;
+                    for (std::size_t c = 0; c < cls.size(); ++c)
+                    {
+                        const int n = static_cast<int>(cls[c].size());
+                        for (int j = n - k[c]; j < n; ++j) { mask |= 1 << cls[c][static_cast<std::size_t>(j)]; }
+                        skipped += k[c];
+                    }
+                    masks.emplace_back(skipped, mask);
+                    std::size_t c = 0;
+                    while (c < cls.size() && k[c] == static_cast<int>(cls[c].size())) { k[c] = 0; ++c; }
+                    if (c == cls.size()) { break; }
+                    ++k[c];
+                }
+                std::stable_sort(masks.begin(), masks.end(),
+                                 [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
+                for (const std::pair<int, int>& m : masks)
+                {
+                    TurnSolver::Plan q = p;
+                    q.wave_skip_choice = m.second;
+                    q.bp_wave0 = false;
+                    extra.push_back(std::move(q));
+                }
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    }
+
     // ---- LEGEND-KEEP TURN FAN (CR 704.5j; Boars LK, 2026-11-13) --------------------------------------------------
     // The routes I5b item 4 left to the provider: a legend rule no name-scoped rider decides (Action::legend_keep on a
     // cast, kAttackPutKeepNewBit on Ilharg's put) -- a legendary LAND drop beside a same-name land (The Grey Havens,
@@ -103527,7 +103686,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 784;   // +8: Plan::crossing_land_choice (Maze's End I3, keyed below); +24: Plan::reflect_targets (Stuffy Doll step 3); +8: Plan::sacfod_admit/sacfod_credit (MTG_SAC_FODDER_MENU scheduling/identity tags -- not a play axis, so not keyed).
+static constexpr std::size_t kPlanDomAssertedSize = 816;   // +32: Plan::paragon_spend_pins + wave_skip_choice (searched Paragon / Wave, keyed below); +8: Plan::crossing_land_choice (Maze's End I3, keyed below); +24: Plan::reflect_targets (Stuffy Doll step 3); +8: Plan::sacfod_admit/sacfod_credit (MTG_SAC_FODDER_MENU scheduling/identity tags -- not a play axis, so not keyed).
 // Recheck after integrating Boars axes with dynamic Mihail choices.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
@@ -103729,6 +103888,8 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             x += "|bpp";   // MTG_BP_DEV_SEQ's sequence (empty on every plan but a walker compound variant)
             for (int s : pl.bp_pre)               { add(s); }
             for (int s : pl.sac_pins)             { add(s); }
+            add(static_cast<int>(pl.paragon_spend_pins.size())); for (int s : pl.paragon_spend_pins) { add(s); }
+            add(pl.wave_skip_choice);
             x += "|ls";
             for (int s : pl.land_search_pins)     { add(s); }
             x += "|champion";
