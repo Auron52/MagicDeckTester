@@ -176,6 +176,7 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   USER (verbatim): *"In fact you can prune trying Field when Vale is in hand. There is no reason to try the
   Field because it is worse at that point and the same later."* -> pre-Blood Sun, Lotus Field is NOT offered
   while a Lotus Vale is in hand (dominated now, identical once Blood Sun lands).
+  USER (verbatim, confirming): *"Field is strictly for when you don't have a Vale in this situation."*
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
