@@ -144,3 +144,57 @@ same hand-off wins T3.
 * Unit tests (test_accomplished_alchemist.cpp, "Untap refund float"): the key on a GenericProvider board
   (Alchemist X = 4 + Umbra, Kalonian Hydra in hand, no loop need), and the both-worlds line "untap once,
   then the continuation casts the 5-drop off the float" -- absent with the lever at 0.
+
+## The holes behind "T4 at every budget" (2026-11-19/20, agents 2-7) and how each closed
+
+The search half above was necessary but not sufficient: the full game (heuristic OFF, `--depth 8 --budget-ms 0`) still
+won T4. Four more defects stood between the engine and the T3 line; each is fixed, each has its own lever.
+
+1. **Crab Umbra host (deck rule, USER 2026-11-20: "Just have a heuristic specific to the deck and we are done.
+   Obviously in this deck Accomplished Alchemist is the target.").** The generic host-branching lever
+   (`MTG_AURA_UNTAP_HOST_SEARCH`) is DELETED. The Umbra-on-Alchemist rank moved from an engine term into the provider
+   (`DecisionProvider::CreatureAuraHostRank`, `MTG_AA_UMBRA_HOST`), and the late-bind fast path now reads it
+   (`MTG_AURA_LATE_BIND_RANK`, default ON): before, every late-bound plan put the Umbra on Arbor Elf / the Boar.
+2. **The Alchemist taps last (`MTG_AA_ALCH_TAP_LAST`, default ON; provider `ManaSourceRank`, order only).** The payer
+   tapped the Alchemist for the Boar's last pip instead of Arbor Elf's Sprawl re-tap, so the post-sac Umbra untap
+   ({2}{U}) was unpayable. ab4 (d5 b20, 1000 held-out games x 2 seeds): -0.0100 turns, t = -3.64, wall -5.1%. It is
+   needed for the acceptance (without it T4). **USER decision pending: adopt (recommended).**
+3. **Site 9 after a deferred continuation (`MTG_SITE9_AFTER_DEFERRED`, default ON).** A site-10 continuation (Living
+   Wish -> Boar) that casts an untapper / sac outlet got no post-entry re-plan; the rollout and the executor's
+   no-commit twin now run site 9 after the deferred continuation. Not needed for seed 12345681 once 2 and 4 are in, but
+   engine-wide and a net gain elsewhere (below).
+4. **The in-window cache hole (`MTG_DEV_SEQ_HEXIT_TAINT`, default ON):** a first-pass horizon exit rested on one-deviation
+   refutations and was filed as a full proof. See `docs/design/devseq-hexit-taint.md`.
+
+Also: `MTG_BURST_ACT_COLOUR_PENDING` (USER: "Yes, we need to fix this."): the burst floats the colour of a board untap
+aimed at the burst source (Crab Umbra's U) when nothing else claims the surplus. ab4: exactly 0.0000 (200 chunks tied).
+
+**Acceptance (2026-11-20, chain6 binary 57b56d62c):** seed 12345681 game 0 keep 7, heuristic OFF, d8 b0: **T3**; play
+setting (d5 b20) heuristic OFF **T3**, heuristic ON **T3**.
+
+### Site 9 after deferred broke the replay: each recorded segment must close at its end (agent 7, 2026-11-20)
+
+The tiers showed three AA games slower with `MTG_SITE9_AFTER_DEFERRED` that did NOT recover at d8 b0 (smoke d3 gi12
+6 -> 7, only with tap-last too; regression d5_s3003 gi40 5 -> 6 and gi87 4 -> 5). Not a search loss: in all three the
+T1 search COMMITTED a line whose winning turn holds an s9d continuation, and the executor did not realise it.
+
+* **Node:** the deferred continuation of a draw breakpoint (gi87 T4: Stroke of Genius X=1 draws Staff of Domination;
+  site-3 continuation casts it), followed by two site-9 continuations: `[Staff untaps the Alchemist (loop), Ezuri pump]`
+  then `[Staff loop, Ezuri pump, Ezuri pump]`. The rollout applies each continuation's activations at its end and scores
+  the turn lethal (`[fd-pred] turn=4 opp_life=-10`).
+* **Lost line / why:** the rollout records all of it into ONE list (the deferred continuation's sink). The committed
+  line's replay (`AIEngine` `replay_recorded`) dispatches a continuation's board activations "as one trailing pass once
+  the casts are replayed" -- right for one continuation, wrong for several: the two segments' activations were pooled
+  into one pass, the provider's activation sort ran both Staff loops ahead of all three pumps, the Alchemist ended
+  tapped, Ezuri attacked alone (14 damage, opponent at 4) and the game ran to T5. gi40 / gi12: a Stroke of Genius
+  recorded AFTER a segment's activations was cast BEFORE them. The "better line" was not displaced by a re-plan; it was
+  played wrongly.
+* **Fix (lockstep, no lever of its own: it is part of s9d's correctness):** `Action::rec_s9d_seg` -- the rollout
+  stamps each site-9 segment's top-level records with the continuation traits it applied them under (one object per
+  continuation; pointer identity is the boundary). `replay_recorded` closes a segment at the boundary exactly as the
+  rollout closed it: the cast section (opened up front even when it cast nothing), its line, then the segment's
+  activations under its traits. Unstamped records (every other line) replay as before. The no-commit twin
+  (`resolve_draw_breakpoint`) now carries a site-9 continuation's pending activations from the deferred
+  continuation's traits, as the rollout does (agent 4's recorded asymmetry).
+* **Scenario:** `test/scenarios/aa_s9d_replay_segments_staff_ezuri_t4.json` (gi87's T4 board): the pre-fix binary
+  commits the identical line and wins T5; `MTG_SITE9_AFTER_DEFERRED=0` never finds the T4 line.
