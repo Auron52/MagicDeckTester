@@ -3063,6 +3063,7 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         faces_of.push_back(std::move(fs));
     }
     std::vector<std::size_t> k(faces_of.size(), 0);
+    int tried = 0;
     for (int guard = 0; guard < 256; ++guard)
     {
         OracleScratch cscr(c);
@@ -3075,39 +3076,36 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
             ok = (f.second ? OracleCreatureTap(c2, f.first) : ApplyEnginePreTap(c2, f.first)).empty();
         }
         if (ok && CoversBoards(c2, e, true, nullptr)) { return true; }
-        static const bool s_dbg = EnvOn("MTG_RBT_DEBUG");   // diagnostic: why a combination fails
-        static std::atomic<int> s_dbg_n{0};
-        if (s_dbg && guard < 2 && s_dbg_n.fetch_add(1) < 400)
-        {
-            std::string w;
-            for (std::size_t r2 = 0; r2 < faces_of.size(); ++r2)
-            {
-                const auto& f = faces_of[r2][k[r2]];
-                if (f.first.num < 0) { w += " skip"; continue; }
-                OracleScratch dscr(c);
-                const std::string why = f.second ? OracleCreatureTap(dscr.Board(), f.first) : ApplyEnginePreTap(dscr.Board(), f.first);
-                w += " #" + std::to_string(f.first.num) + (why.empty() ? ":ok" : (":FAIL(" + why + ")"));
-            }
-            std::string dx;
-            if (ok)
-            {
-                const int pa = c2.active_player_index;
-                dx = " life " + std::to_string(c2.players[pa].life) + "/" + std::to_string(e.players[pa].life) + " float "
-                   + PoolText(c2.floating_mana, c2.floating_haste_c) + " vs " + PoolText(e.floating_mana, e.floating_haste_c)
-                   + " cfloat " + std::to_string(c2.floating_creature_mana.Total()) + "/" + std::to_string(e.floating_creature_mana.Total())
-                   + " bfloat " + std::to_string(c2.floating_bigspell_mana.Total()) + "/" + std::to_string(e.floating_bigspell_mana.Total());
-                for (std::size_t i = 0; i < c2.battlefield.size() && i < e.battlefield.size(); ++i)
-                {
-                    const Permanent& p = c2.battlefield[i]; const Permanent& q = e.battlefield[i];
-                    if (p.controller_index == pa && p.tapped != q.tapped) { dx += " tapdiff:" + p.card.m_name.str() + (p.tapped ? "(c tapped)" : "(c untapped)"); }
-                }
-            }
-            std::lock_guard<std::mutex> lk(g_print_mu);
-            std::fprintf(stderr, "[rbt-dbg] released=%zu combo%d apply=%d%s%s\n", released.size(), guard, ok ? 1 : 0, w.c_str(), dx.c_str());
-        }
         std::size_t r = 0;
         while (r < k.size() && ++k[r] == faces_of[r].size()) { k[r] = 0; ++r; }
-        if (r == k.size()) { break; }
+        if (r == k.size()) { tried = guard + 1; break; }
+        tried = guard + 1;
+    }
+    {
+        // MTG_RBT_DEBUG=1 (diagnostic only): a refused call releasing >= 4 sources -- the engine's payment's float, the
+        // candidate's taps, the released sources and their faces, and the combinations tried.
+        static const bool s_dbg = EnvOn("MTG_RBT_DEBUG");
+        static std::atomic<int> s_dbg_n{0};
+        if (s_dbg && released.size() >= 4 && s_dbg_n.fetch_add(1) < 400)
+        {
+            std::string ct, rl;
+            for (std::size_t i = 0; i < c.battlefield.size(); ++i)
+            {
+                const Permanent& p = c.battlefield[i];
+                if (p.controller_index != a) { continue; }
+                if (p.tapped && !e.battlefield[i].tapped) { ct += " +" + p.card.m_name.str(); }
+                if (p.tapped && e.battlefield[i].tapped) { ct += " " + p.card.m_name.str(); }
+            }
+            for (std::size_t r2 = 0; r2 < released.size(); ++r2)
+            {
+                for (const Permanent& p : c.battlefield) { if (p.card.m_number == released[r2]) { rl += " " + p.card.m_name.str(); } }
+                rl += "/" + std::to_string(faces_of[r2].size());
+            }
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[rbt-dbg] T=%d released=%zu tried=%d e_float=%s c_float=%s c_taps=[%s] released=[%s]\n", c.turn_number,
+                         released.size(), tried, PoolText(e.floating_mana, e.floating_haste_c).c_str(),
+                         PoolText(c.floating_mana, c.floating_haste_c).c_str(), ct.c_str(), rl.c_str());
+        }
     }
     ++t_trc_rbt[1];
     return false;
