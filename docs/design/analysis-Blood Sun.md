@@ -173,6 +173,9 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   other mana cannot cast it (short of 3 mana or of {R}), and only with >= 2 other lands out (Vale: 2 untapped
   to sacrifice); Field is allowed for the same reason (its mana arrives next turn) but ORDERED after the Vale
   (USER: "strictly worse at it"). With 0-1 other lands neither is ever played.
+  USER (verbatim): *"In fact you can prune trying Field when Vale is in hand. There is no reason to try the
+  Field because it is worse at that point and the same later."* -> pre-Blood Sun, Lotus Field is NOT offered
+  while a Lotus Vale is in hand (dominated now, identical once Blood Sun lands).
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
