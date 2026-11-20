@@ -35935,6 +35935,13 @@ inline std::atomic<long long> g_closed_cut{0};    // windows closed cut
 inline std::atomic<long long> g_upgraded{0};      // ...a later twin's uncut close upgraded a cut entry
 inline std::atomic<long long> g_unclosed{0};      // windows never closed (skipped / pruned / returned early)
 inline bool StatsOn() { static const bool v = EnvOn("MTG_LAND_TWIN_STATS"); return v; }
+// DIAGNOSTIC ONLY (bisecting which skip moves a game; single-thread replays): MTG_LAND_TWIN_SKIP_LIMIT=N admits only
+// the first N would-be skips of this thread (the rest are searched as a cut twin would be); default -1 = no limit.
+// MTG_LAND_TWIN_TRACE=1 prints every skip with its ordinal and the skipped state's board.
+inline int SkipLimit() { static const int v = EnvInt("MTG_LAND_TWIN_SKIP_LIMIT", -1); return v; }
+inline bool TraceOn() { static const bool v = EnvOn("MTG_LAND_TWIN_TRACE"); return v; }
+inline thread_local long long t_skip_ordinal = 0;
+inline thread_local long long t_window_id = 0;
 struct Dumper
 {
     ~Dumper()
@@ -35957,6 +35964,8 @@ struct LandTwinSet
     bool upgrade = false;   // the open window re-searches a twin whose earlier evaluation was cut
     TranspositionTable::Key open_key{};
     LandTwinMark mark;
+    long long open_id = 0;   // MTG_LAND_TWIN_TRACE only
+    std::unordered_map<TranspositionTable::Key, long long, TranspositionTable::KeyHash> clean_id;   // trace only
     ~LandTwinSet() { Drop(); }
     // A window still open was not vouched for by its site: it stays cut.
     void Drop()
@@ -35972,8 +35981,16 @@ struct LandTwinSet
         const bool st = landtwin::StatsOn();
         if (st) { landtwin::g_checked.fetch_add(1, std::memory_order_relaxed); }
         const auto ins = canon.emplace(ck, std::uint8_t(0));
-        if (!ins.second && (ins.first->second & 1) != 0)
+        if (!ins.second && (ins.first->second & 1) != 0
+            && (landtwin::SkipLimit() < 0 || landtwin::t_skip_ordinal < landtwin::SkipLimit()))
         {
+            ++landtwin::t_skip_ordinal;
+            if (landtwin::TraceOn())
+            {
+                const auto ci = clean_id.find(ck);
+                std::fprintf(stderr, "[lt-skip] ord=%lld rests-on-window=%lld\n", landtwin::t_skip_ordinal,
+                             ci == clean_id.end() ? -1LL : ci->second);
+            }
             if (st)
             {
                 landtwin::g_skipped.fetch_add(1, std::memory_order_relaxed);
@@ -35983,15 +36000,31 @@ struct LandTwinSet
         }
         if (!ins.second && st) { landtwin::g_cut_searched.fetch_add(1, std::memory_order_relaxed); }
         open = true; open_key = ck; upgrade = !ins.second; mark.Take();
+        if (landtwin::TraceOn())
+        {
+            open_id = ++landtwin::t_window_id;
+            std::fprintf(stderr, "[lt-open] win=%lld %s\n", open_id, ins.second ? "fresh" : "twin-of-cut");
+        }
         return false;
     }
     // The site finished evaluating the candidate whose window is open. `line_ok`: the evaluated line was not marked
     // truncated (sites without one pass true).
-    void Close(bool line_ok = true)
+    void Close(bool line_ok = true, int val = -1)
     {
         if (!open) { return; }
         open = false;
         const bool clean = line_ok && mark.Clean();
+        if (landtwin::TraceOn())
+        {
+            std::fprintf(stderr, "[lt-close] win=%lld val=%d clean=%d line_ok=%d dtrunc=%llu dbinds=%llu ddrops=%llu"
+                                 " ddefer=%llu dcutread=%llu dhexit=%lld exceeded=%d\n",
+                         open_id, val, clean ? 1 : 0, line_ok ? 1 : 0, g_fs_trunc_events - mark.trunc,
+                         budgetbind::t_binds - mark.binds, g_condemn_drops - mark.drops,
+                         g_sibling_defer_skips - mark.defers, g_lt_cut_reads - mark.cut_reads,
+                         FsHexitsNow() - mark.hexits,
+                         (decisionwork::Exceeded() || decisionwork::PricedExceededQuiet() || gamework::Abandoned()) ? 1 : 0);
+            if (clean) { clean_id.emplace(open_key, open_id); }
+        }
         const bool st = landtwin::StatsOn();
         if (st) { (clean ? landtwin::g_closed_clean : landtwin::g_closed_cut).fetch_add(1, std::memory_order_relaxed); }
         if (!clean) { return; }
@@ -36011,7 +36044,23 @@ static bool LandTwinDup(SeenSet& seen, LandTwinSet& tw, const GameState& s, cons
     tw.Drop();
     if (!seen.insert(exact).second) { return true; }
     if (!FoldLandOrderSeenLive(s)) { return false; }
-    return tw.Check(fold(SeenKeyGiven(s, &raw)));
+    const bool skip = tw.Check(fold(SeenKeyGiven(s, &raw)));
+    if (landtwin::TraceOn())
+    {
+        std::string bf;
+        for (const Permanent& pm : s.battlefield)
+        {
+            if (pm.controller_index != s.active_player_index) { continue; }
+            bf += pm.card.m_name.str(); bf += pm.entered_this_turn ? "*" : ""; bf += pm.tapped ? "(T)" : ""; bf += ", ";
+        }
+        std::string hd;
+        for (const Card& c : s.players[static_cast<std::size_t>(s.active_player_index)].hand)
+        { hd += c.m_name.str(); hd += ", "; }
+        std::fprintf(stderr, "[land-twin-%s] #%lld turn=%d step=%d bf=[%s] hand=[%s]\n", skip ? "skip" : "open",
+                     skip ? landtwin::t_skip_ordinal : tw.open_id,
+                     s.turn_number, static_cast<int>(s.step), bf.c_str(), hd.c_str());
+    }
+    return skip;
 }
 template <typename SeenSet>
 static bool LandTwinDup(SeenSet& seen, LandTwinSet& tw, const GameState& s)
@@ -121298,7 +121347,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             dvs_g.Done(tail, dvs_cut);
                         }
                     }
-                    bp_twins.Close(!tail.truncated);   // P5b-3: this node child's evaluation ends here
+                    bp_twins.Close(!tail.truncated, tail.win_turn);   // P5b-3: this node child's evaluation ends here
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
                     FswDeclinedTrace(state, depth, v, "node-child", bp3, s3, tail.win_turn, best.win_turn);
@@ -121655,7 +121704,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (alt_wins)
             { tail = std::move(tail_rel); chose_release = alt_rec; }
         }
-        bp_twins.Close(!tail.truncated);   // P5b-3: this plan's evaluation ends here (both combat variants)
+        bp_twins.Close(!tail.truncated, tail.win_turn);   // P5b-3: this plan's evaluation ends here (both combat variants)
         // FRESH-SPEND admissibility v2 (MTG_FRESH_SPEND_AXIS): a freshmode variant is admitted
         // ONLY when its simulated line realizes a WIN within the horizon -- a this-turn kill takes
         // the win-floor above (mw136), and a later-turn win competes below by win_turn, which is an
@@ -122012,7 +122061,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         dvs_g.Done(tail, dvs_cut);
                     }
                 }
-                bp_twins.Close(!tail.truncated);   // P5b-3: this wave variant's evaluation ends here
+                bp_twins.Close(!tail.truncated, tail.win_turn);   // P5b-3: this wave variant's evaluation ends here
                 // ...and the tail half of the [fsw-wave] line above (same gate).
                 {
                     static const bool s_fsw_w  = EnvOn("MTG_FSW_TRACE");
@@ -122164,7 +122213,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         dvs_g.Done(tail, dvs_cut);
                     }
                 }
-                bp_twins.Close(!tail.truncated);   // P5b-3: this tranche plan's evaluation ends here
+                bp_twins.Close(!tail.truncated, tail.win_turn);   // P5b-3: this tranche plan's evaluation ends here
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
                 // took the won_now return above. See the wave-0 comment for the doctrine.
@@ -130407,9 +130456,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             leafeval::t_inf = -1;                  // ...and its winning rollout's inf-life stamp
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          cand_cutoff, second_main, tt);
-            bp_twins.Close();   // P5b-3: this candidate's evaluation ends here
+            bp_twins.Close(true, win_turn);   // P5b-3: this candidate's evaluation ends here
             const long long leaf_tb   = leafeval::t_tb;
             const long long leaf_life = leafeval::t_life;
+            if (landtwin::TraceOn())
+            {
+                std::fprintf(stderr, "[lt-cand] win_turn=%d cutoff=%d sub_depth=%d leaf_tb=%lld leaf_life=%lld value=%d\n",
+                             win_turn, cand_cutoff, sub_depth, leaf_tb, leaf_life, static_cast<int>(plan.value));
+            }
             const int       leaf_inf  = leafeval::t_inf;
             // Feed the rollout result back so the census can count HARM -- a dominated candidate
             // that outscored its dominator is a win the prune would have deleted (see RecordWin).
@@ -130673,7 +130727,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                           ? pass_best_win - 1 : pass_best_win;
                     const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                                        wave_cutoff, second_main, tt);
-                    bp_twins.Close();   // P5b-3: this variant's evaluation ends here
+                    bp_twins.Close(true, win_turn);   // P5b-3: this variant's evaluation ends here
                     // STRICTLY better only. Wave 0's variants share their base plan's `value`, so the
                     // equal-turn value tiebreak the main loop uses would let a deferred rank displace
                     // an equally-good searched line for no measured reason; requiring a strict
@@ -130799,7 +130853,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                     ? pass_best_win - 1 : pass_best_win;
                 const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                                    gw_cutoff, second_main, tt);
-                bp_twins.Close();   // P5b-3: this tranche plan's evaluation ends here
+                bp_twins.Close(true, win_turn);   // P5b-3: this tranche plan's evaluation ends here
                 // STRICTLY better only -- same reasoning as the bp wave phase above.
                 if (pass_has_best && win_turn >= pass_best_win) { return true; }
                 if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
