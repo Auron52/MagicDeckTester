@@ -124,7 +124,7 @@ What AB1 says:
    inside the window AND a leafless pass proves that win; every other decision runs the whole ladder. That is the
    case the USER ruled out (*"There shouldn't be cases where it is so uncertain it just runs the ladder."*), so
    mode 4 alone is not the USER's design; mode 5 (a miss goes to the priced sampled gate) is.
-2. **Mode 5 skips 35-79 % of the rollouts, but units and CPU barely move** (units 0.93-1.02, CPU 0.91-1.03): a
+2. **[CORRECTED 2026-11-20, see AB2: the skip share and the tree growth below are TRACE ARTIFACTS.]** **Mode 5 skips 35-79 % of the rollouts, but units and CPU barely move** (units 0.93-1.02, CPU 0.91-1.03): a
    leafless pass has no incumbent, so its tree is far larger than the rollout pass's tree it replaces. Per decision
    (decstats): Mill live = 639 tree + 9,362 rollout units, sg5 = 7,976 tree + 1,968 rollout units; Maze's End 440 +
    11,588 vs 7,023 + 4,927. The rollouts saved are spent again on incumbent-free trees.
@@ -155,4 +155,92 @@ rollout pass sees, and its refutations are refutations again. Leaves past the wi
 (`MTG_P18_WALK_EDGE_ROLL=0` / arm key `_pwe0` turn it off for the A/B); no deck ships mode 4 or 5, so no GT moves.
 The same gap exists in every other leafless shape (FIT and escalation probes, emulated warm-ups, mode 3's lookahead);
 not touched here (a USER question: it would move GT on ~30 decks and needs its own A/B).
-Measured in AB2 (`sparse` vs `sparse_pwe0`, rebased tree): pending.
+Measured in AB2 (`sparse` vs `sparse_pwe0`, rebased tree): the fix wins 4 Maze's End games and loses none (sparse_pwe0
++4 (0/4) vs live, sparse 0 vs live), and 1 Mill game (sparse_pwe0 +1); it is digest-identical on every other deck.
+
+### AB2 (2026-11-20, rebased tree, AB1's held-out structure on new seeds)
+
+One pooled `mtg --batch`, 47,200 games, 24 workers (heartbeat 24/24), binary `mtg_d2` (a3de8b3b7 src: the walk-edge fix +
+diagnostics), `MTG_P16_TRACE=1 MTG_ESC_P2_MEAS=1`, unit tests rc 0. Bare decks and Sea Creatures / Boars: 6 blocks x 200
+games, seeds 17,100,000 + 10,000 x block, arms adjacent. Paired per game, loss = 9, vs `live` (the shipped shape: bare
+ladder, Sea = emulated + model, Boars = mode 3 at d6/b40). CPU = the job's `cpu=` field (thread CPU; `abreport.py` read the
+wall `ms` field as "cpu" before 2026-11-20 -- the AB1 CPU column is wall). CPU noise between two digest-identical arms is
+up to +-6 % per deck (Mill sparse 0.932 vs sparse_pwe0 1.019 at identical units), so only units are a fine signal.
+
+| deck | sparse net (e/l), units / CPU | sg5 net (e/l), units / CPU | heur vs live |
+|---|---|---|---|
+| Hydras | 0, 0.998 / 1.005 | 0, 0.983 / 0.982 | |
+| Martyr Lifegain | 0, 1.011 / 0.994 | +1 (0/1), 1.012 / 1.003 | |
+| Maze's End | 0, 1.003 / 0.991 (no-fix twin +4) | +3 (0/3), 1.000 / 0.983 | |
+| Merfolk Turns | 0, 0.999 / 0.995 | 0, 0.994 / 0.994 | |
+| Mill | 0, 1.006 / 0.932 | 0, 1.000 / 0.986 | |
+| Shadowborn Apostle | 0, 1.010 / 0.963 | **+8 (0/7)**, 0.994 / 0.975 | |
+| Stuffy Doll | 0, 0.998 / 0.999 | 0, 0.976 / 0.973 | |
+| Sea Creatures (emulated + model) | +1 (0/1), 0.943 / 0.951 | +1 (0/1), 0.925 / 0.932 | +1 (0/1), 0.998 / 0.982 |
+| Boars (mode 3, d6/b40) | +2 (0/2), 1.205 / 1.300 | +1 (0/1), 1.197 / 1.265 | +7 (0/7), 1.528 / 1.667 |
+
+Sea's one later game (17110151, T6 -> T7) is the same game in heur, sparse and sg5: it is the bare ladder against the
+emulated model, not a sparse-ladder defect. Boars: mode 3 stays the best shape (heur +7, sparse +2 at 1.2x units). Sg5's
+Shadowborn losses are all mode 2 refusals at T1 (firstdiv: passes 1-3 identical, pass 4 or 5 priced and refused, e.g.
+17150038 heur H4 = 11,346 units fits, sg5 refuses at W4 and commits pass 3); its AB1 Hydras refusals did not recur.
+**No mode meets the bar on any deck** (quality even AND units/CPU measurably lower): sparse is quality-even everywhere but
+saves nothing (units 0.998-1.011, Sea 0.943 at +1); sg5 saves 0-2.4 % units with losses on three decks.
+
+**AB1's mode-5 diagnosis was a trace artifact.** Two recording defects in the [p16] trace, not in play:
+1. Mode 5's exact bootstrap passes (mode 2's `_pb1`/`_pb2`/`_pb3`: passes 1, 2 and 3 run on rollouts) were recorded with
+   leaf = 0, so `abreport.py` counted their rollouts as skipped and `decstats.py` counted them as tree. The "35-79 %
+   skipped" and "leafless trees eat the saving (Mill tree 639 -> 7,976)" in AB1 item 2 are that. Fixed (print-only).
+2. Mode 5's priced W records carry the pass's LEAF COUNT in the leaf field (the walk's carry its price).
+Measured directly (`tools/wtree.py`, each sg5 leafless pass W_k against the rollout pass H_k of the same depth later in the
+same decision): the leafless pass costs 0.15-0.95x the rollout pass's tree on 8 of 9 decks (Merfolk Turns 1.34x), e.g.
+Shadowborn 17100014 T1 W4 = 337 units = H4's tree (3,258 - 2,921). **The leafless trees do not grow.** What actually
+limits mode 5 is that the superseded rollouts sit in passes 1-3, which it runs exactly. Superseded rollout units by pass
+depth, share of all units (`tools/supdepth.py`, live arm):
+
+| deck | pass 1 | pass 2 | pass 3 | pass 4+ | all |
+|---|---|---|---|---|---|
+| Hydras | 3.1 % | 5.9 % | 8.8 % | 3.8 % | 21.5 % |
+| Martyr Lifegain | 3.6 | 14.5 | 10.0 | 1.4 | 29.6 |
+| Maze's End | 2.6 | 1.6 | 0.5 | 0.1 | 4.8 |
+| Merfolk Turns | 3.6 | 3.6 | 2.1 | 0.5 | 9.8 |
+| Mill | 3.4 | 1.4 | 0.6 | 0.2 | 5.8 |
+| Shadowborn Apostle | 5.3 | 5.2 | 2.7 | 0.8 | 14.0 |
+| Stuffy Doll | 4.4 | 5.0 | 3.4 | 1.7 | 14.4 |
+| Sea Creatures (heur arm) | 7.1 | 12.0 | 9.9 | 4.0 | 33.0 |
+| Boars (heur arm) | 4.6 | 14.5 | 19.6 | 2.0 | 40.7 |
+
+Mode 5 can bank at most the pass-4+ column (0.1-4 % of units), less its pricing (W + Z = 1-10 % of units). Note also
+that superseded rollouts are not all waste: they pre-pay the committing pass's rollouts through the rollout tables (P18:
+the committing pass costs ~1.6x more when the pass below ran leafless), so the real ceiling is below the table. P18i's
+oracle (perfect K, passes below it leafless, 56 decks x 60) measured 0.925x CPU overall, 0.36-0.60x on rollout-heavy
+decks and only 2-4 % on gate-bound decks (Mill, Gods, Hinata, Cyclone, Melira, Shadowborn).
+
+**The early-win cutoff for the rollout-free passes (USER Q1's recommended default) has nothing to cut.** Its premise was
+the AB1 tree growth, which is the artifact above. Structurally: (a) the mode-4 walk already cuts every pass at its window
+edge, and its deepest pass ends at the root rollout's win W, so an incumbent W prunes nothing inside the window; (b) mode
+2's leafless passes already carry the sampled incumbent (`lcut = max(wb_prev - 1, window_end)`); (c) whatever they do,
+mode 5's rollout-free passes are only passes 4+, whose superseded rollouts are 0.1-4 % of units. Not built.
+
+#### Escalation PATH 2 (MEASURE ONLY, USER: "only really a good idea if we can drop a lot of lines that we have shown will not win")
+
+16 escalation / learned-hybrid decks x 2 x 50 games, live only, seeds 18,000,000 (+10,000), `MTG_ESC_P2_MEAS=1`
+(`tools/escshare.py`). A path-2 leaf is a top-level rollout leaf of the escalation's full heuristic ladder. "No win" = its
+rollout returned no win (none in the game, or none by its cutoff: a rollout aborts once past its cutoff); "useless" = no
+win by the leaf's cutoff, i.e. it could not change the pass's result.
+
+| deck | path-2 decisions | path-2 units / all units | no-win leaf units / leaf units | useless units / path-2 units | decisions with no win |
+|---|---|---|---|---|---|
+| Bruna | 58 | 21.6 % | 94.8 % | 88.8 % | 1 |
+| Extra Turns | 90 | 1.5 % | 100.0 % | 0.0 % (no cutoff: nothing to beat) | 90 |
+| Gods | 88 | 19.7 % | 93.5 % | 53.7 % | 15 |
+| Kitty Equipment | 38 | 29.9 % | 82.4 % | 70.0 % | 3 |
+| Landfall Elementals | 58 | 21.7 % | 93.7 % | 89.0 % | 1 |
+| Prevent Damage | 81 | 16.6 % | 93.4 % | 85.8 % | 4 |
+| Vampires | 9 | 7.1 % | 91.7 % | 86.9 % | 0 |
+| **all 7** | 422 | 18.4 % (10.4 % of all 16 decks' units) | 92.9 % | 72.9 % | 114 |
+
+The other 9 (Anti-Lifegain, Breaching Dragonstorm, Burn, Creature Giving, Critter Lifegain, Five Colour, Hinata, Knights,
+White Knights) never reached path 2 in 100 games. So ~93 % of the fallback's rollout work ends in no win and ~73 % could
+not have changed its pass -- but both are known only AFTER the rollout ran; dropping them needs a cheap proof of "will not
+win" before rolling out, which nothing here provides. Not built (USER).
+
