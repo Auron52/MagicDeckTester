@@ -112980,7 +112980,10 @@ namespace p16
     // MTG_P16_ORACLE=<file> (MEASUREMENT ONLY, default unset): "seed ord T sm K" per top-level decision, from a
     // heuristic-ladder trace. The ladder then runs passes 1..K-1 LEAFLESS and only pass K on rollouts -- the
     // "skip every superseded rollout, knowing K" upper bound. Never a play shape: it reads another run's answers.
-    struct OKey { unsigned long long s; int ord; bool operator<(const OKey& o) const { return s != o.s ? s < o.s : ord < o.ord; } };
+    // A line may start with a DECK TAG ("tag seed ord T sm K W"): it then applies only to jobs whose deck key contains
+    // "/v/<tag>/", so one oracle file serves a pooled batch of several decks that share game seeds (2026-11-20).
+    struct OKey { std::string tag; unsigned long long s; int ord;
+                  bool operator<(const OKey& o) const { return tag != o.tag ? tag < o.tag : (s != o.s ? s < o.s : ord < o.ord); } };
     struct OVal { int T, sm, K, W; };
     inline const std::map<OKey, OVal>& Oracle()
     {
@@ -112991,10 +112994,28 @@ namespace p16
             while (std::getline(in, ln))
             {
                 unsigned long long sd; int ord, T, sm, K, W = 0;
-                if (std::sscanf(ln.c_str(), "%llu %d %d %d %d %d", &sd, &ord, &T, &sm, &K, &W) >= 5) { r[OKey{sd, ord}] = OVal{T, sm, K, W}; }
+                std::string tag; const char* body = ln.c_str();
+                if (!ln.empty() && (ln[0] < '0' || ln[0] > '9'))
+                {
+                    const std::size_t sp = ln.find(' ');
+                    if (sp == std::string::npos) { continue; }
+                    tag = ln.substr(0, sp); body = ln.c_str() + sp + 1;
+                }
+                if (std::sscanf(body, "%llu %d %d %d %d %d", &sd, &ord, &T, &sm, &K, &W) >= 5) { r[OKey{tag, sd, ord}] = OVal{T, sm, K, W}; }
             }
             return r; }();
         return m;
+    }
+    inline const std::string& OracleTag()   // this job's deck tag: the directory after "/v/" in its deck key ("" = none)
+    {
+        static thread_local std::string key, tag;
+        if (key != valuearm::t_deck_key)
+        {
+            key = valuearm::t_deck_key; tag.clear();
+            const std::size_t p = key.find("/v/");
+            if (p != std::string::npos) { const std::size_t e = key.find('/', p + 3); tag = key.substr(p + 3, e == std::string::npos ? std::string::npos : e - p - 3); }
+        }
+        return tag;
     }
     inline thread_local unsigned long long t_o_seed = 0;
     inline thread_local int  t_o_ord = 0;
@@ -113013,7 +113034,8 @@ namespace p16
         if (seed != t_o_seed) { t_o_seed = seed; t_o_ord = 0; t_o_dead = false; }
         const int ord = t_o_ord++;
         if (t_o_dead) { return; }
-        auto it = m.find(OKey{seed, ord});
+        auto it = m.find(OKey{std::string(), seed, ord});
+        if (it == m.end()) { it = m.find(OKey{OracleTag(), seed, ord}); }
         if (it == m.end() || it->second.T != T || it->second.sm != (sm ? 1 : 0)) { t_o_dead = true; return; }
         t_oracle_K = it->second.K;
         t_oracle_W = (valuearm::t_deck_key.find("asp") != std::string::npos) ? it->second.W : 0;   // arm dir holds "asp"
@@ -123086,7 +123108,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 SearchLine pr;
                 {
                     ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
-                    pr = FSLineWin(state, k, max_turns, root_cut, second_main, ltt, &p18_leafless_cache, budget);
+                    // Arm key `_pwe1` (A/B only, default off so the shipped mode-3 decks are unchanged): the walk-edge
+                    // roll of p18::t_walk_edge inside this lookahead too -- a leaf at or before the pass's last window
+                    // turn is rolled out (cut there), so the pass proves every in-window win its rollout pass sees.
+                    static thread_local std::string s_k3; static thread_local bool s_we3 = false;
+                    if (s_k3 != valuearm::t_deck_key) { s_k3 = valuearm::t_deck_key; s_we3 = s_k3.find("_pwe1") != std::string::npos; }
+                    const int we_saved = p18::t_walk_edge;
+                    // ... and, as in the walk, the pass is cut at that edge (it commits only an in-window win, and the
+                    // rolled-out edge leaves then stop there instead of rolling to the root cut).
+                    const int cut3 = s_we3 ? std::min(root_cut, state.turn_number + k - 1) : root_cut;
+                    if (s_we3) { p18::t_walk_edge = cut3; }
+                    pr = FSLineWin(state, k, max_turns, cut3, second_main, ltt, &p18_leafless_cache, budget);
+                    p18::t_walk_edge = we_saved;
                 }
                 l2 = l1; l1 = static_cast<double>((budget ? budget->Used() : 0) - w0);
                 const bool hit = cap_abs > 0 && budget->Used() >= cap_abs;
@@ -123124,12 +123157,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 {
                     // ANYTIME COMMIT, as the ladder below: a strictly better proven win is kept, else the prior line.
                     const bool rescued = s_id_anytime && p1.win_turn < prev_line.win_turn;
-                    p16::Rec('H', 1, c1, 0, rescued ? 2 : 1, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    p16::Rec('H', 1, c1, p16::t_leaf_units - leaf0, rescued ? 2 : 1, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                     if (rescued) { line = p1; committed_depth = 1; escstats::t_esc_rescued_main = true; }
                     else         { line = prev_line; committed_depth = prev_committed; }
                     p18_done = true; break;
                 }
-                p16::Rec('H', 1, c1, 0, 0, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p16::Rec('H', 1, c1, p16::t_leaf_units - leaf0, 0, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                 if (p1.truncated) { p18_K = 1; break; }   // the ladder below runs pass 1 its own way (order-free re-search)
                 const double rem = static_cast<double>(budget->Remaining());
                 const double e2 = static_cast<double>(c1) * kDefaultGrowth;
@@ -123168,12 +123201,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (ab2)
                 {
                     const bool rescued = s_id_anytime && p2.win_turn < prev_line.win_turn;
-                    p16::Rec('H', 2, c2, 0, rescued ? 2 : 1, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    p16::Rec('H', 2, c2, p16::t_leaf_units - leaf0, rescued ? 2 : 1, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                     if (rescued) { line = p2; committed_depth = 2; escstats::t_esc_rescued_main = true; }
                     else { line = prev_line; committed_depth = prev_committed; }
                     p18_done = true; break;
                 }
-                p16::Rec('H', 2, c2, 0, 0, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p16::Rec('H', 2, c2, p16::t_leaf_units - leaf0, 0, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                 p18_K = 2;
                 if (p2.truncated) { p18_stop = 2; break; }
                 line = p2; committed_depth = 2; prev_line = line; prev_committed = 2; p18_exact_prev = true;
@@ -123217,12 +123250,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (ab3)
                 {
                     const bool rescued = s_id_anytime && p3.win_turn < prev_line.win_turn;
-                    p16::Rec('H', 3, c3, 0, rescued ? 2 : 1, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    p16::Rec('H', 3, c3, p16::t_leaf_units - leaf0, rescued ? 2 : 1, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                     if (rescued) { line = p3; committed_depth = 3; escstats::t_esc_rescued_main = true; }
                     else { line = prev_line; committed_depth = prev_committed; }
                     p18_done = true; break;
                 }
-                p16::Rec('H', 3, c3, 0, 0, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p16::Rec('H', 3, c3, p16::t_leaf_units - leaf0, 0, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
                 p18_K = 3;
                 if (p3.truncated) { p18_stop = 3; break; }
                 line = p3; committed_depth = 3; prev_line = line; prev_committed = 3; p18_exact_prev = true;
