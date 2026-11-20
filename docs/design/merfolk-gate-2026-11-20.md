@@ -42,7 +42,24 @@ that tapped its plain {C}`.
 ## 3. ENUM-GAP: {Seahunter + Rishadan Dockhand} kept off the menu
 
 s30000762 T4: Islands x2, City, three Merfolk; hand Seahunter, Dockhand, Island x2. Dockhand first makes four Merfolk
-and two Islands into City pay Seahunter. Status: see section 5.
+and two Islands into City pay Seahunter. NOT FIXED (a cast-order question for the USER; see section 5).
+
+Mechanism (traced with `MTG_DBG_MULTI=4` on a unit-test board, the Island already played). The plan never reaches a
+per-subset gate: EnumeratePlans' odometer prunes on a scalar mana bound, `[dbgmulti-bound] t4 bound=4 pool=4
+cands=[Seahunter(4), Rishadan Dockhand(1), Tidal Warrior(0)]`, and {Seahunter, Dockhand} = 5 > 4. The bound already
+carries a same-turn GROWTH addend for scaled DORKS (`growth_bound`, Priest of Titania) but none for a scaled LAND, so
+City's yield is priced at its current three Merfolk. The per-subset rescue (`SubsetPayableWithFilters`) would admit it:
+its `scaled_land_growth` order puts Dockhand first, and the same two payments made by hand on that board both pay.
+
+Why it is not fixed here: admitting the subset (a land-growth addend on the bound -- an upper bound, so it can only
+prune less) moves the hole from the menu to the APPLY. Both apply worlds order the casts by `CastOrderLess`: Seahunter
+and Dockhand tie (both creature rank 10, no cheapest-first tie-break outside rituals), so plan order stands, Seahunter
+is paid first (two Islands into City for three {U} plus the third Island) and Dockhand finds nothing: an APPLY-DROP.
+The payable-order decider (`PayableCastOrderCoreImpl`) re-orders only producers, reveal casts and domain wideners. The
+complete fix is the bound addend plus EITHER a decider domain for "a creature that grows an untapped scaled land"
+(walk the growers first when the given order does not pay) OR a Merfolk Turns cast-order rule (cheaper City-growing
+Merfolk first). The second is a deck cast-order policy, which is the USER's call; the first is the established
+"only when the given order does not pay" shape but changes the realised order of real games.
 
 ## 4. Measurements
 
