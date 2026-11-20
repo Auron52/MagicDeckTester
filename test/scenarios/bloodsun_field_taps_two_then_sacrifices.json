@@ -1,0 +1,53 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lotus Field",
+  "Demonic Tutor"
+ ],
+ "human_lines": [
+  "land=Lotus Field;cast=Demonic Tutor",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_human_summary_contains": "land=Lotus Field; cast: Demonic Tutor",
+ "expect_history_contains": [
+  "tapped for",
+  "in response to the sacrifice",
+  "Lotus Field -- sacrificed"
+ ],
+ "comment": "Blood Sun step 2: LOTUS FIELD TAPS TWO LANDS, THEN SACRIFICES THEM. Three untapped basics; the Field enters tapped and its trigger sacrifices two lands (the menu's front pick -- the scenario harness has no human sacrifice chooser -- two basics, never the Field itself: LotusSacrificeRanking puts the lowest per-tap yield first). Each untapped victim is tapped for its mana in response first (the trigger uses the stack; the mana floats until the phase ends), so the two floated mana plus the surviving land pay Demonic Tutor {1}{B}: nothing is dropped.",
+ "expect_history_lacks": [
+  "sacrificed Lotus Field"
+ ]
+}

@@ -646,7 +646,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // the one thing a decision menu must never do. Only ACCEPT is annotated: rad_mode -1 is
         // "no such land in this plan" and 0 is the ordinary decline, and both print as they always
         // did, so every deck without such a land is byte-identical.
-        if (plan.rad_mode == 1) { os << " (enters tapped, +rad)"; }
+        // A Lotus land's land-entry pin is its SACRIFICE pick (LotusSacrificePicks), never a rad mode.
+        const CardDefinition* lotus_ld = (plan.rad_mode >= 0 && !plan.land_to_play.empty())
+                                       ? CardDatabase::Instance().Lookup(plan.land_to_play) : nullptr;
+        if (lotus_ld != nullptr && LandLotusSacrificeCount(lotus_ld->params) > 0)
+        { os << " (sacrifice pick " << plan.rad_mode << ")"; }
+        else if (plan.rad_mode == 1) { os << " (enters tapped, +rad)"; }
         // MDFC LAND FACE (Branchloft // Boulderloft Pathway) -- the SAME defect the rad_mode note
         // above describes, and found the same way: a Stage 5d claude-play sweep in which SEVEN
         // independent player agents each reported the Pathway's two faces as byte-identical menu

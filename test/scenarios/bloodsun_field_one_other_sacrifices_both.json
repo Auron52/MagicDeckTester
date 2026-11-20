@@ -1,0 +1,36 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lotus Field"
+ ],
+ "human_lines": [
+  "land=Lotus Field",
+  "pass",
+  "pass"
+ ],
+ "expect_graveyard_contains": [
+  "Lotus Field",
+  "Swamp"
+ ],
+ "comment": "Blood Sun step 2: LOTUS FIELD WITH ONE OTHER LAND SACRIFICES BOTH (ruling: 'If Lotus Field enters the battlefield while you control fewer than two other lands, you must sacrifice each land you control, including Lotus Field.'). Human path only -- fold F-L2 keeps the autonomous land choice from making this drop. The Swamp is tapped for {B} in response first."
+}

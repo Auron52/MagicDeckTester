@@ -11928,6 +11928,8 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         { land += std::string("[color=") + ColorName(static_cast<Color>(p.rad_mode)) + "]"; }
         else if (ld != nullptr && ld->params.etb_sacrifice_unless_pay.has_value())
         { land += p.rad_mode ? "[pay]" : "[sacrifice]"; }
+        else if (ld != nullptr && LandLotusSacrificeCount(ld->params) > 0)   // a Lotus land's sacrifice pick
+        { land += "[sac" + std::to_string(p.rad_mode) + "]"; }
         else { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
     }
     if (p.bounce_choice >= 1) { land += "[bounce" + std::to_string(p.bounce_choice) + "]"; }
@@ -105983,6 +105985,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // other could never be played at any budget (Shadowborn INT-9, found by the P1 Swamp + Lake test). Only Lake
         // sets the param, so every other deck is byte-identical.
         if (!pp.etb_replace_sacrifice_land_subtype.empty()) { s += "er" + pp.etb_replace_sacrifice_land_subtype; }
+        // The Lotus lands (Lotus Vale / Scorched Ruins: N untapped lands, a replacement; Lotus Field: N lands, a
+        // trigger) -- an ETB that COSTS lands, the Lake's reason exactly; plus "N mana of any ONE colour", which a
+        // Karoo-shaped bundle of the same colours and amount is not. Only these lands set the params.
+        if (pp.etb_replace_sacrifice_untapped_lands > 0) { s += "lv" + std::to_string(pp.etb_replace_sacrifice_untapped_lands); }
+        if (pp.etb_sacrifice_lands > 0)                  { s += "lf" + std::to_string(pp.etb_sacrifice_lands); }
+        if ((pp.etb_replace_sacrifice_untapped_lands > 0 || pp.etb_sacrifice_lands > 0) && pp.produces_one_color)
+        { s += "o1"; }
         // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
         // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
