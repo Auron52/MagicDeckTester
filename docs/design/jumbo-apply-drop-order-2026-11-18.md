@@ -291,10 +291,66 @@ CPU delta (11.0 ms a game, ~281k units) agrees. That is ~760 units a game on a ~
 Jumbo gi 719500-719599 (100 games), arms on / price+cut / price only: **100/100 byte-identical** (win turn, digest,
 units).
 
-### Held-out A/B (QUEUED 2026-11-20 12:44 UTC behind `claude_box.lock`; results land here)
+### Held-out A/B (ran 2026-11-20, finished 16:23 UTC, rc=0, heartbeat 32/32)
 
 One pooled `mtg --batch` (`build/scratch/claude_jumbo_uo_budget/ab.json`, binary `mtg.w16` = bfac80e72, `MTG_PGO=0`,
 `MTG_RSS_CAP_GB=40`, 32 threads), seed = 30000000+gi, game_index = gi, play settings, **gi from 720000** (no earlier
 Jumbo A/B used 719000+; the earlier ones used 640000-660299 and 115000-116999). Arms: off = `MTG_PO_UNLOCK_ORDER=0`;
 on = unlock lever, price off (the shipped play); pc = price + cut; p = price only. Jumbo 10,000 games a arm; Angels,
 Boars, Bruna, Five Colour, Kitty Equipment 2,000 each (80,000 games).
+
+Per deck, each arm against `on` (the shipped play). faster / slower = games whose win turn moved (a non-win scored 9);
+net = summed turn delta (`+` = worse); CPU = summed per-job CPU, ratio to `on` and to `off`; ms/g = CPU per game.
+
+| deck | games | arm | faster | slower | net | digest-only | units vs on | CPU vs on | CPU vs off | ms/g |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Jumbo | 10,000 | off | 1 | 4 | **+3** | 180 | x0.995 | x0.839 | 1 | 179 |
+| | | on | - | - | 0 | - | 1 | 1 | x1.192 | 213 |
+| | | pc | 0 | 2 | **+2** | 29 | x1.080 | x0.924 | x1.101 | 197 |
+| | | p | 0 | 2 | **+2** | 12 | x1.103 | x0.946 | x1.128 | 201 |
+| Bruna | 2,000 | off | 0 | 1 | +1 | 31 | x1.000 | x0.992 | 1 | 705 |
+| | | pc | 0 | 1 | **+1** | 3 | x1.025 | x1.004 | x1.012 | 713 |
+| | | p | 0 | 1 | **+1** | 3 | x1.026 | x1.003 | x1.011 | 713 |
+| Angels | 2,000 | pc / p | 0 | 0 | 0 | 0 / 0 | x1.013 | x1.002 | x1.001 | 46 |
+| Boars | 2,000 | pc / p | 0 | 0 | 0 | 0 / 0 | x1.010 / x1.002 | x0.969 / x0.953 | x0.999 / x0.984 | 264 / 260 |
+| Five Colour | 2,000 | pc / p | 0 | 0 | 0 | 0 / 0 | x1.025 | x1.008 / x1.004 | x1.014 / x1.010 | 1754 / 1746 |
+| Kitty Equipment | 2,000 | pc / p | 0 | 0 | 0 | 0 / 0 | x1.000 | x0.995 / x0.996 | x0.996 / x0.997 | 678 |
+
+(Angels / Boars / Five Colour / Kitty: `off` vs `on` is also 0/0/0; Boars' `off` CPU x0.969 with 8 digest-only moves
+shows the CPU noise floor between arms of a deck the lever barely touches is about +-3%.)
+
+The slower games are the SAME games on both price arms: Jumbo gi 722372 (8 -> 9, a lost win) and gi 727984 (4 -> 5),
+Bruna gi 720338 (6 -> 7). No price arm made any game faster. Against `off`, both price arms keep all four of the
+unlock lever's Jumbo wins (gi 724404, 725337, 727698, 729291) and its one Bruna win (720747), and add the three
+slower games above (the lever alone loses one, gi 727106, 4 -> 5): Jumbo net vs off on -3 / pc -1 / p -1, Bruna
+on -1 / pc 0 / p 0.
+
+**CPU.** Jumbo at play settings: off 179 ms a game, on 213 (+19.2%), pc 197 (+10.1% vs off, -7.6% vs on), p 201
+(+12.8% vs off, -5.4% vs on). The price therefore recovers ~60% (pc) / ~33% (p) of the lever's cost; the cut is
+worth a further ~2 points. Every other deck is within the +-3% noise floor. Against Hinata: `test/suite_cost.json`
+has Jumbo at 3,391.5 ms a game (the d5 b20 regression shape) and Hinata at 6,434.4, 0.527x, measured before the
+unlock lever. Scaling by the play-settings ratios above (a projection, not a suite-shape measurement): on ~0.63x,
+pc ~0.58x, p ~0.59x Hinata.
+
+**d8 b0 recovery** of every slower game (`rec.json`, arms on / pc / p; recovered = d8 b0 turn <= `on`'s budgeted
+turn), on the 4-core lane, binary `mtg.w16`:
+
+| deck | gi | on (budgeted) | pc / p (budgeted) | d8 b0 on / pc / p | recovered |
+|---|---|---|---|---|---|
+| Bruna | 720338 | 6 | 7 / 7 | 6 / 6 / 6 | yes |
+| Jumbo | 722372 | 8 | 9 / 9 | 8 / 8 / 8 | yes |
+| Jumbo | 727984 | 4 | 5 / 5 | 4 / 4 / 4 | yes |
+
+All three recover, and the three arms are byte-identical at d8 b0 (digest and units). This confirms again that the
+price is inert at an unlimited root. Each loss is the finite budget being re-spent: the price bills the walks, so the
+rest of that decision's search gets less.
+
+**Verdict against the bar.** Every slower game recovers at d8 b0, but the per-deck net against the committed tree is
+**Jumbo +2 and Bruna +1 on BOTH price arms** ("+1 is not neutral. 0 is neutral."). As measured, **neither arm meets
+the adoption bar**. The lever stays default OFF; the USER decides.
+
+**On the open question (cut on `Exhausted() || Overrun()` vs `Overrun()` only).** On this sample the two arms
+have the same turn outcomes: the same three slower games, no faster games, and net turns identical in every deck.
+The cut arm is cheaper (Jumbo CPU x0.924 vs x0.946 of `on`; units x1.080 vs x1.103) but moves more digests without
+changing a turn (29 vs 12 Jumbo digest-only moves; both are small). On the evidence, pc matches p on quality and beats it on CPU.
+
