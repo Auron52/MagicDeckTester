@@ -1,21 +1,8 @@
-# Regression ground truth -- commit 5d0d26067  date 2026-11-20
+# Regression ground truth -- commit f6695ff3e  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
-# accepted-with-regressions (smoke, 2026-11-19): AccomplishedAlchemist MTG_AA_CAST_ORDER_V2 default ON (USER 2026-11-19 adoption; 6b69e003a): Weather the Storm flexible around the untappers; held-out AA A/B net -80; regression slower s2002 gi23 d3/d5 5->6 and s3003 gi20 d5 4->5 are budget churn (recover at 4x/16x: 4,4,4); smoke all AA rows faster; d0 greedy lighter bar 11 slower; only alchemist/alchemist2hg rows changed
-# accepted-with-regressions (smoke, 2026-11-19): sea-integ-1118 run3 (opponent lands from a pool deck, Sin/Gorger, Sea discard bucket, payable-order walk perf, Jumbo front block) on origin ae2b9f91b; every searched slower game has a verdict (search-shuffle decoupling or b200 recovery): logs/opp-lands/attribution.md, logs/sea-integ/run3-verdicts.md
-# accepted-with-regressions (smoke, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
-# accepted-with-regressions (smoke, 2026-11-18): Jumbo MTG_AURA_CEIL_HASTE_UNTAPPER default ON (6e2240a9b): land-Aura ceiling counts same-plan haste-unlocked untappers; held-out Jumbo 640000-644999 7 faster/1 slower net -6, slower gi 641075 recovers at d8 b0; tiers: only Jumbo rows, digest-only (0 slower, 0 faster)
-# accepted-with-regressions (smoke, 2026-11-19): Jumbo order levers MTG_PO_UNLOCK_ORDER + MTG_SEQ_TRAILING_EQUIP default ON (+ MTG_AURA_CEIL_HASTE_UNTAPPER), rebased onto sea-integ-1118: held-out 27,000 games Jumbo net -2 (2 faster/0 slower), Angels/Boars/Bruna/Colossus Hammer/Five Colour/Kitty/Martyr 0/0; tiers: only reach decks (Jumbo, Boars, Five Colour, Bruna) moved, searched 0 slower / 1 faster, d0 0 slower
-# accepted-with-regressions (regression, 2026-11-19): Shadowborn MTG_SB_APOSTLE_FODDER_CLAIMS default ON (0354fa0b2): Culling the Weak counts as a sacrifice claim for Apostle-before-Ritual; gate slice APPLY-DROP-ORDER 44 -> 0; held-out 15k 1 changed game 0 slower net 0; only shadowborn_regression_d5_s2002 gi98 play-changed at the same T6 (0 slower, 0 faster)
-# accepted-with-regressions (regression, 2026-11-19): AccomplishedAlchemist MTG_AA_CAST_ORDER_V2 default ON (USER 2026-11-19 adoption; 6b69e003a): Weather the Storm flexible around the untappers; held-out AA A/B net -80; regression slower s2002 gi23 d3/d5 5->6 and s3003 gi20 d5 4->5 are budget churn (recover at 4x/16x: 4,4,4); smoke all AA rows faster; d0 greedy lighter bar 11 slower; only alchemist/alchemist2hg rows changed
-# accepted-with-regressions (regression, 2026-11-19): sea-integ-1118 run3 (opponent lands from a pool deck, Sin/Gorger, Sea discard bucket, payable-order walk perf, Jumbo front block) on origin ae2b9f91b; every searched slower game has a verdict (search-shuffle decoupling or b200 recovery): logs/opp-lands/attribution.md, logs/sea-integ/run3-verdicts.md
-# accepted-with-regressions (regression, 2026-11-18): Re-accept after rebasing wip/maze-shared onto origin/phase-1-2-deck-analyzer 534dca483: mazesend/mazesend2hg (P6 off-main Maze's End activation, f3b001beb) and extraturns/extraturns2hg (opponent-target extra-turn prune, 2747ca60c); every moved key reproduces its pre-rebase accepted aggregate+digest byte-for-byte; no other key moved
-# accepted-with-regressions (regression, 2026-11-18): Jumbo MTG_AURA_CEIL_HASTE_UNTAPPER default ON (6e2240a9b): land-Aura ceiling counts same-plan haste-unlocked untappers; held-out Jumbo 640000-644999 7 faster/1 slower net -6, slower gi 641075 recovers at d8 b0; tiers: only Jumbo rows, digest-only (0 slower, 0 faster)
-# accepted-with-regressions (regression, 2026-11-19): Jumbo order levers MTG_PO_UNLOCK_ORDER + MTG_SEQ_TRAILING_EQUIP default ON (+ MTG_AURA_CEIL_HASTE_UNTAPPER), rebased onto sea-integ-1118: held-out 27,000 games Jumbo net -2 (2 faster/0 slower), Angels/Boars/Bruna/Colossus Hammer/Five Colour/Kitty/Martyr 0/0; tiers: only reach decks (Jumbo, Boars, Five Colour, Bruna) moved, searched 0 slower / 1 faster, d0 0 slower
-# accepted-with-regressions (smoke, 2026-11-20): Maze's End fix batch (I5: F5 joint pay + heapstrict, F5p unpayable prune, F5R, F7, Summit lockstep + twin fold, SHUF, P5c, P7): every searched-slower game recovers at d8 b0 (22/22; martyr g149 and maze s2002 g120 tie the base binary's d8 b0)
-# accepted-with-regressions (regression, 2026-11-20): Maze's End fix batch (I5: F5 joint pay + heapstrict, F5p unpayable prune, F5R, F7, Summit lockstep + twin fold, SHUF, P5c, P7): every searched-slower game recovers at d8 b0 (22/22; martyr g149 and maze s2002 g120 tie the base binary's d8 b0)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -36,10 +23,10 @@ sea_smoke_d0_s1001=6.5590/249ad9e14c9dfa03
 sea_smoke_d3_s1001=5.8400/3da5ae96f8a8fd25
 sea_smoke_d5_s1001=5.8300/fb864b7c06174b6a
 sea2hg_smoke_d5_s1001=6.4400/d115b281b26444af
-stuffy_smoke_d0_s1001=6.4260/933efd34b07207d5
-stuffy_smoke_d3_s1001=4.6200/dbe870a3e3741f5a
-stuffy_smoke_d5_s1001=4.6300/e52ec1e719611350
-stuffy2hg_smoke_d5_s1001=4.6800/b973b3f3a8eeae8c
+stuffy_smoke_d0_s1001=5.9350/d9784f095942c97d
+stuffy_smoke_d3_s1001=4.6200/922ace4c6fd142ba
+stuffy_smoke_d5_s1001=4.6200/b2d57278c6e6a61c
+stuffy2hg_smoke_d5_s1001=4.6800/3cfa3c3d63c42c73
 morph_smoke_d0_s1001=4.7270/7bebf64d01f6a0fd
 morph_smoke_d3_s1001=3.9800/e158437b2359a584
 morph_smoke_d5_s1001=4.0500/2cd4020c21550e42
@@ -284,13 +271,13 @@ boars_regression_d3_s30261=4.6000/1fc13d590fe04025
 boars_regression_d5_s30261=4.6000/1fc13d590fe04025
 sea_regression_d3_s30011=6.2000/2c1b993bb5dff488
 sea_regression_d5_s30011=6.2000/2c1b993bb5dff488
-stuffy_regression_d0_s2002=6.4700/f680e8f2b4144073
-stuffy_regression_d3_s2002=4.5000/a9973dc8b27fc673
-stuffy_regression_d5_s2002=4.5400/46955e82aca44ab8
-stuffy_regression_d5_s3003=4.6267/baa05bd741fc45b7
-stuffy2hg_regression_d5_s2002=4.7867/8c4212731643d85d
-stuffy_regression_d3_s30071=4.0000/43175ce36a83ba7d
-stuffy_regression_d5_s30071=4.0000/19740a46b3741935
+stuffy_regression_d0_s2002=6.0180/cac337334e3a14ba
+stuffy_regression_d3_s2002=4.5000/45b37631a3e3c35a
+stuffy_regression_d5_s2002=4.5333/a467ca84a7bb7982
+stuffy_regression_d5_s3003=4.6267/2f1d9dc4fb370a88
+stuffy2hg_regression_d5_s2002=4.7733/dcd49823c02675e4
+stuffy_regression_d3_s30071=4.0000/0b1c26c279c0abec
+stuffy_regression_d5_s30071=4.0000/0b1c26c279c0abec
 morph_regression_d0_s2002=4.7570/7ec5d65a674c1a10
 morph_regression_d3_s2002=4.0267/f1bcfc70d04c2127
 morph_regression_d5_s2002=4.0333/88dc4449f97fa44d

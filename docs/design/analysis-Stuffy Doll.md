@@ -343,3 +343,11 @@ Fixes: 8fc873144. Validation: build, unit, scenarios, trick-order check, human_p
 viewer_protocol_check --strict over 909 refs (0 play-drift / board-diverged / enum-gap; 1 beaten suboptimal ref),
 test/viewer_checks.sh (re-run on the rebased binary; its two pre-existing failures are listed in the Stage 6 report). Search play is unchanged: B is human-only; A removes only orders that cannot execute; C, D, F
 and G are protocol/viewer text.
+
+GT accepted 2026-11-20 at f6695ff3e (smoke + regression, one pooled batch, 100 min makespan): the USER-adopted
+flips (344b79788: MTG_STUFFY_SPLIT_LETHAL_M1 and MTG_STUFFY_OPP_CREATURE_PRUNE default ON) plus the F2c fold
+(f6695ff3e: F2c holds while a GC is out unless the SOURCE carries a GC). Only Stuffy / Stuffy-2HG keys moved (11
+rows). Searched: 0 slower, 3 faster, 297 play-changed at the same score. d0: 651 faster, 1 slower (regression d0
+s2002 gi145 4->5); d0 averages 6.426->5.935 (smoke) and 6.470->6.018 (regression). viewer_protocol_check --strict:
+930 refs, 0 drift / contract-fail. The ~2 h Galadriel s10 gi9 replay in that run is origin's (Maze's End F5R
+pay-refine Dfs, reproduced on origin 8fbbc5023 without these commits); fix queued as wip/refine-node-cap.
