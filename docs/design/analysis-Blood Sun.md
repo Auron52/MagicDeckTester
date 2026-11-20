@@ -43,6 +43,8 @@ certifies the round; ordinary order-only heuristics below the threshold. Passed 
 USER addendum (verbatim): *"But prior to that we can often chain into Time Warp."* -> below the
 Emrakul-loop threshold, Revelation for Time Warp + Revelation bridges extra turns (bounded: 2 Time Warps,
 returned only by an Emrakul graveyard shuffle) while land drops grow the mana. Passed to the design agent.
+USER addendum 2 (verbatim): *"(and get additional lands or extra land playing cards to ramp up our
+mana)"* -> the bridge Revelation's spare picks are big lands and Exploration/Burgeoning/Fastbond.
 
 
 ## Standing decisions (pass to every subagent)
