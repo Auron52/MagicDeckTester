@@ -62,7 +62,9 @@ origin/phase-1-2-deck-analyzer 8fbbc5023 (batch 1). This handoff commit sits on 
    the same with no mode flag for regression (`--deck=mazesend,mazesend2hg`). The test/logs runs are from mtg.p7t.
    Do not re-run first. Diff `test/regression_gt.txt` (expect only mazesend keys + the note line), then run
    `python3 test/check_gt_logs.py`. Commit the GT.
-3. Report the VPC line as "VPC: full corpus held; subset strict (Maze_s_End) = <vpc6 result>".
+3. **VPC subset LANDED: PASS (rc=0)** -- 11 refs: 4 ok, 7 repaired, 0 beaten / play-drift / shuffle-dead / board-diverged /
+   enum-gap / mull-drift / contract-fail; 0 stateless fallbacks in 311 steps (`p7g/vpc6.log`). Report: "VPC: full corpus
+   held; subset strict (Maze_s_End) = PASS". (Re-run it if src changes for the gi14 fix.)
 4. Push wip/maze-p7 and watch CI (`gh run watch <id> --interval 60 --exit-status`). Then READY FOR BATCH 2.
 5. Optional / follow-up, NOT done: `EchoEdgeFoldHere` (TurnSolver.cpp ~82248) also fires on
    `FsNextLeafConstant` with no `g_probe_recording` exclusion, so it may misprice FIT the same way. Not ours;
