@@ -47,6 +47,12 @@ Worktree `.claude/worktrees/maze-p5d`, branch `wip/maze-p5d` (base 021c821d0). P
   (blind) and `cat $P4/ac/rows.out $O/rev.out > y; python3 $P4/../p5d/anab.py y fixidle` (clairvoyant).
 
 ## USER rulings 2026-11-20 (VERBATIM, relayed by the parent)
+GOVERNING PRINCIPLE (applies to every ruling below), VERBATIM: "Either way, any of the close cases here should be searched and any that are not are considerations for pruning."
+Reading (parent): the rules must not pick an answer in a close case. A close case keeps BOTH options on the menu
+(Manabond yes/no, fetch vs engine cast) and the search decides. The rules may PRUNE only the clearly dominated cases
+(e.g. Manabond with only free discards and 2+ lands: prune "no"; Manabond with 1 land and a castable tutor: prune "yes
+before casting"); anywhere else they may at most ORDER. P5d-6 must classify each condition as "clear -> prune" or
+"close -> keep both, order only", and report how many decisions fall in each class.
 Q1 (the lands-short "win out" tier 1000 vs C2=100): "I'm not exactly sure what to do with this ranking and my original comments were not directed at spells, but other "use spare mana" effects. I don't think activating strictly beats or loses to spells. Both are good and better in certain circumstances. That means that potentially A is okay, but the best answer is conditional. If you need to deploy more lands from hand Exploration, Manabond and maybe even Burgeoning are better. If you need more lands in hand activation or Guild Summit are better. Guild Summit is typically better relatively early or when you have the means to drop a number of gates, whereas the activation is better late, especially when you are nearing the win (and in fact you need to activate to win) as long as you don't strand the Maze's end in hand."
 (Option "A" = lower the lands-short tier to 100, C2.)
 
@@ -57,6 +63,11 @@ Reading (parent): Charm / Scrying count as discardable when Manabond's yes puts 
 1 land to put, the better line casts the Scrying / Charm first (if mana allows) and then decides Manabond, so the rule
 should prefer that ordering, not count them as free discards. Burgeoning: parent proposed "droppable like the other
 accelerators"; the USER did not object -- default, UNCONFIRMED.
+
+Q2 addendum (VERBATIM): "I guess with two lands and multiple scrying you would consider again. In that case, unless we are close to the win you may want to delay one turn."
+Reading (parent): Manabond putting only 2 lands with MULTIPLE Scrying/Charm in hand is not a clear yes; unless close to the
+win, prefer declining this turn (delay one turn) and keep the tutors to cast; near the win the yes is fine. The threshold
+for treating tutors as free discards scales with tutors lost vs lands gained and with closeness to the win.
 
 ## Plan from the rulings (parent's reading; P5d-6 builds it)
 - The "win out" tier was meant to beat other spare-mana sinks, not spells. Against spells the fetch's rank is CONDITIONAL:
