@@ -71,3 +71,24 @@ quality vs time comparison with this, like with every other trade."). New this s
 Coordinator's reading: droppable in std; in 2HG keep it in the ranking (it may outrank other ramp at times), report per-format
 numbers, and leave the 2HG decision to the USER. The report must show Burgeoning's SPREAD (per-game variance / tail:
 how often it is much worse) alongside the averages, per format, so the USER can weigh the 2HG trade.
+
+## UPDATE (chain FINISHED; ab.out copied to logs/maze/p5d6/ab.out)
+- Tiers (VPC_SKIP=1): 10 FAIL, ALL mazesend*/mazesend2hg* keys (expected, P5d is not on origin); 0 non-Maze. NOT accepted
+  yet: accept `--deck=mazesend,mazesend2hg` from `$O`'s run (tiers.log), then check_gt_logs. Maze VPC: 11 refs, 1 ok, 10
+  repaired, 0 failures.
+- A/B (net turns vs shipped; std = d5+d3+d1b3+d1b1; units/game in anab output):
+  | lever | BLIND d5 / 2HG / d3 / d1b3 / d1b1 | CLAIRV d5 / 2HG / d3 / d1b3 / d1b1 / d0 |
+  | rev   | -2 / 0 / -1 / -2 / 0      | -9 / 0 / 0 / -2 / -1 / (=ship) |
+  | c2    | -10 / -6 / +14 / +4 / -5  | +3 / -3 / 0 / -2 / -2 / +4 |
+  | cond  | -39 / -24 / -1 / -1 / -10 | +1 / -4 / -2 / -1 / -3 / +3 |
+  | q2    | -37 / 0 / -6 / -7 / +5    | -2 / -1 / -3 / -3 / -1 / -32 |
+  | revq2 | -40 / -1 / -8 / -9 / 0    | -9 / -1 / -3 / -5 / -2 / (=q2 -32) |
+  revq2 (reveal guard + discard rule) is net <= 0 on EVERY row, both modes, and cheaper in units at d5 (113K vs 117K
+  clairvoyant): a clean-win candidate, pending d8 b0 recovery of its slower games. cond: strongest blind, but +1 at clairvoyant
+  d5 and +3 at d0. c2 fails blind d3 (+14). q2 alone fails blind d1b1 (+5). ms/game is contended (other heavy jobs released
+  tails), so compare units.
+- Burgeoning (q2B drop vs q2nbB keep, blind): std d5 per-game diffs -1:8, 0:988, +1:4 (net -4); 2HG -1:3, 0:295, +1:2 (net -1).
+  Spread is identical (sd 1.19 both; games >= T8: 175 vs 176 std, 39 vs 39 2HG). Its treatment barely matters in either format.
+- NEXT: (1) accept the Maze GT; (2) d8 b0 (50M ceiling, same_seed_inflight 0) on every game where revq2 / cond / q2 is slower
+  than ship (blind at blind_salt 1, clairvoyant), in ONE pooled batch on `$O/mtg.q`; (3) census of CrossingDumpYesOrder
+  classes; (4) ledger section + report to the parent.
