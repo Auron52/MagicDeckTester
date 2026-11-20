@@ -4987,6 +4987,8 @@ public:
     // P1b: alternate-win progress (Gate names) in the no-win leaf, and a new-name fetch scored in the plan walk.
     long long NoWinLeafProgress(const GameState& s) const override;
     int TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const override;
+    // F6: mana-source tap order -- Baldur's Gate (live fed mode) and an untapped Maze's End pay LAST (see the definition).
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate
     // with a live non-mana {T} ability last; ManaSourceRank inside each tier (ledger decisions 10 / 30).
     void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const override;

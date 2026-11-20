@@ -3816,6 +3816,27 @@ static bool GrantDefinedPayOn()
     return heurarm::Flag(heurarm::GRANT_DEFINED_PAY, on);
 }
 
+// The colour order of a scaled mana land's fed tap (MTG_SCALED_FED_FLOAT; see the fed branch below): the bill's own
+// pips first, then the line's owed pips, then the hand's, ties in WUBRG. A stable sort of the five colours.
+static void ScaledFedColourOrder(const GameState& state, const ManaCost& cost, Color cols[5])
+{
+    const ManaCost& lu = g_line_unpaid_cost;
+    const int own[5]  = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    const int line[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+    int hand[5] = { 0, 0, 0, 0, 0 };
+    for (const Card& c : state.players[state.active_player_index].hand)
+    {
+        const ManaCost& m = c.m_mana_cost;
+        hand[0] += m.white; hand[1] += m.blue; hand[2] += m.black; hand[3] += m.red; hand[4] += m.green;
+    }
+    std::stable_sort(cols, cols + 5, [&](Color a, Color b) {
+        const int x = static_cast<int>(a), y = static_cast<int>(b);
+        if (own[x] != own[y]) { return own[x] > own[y]; }
+        if (line[x] != line[y]) { return line[x] > line[y]; }
+        return hand[x] > hand[y];
+    });
+}
+
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors,
@@ -5415,7 +5436,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 const int give   = ScaledManaCreatureCount(state, &state.battlefield[i]);
                 if (give >= 1 && floating.Total() >= feeder && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))
                 {
-                    const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+                    Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+                    // MTG_SCALED_FED_FLOAT: the colour order is the DEMAND order, not WUBRG -- this bill's pips, then
+                    // the line's owed pips (g_line_unpaid_cost), then the hand's -- so the X - feeder units the bill
+                    // does not take float in a colour the line can spend. Order only: every colour is still tried.
+                    // Maze's End s6 gi5 T5: the second Maze's End {3} fed Baldur's Gate for five WHITE, and Sylvan
+                    // Scrying's {G} had nothing (ScaledFedFloatAfter's comment).
+                    if (ScaledFedFloatOn()) { ScaledFedColourOrder(state, cost, cols); }
                     for (Color c : cols)
                     {
                         ManaPool f = floating; bool ok = true;

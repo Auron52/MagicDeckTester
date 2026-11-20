@@ -311,12 +311,15 @@ TEST_CASE("Maze's End F2 (gi1): Talon's {4} is paid so Maze's End's {3} stays pa
         const PlanSourceReserveScope maze_held(TurnSolver::ActivationTapReserveUnion(s, p.actions));
         REQUIRE(std::find(g_plan_reserved_sources.begin(), g_plan_reserved_sources.end(), maze)
                 != g_plan_reserved_sources.end());
-        // The usual payment strands the activation: after it, {3} with Maze's End set aside is not payable.
+        ManaCost three{}; three.generic = 3;
+        // With MTG_SCALED_FED_FLOAT off, the usual payment strands the activation: after it, {3} with Maze's End set
+        // aside is not payable...
+        heurarm::Clear();
+        heurarm::t_arm[heurarm::SCALED_FED_FLOAT] = 0;
         {
             GameState c = s;
             REQUIRE(TurnSolver::ApplyChannelStepDirect(c, p.actions[0]));
             for (Permanent& q : c.battlefield) { if (q.card.m_number == maze) { q.tapped = true; } }
-            ManaCost three{}; three.generic = 3;
             CHECK_FALSE(TapForCostDirect(c, three, false));
         }
         // ...and the hold finds a payment that does not.
@@ -324,6 +327,15 @@ TEST_CASE("Maze's End F2 (gi1): Talon's {4} is paid so Maze's End's {3} stays pa
             s, p.actions[0], p.actions,
             [&p](GameState& g) { return TurnSolver::ApplyChannelStepDirect(g, p.actions[0]); });
         CHECK_FALSE(hold.empty());
+        // F6-2 (fed float, default ON): the usual payment taps Baldur's Gate in its fed mode for Talon's {4} and floats
+        // the surplus, so Maze's End's {3} stays payable with no hold at all.
+        heurarm::Clear();
+        {
+            GameState c = s;
+            REQUIRE(TurnSolver::ApplyChannelStepDirect(c, p.actions[0]));
+            for (Permanent& q : c.battlefield) { if (q.card.m_number == maze) { q.tapped = true; } }
+            CHECK(TapForCostDirect(c, three, false));
+        }
     }
 
     // Rollout world: the whole plan applies -- Talon put, Maze's End activated (back in hand, a Gate fetched).

@@ -11134,6 +11134,153 @@ void ExactLineFloatAfter(GameState& state, const ManaCost& cost_in, const PayRef
     // solver does not write the rollback ledger, so only its float is adopted.
     state.floating_mana = leftover;
 }
+
+static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int out[5]);   // defined below
+
+// An untapped board-scaled mana land of the active player whose fed mode beats its plain {C} by at least one mana
+// (X - feeder - 1 >= 1). The cheap gate for ScaledFedFloatAfter's snapshot.
+bool BoardHasGainfulScaledLand(const GameState& state)
+{
+    const int me = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+        if (ScaledManaCreatureCount(state, &p) - d->params.mana_per_creature_feeder_generic - 1 >= 1) { return true; }
+    }
+    return false;
+}
+
+// THE SCALED LAND'S FED MODE OUT OF THE SAME TAPS (MTG_SCALED_FED_FLOAT, DEFAULT ON; =0 -> the payment as made).
+// A board-scaled mana land -- Baldur's Gate ({2},{T}: X of one colour, X = other Gates), Three Tree City (X = the
+// chosen creature type) -- is tapped for its plain {C} whenever that pays THIS bill: the backtracker reaches the fed
+// branch only if the plain tap fails, and the greedy has no fed branch. When the same payment also spent {feeder}
+// other units on generic pips, the fed tap of the same sources pays the same bill and makes X - feeder - 1 more
+// mana. Maze's End s6 gi5 T5 (the USER's line, viewer rejection Maze_s_End_cod_s6_gi5_t5): activate Maze's End,
+// activate the other one, then Sylvan Scrying. The second {3} taps Gond Gate + the fetched Gate + Baldur's Gate for
+// {C}; fed by the first two, Baldur's Gate makes 5 (X = 5 other Gates), so 2 float and pay Scrying off the Gate the
+// second fetch puts in. Without the float the line has 7 mana for an 8-mana bill and is unpayable in any order the
+// USER queues -- and in the breakpoint chain the search walks ({ME} -> bp -> {ME} -> bp -> {Scrying}), where no
+// later cast is named when the second {3} is paid, so a line-demand gate could not fire there.
+//
+// Why it is a dominance (the board is the same; only the float moves): S's {C} paid a generic pip or floated, and
+// at least {feeder} OTHER units of the payment paid generic pips (cost generic >= feeder + 1). Re-read: those
+// {feeder} units feed S, and S's X units of colour K pay S's slot and theirs. Float change: + (X - feeder - 1) K;
+// or, if a {C} floated off this payment (S's or another {C} source's -- a {C} can then take a generic slot K paid),
+// - 1 {C} + (X - feeder) K. Every coloured pip keeps the unit that paid it. Refused, as the payment made, whenever
+// the accounting cannot be read exactly: a fed tap already taken (the float total is not the plain taps' sum), a
+// {C}/hybrid/Phyrexian/snow/X bill, restricted pools, a prepay's colour-restricted wild, a changed board. One scaled
+// land per payment. K: LumpColourOrder's first colour (the line's remaining pips, then the hand's, then WUBRG).
+// Shared payer (the outermost payment only): search, rollout, executor and human auto-tap alike -- lockstep.
+// The payment exemption: which mode a mana source is tapped in is a payment choice. Not ManaOracle's RefinePayment
+// (that one seeks a CHEAPER payment of the bill; this one keeps the taps and reads more mana out of them).
+void ScaledFedFloatAfter(GameState& state, const ManaCost& cost_in, const PayRefineSnap& pre)
+{
+    if (cost_in.colorless != 0 || cost_in.has_x || cost_in.x_pips != 0 || cost_in.hybrid_count != 0
+        || cost_in.twobrid_count != 0 || cost_in.phyrexian_count != 0 || cost_in.snow_pips != 0)
+    { return; }
+    if (state.battlefield.size() != pre.bf.size() || pre.fcm.Total() != 0 || pre.fbm.Total() != 0 || pre.fhc != 0
+        || state.floating_creature_mana.Total() != 0 || state.floating_bigspell_mana.Total() != 0
+        || state.floating_haste_c != 0 || state.floating_mana.wild_phantom != 0 || pre.fm.wild_phantom != 0)
+    { return; }
+    {
+        WildTrueRec rec;
+        if (PrepayWildTrueLoad(state, 0, rec) && rec.n > 0) { return; }
+    }
+    const int me = state.active_player_index;
+    int plain = 0;
+    int scaled = -1;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != me || !p.tapped || pre.bf[i].tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return; }
+        if (IsScaledManaLand(*d) && !LandTypeChangedToIsland(state, p))
+        {
+            if (scaled >= 0) { return; }   // two scaled lands in one payment: not read
+            scaled = static_cast<int>(i);
+            plain += 1;
+        }
+        else { plain += PermanentManaYield(state, p, *d); }
+    }
+    if (scaled < 0) { return; }
+    // Every newly tapped source made its plain yield (so S was not already fed) and the bill came out of it.
+    if (state.floating_mana.Total() != pre.fm.Total() + plain - cost_in.ManaValue()) { return; }
+    const Permanent& sp = state.battlefield[static_cast<std::size_t>(scaled)];
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+    const int feeder = sd->params.mana_per_creature_feeder_generic;
+    const int x = ScaledManaCreatureCount(state, &sp);
+    const int gain = x - feeder - 1;
+    if (gain < 1 || cost_in.generic < feeder + 1) { return; }
+    int order[5];
+    LumpColourOrder(state, ManaCost{}, order);
+    const Color k = static_cast<Color>(order[0]);
+    ManaPool& f = state.floating_mana;
+    if (f.colorless > pre.fm.colorless) { f.colorless -= 1; f.Add(k, gain + 1); }
+    else { f.Add(k, gain); }
+}
+
+// THE FED TAP'S COLOUR, WHEN SOMETHING ELSE CHOSE IT (MTG_SCALED_FED_FLOAT). The pay refine (PayRefineAfter: the mana
+// oracle's dominating payment of the same bill) can itself take a board-scaled land's fed face, and the oracle
+// enumerates that face's colours in WUBRG order, so the X units come out WHITE whatever the line needs. Maze's End
+// s6 gi5 T5 (F6-3 unit test): the second Maze's End {3} tapped Baldur's Gate, Thran Portal and the fetched Gate; Thran
+// Portal's life cost triggered the refine, which re-made the payment with Baldur's Gate fed for five WHITE, and
+// Sylvan Scrying's {G} had nothing. The colour of a fed tap is a free choice of the same activation, so when the
+// payment's whole float gain is in that one colour and the bill has no pip of it, the surplus is re-read in the
+// colour ScaledFedFloatAfter would choose (LumpColourOrder: the line's remaining pips, then the hand's). Same taps,
+// same bill, same float total: only the colour moves. One scaled land per payment; refused whenever the float
+// cannot be attributed to the fed tap exactly.
+void ScaledFedRecolourAfter(GameState& state, const ManaCost& cost_in, const PayRefineSnap& pre)
+{
+    if (cost_in.colorless != 0 || cost_in.has_x || cost_in.x_pips != 0 || cost_in.hybrid_count != 0
+        || cost_in.twobrid_count != 0 || cost_in.phyrexian_count != 0 || cost_in.snow_pips != 0)
+    { return; }
+    if (state.battlefield.size() != pre.bf.size() || pre.fcm.Total() != 0 || pre.fbm.Total() != 0 || pre.fhc != 0
+        || state.floating_creature_mana.Total() != 0 || state.floating_bigspell_mana.Total() != 0
+        || state.floating_haste_c != 0 || state.floating_mana.wild != pre.fm.wild
+        || state.floating_mana.wild_phantom != 0 || pre.fm.wild_phantom != 0)
+    { return; }
+    const int me = state.active_player_index;
+    int scaled = -1;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != me || !p.tapped || pre.bf[i].tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { return; }
+        if (IsScaledManaLand(*d) && !LandTypeChangedToIsland(state, p))
+        {
+            if (scaled >= 0) { return; }
+            scaled = static_cast<int>(i);
+        }
+    }
+    if (scaled < 0) { return; }
+    const ManaPool& f = state.floating_mana;
+    const int now[6] = { f.white, f.blue, f.black, f.red, f.green, f.colorless };
+    const int was[6] = { pre.fm.white, pre.fm.blue, pre.fm.black, pre.fm.red, pre.fm.green, pre.fm.colorless };
+    int c = -1;
+    for (int k = 0; k < 6; ++k)
+    {
+        if (now[k] < was[k]) { return; }
+        if (now[k] > was[k]) { if (c >= 0) { return; } c = k; }
+    }
+    if (c < 0 || c == 5) { return; }
+    const int pips[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    if (pips[c] != 0) { return; }
+    const Permanent& sp = state.battlefield[static_cast<std::size_t>(scaled)];
+    const int x = ScaledManaCreatureCount(state, &sp);
+    const int gain = now[c] - was[c];
+    if (gain > x) { return; }
+    int order[5];
+    LumpColourOrder(state, ManaCost{}, order);
+    const int k = order[0];
+    if (k == c) { return; }
+    ManaPool& fm = state.floating_mana;
+    fm.Add(static_cast<Color>(c), -gain);
+    fm.Add(static_cast<Color>(k), gain);
+}
 } // namespace
 
 static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool for_creature,
@@ -11187,6 +11334,9 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     const bool refine = can_snap && PayRefineOn();
     const bool exact_float = can_snap && !for_creature && cost_in.has_x
                           && state.deck_has_land_aura && state.deck_has_mana_untapper;
+    // MTG_SCALED_FED_FLOAT (ScaledFedFloatAfter): a bill with >= 3 generic and a gainful scaled land up.
+    const bool scaled_fed = can_snap && cost_in.generic >= 3 && cost_in.colorless == 0 && ScaledFedFloatOn()
+                         && BoardHasGainfulScaledLand(state);
     // MTG_LINE_REDUCER_KEEP (see LineReducerKeepHold): a reducer line's payment that strands the rest of the line.
     // Off, outside such a line, or under another rung's decision: a counter test and out.
     LineKeepPlan lrk;
@@ -11195,7 +11345,7 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
         && !state.dmg_events_armed && !manaoracle::t_float_only)
     { lrk = LineReducerKeepHold(state, cost_in, for_creature, available, honor_legacy_cco); }
     std::optional<PayRefineSnap> refine_pre;
-    if (refine || exact_float) { refine_pre.emplace(); refine_pre->Take(state, available); }
+    if (refine || exact_float || scaled_fed) { refine_pre.emplace(); refine_pre->Take(state, available); }
     bool ok;
     if (haste_keep > 0)
     {
@@ -11259,6 +11409,7 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
     {
         if (refine) { PayRefineAfter(state, cost_in, for_creature, available, honor_legacy_cco, *refine_pre); }
         if (exact_float) { ExactLineFloatAfter(state, cost_in, *refine_pre); }
+        if (scaled_fed) { ScaledFedRecolourAfter(state, cost_in, *refine_pre); ScaledFedFloatAfter(state, cost_in, *refine_pre); }
     }
     return ok;
 }
