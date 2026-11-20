@@ -1409,6 +1409,7 @@ bool PerformLookTakeDig(GameState& state, int controller_index, int count,
         const int k = g_scripted_etbdig_choice;
         take = ranked[std::min<std::size_t>(static_cast<std::size_t>(k), ranked.size() - 1)];
     }
+    const int pin_seen = g_scripted_etbdig_choice;   // MTG_ETBDIG_CENSUS reads it below
     g_scripted_etbdig_choice = -1;   // consumed by this dig (see the header note)
 
     // MTG_ETBDIG_TRACE: DIAGNOSTIC (no play change). Sizes the decision -- how many legal matches the
@@ -1421,6 +1422,32 @@ bool PerformLookTakeDig(GameState& state, int controller_index, int count,
         std::fprintf(stderr, "[etbdig] turn=%d looked=%d legal=%d\n",
                      state.turn_number, static_cast<int>(examined.size()),
                      static_cast<int>(legal.size()));
+    }
+    // MTG_ETBDIG_CENSUS (DIAGNOSTIC, default OFF; no play change): the REAL game's digs (g_real_resolution is cleared
+    // inside every search / rollout), with the census the provider-policy work needs
+    // (docs/design/provider-heuristic-required.md): the matches in LOOK order, the provider's ranking, the searched pin,
+    // and the card taken. Its own flag because MTG_ETBDIG_TRACE fires in every rollout.
+    static const bool s_dig_census = EnvOn("MTG_ETBDIG_CENSUS");
+    if (s_dig_census)
+    {
+        if (g_real_resolution && !legal.empty())
+        {
+            auto nm = [&](int i) { return examined[static_cast<std::size_t>(i)].m_name.str(); };
+            std::string looks, ranks;
+            for (int i : legal)  { looks += (looks.empty() ? "" : "|") + nm(i); }
+            for (int i : ranked) { ranks += (ranks.empty() ? "" : "|") + nm(i); }
+            int pos = -1;
+            for (std::size_t r = 0; r < ranked.size(); ++r) { if (ranked[r] == take) { pos = static_cast<int>(r); } }
+            const Player& tp = state.players[static_cast<std::size_t>(controller_index)];
+            int lands = 0;
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == controller_index && q.card.IsLand()) { ++lands; } }
+            std::fprintf(stderr, "[etbdig-real] job=%s turn=%d src=%s lands=%d hand=%d legal=%s ranked=%s pin=%d "
+                                 "took=%s rank_pos=%d\n",
+                         heurarm::t_job_name ? heurarm::t_job_name : "-", state.turn_number, src_name.c_str(), lands,
+                         static_cast<int>(tp.hand.size()), looks.c_str(), ranks.c_str(), pin_seen,
+                         take >= 0 ? nm(take).c_str() : "(none)", pos);
+        }
     }
 
     // Human play: with at least one legal candidate, let the player choose WHICH match enters hand

@@ -1,6 +1,7 @@
 #include "../core/WorkCounters.h"
 #include "../core/Tier1Ledger.h"
 #include "HeuristicArm.h"
+#include "ProviderHeuristicRequired.h"
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "../core/MemBudget.h"
@@ -29766,7 +29767,15 @@ static std::size_t EtbDigAxisWidth(const GameState& state)
         return n < 1 ? 1 : static_cast<std::size_t>(n);
     }();
     if (env_w > 0) { return env_w; }
-    const int pw = ResolveProvider(state).EtbDigSearchWidth();
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h, USER 2026-11-20: "The default should be
+    // searched"): a deck with NO dig policy of its own scores EVERY legal match. The cap of 3 was measured on Knights
+    // as a knee OVER A RANKING -- but the base ranking is library order, so the cap kept three arbitrary matches and
+    // made a 4th or 5th one unfindable at any budget. The cap is a deck policy (EtbDigSearchWidth) now, never the
+    // engine's. MTG_REQHEUR_OLD_DEFAULT=1 restores the 3-cap for the A/B (measurement only).
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (!RequiredHeuristicPolicyLive(prov, RequiredHeuristic::EtbDigPick) && !RequiredHeuristicOldDefault())
+    { return static_cast<std::size_t>(-1); }
+    const int pw = prov.EtbDigSearchWidth();
     return pw > 0 ? static_cast<std::size_t>(pw) : 3;
 }
 

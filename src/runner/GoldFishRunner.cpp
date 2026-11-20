@@ -2287,10 +2287,10 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // (GoldFishRunner / BatchRunner / AnalyzerEngine / main) funnel through, and every
     // search/rollout state is a copy of this one, so the pointer reaches every node.
     state.m_provider = &SelectDecisionProvider(deck);
-    // "A provider heuristic is REQUIRED" (ProviderHeuristicRequired.h): refuse, before the game starts, a deck holding a
-    // registered card under a provider that does not implement its policy. Human play and the unpruned measurement
-    // route are the only bypasses. Reads nothing into the state.
-    EnforceRequiredHeuristics(deck, *state.m_provider, "");
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h, USER 2026-11-20): a deck holding a registered
+    // card under a provider with no policy for it gets a RED-FLAG warning (once per process) and plays the engine's
+    // searched default. Reads nothing into the state.
+    WarnRequiredHeuristics(deck, *state.m_provider, "");
     // The one deck trait that needs the provider (StampDeckTraits ran above, before it was attached).
     state.deck_m2_tracks_noncombat = state.deck_reads_damage_dealt && state.m_provider->Main2RuleReadsNoncombatDamage();
 

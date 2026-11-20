@@ -206,8 +206,9 @@ enum class UnprunedGate
     StuffyScry,      // Stuffy Doll (step 9d): Loran's Escape's searched scry keeps BOTH dispositions instead of
                      // StuffyDollProvider::ScryVerdict's firm keep / bottom prune (USER 2026-11-17 ~23:25)
     ExtraTurnTarget, // Extra Turns: Time Warp's / Walk the Aeons' OPPONENT target restored (DecisionProvider::OffersExtraTurnOpponentTarget, USER 2026-11-18)
-    HeuristicRequired, // "a provider heuristic is REQUIRED" bypassed: a deck holding a registered card runs under a provider that
-                       // does not implement it, on the engine's measurement menu (ProviderHeuristicRequired.h). Measurement only.
+    HeuristicRequired, // "a provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): every deck's policy for a registered
+                       // decision is LIFTED to the engine's searched default where the engine site reads
+                       // RequiredHeuristicPolicyLive. Measurement only.
     OpponentDraw,    // the OPPONENT target of Garth One-Eye's conjured Braingeyser and of Unite the Coalition's draw
                      // mode opened to every count, lethal or not (DecisionProvider::OpponentDrawCandidates prunes it
                      // to the minimal lethal count; USER 2026-11-17)
@@ -441,6 +442,9 @@ public:
     // Mill's Watery Grave preference is its own fetch rule.
     bool FetchLineRankEnabled(const GameState&) const override { return false; }
     const char* Name() const override { return "Mill"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): its periodic Hedron Crab target policy (HedronMillTargetPolicyPeriod 4) is this deck's policy.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::HedronMillTarget; }
     std::vector<std::string> FetchCandidates(const GameState&, int,
         const CardParams&) const override;
     // Hedron/Ruin landfall can use a fetchland's second entry later in the turn.
@@ -1505,6 +1509,17 @@ public:
     // holding -- so a multi-card cleanup must re-ask after each shed. The generic fallback (=0) is
     // prefix-stable, so it keeps the batched path.
     bool CleanupDiscardShedStable() const override;
+    // ACCLAIMED CONTENDER'S DIG -- a DRAFT policy for USER review (MTG_KN_ETBDIG_RANK, DEFAULT OFF; 2026-11-20,
+    // docs/design/provider-heuristic-required.md). Off, the deck carries the provider-policy RED FLAG and plays the
+    // engine's searched default (every legal match, library order). On: same-NAME copies folded onto the first (exact,
+    // the PiratesProvider precedent), the rest RANKED -- castable now with the untapped lands (site 10 can deploy it
+    // this turn), then lord value on the current board (power_bonus x own creatures it pumps), then castable next turn,
+    // then mana value -- and the axis keeps EVERY ranked match (an ORDER, not a cut; the rank decides the playout's
+    // pick beyond the horizon and the search's tie-break / budget order).
+    std::vector<int> EtbDigCandidates(const GameState& s, int controller, const std::vector<Card>& examined,
+                                      const std::vector<int>& legal) const override;
+    int EtbDigSearchWidth() const override;
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override;
 };
 
 // WhiteKnights (2026-09-25) -- mono-white Knight tribal on Aether Vial, a DIFFERENT shipping list
@@ -2111,6 +2126,9 @@ public:
     // See docs/design/horizon-honest-leaf.md.
 
     const char* Name() const override { return "Dragonstorm"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): its Lathliss-first / Scourge-second put order (TutorToBattlefieldPutOrder) is this deck's policy.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::TutorToBattlefieldPut; }
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
@@ -2860,6 +2878,9 @@ public:
                "Heavens makes a 4/4 flier at instant speed and Serra Ascendant jumps to 6/6 at 30 life "
                "mid-turn (Martyr / Lurrus loops), so any bound has to price the life total first." }; }
     const char* Name() const override { return "MartyrLifegain"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): its Ranger of Eos / Squadron Hawk fetch rule (TutorHandPutList) is this deck's policy.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::TutorHandPut; }
     // SPEAKER OF THE HEAVENS' NARROW SECOND MAIN -- ColossusHammerProvider's lever, shared body
     // (MTG_SPEAKER_M2; default ON, PROVISIONAL: main 1 vs main 2 is the USER's call). Opens after combat
     // only when a live Speaker passes its life gate; admits only that activation -- or (MTG_MARTYR_SPEAKER_M2_JITTE,
@@ -4766,6 +4787,10 @@ public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "MeliraPod"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): Ranger of Eos's fetch (TutorHandPutList) and
+    // Reveillark's return (ReviveCandidates) are this deck's policies.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::TutorHandPut || h == RequiredHeuristic::RevivePick; }
     // Felidar Guardian's ETB flicker on the PUT paths (Pod / Chord / a Reveillark return), where
     // no cast-time variant carries the target: tapped Birthing Pod (a second activation this
     // turn) > spent persist body (counter reset) > Reveillark (fire the LTB) > tapped plain land
@@ -5529,6 +5554,9 @@ public:
                "hand + Vial + Treasures), the Bolt, and haste bodies before it can be sound. See "
                "SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Pirates"; }
+    // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h): its Staunch Crewmate dig ranking (EtbDigCandidates name-dedup + ranking) is this deck's policy.
+    bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
+    { return h == RequiredHeuristic::EtbDigPick; }
 
     // Forerunner of the Coalition searches for "a Pirate card", and this list holds NINE distinct
     // Pirate names in its library (Daring Buccaneer, Corsair Captain, Kitesail Larcenist, Malcolm,

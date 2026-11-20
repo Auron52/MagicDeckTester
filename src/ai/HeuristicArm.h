@@ -1062,6 +1062,8 @@ enum Slot : int
     BURST_ACT_COLOUR_PENDING, // MTG_BURST_ACT_COLOUR_PENDING  a single-colour BURST source (Accomplished Alchemist's X) floats the colour the plan's pending/board activations need (BurstPendingActColour: an own untap Aura's {2}{U} on a live host counts), not prod[0] (AccomplishedAlchemist 2026-11-20, USER: "Yes, we need to fix this."). DEFAULT ON; =0 -> the pre-2026-11-20 colour
     AA_ALCH_TAP_LAST,         // MTG_AA_ALCH_TAP_LAST  AccomplishedAlchemistProvider::ManaSourceRank: a life-scaled source (Accomplished Alchemist, mana_per_life_gained) taps LAST, behind the whole creature band -- its yield only grows within the turn and its {T} is the loop (2026-11-20, seed 12345681 T3: the Boar's last pip took the Alchemist's 1 instead of Arbor Elf's Sprawl re-tap, killing the post-sac Umbra untap). DEFAULT ON; =0 -> the inherited SelesnyaLifegain/Generic rank
     DEV_SEQ_HEXIT_TAINT,      // MTG_DEV_SEQ_HEXIT_TAINT  MTG_BP_DEV_SEQ's first (one-deviation) pass marks a node DIRTY when it takes the FIRST-VERIFIED-WIN HORIZON EXIT past its own turn while the pass has met a latent occurrence before that win turn: the exit's "no earlier win" rests on the shallower ladder passes' ONE-DEVIATION refutations, so its answer (and the in-window cache / game-line cache entry made from it) is not a full-tree proof. Soundness fix (AA seed 12345681: the T2 no-win-by-T3 inwin proof the second pass read). Default ON; =0 -> the exit leaves the node clean (the hole)
+    REQHEUR_OLD_DEFAULT,      // MTG_REQHEUR_OLD_DEFAULT  MEASUREMENT arm (2026-11-20, provider-heuristic-required.md): a registered decision with NO deck policy runs the pre-2026-11-20 engine default instead of the searched default (Acclaimed Contender: the dig axis capped at the 3 front matches in library order; Paragon and Genesis Wave have no searched default yet, so the lever does not touch them). Default OFF; never a play setting
+    KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights DRAFT policy for Acclaimed Contender's dig (2026-11-20, for USER review): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default OFF until the USER rules
     COUNT
 };
 
@@ -2068,6 +2070,8 @@ inline const char* Name(int slot)
         "MTG_BURST_ACT_COLOUR_PENDING",
         "MTG_AA_ALCH_TAP_LAST",
         "MTG_DEV_SEQ_HEXIT_TAINT",
+        "MTG_REQHEUR_OLD_DEFAULT",
+        "MTG_KN_ETBDIG_RANK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

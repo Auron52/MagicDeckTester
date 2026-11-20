@@ -15734,6 +15734,81 @@ std::vector<int> KnightsProvider::CleanupDiscardCandidates(
 
 bool KnightsProvider::CleanupDiscardShedStable() const { return !KnightsBucketDiscardEnabled(); }
 
+// ---- KnightsProvider: Acclaimed Contender's dig (DRAFT, MTG_KN_ETBDIG_RANK; see the header) ----------------------
+static bool KnightsEtbDigRankOn()
+{
+    static const bool on = EnvOn("MTG_KN_ETBDIG_RANK");   // DEFAULT OFF (a USER decision); =1 -> the draft
+    return heurarm::Flag(heurarm::KN_ETBDIG_RANK, on);
+}
+
+bool KnightsProvider::ImplementsRequiredHeuristic(RequiredHeuristic h) const
+{
+    return h == RequiredHeuristic::EtbDigPick && KnightsEtbDigRankOn();
+}
+
+int KnightsProvider::EtbDigSearchWidth() const { return KnightsEtbDigRankOn() ? 64 : 0; }   // every ranked match
+
+std::vector<int> KnightsProvider::EtbDigCandidates(const GameState& s, int controller,
+                                                   const std::vector<Card>& examined,
+                                                   const std::vector<int>& legal) const
+{
+    if (!KnightsEtbDigRankOn()) { return DecisionProvider::EtbDigCandidates(s, controller, examined, legal); }
+    // Same-name fold first (PiratesProvider::EtbDigCandidates: two copies of one name leave identical states).
+    std::vector<int> folded;
+    for (int i : legal)
+    {
+        bool dup = false;
+        for (int j : folded) { if (examined[j].m_name == examined[i].m_name) { dup = true; break; } }
+        if (!dup) { folded.push_back(i); }
+    }
+    int lands = 0, untapped = 0;
+    std::vector<const Permanent*> mine;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        if (q.card.IsLand()) { ++lands; if (!q.tapped) { ++untapped; } }
+        else if (q.card.IsCreature()) { mine.push_back(&q); }
+    }
+    bool land_in_hand = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->card.IsLand()) { land_in_hand = true; break; }
+    }
+    struct Key { int now, lord, next, mv; };
+    auto key_of = [&](int i) -> Key
+    {
+        // Library placeholders carry empty type masks: every test goes through the definition (the ExileTop trap).
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[static_cast<std::size_t>(i)]);
+        if (d == nullptr) { return { 0, 0, 0, 0 }; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        int lord = 0;
+        const CardParams& p = d->params;
+        if (p.power_bonus > 0)
+        {
+            for (const Permanent* q : mine)
+            {
+                bool hit = p.affects_all_creatures;
+                for (const std::string& st : p.subtypes_affected) { if (CardHasSubtype(q->card, st)) { hit = true; } }
+                if (hit) { lord += p.power_bonus; }
+            }
+        }
+        return { mv <= untapped ? 1 : 0, lord, mv <= lands + (land_in_hand ? 1 : 0) ? 1 : 0, mv };
+    };
+    std::vector<std::pair<Key, int>> ks;
+    for (int i : folded) { ks.push_back({ key_of(i), i }); }
+    std::stable_sort(ks.begin(), ks.end(), [](const auto& a, const auto& b)
+    {
+        if (a.first.now  != b.first.now)  { return a.first.now  > b.first.now; }
+        if (a.first.lord != b.first.lord) { return a.first.lord > b.first.lord; }
+        if (a.first.next != b.first.next) { return a.first.next > b.first.next; }
+        return a.first.mv > b.first.mv;
+    });
+    std::vector<int> out;
+    for (const auto& k : ks) { out.push_back(k.second); }
+    return out;
+}
+
 // ---- WhiteKnightsProvider::CleanupDiscardCandidates ---------------------------------------------
 // USER (2026-10-09, docs/design/whiteknights-discard-policy.md): "Knights curve rule + the extras" --
 // Swords / Unexpectedly Absent shed first (removal is inert against the goldfish), Sol Ring and Remote

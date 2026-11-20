@@ -1045,10 +1045,14 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
             std::cerr << " provider_detected=" << det.Name() << " (pinned via MTG_PROVIDER_DECK)";
         }
         std::cerr << "\n";
-        // "A provider heuristic is REQUIRED" (ProviderHeuristicRequired.h): refuse the whole batch at parse, before any
-        // game runs, when this job's deck holds a registered card its provider does not implement (after the [play]
-        // line, so the provider in force is on record). Bypassed runs print a [provider-required] warning per job.
-        EnforceRequiredHeuristics(j.deck, SelectDecisionProvider(j.deck), j.name);
+        // "A provider heuristic is EXPECTED" (ProviderHeuristicRequired.h, USER 2026-11-20): a job whose deck holds a
+        // registered card its provider has no policy for runs the engine's searched default, and gets ONE RED-FLAG
+        // stderr line per job here (after the [play] line, so the provider in force is on record).
+        // Under the JOB'S ARM (a per-job policy lever such as MTG_KN_ETBDIG_RANK decides the provider's answer).
+        const heurarm::Arm saved_arm = heurarm::t_arm;
+        heurarm::t_arm = j.flags;
+        WarnRequiredHeuristics(j.deck, SelectDecisionProvider(j.deck), j.name);
+        heurarm::t_arm = saved_arm;
     }
 
     // Evaluated UNDER THE JOB'S ARM: DeckUsesSecondMain reads heurarm levers (EDF_M2), and this
