@@ -56,3 +56,6 @@ accept `--deck=mazesend,mazesend2hg`, check_gt_logs, push wip/maze-p5d. 3. ledge
 - bl2 DONE: blind totals (salts 1-4) g231 ship 28 / u2 28 / u2+(a) 28 / fix 29 / shipped 30; g320 ship 25 / u2 26 /
   u2+(a) 29 / fix 26 / shipped 29. g320 s4 (seed 201321, game_index 320, blind_salt 4, d8 b0): prune (a) 6 -> 9 BLIND on
   both bases = first non-clairvoyant (a) loss. NEXT: root-cause it (which removed plan, which turn), then report.
+- blw DONE (blind_salt 1, vs shipB, net turns): candB d5 -8 2HG -8 d3 -6 d1b3 -20 d1b1 -3; fixB -7 -11 -9 -18 +6;
+  u2B +6 +2 -3 -17 +2; idleB +6 +2 -1 -20 -4. Shipped beats ship blind on every row. (a) on fix: std -9, 2HG +3.
+  Remaining: g320 s4 root cause; the C2 / amended-(a) USER questions.
