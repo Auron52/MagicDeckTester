@@ -1,3 +1,12 @@
 {
- "entries": []
+ "entries": [
+  {
+   "branch": "adopt-1119",
+   "head_since": "2026-11-20T11:42:13Z",
+   "host": "67d5329561c0",
+   "id": "67d5329561c0:adopt-1119",
+   "joined": "2026-11-20T11:42:13Z",
+   "note": "67766a0b: Sea Creatures keep+VL, Merfolk Turns keep, Boars d6b40 (6 commits)"
+  }
+ ]
 }
