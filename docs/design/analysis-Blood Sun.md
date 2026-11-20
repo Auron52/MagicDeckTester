@@ -45,6 +45,11 @@ Emrakul-loop threshold, Revelation for Time Warp + Revelation bridges extra turn
 returned only by an Emrakul graveyard shuffle) while land drops grow the mana. Passed to the design agent.
 USER addendum 2 (verbatim): *"(and get additional lands or extra land playing cards to ramp up our
 mana)"* -> the bridge Revelation's spare picks are big lands and Exploration/Burgeoning/Fastbond.
+USER worked example (verbatim): *"An example of a easier chain would be Revelation for Time Warp,
+Revelation, Exploration, and two lotus lands. As long as you have a remaining land-drop you can play the
+first lotus for Exploration and then the second for Time wark. Technically it is even easier if you get
+Fastbond, though you will need the green held if you have no current land drop."* -> canonical scenario
+test for the bridge recognizer (Revelation X=5; colour matters: Scorched Ruins is colourless).
 
 
 ## Standing decisions (pass to every subagent)
