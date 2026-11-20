@@ -50,6 +50,8 @@ Revelation, Exploration, and two lotus lands. As long as you have a remaining la
 first lotus for Exploration and then the second for Time wark. Technically it is even easier if you get
 Fastbond, though you will need the green held if you have no current land drop."* -> canonical scenario
 test for the bridge recognizer (Revelation X=5; colour matters: Scorched Ruins is colourless).
+USER (verbatim): *"And having these in hand makes it even easier, since you don't need to search pieces
+you already have."* -> the required set is net of hand and battlefield; X covers only the missing pieces.
 
 
 ## Standing decisions (pass to every subagent)
