@@ -91,3 +91,13 @@ commit on top (diag-key fix + Windows skip of the unit test). build/Release in t
 - CI run 44683038229 (6dea361e9): Windows FAILED only on test_inwin_exit_guard.cpp -- SIGSEGV stack overflow (a d6 b0
   game on a std::thread, 1 MB Windows default stack). The handoff commit skips that test on _WIN32; re-check CI.
 - Case 3 (gods) unchanged on the new base: F3_gods d3 b0 = 9 with mtg.fix.
+
+### Unit-test result (arrived after the report)
+mtg-test on 7ec94d53b: 3774/3775 pass; the ONLY failure is the new test_inwin_exit_guard.cpp, and not for the
+defect: in-process `GoldFishRunner::Run(deck,1,2151,8,prof,{},149,depth,0,1)` plays Martyr gi149 to **T7 at both d5
+and d6** (the CLI repro gives 5 and 5 on this base). So the harness does not reproduce main.cpp's single-game setup
+(suspects: ResolvePlaySettings / --ignore-play-profile handling, deck-trait stamping, sideboard/legacy flags). The
+test is now `doctest::skip(true)` (commit after c475494cd). It also no longer has a defect to pin, since Martyr gi149
+does not reproduce on 8fbbc5023. Replace it with a test that reproduces the real case-1 mechanism once step 1 names it
+(Maze gi73; build the setup the way main.cpp does, or test the cache store rule on a crafted board via a seam like
+LeaflessReadProbeForTest).
