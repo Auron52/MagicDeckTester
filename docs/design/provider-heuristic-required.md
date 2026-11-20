@@ -1,71 +1,69 @@
-# "A provider heuristic is REQUIRED" -- the setup-time gate
+# "A provider heuristic is EXPECTED" -- searched default + a RED FLAG
 
-Status: BUILT 2026-11-18 (branch `sea-sin-gorger`). First and only registered decision: Trench Gorger.
+Status: BUILT 2026-11-18 as a setup-time THROW (branch `sea-sin-gorger`, Trench Gorger only). REWORKED 2026-11-20
+(branch `provreg-1120`) per the USER ruling below: no throw; the engine default is the searched menu; a deck with no
+policy gets a RED FLAG. Eight decisions registered.
 
 ## Why
 
-Some decisions have no acceptable engine-side shape. The full searched menu is combinatorially huge, and the cheap
-generic shape the engine can build without deck knowledge is not close to correct. A deck holding such a card must
-therefore carry its own provider policy, and the engine must refuse to play it otherwise.
+Some decisions have a menu that is combinatorially large, or a cheap generic shape that is near-arbitrary (library
+order, one greedy pick). A deck holding such a card is EXPECTED to carry its own provider policy (restrict / order the
+options), and the analysis must say loudly when it does not.
 
-USER, 2026-11-18, verbatim:
+USER, 2026-11-18 (Trench Gorger, created the registry), verbatim:
 
 > For Trench Gorger this is a bit of a mess. It is one of those cases where we might want to consider it searched,
 > but then would always want to prune it anyway. Maybe the best way to handle this is throwing an error if we don't
 > implement a heuristic in the provider? Essentially we want the agent working on this to be forced to implement
 > something because fully searched and what you mentioned are both unacceptable for normal usage.
 
-> (i.e. searching a massive combinatoric set is not practical, but neither is removing them in library order anywhere
-> near correct)
+USER, 2026-11-20 (SUPERSEDES the throw), verbatim:
 
-("What you mentioned" is the engine's current Gorger menu: for 3 or more KEPT lands only the count is searched, and
-WHICH lands are kept is one provider-ordered round-robin prefix per count, capped at 62 entries -- ledger
-`analysis-Sea Creatures.md` Q19(a).)
+> The default should be searched and probably the analysis should be given a warning if we don't override the policy.
+> The expectation is that we will override it and so this should be a red flag. I don't think Breaching Dragonstorm
+> has an issue because they don't play the same cards. Knights looks like the worst offender here, which might help
+> explain why Acclaimed Contender did so poorly in screens. Nykthos Paragon could also be an issue potentially.
 
-## The mechanism
+## The mechanism (2026-11-20)
 
 All in `src/ai/ProviderHeuristicRequired.{h,cpp}`.
 
-* **Registry** (`RequiredHeuristicRegistry`). One entry per decision: an id (`RequiredHeuristic`), the cards.json
-  parameter that carries it, the decision in words, and the provider hook(s) to implement. Today:
-  `ExileLibraryLands` <- `etb_exile_library_lands_set_base_pt` (Trench Gorger), hook
-  `DecisionProvider::RestrictExileLibraryLandsMenu`.
-* **Capability query** (`DecisionProvider::ImplementsRequiredHeuristic(RequiredHeuristic)`). The root / generic
-  answer is `false`. A deck provider answers `true` only for a policy it really implements.
-  `SeaCreaturesProvider` answers `true` for `ExileLibraryLands` (its USER rule: >= 6 library lands -> exile all,
-  < 6 -> decline).
-* **Setup-time check** (`EnforceRequiredHeuristics`). Scans the mainboard AND the sideboard (a wish can fetch the
-  card). For every registered card the provider does not implement it throws `std::runtime_error` with a message
-  naming the card, the parameter, the decision, the deck, the provider, the hook, this doc and the bypasses. Called:
-  * `BatchRunner` `ParseJob`, right after the `[play] ... provider=` line: the whole batch is refused before any
-    game runs (`mtg --batch` exits non-zero with `Error: [provider-required] ...`);
-  * `GoldFishRunner::SetupGame`, the choke point every other game route goes through (single game, analyzer,
-    mulligan generation, viewer);
-  * the `--scenario` route.
-  It reads nothing into the game state, so every deck plays byte-identically.
-* **Bypasses -- the only two, both explicit:**
-  * human play (`MTG_HUMAN_PLAY`, set by the viewer / `--claude-play`): the human chooses from the full list;
-  * the unpruned measurement route: `MTG_UNPRUNED`, or `MTG_UNPRUNE=heuristicrequired` (the new gate
-    `UnprunedGate::HeuristicRequired`). The engine's menu runs, for measurement only.
-  A bypassed run prints `[provider-required] <job> BYPASSED (<bypass>)` plus the full message to stderr (per batch
-  job; once per process from `SetupGame`).
-* **CI / verify**: `scripts/provider_audit.py` runs its routing batch under `MTG_UNPRUNE=heuristicrequired` (so one
-  bad deck cannot abort the audit of the others), reads the `BYPASSED` lines, and `--check` FAILS on any deck listed.
-* **Tests**: `test/unit/test_provider_heuristic_required.cpp` (generic provider refused with the full message, Sea
-  provider and a Gorger-free deck run, sideboard counted, both bypasses, `SetupGame` throws).
+* **Registry** (`RequiredHeuristicRegistry`), one entry per decision: id, the cards.json parameter that carries it, the
+  decision in words, what the ENGINE runs without a policy (`fallback`), and the hook(s) to implement.
+* **Capability query** (`DecisionProvider::ImplementsRequiredHeuristic`), false in the root / generic provider.
+* **Engine-site query** (`RequiredHeuristicPolicyLive(prov, h)`): the provider implements `h` AND the policy is not
+  lifted for measurement (`MTG_UNPRUNED`, or `MTG_UNPRUNE=heuristicrequired`). An engine site reads it to choose
+  between the deck's policy and the searched default.
+* **RED FLAG** (`WarnRequiredHeuristics`), never a refusal. One machine-readable stderr line
+  `[provider-required] RED-FLAG <job> provider=<P>: <card> [<param>], ... -- no deck policy, the engine default runs`
+  plus the full message: per `--batch` job (BatchRunner job parse), once per process from `GoldFishRunner::SetupGame`
+  (single game, analyzer, mulligan generation, viewer) and from `--scenario`.
+* **Tools that make it visibly red:** `scripts/verify_deck.py` gate `provider_policy` (BLOCKING FAIL, one finding
+  `provider_policy:<card>` per card -- signing one off is the USER's call); `scripts/analyze_deck.py` prints a
+  `PROVIDER POLICY RED FLAG` banner and records `provider_policy` in its report; `scripts/provider_audit.py` marks
+  the deck's row `<-- RED FLAG` and `--check` FAILS on it.
+* **Measurement levers:** `MTG_REQHEUR_OLD_DEFAULT=1` (per-job `flags`) runs the pre-2026-11-20 engine default for a
+  deck with no policy (Contender: the 3-cap). `MTG_UNPRUNE=heuristicrequired` lifts every deck's policy to the
+  searched default where the engine site reads `RequiredHeuristicPolicyLive` (today: the ETB dig). Sea's own
+  `MTG_SEA_GORGER_ALL=0` / `MTG_UNPRUNE=seagorger` levers are unchanged.
+* **Human play** is unaffected: every registered decision's human chooser offers the full list.
+* **Tests:** `test/unit/test_provider_heuristic_required.cpp`.
 
-### Sea Creatures' own measurement levers
+## The registered decisions (2026-11-20)
 
-`MTG_SEA_GORGER_ALL=0` and `MTG_UNPRUNE=seagorger` still lift the Sea policy and restore the engine's searched menu.
-They are kept, and are now defined as Sea's form of the unpruned measurement route (the same thing the global route
-does for a deck with no policy); the Sea provider keeps declaring the capability under them. They are A/B levers,
-never a normal-play setting.
+| Decision (id) | Card(s) carrying the param | Engine default with NO policy | Decks / policy |
+|---|---|---|---|
+| ExileLibraryLands | Trench Gorger | the engine's Gorger menu (every count; 3+ kept lands = one round-robin prefix per count, cap 62 -- the full keep-subset product is not built) | Sea Creatures: policy (USER rule) |
+| EtbDigPick | Acclaimed Contender, Staunch Crewmate | **SEARCHED: the ETB-dig axis over EVERY legal match** (was: the 3 front matches in library order). Beyond the horizon the playout still takes the first match in library order | Pirates: policy (name fold). **Knights: RED FLAG** (draft `MTG_KN_ETBDIG_RANK`, below) |
+| LifegainCountersSpend | Nykthos Paragon | **NOT YET SEARCHED** -- the old greedy (spend every use on the first gain). A searched axis is a new plan pin in both worlds; owed (see "Owed") | **Selesnya Lifegain: RED FLAG** |
+| GenesisWavePut | Genesis Wave | **NOT YET SEARCHED** -- the disclosed rule (every legal permanent except a creature whose mandatory ETB destroys one of ours). Full menu = 2^L subsets of the L legal reveals; owed | **Landfall, Selesnya Lifegain: RED FLAG** |
+| TutorHandPut | Ranger of Eos, Squadron Hawk | library order, truncated (no searched axis; owed, unexercised) | Melira Pod, Martyr Lifegain: policy |
+| TutorToBattlefieldPut | Dragonstorm | TutorCandidates' library-order enumeration (no searched axis; owed, unexercised) | Dragonstorm: policy. Breaching Dragonstorm holds no such card (USER: "they don't play the same cards") |
+| HedronMillTarget | Hedron Crab | no periodic target policy (period 0) | Mill: policy (period 4) |
+| RevivePick | Reveillark | the deck-agnostic ranking, printed MV desc (no searched axis; owed, unexercised) | Melira Pod: policy |
 
-## Adding an entry
-
-Registering a decision is the USER's call: it makes every deck holding the card unplayable until its provider has a
-policy. To add one: a `RequiredHeuristic` value, a registry row (param, words, hook, predicate), a deck provider
-override of the hook plus `ImplementsRequiredHeuristic`, and a test.
+"Owed, unexercised": every deck holding the card has a policy, so the engine default never plays; a new deck holding
+one would carry the RED FLAG, and its searched default must be built before its policy is measured against it.
 
 ## Candidates (survey 2026-11-18, NOT registered -- for the USER)
 

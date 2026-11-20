@@ -1378,6 +1378,25 @@ def Main():
     report["discard_analysis"] = da
     print(f"  Discard analysis: {da.get('verdict')} — {da.get('detail', '')}", file=sys.stderr)
 
+    # 9. EXPECTED provider policies (USER 2026-11-20: "the analysis should be given a warning if we don't override the
+    # policy ... this should be a red flag"). Same check as verify_deck.py's blocking `provider_policy` gate; printed
+    # LOUDLY here and recorded in the report so a deck riding the engine's searched default cannot pass unnoticed.
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import verify_deck  # noqa: E402  (scripts/ sibling)
+        g = verify_deck.gate_provider_policy(deck_path, _CostDiagProfile(Path(deck_path)))
+        report["provider_policy"] = {"status": g.status, "summary": g.summary,
+                                     "findings": [d for _, d in g.findings]}
+        if g.status != "PASS":
+            print("\n  !!!!!!!! PROVIDER POLICY RED FLAG !!!!!!!!", file=sys.stderr)
+            print(f"  {g.summary}", file=sys.stderr)
+            for _, d in g.findings:
+                print(f"    * {d}", file=sys.stderr)
+            print("  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", file=sys.stderr)
+    except Exception as e:  # never let the check sink the analysis; an error is itself reported
+        report["provider_policy"] = {"status": "ERROR", "summary": str(e), "findings": []}
+        print(f"  provider policy check ERROR: {e}", file=sys.stderr)
+
     print(json.dumps(report, indent=2))
 
 if __name__ == "__main__":

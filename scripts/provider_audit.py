@@ -94,20 +94,19 @@ def main():
     with open(man, "w") as fh:
         json.dump({"jobs": jobs}, fh, indent=1)
 
-    # "A provider heuristic is REQUIRED" (docs/design/provider-heuristic-required.md): the engine refuses a deck that
-    # holds a registered card (Trench Gorger) under a provider that does not implement its policy -- and one refused
-    # job aborts the whole batch. So the audit runs under that gate's measurement bypass, which makes the engine print a
-    # `[provider-required] <job> BYPASSED` line per offending job instead, and reports each as a hard failure below.
-    env = dict(os.environ, MTG_UNPRUNE="heuristicrequired")
-    proc = subprocess.run([BIN, "--batch", man], capture_output=True, text=True, cwd=ROOT, env=env)
+    # "A provider heuristic is EXPECTED" (docs/design/provider-heuristic-required.md, USER 2026-11-20): a deck holding a
+    # registered card whose provider has no policy for it plays the engine's SEARCHED default, and the engine prints one
+    # `[provider-required] RED-FLAG <job> provider=<P>: <cards> -- ...` line per job. Nothing refuses to run any more, so
+    # no bypass env is needed; each flagged deck is reported as a hard failure below ("this should be a red flag").
+    proc = subprocess.run([BIN, "--batch", man], capture_output=True, text=True, cwd=ROOT)
     found, required_missing = {}, {}
     for line in (proc.stdout + proc.stderr).splitlines():
         m = re.match(r"\[play\] (\S+) .*provider=(\w+)", line)
         if m:
             found[m.group(1)] = m.group(2)
-        m = re.match(r"\[provider-required\] (\S+) BYPASSED", line)
-        if m:
-            required_missing[m.group(1)] = True
+        m = re.match(r"\[provider-required\] RED-FLAG (\S+) provider=\w+: (.*?) -- ", line)
+        if m and m.group(1) != "(unnamed)":   # SetupGame's once-per-process copy carries no job label
+            required_missing[m.group(1)] = m.group(2)
 
     # ---- certificate stance, parsed from the header ------------------------------------------
     # The compiler forces a NEW provider to answer Certificate() (DeckProvider's pure virtual), but
@@ -147,6 +146,8 @@ def main():
             flag = "   <-- FAIL: no provider of its own"
         elif not named:
             flag = "   <-- note: name differs (fine if this provider is only this deck's)"
+        if key in required_missing:
+            flag += f"   <-- RED FLAG: no deck policy for {required_missing[key]}"
         print(f"  {stem:<{width}}  {prov:<22} cert={cert}{flag}")
 
     borrowed = {p: d for p, d in shared.items() if len(d) > 1}
@@ -169,9 +170,10 @@ def main():
         hard.append("providers shared by more than one deck: "
                     + "; ".join(f"{p} <- {', '.join(d)}" for p, d in borrowed.items()))
     if required_missing:
-        hard.append("decks holding a card whose decision REQUIRES a provider heuristic their provider does not "
-                    "implement (docs/design/provider-heuristic-required.md; the engine refuses to play them): "
-                    + ", ".join(sorted(required_missing)))
+        hard.append("RED FLAG -- decks holding a card whose decision EXPECTS a deck provider policy their provider "
+                    "does not implement, so the ENGINE DEFAULT plays it "
+                    "(docs/design/provider-heuristic-required.md; draft a policy for the USER): "
+                    + "; ".join(f"{d} <- {c}" for d, c in sorted(required_missing.items())))
     if missing_cert:
         hard.append("provider classes that do not declare Certificate() in their OWN body "
                     "(they silently inherit another deck's answer): "
