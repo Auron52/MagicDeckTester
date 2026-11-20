@@ -45,3 +45,25 @@ Worktree `.claude/worktrees/maze-p5d`, branch `wip/maze-p5d` (base 021c821d0). P
   blw candB); (3) `*_rev` clairvoyant on the ac fixidle jobs (+ d0 on ac fix).
   Analyse: `cat $P4/../p5d/abb/run.out $P4/blw/*.out $O/rev.out | grep -v ^AMU > x; python3 $P4/../p5d/anab.py x shipB`
   (blind) and `cat $P4/ac/rows.out $O/rev.out > y; python3 $P4/../p5d/anab.py y fixidle` (clairvoyant).
+
+## USER rulings 2026-11-20 (VERBATIM, relayed by the parent)
+Q1 (the lands-short "win out" tier 1000 vs C2=100): "I'm not exactly sure what to do with this ranking and my original comments were not directed at spells, but other "use spare mana" effects. I don't think activating strictly beats or loses to spells. Both are good and better in certain circumstances. That means that potentially A is okay, but the best answer is conditional. If you need to deploy more lands from hand Exploration, Manabond and maybe even Burgeoning are better. If you need more lands in hand activation or Guild Summit are better. Guild Summit is typically better relatively early or when you have the means to drop a number of gates, whereas the activation is better late, especially when you are nearing the win (and in fact you need to activate to win) as long as you don't strand the Maze's end in hand."
+(Option "A" = lower the lands-short tier to 100, C2.)
+
+Q2 (Manabond counting as "comes back" in prune (a)): "I think this case depends more on whether we care about the cards discarded. For example a Gates Ablaze does nothing in goldfish and can be freely discarded. An extra Guild Summit is usually not needed. 1 Exploration is possibly worth keeping if we don't have one out, but otherwise we can probably drop all of the other accelerators since Manabond can drop multiple lands in a turn. Amulets are usually good to keep if you can because of how they interact with Maze's End so they would prefer to be kept. It might be worth going through a discard heuristic to help with this process of determining what is important."
+
+## Plan from the rulings (parent's reading; P5d-6 builds it)
+- The "win out" tier was meant to beat other spare-mana sinks, not spells. Against spells the fetch's rank is CONDITIONAL:
+  lands in hand exceed the drops available (need to DEPLOY) -> Exploration / Manabond / Burgeoning outrank the fetch;
+  short of lands for this/next turn's drops (need lands IN HAND) -> the fetch and Guild Summit outrank them (Summit early
+  or when several Gates can drop; the activation late / near the win, it is also the win action, provided Maze's End is
+  not stranded in hand). Interim: C2 (100) is acceptable to the USER and may replace 1000 now.
+- Manabond counts as "comes back" in (a) when the nonland cards its yes would discard are LOW-VALUE. Discard-value
+  ranking per the USER: Gates Ablaze free; an extra Guild Summit usually free; keep 1 Exploration if none is in play,
+  otherwise other accelerators droppable; Amulets prefer to be kept. Reuse an existing discard heuristic / bucket (profile
+  `discard` / card scores; the Manabond yes/no provider near TurnSolver.cpp:114523, DecisionProviders.cpp:69865-69920)
+  rather than a parallel one; consider the same ranking for the Manabond end-step yes/no itself.
+- These are provider ORDER/RESTRICT rules (allowed). Measure as before: held-out blind + clairvoyant A/B, d8 b0 recovery of
+  every slower game, and the d0 row.
+- The reveal-guard amendment (this handoff, TEMP lever `MTG_MAZE_IDLE_FETCH_REVEAL`) is a fix to prune (a) itself and
+  composes with both; P5d-6 should land it as part of (a) (or keep it as a measured patch) per the parent.
