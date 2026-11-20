@@ -92,3 +92,4 @@ how often it is much worse) alongside the averages, per format, so the USER can 
 - NEXT: (1) accept the Maze GT; (2) d8 b0 (50M ceiling, same_seed_inflight 0) on every game where revq2 / cond / q2 is slower
   than ship (blind at blind_salt 1, clairvoyant), in ONE pooled batch on `$O/mtg.q`; (3) census of CrossingDumpYesOrder
   classes; (4) ledger section + report to the parent.
+- g108 s4 rev single-game repro ENDED WITHOUT A RESULT (g108r.out has only its header; the err log stops at the worker line -- killed or died, cause unknown; in the batch it took >0.33 h and gave 9). cand repro = 7 (logs in `$O/g108c`). Re-run with `$O/rp.sh g108r 202109 108 4 1 MTG_MAZE_IDLE_FETCH_REVEAL=1` if the mechanism is needed.
