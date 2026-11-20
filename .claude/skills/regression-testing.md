@@ -60,9 +60,9 @@ Release first: `./build.sh` (never raw `cmake` — see CLAUDE.md; a bare `cmake`
 
 | Mode | Flag | Budget (ceiling) | MEASURED makespan | Cadence | Seeds |
 |------|------|--------|--------|---------|-------|
-| smoke | `--smoke` | < 15 min | ~2 min | frequently / before every push | 1001 |
-| regression | *(default)* | < 45 min | ~5 min | before committing | 2002, 3003 |
-| overnight | `--overnight` | < 8 h | **12m52s** (2026-09-26, 309 jobs, 32 cores) | any time — see below | 4004, 5005, 6006, 7007 |
+| smoke | `--smoke` | < 15 min | ~4.5-6.5 min PGO, 6.5-11 min Release (2026-11-19, 32 cores) | frequently / before every push | 1001 |
+| regression | *(default)* | < 45 min | `--both` (smoke + regression pooled): ~19 min PGO, 22-25 min Release (2026-11-19, 32 cores) | before committing | 2002, 3003 |
+| overnight | `--overnight` | < 8 h | ~30 min PGO (2026-11-10, 578 jobs, 29 threads) | any time — see below | 4004, 5005, 6006, 7007 |
 
 > **THE BUDGET COLUMN IS A CEILING, NOT AN ESTIMATE — do not defer the overnight tier on it.**
 > "< 8 h" is the *sizing rule* for the matrix, not what a run costs. Measured 2026-09-26 on a
