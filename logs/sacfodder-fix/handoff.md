@@ -43,7 +43,7 @@ does not stage: decisions not routed through the two-pass root; beyond-horizon p
 d8 b0 (`--depth 8 --budget-ms 0`, lever off vs on): Fungus 630865 4/4, 633295 4/4 -> both recover
 (rc1/d8/results.txt). Goblins: first attempt failed (needs --ignore-play-profile); re-run is hold3 (below).
 
-## Running job
+## Running job (FINISHED: Goblins d8 b0 620594 4/4, 622286 3/3, 622411 3/3 -- all recover; recorded in the doc)
 - hold3: PID in build/scratch/claude_sacfodder_fix3/hold3.pid (the flock wrapper; it runs hold3.sh under
   build/scratch/claude_box.lock). DONE marker: build/scratch/claude_sacfodder_fix3/HOLD3.DONE (written by hold3.sh
   as its last line). Output: build/scratch/claude_sacfodder_fix3/rc1/d8g/results.txt plus per-run
