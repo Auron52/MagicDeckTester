@@ -2668,6 +2668,19 @@ inline bool EquipLogTruthEnabled()
     return heurarm::Flag(heurarm::EQUIP_LOG_TRUTH, v);
 }
 
+// MTG_SCALED_FED_FLOAT -- DEFAULT ON; =0 -> the payment as made. A board-scaled mana land (Baldur's Gate, Three Tree
+// City) the payer tapped for its plain {C} while {feeder} other generic units of the same payment could have fed its
+// fed mode is re-read as the fed tap: same sources tapped, every pip still paid, X - feeder - 1 more mana floating
+// (ManaPayment.cpp ScaledFedFloatAfter). The payer takes the plain tap whenever it suffices for THIS bill, so the
+// surplus a later step of the line needs was never made -- Maze's End s6 gi5 T5, the USER's line (two Maze's End
+// activations, then Sylvan Scrying) pays only if the second {3} floats Baldur's Gate's surplus. Shared payer: search,
+// executor and human auto-tap alike.
+inline bool ScaledFedFloatOn()
+{
+    static const bool env_on = EnvOn("MTG_SCALED_FED_FLOAT", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::SCALED_FED_FLOAT, env_on);
+}
+
 // MTG_SCALED_LAND_RANK=1 -- DEFAULT OFF pending the adoption A/B.
 //
 // ManaSourceRank reserves every OTHER board-scaled source (scaled dork 61, storage land 62, live
