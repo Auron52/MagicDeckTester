@@ -10,7 +10,9 @@
 #include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/GameSetup.h"
 #include "core/GameState.h"
+#include "core/SpellEffects.h"
 #include "core/HeuristicDefaults.h"
 #include "mtg_test_seam.h"
 
@@ -158,7 +160,9 @@ TEST_CASE("Maze's End P7d: the last-ply proof's bound, at and either side of ten
         CHECK(MazesEndProvider::MazeWinlessBound(s) == 1);
     }
     {
-        // Guild Summit (S): count the entry sources in hand, play and library, however the draws fall.
+        // Guild Summit (S): count the entry sources in hand, play and library, however the draws fall. (The library-order
+        // refinement (O) is off here: these cases pin the agnostic count; (O) has its own case below.)
+        const Arm agnostic(heurarm::MAZE_WINLESS_ORDER, 0);
         GameState s = Board(prov, 5, true);
         Hand(s, "Guild Summit", 30);
         CHECK(MazesEndProvider::MazeWinlessBound(s) == 3);    // 5 + fetch + one drop = 7
@@ -266,5 +270,69 @@ TEST_CASE("Maze's End P7d: the fold is an identity fold -- the leafless search a
         CHECK(r.win_on == r.win_off);
         CHECK(r.folded >= 1);
         CHECK(r.leaves_on < r.leaves_off);
+    }
+}
+
+TEST_CASE("Maze's End P7-8: the library-order Summit bound (O) reads the order the search sees, and only that")
+{
+    LoadP7dCards();
+    const MazesEndProvider prov;
+    // Summit controlled, 5 Gates, no Maze's End, one drop; the other 5 names in the library (so (N) is open), 35 more
+    // Gates, and 4 Explorations at the BOTTOM. Agnostic (S): 5 + drop + 4 Explorations = 10 -> open (-4). With the order:
+    // E = 5 -> 5 draws, 5 reshuffles, 10 cards removed; each Exploration's number is chosen so it ranks below the 10th
+    // card of every one of those 5 keyed orders (game_seed 0, ordinals 0..4, salt 0) and it is not in the top 5 now,
+    // so none is drawable: E = 1 -> 5 + 1 = 6 < 10, proof code 4.
+    GameState s = Board(prov, 5, false);
+    Put(s, "Guild Summit", 30);
+    for (int k = 0; k < 35; ++k) { s.players[0].library.push_back(C("Izzet Guildgate", 300 + k)); }
+    std::vector<std::int32_t> others;
+    for (const Card& c : s.players[0].library) { others.push_back(c.m_number); }
+    auto ok = [&](std::int32_t m)
+    {
+        for (std::uint64_t j = 0; j < 5; ++j)
+        {
+            const std::uint64_t seed = SaltSeed(SearchShuffleSeed(0, j), 0);
+            int below = 0;
+            for (std::int32_t o : others) { below += Library::ShuffleKey(seed, o) < Library::ShuffleKey(seed, m) ? 1 : 0; }
+            if (below < 12) { return false; }
+        }
+        return true;
+    };
+    int added = 0;
+    for (std::int32_t m = 1000; added < 4 && m < 100000; ++m)
+    { if (ok(m)) { s.players[0].library.push_back(C("Exploration", m)); ++added; } }
+    REQUIRE(added == 4);
+    s.game_seed = 0; s.search_count = 0; s.shuffle_salt = 0; s.shuffle_salt_search = 0;
+    CHECK(MazesEndProvider::MazeWinlessBound(s) == 4);
+    {
+        const Arm off(heurarm::MAZE_WINLESS_ORDER, 0);
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -4);   // the agnostic count
+    }
+    {
+        // A blind search does not see the order: the bound must not either.
+        const long long prev = gamesetup::t_setup.blind_salt;
+        gamesetup::t_setup.blind_salt = 1;
+        CHECK(MazesEndProvider::MazeWinlessBound(s) == -4);
+        gamesetup::t_setup.blind_salt = prev;
+    }
+    {
+        // The same Explorations on TOP are drawn by the first Summit trigger: no proof.
+        GameState t = s;
+        Library lib;
+        std::vector<Card> ex, rest;
+        for (const Card& c : t.players[0].library) { (c.m_name.str() == "Exploration" ? ex : rest).push_back(c); }
+        for (Card& c : ex) { lib.push_back(c); }
+        for (Card& c : rest) { lib.push_back(c); }
+        t.players[0].library = lib;
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == -4);
+    }
+    {
+        // A Manabond on top is drawable (its dump needs no source): no proof, the Manabond code.
+        GameState t = s;
+        Library lib;
+        lib.push_back(C("Manabond", 900));
+        for (const Card& c : t.players[0].library) { lib.push_back(c); }
+        t.players[0].library = lib;
+        CHECK(MazesEndProvider::MazeWinlessBound(t) == -5);
     }
 }
