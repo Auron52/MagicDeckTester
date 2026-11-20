@@ -110614,6 +110614,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                 // (max_turns+1) at a cached real win is also a mismatch (the cache claims a win that isn't).
                 if (fresh != *cached)
                 {
+                    std::fprintf(stderr, "[leaf-verify] HIT CTX epoch=%llu ctx=%llx\n",
+                                 static_cast<unsigned long long>(g_decision_epoch),
+                                 static_cast<unsigned long long>(PlanCacheCtxBits()));   // RC-3 DIAG
                     static std::atomic<long long> s_mm{0};
                     const long long n = s_mm.fetch_add(1) + 1;
                     if (n <= 8)
@@ -111013,6 +111016,10 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             // cutoff and at a loose one. A mismatch here means the stored run's own context (nested tables, the
             // budget, the cutoff) changed its answer; a clean store with a stale hit later means DRIFT.
             FsSimTraceScope _tr(key.h1 == LeafVerifyTraceKey());
+            if (key.h1 == LeafVerifyTraceKey())   // RC-3 DIAG
+            { std::fprintf(stderr, "[leaf-verify] STORE CTX epoch=%llu ctx=%llx\n",
+                           static_cast<unsigned long long>(g_decision_epoch),
+                           static_cast<unsigned long long>(PlanCacheCtxBits())); }
             GameState s1 = *leaf_vcopy;
             const int r_same = SimulateToEndImpl(s1, depth, max_turns, nullptr, cutoff_turn, second_main, nullptr);
             GameState s2 = *leaf_vcopy;
@@ -128201,6 +128208,18 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             : cands.size();
         lahist::Note(state.turn_number, is_pre_combat, depth, g_fsline_nest, g_rollout_nest, g_bp_enum_depth,
                      static_cast<long long>(n_cands));
+        if (g_fs_sim_trace > 0)   // RC-3 DIAG (print-only): the walk's candidate list under a traced leaf key
+        {
+            std::fprintf(stderr, "[fs-sim] WALK t%d d%d pre=%d n_cands=%zu epoch=%llu ctx=%llx\n", state.turn_number, depth,
+                         is_pre_combat ? 1 : 0, n_cands, static_cast<unsigned long long>(g_decision_epoch),
+                         static_cast<unsigned long long>(PlanCacheCtxBits()));
+            for (std::size_t di = 0; di < n_cands; ++di)
+            {
+                Plan dsyn;
+                const Plan& dp = cands.At(di, dsyn);
+                std::fprintf(stderr, "[fs-sim]   cand %zu: %s\n", di, FsPlanText(dp).c_str());
+            }
+        }
         for (std::size_t ci = 0; ci < n_cands; ++ci)
         {
             if (EtChainTrialBudgetExceeded())
@@ -128263,6 +128282,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
             }
             const Plan& plan = cands.At(ci, pb_syn);
+            if (g_fs_sim_trace > 0) { std::fprintf(stderr, "[fs-sim]   reach %zu\n", ci); }   // RC-3 DIAG
             // MTG_NESTED_EXH_AXIS: a Ponder order variant at rank >= W, once the decision budget is spent.
             if (nested_exh_w > 0 && plan.ponder_choice >= nested_exh_w && budget->Exhausted())
             {
