@@ -1040,6 +1040,7 @@ enum Slot : int
     AURA_LATE_BIND_RANK,      // MTG_AURA_LATE_BIND_RANK  the late-bound creature-Aura host walk's FAST PATH (BindAuraLateHosts) reads the deck provider's host order (DecisionProvider::CreatureAuraHostRank, AuraHostKey::combo) before its dork tie-break, so it binds exactly what the full key would (AccomplishedAlchemist 2026-11-20, USER: "Obviously in this deck Accomplished Alchemist is the target"; seed 12345681 T3: no plan ever put Crab Umbra on the Alchemist). DEFAULT ON; =0 -> the dork tie-break only (pre-2026-11-20; inexact whenever a provider ranks hosts)
     SITE9_AFTER_DEFERRED,     // MTG_SITE9_AFTER_DEFERRED  breakpoint SITE 9 (post-entry activation) after a DEFERRED continuation (sites 3/5/6/10), both worlds: a continuation that casts an activated permanent (Living Wish -> Brindle Boar, then the Boar + Crab Umbra) gets the post-entry re-plan the main section gets (AccomplishedAlchemist 2026-11-20, seed 12345681 T3). Searched-only, budget-staged by the wave walker (MTG_BP_DEV_SEQ). DEFAULT ON; =0 -> no site 9 after a deferred continuation (pre-2026-11-20)
     BURST_ACT_COLOUR_PENDING, // MTG_BURST_ACT_COLOUR_PENDING  a single-colour BURST source (Accomplished Alchemist's X) floats the colour the plan's pending/board activations need (BurstPendingActColour: an own untap Aura's {2}{U} on a live host counts), not prod[0] (AccomplishedAlchemist 2026-11-20, USER: "Yes, we need to fix this."). DEFAULT ON; =0 -> the pre-2026-11-20 colour
+    AA_ALCH_TAP_LAST,         // MTG_AA_ALCH_TAP_LAST  AccomplishedAlchemistProvider::ManaSourceRank: a life-scaled source (Accomplished Alchemist, mana_per_life_gained) taps LAST, behind the whole creature band -- its yield only grows within the turn and its {T} is the loop (2026-11-20, seed 12345681 T3: the Boar's last pip took the Alchemist's 1 instead of Arbor Elf's Sprawl re-tap, killing the post-sac Umbra untap). DEFAULT ON; =0 -> the inherited SelesnyaLifegain/Generic rank
     COUNT
 };
 
@@ -2024,6 +2025,7 @@ inline const char* Name(int slot)
         "MTG_AURA_LATE_BIND_RANK",
         "MTG_SITE9_AFTER_DEFERRED",
         "MTG_BURST_ACT_COLOUR_PENDING",
+        "MTG_AA_ALCH_TAP_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
