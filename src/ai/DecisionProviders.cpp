@@ -69821,11 +69821,11 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
     }
     // (S): a Guild Summit controlled or in hand -- count the entry sources (above), or give up (-1).
     {
-        int summit = 0, mb = 0, ex = 0, bg = 0, ch = 0, tl = 0, mz = 0;
+        int summit = 0, mb = 0, mb_lib = 0, ex = 0, bg = 0, ch = 0, tl = 0, mz = 0;
         auto tally = [&](const std::string& n, bool lib)
         {
             if (n == "Guild Summit") { summit += lib ? 0 : 1; }
-            else if (n == "Manabond") { ++mb; }
+            else if (n == "Manabond") { ++mb; mb_lib += lib ? 1 : 0; }
             else if (n == "Exploration") { ++ex; }
             else if (n == "Burgeoning") { ++bg; }
             else if (n == "Archdruid's Charm") { ++ch; }
@@ -69847,10 +69847,19 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
         (void)expl_bf;   // a controlled Exploration is already in LandDropsAvailable
         if (summit > 0)
         {
-            if (mb > 0) { return -1; }
             const int drops0 = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn);
             const int bound_s = mz + drops0 + ex + bg + burg_bf + ch + tl;
-            return g0 + bound_s < need ? 3 : -1;
+            const bool s_closes = g0 + bound_s < need;
+            // Decline codes (diagnostic only: every consumer reads proof > 0; the census splits them for the USER's
+            // narrowing decision): -1 Manabond controlled / in hand, (S) count open as well; -6 the same but the (S)
+            // count alone would close; -5 Manabond in the library only, count open; -7 library only, count would
+            // close; -4 no Manabond, (S) count open.
+            if (mb > 0)
+            {
+                const bool lib_only = mb_lib == mb;
+                return lib_only ? (s_closes ? -7 : -5) : (s_closes ? -6 : -1);
+            }
+            return s_closes ? 3 : -4;
         }
     }
     int me_bf = 0, amulet = 0, burg = 0, manabond = 0;

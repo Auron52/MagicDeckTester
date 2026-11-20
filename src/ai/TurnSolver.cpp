@@ -118060,20 +118060,24 @@ inline thread_local bool t_inner = false;   // census: the node is being searche
 inline std::atomic<long long> g_fold{0};
 // Census: [0] proof, [1..2] the provider's decline codes -1 / -2 (Maze's End: Guild Summit, bound open), [3] any other
 // decline (Maze's End -3: a card outside the reviewed list; a provider with no codes). n = nodes, u = units under them.
-inline std::atomic<long long> g_n[4], g_u[4], g_unsound{0}, g_win[4];
-inline int Slot(int v) { return v > 0 ? 0 : v == -1 ? 1 : v == -2 ? 2 : 3; }
+// Maze's End's Guild Summit declines are split (P7-8, for the USER's narrowing decision): [4] -4 no Manabond, (S) count
+// open; [5] -5 Manabond in the library only, count open; [6] -6 Manabond controlled / in hand, count would close; [7] -7
+// Manabond in the library only, count would close. [1] -1 is then Manabond controlled / in hand with the count open.
+inline std::atomic<long long> g_n[8], g_u[8], g_unsound{0}, g_win[8];
+inline int Slot(int v) { return v > 0 ? 0 : v == -1 ? 1 : v == -2 ? 2 : (v <= -4 && v >= -7) ? -v : 3; }
 struct Printer
 {
     ~Printer()
     {
         const long long f = g_fold.load();
         long long un = 0, uu = 0;
-        for (int i = 0; i < 4; ++i) { un += g_n[i].load(); uu += g_u[i].load(); }
+        for (int i = 0; i < 8; ++i) { un += g_n[i].load(); uu += g_u[i].load(); }
         if (f > 0) { std::fprintf(stderr, "[lastply] folded=%lld\n", f); }
         if (un == 0) { return; }
-        static const char* const kName[4] = { "PROOF", "CODE-1", "CODE-2", "OTHER" };
-        for (int i = 0; i < 4; ++i)
+        static const char* const kName[8] = { "PROOF", "CODE-1", "CODE-2", "OTHER", "CODE-4", "CODE-5", "CODE-6", "CODE-7" };
+        for (int i = 0; i < 8; ++i)
         {
+            if (i >= 4 && g_n[i].load() == 0) { continue; }
             std::fprintf(stderr, "[lastply] census %-6s nodes=%lld (%.1f%%) units=%lld (%.1f%%) won=%lld\n", kName[i],
                          g_n[i].load(), un ? 100.0 * g_n[i].load() / un : 0.0, g_u[i].load(),
                          uu ? 100.0 * g_u[i].load() / uu : 0.0, g_win[i].load());
