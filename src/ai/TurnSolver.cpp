@@ -118192,7 +118192,8 @@ static inline bool LeafGameOverOn()
 // It is NOT unbudgeted-only: it applies wherever the next leaf is constant, at every budget (a deck whose budgeted
 // ladder is leafless -- a no-leaf sidecar, value_play.sampled_gate, rollout_from -- folds there too). Not at a pass
 // ROOT (its plans are its caller's), inside a rollout or the cast-sequence solver, or for a deck with extra turns (the
-// next turn may be searched). The proof is the deck's WINLESS CERTIFICATE (DecisionProvider::ProvenWinlessThisTurn,
+// next turn may be searched), nor inside a RECORDING probe, whose leaf count prices a later pass that cannot fold
+// (MTG_LASTPLY_PROBE_MEASURE, see LastPlyFoldHere). The proof is the deck's WINLESS CERTIFICATE (DecisionProvider::ProvenWinlessThisTurn,
 // the one PROOF hook; MTG_WINLESS_CERT gates every consumer). MTG_LASTPLY_NOWIN_FOLD=0 -> the node is searched.
 // MTG_LASTPLY_NOWIN_CENSUS=1 (diagnostic): NEVER cuts; searches every eligible node, tallies the proof's verdicts and
 // the units under each, and counts a proof whose node then found a win (UNSOUND -- must read 0); =2 also prints each
@@ -118234,11 +118235,24 @@ struct Printer
 };
 inline Printer g_printer;
 }   // namespace lastply
+// NOT IN A RECORDING PROBE (MTG_LASTPLY_PROBE_MEASURE, default ON; P7-8, 2026-11-20). While g_probe_recording is set,
+// the leafless probe is a MEASUREMENT as well as a pass: its per-depth tree cost and LEAF COUNT (g_probe_cost /
+// g_probe_leaves) price a later pass whose leaf is NOT constant (FIT's tree(d) + R x leaves(d), the reserve, the
+// K-predictor, path-to-trust), and that pass can never fold. A folded node answers before its depth-0 children, so it
+// removes exactly the leaves the priced pass will face: Snow gi961 (seed 192962, d3 b10) recorded leaves 184 -> 0 and
+// tree 390 -> 111 at d3 on T1, FIT then admitted a d3 rollout pass priced at 111 units that ran to the 25x overrun
+// ceiling (225k units) on T2 and T3, and the anytime rescue committed a T7 line where the affordable d1 pass finds
+// T6 (held-out d3b10: Snow net +1). The proof is still sound; what the fold changed was the price, so a finite budget
+// reached different lines for a reason other than the work it removed. Same reason, same gate as
+// MTG_PROBE_INCLUSIVE_CUT. A non-recording leafless pass (the ladders, P16/P18, Maze's End's play) folds as before.
+// =0 -> fold inside a recording probe too (the pre-fix behaviour).
+static bool LastPlyProbeMeasureOn() { static const bool v = EnvOn("MTG_LASTPLY_PROBE_MEASURE", true); return v; }
 static bool LastPlyFoldHere(const GameState& s)
 {
     static const bool s_on = EnvOn("MTG_LASTPLY_NOWIN_FOLD", true);
     return !lastply::t_inner && !s.deck_has_extra_turn && g_fsline_nest > 0 && g_cs_solver_nest == 0
         && g_rollout_nest == 0 && heurarm::Flag(heurarm::LASTPLY_NOWIN_FOLD, s_on) && winlesscert::Enabled()
+        && !(g_probe_recording && LastPlyProbeMeasureOn())
         && FsNextLeafConstant(s) && !OpponentHasLost(s);
 }
 
