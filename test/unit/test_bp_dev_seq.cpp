@@ -232,3 +232,37 @@ TEST_CASE("deviation sequences: searched M2 memo carries latent NOWIN ancestry")
     CHECK(DevSeqMemoCarryForTest(false, true, true, true) == 31);
     CHECK(DevSeqMemoCarryForTest(false, false, true, true) == 16);
 }
+
+// MTG_DEV_SEQ_HEXIT_TAINT. Accomplished Alchemist seed 12345681 keep 7 at --depth 8 --budget-ms 0
+// (MTG_AA_LOOP_CAST_DRAW=0): ladder pass 3 of the FIRST (one-deviation) pass met the T3 latent occurrences; pass 4's T2
+// node took the first-verified-win horizon exit on a T4 win without walking a latent occurrence of its own, so it was
+// CLEAN, and MTG_INWIN_CACHE widened its "no win by T3" to a full-tree proof. The second pass read that proof at T2
+// depth 2 (MTG_INWIN_CACHE_VERIFY: DISAGREE cached=11 fresh=3) and never walked the two-deviation T3 kill: T4 at every
+// budget. The exit's "no earlier win" IS the shallower passes' one-deviation refutation, so it must taint the node.
+extern int DevSeqHexitTaintForTest(int latent_turn, int node_turn, int win_turn, bool suppressed);
+
+struct HexitTaintScope
+{
+    explicit HexitTaintScope(int on) { heurarm::t_arm[heurarm::DEV_SEQ_HEXIT_TAINT] = static_cast<std::int8_t>(on); }
+    ~HexitTaintScope() { heurarm::t_arm[heurarm::DEV_SEQ_HEXIT_TAINT] = -1; }
+};
+
+TEST_CASE("deviation sequences: a first-pass horizon exit past a latent turn is dirty (AA seed 12345681 inwin proof)")
+{
+    {
+        HexitTaintScope on(1);
+        // The trace's shape: latent at T3, the T2 node exits on a T4 win -> dirty, earliest turn 3, erased at cut 3.
+        CHECK(DevSeqHexitTaintForTest(3, 2, 4, true) == 7);
+        // A latent occurrence at or after the win turn cannot hide an earlier win: clean.
+        CHECK(DevSeqHexitTaintForTest(4, 2, 4, true) == 0);
+        CHECK(DevSeqHexitTaintForTest(5, 2, 4, true) == 0);
+        // A win in the node's own turn needs no premise: clean.
+        CHECK(DevSeqHexitTaintForTest(3, 4, 4, true) == 0);
+        // Outside a first pass the shallower passes searched the full tree: clean.
+        CHECK(DevSeqHexitTaintForTest(3, 2, 4, false) == 0);
+    }
+    {
+        HexitTaintScope off(0);   // the hole: the node stays clean and its refutation is carried / filed as full-tree
+        CHECK(DevSeqHexitTaintForTest(3, 2, 4, true) == 0);
+    }
+}
