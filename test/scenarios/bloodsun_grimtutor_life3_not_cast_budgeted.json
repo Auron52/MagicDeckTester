@@ -1,0 +1,44 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 3,
+ "opponent_life": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Grim Tutor"
+ ],
+ "library": [
+  "Lightning Bolt"
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 4,
+ "expect_no_win": true,
+ "expect_active_life": 3,
+ "comment": "Blood Sun step 5 (USER D1, design \u00a79.1): life 3, Grim Tutor in hand, four lands, opponent at 3, the only Bolt at the BOTTOM of a Swamp library. Grim Tutor would fetch the Bolt and kill -- but its 'You lose 3 life' resolves first and kills us (own death live), so it is never cast: no win, life stays 3. d3, budget 100."
+}

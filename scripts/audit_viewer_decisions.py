@@ -123,6 +123,11 @@ MANIFEST = {
     # canonical order provably inert; see design 4.7). Mapped here, on the card whose presence makes it reachable.
     "aura_host_damage_back": ("dig",                truthy),
     "cast_reorder":          ("reorder",              positive),
+    # Dimir Machinations (Blood Sun step 5): "Look at the top three cards of target player's library. Exile any number
+    # of those cards, then put the rest back in any order." -- the `exile_reorder` look decision (LookTopExileReorder,
+    # LookKind::ExileThenReorder, the `surveil` shape with destination exile); its target player is the board-click
+    # `target` (players only) at cast time.
+    "look_top_target_player_exile_reorder": ("exile_reorder", positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
     # by the shared ResolvePutBackFromHand (SpellEffects.h); the autonomous engine searches it
@@ -1452,6 +1457,10 @@ INERT_PARAMS = {
     "tap_self_damage_is_trigger": "classification of City of Brass's ping (a triggered ability, removed by Blood Sun); no choice",
     "lands_lose_nonmana_abilities": "static (Blood Sun, layer 6): changes how lands enter / tap, offers no choice; the land-position axis it opens is the existing land= / landat= queue",
     "unlimited_land_plays": "Fastbond -- static unlimited land drops (folded into the static extra drops); HOW MANY lands to play is the main_phase land drop the viewer already offers while a drop remains, one land per click, no choice of its own",
+    "lose_life_on_resolve": "Grim Tutor's 'You lose 3 life' -- automatic life loss on resolution, no choice (the tutor's target is the `tutor` pick)",
+    "exile_all_permanents": "Worldfire -- automatic: every permanent of both sides is exiled, no choice",
+    "exile_all_hands_and_graveyards": "Worldfire -- automatic: every hand and graveyard is exiled, no choice",
+    "set_all_life_totals": "Worldfire -- automatic: each life total becomes N, no choice",
     "land_play_damage_after_first": "Fastbond's trigger -- automatic damage to you on each land play after the first; no choice (the human chooses how many lands to play through the land drop)",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",

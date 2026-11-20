@@ -5424,6 +5424,15 @@ struct CardParams
     // N" (-1 = absent). Parsed, read today only by the own-death arming (GoldFishRunner::StampDeckTraits).
     int                      lose_life_on_resolve = 0;
     int                      set_all_life_totals = -1;
+    // BLOOD SUN step 5 -- Dimir Machinations: "Look at the top N cards of target player's library. Exile any number
+    // of those cards, then put the rest back in any order." (0 = none). LookTopExileReorder (SpellEffects.h) on the
+    // TARGET player's library (Action::player_target: 0 = us, 1 = the opponent), LookKind::ExileThenReorder; the
+    // disposition is the searched reorder pin (Plan::ponder_choice, the Ponder shape) over every disposition.
+    int                      look_top_target_player_exile_reorder = 0;
+    // BLOOD SUN step 5 -- Worldfire: "Exile all permanents. Exile all cards from all hands and graveyards. Each
+    // player's life total becomes 1." (set_all_life_totals above carries the 1). ResolveWorldfire (SpellEffects.h).
+    bool                     exile_all_permanents = false;
+    bool                     exile_all_hands_and_graveyards = false;
     // Burgeoning: "Whenever an opponent plays a land, you may put a land card from your hand onto the
     // battlefield." One trigger per copy per opponent land PLAYED (ResolvePassiveOpponentLandTurn); which land
     // (or none) is the searched crossing-land pin (GameState::scripted_crossing_lands).

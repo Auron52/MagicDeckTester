@@ -4419,6 +4419,11 @@ public:
                "package axis makes the reachable damage depend on the library. ProvenNoWinThisRound (one-sided, "
                "round-aware) is design step 9." }; }
     const char* Name() const override { return "BloodSun"; }
+    // GRIM TUTOR (design §9.1): COMPLETE, not a heuristic. Every distinct library name is a searched target (64 >=
+    // the distinct names of any 60-card list), and every to-hand tutor cast of a plan carries its own target (the
+    // per-cast named axis), closing the one-tutor-per-plan gap for this deck. Order: TutorCandidates' generic order.
+    int  TutorSearchWidth() const override { return 64; }
+    bool TutorCastTimeAxis(const CardParams& p) const override { return p.tutor_to_hand && !p.wish_from_sideboard; }
 };
 
 // MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1

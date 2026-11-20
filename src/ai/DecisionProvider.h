@@ -3589,6 +3589,16 @@ public:
     // MTG_TUTOR_WIDTH still overrides engine-side for A/B. See docs/design/searched-action-subdecisions.md.
     virtual int TutorSearchWidth() const { return 6; }
 
+    // TutorCastTimeAxis -- opt a to-hand tutor (by its params) into the PER-CAST named target axis (Blood Sun step 5,
+    // design §9.1). FALSE (the default, every deck but Blood Sun): the tutor rides the resolve-mode INDEX axis
+    // (Plan::tutor_choice), which varies ONE tutor per plan -- a second tutor of the same plan takes the provider's
+    // front at resolution (audit gap A4/C6, docs/design/no-greedy-in-search-window.md). TRUE: every such cast of a
+    // plan gets its own target (Action::tutor_target) from the post-dedup cross product over the distinct names
+    // TutorCandidates ranks (TutorSearchWidth of them; the Transmute / Tooth and Nail named shape), so a plan with
+    // two copies searches both picks. A provider sets it only where the width is COMPLETE (every distinct name), or
+    // the named axis would cut lines the index axis reached.
+    virtual bool TutorCastTimeAxis(const CardParams& p) const { (void)p; return false; }
+
     // CleanupDiscardSearchWidth -- how many of CleanupDiscardCandidates' ranked cards the ROLLOUT's
     // end-of-turn cleanup branches over (1 == the ranked pick only, byte-identical to no branch).
     //

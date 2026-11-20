@@ -532,6 +532,19 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     ApplyBorosCharm(state, entry.controller_index,
                                     entry.chosen_x.value_or(1), entry.enchant_target);
                 }
+                // Worldfire (Blood Sun step 5): exile everything, then each life total becomes 1 (lockstep with apply_one).
+                if (def.params.exile_all_permanents || def.params.exile_all_hands_and_graveyards
+                    || def.params.set_all_life_totals >= 0)
+                { ResolveWorldfire(state, entry.controller_index, def); }
+                // Dimir Machinations (Blood Sun step 5): the look on the TARGET's library (lockstep with apply_one).
+                if (def.params.look_top_target_player_exile_reorder > 0)
+                {
+                    int who = entry.player_target != 0 ? 1 - entry.controller_index : entry.controller_index;
+                    for (const Target& t : entry.targets)
+                    { if (t.type == Target::Type::Player) { who = t.player_index; break; } }
+                    LookTopExileReorder(state, who, def.params.look_top_target_player_exile_reorder,
+                                        def.card.m_name.str());
+                }
                 if (def.params.spell_mill_opponent > 0 || def.params.spell_exile_opponent_until_mv > 0)
                 {
                     int mill_target = 1;
@@ -574,6 +587,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     // per cast instance, in cast order). Inert without a chooser installed.
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
                                  def.card.m_name, /*human_repick=*/true);
+                    // Grim Tutor's "You lose 3 life" (Blood Sun step 5; lockstep with apply_one). Param-gated.
+                    ApplyLoseLifeOnResolve(state, entry.controller_index, def);
                 }
                 if (def.params.return_up_to_gy_lands > 0)
                 { ReturnTargetedGraveyardLands(state, entry.controller_index, entry.tutor_target,

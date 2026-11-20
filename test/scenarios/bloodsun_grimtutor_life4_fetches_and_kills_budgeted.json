@@ -1,0 +1,44 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 4,
+ "opponent_life": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Grim Tutor"
+ ],
+ "library": [
+  "Lightning Bolt"
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 4,
+ "expect_win_turn": 3,
+ "expect_active_life": 1,
+ "comment": "Blood Sun step 5 (design \u00a79.1): life 4 -- the same board as the life-3 fixture. Grim Tutor fetches the bottom Bolt (the searched target), we lose 3 (4 -> 1, life loss not damage), and the Bolt kills the opponent at 3 on this turn with the Mountain. d3, budget 100."
+}

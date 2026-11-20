@@ -261,12 +261,15 @@ TEST_CASE("fastbond own death: armed from the card's own param; City of Brass al
         CHECK(s.deck_has_static_land_drops);
         CHECK_FALSE(s.dmg_events_armed);
     }
-    // Without Fastbond (no Grim Tutor / Worldfire params yet -- step 5): unarmed, City of Brass included.
+    // Without Fastbond, Grim Tutor and Worldfire (the three own-death params; step 5 added the other two): unarmed,
+    // City of Brass included.
     Decklist no_fb = deck;
+    auto armer = [](const Card& c)
+    { const std::string n = c.m_name.str(); return n == "Fastbond" || n == "Grim Tutor" || n == "Worldfire"; };
     for (auto it = no_fb.mainboard.begin(); it != no_fb.mainboard.end(); )
-    { if (it->m_name.str() == "Fastbond") { it = no_fb.mainboard.erase(it); } else { ++it; } }
+    { if (armer(*it)) { it = no_fb.mainboard.erase(it); } else { ++it; } }
     for (auto it = no_fb.sideboard.begin(); it != no_fb.sideboard.end(); )
-    { if (it->m_name.str() == "Fastbond") { it = no_fb.sideboard.erase(it); } else { ++it; } }
+    { if (armer(*it)) { it = no_fb.sideboard.erase(it); } else { ++it; } }
     bool has_city = false;
     for (const Card& c : no_fb.mainboard) { if (c.m_name.str() == "City of Brass") { has_city = true; } }
     CHECK(has_city);

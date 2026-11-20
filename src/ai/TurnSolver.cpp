@@ -30047,6 +30047,7 @@ static bool PutBackAxisEnabled()
 static bool PutBackPredictionUnsafe(const CardDefinition& d)
 {
     return d.params.cast_reorder > 0 || IsLibraryTutor(d.params)   // Long-Term Plans shuffles too
+        || d.params.look_top_target_player_exile_reorder > 0          // Dimir Machinations (a searched look)
         || !d.params.fetch_land_types.empty();
 }
 // THE FAN WIDTH for plan `p`'s put-back cast `bs`: an UPPER BOUND on the number of candidates the
@@ -30297,6 +30298,7 @@ static bool PbCastLibraryBlind(const Action& a)
     if (d == nullptr) { return false; }
     const CardParams& pp = d->params;
     if (pp.draw > 0 || pp.cast_scry > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || IsLibraryTutor(pp)
+        || pp.look_top_target_player_exile_reorder > 0
         || pp.counters_target_spell_to_hand || pp.etb_dig_count > 0 || pp.etb_reveal_count > 0
         || pp.etb_tutor_hand_count > 0 || pp.etb_exile_until_nonland || pp.etb_return_gy_to_hand
         || pp.land_search_on_resolve || pp.land_search_on_enter_or_attack || pp.cascade_max_mv > 0
@@ -44297,6 +44299,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // path: the human picks among named variants, exactly as before.
             // A provider that requires a candidate (DecisionProvider::TutorNeedsCandidate; Shadowborn, USER
             // 2026-11-03: "or we should not cast the spell at all") gets NO cast when its list is empty.
+            // GRIM TUTOR at <= 3 life with own death live (Blood Sun step 5): the resolution's "You lose 3 life" kills
+            // us and the fetched card only reaches HAND, so the cast is dominated by not casting it (a loss is the
+            // worst outcome, USER D1) -- a SOUND dominance prune in every autonomous world; a human is still offered
+            // it. False for every deck without own death or a lose_life_on_resolve card.
+            if (!HumanPlayActive() && CastLoseLifeWouldKill(state, state.active_player_index, def)) { continue; }
             if (ResolveProvider(state).TutorNeedsCandidate(state, state.active_player_index, def.params)
                 && RankedTutorCandidates(ResolveProvider(state), state, state.active_player_index, def.params).empty())
             { continue; }
@@ -55550,6 +55557,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             actions[i].eval = 0;
             actions.push_back(std::move(v));
         }
+    }
+
+    // DIMIR MACHINATIONS (look_top_target_player_exile_reorder; Blood Sun step 5, design §9.2 / U3): "target player" --
+    // both are legal and NEITHER is inert: our own look sets up our draws, and the opponent's decides which cards it
+    // draws (its land plays -> Burgeoning puts for us) and moves it three cards nearer a deck-out. The ENGINE offers
+    // both; the opponent's copy is appended LAST with the lowest eval (an ORDER, not a restriction -- U3 default).
+    // Human play picks the target at cast time (the board-click target chooser, players only).
+    {
+        const std::size_t pt_n = actions.size();
+        for (std::size_t i = 0; i < pt_n && !HumanPlayActive(); ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || actions[i].def->params.look_top_target_player_exile_reorder <= 0
+                || actions[i].player_target != 0) { continue; }
+            if (!state.opponent_library_dealt) { continue; }   // no opponent library to look at: the cast is a no-op
+            Action v = actions[i];                   // copy BEFORE push_back (reallocation)
+            v.player_target = 1;
+            v.eval          = std::min(v.eval, 0);
+            actions.push_back(std::move(v));
+        }
+    }
+
+    // WORLDFIRE (exile_all_permanents; Blood Sun step 5, design §9.3 / U2): cast-enumerated normally and ORDERED LAST
+    // (the no-gain eval: the beyond-horizon greedy never prefers it) -- an order, not a restriction (U2 default). It
+    // exiles every attacker and this list deals damage with nothing else, so no goldfish line found speeds a win.
+    for (Action& a : actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.exile_all_permanents)
+        { a.eval = std::min(a.eval, kNoGainCastEval); }
     }
 
     // REMAND post-pass (CardParams::counters_target_spell_to_hand; Remand -- Hinata2, Unpredictable
@@ -78268,6 +78304,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (RevealLogPause), so autonomous play is byte-identical.
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name,
                          /*human_repick=*/true);
+            // Grim Tutor's "You lose 3 life" (Blood Sun step 5; lockstep with EffectHandler). Param-gated.
+            ApplyLoseLifeOnResolve(state, state.active_player_index, def);
             // Tutor-to-hand re-solve (AcqResolveEnabled / MTG_ACQ_RESOLVE, EngineFlags.h -- the
             // mid-phase acquisition family; main-2 parity work, USER 2026-08-14): the fetched
             // card competes for this turn's remaining mana exactly like a cantrip's draw, but
@@ -78807,6 +78845,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         if (!remand_countered && def.params.boros_charm_modal)
         { ApplyBorosCharm(state, state.active_player_index, chosen_x, enchant_target); }
+        // Worldfire (Blood Sun step 5): exile everything, then each life total becomes 1 (lockstep with EffectHandler).
+        if (!remand_countered && (def.params.exile_all_permanents || def.params.exile_all_hands_and_graveyards
+                                  || def.params.set_all_life_totals >= 0))
+        { ResolveWorldfire(state, state.active_player_index, def); }
+        // Dimir Machinations (Blood Sun step 5): the look on the TARGET's library (lockstep with EffectHandler).
+        if (!remand_countered && def.params.look_top_target_player_exile_reorder > 0)
+        {
+            LookTopExileReorder(state, cast_player_target != 0 ? 1 - state.active_player_index : state.active_player_index,
+                                def.params.look_top_target_player_exile_reorder, def.card.m_name.str());
+        }
         if (!remand_countered && (def.params.spell_mill_opponent > 0
                                   || def.params.spell_exile_opponent_until_mv > 0))
         {
@@ -86316,6 +86364,7 @@ static bool CycleSeedPinRedundant(const CycleSeedFoldCtx& c, const std::vector<A
         if (d == nullptr) { return false; }
         const CardParams& pp = d->params;
         if (pp.draw > 0 || pp.cast_reorder > 0 || pp.put_back_from_hand > 0 || pp.cast_scry > 0
+            || pp.look_top_target_player_exile_reorder > 0
             || IsLibraryTutor(pp) || pp.counters_target_spell_to_hand || d->tmpl == CardTemplate::DrawSpell
             || d->tmpl == CardTemplate::DrawX || d->tmpl == CardTemplate::DrawUntilNonland)
         { return false; }
@@ -97443,7 +97492,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* dl = CardDatabase::Instance().Lookup(a.card_name);
                 if (dl != nullptr && dl->params.etb_dig_count > 0) { t |= kTrDig; }
                 if (a.kind != Action::Kind::CastFromHand) { continue; }
-                if (dl != nullptr && dl->params.cast_reorder > 0) { t |= kTrPonder; }
+                if (dl != nullptr && (dl->params.cast_reorder > 0
+                                      || dl->params.look_top_target_player_exile_reorder > 0)) { t |= kTrPonder; }
                 if (dl != nullptr && dl->params.tutor_to_hand && dl->params.wish_from_sideboard) { ++wishes; }
                 if (a.sacrifice_land) { t |= kTrSacLand; }
                 const CardDefinition* dd = a.def ? a.def : dl;
@@ -97918,6 +97968,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
+                // A per-cast NAMED tutor (DecisionProvider::TutorCastTimeAxis) is searched by the named axis below,
+                // never by this index pin (it would only duplicate one of its names).
+                if (!put_tutor && ResolveProvider(state).TutorCastTimeAxis(d->params)) { continue; }
                 // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
                 if (d->params.modal_exile_target_artifact_enchantment
                     && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
@@ -98073,6 +98126,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
+                if (ResolveProvider(state).TutorCastTimeAxis(d->params)) { continue; }   // the named axis below
                 // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
                 if (d->params.modal_exile_target_artifact_enchantment
                     && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
@@ -98143,6 +98197,98 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // PER-CAST NAMED TUTOR AXIS (DecisionProvider::TutorCastTimeAxis; Blood Sun step 5, design §9.1). For a to-hand
+    // tutor the provider opts in, EVERY cast of the plan carries its own searched target (Action::tutor_target): the
+    // cross product over the distinct names TutorCandidates ranks (TutorAxisWidth of them -- the opting provider makes
+    // it complete), so two Grim Tutors in one plan search both picks (the index axis above varies ONE tutor per plan).
+    // Emitted POST-dedup like the index axis (the cast-name signature would fold the names together), on base plans
+    // only (one axis at a time; a variant of another axis resolves its tutor to the provider's front at resolution,
+    // exactly as an index-axis plan's later axes do). The first combination is written in place, so the base IS a
+    // named plan and the set is exactly the combinations. One sound fold: copies of one tutor are interchangeable,
+    // so their picks are a MULTISET (non-decreasing rank across the copies of a name): both orders put the same cards
+    // in hand, and the library after both searches is the one keyed shuffle of the same remaining set (ShuffleByKey
+    // at the same ordinal) -- the real-information identity of same-name copies (U7). A name picked more often than
+    // the library holds it whiffs on the later pick (still a legal line: kept). Inert for every provider without the
+    // hook.
+    if (TutorAxisEnabled() && !HumanPlayActive())
+    {
+        const DecisionProvider& tprov = ResolveProvider(state);
+        std::map<std::string, std::vector<std::string>> nm_cache;
+        std::vector<TurnSolver::Plan> extra;
+        const std::size_t n_named = all.size();
+        for (std::size_t pi = 0; pi < n_named; ++pi)
+        {
+            {
+                const TurnSolver::Plan& p = all[pi];
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0) { continue; }
+            }
+            std::vector<std::size_t> slots;
+            std::vector<const std::vector<std::string>*> slot_names;
+            for (std::size_t ai = 0; ai < all[pi].actions.size(); ++ai)
+            {
+                const Action& act = all[pi].actions[ai];
+                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
+                if (d == nullptr || !IsLibraryTutor(d->params) || !tprov.TutorCastTimeAxis(d->params)) { continue; }
+                auto it = nm_cache.find(act.card_name);
+                if (it == nm_cache.end())
+                {
+                    std::vector<std::string> uniq;
+                    for (const std::string& c : RankedTutorCandidates(tprov, state, state.active_player_index, d->params))
+                    { if (!c.empty() && std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+                    if (uniq.size() > TutorAxisWidth(state)) { uniq.resize(TutorAxisWidth(state)); }
+                    it = nm_cache.emplace(act.card_name, std::move(uniq)).first;
+                }
+                if (it->second.empty()) { continue; }   // nothing to find: the empty target whiffs (and shuffles)
+                slots.push_back(ai);
+                slot_names.push_back(&it->second);
+            }
+            if (slots.empty()) { continue; }
+            const std::size_t ns = slots.size();
+            std::vector<std::size_t> idx(ns, 0);
+            bool first = true;
+            const TurnSolver::Plan proto = all[pi];
+            auto valid = [&]() -> bool
+            {
+                for (std::size_t k = 0; k < ns; ++k)
+                {
+                    // The multiset fold: a later copy of the SAME tutor never ranks below an earlier one.
+                    for (std::size_t j = 0; j < k; ++j)
+                    {
+                        if (proto.actions[slots[j]].card_name == proto.actions[slots[k]].card_name && idx[k] < idx[j])
+                        { return false; }
+                    }
+                }
+                return true;
+            };
+            for (;;)
+            {
+                if (valid())
+                {
+                    TurnSolver::Plan* tgt = nullptr;
+                    if (first) { tgt = &all[pi]; first = false; }
+                    else       { extra.push_back(proto); tgt = &extra.back(); }
+                    for (std::size_t k = 0; k < ns; ++k)
+                    { tgt->actions[slots[k]].tutor_target = (*slot_names[k])[idx[k]]; }
+                }
+                std::size_t k = ns;
+                while (k > 0)
+                {
+                    --k;
+                    if (++idx[k] < slot_names[k]->size()) { break; }
+                    idx[k] = 0;
+                    if (k == 0) { k = ns + 1; break; }
+                }
+                if (k == ns + 1) { break; }
+            }
+        }
+        if (!extra.empty())
+        {
+            all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+            plan_tr.clear();   // indices moved: recompute lazily
+        }
     }
 
     // WISH SINGLETONS (AccomplishedAlchemist chunk E1, claude-play sweep seed 80012). Every sideboard
@@ -99234,7 +99380,43 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.ponder_keep >= 0) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupInterned(act.card_name);
-                if (d == nullptr || d->params.cast_reorder <= 0) { continue; }
+                // DIMIR MACHINATIONS (look_top_target_player_exile_reorder; Blood Sun step 5) rides this ORDER fan: its
+                // LookTopExileReorder consumes the same reorder pin (g_scripted_reorder_choice), at FULL width -- every
+                // ordered subset of its look kept on top (sum_k C(m,k) k!, 16 for three), sized off the TARGET's
+                // library (Action::player_target), never narrowed by a provider's Ponder rule.
+                const int mach_look = d != nullptr ? d->params.look_top_target_player_exile_reorder : 0;
+                if (d == nullptr || (d->params.cast_reorder <= 0 && mach_look <= 0)) { continue; }
+                if (mach_look > 0)
+                {
+                    const Library& tlib = act.player_target != 0 ? state.players[1 - state.active_player_index].library
+                                                                 : ap.library;
+                    const int look = std::min(mach_look, static_cast<int>(tlib.size()));
+                    std::size_t n_disp = 0;   // sum_k look!/(look-k)!
+                    for (int kk = 0; kk <= look; ++kk)
+                    {
+                        std::size_t f = 1;
+                        for (int j = 0; j < kk; ++j) { f *= static_cast<std::size_t>(look - j); }
+                        n_disp += f;
+                    }
+                    const std::size_t k_max = look > 0 ? n_disp - 1 : 0;
+                    // A keep-vs-shuffle provider materialises its Ponder pairs into `extra`, which never meets a lazy
+                    // block (the note below): this look then materialises too.
+                    PbLazyLayout* const mlz = ResolveProvider(state).ReorderKeepShuffleOnly(state) ? nullptr : pon_lz;
+                    if (pond_materialize) { cantripattr::NoteFan(cantripattr::kPonder, static_cast<long long>(k_max)); }
+                    if (mlz != nullptr && k_max > 0)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.ponder_choice = 1;
+                        mlz->AddFan(std::move(v), static_cast<int>(k_max), kFanPonder, pi);
+                    }
+                    for (std::size_t k = 1; pond_materialize && mlz == nullptr && k <= k_max; ++k)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.ponder_choice = static_cast<int>(k);
+                        extra.push_back(std::move(v));
+                    }
+                    break;   // vary ONE look per variant; a second resolves by the provider's default
+                }
                 if (PonderAxisPartial() && !PonderSetIsMixed(state, d->params.cast_reorder)) { break; }
                 // A provider with a user-given ORDER rule may narrow the fan to keep-in-its-order vs
                 // shuffle (ReorderKeepShuffleOnly): the keep_decision branch below.
@@ -136283,7 +136465,8 @@ static bool BpCanonFrontPays(const GameState& state)
     for (const Card& c : state.ActivePlayer().hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && (d->params.put_back_from_hand > 0 || d->params.cast_reorder > 0)) { return true; }
+        if (d != nullptr && (d->params.put_back_from_hand > 0 || d->params.cast_reorder > 0
+                             || d->params.look_top_target_player_exile_reorder > 0)) { return true; }
     }
     return false;
 }
