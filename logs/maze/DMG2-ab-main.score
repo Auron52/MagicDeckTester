@@ -1,0 +1,50 @@
+gods2hg_d5   on vs off: n=600 (of 600/600) net_turns=-79 mean=-0.1317 se=0.0285 faster=78 slower=18 wins 577->575
+    SLOWER gods2hg_d5 gi=37 5->8
+    SLOWER gods2hg_d5 gi=45 7->9
+    SLOWER gods2hg_d5 gi=110 5->6
+    SLOWER gods2hg_d5 gi=125 6->7
+    SLOWER gods2hg_d5 gi=154 8->9
+    SLOWER gods2hg_d5 gi=210 5->6
+    SLOWER gods2hg_d5 gi=313 5->9
+    SLOWER gods2hg_d5 gi=337 6->7
+    SLOWER gods2hg_d5 gi=338 6->9
+    SLOWER gods2hg_d5 gi=353 6->7
+    SLOWER gods2hg_d5 gi=373 6->9
+    SLOWER gods2hg_d5 gi=437 7->9
+    SLOWER gods2hg_d5 gi=456 6->7
+    SLOWER gods2hg_d5 gi=463 6->9
+    SLOWER gods2hg_d5 gi=537 5->6
+    SLOWER gods2hg_d5 gi=540 8->9
+    SLOWER gods2hg_d5 gi=562 5->9
+    SLOWER gods2hg_d5 gi=586 6->9
+gods_d0      on vs off: n=1000 (of 1000/1000) net_turns=+0 mean=+0.0000 se=0.0000 faster=0 slower=0 wins 139->139
+gods_d3      on vs off: n=600 (of 600/600) net_turns=-64 mean=-0.1067 se=0.0208 faster=65 slower=15 wins 585->582
+    SLOWER gods_d3 gi=38 5->6
+    SLOWER gods_d3 gi=40 5->6
+    SLOWER gods_d3 gi=99 5->6
+    SLOWER gods_d3 gi=110 5->6
+    SLOWER gods_d3 gi=125 6->7
+    SLOWER gods_d3 gi=130 7->9
+    SLOWER gods_d3 gi=167 7->8
+    SLOWER gods_d3 gi=217 8->9
+    SLOWER gods_d3 gi=238 7->9
+    SLOWER gods_d3 gi=273 6->9
+    SLOWER gods_d3 gi=437 5->6
+    SLOWER gods_d3 gi=456 5->6
+    SLOWER gods_d3 gi=467 5->6
+    SLOWER gods_d3 gi=558 6->7
+    SLOWER gods_d3 gi=577 6->8
+gods_d5      on vs off: n=600 (of 600/600) net_turns=-86 mean=-0.1433 se=0.0222 faster=74 slower=11 wins 587->591
+    SLOWER gods_d5 gi=37 5->8
+    SLOWER gods_d5 gi=110 5->6
+    SLOWER gods_d5 gi=125 6->7
+    SLOWER gods_d5 gi=154 6->9
+    SLOWER gods_d5 gi=337 6->7
+    SLOWER gods_d5 gi=348 6->7
+    SLOWER gods_d5 gi=353 6->7
+    SLOWER gods_d5 gi=463 6->7
+    SLOWER gods_d5 gi=537 5->6
+    SLOWER gods_d5 gi=558 6->7
+    SLOWER gods_d5 gi=562 5->6
+gods_smoke_d3_g7 on vs off: n=0 (of 0/0) net_turns=+0 mean=+0.0000 se=0.0000 faster=0 slower=0 wins 0->0
+gods_smoke_d5_g35 on vs off: n=0 (of 0/0) net_turns=+0 mean=+0.0000 se=0.0000 faster=0 slower=0 wins 0->0
