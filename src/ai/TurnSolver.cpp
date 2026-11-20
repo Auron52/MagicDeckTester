@@ -10018,7 +10018,79 @@ struct SacFodderMenuCtx
     int          bound        = 0;      // upper bound of the credit over every subset (the odometer's addend)
     std::vector<unsigned char> outlet_cand;   // per cand: puts an outlet onto the battlefield
     std::vector<unsigned char> bodies;        // per cand: matching bodies it puts onto the battlefield
+    // MTG_SAC_FODDER_INERT_PRUNE: per cand, a plan-cast outlet whose OWN body is dominated fodder (see
+    // FodderOwnBodyDominated); empty when the prune is off for this enumeration.
+    std::vector<unsigned char> own_dominated;
 };
+// THE INERT-FODDER DOMINANCE PRUNE (MTG_SAC_FODDER_INERT_PRUNE, DEFAULT ON under the lever). A body B the plan CASTS
+// from hand (no alternative cost) and eats for a SINGLE-colour outlet (colour C, `per` mana a body), where
+//   (a) B is fodder_inert -- nothing it carries acts in a main phase (CardDefinition::fodder_inert), and its cost
+//       holds at least `per` plain C pips;
+//   (b) every permanent on the battlefield and every card the plan may cast is fodder_board_audited, and every
+//       other card the active player owns (hand, library, graveyard; the exile zone) is fodder_deck_audited --
+//       nothing watches B being cast, entering, dying or being counted, no restricted mana can be laundered
+//       through it, and nothing reads this turn's history or the graveyard;
+// is DOMINATED as fodder: for any plan P that must eat B, P without B's cast reaches the same board with B in
+// hand instead of the graveyard and at least the same mana at every point -- the source that paid B's C pip
+// produces C (it paid one) and is held instead of spent, which is all eating B returns; the rest of B's cost is
+// mana left over. B in hand is never worse than B in the graveyard under (b) (a forced discard can still pick it).
+// So B's body is not credited; the menu still holds P without B (a subset of the same candidates, payable, so
+// admitted by every necessary-condition gate) and P itself whenever it is payable without eating B. The same
+// argument covers the plan-cast OUTLET'S OWN body when nothing else is creditable: the plan then eats only the
+// outlet, and the plan without the outlet dominates it (fodder_inert_outlet: an outlet with no other ability).
+// Exact at every budget: it removes only dominated plans, so it can make no line unfindable.
+static bool FodderPipsCover(const ManaCost& c, Color col, int need)
+{
+    if (c.hybrid_count != 0 || c.phyrexian_count != 0 || c.twobrid_count != 0 || c.has_x) { return false; }
+    int pips = 0;
+    switch (col)
+    {
+        case Color::White: pips = c.white; break;
+        case Color::Blue:  pips = c.blue;  break;
+        case Color::Black: pips = c.black; break;
+        case Color::Red:   pips = c.red;   break;
+        case Color::Green: pips = c.green; break;
+        default: return false;
+    }
+    return pips >= need;
+}
+static bool FodderInertCast(const Action& a, Color col, int per)
+{
+    return a.kind == Action::Kind::CastFromHand && !a.alt_cost && a.def != nullptr && a.def->fodder_inert
+        && FodderPipsCover(a.cost, col, per);
+}
+// Premise (b): the board, the plan's cards and the rest of the active player's cards are audited.
+static bool FodderPruneAudited(const GameState& state, const std::vector<Action>& cands)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d == nullptr)
+        {
+            // A token (or an opponent spawn) has no definition: a vanilla body unless it carries a keyword.
+            if (!(p.is_token || p.card.m_number >= GameState::kFirstOppSpawnNumber)) { return false; }
+            continue;
+        }
+        if (!d->fodder_board_audited) { return false; }
+    }
+    for (const Action& a : cands)
+    {
+        const CardDefinition* d = a.def != nullptr ? a.def : db.Lookup(a.card_name);
+        if (d == nullptr || !d->fodder_board_audited) { return false; }
+    }
+    const Player& me = state.players[static_cast<std::size_t>(state.active_player_index)];
+    auto zone_ok = [&](const auto& zone)
+    {
+        for (const Card& c : zone)
+        {
+            const CardDefinition* d = db.LookupCached(c);
+            if (d == nullptr || !d->fodder_deck_audited) { return false; }
+        }
+        return true;
+    };
+    return zone_ok(me.hand) && zone_ok(me.library) && zone_ok(me.graveyard) && zone_ok(state.exile);
+}
 static void BuildSacFodderMenuCtx(const GameState& state, const std::vector<Action>& cands, SacFodderMenuCtx& out)
 {
     out = SacFodderMenuCtx{};
@@ -10051,6 +10123,41 @@ static void BuildSacFodderMenuCtx(const GameState& state, const std::vector<Acti
     if (!out.outlet_live)
     {
         out.board_bodies = SacPayFodderCount(state, active, so) + SacPayPlanFodderCount(state, active, so);
+    }
+    // MTG_SAC_FODDER_INERT_PRUNE (see FodderPipsCover above): drop the dominated bodies before the bound is taken.
+    const std::vector<Color>& prod = SacPayOutletColors(op);
+    if (plan_bodies > 0 && prod.size() == 1 && SacFodderInertPruneOn())
+    {
+        const Color col = prod[0];
+        bool any = false;
+        for (std::size_t j = 0; j < cands.size() && !any; ++j)
+        {
+            if (out.bodies[j] > 0 && !out.outlet_cand[j] && FodderInertCast(cands[j], col, out.per * out.bodies[j])) { any = true; }
+            if (out.outlet_cand[j] && cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost
+                && cands[j].def->fodder_inert_outlet && FodderPipsCover(cands[j].cost, col, out.per)) { any = true; }
+        }
+        if (any && FodderPruneAudited(state, cands))
+        {
+            out.own_dominated.assign(cands.size(), 0);
+            for (std::size_t j = 0; j < cands.size(); ++j)
+            {
+                if (out.bodies[j] == 0) { continue; }
+                if (out.outlet_cand[j])
+                {
+                    // Its own body only (an inert outlet makes no tokens), and only when nothing else can be eaten.
+                    if (cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost
+                        && cands[j].def->fodder_inert_outlet && out.bodies[j] == 1
+                        && FodderPipsCover(cands[j].cost, col, out.per))
+                    { out.own_dominated[j] = 1; }
+                    continue;
+                }
+                if (FodderInertCast(cands[j], col, out.per * out.bodies[j]))
+                {
+                    plan_bodies -= out.bodies[j];
+                    out.bodies[j] = 0;
+                }
+            }
+        }
     }
     out.bound = out.per * (out.board_bodies + plan_bodies);
     out.live  = out.bound > 0;
@@ -10088,6 +10195,12 @@ static int SacFodderMenuSubsetBodies(const SacFodderMenuCtx& ctx, const std::vec
     if (last_min == std::numeric_limits<int>::max()) { return 0; }   // the outlet alone: nothing to fund
     n -= last_min;
     if (!ctx.outlet_live) { n += ctx.board_bodies; }
+    // MTG_SAC_FODDER_INERT_PRUNE: a plan-cast outlet whose own body is the only creditable one eats only itself, and
+    // the plan without the outlet dominates that (see FodderPipsCover). With the bound's other bodies at 0, either
+    // no other body exists or a lone other cast's bodies arrive after every cost it could fund.
+    if (outlet_j >= 0 && !ctx.own_dominated.empty() && ctx.own_dominated[static_cast<std::size_t>(outlet_j)]
+        && n - ctx.bodies[static_cast<std::size_t>(outlet_j)] <= 0)
+    { return 0; }
     return n;
 }
 // THE PREFIX TEST (same lever). The aggregate credit above lets a body pay for the very cast that brings it in
@@ -88702,21 +88815,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 if (judged && !SacFodderSubsetOrderPays(state, cands, sf_ord)) { _ct.label = "sacfod-walk"; return; }
             }
         }
-        {   // TEMP DIAGNOSTIC (sacfodder-fix2): one line per OFFERED fodder-credited plan
-            static const bool s_sfm_dump = EnvOn("MTG_SFM_DUMP");
-            if (s_sfm_dump && sacfod_credited)
-            {
-                std::string nm, bd;
-                for (int j : sel) { nm += cands[static_cast<std::size_t>(j)].card_name.str(); nm += ","; }
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != state.active_player_index || p.card.IsLand()) { continue; }
-                    bd += p.card.m_name.str(); bd += ",";
-                }
-                std::fprintf(stderr, "[sfm] T%d live=%d admit=%d pool=%d need=%d plan=[%s] board=[%s]\n", state.turn_number,
-                             sacfod.outlet_live ? 1 : 0, sacfod_admit ? 1 : 0, pool.Total(), combined.ManaValue(),
-                             nm.c_str(), bd.c_str());
-            }
+        // MTG_SAC_FODDER_WAVE: a fodder-credited plan is admitted in MTG_BP_DEV_SEQ's SECOND pass only. In the first
+        // pass (g_devseq_suppress) it is dropped HERE, after every gate, and recorded as a latent occurrence -- so the
+        // first pass searches the lever-off menu, the second pass runs (FullSearchLine's two passes) and searches the
+        // credited plans under the first pass's win turn - 1 as its root cut, and every first-pass node whose walk
+        // met one is dirty (re-walked there, never carried or filed as a full-tree answer: the dev-seq machinery's
+        // own provenance). A budget-staged admission order (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK"): a finite budget
+        // spends on the lever-off plans first and reaches these with what is left; at an unlimited budget both passes
+        // run and nothing is unfindable. Only where the two passes govern (the dev-seq latent site's own scope).
+        if (sacfod_credited && g_devseq_suppress > 0 && g_rollout_nest == 0 && g_bp_enum_depth == 0
+            && SacFodderWaveOn() && BpDevSeqOn())
+        {
+            g_devseq_latent_hit = true; ++g_devseq_latent_n;
+            g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+            _ct.label = "sacfod-wave";
+            return;
         }
         _ct.label = "OFFERED";
         {

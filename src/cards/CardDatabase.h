@@ -5596,6 +5596,23 @@ struct CardDefinition
     // fold's list), so the bound prices everything this card can do to a payment walk. false for a
     // Register-built definition (no JSON to audit) -- such a card sends the subset to the real walk.
     bool walk_bound_audited = false;
+    // THE INERT-FODDER DOMINANCE PRUNE's card-data premises (MTG_SAC_FODDER_INERT_PRUNE; the prune and its proof
+    // are at TurnSolver.cpp BuildSacFodderMenuCtx). Three audited WHITELISTS of raw keys (CardDatabase.cpp), so a
+    // param invented tomorrow is NOT audited and an unaudited card where the prune looks disables it:
+    //   fodder_inert         -- a CREATURE that does nothing in a main phase: its every key is combat-only, a
+    //                           static P/T lord or an echo (Goblin Lackey, Goblin Piledriver, Goblin King,
+    //                           Stingscourger). Cast and eaten in the same main, it is worth exactly its body.
+    //   fodder_inert_outlet  -- the same, but it may also BE the sac-for-mana outlet (Skirk Prospector).
+    //   fodder_board_audited -- watches no other creature's cast, entry, death or count and makes no restricted
+    //                           mana (a permanent, or a card the plan may cast, while the inert body is out).
+    //   fodder_deck_audited  -- the same for a card anywhere else in the game: a presence-only watcher (a death
+    //                           trigger, Krenko's count, Three Tree City, Cavern of Souls) is fine OFF the
+    //                           battlefield; anything that reads this turn's history or the graveyard is not.
+    // false for a Register-built definition (no JSON to audit).
+    bool fodder_inert         = false;
+    bool fodder_inert_outlet  = false;
+    bool fodder_board_audited = false;
+    bool fodder_deck_audited  = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

@@ -5739,6 +5739,20 @@ bool SacFodderNeededOnlyOn()
     static const bool env_on = EnvOn("MTG_SAC_FODDER_NEEDED_ONLY", true);
     return heurarm::Flag(heurarm::SAC_FODDER_NEEDED_ONLY, env_on);
 }
+bool SacFodderInertPruneOn()
+{
+    // MTG_SAC_FODDER_INERT_PRUNE (DEFAULT ON; read only under MTG_SAC_FODDER_MENU): see TurnSolver.cpp
+    // BuildSacFodderMenuCtx for the dominance argument and CardDefinition::fodder_inert for the premises.
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_INERT_PRUNE", true);
+    return heurarm::Flag(heurarm::SAC_FODDER_INERT_PRUNE, env_on);
+}
+bool SacFodderWaveOn()
+{
+    // MTG_SAC_FODDER_WAVE (DEFAULT ON; read only under MTG_SAC_FODDER_MENU): fodder-credited plans are admitted in
+    // MTG_BP_DEV_SEQ's second pass only (EnumeratePlansCore, after the fodder walk gate).
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE", true);
+    return heurarm::Flag(heurarm::SAC_FODDER_WAVE, env_on);
+}
 
 bool SacFodderPutKind(const Action& a)
 {
