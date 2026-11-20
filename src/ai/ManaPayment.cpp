@@ -966,12 +966,47 @@ static void CreditConversionLandAura(GameState& state, const Permanent& p, ManaP
 // the largest shortfall instead. A mana-payment choice (the standing exemption): it decides only which
 // colour a surplus that is spent nowhere else carries, so it can only make a pending activation payable.
 // No plan scope / no pending pip / not a burst source -> `fallback`, byte-identical.
-static Color BurstPendingActColour(const GameState& state, const CardDefinition& def,
-                                   const std::vector<Color>& prod, const ManaPool& pay_float, Color fallback)
+// MTG_BURST_ACT_COLOUR_PENDING (DEFAULT ON; heurarm BURST_ACT_COLOUR_PENDING; =0 -> the pre-2026-11-20 colour):
+// the BOARD's untap ability on the burst source itself, below (USER 2026-11-20: "Yes, we need to fix this.").
+static bool BurstActColourBoardOn()
 {
-    if (!IsSingleColorBurstSource(def) || prod.size() < 2 || !ActLineHoldEnabled()) { return fallback; }
-    const PlanTraits* pt = CurrentPlanTraits();
-    if (pt == nullptr) { return fallback; }
+    static const bool env = EnvOn("MTG_BURST_ACT_COLOUR_PENDING", true);
+    return heurarm::Flag(heurarm::BURST_ACT_COLOUR_PENDING, env);
+}
+// The colour of the first coloured pip, among those this source makes, of an own untap ability that can aim at
+// `src`; `none` when there is no such ability, the lever is off, or the rest of the line owes a colour.
+static Color BurstBoardUntapColour(const GameState& state, const std::vector<Color>& prod, const ManaPool& pay_float,
+                                   const Permanent* src, Color none)
+{
+    if (!BurstActColourBoardOn()
+        || LineDemandAnyPipColor(state, prod, pay_float, Color::Colorless) != Color::Colorless) { return none; }
+    std::vector<UntapAbilityRef> refs;
+    CollectCreatureUntapAbilities(state, src->controller_index, *src, refs);
+    for (const UntapAbilityRef& r : refs)
+    {
+        const Permanent* us = nullptr;
+        for (const Permanent& q : state.battlefield) { if (q.card.m_number == r.source_id) { us = &q; break; } }
+        if (us == nullptr) { continue; }
+        const std::optional<ManaCost> uc = UntapUnitCost(state, src->controller_index, r.shape, *us, *src);
+        if (!uc) { continue; }
+        const int pips[5] = { uc->white, uc->blue, uc->black, uc->red, uc->green };
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (pips[ci] <= 0) { continue; }
+            for (Color pc : prod) { if (static_cast<int>(pc) == ci) { return pc; } }
+        }
+    }
+    return none;
+}
+static Color BurstPendingActColour(const GameState& state, const CardDefinition& def,
+                                   const std::vector<Color>& prod, const ManaPool& pay_float, Color fallback,
+                                   const Permanent* src = nullptr)
+{
+    if (!IsSingleColorBurstSource(def) || prod.size() < 2) { return fallback; }
+    const PlanTraits* pt = ActLineHoldEnabled() ? CurrentPlanTraits() : nullptr;
+    // No plan scope (or the hold off): only the board rule below can apply -- before 2026-11-20 this returned
+    // `fallback` here, which is still what happens with MTG_BURST_ACT_COLOUR_PENDING=0 or no untapper.
+    if (pt == nullptr) { return src != nullptr ? BurstBoardUntapColour(state, prod, pay_float, src, fallback) : fallback; }
     const int paid[5] = { g_act_line_paid.white + g_act_line_current.white,
                           g_act_line_paid.blue  + g_act_line_current.blue,
                           g_act_line_paid.black + g_act_line_current.black,
@@ -987,6 +1022,21 @@ static Color BurstPendingActColour(const GameState& state, const CardDefinition&
         if (ci >= 5) { continue; }
         const int shortfall = pt->act_pips[ci] - paid[ci] - have[ci];
         if (shortfall > best_short) { best_short = shortfall; best = c; }
+    }
+    // THE BOARD'S UNTAP ON THIS SOURCE (MTG_BURST_ACT_COLOUR_PENDING; AccomplishedAlchemist 2026-11-20). An untap
+    // ability already on the battlefield that can aim at the source being tapped -- Crab Umbra on the Alchemist
+    // ({2}{U}), a live Galvanic Alchemist pair, Seedcradle Witch (CollectCreatureUntapAbilities, the one oracle) --
+    // is no pip of THIS plan's activations (act_pips holds only the plan's own), so the burst floated prod[0]:
+    // "cast Staff of Domination" at float U2 paid {3} with U2 + an Alchemist tap that floated W3, the Umbra's
+    // {2}{U} was unpayable, and the viewer's Combo Off route rolled back ("did not finish the game"). Float the
+    // colour of that untap's first coloured pip this source makes, so the surplus can re-buy the source's own
+    // {T}. Below the plan's own pending pips and below a colour the REST OF THE LINE owes (LineDemandAnyPipColor
+    // asked with a sentinel outside `prod`): those spend it for sure. A mana-payment choice (the standing
+    // exemption): it decides only which colour a surplus carries. No untapper aimed at the source -> unchanged.
+    if (best_short <= 0 && src != nullptr)
+    {
+        const Color b = BurstBoardUntapColour(state, prod, pay_float, src, Color::Colorless);
+        if (b != Color::Colorless) { return b; }
     }
     if (best_short > 0 || !def.params.mana_per_life_gained || !ResolveProvider(state).LifeScaledManaInOrderWalk())
     { return best; }
@@ -3705,7 +3755,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // last word, so a painland keeps its painless {C}. See its header (EDF seed 6 T4).
                 const std::vector<Color>& prod = pay_produces(*bdef, &bp);
                 const Color gen_pick = BurstPendingActColour(state, *bdef, prod, floating,
-                                                             LineDemandAnyPipColor(state, prod, floating, prod[0]));
+                                                             LineDemandAnyPipColor(state, prod, floating, prod[0]), &bp);
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick)
                                           : PainlessAuraPipColor(state, active, bp, *bdef, needed, nd_left, cost_in));
                 return true;
@@ -3809,7 +3859,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // choice source offers a generic pip. Grove {C} mode for generic still has last word.
                 col = DripLandAnyPipColor(state, active, *def,
                                           BurstPendingActColour(state, *def, prod, floating,
-                                                                LineDemandAnyPipColor(state, prod, floating, prod[0])));
+                                                                LineDemandAnyPipColor(state, prod, floating, prod[0]), &p));
             }
             else
             {

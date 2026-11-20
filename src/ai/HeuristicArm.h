@@ -1057,7 +1057,9 @@ enum Slot : int
     MAZE_DISCARD_BURGEONING,  // MTG_MAZE_DISCARD_BURGEONING  sub-lever of MAZE_MANABOND_DISCARD (USER 2026-11-20: "Yes, Burgeoning is probably droppable. It is a bit too unreliable."; "It's a lot better in 2HG, though." -- the 2HG treatment is the USER's call, per-format numbers owed): Burgeoning counts as a droppable accelerator. Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> Burgeoning is a kept card
     AA_LOOP_CAST_DRAW,        // MTG_AA_LOOP_CAST_DRAW  AccomplishedAlchemist (2026-11-19, seed 12345681 T3): a draw engine in HAND (Staff of Domination) is an untap-loop payoff -- ComputeUntapLoopNeed (f) kLoopPayCastDraw (the loop banks the engine's cast with the Alchemist left untapped) and the Combo Off rule row FIN-STAFF-HAND-DIG. The provider (heuristic) half of docs/design/aa-staff-in-hand-loop-cast-draw.md. DEFAULT ON; =0 -> no such need (the pre-2026-11-19 provider)
     BP_UNTAP_FLOAT,           // MTG_BP_UNTAP_FLOAT  breakpoint SITE 9 for an activated untap's REFUND (2026-11-19, the search half of docs/design/aa-staff-in-hand-loop-cast-draw.md): mana FLOATING beside a live mana creature an own activated untapper can aim at is an activation key (kActUntapFloat, valued by the float), so a plan whose trailing untaps refund mana -- which none of its casts, applied first, could spend -- re-plans the rest of the main phase onto it, and each further refund re-opens (MTG_SITE9_REOPEN, deviation sequences MTG_BP_DEV_SEQ). Completeness: 'untap, untap, cast the Staff off the float' was unfindable at every budget unless the provider recognised a loop need. DEFAULT ON; =0 -> no such key
-    AURA_UNTAP_HOST_SEARCH,   // MTG_AURA_UNTAP_HOST_SEARCH  AccomplishedAlchemist (2026-11-19, seed 12345681 T3; docs/design/aa-staff-in-hand-loop-cast-draw.md): an Aura that UNTAPS its host (untap_enchanted_cost, Crab Umbra) re-uses the HOST's {T}, so each own host with a tap use (a mana ability or a {T} ability) is its own SEARCHED plan -- the plan signature keys it (#A) and the late-bind fold covers only the hosts without one. The AURA CAST HOST RANKING (USER 2026-10-06) still picks among the rest. Completeness: Umbra on the Alchemist (the whole combo) was never searched at any budget. DEFAULT ON; =0 -> one host per plan class (the pre-2026-11-19 fold)
+    AURA_LATE_BIND_RANK,      // MTG_AURA_LATE_BIND_RANK  the late-bound creature-Aura host walk's FAST PATH (BindAuraLateHosts) reads the deck provider's host order (DecisionProvider::CreatureAuraHostRank, AuraHostKey::combo) before its dork tie-break, so it binds exactly what the full key would (AccomplishedAlchemist 2026-11-20, USER: "Obviously in this deck Accomplished Alchemist is the target"; seed 12345681 T3: no plan ever put Crab Umbra on the Alchemist). DEFAULT ON; =0 -> the dork tie-break only (pre-2026-11-20; inexact whenever a provider ranks hosts)
+    SITE9_AFTER_DEFERRED,     // MTG_SITE9_AFTER_DEFERRED  breakpoint SITE 9 (post-entry activation) after a DEFERRED continuation (sites 3/5/6/10), both worlds: a continuation that casts an activated permanent (Living Wish -> Brindle Boar, then the Boar + Crab Umbra) gets the post-entry re-plan the main section gets (AccomplishedAlchemist 2026-11-20, seed 12345681 T3). Searched-only, budget-staged by the wave walker (MTG_BP_DEV_SEQ). DEFAULT ON; =0 -> no site 9 after a deferred continuation (pre-2026-11-20)
+    BURST_ACT_COLOUR_PENDING, // MTG_BURST_ACT_COLOUR_PENDING  a single-colour BURST source (Accomplished Alchemist's X) floats the colour the plan's pending/board activations need (BurstPendingActColour: an own untap Aura's {2}{U} on a live host counts), not prod[0] (AccomplishedAlchemist 2026-11-20, USER: "Yes, we need to fix this."). DEFAULT ON; =0 -> the pre-2026-11-20 colour
     COUNT
 };
 
@@ -2059,7 +2061,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_DISCARD_BURGEONING",
         "MTG_AA_LOOP_CAST_DRAW",
         "MTG_BP_UNTAP_FLOAT",
-        "MTG_AURA_UNTAP_HOST_SEARCH",
+        "MTG_AURA_LATE_BIND_RANK",
+        "MTG_SITE9_AFTER_DEFERRED",
+        "MTG_BURST_ACT_COLOUR_PENDING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
