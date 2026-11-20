@@ -1449,6 +1449,8 @@ INERT_PARAMS = {
     "etb_other_creatures_pump_tough": "automatic ETB team pump (End-Raze Forerunners, toughness half; Boars I3a)",
     "etb_other_creatures_grant_vigilance": "automatic ETB team keyword grant (End-Raze Forerunners: vigilance until EOT, no choice; Boars I3a)",
     "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
+    "tap_self_damage_is_trigger": "classification of City of Brass's ping (a triggered ability, removed by Blood Sun); no choice",
+    "lands_lose_nonmana_abilities": "static (Blood Sun, layer 6): changes how lands enter / tap, offers no choice; the land-position axis it opens is the existing land= / landat= queue",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",
     "lord_excludes_self": "lord effect detail", "affinity_for_subtype": "cost reduction",

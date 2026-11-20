@@ -488,6 +488,7 @@ TEST_CASE("Land-drop timing: a deck with no landfall card never emits a land-aft
     GameState s = FreshLf();
     s.deck_has_landfall = false;
     s.deck_has_scry_watcher = false;   // the other land-position watcher kind (Galadriel), also absent
+    s.deck_has_land_ability_loss = false;   // ...and the third (a Blood Sun list, LandOrderMatters), also absent
     for (int i = 0; i < 6; ++i) { PutLf(s, "Forest", 10 + i); }
     s.players[0].hand.push_back(HandLf(kBaloths, 1));
     s.players[0].hand.push_back(HandLf("Forest", 2));

@@ -762,6 +762,15 @@
     "toughness": null,
     "type_line": "Land — Swamp Mountain"
   },
+  "Blood Sun": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "When this enchantment enters, draw a card.\nAll lands lose all abilities except mana abilities.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Bloodghast": {
     "cmc": 2.0,
     "keywords": [

@@ -1402,3 +1402,67 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
   `BatchPrepayMainCasts` and back out with 0 left -- R3's 8-slot overflow did not bite on this line).
   `test/scenarios.sh` 600/600 (10 new `bloodsun_*`). Smoke: 235/235 PASS, **0 moved digests** vs
   `build/scratch/bloodsun/impl0/smoke-step0-batch.log` (saved as `impl2/smoke-step2-batch.log`).
+
+### Implementation notes (step 3)
+**Commits:** WIP `f25409835` (implementer 1: everything below except the last bullets) + the step-3 finishing commit
+(`git log --grep "Blood Sun step 3:"`: tests, scenarios, snapshot, viewer classification, these notes).
+- **What landed** (handoff `logs/bloodsun/impl-step3-handoff.md` lists every site): params
+  `lands_lose_nonmana_abilities` (Blood Sun) and `tap_self_damage_is_trigger` (City of Brass); the single land-param
+  classification `src/cards/LandAbilityClasses.h` (Mana / Gated / SelfGuard; unclassified = SelfGuard); the load-time
+  projection (`CardDefinition::land_ability_loss_twin`, `mana_only_identity`, `land_ungated_ability`); the stamp
+  `GameState::deck_has_land_ability_loss` (default TRUE unstamped, stamped `garth || Blood Sun in main/side`); the
+  predicate + `EffectiveLandDef` / `EffectiveLandIdentity` / `EffectiveTapSelfDamage` (`src/core/LandAbilityLoss.h`);
+  G1-G9 as §2.3; the Karoo deferral judged on the plan START state (under Blood Sun a Karoo is a plain land, played
+  first) in every world; the §2.4 self-guard (`[bloodsun] ... gate it before playing this list`, exit 3);
+  `BloodSunProvider` (NotAssessed, routed right after `stuffy`, i.e. above AntiLifegain); cards.json Blood Sun.
+- **Deviation 1 (§2.3 G2):** depletion / mana-counter lands (`enters_tapped_with_depletion`, `enters_with_mana_counters`,
+  `mana_counters_are_mining`, `sacrifice_when_mana_counters_empty`), `etb_choose_color` and the colour/type choice
+  lands, and Cavern / Unclaimed Territory (`colored_creature_*`) are SELF-GUARD, not gated: dropping their entry would
+  leave a mana ability the engine still models as working with no counter / chosen colour. None is in the list.
+- **Deviation 2 (G4):** the self-guard does NOT scan the opponent's land pool (the passive opponent models only
+  enters-tapped and fetch, both gated; scanning would abort on its fetchlands).
+- **Addition (sound widening, param-gated):** the land-POSITION axis is opened for a Blood Sun list —
+  `LandOrderMatters` also returns `deck_has_land_ability_loss`, `PutsLandfallWatcher` counts a
+  `lands_lose_nonmana_abilities` cast, and `DecisionProvider::KarooEntryObserver`'s base returns true for it — so
+  "land before / after Blood Sun" is searched. It only offers more lines (costs branching for this deck only).
+- **Disclosed, not gated:** the payment ORDER heuristics that read `tap_self_damage` (pain-last ordering in
+  `ManaPayment.cpp`) and the armed-only pricing (`PaymentDamageLowerBound`) — the standing mana-payment exemption; the
+  deck is not `dmg_events_armed`.
+- **City of Brass identity:** the new param changes City's DefHash / `behaviour_identity`. Play elsewhere is
+  byte-identical (read only under suppression; smoke below). The artifact queue's card-data axis
+  (`artifact_queue.py` `canon_card`: the whole entry minus name/oracle_text) will flag `card-data` on the three shipped
+  City decks — Creature Giving, Gods, Prevent Damage (each has a keep table + value leaf) — at FLAG_WEIGHT 0.0
+  (reported, not scored). Keep-journal provenance (`ExhaustiveKeep` `card_defs`) will attribute City as a changed card
+  on a regen re-run; no play or load gate reads it.
+- **THE KAROO GAP (parent ruling: root-cause it).** The top-level enumeration plays a deferred Karoo after the plan's
+  casts and enumerates those casts on the PRE-Karoo board (`add_for_land`), and the Karoo-position clones place it
+  before an observer cast, i.e. BEFORE Blood Sun; so no TOP-LEVEL plan holds "Blood Sun, Karoo, then a cast paid by
+  the Karoo". The line is nonetheless findable, through Blood Sun's own draw: `etb_self_draw` arms the site-10
+  put-in-hand breakpoint (`MTG_BP_PUT_IN_HAND`, default on), ApplyPlanDirect plays the deferred Karoo after the main
+  casts and BEFORE the deferred re-solve (AIEngine::TakeTurn the same), the Karoo now enters as its projection
+  (untapped, no bounce), and the continuation is enumerated on that board. Pinned by
+  `bloodsun_sun_then_karoo_untapped_funds_cast.json` (budget 0) and `bloodsun_sun_then_karoo_budgeted.json` (d3 b100):
+  the only turn-3 kill is Blood Sun -> Gruul Turf untapped -> Bolt, Bolt; with `MTG_BP_PUT_IN_HAND=0` it wins on turn 4
+  (route proof). No engine change. Residual boundary (stated, not fixed): the route rides the draw, so it needs a
+  non-empty library and runs at sink depth 0 / autonomous play; inside a continuation the re-solve is inline (the
+  nested continuation enumerates its own land drop on the post-Blood-Sun board), and a human orders it by committing
+  Blood Sun first (commit-the-line re-asks on the new board).
+- **Blood Sun's ETB draw fires for a cast enchantment in both worlds** (§9.4): the human scenario
+  `bloodsun_sun_etb_draw_casts_drawn.json` casts the drawn Bolt; the autonomous Karoo scenario's kill needs the drawn
+  Bolt (rollout finds it, executor plays it).
+- **Rules review (2d):** City tapped to PAY for Blood Sun still pings (Blood Sun is on the stack, CR 603.2 + City
+  ruling 3) — `bloodsun_city_pays_for_sun_pings.json` (20 -> 19, executor). Painland damage is part of the mana ability
+  and stays (Mana class). Rulings 5-6 (granted abilities, type-changing lands) are self-guard items; no card in the
+  list grants a land an ability. Blood Sun's draw resolves at once (goldfish: nothing can respond).
+- **Test fixes:** two pre-existing unit tests that hand-clear the land-position stamp bits now also clear
+  `deck_has_land_ability_loss` (`test_landfall.cpp` "a deck with no landfall card...", `test_cyclone_sound_folds.cpp`
+  Q36): its default-TRUE unstamped value re-opened the axis in those hand-built states. Real games are stamped.
+- **Cost audit (2d-bis):** `audit_card_costs.py` on Blood Sun: rc 0. Scryfall snapshot: Blood Sun appended to
+  `scryfall_reference.json` (no other entry touched); `audit_card_fields.py` rc 0 (oracle bracket note advisory only).
+- **Viewer:** Blood Sun has no choices (no DECISIONS.md row). `audit_viewer_decisions.py` classifies
+  `lands_lose_nonmana_abilities` and `tap_self_damage_is_trigger` as INERT_PARAMS (USER sign-off to collect);
+  `--no-sweep` rc 0 (the deck has no profile yet, so the dynamic sweep cannot run).
+- **Measurements (step 3 tree):** `mtg-test` 3804 cases, 3804 pass (the step-2 `Pirates routing` failure is fixed by
+  the Blood Sun row). `test/scenarios.sh` 610/610 (10 step-3 `bloodsun_*`: 6 by implementer 1, 4 here). Smoke: 235/235
+  PASS, **0 moved digests** vs `impl2/smoke-step2-batch.log` (City decks Gods and Creature Giving included; Prevent
+  Damage has no smoke row); saved as `build/scratch/bloodsun/impl3/smoke-step3-batch.log`.

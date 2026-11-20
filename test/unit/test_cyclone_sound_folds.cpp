@@ -423,6 +423,7 @@ GameState CycloneBoardSf(const std::vector<std::string>& lib, bool curator_out)
     s.deck_has_landfall               = false;
     s.deck_has_draw_ping              = false;
     s.deck_has_scry_watcher           = false;
+    s.deck_has_land_ability_loss      = false;   // no Blood Sun (LandOrderMatters' third reason)
     for (int k = 0; k < 3; ++k) { PutSf(s, "Island", 1 + k); }
     PutSf(s, "Unpredictable Cyclone", 10);
     if (curator_out) { PutSf(s, "Curator of Mysteries", 11); }
