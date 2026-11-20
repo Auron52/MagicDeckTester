@@ -242,3 +242,59 @@ either open candidate, its CEILING was measured with temporary counters (`MTG_UO
   (`TurnSolver::DecisionBudget()`, as the equip route does). It is inert at unlimited budget but moves budgeted
   play, so it needs its own A/B.
 
+
+## Pricing the walks: `MTG_UO_BUDGET_PRICE` (USER option (a)), 2026-11-20
+
+USER, 2026-11-20: *"I'm okay with trying (a), but we will reserve judgement until we see the results. 20% extra is
+kind of painful"*. Branch `wip/jumbo-uo-budget` (bfac80e72). **PROPOSED, DEFAULT OFF; adoption is the USER's call.**
+
+### The change
+
+* `MTG_UO_BUDGET_PRICE` (heurarm `UO_BUDGET_PRICE`, default OFF): the unlock-order search's walks charge
+  `TurnSolver::DecisionBudget()` one unit per `MTG_UO_BUDGET_PRICE_W` (default 16) cast steps, at a new unit site
+  `unlock_order` (census `u_unlock_order`). A step is one cast paid and resolved by the walk (`UnlockOrderDfsRec`'s
+  `step()`, or one cast of an order-by-order walk); a search is charged on its steps 0, W, 2W, ... (ceil, no
+  residual carried between searches).
+* Only the lever's own work is charged: at the ENUMERATION site the given order's path through the tree (inversion
+  floor 0 under `MTG_UO_FOLD`) is pre-lever work, never charged and never cut, so its verdict is always reached. The
+  other orders, and the APPLY site's given walk and nearest-order search, are charged.
+* `MTG_UO_BUDGET_CUT` (heurarm `UO_BUDGET_CUT`, default ON, inert while the price is off): the enumeration site's
+  search stops, before a charge, once the budget is `Exhausted() || Overrun()` (the equip route's per-link test). The
+  subset then stands or falls on the given order and the ETB order, as with the unlock lever off. The apply site is
+  charged and never cut (it realises a plan the search chose; the AA route's rule). The predicates count their binds,
+  so a plan list derived across a cut is never stored (cachecharge read guard).
+* Inert at an unlimited root by construction: `DecisionBudget()` is nullptr there, so the meter holds no budget and
+  nothing is charged, read or cut. (Deliberately no `CacheChargeNoteNull()` at a null budget: the cache's hit test
+  reads that note against the greedy budget too, which can be live at an unlimited root.)
+* Never a pick: a cut withholds an order the search did not reach; it chooses nothing.
+* Unit tests (`*Jumbo*` 22/22, full suite 3776/3776): the s30115214 apply board realises GSZ first with nothing charged
+  at an unlimited root, is charged at a finite one, and is still realised with the budget spent; on the s30119376
+  board the Satyr-#54 unlock line is cut from the menu only with the price on AND the budget spent.
+
+### The price (W = 16), by measurement
+
+`MTG_UO_PRICE_STATS=1`, Jumbo 400 games (gi 719000-719399, seed 30000000+gi, play settings), lever on, 2 threads:
+
+| site | searches | chargeable steps | exempt (given-path) steps | wall in the searches |
+|---|---|---|---|---|
+| enumeration | 147,719 | 2,535,367 | 342,881 | 4.48 s |
+| apply | 58,046 | 234,221 | 0 | 0.71 s |
+
+1,668 ns a step, setup included; ~4.62 s of it is lever work (the exempt share removed). The lever-off arm of the
+same batch ran 15,663 ns of game CPU per budget unit (5,689 units, 89.1 ms a game; lever on 100.1 ms), so the walks
+are worth ~295k units. Ceil-per-search pricing charges 456k at W=8, 350k at W=12, **304k at W=16**, 259k at W=24
+(beyond that the one-unit-a-search floor dominates). W = 16 bills the walks at their measured cost; the whole arm's
+CPU delta (11.0 ms a game, ~281k units) agrees. That is ~760 units a game on a ~5,750-unit game, +13%.
+
+### Inertness at `--depth 8 --budget-ms 0`
+
+Jumbo gi 719500-719599 (100 games), arms on / price+cut / price only: **100/100 byte-identical** (win turn, digest,
+units).
+
+### Held-out A/B (QUEUED 2026-11-20 12:44 UTC behind `claude_box.lock`; results land here)
+
+One pooled `mtg --batch` (`build/scratch/claude_jumbo_uo_budget/ab.json`, binary `mtg.w16` = bfac80e72, `MTG_PGO=0`,
+`MTG_RSS_CAP_GB=40`, 32 threads), seed = 30000000+gi, game_index = gi, play settings, **gi from 720000** (no earlier
+Jumbo A/B used 719000+; the earlier ones used 640000-660299 and 115000-116999). Arms: off = `MTG_PO_UNLOCK_ORDER=0`;
+on = unlock lever, price off (the shipped play); pc = price + cut; p = price only. Jumbo 10,000 games a arm; Angels,
+Boars, Bruna, Five Colour, Kitty Equipment 2,000 each (80,000 games).
