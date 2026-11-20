@@ -18740,6 +18740,79 @@
    "parameters": {
     "etb_opp_may_take_damage_to_sac": 4
    }
+  },
+  {
+   "name": "Keldon Champion",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Barbarian"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "Haste\nEcho {2}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)\nWhen this creature enters, it deals 3 damage to target player or planeswalker. [Every clause modelled. Haste is Keyword::Haste (it attacks the turn it lands). Echo {2}{R}{R} rides echo_cost -- the shared upkeep pay-or-sacrifice decision (Mogg War Marshal / Stingscourger precedent), SEARCHED by the echo axis (Plan::echo_choice, MTG_ECHO_AXIS) and surfaced to a human as the `echo` decision; 'came under your control since the beginning of your last upkeep' is the per-object Permanent::echo_resolved flag, so only the first upkeep after it enters asks. The ETB '3 damage to target player or planeswalker' is etb_damage_any 3 at the opponent's FACE: the passive opponent has no planeswalker and damage to ourselves never helps (the etb_damage_any precedent -- automatic, not asked of a human). x1 in 2HG: it is a single target, not 'each opponent'. Fired from the universal own-ETB cascade, so every enter route, executor and rollout alike. Not second-main relevant.]",
+   "template": "custom",
+   "parameters": {
+    "echo_cost": "{2}{R}{R}",
+    "etb_damage_any": 3
+   }
+  },
+  {
+   "name": "Keldon Marauders",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Vanishing 2 (This creature enters with two time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)\nWhen this creature enters or leaves the battlefield, it deals 1 damage to target player or planeswalker. [Every clause modelled. Vanishing is NOT in the keywords array: the engine's Keyword enum carries only keywords it reads, and vanishing is fully expressed by vanishing_counters 2 (the fading / devour convention). VANISHING (CR 702.63, new 2026-11-20): two TIME counters put AS IT ENTERS (Permanent::time_counters, at the universal enter cascade -- so a counter doubler doubles them, CR 614.1c), one removed at each of our upkeeps by PerformUpkeepVanishing (both worlds, beside fading), and sacrificed when the LAST comes off -- i.e. at the SECOND upkeep after it enters (2 -> 1, then 1 -> 0 and sacrificed), so cast on turn N it attacks on turn N+1 only. The sacrifice goes through the shared SacrificePermanentAt, so its leave trigger fires. 'Enters OR leaves' is ONE printed trigger with two conditions, modelled as two params: etb_damage_any 1 (the universal own-ETB cascade) and ltb_damage_any 1 (the shared FireLeavesBattlefieldTriggers -- any leave: the vanishing sacrifice, a sacrifice outlet, a death, a bounce). An upkeep sacrifice's 1 damage is dealt in the upkeep, so a lethal one wins that turn in both worlds. 'Target player or planeswalker' collapses to the opponent's FACE for both halves (no opponent planeswalker; damage to ourselves never helps -- the etb_damage_any precedent, not asked of a human); x1 in 2HG (a single target). No player decision anywhere: both vanishing steps are mandatory.]",
+   "template": "custom",
+   "parameters": {
+    "vanishing_counters": 2,
+    "etb_damage_any": 1,
+    "ltb_damage_any": 1
+   }
+  },
+  {
+   "name": "Flame Javelin",
+   "mana_cost": "{2/R}{2/R}{2/R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({2/R} can be paid with any two mana or with {R}. This card's mana value is 6.)\nFlame Javelin deals 4 damage to any target. [TWOBRID PIPS (the Beseech the Queen parse): each {2/R} is generic 2 plus ManaCost::twobrid metadata, so the mana value is 6 for every reader (CR 202.3f) and the card is red (CR 105.2). Which pips to pay with {R} is a SEARCHED branch (CollectActions' twobrid post-pass: one variant per coloured-pip count k = 0..3 -- {6}, {4}{R}, {2}{R}{R}, {R}{R}{R}). SOUND FOLD (MTG_TWOBRID_COLOUR_FOLD, default ON): when every unit of mana the cast could use is red (pool + floating all {R}, every permanent and every land in hand makes only {R}, nothing reads the mana spent) the fewest-mana variant dominates every other and is the only one emitted -- a mono-red Mountain board casts it for {R}{R}{R}; with any colourless / other-colour source the full fan is kept. The human plan menu always shows every payment. 4 damage to any target = direct_damage targeting any: the face, or a creature through the shared burn-target decision (a human picks on the board).]",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 4,
+    "targeting": "any"
+   }
+  },
+  {
+   "name": "Browbeat",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards. [PROVISIONAL opponent model (policy A, USER-owned decision pending, 2026-11-20; ONE place: BrowbeatOpponentTakesDamage in SpellEffects.h, the analog of the USER's Vexing Devil ruling): the opponent takes the 5 damage iff its life (the shared team life in 2HG) is > 5 with our hand empty, or > 8 while we hold any card (it guesses from our hand SIZE, never its contents; Browbeat itself and staged exiled cards are not counted). Taken: 5 noncombat damage from Browbeat to the opponent (marks it dealt damage / lost life this turn) and NO cards drawn. Declined: we draw three (draw_spell draw 3; an over-draw loses, CR 104.3c). The choice is the OPPONENT's, so it is neither a search branch nor a viewer decision; executor and rollout resolve it through the same ResolveDamageInsteadOfDraw. Our OWN 'take 5' option is never used: it is dominated (no draw and no damage to the opponent). 'Target player draws' targets US: the passive opponent's library is never worth handing three cards. SECOND-MAIN RELEVANT (PROVISIONAL, surfaced to the USER): the choice reads the opponent's life at resolution, which combat changes, so the param is in GoldFishRunner::DeckUsesSecondMain and the cast classifies to either main.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 3,
+    "opp_may_take_damage_instead_of_draw": 5
+   }
   }
  ]
 }

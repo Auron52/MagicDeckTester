@@ -204,6 +204,9 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // IS the power and toughness of every Saproling the Burst has made, so without the badge
         // a human cannot read their own board -- and it is also the number of activations left.
         if (p.fade_counters)    { cs.push_back({ "fade",      "fade",      p.fade_counters }); }
+        // TIME counters (vanishing -- Keldon Marauders): the count IS how many more upkeeps the body
+        // survives, so the human needs it to read the board.
+        if (p.time_counters)    { cs.push_back({ "time",      "time",      p.time_counters }); }
         if (p.quest_counters)   { cs.push_back({ "quest",     "quest",     p.quest_counters }); }
         // Hone counters (Dwalin): NOT optional display -- the total IS the equipped
         // creature's hidden power bonus, so without the badge the board's real power is
@@ -10600,6 +10603,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // The --scenario loader has silently dropped a new Permanent field three times;
             // see the partial-GameState note. Added with the field, not after.
             p.fade_counters     = e.value("fade_counters", 0);
+            p.time_counters     = e.value("time_counters", 0);   // vanishing (Keldon Marauders)
             p.created_by_number = e.value("created_by_number", 0);
             p.quest_counters    = e.value("quest_counters", 0);
             // +1/+1 counters (Walking Ballista's X / pinger fixtures) and Heliod's until-EOT lifelink grant,

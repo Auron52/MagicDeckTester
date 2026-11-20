@@ -1126,6 +1126,11 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
 {
     Player& controller = state.players[entry.controller_index];
     int n = SpellDrawCount(state, def.params);
+    // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's choice first -- taken, nothing is drawn.
+    // Lockstep twin: the rollout's apply_one DrawSpell branch (both through ResolveDamageInsteadOfDraw).
+    if (def.params.opp_may_take_damage_instead_of_draw > 0
+        && ResolveDamageInsteadOfDraw(state, entry.controller_index, def))
+    { n = 0; }
 
     // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /
     // Ponder's order is decided here, after the draw / the look, against what the resolution reveals.

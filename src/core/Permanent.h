@@ -888,6 +888,15 @@ struct Permanent
     // is returned to the battlefield under its owner when this permanent leaves (ReturnLinkedExile).
     // Sits in the pad before copy_printed_name (sizeof unchanged). Folded NONZERO-gated.
     int       linked_exile_number  = 0;
+    // TIME counters from VANISHING (CR 702.63; Keldon Marauders, CardParams::vanishing_counters): put AS
+    // THE PERMANENT ENTERS at the universal enter cascade, one removed at each of the controller's
+    // upkeeps (PerformUpkeepVanishing), sacrificed when the LAST one comes off. A dedicated int (the
+    // fade_counters rationale: kept out of the counters vector EffectivePower iterates). FUTURE-
+    // DETERMINING -- it decides which upkeep sacrifices the body (and fires its leave trigger) -- so it
+    // is folded into every state key that carries fade_counters, NONZERO-gated so every other deck keeps
+    // its exact prior key. Sits in the 8-byte slot before lens_imprinted_land (sizeof 328 -> 336, see
+    // the Dominance.h note). Read only for a card with vanishing_counters -> inert elsewhere.
+    int       time_counters        = 0;
     // Extraplanar Lens: the name of the land exiled by this copy's optional imprint trigger.
     // Empty means the trigger was declined or its target was no longer legal.
     InternedName lens_imprinted_land;

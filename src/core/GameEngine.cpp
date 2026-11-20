@@ -76,6 +76,7 @@ static void CollectBoardState(const GameState& state,
         // reads a Fungus board by these two numbers, so they must reach the viewer.
         if (p.spore_counters != 0) { snap.counters.push_back({ "spore", p.spore_counters }); }
         if (p.quest_counters != 0) { snap.counters.push_back({ "quest", p.quest_counters }); }
+        if (p.time_counters  != 0) { snap.counters.push_back({ "time",  p.time_counters  }); }   // vanishing
 
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns
@@ -776,6 +777,7 @@ void GameEngine::UpkeepTail(GameState& state)
     // Fading (Saproling Burst): remove a fade counter, or sacrifice if you cannot -- and the LTB
     // then destroys every token it made. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
     PerformUpkeepFading(state);
+    PerformUpkeepVanishing(state);   // Keldon Marauders (lockstep twin of the other upkeep site)
     // Abhorrent Overlord: "At the beginning of your upkeep, sacrifice a creature" -- the victim the
     // previous turn's plan pinned (Plan::demon_trigger_choice, high byte), consumed here whatever happens.
     // Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn; deck-gated -> inert elsewhere.

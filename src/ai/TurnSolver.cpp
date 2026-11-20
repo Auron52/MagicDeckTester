@@ -721,6 +721,9 @@ inline uint64_t FungibilityKey(const Permanent& p)
     // this permanent has already made. A key that cannot see it would collide two boards that
     // play out completely differently.
     Mix(h, static_cast<uint64_t>(p.fade_counters) << 48);
+    // Vanishing's time counters (Keldon Marauders): which upkeep sacrifices the body. Nonzero-gated so every
+    // other deck keeps its exact prior key.
+    if (p.time_counters != 0) { Mix(h, 0x7133E00000000000ull ^ static_cast<uint64_t>(p.time_counters)); }
     Mix(h, static_cast<uint64_t>(p.quest_counters) << 32 | static_cast<uint64_t>(p.loyalty));
     if (p.hone_counters != 0) { Mix(h, static_cast<uint64_t>(p.hone_counters) * 0x9E3779B1ull); }
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
@@ -3707,6 +3710,7 @@ static std::string BoardSignature(const GameState& s)
         // distinguished. Nonzero-gated, so every other deck keeps the EXACT prior signature.
         if (p.spore_counters > 0) { e += "/sp" + std::to_string(p.spore_counters); }
         if (p.fade_counters > 0)  { e += "/fd" + std::to_string(p.fade_counters); }
+        if (p.time_counters > 0)  { e += "/tm" + std::to_string(p.time_counters); }   // vanishing (gated)
         if (p.quest_counters > 0) { e += "/qu" + std::to_string(p.quest_counters); }
         // Hone counters (Dwalin) MUST be keyed: the attack half flips them MID-TURN, and they are a
         // bare int, not a CounterList entry, so the generic `/c` field never sees them.
@@ -16614,6 +16618,15 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
 
     if (def.tmpl == CardTemplate::DrawSpell)
     {
+        // Browbeat: worth its N damage when the opponent's (PROVISIONAL policy A) choice takes it, else its
+        // draws. Evaluated IN HAND, so this copy is not one of the cards we would still hold.
+        if (def.params.opp_may_take_damage_instead_of_draw > 0)
+        {
+            const int me = state.active_player_index;
+            if (BrowbeatOpponentTakesDamage(state, 1 - me, def.params.opp_may_take_damage_instead_of_draw,
+                                            HeldCardCount(state, me) - 1 > 0))
+            { return def.params.opp_may_take_damage_instead_of_draw * DMG; }
+        }
         // 1 damage-equivalent per card: draw spells trail burn and creatures,
         // but are still worth casting when other options are exhausted.
         return SpellDrawCount(state, def.params) * DMG;
@@ -20937,7 +20950,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // membership, so UNEQUAL counts still never share a class -- see the note above this function.
     if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0
                                     || p.hone_counters != 0
-                                    || p.fade_counters != 0))
+                                    || p.fade_counters != 0 || p.time_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
@@ -21832,6 +21845,8 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
         mix(static_cast<std::uint64_t>(src.fade_counters));
         mix(static_cast<std::uint64_t>(src.quest_counters));
         mix(static_cast<std::uint64_t>(src.hone_counters));
+        // Vanishing's time counters: nonzero-gated so every other deck's tag is unchanged.
+        if (src.time_counters != 0) { mix(0x7133Eull); mix(static_cast<std::uint64_t>(src.time_counters)); }
     }
     const int t = static_cast<int>(h & 0x7fffffff);
     return t == 0 ? 1 : t;   // never collide with "do not fold"
@@ -27009,7 +27024,7 @@ static int BuildFungibleEquipClasses(const GameState& state,
             // list is "every field that can differentiate two copies" and an incomplete one is the
             // documented failure mode -- keep it exhaustive rather than argue reachability.
             || src->spore_counters != 0 || src->quest_counters != 0
-            || src->fade_counters != 0)
+            || src->fade_counters != 0 || src->time_counters != 0)
         { continue; }
         // HONE COUNTERS ARE CARRIED IN THE KEY, NOT REFUSED -- and that is the difference between
         // this collapse working on KittyEquipment v2 and finding nothing at all.
@@ -27380,6 +27395,7 @@ static std::string LandHostClassKey(const GameState& state, const LandHostClassC
                     && lp->lore_counters == 0   && lp->storage_counters == 0
                     && lp->ice_counters == 0    && lp->age_counters == 0
                     && lp->spore_counters == 0  && lp->fade_counters == 0
+                    && lp->time_counters == 0
                     && lp->quest_counters == 0
                     && (!LandAuraHostClassFoldOn() || lp->counters.empty());
     if (!plain) { return std::string(); }
@@ -38389,6 +38405,10 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // Spectacle: the alternate cost turns ON during combat (Light Up the Stage -- the USER's
     // named example), so post-combat is cheaper-or-equal and never worse.
     if (p.spectacle_cost.has_value()) { return MP::Main2; }
+    // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's take-or-decline is read off its life AT
+    // RESOLUTION, which combat changes, and the declined half draws three that can dig into a main-1 card --
+    // so either main can be the right one. Both (the search decides per state).
+    if (p.opp_may_take_damage_instead_of_draw > 0) { return MP::Both; }
     // ATTACK-HELPING classes stay pre-combat (USER placement rule 2026-08-15: bake in "the
     // cards that help with the attack phase" explicitly, so the residual doubt class can
     // defer). Mirrors the per-card signals DeckFeedsCombat scans -- pumps, anthems, haste
@@ -42901,6 +42921,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && !def.params.morph_cost.has_value() && !def.params.megamorph_cost.has_value()
             // EMERGE (Decimator): the emerge variants are priced off the victim -- the post-pass gates them.
             && !def.params.emerge_cost.has_value()
+            // TWOBRID ({2/R}, Flame Javelin / Beseech): the printed MV 6 is the ALL-GENERIC side; the coloured
+            // variants cost as little as 3, so the printed cost is no bound (the post-pass emits them).
+            && def.card.m_mana_cost.twobrid_count == 0
             && EffectiveCost(def, state).ManaValue() > mana_ceiling
             && !free_charge_live)
         { continue; }
@@ -54787,10 +54810,62 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // (the most {B} pips it covers), so a leaf never prices Beseech as a 6-drop it would in fact
     // cast for {B}{B}{B}. The full-cost base survives only when no coloured variant is payable.
     // Gated on twobrid_count -> byte-identical for every deck without a twobrid card.
+    //
+    // THE MONO-COLOUR FOLD (MTG_TWOBRID_COLOUR_FOLD, DEFAULT ON; =0 disables -- Flame Javelin, Creature Burn
+    // 2026-11-20). A SOUND DOMINANCE COLLAPSE of the decision-space fan (CLAUDE.md "collapse wasted search
+    // unconditionally"), never a heuristic: when EVERY unit of mana this cast could be paid with is the pips'
+    // colour -- the turn pool plus floating mana holds that one colour and nothing else (no {C}, no wild),
+    // every permanent we control produces only that colour (EffectiveProducesFor; a land Aura refuses), every
+    // land in hand does too, and no permanent of ours reads the mana SPENT on a cast (Raggadragga's
+    // cast_trigger_untap_pump_target_min_spent, the one reader) -- then payability and leftover depend on the
+    // TOTAL alone, and any payment of a variant with more mana can be turned into one of the fewest-mana variant
+    // using a SUBSET of the same taps (each unit it spent could have been the colour). So the fewest-mana
+    // variant (ties -> the most coloured pips: equivalent in a one-colour world) dominates every other and is
+    // the only one emitted, REPLACING the base. Reductions are respected: the variants are priced off the
+    // action's (already reduced) cost, so a generic reduction that makes a partly-generic variant cheaper picks
+    // that one. The Beseech the Queen deck (Prevent Damage) never qualifies -- its lands all make several
+    // colours or {C} -- so it is byte-identical. Human play is never folded: the human sees every payment.
     {
         const bool tb_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        static const bool s_tb_colour_fold = EnvOn("MTG_TWOBRID_COLOUR_FOLD", true);   // DEFAULT ON; =0 disables
         bool     tb_pool_ready = false;
         ManaPool tb_pool;
+        int      tb_mono = -2;   // -2 = not computed; -1 = the board is not one colour; else the Color ordinal
+        auto tb_mono_colour = [&]() -> int {
+            if (tb_mono != -2) { return tb_mono; }
+            tb_mono = -1;
+            ManaPool pl = turn_pool();
+            pl.AddPool(state.floating_mana);
+            if (pl.wild != 0 || pl.colorless != 0 || pl.Total() <= 0) { return tb_mono; }
+            const int buckets[5] = { pl.white, pl.blue, pl.black, pl.red, pl.green };
+            int col = -1;
+            for (int c = 0; c < 5; ++c)
+            {
+                if (buckets[c] == 0) { continue; }
+                if (col >= 0) { return tb_mono; }   // two colours
+                col = c;
+            }
+            const int me = state.active_player_index;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me || q.def_absent) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd == nullptr) { continue; }
+                if (qd->params.cast_trigger_untap_pump_target_min_spent > 0 || qd->params.is_land_aura) { return tb_mono; }
+                for (Color c : EffectiveProducesFor(state, me, *qd, &q, /*in_hand=*/false))
+                { if (static_cast<int>(c) != col) { return tb_mono; } }
+            }
+            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd == nullptr || !hd->card.IsLand()) { continue; }
+                const std::vector<Color>& prod = EffectiveProduces(state, me, *hd, /*in_hand=*/true);
+                if (prod.empty()) { return tb_mono; }   // a fetch / utility land: refuse rather than reason about it
+                for (Color c : prod) { if (static_cast<int>(c) != col) { return tb_mono; } }
+            }
+            tb_mono = col;
+            return tb_mono;
+        };
         const std::size_t tb_n = actions.size();
         for (std::size_t i = 0; i < tb_n; ++i)
         {
@@ -54798,6 +54873,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].free_cast || actions[i].alt_cost) { continue; }
             if (actions[i].kind != Action::Kind::CastFromHand) { continue; }
             const int pips = actions[i].cost.twobrid_count;
+            if (tb_decision_space && s_tb_colour_fold && !HumanPlayActive())
+            {
+                bool one_colour = true;
+                for (int k = 0; k < pips; ++k)
+                { if (actions[i].cost.twobrid_color[k] != actions[i].cost.twobrid_color[0]) { one_colour = false; } }
+                if (one_colour && tb_mono_colour() == static_cast<int>(actions[i].cost.twobrid_color[0]))
+                {
+                    int best_k = 0;
+                    int best_mv = actions[i].cost.ManaValue();
+                    for (int k = 1; k <= pips; ++k)
+                    {
+                        ManaCost c = actions[i].cost;
+                        c.PayTwobridWithColor(k);
+                        if (c.ManaValue() <= best_mv) { best_mv = c.ManaValue(); best_k = k; }
+                    }
+                    if (best_k > 0)
+                    {
+                        actions[i].cost.PayTwobridWithColor(best_k);
+                        actions[i].twobrid_colored = best_k;
+                    }
+                    continue;
+                }
+            }
             if (tb_decision_space)
             {
                 for (int k = 1; k <= pips; ++k)
@@ -61929,6 +62027,15 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
         {
             const int me = state.active_player_index;
             if (VexingDevilOpponentTakesDamage(state, me, 1 - me, a.def->params.etb_opp_may_take_damage_to_sac))
+            { out.trig[j] = 1; }
+        }
+        // Browbeat: the same opponent's-choice shape. A spectacle cast after it is still in hand when Browbeat
+        // resolves, so the policy is read with a card held (the Devil's reasoning above).
+        else if (a.def != nullptr && a.def->params.opp_may_take_damage_instead_of_draw > 0)
+        {
+            const int me = state.active_player_index;
+            if (BrowbeatOpponentTakesDamage(state, 1 - me, a.def->params.opp_may_take_damage_instead_of_draw,
+                                            /*we_hold_cards=*/true))
             { out.trig[j] = 1; }
         }
     }
@@ -71804,6 +71911,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.lore_counters == b.lore_counters && a.storage_counters == b.storage_counters
         && a.loyalty == b.loyalty && a.ice_counters == b.ice_counters && a.age_counters == b.age_counters
         && a.spore_counters == b.spore_counters && a.fade_counters == b.fade_counters
+        && a.time_counters == b.time_counters
         && a.quest_counters == b.quest_counters && a.hone_counters == b.hone_counters
         && a.linked_exile_number == b.linked_exile_number && a.copy_printed_name == b.copy_printed_name
         && a.lens_imprinted_land == b.lens_imprinted_land;
@@ -77331,6 +77439,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!is_ei && def.params.cast_scry > 0)    { ScryTop(state, def.params.cast_scry); }
             if (!is_ei && def.params.cast_reorder > 0) { ReorderTopOrShuffle(state, def.params.cast_reorder, def.card.m_name, ponder_keep, def.params.draw); }
             int n = is_ei ? 0 : SpellDrawCount(state, def.params);
+            // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's choice first -- taken, nothing is
+            // drawn (n = 0, so every breakpoint below sees the hand unchanged, exactly as the executor's).
+            // Lockstep twin: EffectHandler::ResolveDrawSpell (both through ResolveDamageInsteadOfDraw).
+            if (!is_ei && def.params.opp_may_take_damage_instead_of_draw > 0
+                && ResolveDamageInsteadOfDraw(state, state.active_player_index, def))
+            { n = 0; }
             if (def.params.stages_cards)
             { n = std::min(n, static_cast<int>(ap.library.size())); }
             if (!is_ei && def.params.stages_cards)
@@ -83477,6 +83591,7 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
     // Fading (Saproling Burst): remove one, or sacrifice if you cannot -- and the LTB then
     // destroys every token it made. Lockstep twin in GameEngine::UpkeepTail.
     PerformUpkeepFading(state);
+    PerformUpkeepVanishing(state);   // Keldon Marauders (lockstep twin of the other upkeep site)
     PerformUpkeepSacrificeCreature(state);   // Abhorrent Overlord (lockstep twin of GameEngine::UpkeepTail)
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
@@ -107561,6 +107676,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
                               pm.fade_counters, pm.created_by_number, pm.quest_counters, pm.hone_counters,
                               pm.linked_exile_number };
         for (int v : extra) { mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(v))); }
+        if (pm.time_counters != 0) { mix(0x7133Eull); mix(static_cast<std::uint64_t>(pm.time_counters)); }   // vanishing (gated)
         if (!pm.copy_printed_name.empty()) { mix(std::hash<std::string>{}(pm.copy_printed_name.str())); }
         if (!pm.lens_imprinted_land.empty()) { mix(std::hash<std::string>{}(pm.lens_imprinted_land.str())); }
     }
@@ -109745,6 +109861,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // source's tokens, below); verse: the damage the source deals when it fires; ice: whether the
         // permanent untaps. Nonzero-gated, so a deck that never sets them keeps the EXACT prior key.
         if (perm.fade_counters != 0)  { Fold(tk, 0xFADEC); Fold(tk, static_cast<uint64_t>(perm.fade_counters)); }
+        if (perm.time_counters != 0)  { Fold(tk, 0x7133E); Fold(tk, static_cast<uint64_t>(perm.time_counters)); }   // vanishing
         if (perm.verse_counters != 0) { Fold(tk, 0x7E55E); Fold(tk, static_cast<uint64_t>(perm.verse_counters)); }
         if (perm.ice_counters != 0)   { Fold(tk, 0x1CE0C); Fold(tk, static_cast<uint64_t>(perm.ice_counters)); }
         // THE CHOSEN COLOUR (MTG_KEY_CHOSEN_COLOR, DEFAULT ON; =0 restores the hole). Utopia Sprawl's colour, a

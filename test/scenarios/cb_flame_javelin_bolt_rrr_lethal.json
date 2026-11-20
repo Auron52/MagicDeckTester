@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Creature Burn (2026-11-20, Stage 2 batch 1). Flame Javelin is {2/R}{2/R}{2/R} -- mana value 6, but",
+    "castable for {R}{R}{R} (the twobrid variant; on an all-Mountain board the MTG_TWOBRID_COLOUR_FOLD offers",
+    "only that one). Four Mountains, Javelin + Lightning Bolt in hand, opponent at 7: {R}{R}{R} Javelin (4) +",
+    "{R} Bolt (3) is exactly lethal this turn. A parse or payment that only knew the all-generic {6} side could",
+    "cast neither on four lands with the Bolt too, and the game would not end on turn 4."
+  ],
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 7,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }
+  ],
+  "hand": [ "Flame Javelin", "Lightning Bolt" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 6,
+  "expect_win_turn": 4
+}

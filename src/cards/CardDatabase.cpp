@@ -1565,6 +1565,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     // Saproling Burst: fading + the counter-costed token maker + the LTB sweep.
     p.fading_counters      = params.value("fading_counters", 0);
+    p.vanishing_counters   = params.value("vanishing_counters", 0);
     p.fade_saproling_cost  = params.value("fade_saproling_cost", 0);
     p.fade_creates_tokens  = params.value("fade_creates_tokens", 0);
     p.fade_token_power     = params.value("fade_token_power", 0);
@@ -2022,6 +2023,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.other_creature_gy_enter_team_counters = params.value("other_creature_gy_enter_team_counters", 0);
     p.ltb_return_creatures      = params.value("ltb_return_creatures", 0);
     p.ltb_return_max_power      = params.value("ltb_return_max_power", 0);
+    p.ltb_damage_any            = params.value("ltb_damage_any", 0);
     if (params.contains("evoke_cost"))
         p.evoke_cost = ManaCostFromString(params["evoke_cost"].get<std::string>());
     // lfe-fury cluster (Fury / Incandescent Soulstoke / Smokebraider) -- see the CardParams block.
@@ -2064,6 +2066,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.granted_tap_mana_color    = params.value("granted_tap_mana_color", std::string());
     p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);
     p.etb_opp_may_take_damage_to_sac = params.value("etb_opp_may_take_damage_to_sac", 0);
+    p.opp_may_take_damage_instead_of_draw = params.value("opp_may_take_damage_instead_of_draw", 0);
     p.etb_reveal_count          = params.value("etb_reveal_count", 0);
     for (const std::string& s : params.value("etb_reveal_put_subtypes", json::array()))
         p.etb_reveal_put_subtypes.push_back(s);

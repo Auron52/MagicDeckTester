@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp></lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="1" name="Browbeat" setShortName="PLST" collectorNumber="A25-123" uuid="db8ec14b-f972-4a23-a49b-30a83f52f9aa"/>
+        <card number="2" name="Rift Bolt" setShortName="PLST" collectorNumber="TSP-176" uuid="1c5cac57-5c8f-4404-894b-7b055fb19152"/>
+        <card number="1" name="Flame Javelin" setShortName="PLST" collectorNumber="DD2-53" uuid="26120b50-67f2-4c01-9242-ccb80dc0fee5"/>
+        <card number="3" name="Fireblast" setShortName="PLST" collectorNumber="VIS-79" uuid="ff45073c-5ac1-4295-833e-58b253319c9b"/>
+        <card number="4" name="Lightning Bolt" setShortName="CLU" collectorNumber="141" uuid="77c6fa74-5543-42ac-9ead-0e890b188e99"/>
+        <card number="4" name="Magma Jet" setShortName="JMP" collectorNumber="346" uuid="2975ce11-589a-4da8-a016-854bbaeb869c"/>
+        <card number="2" name="Price of Progress" setShortName="PLST" collectorNumber="EXO-95" uuid="a20751b4-01cb-4b45-9378-cf552a7075e7"/>
+        <card number="2" name="Searing Blaze" setShortName="PLST" collectorNumber="WWK-90" uuid="0008098c-2985-493f-bc37-0a8fb96cad65"/>
+        <card number="4" name="Ball Lightning" setShortName="FDN" collectorNumber="618" uuid="5f27dbf0-6818-40ea-832d-10686b4c2900"/>
+        <card number="2" name="Cinder Pyromancer" setShortName="PD2" collectorNumber="9" uuid="d42fe083-c2ab-4d67-8b10-8869c5da0b2a"/>
+        <card number="2" name="Figure of Destiny" setShortName="2X2" collectorNumber="213" uuid="6d779966-4bd4-4315-8b45-d3a4492f2bb2"/>
+        <card number="4" name="Goblin Fireslinger" setShortName="J25" collectorNumber="136" uuid="c6f2399f-b26d-4fa2-a26d-874cb51e5742"/>
+        <card number="2" name="Hellspark Elemental" setShortName="DCI" collectorNumber="25" uuid="a485fc8d-a7a0-444f-b4b3-aa0c9964ec53"/>
+        <card number="2" name="Keldon Champion" setShortName="PLST" collectorNumber="UDS-90" uuid="ce2905f7-c517-4079-ba58-49aa72b9b42d"/>
+        <card number="1" name="Keldon Marauders" setShortName="EMA" collectorNumber="136" uuid="bf42524c-97e5-40b2-8a6d-d2a1f0a9eb65"/>
+        <card number="2" name="Spark Elemental" setShortName="PD2" collectorNumber="4" uuid="f9a8ddf2-03f8-4e6f-8dbb-0e09e1717221"/>
+        <card number="2" name="Vulshok Sorcerer" setShortName="PLST" collectorNumber="5DN-80" uuid="7f5a5b56-bd29-46ec-bb37-9b96e36681ea"/>
+        <card number="18" name="Mountain" setShortName="ACR" collectorNumber="107" uuid="1a534ae1-4e6f-43ae-a8ad-89e306f11f21"/>
+        <card number="2" name="Teetering Peaks" setShortName="F11" collectorNumber="9" uuid="ce85799d-f8f1-43d6-b8f5-0759723ebd1a"/>
+    </zone>
+</cockatrice_deck>

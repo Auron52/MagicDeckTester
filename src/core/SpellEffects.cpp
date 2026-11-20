@@ -985,7 +985,8 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         if (!put_flag[static_cast<std::size_t>(i)]) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(revealed[static_cast<std::size_t>(i)]);
         if (d != nullptr && (d->params.enters_with_plus_counters > 0
-            || !d->params.enters_with_plus_counters_per_other_subtype.empty()))
+            || !d->params.enters_with_plus_counters_per_other_subtype.empty()
+            || d->params.vanishing_counters > 0))
         { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
     }
     // ONE event for every trigger pass below: a token made while it resolves (a Scute Swarm copy from the
@@ -1229,7 +1230,7 @@ void PerformReplenish(GameState& state, int controller, const std::string& sourc
     int counter_shift = 0;
     for (const ReturnCard& item : regular)
     {
-        if (item.def->params.enters_with_plus_counters > 0)
+        if (item.def->params.enters_with_plus_counters > 0 || item.def->params.vanishing_counters > 0)
         { counter_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
     }
     auto put = [&](const ReturnCard& item, int host_number)

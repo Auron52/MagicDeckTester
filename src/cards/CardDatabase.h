@@ -1451,6 +1451,17 @@ struct CardParams
     // Season a Saproling Burst enters with FOURTEEN. Routed through PutFadeCounters beside the
     // other three chokepoints. Counter REMOVAL is a cost and is never doubled.
     int                      fading_counters = 0;
+    // VANISHING N (CR 702.63; Keldon Marauders, Creature Burn 2026-11-20): "This permanent enters with N
+    // time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last
+    // is removed, sacrifice it." The OPPOSITE edge from fading above: vanishing sacrifices WHEN THE LAST
+    // COUNTER COMES OFF (Vanishing 2 = two upkeeps: 2 -> 1, then 1 -> 0 and sacrificed on the SECOND),
+    // fading when one CANNOT come off. A permanent with no time counter (e.g. one that entered by a route
+    // that put none) is never sacrificed by it (CR 702.63a's intervening "if"). The counters live in the
+    // dedicated Permanent::time_counters int (the fade_counters pattern), are put AS IT ENTERS at the
+    // universal enter cascade (FireEtbWatchers / ApplyEntersWithOnPut -- an as-enters replacement, so
+    // Doubling Season doubles them, CR 614.1c), and come off in PerformUpkeepVanishing (both upkeep
+    // sites, lockstep). The sacrifice goes through SacrificePermanentAt, so dies / LTB watchers fire.
+    int                      vanishing_counters = 0;
     //   fade_saproling_cost      -- counters removed per activation (1). No {T}, no mana, so it is
     //                               legal the turn the enchantment lands and repeatable within a
     //                               turn; PermAbilityMode::FadeSaproling.
@@ -3291,6 +3302,17 @@ struct CardParams
     // universal own-ETB cascade (FireOwnEtbTriggers), so every enter route, executor and rollout alike,
     // applies the same rule. > 0 gates it; the value is N.
     int etb_opp_may_take_damage_to_sac = 0;
+    // Browbeat (Creature Burn, 2026-11-20): "Any player may have Browbeat deal 5 damage to them. If no one
+    // does, target player draws three cards." A PUNISHER on a draw_spell: the value is N (5). The choice that
+    // matters is the OPPONENT's, an ENVIRONMENT model of the passive goldfish opponent (no search branch, no
+    // viewer decision): BrowbeatOpponentTakesDamage (SpellEffects.h) is the ONE place the policy lives --
+    // PROVISIONAL policy A, a USER-owned decision (the analog of the USER's Vexing Devil ruling): the opponent
+    // takes the N iff its life > N + (we hold any card ? 3 : 0). Taken -> N damage to the opponent and NO
+    // draw; declined -> the normal draw (params.draw). Resolved at the top of both draw resolutions
+    // (EffectHandler::ResolveDrawSpell and the rollout's apply_one DrawSpell branch, through the shared
+    // ResolveDamageInsteadOfDraw). Our OWN "take 5" option is never used (it is dominated: it neither
+    // draws nor hurts the opponent). > 0 gates it.
+    int opp_may_take_damage_instead_of_draw = 0;
 
     // ETB reveal-and-cheat (Muxus, Goblin Grandee: "reveal the top six cards; put all Goblin
     // creature cards with mana value 5 or less onto the battlefield and the rest on the bottom").
@@ -3479,6 +3501,15 @@ struct CardParams
     // paths no plan action carries), human-overridable via the `revive` decision type.
     int                      ltb_return_creatures = 0;
     int                      ltb_return_max_power = 0;
+    // Keldon Marauders (Creature Burn, 2026-11-20): "When this creature enters or leaves the battlefield,
+    // it deals 1 damage to target player or planeswalker." The ENTERS half is etb_damage_any; this is the
+    // LEAVE half -- an LTB trigger (fires on ANY leave: the vanishing sacrifice, a sac outlet, combat
+    // death, a bounce), resolved in the shared FireLeavesBattlefieldTriggers (both worlds, every leave
+    // route that calls it) through DealPermanentAbilityDamage at the opponent's FACE ("target player or
+    // planeswalker": the passive opponent has no planeswalker, and damage to ourselves never helps --
+    // the etb_damage_any precedent; x1 in 2HG, a single target). The source is the departed creature
+    // (last known information, CR 603.10a). > 0 gates it; the value is the damage.
+    int                      ltb_damage_any = 0;
     // Evoke (Reveillark {5}{W}): an alternate-cost cast variant (Action::evoke, mutually exclusive
     // with the hard cast by hand_index) that self-sacrifices the just-entered creature -- which
     // routes through the ordinary death cascade and thus fires the LTB. Here evoke costs MORE than

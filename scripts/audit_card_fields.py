@@ -115,6 +115,10 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # it actually reads (the same reason devour is absent). Not a combat/evasion keyword, so
     # stripping it cannot mask a missing one.
     "fading",
+    # Vanishing (Keldon Marauders): the same shape as fading -- modeled structurally via
+    # vanishing_counters -> Permanent::time_counters plus PerformUpkeepVanishing, not a keyword tag.
+    # Not a combat/evasion keyword, so stripping it cannot mask a missing one.
+    "vanishing",
     # Ascend (Ocelot Pride): modeled structurally via the `ascend` param ->
     # Player::has_city_blessing, a per-player designation checked by RefreshCityBlessing,
     # not a keyword tag -- and not a combat/evasion keyword, so stripping it is safe.

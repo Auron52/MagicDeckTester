@@ -80,6 +80,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // again, keyed on DAMAGE: combat damage is what makes the opponent a legal target, so its
         // post-combat cast is a real line.
         if (def->params.target_dealt_damage_this_turn) { return true; }
+        // BROWBEAT (Creature Burn, 2026-11-20; PROVISIONAL -- surfaced to the USER, cost to be measured): the
+        // opponent takes Browbeat's 5 or lets us draw three according to its life AT RESOLUTION, so the
+        // post-combat cast ("attack, then Browbeat") meets a different choice than the pre-combat one -- a line
+        // that is otherwise unfindable at any budget (the spectacle bucket, keyed on the opponent's life).
+        if (def->params.opp_may_take_damage_instead_of_draw > 0) { return true; }
         // FALKENRATH PIT FIGHTER (Vampires A2, 2026-10-18): "Activate only if an opponent lost life this
         // turn" -- the spectacle bucket: combat damage is what unlocks the activation, so its whole line
         // ("attack, then discard + sacrifice a Vampire: draw two") lives in the post-combat main.

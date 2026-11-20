@@ -4090,7 +4090,7 @@ inline void ForEachDedicatedCounterField(P& p, F&& f)
     f("charge", p.charge_counters); f("verse", p.verse_counters); f("lore", p.lore_counters);
     f("storage", p.storage_counters); f("ice", p.ice_counters); f("age", p.age_counters);
     f("spore", p.spore_counters); f("fade", p.fade_counters); f("quest", p.quest_counters);
-    f("hone", p.hone_counters);
+    f("hone", p.hone_counters); f("time", p.time_counters);
 }
 
 // "Each counter on it" counts every type, not merely +1/+1. Capture this
@@ -4460,6 +4460,11 @@ inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int p
                                 std::vector<int>& done, const GameState& state,
                                 std::size_t pre_event_board_size)
 {
+    // VANISHING (CR 702.63, Keldon Marauders): the time counters are an as-enters replacement of the same
+    // event -- applied here at the pre-event shift and recorded in `done`, so FireEtbWatchers skips both
+    // halves for this copy (the +1/+1 half below is a no-op for a card without that param).
+    const bool vanishing = d.params.vanishing_counters > 0;
+    if (vanishing) { perm.time_counters += d.params.vanishing_counters << pre_shift; }
     int n = d.params.enters_with_plus_counters
           + (d.params.enters_with_gy_creature_counters
              ? GraveyardCreatureCount(state, perm.controller_index) : 0);
@@ -4475,7 +4480,7 @@ inline void ApplyEntersWithOnPut(Permanent& perm, const CardDefinition& d, int p
     }
     if (n <= 0)
     {
-        if (!sub.empty()) { done.push_back(perm.card.m_number); }
+        if (!sub.empty() || vanishing) { done.push_back(perm.card.m_number); }
         return;
     }
     AddPlusCounters(perm, n << pre_shift);
@@ -11270,7 +11275,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
         || p.storage_counters != 0 || p.loyalty != 0 || p.ice_counters != 0
         || p.age_counters != 0 || p.spore_counters != 0 || p.fade_counters != 0
-        || p.quest_counters != 0 || p.hone_counters != 0)                         { return false; }
+        || p.quest_counters != 0 || p.hone_counters != 0 || p.time_counters != 0) { return false; }
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
         || p.lifegain_counters_used_this_turn || p.once_per_turn_used
@@ -12155,6 +12160,26 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 EmitPlayEvent(state.turn_number, "etb",
                               e.card.m_name.str() + " enters with " + std::to_string(PlusCountersOn(e))
                               + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s"));
+            }
+        }
+        // VANISHING N (CR 702.63a, Keldon Marauders; CardParams::vanishing_counters): "This permanent enters
+        // with N time counters on it" -- the same as-enters replacement shape as the +1/+1 counters above,
+        // at the same site so every enter route reaches it (executor and rollout). A counter given as the
+        // permanent enters is a put (CR 122.6), so a counter doubler already out doubles it (DoublerShift,
+        // the PutFadeCounters chokepoint). A simultaneous multi-put applied it in its own pass 1
+        // (ApplyEntersWithOnPut) -- skipped here. Param-gated: one int test for every other entrant.
+        if (ed != nullptr && ed->params.vanishing_counters > 0
+            && (g_enters_with_preapplied == nullptr
+                || std::find(g_enters_with_preapplied->begin(), g_enters_with_preapplied->end(),
+                             e.card.m_number) == g_enters_with_preapplied->end()))
+        {
+            e.time_counters += ed->params.vanishing_counters
+                               << DoublerShift(state, e.controller_index, /*for_tokens=*/false);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb",
+                              e.card.m_name.str() + " enters with " + std::to_string(e.time_counters)
+                              + " time counter" + (e.time_counters == 1 ? "" : "s") + " (vanishing)");
             }
         }
         if (ed != nullptr && !ed->params.enters_with_plus_counters_per_other_subtype.empty()
@@ -14060,7 +14085,8 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         {
             const CardDefinition* dd = CardDatabase::Instance().LookupCached(dc);
             if (dd != nullptr && (dd->params.enters_with_plus_counters > 0
-                || !dd->params.enters_with_plus_counters_per_other_subtype.empty()))
+                || !dd->params.enters_with_plus_counters_per_other_subtype.empty()
+                || dd->params.vanishing_counters > 0))
             { enters_with_shift = DoublerShift(state, controller, /*for_tokens=*/false); break; }
         }
         for (const Card& dc : deploy)
@@ -15027,6 +15053,74 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
     }
 }
 
+// ---- BROWBEAT (CardParams::opp_may_take_damage_instead_of_draw) ------------------------------------------
+// "Any player may have Browbeat deal 5 damage to them. If no one does, target player draws three cards."
+//
+// THE OPPONENT POLICY -- the ONE place it lives. PROVISIONAL POLICY A (2026-11-20, Creature Burn Stage 2):
+// a USER-OWNED decision not yet ruled on, modelled as the analog of the USER's Vexing Devil ruling above
+// (VexingDevilOpponentTakesDamage): the opponent TAKES the N damage iff its life (the opposing TEAM's shared
+// life in 2HG, players[opponent]) is > N + (we hold any card ? 3 : 0) -- i.e. it declines (we draw three)
+// once N would leave it within reach of our hand, guessing from our hand SIZE only, never its contents.
+// N = 5 for the only card, so it takes above 5 with our hand empty and above 8 while we hold a card. The
+// contrast policy B (take unless life <= N) is the other candidate surfaced to the USER. Like the Devil it
+// is an ENVIRONMENT model of the passive goldfish opponent: the choice is THEIRS, so it is neither a search
+// branch nor a viewer decision, and no option of OURS is collapsed (CLAUDE.md "NO GREEDY PICK"). Our own
+// "take 5" option is never used: it is dominated (no draw, no damage to the opponent).
+//
+// HELD CARDS = our hand excluding STAGED (exiled-playable) cards, which are not in the hand: the rollout
+// keeps staged cards in the hand vector (m_is_staged) and the executor in Player::staged_cards, so counting
+// the raw hand would let the two worlds disagree. Browbeat itself is never counted -- it has left the hand
+// (on the stack in the executor, erased at the cast in the rollout) when it resolves.
+inline int HeldCardCount(const GameState& s, int who)
+{
+    int n = 0;
+    for (const Card& c : s.players[static_cast<std::size_t>(who)].hand) { if (!c.m_is_staged) { ++n; } }
+    return n;
+}
+inline bool BrowbeatOpponentTakesDamage(const GameState& s, int opponent, int amount, bool we_hold_cards)
+{
+    return s.players[static_cast<std::size_t>(opponent)].life > amount + (we_hold_cards ? 3 : 0);
+}
+// The shared resolver, called at the TOP of both draw resolutions (EffectHandler::ResolveDrawSpell and the
+// rollout's apply_one DrawSpell branch, lockstep). Taken: N damage from the spell (a red noncombat source --
+// marks the opponent dealt damage / lost life this turn, feeds the noncombat-damage watchers and the
+// damage-event layer through DealPermanentAbilityDamage) and the caller draws NOTHING. Declined: returns
+// false and the caller draws params.draw for us ("target player" -- ourselves: the passive opponent's
+// library is never worth drawing from three at a time, bracket-noted). Returns whether the damage was taken.
+inline bool ResolveDamageInsteadOfDraw(GameState& state, int controller, const CardDefinition& def)
+{
+    const int amount = def.params.opp_may_take_damage_instead_of_draw;
+    if (amount <= 0) { return false; }
+    const int  opp     = 1 - controller;
+    const int  before  = state.players[static_cast<std::size_t>(opp)].life;
+    const bool holding = HeldCardCount(state, controller) > 0;
+    if (!BrowbeatOpponentTakesDamage(state, opp, amount, holding))
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xF0\x9F\x98\xA0 " + def.card.m_name.str() + ": the opponent DECLINES the "
+                          + std::to_string(amount) + " damage (life " + std::to_string(before)
+                          + (holding ? " while we hold cards" : " with our hand empty")
+                          + ") -- we draw " + std::to_string(def.params.draw) + " [PROVISIONAL policy A]");
+        }
+        return false;
+    }
+    {
+        NoncombatTriggerScope noncombat_scope(state);
+        DealPermanentAbilityDamage(state, controller, def, amount, 0, /*ask_human=*/false);
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x98\xA0 " + def.card.m_name.str() + ": the opponent TAKES "
+                      + std::to_string(amount) + " (" + std::to_string(before) + "\xE2\x86\x92"
+                      + std::to_string(state.players[static_cast<std::size_t>(opp)].life)
+                      + ") -- no cards drawn [PROVISIONAL policy A]");
+    }
+    return true;
+}
+
 // THE ENTRANT'S OWN ETB TRIGGERS, then -- at the OUTERMOST exit only -- the LOOK-TOP queue (Risen
 // Reef; see LOOK-TOP WATCHERS). Every full enter site calls FireEtbWatchers (which RECORDS the
 // look-top triggers) and then this, so draining here resolves them on every such route with no
@@ -15372,6 +15466,29 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
     if (d && d->params.ltb_exiled_owner_illusion_token) { FireExiledOwnerIllusion(state, left); }
     // Champion's LEAVE half: the championed card returns as a new object (CR 702.72a).
     if (d && !d->params.champion_subtype.empty()) { ReturnChampionedCard(state, left); }
+    // Keldon Marauders' LEAVE half (CardParams::ltb_damage_any): "When this creature ... leaves the
+    // battlefield, it deals 1 damage to target player or planeswalker" -> the opponent's FACE (no
+    // planeswalker exists; damage to ourselves never helps -- the etb_damage_any precedent, not asked of a
+    // human). Noncombat damage from the departed creature (last known information, CR 603.10a), through
+    // the shared any-target primitive (life, damaged-this-turn marks, the damage-event layer when armed).
+    // Every leave route that reaches this hook, both worlds. Param-gated: one int test for every other card.
+    if (d && d->params.ltb_damage_any > 0)
+    {
+        const int opp    = 1 - controller;
+        const int before = state.players[static_cast<std::size_t>(opp)].life;
+        {
+            NoncombatTriggerScope noncombat_scope(state);
+            DealPermanentAbilityDamage(state, controller, *d, d->params.ltb_damage_any, 0, /*ask_human=*/false);
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xF0\x9F\x94\xA5 " + left.m_name.str() + " left the battlefield: "
+                          + std::to_string(d->params.ltb_damage_any) + " to opponent ("
+                          + std::to_string(before) + "\xE2\x86\x92"
+                          + std::to_string(state.players[static_cast<std::size_t>(opp)].life) + ")");
+        }
+    }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -28468,6 +28585,53 @@ inline void PerformUpkeepFading(GameState& state)
         state.players[dead_owner].graveyard.push_back(RevealedCard(dead));
         if (dd && dd->params.fade_ltb_destroys_created_tokens)
         { DestroyTokensCreatedBy(state, num); }
+    }
+}
+
+// VANISHING at upkeep (CR 702.63a; Keldon Marauders, CardParams::vanishing_counters): "At the beginning of
+// your upkeep, if this permanent has a time counter on it, remove a time counter from it. When the last is
+// removed, sacrifice it."
+//
+// THE OPPOSITE EDGE FROM FADING ABOVE: the sacrifice is on REMOVING THE LAST counter, so Vanishing 2 is
+// two upkeeps (2 -> 1, then 1 -> 0 and sacrificed at that SECOND upkeep), and a permanent with NO time
+// counter is left alone (the intervening "if"). Both are mandatory, untargeted triggers -- no choice.
+// The sacrifice goes through the shared SacrificePermanentAt, so the dies and LEAVES watchers fire (the
+// Marauders' own ltb_damage_any ping, FireLeavesBattlefieldTriggers) and an upkeep kill is seen by the
+// turn's win check in both worlds. Lockstep twin: called from GameEngine::UpkeepTail (executor) and
+// TurnSolver::SimulateEndAndStartNextTurn (rollout), right after PerformUpkeepFading. Snapshot-by-number
+// (the PerformUpkeepFading shape): the sacrifice erases from the battlefield. Param-gated, so every other
+// deck is byte-identical (one int test per own permanent at upkeep: only a time counter triggers a lookup).
+inline void PerformUpkeepVanishing(GameState& state)
+{
+    const int active = state.active_player_index;
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.def_absent || p.time_counters <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.vanishing_counters <= 0) { continue; }
+        sources.push_back(p.card.m_number);
+    }
+    for (int num : sources)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.controller_index == active && q.card.m_number == num) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }   // already gone this upkeep (an earlier sacrifice's watcher)
+        Permanent& q = state.battlefield[static_cast<std::size_t>(idx)];
+        if (q.time_counters <= 0) { continue; }
+        const int left = --q.time_counters;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xE2\x8C\x9B " + q.card.m_name.str() + ": vanishing -- a time counter removed ("
+                          + std::to_string(left) + " left)"
+                          + (left == 0 ? " -- the last one: sacrificed" : ""));
+        }
+        if (left == 0) { SacrificePermanentAt(state, active, idx); }
     }
 }
 
@@ -58443,6 +58607,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);
     add(p.fade_counters); add(p.quest_counters); add(p.hone_counters); add(p.mana_tap_mark);
+    if (p.time_counters != 0) { k += "|tm"; add(p.time_counters); }   // vanishing's time counters (gated)
     add(p.chosen_color); add(p.garth_chosen_mask); add(p.chosen_keyword_mask); add(p.chosen_subtype_id);
     add(p.paired_with); add(p.linked_exile_number); add(p.created_by_number);
     if (!p.lens_imprinted_land.empty()) { k += "|lens:" + p.lens_imprinted_land.str(); }

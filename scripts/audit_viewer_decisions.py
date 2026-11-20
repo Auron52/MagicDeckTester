@@ -1297,6 +1297,8 @@ INERT_PARAMS = {
     "sac_outlet_minus_tough": "outlet payload constant (signed -N/-N UEOT); target as above",
     "fading_counters": "Fading N (CR 702.32): the enters-with count, then a MANDATORY untargeted upkeep trigger -- remove one, or sacrifice if you cannot. No choice at either step (pay-or-sac is echo's shape, not fading's: fading has no cost to decline)",
     "fade_creates_tokens": "token count constant", "fade_token_power": "token spec constant",
+    "vanishing_counters": "Vanishing N (CR 702.63, Keldon Marauders): the enters-with time-counter count, then a MANDATORY untargeted upkeep trigger -- remove one; sacrifice when the last comes off. No choice at either step",
+    "ltb_damage_any": "Keldon Marauders' leave trigger -- automatic 1 damage; 'target player or planeswalker' collapses to the opponent's face in the goldfish (no planeswalker; self-damage never helps) -- the etb_damage_any precedent, no decision",
     "fade_token_toughness": "token spec constant", "fade_token_subtypes": "token spec constant",
     "fade_token_color": "token spec constant",
     "fade_ltb_destroys_created_tokens": "mandatory untargeted leaves-the-battlefield trigger (destroy all tokens created with this permanent) -- untargeted and exhaustive, nothing to choose",
@@ -1569,6 +1571,10 @@ INERT_PARAMS = {
     # The choice is the OPPONENT's, resolved by the USER-ruled passive-opponent model
     # (VexingDevilOpponentTakesDamage, ledger 2026-11-17); the controller makes no decision.
     "etb_opp_may_take_damage_to_sac": "opponent's choice (Vexing Devil), USER-ruled passive-opponent model -- no player decision",
+    # Browbeat: "any player may have it deal 5 damage to them; if no one does, target player draws three". The
+    # choice that matters is the OPPONENT's (PROVISIONAL policy A, BrowbeatOpponentTakesDamage); our own 'take 5'
+    # is dominated and never offered. History event only.
+    "opp_may_take_damage_instead_of_draw": "opponent's choice (Browbeat), PROVISIONAL passive-opponent model (policy A) -- no player decision; our own 'take 5' is dominated",
     "any_creature_enters_lifegain": "automatic enter trigger (Soul Warden; Soul's Attendant / Auriok Champion's 'you may' always taken -- disclosed 6a)",
     "own_creature_enters_lifegain": "automatic enter trigger (Suture Priest, may-always-taken)",
     # ---- Angels (2026-09-17). Every one of these is a MANDATORY, UNTARGETED trigger, a static

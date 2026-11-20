@@ -46769,6 +46769,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.ice_counters); v.push_back(p.age_counters); v.push_back(p.spore_counters); v.push_back(p.fade_counters);
         v.push_back(p.created_by_number); v.push_back(p.quest_counters); v.push_back(p.hone_counters);
         v.push_back(p.linked_exile_number);
+        if (p.time_counters != 0) { v.push_back(0x7133E); v.push_back(p.time_counters); }   // vanishing (gated)
         v.push_back(static_cast<long long>(std::hash<std::string>{}(p.copy_printed_name.str())));
         v.push_back(static_cast<long long>(p.counters.size()));
         for (std::size_t i = 0; i < p.counters.size(); ++i)
@@ -50534,6 +50535,7 @@ static std::uint64_t RouteStateKey(const GameState& s, int me, bool gy_by_name =
                                   p.loyalty, p.ice_counters, p.age_counters, p.spore_counters,
                                   p.fade_counters, p.quest_counters, p.hone_counters };
         for (const int c : dedicated) { v = v * 37 + static_cast<std::uint64_t>(c + 1); }
+        if (p.time_counters != 0) { v = v * 41 + static_cast<std::uint64_t>(p.time_counters); }   // vanishing (gated)
         comboroute::Mix(h, v);
     }
     // The PHASE: the route projects THIS turn's attack, so the same board before combat (lethal) and

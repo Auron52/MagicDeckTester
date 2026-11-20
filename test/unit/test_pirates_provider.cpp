@@ -364,6 +364,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // StuffyDollProvider ABOVE that chain (self_ping_damage / aura_host_damage_back / the en-Kor
         // shield + pull / Spiteful Sliver's grant; docs/design/damage-reflection-pipeline.md section 8).
         {"Stuffy Doll", "StuffyDoll"},
+        // Creature Burn (onboarding 2026-11-20, Stage 2): a MEASURED capture, pinned until Stage 4a decides
+        // its routing -- it rides RedElementalsProvider (an Elemental's unearth_cost: Hellspark Elemental),
+        // identically under the pre-batch-1 binary, so the capture predates the deck's new cards.
+        {"Creature Burn", "RedElementals"},
     };
 
     namespace fs = std::filesystem;

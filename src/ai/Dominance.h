@@ -217,7 +217,12 @@
 // this enters, choose a player"), in the pad byte after chosen_keyword_mask -- THE TRIPWIRE DID NOT
 // FIRE. Classification: EXACT-MATCH per-object state (which player the Doll's reflection hits),
 // folded below and in the sim keys, gated on >= 0.
-static_assert(sizeof(Permanent) == 328,
+// 328 -> 336 (2026-11-20, Creature Burn / Keldon Marauders): Permanent gained `time_counters` (VANISHING,
+// CR 702.63), an int with no pad hole left to sit in, so the size moved. Classification: EXACT-MATCH,
+// folded below GATED ON NONZERO -- NOT a directional axis: more time counters is a LONGER life (more
+// attacks) but a LATER leave trigger (Marauders' 1 damage), so no direction survives on its own. Also
+// folded into every sim / signature key that carries fade_counters, nonzero-gated.
+static_assert(sizeof(Permanent) == 336,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -1649,6 +1654,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         if (p.landfall_resolved_twice)          { mfold(0x5C7C2ull); }
         // Moraug's per-turn attack count: exact-match, gated on nonzero (it changes the creature's power).
         if (p.AttacksThisTurn() != 0)           { mfold(0xA77C0ull + static_cast<std::uint64_t>(p.AttacksThisTurn())); }
+        // Vanishing's time counters (Keldon Marauders): exact-match, gated on nonzero (see the 328 -> 336 note).
+        if (p.time_counters != 0)               { mfold(0x7133Eull); mfold(static_cast<std::uint64_t>(p.time_counters)); }
         if (wired)
         {
             mfold(0xA77Aull);
