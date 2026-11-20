@@ -4574,6 +4574,13 @@ static thread_local uint64_t g_decision_epoch = 0;
 // P18j (sampled_gate 4): > 0 while the lookahead runs ahead of the ladder; the game-level caches (rollout game cache,
 // game line cache, in-window cache) take no store from it, so a miss leaves the ladder the caches it would have had.
 namespace p18 { inline thread_local int t_nostore = 0; inline thread_local int t_zcuts = 0; }   // t_zcuts: _pzb, per game
+// t_walk_edge (> 0 while a sparse-ladder walk pass runs): the last turn of that pass's window. A constant leaf reached
+// AT OR BEFORE it stands for the REST OF A WINDOW TURN (the tail a breakpoint continuation or an edge node hands to the
+// horizon), where the ladder's rollout pass plays that turn out and can find its win; the walk's leafless pass must
+// see the same, or its "no in-window win" is not a refutation and the walk commits a later win (Maze's End 17000084
+// T4: the rollout pass wins T5 through a Maze's End replay continuation, leafless pass 2 scores that tail 9, pass 3
+// commits T6). Such a leaf is rolled out (cut at the window edge); every leaf past the window stays constant.
+namespace p18 { inline thread_local int t_walk_edge = 0; inline thread_local long long t_walk_edge_rolls = 0; }
 std::uint64_t TurnSolver::DecisionEpoch() { return g_decision_epoch; }
 
 // MTG_CANTRIP_ORDER watermark: the cantrip-class cast whose breakpoint CONTINUATION is being
@@ -113374,6 +113381,21 @@ inline thread_local long long g_fs_cut_prunes   = 0;
 inline thread_local long long g_fs_hexits       = 0;
 inline thread_local long long g_fs_leaf_wt_sum  = 0;
 inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
+// MTG_ESC_P2_MEAS (DIAGNOSTIC, print-only, default off): the escalation's PATH 2 heuristic ladder, measured per deck
+// -- its decisions and units, and its top-level rollout leaves split by outcome: no win at all (w > max_turns), and
+// no win the pass could use (w > the leaf's cutoff: it cannot beat the incumbent / window). Printed at exit.
+namespace escp2
+{
+    inline thread_local int on = 0;
+    inline thread_local long long t[8] = {};   // leaves, leaf units, nowin leaves, nowin units, uncut leaves, uncut units
+    struct Agg { std::mutex m; std::map<std::string, std::array<long long, 10>> d;
+                 ~Agg() { if (d.empty()) { return; }
+                          for (auto& kv : d) { const auto& a = kv.second;
+                              std::fprintf(stderr, "[escp2] %s decisions=%lld p2_units=%lld leaves=%lld leaf_units=%lld nowin_leaves=%lld nowin_units=%lld useless_leaves=%lld useless_units=%lld decisions_no_win=%lld\n",
+                                           kv.first.c_str(), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]); } } };
+    inline Agg& G() { static Agg g; return g; }
+    inline bool On() { static const bool v = EnvOn("MTG_ESC_P2_MEAS"); return v; }
+}
 namespace p16
 {
     // MTG_P17_LEDGER snapshot, in print order: cpu_ns nodes leaf_evals tt_look tt_hit memo_win memo_nowin glc_w glc_n
@@ -118036,7 +118058,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // probe run full rollouts while reporting a 100% "hit" rate: identical units in both arms,
         // which is what gave it away. Byte-identical for every pre-existing caller: the flag is
         // set only by the emulated ladder's warm-ups and by the lazy-leaf probe.
-        if (g_force_constant_leaf || (vm && vm->constant))
+        // The sparse-ladder walk's in-window leaf (see p18::t_walk_edge): rolled out like the ladder's, not constant.
+        static const bool s_walk_edge_roll = EnvOn("MTG_P18_WALK_EDGE_ROLL", true);
+        const bool walk_edge_leaf = s_walk_edge_roll && p18::t_walk_edge > 0 && g_rollout_nest == 0
+                                 && state.turn_number <= p18::t_walk_edge;
+        if (walk_edge_leaf) { ++p18::t_walk_edge_rolls; }
+        if ((g_force_constant_leaf || (vm && vm->constant)) && !walk_edge_leaf)
         {
             // NO-LEAF: never a win here; the search commits only what it proves inside the horizon.
             if (p18::t_smp != nullptr && g_rollout_nest == 0) { p18::t_smp->Offer(state, cutoff); }   // sampled gate: the pass's leaves
@@ -118103,6 +118130,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const long long p16u0 = budget ? budget->Used() : 0;   // MTG_P16_TRACE (print-only)
             w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
             if (budget) { p16::t_leaf_units += budget->Used() - p16u0; }
+            if (escp2::on > 0 && g_rollout_nest == 0)
+            {
+                const long long du = budget ? budget->Used() - p16u0 : 0;
+                escp2::t[0] += 1; escp2::t[1] += du;
+                if (w > max_turns) { escp2::t[2] += 1; escp2::t[3] += du; }
+                if (w > cutoff)    { escp2::t[4] += 1; escp2::t[5] += du; }
+            }
         }
         g_fs_leaf_wt_sum += w;
         return { w, {} };
@@ -122743,6 +122777,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // commits the first in-window win for the current turn only. Without a commit the spend since u0 is refunded
     // (_plrf), so the ladder continues on exactly its own budget. Returns true when it committed.
     bool p18_llw = false, p18_lrf = false, p18_llr = false, p18_pkt = false, p18_plx = false; double p18_pal = 0.1;
+    bool p18_we = true;   // the walk's in-window leaves rolled out (p18::t_walk_edge); arm key `_pwe0` = off (A/B only)
     long long p18_z_add = 0;            // the root rollout's units: they warmed pass 1's rollouts, so its gate cost carries them
     FSLineCache p18w_cache;             // keys fold the remaining depth: walk k+1 reuses walk k
     // Per-depth leafless cost and leaf count, the largest seen this decision: a re-walk answered from p18w_cache costs
@@ -122839,9 +122874,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             {
                 P18PricedCap _pc(cap_k > 0 ? cap_k - w0 : 0);
                 ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
+                struct WalkEdge { int s; explicit WalkEdge(int e) : s(p18::t_walk_edge) { p18::t_walk_edge = e; }
+                                  ~WalkEdge() { p18::t_walk_edge = s; } } _we(p18_we ? std::min(root_cut, state.turn_number + k - 1) : 0);
                 // The walk only commits an in-window win, so it searches under that bound: cut at the window's edge.
-                pr = FSLineWin(state, k, max_turns, std::min(root_cut, state.turn_number + k - 1), second_main, tt,
-                               &p18w_cache, budget);
+                // MTG_P18_WALKDIAG (DIAGNOSTIC, default 0): bit 1 = each walk pass on a fresh transposition table and
+                // line cache instead of the decision's (isolates a cache answer from the search itself).
+                static const int s_wdiag = EnvInt("MTG_P18_WALKDIAG", 0);
+                if (s_wdiag & 1)
+                { TranspositionTable dtt; FSLineCache dlc;
+                  pr = FSLineWin(state, k, max_turns, std::min(root_cut, state.turn_number + k - 1), second_main, &dtt, &dlc, budget); }
+                else
+                { pr = FSLineWin(state, k, max_turns, std::min(root_cut, state.turn_number + k - 1), second_main, tt,
+                                 &p18w_cache, budget); }
                 ptrip = _pc.Tripped();
             }
             const bool hit = (cap_k > 0 && budget->Used() >= cap_k) || ptrip;
@@ -122856,6 +122900,23 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                      : static_cast<double>(lk) + static_cast<double>(nk) * r;   // rollout pass k's price
             spent += ck; cm2 = cm1; cm1 = ck;
             p16::Rec('W', k, lk, static_cast<long long>(ck), 0, pr.win_turn, p18_ms);   // leaf field = the price; dvs = ms
+            {   // MTG_P18_WALKDIAG bit 2 (DIAGNOSTIC): on a walk pass with no in-window win, the same pass UNBUDGETED on
+                // fresh tables, leafless and on rollouts, printed: does a rollout pass find an in-window win the leafless
+                // pass refuted?
+                static const int s_wdiag2 = EnvInt("MTG_P18_WALKDIAG", 0);
+                if ((s_wdiag2 & 2) && pr.win_turn > state.turn_number + k - 1)
+                {
+                    const int cut = std::min(root_cut, state.turn_number + k - 1);
+                    SearchLine a, b;
+                    { TranspositionTable dtt; FSLineCache dlc; ForceConstantLeafGuard _a(true);
+                      const int we = p18::t_walk_edge; p18::t_walk_edge = 0;   // the pre-fix leafless pass
+                      a = FSLineWin(state, k, max_turns, cut, second_main, &dtt, &dlc, nullptr); p18::t_walk_edge = we; }
+                    { TranspositionTable dtt; FSLineCache dlc;
+                      b = FSLineWin(state, k, max_turns, max_turns, second_main, &dtt, &dlc, nullptr); }
+                    std::cerr << "[p18diag] T" << state.turn_number << " k=" << k << " cut=" << cut << " walk_win=" << pr.win_turn
+                              << " leafless_unl=" << a.win_turn << " rollout_unl=" << b.win_turn << " W=" << W << "\n";
+                }
+            }
             if (pr.win_turn <= state.turn_number + k - 1)
             {
                 line = pr; committed_depth = k; prev_line = line; prev_committed = k;
@@ -122914,6 +122975,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
         bool p18_ll_done = false;         // _pll: the lookahead decided this decision (commit or ladder fallback)
         p18_llw = kn.llw && !kn.verify; p18_lrf = kn.lrf; p18_llr = kn.llr; p18_pkt = kn.pkt; p18_plx = kn.plx; p18_pal = kn.pal;
+        p18_we = valuearm::t_deck_key.find("_pwe0") == std::string::npos;
         if (p18_llw)
         {
             // EPOCH-ISOLATED: the per-decision memos (the rollout main-1 solve memo, the enumeration and greedy-Solve
@@ -125945,7 +126007,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             else
             {
                 g_lazy_known_miss_depth = value_leafless_miss;   // same state: its lazy probe would re-prove the miss
+                const bool e2 = escp2::On();
+                const long long e2u0 = esc_budget ? esc_budget->Used() : 0;
+                if (e2) { ++escp2::on; for (long long& x : escp2::t) { x = 0; } }
                 hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted);
+                if (e2)
+                {
+                    --escp2::on;
+                    std::lock_guard<std::mutex> lk(escp2::G().m);
+                    auto& a = escp2::G().d[valuearm::t_deck_key];
+                    a[0] += 1; a[1] += (esc_budget ? esc_budget->Used() : 0) - e2u0;
+                    for (int i = 0; i < 6; ++i) { a[2 + i] += escp2::t[i]; }
+                    a[8] += hline.win_turn > max_turns ? 1 : 0;
+                }
             }
             if (s_esc_measure && esc_budget && hcommitted >= 1)
             {

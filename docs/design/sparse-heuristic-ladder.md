@@ -83,4 +83,76 @@ the gate admitted inside the escalation (not done; a USER question).
 
 ## Measurements
 
-(2026-11-19 pooled held-out A/B; see below.)
+### AB1 (2026-11-20, held out)
+
+One pooled `mtg --batch`, 102,370 games, 24 workers (heartbeat 24/24 throughout), binary `mtg_c0` (= 02c7044e2 src),
+shipped settings, `MTG_P16_TRACE=1`. 15 decks x 6 blocks x 200 games, seeds 17,000,000 + 10,000 x block, arms adjacent
+per (block, deck). Arms: `live` (the shipped sidecar), `sparse` (`ladder: sparse` = mode 4), `sg5` (mode 5, research),
+and on the mode-3 and emulated decks `heur` (the bare ladder, deck play block kept). Paired per game; loss = 9.
+"roll" = rollout units (leaf part of every pass + the root rollout) vs the baseline; "skip" = share of the baseline's
+rollout units not spent. Tools: `build/scratch/p18j-int/tools/abreport.py`, `decstats.py`, `firstdiv.py`.
+
+Bare decks (live = the heuristic ladder):
+
+| deck | sparse net (e/l), t | sparse units / CPU | sparse skip | sg5 net (e/l), t | sg5 units / CPU | sg5 skip |
+|---|---|---|---|---|---|---|
+| Hydras | 0 (0/0) | 0.991 / 0.931 | 4.2 % | +4 (0/4), +2.00 | 0.984 / 1.030 | 36.5 % |
+| Martyr Lifegain | -1 (1/0), -1.00 | 1.012 / 0.949 | 3.6 % | 0 (1/1) | 1.018 / 0.970 | 37.5 % |
+| Maze's End | **+10 (0/10), +3.17** | 1.005 / 0.905 | -0.2 % | **+12 (0/12), +3.48** | 1.002 / 0.948 | 57.1 % |
+| Merfolk Turns (pre-adoption) | 0 | 1.003 / 0.992 | 0.0 % | 0 | 0.991 / 0.990 | 34.5 % |
+| Mill | 0 | 1.004 / 1.003 | 0.5 % | +1 (0/1) | 1.004 / 0.991 | 78.6 % |
+| Sea Creatures (pre-adoption) | 0 | 0.984 / 0.971 | 3.8 % | 0 | 0.930 / 0.908 | 51.0 % |
+| Shadowborn Apostle | 0 | 1.013 / 0.988 | 0.5 % | 0 | 1.016 / 0.995 | 56.9 % |
+| Stuffy Doll | 0 | 0.999 / 1.006 | 0.8 % | 0 | 0.985 / 0.983 | 39.8 % |
+
+Mode-3 decks (live = `sampled_gate: 3`) and emulated decks (live = `ladder: emulated`), each vs live and vs heur:
+
+| deck | live vs heur: net (e/l), units, skip | sparse vs live: net (e/l), units | sparse vs heur: net, units, skip | sg5 vs live: net, units |
+|---|---|---|---|---|
+| Boars (pre-adoption) | -12 (13/1), 0.746, 75.8 % | **+9 (1/10)**, 1.076 | -3 (3/0), 0.803, 35.6 % | +9 (1/10), 1.079 |
+| Morph | -8 (9/1), 0.800, 76.5 % | **+8 (1/9)**, 1.238 | 0, 0.991, 3.4 % | +8 (1/9), 1.251 |
+| Spirits | -1 (1/0), 0.704, 81.0 % | +1 (0/1), 1.092 | 0, 0.769, 39.7 % | +1 (0/1), 1.089 |
+| Landfall | -33 (37/4), 1.093 | **+33 (4/37)**, 0.920 | 0, 1.006, -0.3 % | +33 (4/37), 0.920 |
+| Melira Pod | -1 (1/0), 1.017 | +1 (0/1), 1.008 | 0, 1.025, 0.7 % | +1 (0/1), 1.008 |
+| Modern RW Burn | +1 (0/1), 1.027 | -1 (1/0), 0.948 | 0, 0.974, 16.6 % | -1 (1/0), 0.951 |
+| NivMizzetCombo | -12 (12/0), 1.112 | **+12 (0/12)**, 0.905 | 0, 1.006, -0.4 % | +12 (0/12), 0.904 |
+
+What AB1 says:
+
+1. **Mode 4 skips almost none of the ladder's rollouts on the decks that run it**: 0-4 % on every bare deck, against
+   2.5-29 % of units that the census measured as superseded rollouts there. It acts only when the root rollout wins
+   inside the window AND a leafless pass proves that win; every other decision runs the whole ladder. That is the
+   case the USER ruled out (*"There shouldn't be cases where it is so uncertain it just runs the ladder."*), so
+   mode 4 alone is not the USER's design; mode 5 (a miss goes to the priced sampled gate) is.
+2. **Mode 5 skips 35-79 % of the rollouts, but units and CPU barely move** (units 0.93-1.02, CPU 0.91-1.03): a
+   leafless pass has no incumbent, so its tree is far larger than the rollout pass's tree it replaces. Per decision
+   (decstats): Mill live = 639 tree + 9,362 rollout units, sg5 = 7,976 tree + 1,968 rollout units; Maze's End 440 +
+   11,588 vs 7,023 + 4,927. The rollouts saved are spent again on incumbent-free trees.
+3. **Maze's End loses 10 games under mode 4 (12 under mode 5), all the same shape** (firstdiv, 7 of the 10): the ladder's
+   pass 2 commits a win at T+1, the walk's leafless pass 2 completes WITHOUT one, and leafless pass 3 commits the
+   root rollout's T+2 win. The walk's premise (every pass below the commit refuted the earlier win) fails: the
+   leafless pass refutes a T+1 win the rollout pass finds. Root cause and fix: below.
+4. **Mode 3 beats both the bare ladder and the sparse ladder on Boars and Morph** (live vs heur -12 and -8, at 0.75x and
+   0.80x units): the approved fold of the mode-3 decks into sparse does NOT meet its condition ("at least as good as
+   their mode 3"): sparse vs mode 3 is +9 (Boars), +8 (Morph), +1 (Spirits). They stay on mode 3.
+5. **On the emulated decks sparse = the bare ladder** (it sets the model aside), which is +33 (Landfall) and +12 (Niv) vs
+   the shipped emulated ladder. Not flipped.
+6. Mode 5's own losses (Hydras +4) are priced-gate refusals: it commits a shallower pass than the ladder (Hydras
+   17010116 T1: ladder pass 4 wins T6, sg5 commits pass 3, T7).
+
+### The walk-edge gap (Maze's End, AB1) and its fix
+
+Maze's End 17000084, T4 decision (MTG_FSW_TRACE=1 MTG_FSW_TURN=5, binary mtg_c0): the same breakpoint node child at T5
+d1 -- `land=Maze's End; Manabond, Maze's End` with the continuation `[play Maze's End, activate Maze's End]` -- scores
+tail=5 under the ladder's rollout leaf and tail=9 under the walk's constant leaf. The tail of a window turn that a
+continuation (or an edge node) hands to the horizon is played out by the rollout leaf, which finds the win in that turn;
+the constant leaf answers "no win" for it. So leafless pass 2 "refuted" a T5 win that rollout pass 2 has, and leafless
+pass 3 committed the root rollout's T6 win. Every one of the 7 traced Maze losers has this shape.
+
+Fix (walk only; modes 4 and 5): `p18::t_walk_edge` = the walk pass's last window turn; a leaf at or before it is rolled
+out (cut at the window edge) instead of answering constant, so the walk's leafless pass sees every in-window win the
+rollout pass sees, and its refutations are refutations again. Leaves past the window stay constant. Default on
+(`MTG_P18_WALK_EDGE_ROLL=0` / arm key `_pwe0` turn it off for the A/B); no deck ships mode 4 or 5, so no GT moves.
+The same gap exists in every other leafless shape (FIT and escalation probes, emulated warm-ups, mode 3's lookahead);
+not touched here (a USER question: it would move GT on ~30 decks and needs its own A/B).
+Measured in AB2 (`sparse` vs `sparse_pwe0`, rebased tree): pending.
