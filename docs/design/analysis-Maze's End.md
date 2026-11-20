@@ -4622,3 +4622,28 @@ discard-value rule, NOT Burgeoning's worth as a card. The USER's "too unreliable
 deck-list question, and only a deck_compare screen (Burgeoning -> each candidate replacement, std and 2HG, blind) can
 answer it. That screen has not been run. A list change belongs BEFORE the deck's
 mulligan profile, since no new keep table should be built until the list recommendation is settled.
+
+**d8 b0 on every slower game of the two arms that pass the net bar** (`p5d7/m_d8.json`, one pooled batch of 237 jobs:
+each slower lever game paired with ship, both at d8 b0 on the same seed and salt, 50M unit ceiling,
+same_seed_inflight 0; the failing arms were scoped OUT at the coordinator's direction and root-caused from logs
+instead). "Recovered" = lever d8 <= ship d8. UNRESOLVED = one side or both hit the 50M ceiling, so it is neither
+recovered nor failed.
+- **rev (reveal guard): 0 persist.** Clairvoyant 5/5 recovered. Blind 23 recovered, 4 UNRESOLVED (d5 g628 g639 both
+  sides abandoned; d5 g780 lever 7, ship abandoned; d1b3 g110 both abandoned).
+- **revq2: 11 persist, all blind.** Clairvoyant 16/16 recovered. Blind d5: 21 recovered, 6 persist (g95 7 vs 6, g303
+  6 vs 5, g412 5 vs 4, g427 6 vs 5, g600 8 vs 7, g654 9 vs 7), 5 UNRESOLVED (g628 g639 both abandoned; g704 lever
+  abandoned vs ship 9 = unwon, so the lever cannot be worse; g780 lever 7 and g814 lever 8 vs ship abandoned), g642
+  PENDING at writing. 2HG: 11 recovered, 2 persist (g6 6 vs 5, g296 7 vs 6). d3: 6 recovered, 2 persist (g222 8 vs 7,
+  g293 9 vs 6), 2 UNRESOLVED. d1b3: 7 recovered, 2 UNRESOLVED. d1b1: 9 recovered, 1 persists (g58 6 vs 5), 1
+  UNRESOLVED. Net over the 11 persisters: +14 turns.
+- **The revq2 persisters are the q2 component.** At d8 b0 blind salt 1, d5 g427 / g303 / g412: rev alone = ship (5 / 5 /
+  4); q2 alone = revq2 (6 / 6 / 5). In g427 the lines agree until T4's main, after which ship holds Gond Gate +
+  Manor Gate for the end step and q2 does not; the win slips T5 -> T6.
+- **So q2 (Manabond discard rule) does NOT clear the d8 half of the bar** (at least 11 non-recoveries at salt 1,
+  confirmed on 3 by attribution), on top of failing blind d1b1. **rev clears both halves** (net <= 0 on every row in
+  both modes, 0 persisters, 4 unresolved).
+- The 4-salt ensemble from P5d-6 (d5 g219, 2HG g108 g161 g21: rev +9 over salts 1-4) was a d8 run of the reveal guard
+  over salts 2-4 on games picked from an EARLIER sample. In this held-out A/B none of those four games is slower under
+  rev. The question still stands: whether rev's 4-salt +9 on those games outweighs its clean held-out result here is
+  for the USER.
+- Tier slower games (above): 13 recovered (11 at the old score, 2 equal to origin's own d8), s3003 g112 UNRESOLVED.
