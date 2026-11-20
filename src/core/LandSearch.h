@@ -955,7 +955,7 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         // Forbidden Orchard's on-play spawn, mirrored as Crop Rotation does -- only for an UNTAPPED
         // entry (it models "tapped for mana this turn"); a forced-tapped Orchard taps next turn and
         // the turn-start spawn covers it. Unreachable for every basic-only search.
-        if (!spec.tapped && IsForbiddenOrchard(d)) { SpawnOpponentSpirit(state); }
+        if (!spec.tapped && IsForbiddenOrchard(EffectiveLandDef(state, d))) { SpawnOpponentSpirit(state); }   // G6
         bf_nums[n_bf] = lc.m_number;
         bf_defs[n_bf] = d;
         ++n_bf;
@@ -994,7 +994,7 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
             ResolveLandEnterEtbExtras(state, *bf_defs[i], slot);
         }
         else if (slot >= 0) { ResolveLandEnterEtbExtras(state, *bf_defs[i], slot); }
-        else if (bf_defs[i]->params.etb_lifegain > 0)
+        else if (EffectiveLandDef(state, *bf_defs[i]).params.etb_lifegain > 0)   // G3: none under Blood Sun
         { GainLife(state, state.active_player_index, bf_defs[i]->params.etb_lifegain); }
         if (probed)
         {

@@ -4139,7 +4139,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color. [WUBRG pain land: tap_self_damage 1 (mandatory whenever tapped for mana, applied at the shared tap sites). Our life loss is inert for the goldfish clock in most decks; it interacts only with our own life-cost accounting. EXCEPT in a damage-event deck (Prevent Damage: GameState::dmg_events_armed), where the 1 damage is a damage EVENT from a noncreature source we control -- Tamanoa triggers on it and our own death is a state-based action. The printed ability is a TRIGGER ('whenever this land becomes tapped'), modelled as immediate damage at the tap: it resolves before the spell being paid for either way, which is all the engine can observe (no priority windows). Tapping it for a non-mana reason never happens in this engine.]",
+   "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color. [WUBRG pain land: tap_self_damage 1 (mandatory whenever tapped for mana, applied at the shared tap sites). Our life loss is inert for the goldfish clock in most decks; it interacts only with our own life-cost accounting. EXCEPT in a damage-event deck (Prevent Damage: GameState::dmg_events_armed), where the 1 damage is a damage EVENT from a noncreature source we control -- Tamanoa triggers on it and our own death is a state-based action. The printed ability is a TRIGGER ('whenever this land becomes tapped'), modelled as immediate damage at the tap: it resolves before the spell being paid for either way, which is all the engine can observe (no priority windows). Tapping it for a non-mana reason never happens in this engine. tap_self_damage_is_trigger marks that the ping is this separate TRIGGERED ability, not part of the mana ability (a painland's damage is): under Blood Sun ('All lands lose all abilities except mana abilities') it is removed and a tap is painless; read only while a Blood Sun is on the battlefield (core/LandAbilityLoss.h EffectiveTapSelfDamage), so every other deck is unchanged.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -4149,7 +4149,8 @@
      "R",
      "G"
     ],
-    "tap_self_damage": 1
+    "tap_self_damage": 1,
+    "tap_self_damage_is_trigger": true
    }
   },
   {
@@ -18862,6 +18863,21 @@
     "produces_one_color": true,
     "enters_tapped": true,
     "etb_sacrifice_lands": 2
+   }
+  },
+  {
+   "name": "Blood Sun",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, draw a card.\nAll lands lose all abilities except mana abilities. [Clause 1: etb_self_draw 1 -- the entering permanent's OWN forced draw, fired from FireOwnEtbTriggers for a cast enchantment exactly as for Arcum's Astrolabe (a real draw: cards_drawn_this_turn, the draw sink, the site-10 put-in-hand breakpoint re-solves the drawn card with the turn's remaining mana). Clause 2: lands_lose_nonmana_abilities -- CR 613.1f layer 6, every land on the battlefield, BOTH controllers. Read only through LandNonManaAbilitiesSuppressed (core/LandAbilityLoss.h), gated per game by GameState::deck_has_land_ability_loss. A land's params are classified (cards/LandAbilityClasses.h) as mana (kept: produces, filter modes, a painland's damage, which is part of its mana ability), GATED (dropped while a Blood Sun is on the battlefield: every enters-tapped rule, Karoo bounce, scry / surveil / lifegain / energy enter triggers, the Lotus lands' sacrifices, Gateway Plaza, rad, Forbidden Orchard's tap trigger, City of Brass's triggered ping) or SELF-GUARDED (activated non-mana abilities, statics, as-enters choices a mana ability depends on: a Blood Sun list holding such a land is refused at setup). Rulings 3-4 (CR 614.12): a land entering under Blood Sun has already lost its as-enters / replacement / enter-trigger abilities -- it enters untapped, pays nothing, bounces and sacrifices nothing; nothing is retroactive (a land that entered tapped stays tapped). Ruling 2: land cards off the battlefield are unaffected (cycling). Rulings 5-6 (granted abilities, land type changes) are self-guard items: no card in the list grants a land an ability. The opponent's lands are affected too (their enters-tapped rules and fetch are gated in the passive opponent's land play).]",
+   "template": "custom",
+   "parameters": {
+    "lands_lose_nonmana_abilities": true,
+    "etb_self_draw": 1
    }
   },
   {

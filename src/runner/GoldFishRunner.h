@@ -125,6 +125,9 @@ public:
     // harness missed uses_second_main for months, so the main-phase filter never fired in any
     // scenario fixture and a "both arms find the kill" proof was vacuous for the filtered arm.
     static void StampDeckTraits(GameState& state, const Decklist& deck);
+    // Blood Sun's self-guard (docs/design/blood-sun-pipeline.md 2.4): "" when every land in the list has only mana or
+    // GATED abilities, else the "[bloodsun] <card> has <param> ..." refusal StampDeckTraits prints before exiting.
+    static std::string LandAbilityLossSelfGuard(const Decklist& deck);
 
     // Adds the opponent's blocker pattern for this game index (10-game cycle).
     // Exposed so diagnostics can reproduce the runner's per-game setup exactly.

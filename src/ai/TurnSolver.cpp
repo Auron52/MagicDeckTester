@@ -38240,9 +38240,12 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
     // A SCRY WATCHER (Galadriel) counts too: the land's own ETB scry is what fires it, so a land
     // played after the watcher is cast starts a reveal chain and one played before it does not.
+    // BLOOD SUN counts too: a land played after it enters as its mana-only projection (untapped, no bounce, no Lotus
+    // sacrifice), one played before it does not -- so "land after the casts" is a different line (its own param).
     return d != nullptr && (d->landfall_watcher || d->params.horn_draw_on_land_play
                             || d->params.reveal_x_put_permanents
-                            || d->params.scry_reveal_land_to_battlefield);
+                            || d->params.scry_reveal_land_to_battlefield
+                            || d->params.lands_lose_nonmana_abilities);
 }
 
 // ---- The reveal outlet's position (Martyr of Sands; see TurnSolver.h) ------------------------------
@@ -62261,7 +62264,8 @@ static GameState WithPlanLandDrop(const GameState& state, const TurnSolver::Plan
     const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
     // A land played after (any of) the casts (Plan::land_slot != 0) is deferred exactly like the
     // Karoo -- the caller's deferred play handles both.
-    if ((s_karoo_defer && ld && ld->params.etb_bounce_land) || plan.land_slot != 0)
+    // BLOOD SUN: a Karoo played under it is a plain untapped land (its mana-only projection) -- never deferred.
+    if ((s_karoo_defer && ld && EffectiveLandDef(base, *ld).params.etb_bounce_land) || plan.land_slot != 0)
     {
         if (karoo_out != nullptr) { *karoo_out = plan.land_to_play; }
         return base;
@@ -74950,7 +74954,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         bool tap_before = false;
         for (const TurnSolver::PreTap& t : plan.human_pre_taps) { if (t.position <= L) { tap_before = true; } }
         const CardDefinition* hld = CardDatabase::Instance().Lookup(plan.land_to_play);
-        const bool karoo = s_karoo_defer && hld != nullptr && hld->params.etb_bounce_land;
+        const bool karoo = s_karoo_defer && hld != nullptr && EffectiveLandDef(state, *hld).params.etb_bounce_land;
         if (L > 0 || tap_before || karoo) { human_land_at = L; }
         // A shock land enters untapped (2 life) only when the line can still spend its mana: ANY step
         // after it that costs mana -- a cast, a retrace, a dig, and every PAID activation (an equip, a
@@ -75055,7 +75059,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
-                const bool ld_karoo = s_karoo_defer && ld && ld->params.etb_bounce_land;
+                // BLOOD SUN: judged on the plan's START state, as in every other world (WithPlanLandDrop, the
+                // enumeration, AIEngine::TakeTurn): under it a Karoo is a plain land, played first.
+                const bool ld_karoo = s_karoo_defer && ld && EffectiveLandDef(state, *ld).params.etb_bounce_land;
                 if (human_land_at >= 0)
                 {
                     // THE HUMAN'S POSITION (Plan::human_land_step): reserve the drop exactly as the
@@ -84939,7 +84945,7 @@ static std::string SimulateLandPlayOne(GameState& state)
             if (c.m_impulse_no_land) { continue; }
             const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(c));
             if (!d) { continue; }
-            if (d->params.etb_bounce_land && !has_other_land) { continue; }
+            if (EffectiveLandDef(state, *d).params.etb_bounce_land && !has_other_land) { continue; }
             if (LakeDropWithoutVictim(state, *d)) { continue; }
             seen.insert(c.m_name.str());
         }
@@ -85025,7 +85031,7 @@ static std::string SimulateLandPlayOne(GameState& state)
         if (!top_ok) { return false; }
         const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
         if (!def) { return false; }
-        if (def->params.etb_bounce_land && !has_other_land) { return false; }
+        if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { return false; }
         if (LakeDropWithoutVictim(state, *def)) { return false; }
         return pass != 0 || def->params.produces.size() > 1;
     };
@@ -85043,7 +85049,7 @@ static std::string SimulateLandPlayOne(GameState& state)
             // A Karoo bounce land with no other land in play must return ITSELF (the bounce is
             // mandatory) -- net no land in play and a wasted drop. Never the greedy choice; play a
             // real land first (matches the searched land drop, which rejects the self-bounce).
-            if (def->params.etb_bounce_land && !has_other_land) { continue; }
+            if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { continue; }
             if (LakeDropWithoutVictim(state, *def)) { continue; }   // dominated by holding it
 
             bool is_multi = def->params.produces.size() > 1;   // see LandPlay.cpp's measurement
@@ -107102,9 +107108,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // otherwise-identical Gates (Guildgates of different names, the chosen-colour CLB Gates) are NOT
     // interchangeable land drops -- the one already on the battlefield adds nothing to the count.
     // Every deck without a Gate keeps the exact signature above.
-    auto land_sig_named = [&land_sig](const CardDefinition* d) -> std::string
+    // BLOOD SUN (G8): the signature is the land's EFFECTIVE one -- under Blood Sun its mana-only projection, so lands
+    // that differ only in what Blood Sun removed (a Karoo's bounce, a fastland's window, Lotus Vale vs Lotus Field's
+    // sacrifice, City of Brass's triggered ping) fold exactly. The printed params everywhere else.
+    auto land_sig_named = [&land_sig, &state](const CardDefinition* d) -> std::string
     {
-        std::string s = land_sig(d->params);
+        std::string s = land_sig(EffectiveLandDef(state, *d).params);
         if (CardHasSubtype(d->card, "Gate")) { s += "|N"; s += d->card.m_name.str(); }
         return s;
     };
@@ -107186,7 +107195,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // Lake of the Dead with no Swamp to sacrifice: same dominated-drop class (LakeDropWithoutVictim).
         if (!s_human_play_lands && LakeDropWithoutVictim(state, *def)) { return true; }
         return !s_karoo_selfbounce && !s_human_play_lands
-            && def->params.etb_bounce_land && !has_other_land_enum;
+            && EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land_enum;   // Blood Sun: no bounce
     };
     // ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND; see BpLandDropSlotPassed) --------------------
     // The drop's slot has passed and this plan took the DEFER branch, so every land that was in
@@ -107481,7 +107490,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             static const bool s_karoo_defer_enum = !EnvOn("MTG_NO_KAROO_DEFER");
             const CardDefinition* fold_ld =
                 land_name.empty() ? nullptr : CardDatabase::Instance().Lookup(land_name);
-            if (s_karoo_defer_enum && fold_ld && fold_ld->params.etb_bounce_land)
+            if (s_karoo_defer_enum && fold_ld && EffectiveLandDef(state, *fold_ld).params.etb_bounce_land)   // Blood Sun
             {
                 karoo_drop = true;
                 copy = state;   // the PlayLandByName above was the legality probe only
@@ -138897,7 +138906,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     {
         static const bool s_karoo_defer_cl = !EnvOn("MTG_NO_KAROO_DEFER");
         const CardDefinition* wl = CardDatabase::Instance().Lookup(spec.land);
-        if (s_karoo_defer_cl && wl != nullptr && wl->params.etb_bounce_land)
+        if (s_karoo_defer_cl && wl != nullptr && EffectiveLandDef(state, *wl).params.etb_bounce_land)   // Blood Sun
         {
             wantSlot = 0;
             if (spec.land_slot != kLandSlotAfterCasts && spec.land_at_raw >= 0)
@@ -141409,7 +141418,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     // turn (it enters tapped) and its bounce floats an untapped victim, so the prefix is not paid
     // without it in the way this check models.
     const CardDefinition* lat_def = spec.has_land ? CardDatabase::Instance().Lookup(spec.land) : nullptr;
-    const bool lat_karoo = lat_def != nullptr && lat_def->params.etb_bounce_land;
+    const bool lat_karoo = lat_def != nullptr && EffectiveLandDef(state, *lat_def).params.etb_bounce_land;
     // ...and in human play `landafter=` too (the land after EVERY cast): CheckLine now matches a legal
     // human position the menu does not offer against the land-first plan, so the casts queued before
     // the land must be shown payable without it here, or "cast it all, then the land" would be accepted

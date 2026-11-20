@@ -1,0 +1,34 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lotus Vale",
+  "Blood Sun"
+ ],
+ "human_lines": [
+  "land=Lotus Vale;cast=Blood Sun",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "comment": "Blood Sun step 3 (design 3.4 row 5): UNDER BLOOD SUN LOTUS VALE ENTERS WITH NO SACRIFICE, even with no other land (its replacement is a lost ability; ruling 4). Untapped, its {R}{R}{R} pays the second Blood Sun ({2}{R}). Without Blood Sun it would go to the graveyard (bloodsun_vale_one_untapped_to_graveyard.json)."
+}

@@ -5258,7 +5258,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
-                if (s_karoo_defer && ld && ld->params.etb_bounce_land)
+                // BLOOD SUN: a Karoo under it is a plain untapped land -- played first, like the rollout's.
+                if (s_karoo_defer && ld && EffectiveLandDef(state, *ld).params.etb_bounce_land)
                 {
                     // Reserve the drop; play it after the main cast loop (see karoo_deferred) -- or right
                     // before its r-th counted cast (exec_karoo_slot, MTG_KAROO_POSITION).

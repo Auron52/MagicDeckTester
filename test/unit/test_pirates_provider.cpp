@@ -374,6 +374,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // ABOVE `redelem` on six cards' params (tap_ping_damage, vanishing_counters, ltb_damage_any,
         // opp_may_take_damage_instead_of_draw, etb_target_creature_pump_power).
         {"Creature Burn", "CreatureBurn"},
+        // Blood Sun (design step 3, 2026-11-20): it rode GenericProvider; BloodSunProvider routes it by Blood Sun's
+        // own lands_lose_nonmana_abilities, ABOVE `anti` (docs/design/blood-sun-pipeline.md section 10.3).
+        {"Blood Sun", "BloodSun"},
     };
 
     namespace fs = std::filesystem;

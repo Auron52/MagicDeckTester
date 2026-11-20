@@ -63,6 +63,7 @@
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
+#include "../core/LandAbilityLoss.h"   // Blood Sun: LandNonManaAbilitiesSuppressed
 #include "KeepModel.h"    // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
 #include "PlanContext.h"  // PlanTraits for the reserve-override hooks (Action-free header)
 #include "ProviderHeuristicRequired.h"   // RequiredHeuristic (ImplementsRequiredHeuristic)
@@ -4497,6 +4498,9 @@ public:
     virtual bool KarooEntryObserver(const GameState& s, const CardDefinition& def) const
     {
         if (def.params.landfall_damage > 0 || def.params.cast_lifegain_landfall > 0) { return true; }
+        // BLOOD SUN changes HOW a land enters (a Karoo played after it enters untapped and bounces nothing), so the
+        // Karoo before / after it is a real choice -- an observer in the sense above. Its own param: no other deck moves.
+        if (def.params.lands_lose_nonmana_abilities) { return true; }
         return s.deck_has_landfall;
     }
     // LandfallCounterTargetIsPick -- is LandfallCounterTargetOrder's FRONT class the target of every
@@ -5149,6 +5153,8 @@ public:
         (void)s; (void)controller;
         std::vector<int> out;
         if (!def.card.IsLand()) { return out; }
+        // BLOOD SUN: every as-enters choice and enter trigger of the land is gone -- nothing to fan.
+        if (LandNonManaAbilitiesSuppressed(s)) { return out; }
         const CardParams& p = def.params;
         if (p.etb_choose_color && !EtbColorChoiceIsNonSource(p))
         {

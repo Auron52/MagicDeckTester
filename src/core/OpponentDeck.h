@@ -18,6 +18,7 @@
 #include "GameState.h"
 #include "DrawCap.h"
 #include "OpponentDeckPool.h"
+#include "LandAbilityLoss.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/EngineFlags.h"   // FreeTurnHurdlesOn: the free-turn rule's cleanup floor
 #include <algorithm>

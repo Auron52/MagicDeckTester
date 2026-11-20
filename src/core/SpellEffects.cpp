@@ -1175,8 +1175,10 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
                 // GONE (another land's bounce already returned it). Its own enter triggers fired on
                 // entry and still resolve: a Karoo's "return a land you control" with no self to
                 // fall back on (-1), and its lifegain -- in ResolveLandEnterEtbExtras' order.
-                if (pl.def->params.etb_bounce_land) { BounceKarooLand(state, controller, -1); }
-                if (pl.def->params.etb_lifegain > 0) { GainLife(state, controller, pl.def->params.etb_lifegain); }
+                // BLOOD SUN (G3): a land that entered under Blood Sun has no enter trigger to resolve.
+                const CardDefinition& eff = EffectiveLandDef(state, *pl.def);
+                if (eff.params.etb_bounce_land) { BounceKarooLand(state, controller, -1); }
+                if (eff.params.etb_lifegain > 0) { GainLife(state, controller, eff.params.etb_lifegain); }
                 continue;
             }
             if (!late_own_etb(pl.def->params)) { continue; }
@@ -3561,17 +3563,19 @@ static thread_local bool g_bt_painless_pass = false;
 // 2 = nothing (skipped for the pass). Only a PLAIN source keeps a {C}-only shape; a painful source of
 // any other shape (none in cards.json today) is simply skipped by the pass -- conservative, because
 // the unrestricted pass behind it is complete.
-static int BtPainlessMode(const CardDefinition& d)
+// `state`: Blood Sun's G5 -- City of Brass's triggered ping is gone under it, so it is a painless source there.
+static int BtPainlessMode(const GameState& state, const CardDefinition& d)
 {
     if (!g_bt_painless_pass) { return 0; }
+    const int self_dmg = EffectiveTapSelfDamage(state, d);
     // MTG_PAY_ENERGY_LAST: an energy-paid colour (Aether Hub) is withheld like a damaging one; the source
     // keeps its free {C} mode (or is skipped when it has none).
-    if (d.params.tap_self_damage <= 0 && d.params.energy_per_colored_tap > 0 && PayEnergyLastOn())
+    if (self_dmg <= 0 && d.params.energy_per_colored_tap > 0 && PayEnergyLastOn())
     {
         for (Color c : d.params.produces) { if (c == Color::Colorless) { return 1; } }
         return 2;
     }
-    if (d.params.tap_self_damage <= 0) { return 0; }
+    if (self_dmg <= 0) { return 0; }
     bool has_colour = false, has_c = false;
     for (Color c : d.params.produces)
     { if (c == Color::Colorless) { has_c = true; } else { has_colour = true; } }
@@ -3599,7 +3603,7 @@ static bool BoardHasPainfulColourSource(const GameState& state, std::uint64_t re
         if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
-        if (d->params.tap_self_damage <= 0
+        if (EffectiveTapSelfDamage(state, *d) <= 0   // G5: City of Brass under Blood Sun is painless
             && !(d->params.energy_per_colored_tap > 0 && PayEnergyLastOn())) { continue; }   // MTG_PAY_ENERGY_LAST
         for (Color c : d->params.produces) { if (c != Color::Colorless) { return true; } }
     }
@@ -3688,7 +3692,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         // PAINLESS-FIRST PASS (see BtPainlessMode): the oracle prices exactly the sources the restricted
         // DFS may use, so a pass that cannot pay without pain is proven infeasible here in one flow
         // instead of by exhausting the restricted tree. 0 outside the pass -> unchanged.
-        const int pmode = BtPainlessMode(*def);
+        const int pmode = BtPainlessMode(state, *def);
         if (pmode == 2) { continue; }
         // SCALED MANA DORK (Priest of Titania / Elvish Archdruid): one tap bursts the live Elf
         // count into its ONE produces colour ({G}) -- per-permanent yield like a storage land.
@@ -5076,7 +5080,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // below with the other payment-legality strips). Definition-determined, like every filter
         // above, so the identical-sibling chain's "passed the same filters" premise still holds.
         // Constant 0 outside the pass.
-        const int pain_mode = BtPainlessMode(*def);
+        const int pain_mode = BtPainlessMode(state, *def);
         if (pain_mode == 2) { continue; }
 
         // Identical-sibling collapse (see the s_dup_of_buf block above): an untapped chain member was
@@ -5263,7 +5267,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
             // A tap_self_damage_any_mode land (Ancient Tomb) hurts in its {C} mode too: the {C} is
             // its ONLY ability, not a painland's separate painless one. No unarmed deck runs one.
-            const bool hurts = def->params.tap_self_damage > 0
+            const bool hurts = EffectiveTapSelfDamage(state, *def) > 0   // G5: City of Brass under Blood Sun
                                && (!painless || def->params.tap_self_damage_any_mode);
             if (state.dmg_events_armed)
             {
@@ -6263,6 +6267,10 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     // flipped because only it plays drip lands in both configs. Constant within a job -> this fold
     // is byte-identical for every single-config run; mixed-heads pools stop sharing entries.
     mix(h2, 0xD21'4EAD5ull + static_cast<std::uint64_t>(gamesetup::OpponentHeads()));
+    // BLOOD SUN (G7): the same board solves differently under it -- City of Brass's triggered ping is gone, so a
+    // stored solve's self_life must not replay across a Blood Sun entering or leaving. Folded only under the deck
+    // stamp, so every other deck's keys are the historical ones bit for bit.
+    if (state.deck_has_land_ability_loss && LandNonManaAbilitiesSuppressed(state)) { mix(h1, 0xB100D5'00ull); }
     // PREVENT DAMAGE (armed only -- unarmed keys are unchanged). A stored solve records the OBSERVED
     // pain (self_life) and per-tap damage marks, and both depend on two things the source scan below
     // cannot see: whether Purity prevents the pain, and whether this solve paid generic pips with the

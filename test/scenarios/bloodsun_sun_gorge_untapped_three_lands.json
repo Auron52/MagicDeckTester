@@ -1,0 +1,51 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Copperline Gorge",
+  "Lightning Bolt",
+  "Rampant Growth"
+ ],
+ "human_lines": [
+  "land=Copperline Gorge;cast=Lightning Bolt;cast=Rampant Growth",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_opponent_life": 17,
+ "comment": "Blood Sun step 3 (design 3.4 row 2): UNDER BLOOD SUN COPPERLINE GORGE IS UNTAPPED WITH THREE OTHER LANDS (the fastland clause is a lost ability). Its {R} pays Lightning Bolt (opponent 20 -> 17). Control: bloodsun_gorge_tapped_three_lands.json (no Blood Sun: tapped, Bolt illegal)."
+}

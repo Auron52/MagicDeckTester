@@ -1,4 +1,5 @@
 #include "CardDatabase.h"
+#include "LandAbilityClasses.h"
 #include "../core/CreatureTypeCatalog.h"
 #include "../core/EnvFlags.h"
 #include <fstream>
@@ -91,6 +92,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
     {
         throw std::runtime_error("Card data file missing 'cards' array: " + path.string());
     }
+    // Blood Sun's mana-only projections to build once every definition is final (see the land block below).
+    std::vector<std::pair<std::string, json>> land_twin_params;
 
     for (const json& entry : root["cards"])
     {
@@ -141,6 +144,44 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             }
             // 0 is reserved for "no identity" (Register-built definitions), so never hand it out.
             def.behaviour_identity = h ? h : 1ULL;
+        }
+        // BLOOD SUN's mana-only projection and self-guard (CardDefinition::land_ability_loss_twin /
+        // mana_only_identity / land_ungated_ability; the key classes are cards/LandAbilityClasses.h). Digested the
+        // same way as behaviour_identity above, with every GATED key and the land's keywords dropped, so two lands
+        // that differ only in what Blood Sun removes (Lotus Vale, Lotus Field) share it. The twin itself is built
+        // after the loop (it copies the finished definition); a land with nothing to drop gets none.
+        if (def.card.IsLand())
+        {
+            json ident = entry;
+            json stripped = json::object();
+            bool drops = false;
+            const bool trig_ping = entry.contains("parameters") && entry["parameters"].is_object()
+                && entry["parameters"].value("tap_self_damage_is_trigger", false);
+            if (entry.contains("parameters") && entry["parameters"].is_object())
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                {
+                    const landloss::LandKeyClass c = landloss::ClassifyLandKey(it.key());
+                    if (c == landloss::LandKeyClass::Gated || (trig_ping && landloss::StripsTapSelfDamage(it.key())))
+                    { drops = true; continue; }
+                    if ((c == landloss::LandKeyClass::SelfGuard || c == landloss::LandKeyClass::Unclassified)
+                        && def.land_ungated_ability.empty())
+                    { def.land_ungated_ability = it.key(); }
+                    stripped[it.key()] = it.value();
+                }
+            }
+            ident["parameters"] = stripped;
+            if (ident.contains("keywords")) { ident["keywords"] = json::array(); }
+            for (const char* k : { "name", "oracle_text" }) { if (ident.contains(k)) { ident.erase(k); } }
+            const std::string s = ident.dump();
+            std::uint64_t h = 1469598103934665603ULL;            // FNV-1a 64, as behaviour_identity
+            for (char c : s)
+            {
+                h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c));
+                h *= 1099511628211ULL;
+            }
+            def.mana_only_identity = h ? h : 1ULL;
+            if (drops) { land_twin_params.emplace_back(def.card.m_name.str(), std::move(stripped)); }
         }
         // THE OVERLORD VICTIM FOLD's premises (CardDefinition::upkeep_fold_audited / _keeper; the proof
         // and every audited key's reader are at SpellEffects.h UpkeepSacFoldReps). A WHITELIST of raw keys:
@@ -407,6 +448,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             const std::string bn = def.params.mdfc_back_name;
             CardDefinition back = def;                      // Land type/subtypes copied from the front
+            back.mana_only_identity = 0;                    // Blood Sun's projection is the front's: none here
+            back.land_ungated_ability.clear();
             back.card.m_name = bn;                          // InternedName assign
             back.card.m_def  = nullptr;                     // name-derived def cache must reset
             back.card.RehashName();
@@ -652,6 +695,20 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         def.tmpl = CardTemplate::None;
         def.params = BuildParamsFromJson(ph["parameters"]);
         m_cards[def.card.m_name] = std::move(def);
+    }
+    // BLOOD SUN's twins: a copy of the finished definition with the mana-only params (stable: m_land_twins' nodes
+    // never move, and a twin has no twin of its own, so EffectiveLandDef is idempotent).
+    for (auto& [name, stripped] : land_twin_params)
+    {
+        auto it = m_cards.find(name);
+        if (it == m_cards.end()) { continue; }
+        CardDefinition twin = it->second;
+        twin.params                 = BuildParamsFromJson(stripped);
+        twin.behaviour_identity     = it->second.mana_only_identity;
+        twin.land_ability_loss_twin = nullptr;
+        CardDefinition& slot = m_land_twins[name];
+        slot = std::move(twin);
+        it->second.land_ability_loss_twin = &slot;
     }
     RebuildInternedIndex();
 }
@@ -2406,6 +2463,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("etb_replace_sacrifice_land_subtype", std::string{});
     p.etb_replace_sacrifice_untapped_lands = params.value("etb_replace_sacrifice_untapped_lands", 0);
     p.etb_sacrifice_lands                  = params.value("etb_sacrifice_lands", 0);
+    p.lands_lose_nonmana_abilities         = params.value("lands_lose_nonmana_abilities", false);
+    p.tap_self_damage_is_trigger           = params.value("tap_self_damage_is_trigger", false);
     p.sac_for_mana_victim_land_subtype =
         params.value("sac_for_mana_victim_land_subtype", std::string{});
     p.tutor_to_battlefield_single   = params.value("tutor_to_battlefield_single", false);

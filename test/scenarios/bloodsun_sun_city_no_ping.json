@@ -1,0 +1,40 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "City of Brass",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Lightning Bolt"
+ ],
+ "human_lines": [
+  "cast=Lightning Bolt",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_opponent_life": 17,
+ "expect_active_life": 20,
+ "comment": "Blood Sun step 3 (design 3.4 row 3): UNDER BLOOD SUN CITY OF BRASS DOES NOT PING. Its 'Whenever this land becomes tapped, it deals 1 damage to you' is a triggered ability (tap_self_damage_is_trigger), removed by Blood Sun; the mana ability stays. Bolt from City's {R}: opponent 20 -> 17, we stay at 20. Control: bloodsun_city_pings_without_sun.json."
+}

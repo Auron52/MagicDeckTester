@@ -721,7 +721,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         // the payment's flush (core/DamageEvents.h). Same painless-{C} rule as below, except that
         // a tap_self_damage_any_mode land (Ancient Tomb) hurts in every mode.
         int pain = 0;
-        if (def.params.tap_self_damage > 0)
+        if (EffectiveTapSelfDamage(state, def) > 0)   // G5: City of Brass's triggered ping is gone under Blood Sun
         {
             bool has_c_mode = false;
             for (Color pc : EffectiveProducesFor(state, active, def, &p))
@@ -730,7 +730,7 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
         }
         dmgev::ArmedManaTap(state, active, p, pain);
     }
-    else if (def.params.tap_self_damage > 0)
+    else if (EffectiveTapSelfDamage(state, def) > 0)   // G5 (Blood Sun)
     {
         // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
         // the next call overwrites (see RitualTapAheadIntoFloat's note).
