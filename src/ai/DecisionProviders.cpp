@@ -70546,14 +70546,46 @@ bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int c
 //    setting up the win: "cast it first" / "delay one turn"), or a KEPT card (Amulet, the one Exploration with none out,
 //    the one Guild Summit with none out) would go for a single land. Returns -1.
 //  * CLOSE -> the engine's default order (yes first): anything else (a kept card for two or more lands). Returns 0.
+// MTG_MAZE_DUMP_CENSUS=1 (diagnostic only; P5d-7): how often each class fires, split REAL game (g_real_resolution)
+// vs search. Counters are atomics read by nothing but the exit report, so nothing here can reach play.
+namespace mazedumpcensus
+{
+    enum Cls { kClearPrune = 0, kCloseTutor, kCloseKept1, kCloseDefault, kCount };
+    inline bool On() { static const bool on = EnvOn("MTG_MAZE_DUMP_CENSUS"); return on; }
+    struct Census
+    {
+        std::atomic<uint64_t> n[2][kCount]{};
+        ~Census()
+        {
+            if (!On()) { return; }
+            static const char* nm[kCount] = { "clear_prune(all_free)", "close_no_first(tutor_held)",
+                                              "close_no_first(kept_for_1_land)", "close_default(other)" };
+            for (int r = 0; r < 2; ++r)
+            {
+                std::fprintf(stderr, "[maze-dump-census] %s", r ? "real" : "search");
+                for (int i = 0; i < kCount; ++i)
+                { std::fprintf(stderr, " %s=%llu", nm[i], static_cast<unsigned long long>(n[r][i].load())); }
+                std::fprintf(stderr, "\n");
+            }
+        }
+    };
+    inline Census g_census;
+    inline int Note(int cls, int ret)
+    {
+        if (On()) { g_census.n[g_real_resolution ? 1 : 0][cls].fetch_add(1, std::memory_order_relaxed); }
+        return ret;
+    }
+}
+
 int MazesEndProvider::CrossingDumpYesOrder(const GameState& s, int controller, int lands_put) const
 {
     if (!MazeManabondDiscardOn() || !MazeAutonomous() || lands_put <= 0) { return 0; }
     const MazeDumpView v = MazeDumpDiscards(s, controller, lands_put);
     if (v.nonland == 0) { return 0; }
-    if (v.free == v.nonland) { return 2; }
-    if (v.held_tutors > 0 || (v.kept > 0 && lands_put < 2)) { return -1; }
-    return 0;
+    if (v.free == v.nonland) { return mazedumpcensus::Note(mazedumpcensus::kClearPrune, 2); }
+    if (v.held_tutors > 0) { return mazedumpcensus::Note(mazedumpcensus::kCloseTutor, -1); }
+    if (v.kept > 0 && lands_put < 2) { return mazedumpcensus::Note(mazedumpcensus::kCloseKept1, -1); }
+    return mazedumpcensus::Note(mazedumpcensus::kCloseDefault, 0);
 }
 
 // P6 (USER 2026-11-18, ruling 6, VERBATIM: "It's especially easy if we can respond to a trigger from Manabond or
