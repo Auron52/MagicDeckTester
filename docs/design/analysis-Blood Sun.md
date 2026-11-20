@@ -62,6 +62,8 @@ one lotus), emrakul and Diabolic Revelation, play Emrakul and begin looping. It 
 like that after you have the extra land drops from the Time Warp extra turn."* -> canonical Emrakul-loop
 entry: >= 4 remaining drops + 11 mana -> Revelation X=6 {Ruins x4 | Ruins x3 + Lotus, Emrakul,
 Revelation} -> 15-16 mana -> Emrakul -> loop. Scenario test.
+USER (verbatim): *"(naturally you can also get exploration or fastbond and play it if you have the mana
+to do so)"* -> drops can be bought inside the go-off turn ({G} per Exploration/Fastbond).
 
 
 ## Standing decisions (pass to every subagent)
