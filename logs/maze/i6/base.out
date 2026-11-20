@@ -1,0 +1,6 @@
+=== BATCH (streaming per-job results as each job finishes) ===
+D8_mazesend_regression_d5_s2002_g42_base: played=1 avg=6.0000 digest=e243a724fcc843f0 ms=1104 units=49775 cpu=1104
+D8_mazesend_regression_d5_s2002_g11_base: played=1 avg=6.0000 digest=48e7acc0fbe55da3 ms=4742 units=426786 cpu=4742
+D8_mazesend_regression_d5_s2002_g86_base: played=1 avg=5.0000 digest=eeb01fe07a9def9f ms=7996 units=560064 cpu=7995
+D8_mazesend_regression_d5_s3003_g112_base: played=0 avg=0.0000 digest=14650fb0739d0383 ms=752676 units=0 cpu=752538
+=== BATCH done (4 jobs, 3 games) ===

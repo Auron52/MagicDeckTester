@@ -1,0 +1,22 @@
+pooled batch: 11 reference games in ONE process (threads=16)
+
+=== maze_s_end  (n=11, max_turns=8, no-win scores 9)
+reference                   seed   gi |  human search | flags
+claude_s10_gi9.json           10    9 |      6      6 | 
+claude_s12345681_gi12345680.json 12345681 12345680 |      5      5 | 
+claude_s1_gi0.json             1    0 | NO-WIN NO-WIN | 
+claude_s2_gi1.json             2    1 |      5      5 | 
+claude_s3_gi2.json             3    2 |      6      6 | 
+claude_s4_gi3.json             4    3 |      5      5 | 
+claude_s5_gi4.json             5    4 |      5      5 | 
+claude_s6_gi5.json             6    5 |      6      6 | 
+claude_s7_gi6.json             7    6 |      5      5 | 
+claude_s8_gi7.json             8    7 |      6      6 | 
+claude_s9_gi8.json             9    8 |      6      6 | 
+AVG                                   |  5.818  5.818 | avg (no-win = 9)
+
+=== SUMMARY (avg turn-to-win; lower is better; no-win scores 9)
+deck                  n    human   search   shortfalls
+maze_s_end           11    5.818    5.818   0/11 short, 0 faster than human
+TOTAL                11                     0/11 short
+rc=0
