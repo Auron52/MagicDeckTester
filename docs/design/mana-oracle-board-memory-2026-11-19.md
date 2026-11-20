@@ -154,3 +154,81 @@ units 1.
 **Open question for the owner of the gate.** The 768 MB budget now caps Goblins plans that the retry used to
 finish. A board-sharing lever (section 5) would remove most of those stops. So would a larger budget, if thread
 counts allow it.
+
+## 8. Shared outcome boards (branch `wip/oracle-board-share`, 2026-11-19)
+
+The section 5 lever, built exactly. Each distinct outcome board of a `Realize` is held once, in a per-`Realize`
+`BoardPool` (src/ai/ManaOracle.cpp). It is keyed by `boardid::BoardHash` and decided by `boardid::BoardsEqual`
+(src/ai/BoardIdentity.h). Every outcome that ends on that board points at it (`Outcome::board`, read through
+`St()`). The board budget counts it once (`HeldBoard::acct`). The outcome's own `acct` now counts only its script.
+Pooled boards are `const`.
+
+**The equality is complete.** It is C++20 defaulted memberwise `operator==` on `GameState` and on every type it
+holds: Player, Permanent, Card, StackEntry, Target, StagedCard, SuspendedCard, PayRollbackLedger (and Entry),
+IncineratorDamageTrigger, RippleScript, PrepayWildTrue, DblCombatRec, DblCombatPay and Counter. So every member is
+compared, and a member added later is compared too. A member type without `==` deletes `GameState`'s, and
+`BoardsEqual` then stops compiling. Three types compare their LOGICAL value, because part of their storage is
+unreachable:
+- `Library`: the live window and the known-library fields. The drawn prefix below `m_top` is dropped by a copy.
+- `CounterList` and `SubtypeSet`: the slots past the live count.
+
+Cache pointers (`Card::m_def`) are compared as stored, so they can only separate boards, never merge them. The hash
+reads only compared members, through the same logical views. Units: `test/unit/test_board_identity.cpp` (6 cases).
+
+**Levers.** `MTG_ORACLE_BOARD_SHARE` defaults ON; `=0` holds every board apart. `MTG_ORACLE_BOARD_SHARE_CHECK=1`
+checks each share against the unshared board it replaces, using an independent fingerprint: both core keys,
+resources, board text, every zone in order, life, floating mana and counters. It also scans the whole pool on each
+new board for an equal board in another bucket, which would mean the hash is inconsistent. Either finding aborts.
+The scan is quadratic, so this mode is for verification only. A summary line `=== MANA ORACLE shared boards ...`
+counts held boards, shares and checks. `MTG_MANA_ORACLE_MEM_TRACE` now also prints `held_boards`, a per-layer
+`MEMFRONT` line (kept frontier boards against distinct ones) and `MEMWHY`, which says which part separates two
+fingerprint-equal boards.
+
+### Goblins 42-game pool (oracle 2, goal fold on, 8 threads per arm, 4 arms side by side, units alongside)
+
+| arm | applies | oracle ms | memory CAPPED | peak RSS | boards held / outcomes | flags vs on2 (342) | digests |
+|---|---|---|---|---|---|---|---|
+| base 095e03314 (`gon`, section 7) | 14.92M | 1,433,502 | 18 | 4.71 GB | (unshared) | 4 differ | 42/42 |
+| share ON, 768 MB | 17.31M | 1,386,145 | 17 | 4.18 GB | 4.61M / 5.06M | 8 differ, all on 30133979 T6 m2 (still capped) | 42/42 |
+| share ON, unbounded (`BOARD_MB=0`) | 17.58M | 1,408,660 | 0 | 4.35 GB | 4.83M / 5.35M | **identical** | 42/42 |
+| share OFF, unbounded | 17.58M | 1,385,072 | 0 | 4.79 GB | - | **identical** | 42/42 |
+
+- **Exact:** at an unbounded budget, sharing ON and OFF do the identical work (17,582,045 applies each). All 342 flag
+  lines agree with each other and with the goal-fold-only reference `on2`. All 42 digests agree.
+- **Hashing cost:** in that same-work pair, sharing costs +1.7% oracle ms (1,408,660 against 1,385,072) and saves 9%
+  peak RSS.
+- **Check mode:** 41 of 42 games ran with the share check and `MTG_ORACLE_PARETO_ONLINE_CHECK=1`, with 0 mismatches.
+  The 42nd, goblins__h133979, was still running after more than 1.3 h at 1 of 8 workers, slowed by the quadratic
+  pool scan. It was killed to free the box.
+- **The 768 MB caps barely move: 18 to 17.** 30131479 T3 m2 now finishes. 30133979 T6 m2 is still capped.
+
+**Why Goblins gains little: its capped boards really are distinct.** The mem trace on the capped 30133979 searches
+shows, for example, 40,185 outcomes over 1,326 distinct core boards (829 canonical) and still **35,210 fully distinct
+boards**. `MEMWHY` finds every one of them with its own independent fingerprint (fingerprints = held, in every
+traced search). So what separates them is reader-visible content (the order of a zone, a graveyard, a counter), not
+a cache pointer or an unreachable slot, and no exact equality can merge them. Kept frontiers are 100% distinct
+(`MEMFRONT kept=5083 distinct=5083`, every layer), so frontier sharing would gain nothing and was not built. The
+section 5 "~100x duplicates" was a CoreKey count.
+
+### Maze's End gi 0-199 (oracle 2, goal fold on; base and share side by side, 15 threads each)
+
+| arm | applies | oracle ms | CAPPED | memory CAPPED | CAPPED-DECISION | peak RSS | user s | wall |
+|---|---|---|---|---|---|---|---|---|
+| base 095e03314 | 90.70M | 50,892,871 | 532 | 528 | 4,532 | 15.17 GB | 43,701 | 1:19:42 |
+| shared boards | 123.15M | 51,849,198 | 42 | **32** | 4,572 | **13.87 GB** | 44,884 | 1:16:02 |
+
+- **Maze's boards ARE duplicates:** 9.62M boards held for 72.19M outcomes (7.5x). Memory-budget stops fall 528 to 32
+  (-94%), and peak RSS falls 8.6% while the search does 36% more applies, because the plans that used to cap now
+  finish. Oracle ms is +1.9% for +36% applies, so the cost per apply falls 25%.
+- **Exact:** the flag lines differ on 184 lines (of 8,493 / 8,559). 179 of them are on decisions with a CAPPED plan in
+  either run, and the other 5 are on decisions that hit the wall/decision backstop (timing). None is unexplained
+  (`logs/oracle-board-share/attr.py`). Goblins: 8 differing lines, all on the still-capped 30133979 T6 m2.
+- **Play is unchanged:** Maze 200/200 digests identical between oracle 2 (base and new) and oracle 0 (new), and
+  identical to the section 7 run. Goblins 42/42 identical between oracle 2 (base, new, unbounded with share on and
+  off) and oracle 0.
+- Goblins base was re-run in the same hold for timing (8 threads): 17.23M applies, 1,180,028 ms, 20 memory caps
+  (the section 7 run had 18; the wall backstop moves with load).
+
+**Units:** 3,723/3,723 pass (including the 6 new `test_board_identity.cpp` cases). **Smoke** from the worktree: ALL PASS, 0 configs changed (231 unchanged).
+
+**Open question for the owner of the gate:** Goblins 30133979 T6 m2 still caps at 768 MB (17 plans), because its ~35k boards are genuinely distinct. Only a larger budget, or a reader-specific equivalence (proving which board fields the oracle readers ignore), would finish it. That second route is no longer full-state equality, so it needs its own exactness argument.
