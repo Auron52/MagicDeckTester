@@ -69086,7 +69086,10 @@ MAZE_P5_LEVER(MazeHeapTreasureOn,     MAZE_HEAP_TREASURE,      "MTG_MAZE_HEAP_TR
 MAZE_P5_LEVER(MazeManabondAllLandsOn, MAZE_MANABOND_ALL_LANDS, "MTG_MAZE_MANABOND_ALL_LANDS", true)
 MAZE_P5_LEVER(MazeFetchEvalV5On,      MAZE_FETCH_EVAL_V5,      "MTG_MAZE_FETCH_EVAL_V5",      true)
 MAZE_P5_LEVER(MazeIdleFetchOn,        MAZE_IDLE_FETCH,         "MTG_MAZE_IDLE_FETCH",         true)   // P5d
-MAZE_P5_LEVER(MazeIdleFetchRevealOn,  MAZE_IDLE_FETCH_REVEAL,  "MTG_MAZE_IDLE_FETCH_REVEAL",  false)   // P5d-5 amendment of (a)
+// MTG_MAZE_IDLE_FETCH_REVEAL: DEFAULT ON since batch 2 (2026-11-20; the "rev" arm: passes net held-out, d8 b0 0 persist,
+// 4 UNRESOLVED at the 50M ceiling, logs/maze/p5d7/d8_summary.txt). Shipped on the USER's scope ruling, 2026-11-20 ~21:45 UTC:
+// "But I don't really like leaving the deck fully inoperable. Anything crucial or important should go in."
+MAZE_P5_LEVER(MazeIdleFetchRevealOn,  MAZE_IDLE_FETCH_REVEAL,  "MTG_MAZE_IDLE_FETCH_REVEAL",  true)    // P5d-5 amendment of (a)
 MAZE_P5_LEVER(MazeFetchTierFullOn,    MAZE_FETCH_TIER_FULL,    "MTG_MAZE_FETCH_TIER_FULL",    false)   // P5d-6 Q1 (C2)
 MAZE_P5_LEVER(MazeFetchRankCondOn,    MAZE_FETCH_RANK_COND,    "MTG_MAZE_FETCH_RANK_COND",    false)   // P5d-6 Q1
 MAZE_P5_LEVER(MazeManabondDiscardOn,  MAZE_MANABOND_DISCARD,   "MTG_MAZE_MANABOND_DISCARD",   false)   // P5d-6 Q2
@@ -71129,7 +71132,7 @@ static void MazeIdleFetchAdmit(const GameState& s, const std::vector<DecisionPro
         if (open_after >= hand_after + 1 || returns_i || wins_now) { covered.insert(pkey(*plans[i].land, std::move(rest))); }
     }
     if (covered.empty()) { return; }
-    // P5d-5 REVEAL GUARD (MTG_MAZE_IDLE_FETCH_REVEAL, default OFF): a plan whose land or actions REVEAL a card this turn
+    // P5d-5 REVEAL GUARD (MTG_MAZE_IDLE_FETCH_REVEAL, default ON since batch 2): a plan whose land or actions REVEAL a card this turn
     // (a Gate entering under a draw-on-Gate-enter watcher of ours, or casting one -- Guild Summit) is not a "no fetch"
     // plan: its fetch can follow the reveal in the breakpoint continuation, which is enumerated again after the draw (so
     // this prune applies there with the drawn cards known). Removing it forces the fetch AHEAD of the reveal, with the
