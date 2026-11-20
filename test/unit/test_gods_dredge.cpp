@@ -815,3 +815,62 @@ TEST_CASE("Dredge choices remain available in a depth-one Gods draw search")
     std::fprintf(stderr, "[gods-dredge-depth1] plans=%zu budget_used=%lld\n",
                  plans.size(), budget.Used());
 }
+
+TEST_CASE("Gods dredge menu offers the natural draw when the dredge would deck the library")
+{
+    // DMG-1 (gods s2018 gi16): rule 4's single answer "dredge the Troll (6)" from a 6-card library
+    // left the next draw an empty library, so every search crossing into the winning turn lost.
+    CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+    if (std::getenv("MTG_GODS_DREDGE_RULE") && std::atoi(std::getenv("MTG_GODS_DREDGE_RULE")) != 4) { return; }
+    if (!EnvOn("MTG_GODS_RETRIEVAL_DREDGE", true)) { return; }
+    GodsProvider provider;
+    GameState s;
+    s.m_provider = &provider;
+    Player& p = s.players[0];
+    auto add_gy = [&](const char* name, int number)
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card c = def->card;
+        c.m_number = number;
+        c.m_def = def;
+        p.graveyard.push_back(std::move(c));
+    };
+    add_gy("Golgari Grave-Troll", 11);
+    add_gy("Stinkweed Imp", 13);
+    add_gy("Keranos, God of Storms", 40);
+    add_gy("Mogis, God of Slaughter", 41);
+    add_gy("Nylea, God of the Hunt", 42);
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(forest != nullptr);
+    for (int i = 0; i < 3; ++i)
+    {
+        Permanent land;
+        land.card = forest->card;
+        land.card.m_number = 30 + i;
+        land.controller_index = 0;
+        s.battlefield.push_back(std::move(land));
+    }
+    const std::vector<int> menu{11, 13};
+    for (int i = 0; i < 9; ++i) { p.library.push_back(MakeCard("Forest", 60 + i)); }
+    CHECK(DredgeSearchChoices(s, 0, menu) == std::vector<int>{11});   // 9 - 6 = 3 left: no widening
+    p.library.DrawTop();
+    const bool widen = EnvOn("MTG_GODS_DREDGE_DECKOUT", true);
+    CHECK(DredgeSearchChoices(s, 0, menu) == (widen ? std::vector<int>{11, 0} : std::vector<int>{11}));
+    CHECK(provider.DredgeHumanDefault(s, 0, menu) == 1);   // the rule's own pick stays first
+    if (widen)
+    {
+        // The singleton fast path stops recording at a multi-answer draw and flags it for the tree.
+        const std::vector<int> no_pins;
+        std::vector<int> recorded;
+        bool multi = false;
+        g_dredge_singleton_multi = &multi;
+        {
+            ScriptedDredge chooser(no_pins, nullptr, &recorded);
+            CHECK(chooser.Choose(s, 0, menu) == 0);
+        }
+        g_dredge_singleton_multi = nullptr;
+        CHECK(multi);
+        CHECK(recorded.empty());
+    }
+}

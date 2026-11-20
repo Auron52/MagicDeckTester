@@ -301,6 +301,11 @@ inline thread_local DredgeDrawStepProbe* g_dredge_draw_step_probe = nullptr;
 // branches them after this first menu is fixed.
 inline thread_local std::vector<int>* g_dredge_boundary_first_offer = nullptr;
 
+// Set by a singleton-recording replay (TurnSolver's DredgeSearchSingletonPolicy fast path) when a draw's
+// menu held MORE than one answer (GodsProvider's deck-out widening, MTG_GODS_DREDGE_DECKOUT): the
+// recorded prefix stops there and the plan goes to the general adaptive tree, which branches the draw.
+inline thread_local bool* g_dredge_singleton_multi = nullptr;
+
 // A searched plan records one answer for each draw that actually offers dredge.
 // Card numbers are used instead of menu ranks so the answer remains tied to the
 // physical graveyard card when an earlier replacement mills another dredger.
@@ -347,6 +352,15 @@ struct ScriptedDredge final : DredgeChooser
                 if (choice.front() == 0) { return 0; }
                 for (std::size_t i = 0; i < numbers.size(); ++i)
                 { if (numbers[i] == choice.front()) { return static_cast<int>(i + 1); } }
+            }
+            else if (choice.size() > 1 && g_dredge_singleton_multi != nullptr)
+            {
+                // A real choice: the recorded prefix ends HERE (later draws are not recorded on this
+                // replay), and the caller branches this draw in its adaptive tree. The replay's state is
+                // discarded, so the natural draw taken below is never scored.
+                *g_dredge_singleton_multi = true;
+                singleton_record = nullptr;
+                return 0;
             }
         }
         return previous != nullptr && first_unpinned == nullptr

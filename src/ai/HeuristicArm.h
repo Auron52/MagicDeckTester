@@ -1036,6 +1036,7 @@ enum Slot : int
     BP_DROP_REARM,            // MTG_BP_DROP_REARM  a breakpoint continuation that PLAYED a land while a static extra drop (Exploration) is still open, with another land in hand, re-arms site 10 for one more pass of the deferred loop (rollout) and of the executor's no-commit end-of-main re-solve: a continuation carries ONE land, so the second drop after a mid-turn tutor was unfindable at any budget (the USER's Maze's End reference s3 T4: Guild Summit, Sylvan Scrying -> Maze's End, Maze's End, then The Black Gate). A completeness fix; deck-gated (deck_has_static_land_drops). DEFAULT ON; =0 -> as before (the A/B hatch)
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
+    GODS_DREDGE_DECKOUT,      // MTG_GODS_DREDGE_DECKOUT  Gods: a ruled dredge menu (rule >= 2, usually ONE dredge) also offers the natural draw when the dredge would leave the library with fewer than 3 cards (Magus 2 + the draw step), so a deck-out is never the search's only crossing (DMG-1, gods s2018 gi16: the T6 Grave-Troll attack was unfindable at any budget). A completeness fix: widens a provider prune. DEFAULT ON; =0 -> the bare rule menu (A/B hatch)
     COUNT
 };
 
@@ -2016,6 +2017,7 @@ inline const char* Name(int slot)
         "MTG_BP_DROP_REARM",
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_SUMMIT_TWIN_FOLD",
+        "MTG_GODS_DREDGE_DECKOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

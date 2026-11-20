@@ -26429,7 +26429,44 @@ static bool GodsDiscardRuleOn()
 bool GodsProvider::DredgeSearchAlwaysSingleton() const
 { return GodsDredgeRule() >= 4 && !HumanPlayActive(); }
 
+static std::vector<int> GodsDredgeCandidatesForRuleImpl(
+    const GameState& s, int controller, const std::vector<int>& numbers, int rule);
+
+// MTG_GODS_DREDGE_DECKOUT -- DEFAULT ON; =0 restores the bare rule menu (the A/B hatch).
+// The ruled menus above answer most draws with ONE dredge (rule >= 4: the largest dredger).
+// A dredge of N on a library of L leaves L - N cards, and a draw from an empty library loses
+// (CR 704.5b), so near the bottom of the library that single answer can be the ONLY crossing the
+// search ever sees -- and it decks us. Gods s2018 gi16 (DMG-1, 2026-11-20): after T5's Grave-Troll
+// (22 counters) the T6 upkeep Magus draw was offered only "dredge the Troll (6) from a 6-card
+// library"; the next draw found an empty library, every crossing into T6 lost, and the T6 attack
+// was unfindable at any depth or budget (d4..d8 b0 played on to T7 or lost). So whenever an offered
+// dredge would leave fewer than kDredgeDeckoutMargin cards -- the most draws one turn crossing makes
+// in this list, Magus's two plus the draw step -- the natural draw joins the menu after the rule's
+// pick and the search decides. A WIDENING of a provider prune (never a new restriction); the rule's
+// own pick stays first, so a budget still spends on it first.
+static constexpr std::size_t kDredgeDeckoutMargin = 3;
 static std::vector<int> GodsDredgeCandidatesForRule(
+    const GameState& s, int controller, const std::vector<int>& numbers, int rule)
+{
+    std::vector<int> out = GodsDredgeCandidatesForRuleImpl(s, controller, numbers, rule);
+    static const bool deckout_env = EnvOn("MTG_GODS_DREDGE_DECKOUT", true);
+    if (!heurarm::Flag(heurarm::GODS_DREDGE_DECKOUT, deckout_env)
+        || std::find(out.begin(), out.end(), 0) != out.end()) { return out; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    for (int number : out)
+    {
+        const auto it = std::find_if(pl.graveyard.begin(), pl.graveyard.end(),
+                                     [number](const Card& c) { return c.m_number == number; });
+        if (it == pl.graveyard.end()) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(*it);
+        if (def == nullptr || def->params.dredge <= 0) { continue; }
+        const std::size_t mill = static_cast<std::size_t>(def->params.dredge);
+        if (pl.library.size() < mill + kDredgeDeckoutMargin) { out.push_back(0); break; }
+    }
+    return out;
+}
+
+static std::vector<int> GodsDredgeCandidatesForRuleImpl(
     const GameState& s, int controller, const std::vector<int>& numbers, int rule)
 {
     const int base_rule = rule == 7 ? 4 : rule;

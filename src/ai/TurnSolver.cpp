@@ -102639,77 +102639,100 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         dredge_mem_trace("pre-dredge");
         if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
         dredge_mem_trace("materialized-dredge");
+        // The general adaptive tree: replay each prefix at its real resolution state and branch on
+        // the first unanswered draw (plan order preserved).
+        const auto expand_adaptive = [&](std::vector<TurnSolver::Plan>&& in)
+        {
+            std::vector<TurnSolver::Plan> expanded;
+            std::reverse(in.begin(), in.end());
+            std::vector<TurnSolver::Plan> work = std::move(in);
+            while (!work.empty())
+            {
+                TurnSolver::Plan p = std::move(work.back()); work.pop_back();
+                std::vector<int> offer;
+                GameState copy = state;
+                {
+                    RevealLogPause quiet;
+                    struct ProbeScope
+                    {
+                        std::vector<int>* saved_offer;
+                        int saved_depth;
+                        explicit ProbeScope(std::vector<int>& out)
+                            : saved_offer(g_dredge_probe_offer), saved_depth(g_dredge_probe_depth)
+                        { g_dredge_probe_offer = &out; g_dredge_probe_depth = g_apd_depth + 1; }
+                        ~ProbeScope()
+                        { g_dredge_probe_offer = saved_offer; g_dredge_probe_depth = saved_depth; }
+                    } probe(offer);
+                    ApplyPlanDirect(copy, p, is_pre_combat);
+                }
+                if (offer.empty()) { expanded.push_back(std::move(p)); }
+                else
+                {
+                    for (auto it = offer.rbegin(); it != offer.rend(); ++it)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.dredge_pins.push_back(*it);
+                        v.bp_wave0 = false; // this clone did not inherit its base's breakpoint fan
+                        work.push_back(std::move(v));
+                    }
+                }
+            }
+            return expanded;
+        };
         if (DredgeSearchSingletonPolicy(state))
         {
-            // The Gods provider has exactly one live answer at every draw. Record
+            // The Gods provider has ONE live answer at almost every draw. Record
             // all of those answers in one execution of each plan, preserving the
             // same physical-card pins and plan order as the general adaptive tree.
-            // The general path below has to replay after each unanswered draw;
+            // The general path has to replay after each unanswered draw;
             // doing that for a one-choice menu repeats work without adding an arm.
+            // A draw whose menu holds more than one answer (the provider's deck-out
+            // widening, MTG_GODS_DREDGE_DECKOUT) ends the recording; that plan, with
+            // the recorded prefix pinned, goes to the adaptive tree, which branches it.
+            std::vector<TurnSolver::Plan> out;
+            out.reserve(all.size());
             for (TurnSolver::Plan& p : all)
             {
-                GameState copy = state;
                 std::vector<int> recorded;
+                bool multi = false;
+                {   // the recording scope ends before the adaptive tree below replays this plan
+                GameState copy = state;
                 struct RecordScope
                 {
                     std::vector<int>* saved;
                     int saved_depth;
-                    explicit RecordScope(std::vector<int>& out)
-                        : saved(g_dredge_singleton_record), saved_depth(g_dredge_singleton_record_depth)
-                    { g_dredge_singleton_record = &out; g_dredge_singleton_record_depth = g_apd_depth + 1; }
+                    bool* saved_multi;
+                    RecordScope(std::vector<int>& rec, bool* m)
+                        : saved(g_dredge_singleton_record), saved_depth(g_dredge_singleton_record_depth),
+                          saved_multi(g_dredge_singleton_multi)
+                    { g_dredge_singleton_record = &rec; g_dredge_singleton_record_depth = g_apd_depth + 1;
+                      g_dredge_singleton_multi = m; }
                     ~RecordScope()
-                    { g_dredge_singleton_record = saved; g_dredge_singleton_record_depth = saved_depth; }
-                } record(recorded);
-                {
-                    RevealLogPause quiet;
-                    ApplyPlanDirect(copy, p, is_pre_combat);
+                    { g_dredge_singleton_record = saved; g_dredge_singleton_record_depth = saved_depth;
+                      g_dredge_singleton_multi = saved_multi; }
+                } record(recorded, &multi);
+                RevealLogPause quiet;
+                ApplyPlanDirect(copy, p, is_pre_combat);
                 }
                 if (!recorded.empty())
                 {
                     p.dredge_pins.insert(p.dredge_pins.end(), recorded.begin(), recorded.end());
                     p.bp_wave0 = false;
                 }
+                if (!multi) { out.push_back(std::move(p)); continue; }
+                std::vector<TurnSolver::Plan> one;
+                one.push_back(std::move(p));
+                std::vector<TurnSolver::Plan> tree = expand_adaptive(std::move(one));
+                out.insert(out.end(), std::make_move_iterator(tree.begin()),
+                                      std::make_move_iterator(tree.end()));
             }
+            all = std::move(out);
             dredge_mem_trace("recorded-dredge");
         }
         else
         {
-        std::vector<TurnSolver::Plan> expanded;
-        std::reverse(all.begin(), all.end());
-        std::vector<TurnSolver::Plan> work = std::move(all);
-        while (!work.empty())
-        {
-            TurnSolver::Plan p = std::move(work.back()); work.pop_back();
-            std::vector<int> offer;
-            GameState copy = state;
-            {
-                RevealLogPause quiet;
-                struct ProbeScope
-                {
-                    std::vector<int>* saved_offer;
-                    int saved_depth;
-                    explicit ProbeScope(std::vector<int>& out)
-                        : saved_offer(g_dredge_probe_offer), saved_depth(g_dredge_probe_depth)
-                    { g_dredge_probe_offer = &out; g_dredge_probe_depth = g_apd_depth + 1; }
-                    ~ProbeScope()
-                    { g_dredge_probe_offer = saved_offer; g_dredge_probe_depth = saved_depth; }
-                } probe(offer);
-                ApplyPlanDirect(copy, p, is_pre_combat);
-            }
-            if (offer.empty()) { expanded.push_back(std::move(p)); }
-            else
-            {
-                for (auto it = offer.rbegin(); it != offer.rend(); ++it)
-                {
-                    TurnSolver::Plan v = p;
-                    v.dredge_pins.push_back(*it);
-                    v.bp_wave0 = false; // this clone did not inherit its base's breakpoint fan
-                    work.push_back(std::move(v));
-                }
-            }
-        }
-        all = std::move(expanded);
-        dredge_mem_trace("expanded-dredge");
+            all = expand_adaptive(std::move(all));
+            dredge_mem_trace("expanded-dredge");
         }
     }
 
