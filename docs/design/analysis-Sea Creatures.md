@@ -417,6 +417,53 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
     Kiora 1, Hullbreaker 1. `=0` first sheds: Brinelin 8, Gorger 2, Sin 2, Serpent 2, Lorthos 2, Koma 2, Summon: Leviathan 2, Hullbreaker 1. These cleanups come from mana-screwed hands (18 of 21 with no land in hand), which is why the choice never moves a win turn: the rule is correctness for the rare case, as
     the Stage 5i bound (~0 turns) predicted. Files: `logs/sea-discard/census-result.txt`, `logs/sea-discard/reg.log`.
 
+## Mulligan profile + value sidecar: ADOPTED (2026-11-20)
+
+USER 2026-11-19: *"I don't think I have ever not wanted to adopt the mulligan profile. It is pretty much always
+faster and better when confounding clairvoyant."* and *"If 2HG is slower because of clairvoyance, there is no issue."*
+
+* **Keep + bottom table** `Sea Creatures.keepmodel.exhaustive.{profile,raw}.json.gz` (gzip -n of the uncompressed
+  pair generated in `.claude/worktrees/sea-integ` on src tree `f68e98163`; mullgen VALIDATION PASSED there: keep vs
+  static -0.1628t t-38.5 4/4, confounded bottoming -0.0955t t-11.7 4/4). `Sea Creatures.profile.json` gains the
+  screened generation setting (`value_play`: `expected_buckets` 18, `mull_gen_depth` 1, `mull_gen_budget_ms` 3;
+  generation-only keys).
+* **Held-out adoption A/B on the current engine** (src `e48797e50`, PGO+LTO, one pooled `mtg --batch` per confound
+  setting, 24/24 workers busy; absent = `exhaustive_profile: none` = static keep + lookahead bottoming; present = the
+  table; d5 b20; Standard seeds 61061..68068 x1000, 2HG 61061..68068 + 71071..86086 x300; loss = 9):
+
+  | format | n | delta (present - absent) | faster / slower | unwon | units |
+  |---|---|---|---|---|---|
+  | Standard | 8,000 | **-0.1034 +/- 0.0094** (t -11.0) | 1,273 / 909 | 205 -> 88 | 0.133x |
+  | 2HG | 7,200 | **-0.0564 +/- 0.0099** (t -5.7) | 1,095 / 995 | 282 -> 176 | 0.124x |
+  | Standard, confounded (`MTG_CONFOUND_BOTTOM=1`) | 8,000 | **-0.1980 +/- 0.0100** (t -19.8) | 1,672 / 770 | 292 -> 117 | 0.130x |
+  | 2HG, confounded | 7,200 | **-0.1532 +/- 0.0104** (t -14.7) | 1,449 / 832 | 387 -> 187 | 0.120x |
+
+  Per-game cost with the table: ~0.70 s (Standard) / ~1.43 s (2HG) thread-wall vs 4.66 / 10.76 s absent. From the
+  per-game traces: games whose mulligan count changed net -1,069 turns (Standard) / -743 (2HG); every same-count,
+  different-bottom game is slower with the table (Standard 216 games +242 turns, 2HG 309 +337, 0 faster) -- the
+  absent arm's lookahead bottomer plays each candidate out on the real library, i.e. clairvoyance.
+* **Value sidecar** `Sea Creatures.value.json`: valueleaf.sh E.5 ADOPTED the emulated ladder (vs live, 8,000 paired:
+  delta +0.00000, 0.999x units, 0.97x core; USER 2026-10-11 *"We should adopt automatically if the leaf is
+  better."*). E.7 kept the built-in d5/b20 (no candidate cheaper and not notably worse); d5b30/d5b40 and d6b30/d6b40
+  were TRADES (-0.00062 at 1.12x / -0.00162 at 1.24x units, 8 seeds x 1000), surfaced to the USER. Queue logs:
+  `.claude/worktrees/sea-integ/logs/vlq_sea_creatures/`.
+* **Overnight rows** expanded ENTRY -> FULL first, accepted with table and sidecar absent (`534d39e0f`): d3 125 -> 325
+  b10, d5 4x300 -> 4x1425 b20, sea2hg 4x75 -> 4x175 b20.
+* **GT accepted with both live**, all three tiers, one pooled `--smoke --regression --overnight` run scoped to
+  sea/sea2hg/merfolkturns/merfolkturns2hg/boars/boars2hg. Per-game move vs the table-absent GT (loss = 9):
+
+  | tier | d0 | d3 | d5 | 2HG d5 |
+  |---|---|---|---|---|
+  | smoke | -0.314 (n 1,000) | +0.020 (50) | -0.020 (100) | +0.080 (25) |
+  | regression | -0.269 (1,000) | -0.120 (50) | -0.033 (150 s2002) | +0.013 (75) |
+  | overnight | -0.321 (8,000) | -0.037 (325) | -0.085 (5,700) | -0.026 (700) |
+
+  `keep_adoption_attribution.py`, every tier, one pooled replay with a third arm (table off AND the profile read
+  from a directory with no sidecar): that arm reproduces the committed GT game-for-game in every tier, the table-on
+  arm reproduces the run, and every table-moved game is a different mulligan count, a different bottom, or
+  bottom ORDER only -- 0 unexplained. The sidecar alone (table off, with vs without it) moves 39 of ~17,300 games:
+  overnight Standard 26 (5 faster, 0 slower), 2HG 9 (1 faster), regression/smoke 4 (1 faster, 2 slower by one turn).
+
 ## Approved deferrals
 
 (none yet)
