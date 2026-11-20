@@ -37,8 +37,8 @@ are on wip/maze-p7). Scratch: `build/scratch/maze/p7g/` (tools in `tools/`). Bin
   Snow: d5b20 1000 net 0 (996 same), d3b0/d5b0 6+6 net 0, **d3b10 1000 net +1** (one slower: gi961, seed 192962, 6 -> 7) =>
   **Snow net +1: FAILS the strict per-deck bar by one game.**
 - Snow gi961: d8 b0 RECOVERS (both arms T6, identical digest 5d21da9fdc8c033e; fold 1.83M vs 2.21M units). d3 single runs:
-  b0 base 6 / fold 6; b10, b20, b40 base 6 / fold 7; b100 base 6 (fold b100 + both b400 were running -- see
-  `/tmp/claude-1000/.../tasks/ban0pj8jo.output`, rerun if lost). Census on gi961 d3b10: UNSOUND=0 (237 proofs, none won).
+  b0 6/6; b10, b20, b40 base 6 / fold 7; **b100 6/6, b400 6/6** (the fold recovers at larger budgets: the loss is
+  confined to small budgets, b10-b40). Census on gi961 d3b10: UNSOUND=0 (237 proofs, none won).
   First divergence T3: base Coldsteel Heart, fold Ice-Fang Coatl. MTG_FS_ROOT_DUMP=3 (`p7g/g961/dump_{base,fold}.txt`): in the
   third root pass both find Coatl+Augur -> T7; base then evaluates the remaining plans as **bp-child** (breakpoint children) and
   finds Heart+Augur -> **T6**; fold evaluates every remaining plan as **tail** (no breakpoint children) -> 9. So the fold changes
