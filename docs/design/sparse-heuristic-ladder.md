@@ -244,3 +244,36 @@ White Knights) never reached path 2 in 100 games. So ~93 % of the fallback's rol
 not have changed its pass -- but both are known only AFTER the rollout ran; dropping them needs a cheap proof of "will not
 win" before rolling out, which nothing here provides. Not built (USER).
 
+
+### AB3 (2026-11-20): the ORACLE CEILING and mode 3 on the bare decks
+
+One pooled `mtg --batch`, 39,600 games, 24 workers (heartbeat 24/24), binary `mtg_d3` (6d430e300 src), unit tests rc 0, on
+AB2's seeds (17,100,000 + 10,000 x block, 6 x 200). Sanity: every baseline job is digest-identical to AB2's, so the oracle
+file (`oracle_ab2.txt`, the committed depth K of every AB2 baseline decision, deck-tagged) applies; it covered 98.6-100 % of
+the multi-pass decisions. Arms: `oracle` = passes 1..K-1 leafless, only pass K on rollouts, K from the baseline's own
+trace (`MTG_P16_ORACLE`, measurement only: it reads another run's answers) -- the ceiling of skipping EVERY superseded
+rollout with perfect foresight; `sg3` = mode 3 (leafless lookahead, ladder fallback); `sg3_pwe1` = mode 3 with the
+walk-edge roll + window cut in its lookahead (arm key). Baseline = the bare ladder (Sea Creatures: the `heur` arm).
+
+| deck | oracle net, units / CPU | sg3 net (e/l), units / CPU | sg3_pwe1 net (e/l), units / CPU |
+|---|---|---|---|
+| Hydras | 0, **0.850** / 0.769 | +2 (2/4), 1.023 / 1.021 | +2 (2/4), 1.023 / 1.051 |
+| Martyr Lifegain | 0, 0.919 / 0.913 | -5 (6/1), 1.233 / 1.148 | -5 (6/1), 1.233 / 1.073 |
+| Maze's End | +1 (0/1), 0.980 / 0.991 | **+118 (55/170)**, 1.432 / 1.806 | **-91 (124/32)**, 1.106 / 1.504 |
+| Merfolk Turns | 0, 0.935 / 0.870 | -2 (4/2), 1.076 / 0.941 | -2 (4/2), 1.076 / 0.917 |
+| Mill | 0, 0.968 / 0.977 | +30 (29/62), 1.698 / 1.798 | +8 (32/43), 1.677 / 1.722 |
+| Shadowborn Apostle | 0, 0.910 / 0.967 | -14 (23/8), 1.335 / 1.224 | -14 (23/8), 1.335 / 1.158 |
+| Stuffy Doll | 0, 0.910 / 0.913 | -6 (9/3), 1.157 / 1.069 | -6 (9/3), 1.157 / 1.146 |
+| Sea Creatures (vs heur) | 0, **0.721** / 0.728 | -2 (2/0), 1.218 / 1.386 | -2 (2/0), 1.218 / 1.348 |
+
+1. **The ceiling.** Skipping every superseded rollout, with K known, saves 2-28 % of units: Sea 27.9 %, Hydras 15.0 %,
+   Shadowborn / Stuffy 9.0 %, Martyr 8.1 %, Merfolk Turns 6.5 %, Mill 3.2 %, Maze's End 2.0 % -- about half of the
+   superseded share in AB2's table (the rest is pre-pay the committing pass loses). Any real sparse ladder pays for
+   choosing K without foresight out of that; Mill and Maze's End have almost nothing to bank.
+2. **Mode 3 is no candidate on any bare deck**: units 1.02-1.70x the ladder (its lookahead misses and then runs the
+   ladder anyway). It plays BETTER on Martyr (-5), Shadowborn (-14), Stuffy (-6) and Sea (-2) -- deeper commits through
+   its gate credit, at 1.16-1.33x units -- and much worse on Maze's End (+118) without the edge roll.
+3. **The walk-edge gap is real in mode 3 too** (USER Q3): on Maze's End the edge roll turns +118 into -91 (124 earlier /
+   32 later) and on Mill +30 into +8; it is inert on the other six decks. So the gap costs mode 3 dozens of games where it
+   bites. The shipped mode-3 decks (Boars, Morph, Spirits) were not in AB3.
+No flips (parent, 2026-11-20: flips and tiers deferred to a later session).
