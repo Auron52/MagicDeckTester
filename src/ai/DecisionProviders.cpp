@@ -69758,10 +69758,14 @@ static bool MazeManabondOurs(const GameState& s, int me)
 // hand indices in `skip`, the cards a plan casts first). Classes, read off card parameters:
 //  * FREE always: a card that does nothing in goldfish (Gates Ablaze: damage to creatures per Gate).
 //  * Guild Summit (draw on Gate entry): free when one is ours on the battlefield, else all but one in hand.
-//  * Accelerators (extra land drop: Exploration; Manabond; Burgeoning under MTG_MAZE_DISCARD_BURGEONING): free when an
+//  * Accelerators (extra land drop: Exploration; Manabond; Burgeoning under MTG_MAZE_DISCARD_BURGEONING -- USER: "Yes,
+//    Burgeoning is probably droppable. It is a bit too unreliable."; "It's a lot better in 2HG, though."): free when an
 //    Exploration is ours on the battlefield, else all but ONE Exploration (the others are free).
 //  * Land tutors (Sylvan Scrying, Archdruid's Charm): free when the yes is high-impact -- three or more lands, or two
-//    with a single tutor -- or sets up the win (the put leaves at most one Gate name to go); otherwise HELD.
+//    with a single tutor -- or sets up the win (the put leaves at most one Gate name to go); otherwise HELD. Always HELD
+//    while no Maze's End is ours on the battlefield or in hand: the tutor is how the deck finds its win condition (P5d-6,
+//    Maze's End 2HG blind seed 202022 gi 21 salt 3 at d8 b0: a T4 end-step yes discarded the only Sylvan Scrying with
+//    no Maze's End anywhere, and the game was never won).
 //  * Everything else (Amulet of Vigor, a deck change) is KEPT.
 struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; };
 static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, const std::vector<int>* skip = nullptr)
@@ -69770,6 +69774,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
     const Player& pl = s.players[static_cast<std::size_t>(me)];
     bool expl_out = false, summit_out = false;
     const CardDefinition* maze = nullptr;
+    bool maze_held = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -69777,7 +69782,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
         if (d == nullptr) { continue; }
         expl_out   = expl_out || d->params.static_extra_land_drops > 0;
         summit_out = summit_out || !d->params.draw_on_other_subtype_enter.empty();
-        if (MazeIsMazeDef(d)) { maze = d; }
+        if (MazeIsMazeDef(d)) { maze = d; maze_held = true; }
     }
     int summits = 0, accels = 0, expls = 0, tutors = 0;
     int new_names = 0;
@@ -69789,7 +69794,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
         if (d == nullptr) { ++v.nonland; ++v.kept; continue; }
         if (d->card.IsLand())
         {
-            if (MazeIsMazeDef(d)) { maze = d; }
+            if (MazeIsMazeDef(d)) { maze = d; maze_held = true; }
             const std::string nm = d->card.m_name.str();
             if (MazeNameIsGate(nm) && !MazeControlsGateNamed(s, me, nm)
                 && std::find(seen.begin(), seen.end(), nm) == seen.end()) { seen.push_back(nm); ++new_names; }
@@ -69814,7 +69819,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
     const int need = maze != nullptr ? maze->params.alt_win_distinct_named_count : 10;
     const std::string sub = maze != nullptr ? maze->params.alt_win_distinct_named_subtype : std::string("Gate");
     const bool sets_up_win = CountDistinctNamedLandsWithSubtype(s, me, sub, need) + new_names + 1 >= need;
-    const bool tutors_free = lands_put >= 3 || (lands_put == 2 && tutors <= 1) || sets_up_win;
+    const bool tutors_free = maze_held && (lands_put >= 3 || (lands_put == 2 && tutors <= 1) || sets_up_win);
     if (tutors_free) { v.free += tutors; } else { v.held_tutors = tutors; }
     return v;
 }
