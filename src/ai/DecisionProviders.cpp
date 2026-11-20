@@ -69779,6 +69779,12 @@ static bool MazeNewNameFetch(const GameState& s, int me, const Action& a)
 // hand without a same-turn replay costs an activation cycle. Deleting the defer outright (fetch 100 everywhere)
 // measured Maze d5 b20 +11 / 1,000 held-out games because the playout then fetched AFTER filling every drop with hand
 // Gates (the greedy drop runs before the plan's activations) and stranded Maze's End in hand, misreading tails.
+// Measured (P5d, ledger "## P5d"; held-out ab1 seeds vs the P5c spare-drop form, net turns): this eval + the Amulet
+// tier: d5 b20 -8 / 1,000, 2HG -1 / 300, d3 -4, d1b3 -8, d1b1 +4; with prune (a) +4 / +3 / -3 / -4 / +2 (its clairvoyant
+// cost; blind it is std -7, 2HG 0). The d0 greedy, where this eval IS the policy, is +459 turns / 20,000 games vs P5c:
+// kMazeFetchWins (the USER's "win out") puts the fetch ahead of Exploration / Guild Summit / Burgeoning, whose extra
+// drops and draws compound; at `full` instead (C2) d0 is -190 / 20,000 and every searched row is better -- OWED to the
+// USER, not adopted.
 static constexpr int kMazeFetchWins = 1000;
 int MazesEndProvider::TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const
 {

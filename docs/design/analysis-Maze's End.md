@@ -4461,3 +4461,52 @@ deck-property gated).
 - This is pre-existing on this lineage: R1 measured s6 at T7 on F5's base, e682d7942. The work queue notes s6 is
   knife-edge (the pass-2 start gate) and wins T6 at b20 on 7626b6105.
 - So the reference bar must be re-benched on the INTEGRATED shared tip.
+
+## P5d (2026-11-18/20): the USER's fetch-and-replay rules, the Amulet no-drop tier, the idle-mana prune (a)
+
+Branch `wip/maze-p5d`: `2b72ec017` (code, squashed), `d616a508a` (GT). Hand-offs: `logs/maze/P5d-handoff.md`,
+`P5d2-handoff.md`, `P5d3-handoff.md` (every USER ruling VERBATIM), `P5d4-handoff.md`. Scratch `build/scratch/maze/p5d{,4}/`.
+
+**Rule (USER 2026-11-18):** bank lands even with a new-name Gate in hand; do not pass the turn without Maze's End on the
+battlefield unless an effect puts it back; with idle mana, fetching is never worse (clairvoyance aside); when the hand's
+lands run short of full rate, the fetch wins out. `TapTutorPutEval` (ranking only): no open drop -> 0 unless the fetch
+wins, Manabond / Burgeoning returns Maze's End, or **Amulet of Vigor is ours (P5d-4: the replay re-enters untapped, so no
+activation cycle is lost)**; lands short or Manabond -> 1000; plenty of lands -> 1. The playout holds one drop for the
+replay and replays Maze's End into it. **Prune (a)** `MTG_MAZE_IDLE_FETCH` (default ON): a plan without a Maze's End
+activation leaves the menu when the same plan plus one fetch is on it and Maze's End comes back; targets stay searched.
+
+**Held-out vs the shipped P5c play** (ab1 seeds 201001.., clairvoyant search, net turns, + = slower):
+| arm | d5 b20 x1000 | 2HG x300 | d3 x300 | d1b3 x200 | d1b1 x200 | d0 x400 |
+|---|---|---|---|---|---|---|
+| ranking-only u2 (P5d-3) | -3 | +1 | -2 | -7 | +2 | -11 |
+| + Amulet tier ("fix") | -8 | -1 | -4 | -8 | +4 | -16 |
+| **fix + prune (a) = SHIPPED** | **+4** | **+3** | **-3** | **-4** | **+2** | (= fix) |
+| fix + amended (a) (Manabond counts only with no nonland card left) | +2 | +3 | -3 | -4 | +2 | |
+| fix + C2 (lands-short tier 100, not 1000) | -11 | 0 | -6 | -6 | 0 | -16 |
+
+**Prune (a) is the USER's rule and ships.** Its clairvoyant cost (+12 d5, +4 2HG vs u2) is clairvoyance: with the
+library order unseen by the search (`blind_salt` 1, same seeds) it is std -7 (d5 0 at 34/34, d3 +2, d1b3 -3, d1b1 -6),
+2HG 0 (15/15). Amended (a) blind: std -5, 2HG +1 (measured, not adopted).
+
+**d8 b0 recovery (shipped vs ship):** 120 of 132 slower games recover (d0 37/37, d3 11/11, d5 41/48, 2HG 16/18, d1b3 8/9,
+d1b1 7/9). Blind ensemble (salts 1-4, d8 b0) on the 12: 10 are clairvoyance (shipped <= ship blind: d5 g81 g629 g635
+g823 g892, 2HG g196 g254, d1b3 g64, d1b1 g46 g186). **Two persist blind: d5 g231 (+2 over 4 salts) and d5 g320 (+4)**;
+g231 is the Amulet tier (blind u2 = u2+(a) = ship = 28). Attribution runs `bl2/` and the sample-wide blind A/B `blw/`
+(fixB / candB / shipB vs abb's u2B / idleB) were queued at hand-off.
+
+**d0 (the depth-0 greedy, where TapTutorPutEval IS the policy) is worse, and the cause is the 1000 tier.** Fresh 20,000
+paired d0 games @310001: ship 6.8780, u2 6.9073 (+586 turns), shipped 6.9009 (+459); axis by axis on u2 only C2 helps
+(-65 vs ship), and shipped + C2 = 6.8685 (**-190 vs ship**). The 400-game held-out d0 row (-16) was the wrong sign. Logs:
+with the fetch at 1000 the greedy fetches before casting the deck's land-drop / draw engines (game 144: T5 fetch +
+replay, Exploration held to T6; game 294: Guild Summit not until T8), and those compound. **OWED (USER):** C2 lowers the
+lands-short tier from "wins out" (1000) to one spell's worth (100). It measures better at every row (d0 -190/20k vs
+ship; searched -39 vs the Amulet fix's -33) and recovers g635 at d8 b0, but it is the USER's rule, so it is NOT shipped.
+A narrower alternative (keep 1000 but never above a land-drop / draw engine cast) is not built or measured.
+
+**Tiers:** units 3655/3655. Smoke + regression (all decks, MTG_PGO=0): only Maze keys moved (10), accepted
+`--deck=mazesend,mazesend2hg`, `check_gt_logs` 0 stale. Searched keys equal or better (smoke d5 5.7348 -> 5.7273, 2HG
+5.6000 -> 5.5667, regression d5 s2002 5.6630 -> 5.6413, s3003 5.6867 -> 5.6800, d3 equal); d0 smoke 6.8980 -> 6.9070,
+regression 6.8960 -> 6.9060 (the C2 finding above).
+
+**Cost notes for P7:** d0 g237 (ship) > 0.6 h at d8 b0, abandoned at 50M; blind 2HG g196 and d1b3 g64 abandon at 50M on
+both arms; b2000 replays: d1b3 g4 u2 5 vs ship 6, d0 g270 5 = 5.
