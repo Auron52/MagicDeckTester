@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f6695ff3e  date 2026-11-20
+# Regression ground truth -- commit 90560457f  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -621,6 +621,19 @@ merfolkturns_regression_d5_s2002=5.5667/f21add78bf9e1933
 merfolkturns_regression_d5_s3003=5.5933/c17312756f626bad
 
 # --- overnight ---
+mazesend_overnight_d0_s4004=6.8250/06e969bef8361259
+mazesend_overnight_d0_s6006=6.8480/919eb34289145ec7
+mazesend_overnight_d0_s8008=6.8540/beb47a6912449f73
+mazesend_overnight_d0_s10010=6.8685/59d3a5b586eaa5ba
+mazesend_overnight_d3_s4004=5.6000/cc1506667c7d56d1
+mazesend_overnight_d5_s4004=5.5200/277c5fa6dd18b00f
+mazesend_overnight_d5_s5005=5.6633/8b83e48526980bc9
+mazesend_overnight_d5_s6006=5.5333/1c4f62801d1876c8
+mazesend_overnight_d5_s7007=5.4846/51b4b43b3fea847e
+mazesend_overnight_d3_s30341=6.0000/6696c730208e6ebd
+mazesend_overnight_d5_s30341=6.0000/6696c730208e6ebd
+mazesend_overnight_d3_s30441=4.0000/9699737712931c25
+mazesend_overnight_d5_s30441=5.0000/4f83102fb4211440
 mill_overnight_d0_s4004=6.8300/2dbd5b0890840fc1
 mill_overnight_d3_s4004=5.6000/24611133fcc6c01c
 mill_overnight_d5_s4004=5.6000/24611133fcc6c01c
