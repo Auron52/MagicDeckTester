@@ -118246,7 +118246,11 @@ inline Printer g_printer;
 // reached different lines for a reason other than the work it removed. Same reason, same gate as
 // MTG_PROBE_INCLUSIVE_CUT. A non-recording leafless pass (the ladders, P16/P18, Maze's End's play) folds as before.
 // =0 -> fold inside a recording probe too (the pre-fix behaviour).
-static bool LastPlyProbeMeasureOn() { static const bool v = EnvOn("MTG_LASTPLY_PROBE_MEASURE", true); return v; }
+static bool LastPlyProbeMeasureOn()
+{
+    static const bool env = EnvOn("MTG_LASTPLY_PROBE_MEASURE", true);
+    return heurarm::Flag(heurarm::LASTPLY_PROBE_MEASURE, env);
+}
 static bool LastPlyFoldHere(const GameState& s)
 {
     static const bool s_on = EnvOn("MTG_LASTPLY_NOWIN_FOLD", true);
