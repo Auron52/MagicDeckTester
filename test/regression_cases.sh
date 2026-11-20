@@ -36,6 +36,7 @@ declare -A DECK_FILE=(
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
   [onedropburn]="decks/1 Drop Burn/1 Drop Burn.cod"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
+  [creatureburn]="decks/Creature Burn/Creature Burn.cod"
   [merfolk]=decks/Merfolk/Merfolk.cod
   [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.cod"
   [th]="decks/Treasure Hunt/Treasure Hunt.txt"
@@ -108,6 +109,7 @@ declare -A DECK_PROF=(
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
   [onedropburn]="decks/1 Drop Burn/1 Drop Burn.profile.json"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
+  [creatureburn]="decks/Creature Burn/Creature Burn.profile.json"
   [merfolk]=decks/Merfolk/Merfolk.profile.json
   [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.profile.json"
   [th]="decks/Treasure Hunt/Treasure Hunt.profile.json"
@@ -291,6 +293,13 @@ SMOKE_CASES=(
   "modernrwburn     3 1001   50 10"
   "modernrwburn     5 1001  100 20"
   "modernrwburn2hg  5 1001   25 20"
+  # Creature Burn (creatureburn): ADDED 2026-11-20 by the analysis (docs/design/analysis-Creature Burn.md).
+  # Pre-keep-table ENTRY sizing at the built-in d5/b20 play setting (1 Drop Burn's shape). 2HG is a play row:
+  # every burn spell and ping, Browbeat's "any player may" and Price of Progress read the 30-life team.
+  "creatureburn     0 1001 1000 0"
+  "creatureburn     3 1001   50 10"
+  "creatureburn     5 1001  100 20"
+  "creatureburn2hg  5 1001   25 20"
   # fungus: Hinata's sizing, adopted wholesale rather than probed (user call 2026-09-20).
   # MEASURED 2026-09-22 before adopting: this deck is the suite's most expensive by a clear margin
   # -- 281.8s CPU here (2nd behind snow's 520.5s) and 1,331.1s in REGRESSION, where it is 1st at
@@ -924,6 +933,12 @@ REGRESSION_CASES=(
   # at either depth (~31k/23k units); 30161 (overnight) max 5.4 s. Heavy-deck size (5 games).
   "onedropburn      3 30261 5 0"
   "onedropburn      5 30261 5 0"
+  # creatureburn: added 2026-11-20 with the deck. Screened 16 five-game blocks (30001..30301 step 20, d3+d5, budget 0,
+  # abandon_units 2000000, MTG_SLOW_GAME_MS=5000; logs/creature-burn/backstop_screen.*): none abandoned, but the
+  # tail is heavy (30221 d5 1.22M units / 105 s for 5 games; 36 games over 5 s). Clean blocks (no game over 5 s at
+  # either depth): 30041, 30061, 30081, 30161, 30301. Regression 30161 (~19k/16k units), overnight 30081.
+  "creatureburn     3 30161 5 0"
+  "creatureburn     5 30161 5 0"
   # UNBUDGETED BACKSTOP (REGRESSION half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -1328,6 +1343,12 @@ REGRESSION_CASES=(
   "modernrwburn     5 2002  150 20"
   "modernrwburn     5 3003  150 20"
   "modernrwburn2hg  5 2002   75 20"
+  # Creature Burn: pre-keep-table rows at the shipped d5/b20 setting (1 Drop Burn's shape).
+  "creatureburn     0 2002 1000 0"
+  "creatureburn     3 2002   75 10"
+  "creatureburn     5 2002  150 20"
+  "creatureburn     5 3003  150 20"
+  "creatureburn2hg  5 2002   75 20"
   # Merfolk: provisional pre-keep-table ENTRY set; most searched games use play settings.
   "merfolk 0 2002 1000 0"
   "merfolk 3 2002   75 10"
@@ -1530,6 +1551,9 @@ OVERNIGHT_CASES=(
   # onedropburn: see the REGRESSION backstop note (the other clean block).
   "onedropburn      3 30161 5 0"
   "onedropburn      5 30161 5 0"
+  # creatureburn: see the REGRESSION backstop note (the other clean block).
+  "creatureburn     3 30081 5 0"
+  "creatureburn     5 30081 5 0"
   # UNBUDGETED BACKSTOP (OVERNIGHT half; USER 2026-10-22). Every deck, at d3 AND its play depth, at
   # budget 0 (= unlimited). The tiers otherwise run only budgeted games, so a code path that runs only
   # without a budget (g_unbudgeted_play, Unlimited(), the lazy leaf) had nothing standing to catch a
@@ -2325,6 +2349,24 @@ OVERNIGHT_CASES=(
   "modernrwburn2hg  5  5005  100 20"
   "modernrwburn2hg  5  6006  100 20"
   "modernrwburn2hg  5  7007  100 20"
+  # Creature Burn: pre-keep-table overnight ENTRY set (d0 4x2000, d3 4x400 b10, d5 4x300 b20, 2HG 4x100 b20);
+  # expands to the FULL set just before its keep-table adoption (regression-testing.md).
+  "creatureburn     0  4004 2000 0"
+  "creatureburn     0  6006 2000 0"
+  "creatureburn     0  8008 2000 0"
+  "creatureburn     0 10010 2000 0"
+  "creatureburn     3  4004  400 10"
+  "creatureburn     3  5005  400 10"
+  "creatureburn     3  6006  400 10"
+  "creatureburn     3  7007  400 10"
+  "creatureburn     5  4004  300 20"
+  "creatureburn     5  5005  300 20"
+  "creatureburn     5  6006  300 20"
+  "creatureburn     5  7007  300 20"
+  "creatureburn2hg  5  4004  100 20"
+  "creatureburn2hg  5  5005  100 20"
+  "creatureburn2hg  5  6006  100 20"
+  "creatureburn2hg  5  7007  100 20"
   # Merfolk: pre-keep-table overnight ENTRY set (Hinata's shape).
   "merfolk 0  4004 2000 0"
   "merfolk 0  6006 2000 0"

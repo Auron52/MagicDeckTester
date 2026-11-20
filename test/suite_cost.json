@@ -93,6 +93,16 @@
    "total_core_ms": 549116,
    "worst_case": "creature_giving_regression_d5_b30"
   },
+  "creatureburn": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 3173.2663,
+   "jobs": 7,
+   "key": "creatureburn",
+   "note": "SCALED to hinata's committed entry: measured 0.493x hinata in ONE pooled --cost run (creatureburn 13739.7867 vs hinata 27860.1133 ms/game) on a 12-thread laptop (2026-11-20, pre-keep-table), whose absolute ms are not this table's box. Refill with --measure-all on the reference box.",
+   "tier": "regression",
+   "total_core_ms": 579089,
+   "worst_case": "creatureburn2hg_regression_d5_b20"
+  },
   "critter": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 142.26,
