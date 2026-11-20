@@ -111,3 +111,20 @@ origin/phase-1-2-deck-analyzer 8fbbc5023 (batch 1). This handoff commit sits on 
 - Box rules: heavy work via `bash /workspaces/MagicDeckTester/scripts/heavy_run.sh <one stage>`; MTG_BUILD_JOBS=12;
   `MTG_RSS_CAP_GB=20`; waiters on PID/markers (never pgrep -f); push wip/* only; rebase never merge; no timeouts;
   per-job manifest flags must be heurarm slots.
+
+## P7-9 RESULTS (2026-11-20, gi14 root-cause path; mtg.p7t = 3ca5e9f1e, single-thread, no lock)
+`mazesend_regression_d5_s3003 gi14` (`--seed 3017 --game-index 14 --games 1`), outputs in `p7g/d8r/`:
+
+| arm | d5 b20 | d8 b0 (units) |
+|---|---|---|
+| shipped (every lever on) | 7 | **7** (3,333,732; `gi14b.out`) |
+| `MTG_MAZE_CASTDOM_WINDOWS=0` | 6 (`att_win0.out`) | **7** (3,734,034; `gi14_win0_d8.out`) |
+| all branch levers off (WINDOWS, PERPLAN, KEEP_A_ONLY, LASTPLY_NOWIN_FOLD =0; reconstructs batch-1 base) | **6** (= base GT; `gi14_alloff_d5b20.out`) | **7** (7,335,338; `gi14_alloff_d8.out`) |
+
+**Verdict: no lost line.** At d8 b0 the windows-off arm and the base reconstruction ALSO give T7, so the T6 at d5 b20 is
+budget luck, not a line P7c (a) makes unfindable. No amendment to CastDominanceKeep is proposed. The shipped arm reaches
+the same d8 b0 answer as base with 45% of base's units (3.33M vs 7.34M). The literal bar ("recovers at d8 b0" = T6) is not
+met by ANY arm, base included; that is the coordinator's / USER's call to record.
+GT: NOT accepted on the branch (the batch-2 integrator accepts once over the combined tree). Moved keys as listed above.
+VPC: full corpus held; subset strict (Maze_s_End) = PASS.
+Echo edge fold: written up as `docs/design/echo-edge-fold-probe-pricing.md` (a2bfec4e8); not changed.
