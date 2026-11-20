@@ -50,5 +50,44 @@ no-win bound, and stores its win only when an existing proof already refutes eve
 - Next probe: replay the b10 game's T2 choice (Gemstone Mine + Magus) and let d8 b0 search from T3; bisect the turn
   whose search fails to find the T6 continuation, then compare that node's interior menu with the root menu.
 
-## Status / next steps
-(filled in below as work proceeds)
+## STATUS AT HANDOFF (~225K context, 2026-11-20 ~07:00 UTC) -- READ THIS FIRST
+Branch wip/maze-dm1 was REBASED onto 8fbbc5023 (origin/phase-1-2-deck-analyzer, batch 1) per the coordinator:
+`git rebase --onto 8fbbc5023 aa16513e7`. Commits: 7ec94d53b (the guard + test + this doc, rebased) and the handoff
+commit on top (diag-key fix + Windows skip of the unit test). build/Release in the worktree = 7ec94d53b's tree
+(built 06:47; copy at build/scratch/maze/dm1/mtg.fix). The diag-key fix in the handoff commit is NOT built yet.
+
+### What changed on the new base (single games, d6 b0, --ignore-play-profile)
+- martyr gi149: 5 at d6 and d8 with the guard ON, and 5 at d6 with MTG_INWIN_EXIT_GUARD=0 too -> batch 1 already
+  changed this game; it no longer reproduces on 8fbbc5023, so it cannot validate the guard.
+- maze gi73: STILL 6 at d6 and d8 WITH the guard (5 at d5). So the exit guard is NOT the fix for case 1 on this base.
+  Flips at d6 b0 on mtg.fix: MTG_INWIN_CACHE=0 -> 5, MTG_FS_HORIZON_EXIT=0 -> 5, MTG_LAZY_LEAF=0 -> 5,
+  **MTG_LEAFLESS_READS_LEAFED=0 -> 5**, MTG_INWIN_CACHE_VERIFY=1 -> 5 (plays fresh), MTG_GAME_LINE_CACHE=0 -> 6,
+  MTG_BP_DEV_SEQ=0 -> 6.
+- VERIFY (guard on or off), maze d6: 4 MATERIAL, all one chain: `turn=5 depth=2 cutoff=5 cached=9 fresh=5 leaf=2`
+  then T4 d3, T3 d4, T2 d5. A LEAFLESS T5 node with window T5-T6 is told "no win by 5" by the inwin map, and a fresh
+  search finds the T5 win. The printed "stored:" provenance (turn=5 depth=1 leaf=2 twop=1 hexits=0) is UNRELIABLE:
+  the built binary kept the hit key in a thread-local that children overwrite (fixed in the handoff commit, unbuilt).
+- Working hypothesis for case 1 on this base: the no-win comes from a LEAFED (rollout) node via the inwin map's
+  "any leaf" context (inwin::Ctx under MTG_LEAFLESS_READS_LEAFED), i.e. a rollout node's in-window search at T5 is NOT
+  the leafless in-window search plus leaf estimates (some leaf-dependent in-window narrowing/ordering cut), OR the T5
+  menu depends on the remaining depth (depth 1 vs 2). Either breaks the inwin soundness premise ("the menu inside the
+  window does not depend on the remaining depth" / "a leafed node ... only ADDS leaf estimates").
+
+### Next steps, in order
+1. Build (heavy_run ./build.sh) and run `rep.sh <new bin> V maze 6 0 MTG_INWIN_CACHE_VERIFY=1` (guard on): read the
+   CORRECT store provenance on the T5 DISAGREE line (leaf kind 0/1/2, depth, cutoff, devseq pass, hexits).
+   If leaf != 2: the leafed->leafless direction of the inwin "any leaf" Ctx is unsound here; find which in-window cut
+   in the rollout node dropped the T5 line (compare a depth-2 rollout FSLineWin vs leafless at that T5 state).
+   If depth == 1 and leaf == 2: the T5 menu depends on remaining depth; find the depth-1 special case.
+2. Fix soundly (store only what the reader's context can rely on); keep or drop MTG_INWIN_EXIT_GUARD on evidence
+   (it is a real tightening -- exits are not minima -- but currently has NO repro that it changes; consider an A/B).
+3. Then the brief's measurement: smoke+regression `--both` run (moved keys), held-out A/B on moved decks pooled into
+   ONE batch (arms via the heurarm slot, logs/idgate/mkab.py pattern), d8 b0 on every slower game, accept smoke +
+   regression GT, test/check_gt_logs.py, scripts/check_references_safe.py. Push wip/maze-dm1 only; report the tip to the
+   coordinator for batch 2.
+
+### Running / pending at handoff
+- Unit tests of build 7ec94d53b running in place: output build/scratch/maze/dm1/unit1.log (ends with `rc=N`).
+- CI run 44683038229 (6dea361e9): Windows FAILED only on test_inwin_exit_guard.cpp -- SIGSEGV stack overflow (a d6 b0
+  game on a std::thread, 1 MB Windows default stack). The handoff commit skips that test on _WIN32; re-check CI.
+- Case 3 (gods) unchanged on the new base: F3_gods d3 b0 = 9 with mtg.fix.
