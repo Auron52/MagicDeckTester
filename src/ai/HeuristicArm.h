@@ -1022,6 +1022,7 @@ enum Slot : int
     STUFFY_ESCAPE_SCRY_PRUNE, // MTG_STUFFY_ESCAPE_SCRY_PRUNE  Stuffy Doll arm P (2026-11-19, USER 11-17 ~21:35 "perhaps even not castable. It is essentially a Scry 1" / 11-19 ~06:20 "the purpose of that card in the deck is primarily for indestructible and the combo, not for incidental scry 1"): StuffyDollProvider::CollectedActionAllowed refuses a Loran's Escape cast whose grant cannot matter this turn (StuffyEscapeCastIsScryOnly: not our creature, already indestructible, or no damage source this turn). LOSSY (the scry-only line becomes unfindable), DEFAULT OFF, A/B arm only
     STUFFY_ESCAPE_SCRY_LAST,  // MTG_STUFFY_ESCAPE_SCRY_LAST  Stuffy Doll arm W (2026-11-19): the same scry-only Loran's Escape plans stay on the menu but are MOVE-ORDERED LAST among their wins tier (StuffyDollProvider::PlanMoveOrderBack, MoveOrderLess's provider tier = -1). ORDER only: nothing refused at any budget; a budget reaches real lines first; a scry line wins only when strictly better. Inert at d0 (the runner never move-orders). DEFAULT OFF, A/B arm
     ID_GATE_TRIAL,            // MTG_ID_GATE_TRIAL  FullSearchLine's ladder START GATE: a pass whose ESTIMATE does not fit is STARTED anyway as a TRIAL whose overrun ceiling is the gate's own allowance (alpha x remaining); a trial that runs past it rolls back to the prior pass (anytime rescue kept), so a pass is refused only when it really does not fit. Re-prices nothing at an unlimited budget (the gate never refuses there). DEFAULT ON; =0 -> refuse on the estimate, as before
+    ID_GATE_COLD,             // MTG_ID_GATE_COLD  (acts only with ID_GATE_TRIAL on) the start gate's estimate is built on COLD pass costs: a pass's measured cost plus the units its hits in the game-persistent caches (game line cache, in-window proof cache) cost when those answers were first computed, so a pass made nearly free by the previous decision's (often aborted) deeper search no longer bootstraps a tiny estimate that admits the next pass at the 25x proportional ceiling. The estimate is max(warm, cold): it only ever turns an admitted pass into a trial (capped at the gate's allowance). Inert at an unlimited budget (no refusals, no trials). DEFAULT ON; =0 -> the warm estimate (IDG-1/IDG-2's trial)
     COUNT
 };
 
@@ -1988,6 +1989,7 @@ inline const char* Name(int slot)
         "MTG_STUFFY_ESCAPE_SCRY_PRUNE",
         "MTG_STUFFY_ESCAPE_SCRY_LAST",
         "MTG_ID_GATE_TRIAL",
+        "MTG_ID_GATE_COLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
