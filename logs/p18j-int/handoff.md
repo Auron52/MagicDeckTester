@@ -1,44 +1,41 @@
-# p18j-int handoff / resume file (2026-11-20 ~19:00 UTC, agent 3)
+# p18j-int handoff / resume file (2026-11-20 ~22:35 UTC, agent 3 stopping: parent wrap-up)
 
-Worktree `.claude/worktrees/p18j-int`, branch `wip/p18j-int`. REBASED 2026-11-20 onto origin c86a86333. The shared branch is
-NEVER pushed from here; push wip/p18j-int only. Scratch: `/workspaces/MagicDeckTester/build/scratch/p18j-int/` (tools/,
-AB1/, AB2/, AB3/, ESC/, rp/).
+Worktree `.claude/worktrees/p18j-int`, branch `wip/p18j-int` (pushed). Rebased 2026-11-20 onto origin c86a86333. The shared
+branch is NEVER pushed from here. Scratch: `/workspaces/MagicDeckTester/build/scratch/p18j-int/` (tools/, AB1-AB3/, ESC/).
 
-## Done
-- AB1 + AB2 analysed: docs/design/sparse-heuristic-ladder.md "Measurements" (AB1, walk-edge gap, AB2, escalation path 2),
-  committed 9b4d6393b. Headlines: walk-edge fix +4 Maze (0 losses); NO mode meets the bar on any deck in AB2; AB1's
-  mode-5 "35-79 % skipped / leafless trees grow" was a TRACE ARTIFACT (b1-b3 H records leaf=0); the superseded rollouts
-  sit in passes 1-3 (mode 5 runs them exactly), so the "early-win cutoff" (Q1 default) has nothing to cut: NOT built.
-  Escalation path 2: 18.4 % of units on the 7 decks that reach it; 92.9 % of its leaf units no-win, 72.9 % useless.
-- tools: abreport.py now reads cpu= (was wall ms); new escshare.py, supdepth.py, wtree.py, pairdec.py, mkoracle.py.
+## Done (commits)
+- 9b4d6393b doc: AB2 analysis + escalation path-2 shares; AB1's mode-5 diagnosis corrected (trace artifact).
+- 6d430e300 src (measurement only, built + units rc 0): deck-tagged MTG_P16_ORACLE lines; mode-3 arm key `_pwe1`;
+  b1-b3 [p16] H records carry leaf units.
+- be35a6a6a doc: AB3 (oracle ceiling, mode 3 on bare decks, walk-edge gap in mode 3).
+- No deck flipped; no tiers run (parent: deferred to a later session). No jobs running.
 
-## UNCOMMITTED src (src/ai/TurnSolver.cpp; commit once chain4's build passes)
-- MTG_P16_ORACLE lines may carry a deck tag (measurement only); mode-3 lookahead arm key `_pwe1` (walk-edge roll + window
-  cut, A/B only, default off); b1/b2/b3 [p16] H records carry their leaf units (print-only).
+## Key measurements (docs/design/sparse-heuristic-ladder.md, "Measurements")
+- AB2: sparse (mode 4 + walk-edge fix) quality-even on all 7 bare decks, units 0.998-1.011 (no saving); fix alone +4 Maze.
+  Sea sparse 0.943 units at +1 (the same game heur loses). Boars: mode 3 best (heur +7, sparse +2 at 1.2x units).
+  sg5: Shadowborn +8, Maze +3, Martyr +1, units 0.976-1.000.
+- Superseded rollouts live in passes 1-3 (mode 5 runs those exactly); the leafless trees do NOT grow (W_k 0.15-0.95x the
+  rollout pass's tree) -> the "early-win cutoff" has nothing to cut; not built.
+- AB3 oracle ceiling (perfect K, quality 0 / Maze +1): units Sea 0.721, Hydras 0.850, Shadowborn 0.910, Stuffy 0.910,
+  Martyr 0.919, Merfolk Turns 0.935, Mill 0.968, Maze 0.980.
+- AB3 mode 3 on bare decks: units 1.02-1.70x; better quality on Martyr -5, Shadowborn -14, Stuffy -6, Sea -2; Maze +118
+  (edge roll: -91), Mill +30 (edge roll: +8).
+- Escalation path 2: 18.4 % of units on the 7 decks reaching it (10.4 % of 16); 92.9 % of its leaf units no-win, 72.9 %
+  of its units useless -- known only after rolling out.
 
-## Running (2026-11-20 18:50 UTC)
-- chain4 PID 1807469 (`tools/chain4.sh`), queued on BOX.lock behind provreg build_units.sh and alch-t3 chain7: build ->
-  `mtg_d3` -> units (`unit3.log`, rc in AB3.status) -> ONE pooled batch `AB3/manifest.json` (198 jobs, 39,600 games, AB2's
-  seeds 17,100,000+10,000b x 6 x 200): 7 bare decks x {live, oracle, sg3, sg3_pwe1} + Sea x {heur, live, oracle, sg3,
-  sg3_pwe1}; env MTG_P16_TRACE=1 MTG_P16_ORACLE=oracle_ab2.txt (from AB2's live/heur trace) MTG_P16_ORACLE_ARM=/oracle/.
-  Status `AB3.status`, DONE marker `AB3.DONE`. Check `[batch] heartbeat` in AB3/trace.err within 10 min of "batch".
-
-## Remaining, in order
-1. AB3: sanity -- live digests == AB2 live (else the oracle file does not apply); oracle coverage (oracle arm decisions
-   with W passes). `python3 tools/abreport.py AB3 live` (Sea: `AB3 heur`). Oracle = the CEILING of skipping every
-   superseded rollout with perfect K. sg3 / sg3_pwe1 = mode 3 on the bare decks (a flip candidate if quality even AND
-   units/CPU lower; Maze needs _pwe1 -- that is a new arm key, flipping with it means making it the deck's key).
-2. Fill the doc ("AB3"), then flip any deck that meets the bar (rebase onto origin first, never during a build; ./build.sh;
-   smoke + regression --both under BOX.lock; per-game audit; --accept --deck=...; check_gt_logs.py; commit per deck; push
-   wip/p18j-int only). Otherwise flip nothing.
-3. Surface the USER questions below (with AB3 numbers).
+## Remaining, in order (next session)
+1. USER answers to Q1-Q3 below.
+2. Any flip: rebase onto origin (never during a build), ./build.sh, smoke + regression --both under BOX.lock, per-game
+   audit, --accept --deck=..., check_gt_logs.py, commit per deck, push wip/p18j-int.
 
 ## Open USER questions
-- Q1 (revised): no shape meets the vision on bare decks; the waste is in passes 1-3 and is partly pre-pay. AB3's oracle
-  gives the ceiling per deck. Proposal depends on it.
-- Q2: mode 3 stays on Boars (AB2: heur +7 / sparse +2 vs mode 3). Morph / Spirits not re-measured.
-- Q3: walk-edge gap in every leafless shape -- not authorized; `_pwe1` measures it for mode 3 only (arm key).
-- Sea Creatures: sparse 0.943 units but +1 game (the same game heur loses: bare ladder vs model) -> not flipped.
+- Q1: the vision's ceiling on the bare decks is the oracle above (2-28 % units); a real K chooser pays for the foresight
+  out of it. Worth building only for Sea / Hydras (15-28 %) and maybe Shadowborn / Stuffy / Martyr (8-9 %)? Mill / Maze
+  (2-3 %) have nothing to bank.
+- Q2: mode 3 stays on Boars. Mode 3 also plays better on Martyr / Shadowborn / Stuffy / Sea, but at 1.16-1.33x units:
+  a quality-for-cost trade, the USER's call.
+- Q3: the walk-edge gap costs mode 3 dozens of games where it bites (Maze +118 -> -91, Mill +30 -> +8 with `_pwe1`).
+  Extend engine-wide (moves GT on ~30 decks; its own A/B)? Boars / Morph / Spirits under `_pwe1` are not measured yet.
 
 ## USER rulings (verbatim, from the parent brief)
 - "I don't want the heuristic ladder for any deck."
