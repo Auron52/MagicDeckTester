@@ -35,7 +35,7 @@ Worktree `.claude/worktrees/maze-p5d`, branch `wip/maze-p5d` (base 021c821d0). P
   The games rev recovers include most of the old "(a) clairvoyant losses" (d5 g81 g231 g629 g823, 2HG g254, d1b3 g64,
   d1b1 g186), so the reveal mechanism, not only clairvoyance, was behind several of them.
 
-## Running
+## Done (was running)
 - d8 (`$O/run_d8.sh` PID 2128603, `$O/m_d8.json` 110 jobs = the 55 games where rev is slower than shipped (3
   clairvoyant: d5 g516 g984, d1b1 g159; 52 blind salt 1), arms rev / cand at d8 b0 (50M ceiling); out `$O/d8.out`,
   marker `$O/d8.done`). Read: rev <= cand on each?
@@ -84,3 +84,14 @@ for treating tutors as free discards scales with tutors lost vs lands gained and
   every slower game, and the d0 row.
 - The reveal-guard amendment (this handoff, TEMP lever `MTG_MAZE_IDLE_FETCH_REVEAL`) is a fix to prune (a) itself and
   composes with both; P5d-6 should land it as part of (a) (or keep it as a measured patch) per the parent.
+
+## d8 b0 recovery of the amendment's slower games (DONE, `$O/d8.out`, `python3 $O/and8.py`)
+55 games where rev is slower than shipped (3 clairvoyant d5 g516 g984, d1b1 g159; 52 blind salt 1), rev vs shipped at
+d8 b0: **51 recover (all 3 clairvoyant included), 4 do not, all blind salt 1 only: d5 g219 (5 -> 6), 2HG g108 (6 -> 7),
+2HG g161 (7 -> 8), 2HG g21 (6 -> 7)**; net over the 55 at d8 = +3 (the 4 not recovered).
+REMAINING for P5d-6 (in order): (1) blind ENSEMBLE (salts 1-4, d8 b0, 50M ceiling, same_seed_inflight 0) of rev vs cand
+on those 4. A single blind salt is one sampled world, so attribute before ruling, as was done for the 12 in P5d-4.
+(2) Land the reveal guard into (a) (clean code + ledger + TapTutorPutEval/(a) comment numbers), rebased onto
+origin/phase-1-2-deck-analyzer 8fbbc5023, then the USER's Q1/Q2 rules above. (3) Ledger P5d: replace "ROOT-CAUSE OWED"
+for g320 with this mechanism. The working tree still holds the TEMP lever (`$O/reveal-temp.patch`), so revert it before
+committing src.
