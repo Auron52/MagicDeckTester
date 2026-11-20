@@ -422,3 +422,14 @@ audit slower searched games at d8 b0; accept GT in worktree; check_gt_logs.py; d
 - MTG_BURST_ACT_COLOUR_PENDING: ab4 exactly 0.0000 (200 chunks tied), wall -0.3%; not needed for the acceptance (acc_noburst T3).
   The USER asked for it ("Yes, we need to fix this."), so it stays unless the USER says otherwise.
 - MTG_DEV_SEQ_HEXIT_TAINT: a soundness fix (default ON); ab4 alone -0.0010 t=-1.42, within all -0.0035 t=-1.96 (9/1).
+### ATTRIBUTION RESULTS (landed ~17:45 UTC; attr6/out.txt, audit6b/out.txt; jobs finished, nothing running)
+- Non-AA movers: EVERY changed game is reverted by MTG_SITE9_AFTER_DEFERRED=0 (s9d) alone; the taint moves only melira reg
+  d5_s3003 gi126 (digest only, still T4). s9d on non-AA: FASTER cyclone2hg gi10 6->5, cyclone d5_s3003 gi125 5->4, goblins2hg
+  gi17 5->4, goblins d5_s2002 gi3 4->3, martyr d3/d5 gi5 6->5, mazesend gi166 7->6 / gi179 6->5 / smoke gi55 6->5, melira gi110
+  5->4 / gi126 5->4; SLOWER snow smoke gi81 6->7 (recovers 6 at d8 b0). The rest digest-only.
+- AA slower games that do NOT recover at d8 b0 are s9d too: gi40 (reg d5_s3003) and gi87: s9d off -> old result (5 / 4), s9d
+  alone -> slower (6 / 5). gi12 (smoke d3): s9d + tap-last TOGETHER -> 7 (either off -> 6; either alone -> 6).
+- So: the taint is clean in the tiers. The remaining bar failure is MTG_SITE9_AFTER_DEFERRED (agent 4's, engine-wide):
+  3 AA games stay slower at d8 b0 (gi12, gi40, gi87). Next agent: ROOT-CAUSE s9d on gi40/gi87 at d8 b0 (single games,
+  build/scratch/alch-t3/audit6b/manifest.json has the exact job specs) before accepting GT, or surface the s9d decision to the USER
+  (its ab4 value is -0.0010 t=-0.63, and acceptance does not need it). Do NOT accept GT until this is settled.
