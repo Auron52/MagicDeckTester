@@ -308,3 +308,20 @@ Validation (Release, post-change):
    goldfish). The coordinator surfaces it to the USER.
 4. Browbeat is kept out of the provider signature (generic staple).
 5. Land positions: all k plus the unearth clone (beyond the brief's "first haste cast"), kept per coordinator ruling.
+
+## Claude-play sweep
+- commit: `a478b813c`
+- seeds: 50001 games: 16 (8 Sonnet player agents x 2 games; every flag verified by an Opus agent).
+  Disjoint from every suite seed. Games 0 and 2 were dealt the same hand (the two player agents read the seed
+  convention differently), so 15 distinct deals. Results: `logs/creature-burn/claude-sweep-50001.json`.
+- result: 16/16 completed; the player tied the search's win turn in every game (T4 x6, T5 x9, T8 x1); none faster.
+- flags: 1 unresolved
+  - g8 (seed 50009, game-index 8), REAL, low severity, human-play surface only: every Searing Blaze plan in the
+    main-phase menu is labelled "-> you + <own creature>" and the cast-time target prompt defaults to "You (face)",
+    while the note claims "Default = the AI's pick". Accepting the defaults burns our own face and creature. The
+    search's own line is right (opponent + its 6/6). Cause: `FixedBurnCandidates` lists Multi pins in battlefield
+    order, human play collapses target-only variants to the first pin, and `PrepareFixedBurnPin` defaults to it.
+    Pre-existing (shared with Burn and other Searing Blaze decks). Fix agent assigned 2026-11-20.
+- dismissed: g2 T3, the frame's `legal_targets[].index` (object index) vs the reply `options[].index`. FALSE
+  POSITIVE: the engine did what the reply said, and the note says "reply an option index". The fix agent is
+  making the note more explicit (usability only).
