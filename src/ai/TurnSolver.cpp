@@ -110789,6 +110789,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long binds_at_entry = budgetbind::t_binds;
     const unsigned long long drops_at_entry = g_condemn_drops;
+    // MTG_LEAF_VERIFY_TRACE (diagnostic, RC-2): also trace the ORIGINAL rollout of the traced key, not only its verify
+    // replays, so a stale win can be diffed turn by turn against the fresh replay. Print-only; off unless both are set.
+    FsSimTraceScope _orig_tr(LeafVerifyOn() && LeafVerifyTraceKey() != 0 && key.h1 == LeafVerifyTraceKey());
     // MTG_EXH_LEAF_MEMO (see ExhLeafMemoOn): a spent-budget no-win this pass already computed.
     const bool xm_live = tt != nullptr && nowin_armed && depth >= 1 && ExhLeafMemoOn() && xmmemo::Spent(budget);
     TranspositionTable::Key xm_key{};
@@ -111034,9 +111037,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                 if (s_n.fetch_add(1) < 12)
                 {
                     std::fprintf(stderr, "[leaf-verify] STORE-TIME MISMATCH t%d depth=%d stored=%d cutoff=%d fresh_same=%d"
-                                         " fresh_loose=%d key=%llx nest=%d\n  %s\n",
+                                         " fresh_loose=%d key=%llx nest=%d binds_d=%llu trunc_d=%llu exceeded=%d\n  %s\n",
                                  leaf_vcopy->turn_number, depth, result, cutoff_turn, r_same, r_loose,
-                                 static_cast<unsigned long long>(key.h1), g_rollout_nest, FsSimBoardText(*leaf_vcopy).c_str());
+                                 static_cast<unsigned long long>(key.h1), g_rollout_nest,
+                                 budgetbind::t_binds - binds_at_entry, g_fs_trunc_events - trunc_at_entry,
+                                 decisionwork::Exceeded() ? 1 : 0, FsSimBoardText(*leaf_vcopy).c_str());
                 }
             }
             if (t_leaf_stored_states.size() > 8192) { t_leaf_stored_states.clear(); }
