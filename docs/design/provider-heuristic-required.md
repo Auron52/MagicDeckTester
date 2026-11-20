@@ -104,7 +104,7 @@ pre-2026-11-20 play), `searched` (every legal match), `policy` (`MTG_KN_ETBDIG_R
      A/B AND cheaper; otherwise the searched default stands and the deck keeps its RED FLAG.
    * Unit file `test/unit/test_searched_paragon_wave.cpp`. Its two executor-lockstep failures were the TEST's no-op
      stack resolver (`TakeTurn`'s third argument resolves the stack; a `[](GameState&){}` leaves every cast spell on
-     it), not the pins -- fixed on the backup branch; the full unit suite still has to run there.
+     it), not the pins -- fixed on the backup branch, where the full unit suite passes (3781/3781).
    * The pooled A/B is READY, not run: manifest `build/scratch/provreg/pw_main/manifest.json` (copy
      `logs/provreg/pw_main_manifest.json` in the `provreg` worktree), runner `build/scratch/provreg/run_pw_main.sh`,
      13 jobs x 3000 games (Selesnya std + 2HG: old / searched / polpara / polwave / policy; Landfall std: old / searched
