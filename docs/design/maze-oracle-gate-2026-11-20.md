@@ -7,7 +7,7 @@ CAPPED-DECISION 131,360, CAPPED 13,729; the real classes APPLY-DROP 1,909, ENUM-
 DOMINATED-ONESHOT 48, APPLY-DROP-ORDER 29. Report: `logs/mana_clean/claude-queue-20261119i/report.md` (primary
 checkout). Everything here is ANALYZER-side (the mana oracle, `src/ai/ManaOracle.cpp`): play is not changed.
 
-(Status: IN PROGRESS -- sections are filled as the measurements land.)
+(Status: UNMODELED fixed and measured; the CAPPED-DECISION hot spot fixed (exact); the small classes and the residual capped cost are open, section 3 / 2b.)
 
 ## 1. UNMODELED: the engine's non-mana Gate taps
 
@@ -106,12 +106,57 @@ common prefix). It is unpriced, which is why the priced budget never saw it.
 * Identity check: g21 gives the same applies / frontiers / pruned / options (10,395 / 2,002 / 504 / 10,058) with
   oracle ms 1,624 -> 516 (3.1x).
 
-(Measurements on g167 and on the three capped repros: pending.)
+Measured (one thread, lane; "before" = the tap-choice binary without the screen):
+
+| repro | applies before -> after | plans audited before -> after | oracle s before -> after | priced s after | verdict after |
+|---|---|---|---|---|---|
+| g21 (whole game) | 10,395 -> 10,395 (identical) | all | 1.6 -> 0.5 | -- | same |
+| g167 (whole game) | 621,924 -> 621,924 (identical; frontiers 299,749, pruned 188,633) | all | 101.8 -> 25.4 (4.0x) | -- | same; wall 96.8 -> 26.2 s |
+| g14 T5 | 1,599,771 -> 1,599,771 (identical) | 32 -> 32 | 577 -> 230 (2.5x) | 165 | same (MISS 3, CAPPED 2 by board memory) |
+| g30 T6 | 1,878,180 -> 7,937,265 | 14 -> 61 of 106 | wall cap both (~1,500) | 793 | still WALL-BP-CAP, 45 unaudited (was 92) |
+| g4 T7 | 1,069,544 -> 5,964,226 | 4 -> 27 of 132 | wall cap both (~1,500) | 851 | still WALL-BP-CAP, 105 unaudited (was 128) |
+
+Where nothing is capped the counters are identical, which is the identity check. Where the backstop binds, the same
+wall now does 4-6x the applies, and priced work went from 10-15% of the wall to ~55%: the budget now sees most of
+what the decision costs. Unit suite with the screen: 3,780 / 3,780. Smoke is not re-run for this commit: the prune
+runs only inside the oracle (smoke's games run it off), and the tap-choice smoke above already showed oracle-off play
+byte-identical.
+
+The two capped decisions remain capped. In priced terms their work is now `simkey` (117-125M calls, 440-467 priced s)
+and `pay` (95-106M calls, 243-271 priced s): about 15 BuildSimKey and 13 payment calls per apply. A second perf profile
+of g30 T6 on the screened binary is in section 2b.
 
 ## 3. The real classes
 
-(pending)
+Not yet re-classified across the gate: that needs a re-run of the gate (5,000 games under the box lock), which this
+branch has not done. One repro checked on the screened binary:
+
+* **ORACLE-GAP gi115 T4** (`MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 MTG_MANA_ORACLE_ONLY_TURN=4`, seed 30000115): still
+  3 ORACLE-GAP (plans `{land=Maze's End}` and `{land=Baldur's Gate}` x2), no UNMODELED; 82 / 54 oracle outcomes, none
+  covers the engine's. It is in the gate report, so it predates the tap choice. The engine's end board does NOT hold
+  the plan's land: for `{land=Maze's End}` the engine ends with Gond Gate#31 and Baldur's Gate#7 played (new, tapped),
+  Exploration#20 cast, Sylvan Scrying cast (Citadel Gate fetched), Maze's End still in hand, and Gond Gate#28 +
+  Maze's End#43 + Cliffgate tapped. The oracle's nearest outcome leaves Gond Gate#28 and Maze's End#43 up and taps
+  Izzet Guildgate + Baldur's Gate. So the engine's continuation (Exploration's extra land drop, after the Sylvan Scrying
+  draw) re-decided the land drops on a board the oracle's realisations do not reach. Next: trace that plan's engine
+  apply (the continuation actions and their payments) against the oracle's realisation of the same continuation.
+
+## 2b. What the capped decisions cost after the screen
+
+(pending: perf of g30 T6 on the screened binary)
 
 ## 4. Questions for the USER
 
-(pending)
+No new decision. Everything here is analyzer-side and exact (the tap choice adds verdicts, the screen changes nothing
+the prune keeps). One existing item now has an instrument: the provider's Gate order for Summit / Heap Gate taps
+(`MazesEndProvider::EtbTapSubtypeOrder`, ledger decisions 2/10/30, USER sign-off pending there). The oracle can now
+tell whether that order ever loses a line. On the repro games (g9, g21, g27, g167) it never did (0 ORACLE-GAP,
+0 MISS). A gate re-run would answer it deck-wide, and any APPLY-DROP it surfaces on a Summit / Heap outcome is
+evidence for that ledger decision.
+
+## 5. Remaining, in order
+
+1. Re-run the Maze's End mana-clean gate on this branch (box lock) to re-count every class, with UNMODELED expected
+   ~0 and CAPPED-DECISION lower.
+2. The residual capped cost (2b): profile, then a sound collapse or another exact speedup.
+3. ORACLE-GAP gi115 T4 (section 3): trace the continuation's land re-decision.
