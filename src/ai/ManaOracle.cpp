@@ -254,6 +254,8 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
     const PayOption& opt = h.script[h.next++];
     h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return true; }
+    if (opt.what == kTapChoiceWhat)
+    { h.ended = true; h.tap_error = "a tap-ahead met a tap-choice script entry"; return true; }
     const bool eats_pin = OracleOptionConsumesEarlyCrackPin(state, opt.taps);
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
@@ -637,7 +639,7 @@ std::string TapsText(const PayOption& o)
 {
     if (o.engine) { return "(the engine's own)"; }
     if (o.fail) { return "(no payment exists)"; }
-    std::string s;
+    std::string s = o.what == kTapChoiceWhat ? std::string("tap (not for mana)") : std::string();
     for (std::size_t i = 0; i < o.taps.size(); ++i)
     {
         const TurnSolver::PreTap& t = o.taps[i];
@@ -2812,6 +2814,206 @@ std::vector<PayOption> TapAheadOptions(const GameState& state, int count, bool l
     return out;
 }
 
+// ---- THE NON-MANA TAP CHOICE (Maze's End mana-clean gate, 2026-11-20) ---------------------------------------------
+// Guild Summit's ETB ("tap any number of untapped Gates you control; draw a card for each") and Heap Gate's "{1}, {T},
+// tap an untapped Gate you control" cost tap permanents for something other than mana. The COUNT is the search's (the
+// ETB choice axis; one Gate for the cost); WHICH Gates is the provider's EtbTapSubtypeOrder (mana-source rank, least
+// valuable first -- the mana-payment exemption, Maze's End ledger decisions 2/10/30). A Gate tapped that way cannot pay
+// later, so the pick is a MANA choice, and until this the oracle could not drive it: every outcome with a Summit
+// resolution or a Heap activation in it carried an "engine tapped a mana source outside any payment" note and gave no
+// verdict (gate claude-queue-20261119i: 139,000 of maze_s_end's 139,380 UNMODELED, every top signature naming the
+// Gate the rank picked -- Gond Gate, Talon Gates of Madara). Now the pick is a scripted step, served like a payment:
+// the frontier's options are every DISTINCT multiset of n resource classes (Resources' own key, so two picks the
+// oracle's comparisons cannot tell apart are one option; the provider's own pick is listed first). DEFAULT ON; =0
+// restores the engine's order on the oracle's copy (and the UNMODELED notes). Oracle-only: play never reaches it.
+bool TapChoiceOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_TAP_CHOICE", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+// The most options one tap-choice frontier lists (MTG_ORACLE_TAP_CHOICE_CAP, default 512); past it the frontier is
+// cut and the realisation notes "tap-choice enumeration capped" (UNMODELED, never a verdict).
+std::size_t TapChoiceCap()
+{
+    static const std::size_t v = static_cast<std::size_t>(std::max(1, EnvInt("MTG_ORACLE_TAP_CHOICE_CAP", 512)));
+    return v;
+}
+std::string TapChoiceClass(const GameState& s, const Permanent& p)
+{
+    std::string k = ResClassKey(p) + AttachedKey(s, p);
+    if (KeyedApart(s, p)) { k += "|plan#" + std::to_string(p.card.m_number); }
+    return k;
+}
+
+bool OracleTapChoice(GameState& state, std::vector<int>& elig, int n, int kind)
+{
+    Hook* const hp = t_hook;
+    if (hp == nullptr || hp->target != &state || !TapChoiceOn()) { return false; }
+    Hook& h = *hp;
+    auto num_at = [&](int i) { return state.battlefield[static_cast<std::size_t>(i)].card.m_number; };
+    const int m = static_cast<int>(elig.size());
+    bool choice = n > 0 && n < m;   // none or every one: nothing to choose
+    if (choice)
+    {
+        std::string first;
+        bool two = false;
+        for (int i : elig)
+        {
+            const std::string k = TapChoiceClass(state, state.battlefield[static_cast<std::size_t>(i)]);
+            if (first.empty()) { first = k; } else if (k != first) { two = true; break; }
+        }
+        choice = two;   // one class: every pick is the same board
+    }
+    if (!choice)
+    {
+        // The taps are FORCED (all of them, or interchangeable copies): no mana choice was made, so they are the
+        // line's own -- recorded as the script's, never "an engine tap outside any payment". No step is taken.
+        if (!h.ended && !h.safe)
+        { for (int k = 0; k < std::min(n, m); ++k) { h.tapped_by_script.push_back(num_at(elig[static_cast<std::size_t>(k)])); } }
+        return false;
+    }
+    auto serve = [&](const PayOption& opt) -> bool
+    {
+        if (static_cast<int>(opt.taps.size()) != n) { return false; }
+        std::vector<int> front, rest = elig;
+        for (const TurnSolver::PreTap& t : opt.taps)
+        {
+            const auto it = std::find_if(rest.begin(), rest.end(), [&](int i) { return num_at(i) == t.num; });
+            if (it == rest.end()) { return false; }
+            front.push_back(*it);
+            rest.erase(it);
+        }
+        front.insert(front.end(), rest.begin(), rest.end());
+        elig.swap(front);
+        return true;
+    };
+    auto note_taps = [&]() { for (int k = 0; k < n; ++k) { h.tapped_by_script.push_back(num_at(elig[static_cast<std::size_t>(k)])); } };
+    // SAFE (RealPayScope, the real board): the entry only while it fits; else the script is given up.
+    if (h.safe)
+    {
+        if (h.abandoned || h.next >= h.script.size()) { h.abandoned = true; return false; }
+        const PayOption& opt = h.script[h.next];
+        if (opt.engine || opt.fail || opt.what != kTapChoiceWhat) { h.abandoned = true; return false; }
+        ++h.next;
+        h.pay_steps.push_back(t_seq_step);
+        if (!serve(opt)) { h.abandoned = true; return false; }
+        return true;
+    }
+    if (h.ended) { return false; }
+    // ENGINE STEP (the rollback census): the provider's own pick, counted as one of the engine's mana decisions.
+    if (h.next < h.script.size() ? h.script[h.next].engine : h.all_engine)
+    {
+        ++h.next;
+        h.pay_steps.push_back(t_seq_step);
+        note_taps();
+        return false;
+    }
+    if (h.next >= h.script.size())
+    {
+        h.ended         = true;
+        h.frontier      = true;
+        if (h.f_state != nullptr) { *h.f_state = state; } h.f_tapped_n = h.tapped_by_script.size();
+        h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
+        h.f_line_unpaid = g_line_unpaid_cost;
+        h.f_line_opens_unseen = g_line_opens_unseen;
+        h.f_line_has_acts = g_line_hold_has_acts;
+        h.f_dropped     = h.DroppedSoFar();
+        h.f_cost        = ManaCost{};
+        h.f_tapchoice   = n;
+        h.f_tc_kind     = kind;
+        h.f_tc_elig.clear();
+        for (int i : elig) { h.f_tc_elig.push_back(num_at(i)); }
+        return false;
+    }
+    const PayOption& opt = h.script[h.next++];
+    h.pay_steps.push_back(t_seq_step);
+    if (opt.fail || opt.engine || opt.what != kTapChoiceWhat || !serve(opt))
+    {
+        h.ended = true;
+        h.tap_error = "a tap-choice step met a script entry that is not its choice (" + opt.what + ")";
+        return false;
+    }
+    note_taps();
+    return true;
+}
+[[maybe_unused]] static const bool s_tap_choice_registered = (g_oracle_tap_choice = &OracleTapChoice, true);
+
+// The TAP-CHOICE frontier's options: every distinct multiset of `n` resource classes among the eligible permanents
+// (`nums`, in the provider's order; within a class the provider's earliest copies), the provider's own pick first.
+std::vector<PayOption> TapChoiceOptions(const GameState& s, const std::vector<int>& nums, int n,
+                                        std::vector<std::string>* unmodeled)
+{
+    std::vector<std::string> keys;
+    std::vector<std::vector<int>> groups;          // card numbers per class, provider order
+    std::vector<std::string> names;                // per class (display)
+    for (int num : nums)
+    {
+        const Permanent* p = nullptr;
+        for (const Permanent& q : s.battlefield) { if (q.card.m_number == num) { p = &q; break; } }
+        if (p == nullptr) { continue; }
+        const std::string k = TapChoiceClass(s, *p);
+        const auto it = std::find(keys.begin(), keys.end(), k);
+        if (it == keys.end()) { keys.push_back(k); groups.push_back({ num }); names.push_back(p->card.m_name.str()); }
+        else { groups[static_cast<std::size_t>(it - keys.begin())].push_back(num); }
+    }
+    std::vector<PayOption> out;
+    auto make = [&](const std::vector<int>& cnt)
+    {
+        PayOption o;
+        o.what = kTapChoiceWhat;
+        for (std::size_t g = 0; g < groups.size(); ++g)
+        {
+            for (int c = 0; c < cnt[g]; ++c)
+            {
+                TurnSolver::PreTap t;
+                t.name = names[g];
+                t.num  = groups[g][static_cast<std::size_t>(c)];
+                o.taps.push_back(t);
+            }
+        }
+        out.push_back(std::move(o));
+    };
+    // The provider's own pick: its first n in order.
+    std::vector<int> engine_cnt(groups.size(), 0);
+    {
+        int left = n;
+        for (int num : nums)
+        {
+            if (left <= 0) { break; }
+            for (std::size_t g = 0; g < groups.size(); ++g)
+            { if (std::find(groups[g].begin(), groups[g].end(), num) != groups[g].end()) { ++engine_cnt[g]; --left; break; } }
+        }
+    }
+    make(engine_cnt);
+    const std::size_t cap = TapChoiceCap();
+    bool capped = false;
+    std::vector<int> cnt(groups.size(), 0);
+    std::function<void(std::size_t, int)> rec = [&](std::size_t g, int left)
+    {
+        if (capped) { return; }
+        if (g == groups.size())
+        {
+            if (left != 0 || cnt == engine_cnt) { return; }
+            if (out.size() >= cap) { capped = true; return; }
+            make(cnt);
+            return;
+        }
+        int rest = 0;   // what the classes after g can still take
+        for (std::size_t q = g + 1; q < groups.size(); ++q) { rest += static_cast<int>(groups[q].size()); }
+        const int hi = std::min(left, static_cast<int>(groups[g].size()));
+        for (int c = hi; c >= 0 && !capped; --c)
+        {
+            if (left - c > rest) { break; }
+            cnt[g] = c;
+            rec(g + 1, left - c);
+        }
+        cnt[g] = 0;
+    };
+    rec(0, n);
+    if (capped && unmodeled != nullptr) { unmodeled->push_back("tap-choice enumeration capped"); }
+    return out;
+}
+
 bool PerformPayTaps(GameState& state, const PayOption& o) { return PerformTaps(state, o); }
 
 // ---- PAY REFINE (ManaOracle.h) ------------------------------------------------------------------------
@@ -3581,6 +3783,9 @@ struct FrontierRec
     std::size_t            index = 0;
     int                    tapahead = 0;
     bool                   lands_only = true;
+    int                    tapchoice = 0;        // > 0: a NON-MANA TAP CHOICE frontier (Hook::f_tapchoice)
+    int                    tc_kind = 0;
+    std::vector<int>       tc_elig;
     bool                   creature_ability = false;
     bool                   has_spell = false;   // the spell the frontier payment is for (Hook::f_spell)
     Card                   spell;
@@ -3609,6 +3814,7 @@ std::uint64_t FrontKey(const FrontierRec& f, bool line_context)
                                        + (f.creature_ability ? "a" : "s")
                                        + (f.batch ? "b" : "p")
                                        + "t" + std::to_string(f.tapahead)
+                                       + (f.tapchoice > 0 ? "k" + std::to_string(f.tapchoice) + "/" + std::to_string(f.tc_kind) : "")
                                        + (f.has_spell ? "|" + f.spell.m_name.str() : "")
                                        + "v" + std::to_string(f.sac_victim));
     // A failed payment can leave the same board as a successful but
@@ -3970,6 +4176,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.index        = h.next;
                     fr.tapahead     = h.f_tapahead;
                     fr.lands_only   = h.f_lands_only;
+                    fr.tapchoice    = h.f_tapchoice;
+                    fr.tc_kind      = h.f_tc_kind;
+                    fr.tc_elig      = h.f_tc_elig;
                     fr.creature_ability = h.f_creature_ability;
                     fr.has_spell    = h.f_has_spell;
                     if (h.f_has_spell) { fr.spell = h.f_spell; }
@@ -4229,7 +4438,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             std::optional<PaySacSpareScope> _spare;
             if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
             { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }
-            std::vector<PayOption> opts = f.tapahead > 0
+            std::vector<PayOption> opts = f.tapchoice > 0
+                ? TapChoiceOptions(f.st, f.tc_elig, f.tapchoice, &r.unmodeled)
+                : f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
                                   /*whole_float=*/f.batch,
@@ -4247,7 +4458,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             {
                 std::lock_guard<std::mutex> lk(g_print_mu);
                 std::fprintf(stderr, "[mana-oracle]   frontier pay%zu %s%s after %s | %s\n", f.index + 1,
-                             f.tapahead > 0 ? ("TAP-AHEAD up to " + std::to_string(f.tapahead)).c_str()
+                             f.tapchoice > 0 ? ("TAP-CHOICE " + std::to_string(f.tapchoice) + " of "
+                                                + std::to_string(f.tc_elig.size())).c_str()
+                             : f.tapahead > 0 ? ("TAP-AHEAD up to " + std::to_string(f.tapahead)).c_str()
                                             : ("cost=" + f.cost.ToString()).c_str(),
                              f.for_creature ? " (creature)" : "",
                              ScriptText(f.script).c_str(), BoardText(f.st).c_str());
@@ -4288,6 +4501,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
                 std::vector<PayOption> s = f.script;
                 o.what = f.batch ? std::string("batch ") + f.cost.ToString()
+                    : f.tapchoice > 0 ? std::string(kTapChoiceWhat)
                     : (f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString());
                 s.push_back(std::move(o));
                 next.push_back(std::move(s));
@@ -6623,6 +6837,10 @@ RealPayScope::~RealPayScope()
 void AuditDecision(const GameState& state, bool is_pre_combat)
 {
     if (!On() || t_hook != nullptr) { return; }
+    // MTG_MANA_ORACLE_ONLY_TURN=<t> (diagnostic, default 0 = off): audit only turn t's decisions -- a cheap repro of
+    // one turn of a game whose earlier turns cost hours to audit (play is the same with the oracle on or off).
+    static const int s_only_turn = std::max(0, EnvInt("MTG_MANA_ORACLE_ONLY_TURN", 0));
+    if (s_only_turn > 0 && state.turn_number != s_only_turn) { return; }
     const auto t0 = std::chrono::steady_clock::now();
     g_decisions.fetch_add(1, std::memory_order_relaxed);
     RevealLogPause pause;   // quiet: no logger, no viewer sink, not the real game (g_real_resolution)
@@ -6648,6 +6866,8 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
           t_dec_forced_cap = saved_forced; t_dec_wall_cap = saved_wall;
           t_dec_wall_polls = saved_polls; t_dec_wall_start = saved_wall_start; }
     } dec_budget;
+    long long dec_n0[workctr::kKinds];   // the decision's work by kind (DECISION-COST's breakdown)
+    for (int k = 0; k < workctr::kKinds; ++k) { dec_n0[k] = workctr::t_n[k]; }
     long long dec_skipped = 0;
     auto skip_out = [&](const TurnSolver::Plan& p, const char* what)
     {
@@ -6780,13 +7000,22 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     }
     if (DecisionOut() || (HeavyDecision() > 0 && t_dec_applies >= HeavyDecision()))
     {
+        // ...and where the priced work went, by kind: priced ms (count) per workctr kind.
+        std::string by_kind;
+        for (int k = 0; k < workctr::kKinds; ++k)
+        {
+            const long long d = workctr::t_n[k] - dec_n0[k];
+            if (d <= 0) { continue; }
+            by_kind += std::string(" ") + workctr::KindName(k) + "=" + std::to_string(d * workctr::kPriceNs[k] / 1000000LL)
+                     + "ms(" + std::to_string(d) + ")";
+        }
         std::lock_guard<std::mutex> lk(g_print_mu);
         std::fprintf(stderr, "[mana-oracle] DECISION-COST %s plans=%zu gate_checked=%d applies=%lld (menu %lld, gate %lld) "
-                             "priced_ms=%lld ms=%lld%s%s\n",
+                             "priced_ms=%lld ms=%lld%s%s |%s\n",
                      Ctx(state, is_pre_combat).c_str(), plans.size(), checked, t_dec_applies, plan_applies,
                      t_dec_applies - plan_applies, DecisionSpentNs() / 1000000LL, ms,
                      DecisionOut() ? (" BUDGET-SPENT skipped=" + std::to_string(dec_skipped)).c_str() : "",
-                     t_dec_wall_cap ? " WALL-BP-CAP" : (t_dec_forced_cap ? " FORCED-BP-CAP" : ""));
+                     t_dec_wall_cap ? " WALL-BP-CAP" : (t_dec_forced_cap ? " FORCED-BP-CAP" : ""), by_kind.c_str());
     }
 }
 
@@ -6845,6 +7074,15 @@ LineAudit AuditLine(const GameState& state, bool pre, const TurnSolver::Plan& pl
             p.what   = o.what;
             p.engine = o.engine;
             p.fail   = o.fail;
+            // A non-mana tap choice (Guild Summit's ETB taps, a "tap an untapped Gate" cost) is no viewer pre-tap:
+            // it is named in the text only, so the viewer never taps those Gates for mana.
+            if (o.what == kTapChoiceWhat)
+            {
+                p.text = "tap (not for mana):";
+                for (const TurnSolver::PreTap& t : o.taps) { p.text += " " + t.name + "#" + std::to_string(t.num); }
+                v.push_back(std::move(p));
+                continue;
+            }
             for (std::size_t i = 0; i < o.taps.size(); ++i)
             {
                 const TurnSolver::PreTap& t = o.taps[i];

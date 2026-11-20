@@ -1693,3 +1693,73 @@ TEST_CASE("pay refine: the release bound never releases fewer Gates than the eag
         CHECK(rel >= eager);
     }
 }
+
+// ---- MAZE'S END, mana-clean gate claude-queue-20261119i (2026-11-20; docs/design/maze-oracle-gate-2026-11-20.md) -------
+// Guild Summit's ETB taps N Gates (N searched, WHICH by the provider's Gate order). The oracle could not drive that
+// pick, so every outcome with a Summit resolution was "an engine tap outside any payment" and gave no verdict
+// (139,000 of the gate's 139,380 Maze's End UNMODELED). The pick is now the oracle's scripted NON-MANA TAP CHOICE.
+namespace
+{
+GameState SummitBoard()
+{
+    GameState s = Board({ "Azorius Guildgate", "Dimir Guildgate", "Golgari Guildgate", "Selesnya Guildgate",
+                          "Izzet Guildgate", "Gruul Guildgate" });
+    s.turn_number = 4;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    Hand(s, { "Guild Summit" });
+    SetLibrary(s, std::vector<std::string>(12, "Forest"));
+    return s;
+}
+TurnSolver::Plan SummitPlan(const GameState& s, int tap_n)
+{
+    Action summit = CastAction(s, "Guild Summit");
+    summit.chosen_x = tap_n + 1;   // the ETB choice axis: N + 1 (TurnSolver CollectActions)
+    TurnSolver::Plan plan = PlanOf({ summit });
+    plan.land_to_play.clear();
+    return plan;
+}
+int TappedGates(const GameState& g)
+{
+    int n = 0;
+    for (const Permanent& p : g.battlefield) { if (p.card.IsLand() && p.tapped) { ++n; } }
+    return n;
+}
+} // namespace
+
+TEST_CASE("mana oracle: Guild Summit's choice of WHICH Gates to tap is driven, so its outcome is a verdict (Maze's End gate)")
+{
+    EnsureOracleCards();
+    static const MazesEndProvider prov;
+    GameState s = SummitBoard();
+    s.m_provider = &prov;
+    const TurnSolver::Plan plan = SummitPlan(s, 2);   // pay {2}{U} with three Gates, then tap two of the other three
+    {
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        REQUIRE(TappedGates(g) == 5);                   // (the premise: the ETB tapped two Gates)
+        REQUIRE(g.players[0].hand.size() == 2);         // ...and drew two
+    }
+    // Every outcome the engine reaches is one the oracle reaches with nothing the engine chose on its own.
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan, /*scripted_only=*/true));
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    CHECK(std::find(v.begin(), v.end(), "UNMODELED") == v.end());
+    CHECK(std::find(v.begin(), v.end(), "ORACLE-GAP") == v.end());
+}
+
+TEST_CASE("mana oracle: a FORCED Summit tap (every untapped Gate) is the line's own, never an unscripted engine tap")
+{
+    EnsureOracleCards();
+    static const MazesEndProvider prov;
+    GameState s = SummitBoard();
+    s.m_provider = &prov;
+    const TurnSolver::Plan plan = SummitPlan(s, 3);   // the three Gates the payment leaves: no choice
+    {
+        GameState g = s;
+        TurnSolver::ApplyPlan(g, plan, /*is_pre_combat=*/true);
+        REQUIRE(TappedGates(g) == 6);
+    }
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan, /*scripted_only=*/true));
+    const std::vector<std::string> v = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    CHECK(std::find(v.begin(), v.end(), "UNMODELED") == v.end());
+}

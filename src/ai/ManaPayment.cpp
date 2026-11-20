@@ -12111,6 +12111,8 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
     const PayOption& opt = h.script[h.next++];
     h.pay_steps.push_back(t_seq_step);
     if (opt.fail) { return false; }   // the oracle found no payment here: dropped, as the engine drops it
+    // A NON-MANA TAP CHOICE entry (OracleTapChoice) is never a payment: the script is out of step with the apply.
+    if (opt.what == kTapChoiceWhat) { h.ended = true; h.tap_error = "a payment met a tap-choice script entry"; return false; }
     const bool eats_pin = OracleOptionConsumesEarlyCrackPin(state, opt.taps);
     for (std::size_t i = 0; i < opt.taps.size(); ++i)
     {
