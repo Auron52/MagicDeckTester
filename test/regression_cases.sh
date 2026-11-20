@@ -804,12 +804,13 @@ SMOKE_CASES=(
   "spirits     3 1001   50 10"
   "spirits     5 1001  100 20"
   "spirits2hg  3 1001   50 10"
-  # Merfolk Turns: provisional pre-keep-table ENTRY set, sized from the Merfolk/Spirits
-  # templates. Confirm its searched ms/game against Hinata in the same pooled tier
-  # before accepting any GT. The 2HG row is a small 30-life searched canary.
+  # Merfolk Turns: entered at a provisional pre-keep-table ENTRY set (d3 10, d5 30), sized from the Merfolk/
+  # Spirits templates; raised 2026-11-20, just before its keep-table adoption, to the standard smoke shape (d3 50
+  # b10, d5 100 b20 = Hinata's smoke play-row floor) and accepted with the table ABSENT first. The 2HG row is a
+  # small 30-life searched canary.
   "merfolkturns 0 1001 1000 0"
-  "merfolkturns 3 1001   10 10"
-  "merfolkturns 5 1001   30 20"
+  "merfolkturns 3 1001   50 10"
+  "merfolkturns 5 1001  100 20"
   "merfolkturns2hg 3 1001 10 10"
 )
 
@@ -2373,17 +2374,21 @@ OVERNIGHT_CASES=(
   "spirits 5  5005  425 20"
   "spirits 5  6006  425 20"
   "spirits 5  7007  425 20"
-  # Merfolk Turns: pre-keep-table overnight ENTRY set. The searched rows are
-  # the shipped d5/b20 play setting; expand at keep-table adoption.
+  # Merfolk Turns: the overnight FULL set (2026-11-20, just before its keep-table adoption, accepted with the
+  # table ABSENT first): the standard shape -- d0 4x2000, one d3 b10 sanity row, d5 4x1425 b20 (the shipped
+  # d5/b20 play setting). Entered at the ENTRY set (d3 125 b10, d5 4x300 b20). Sized from the 2026-11-20 held-out
+  # adoption A/B (PGO, 24/24 busy): WITH the table d5 b20 costs ~1.15 s/game thread-wall, 0.30x the table-absent
+  # search units, so the full set projects to ~1.9 worker-h (Hinata's d5 rows ~2.3). No 2HG overnight row: no
+  # card scales with opponents (merfolkturns2hg is the smoke d3 canary only).
   "merfolkturns 0  4004 2000 0"
   "merfolkturns 0  6006 2000 0"
   "merfolkturns 0  8008 2000 0"
   "merfolkturns 0 10010 2000 0"
-  "merfolkturns 3  4004  125 10"
-  "merfolkturns 5  4004  300 20"
-  "merfolkturns 5  5005  300 20"
-  "merfolkturns 5  6006  300 20"
-  "merfolkturns 5  7007  300 20"
+  "merfolkturns 3  4004  325 10"
+  "merfolkturns 5  4004 1425 20"
+  "merfolkturns 5  5005 1425 20"
+  "merfolkturns 5  6006 1425 20"
+  "merfolkturns 5  7007 1425 20"
   # Disjoint unlimited backstop: s30161 (three games) completed at both depths,
   # d3 19.7 and d5 4.3 core-s, no abandoned games.
   "merfolkturns 3 30161    3 0"
