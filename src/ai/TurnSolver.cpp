@@ -117728,7 +117728,7 @@ namespace gamelc
     inline std::atomic<long long> g_ver_kind[5]{}, g_ver_printed{0}, g_ver_material{0};
     struct StoreCtx { int turn, depth, cutoff, nest; long long used; };   // verify-only diagnostics
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
-
+    inline thread_local TranspositionTable::Key t_hit_key{};
     inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; tier1::Set(tier1::kGameLc, 0); }
     // The leaf a node at `state` scores its depth-0 leaves with: 0 the heuristic rollout, 1 the value model, 2 NO
     // leaf (a forced constant leaf, or the no-leaf stand-in model). `vm` mirrors the leaf code in FSLineWin exactly.
@@ -117888,7 +117888,6 @@ namespace inwin
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash> t_map;
     struct StoreCtx { int turn, depth, cutoff, nest, leaf, sup, twop; long long hex; };   // DM1 diag (verify only)
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
-    inline thread_local TranspositionTable::Key t_hit_key{};
     inline thread_local std::size_t t_bytes = 0;
     inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_win_stores{0}, g_nowin_stores{0}, g_widen{0}, g_full{0};
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_material{0}, g_ver_printed{0};
