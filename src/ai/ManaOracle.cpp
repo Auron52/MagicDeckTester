@@ -3885,17 +3885,62 @@ std::uint64_t FrontKey(const FrontierRec& f, bool line_context)
 }
 // ParetoKeep's pairwise rule for two frontiers of one key: y covers x when y >= x on every resource either table
 // names (a name a table lacks reads 0), strictly when y is larger on a name y's table holds.
+// One MERGE WALK over the two (sorted) tables: the same answer as a lookup per name, without the log-n string
+// compares a lookup costs (Maze's End gate 2026-11-20: g30 T6's capped decision spent ~75% of its wall in this
+// rule's map lookups, unpriced).
 bool ParetoCovers(const Res& y, const Res& x, bool& strict)
 {
     strict = false;
-    for (const auto& kv : x) { if (Get(y, kv.first) < kv.second) { return false; } }
-    for (const auto& kv : y)
+    auto yi = y.begin();
+    auto xi = x.begin();
+    while (yi != y.end() || xi != x.end())
     {
-        const int v = Get(x, kv.first);
-        if (kv.second < v) { return false; }
-        if (kv.second > v) { strict = true; }
+        if (xi == x.end() || (yi != y.end() && yi->first < xi->first))
+        {   // a name only y holds: x reads 0
+            if (yi->second < 0) { return false; }
+            if (yi->second > 0) { strict = true; }
+            ++yi;
+        }
+        else if (yi == y.end() || xi->first < yi->first)
+        {   // a name only x holds: y reads 0
+            if (xi->second > 0) { return false; }
+            ++xi;
+        }
+        else
+        {
+            if (yi->second < xi->second) { return false; }
+            if (yi->second > xi->second) { strict = true; }
+            ++yi;
+            ++xi;
+        }
     }
     return true;
+}
+// THE PARETO SCREEN: two necessary conditions of ParetoCovers(y, x), cheap enough to test before it. If y covers x
+// then sum(y) >= sum(x) (strictly, when the cover is strict), and every name x holds a POSITIVE amount of, y holds a
+// positive amount of too -- so x's positive-name mask (one hashed bit per name) is a subset of y's. A pair failing
+// either is not a cover, so the online prune keeps and drops exactly the frontiers it did without the screen.
+struct ParetoSig
+{
+    long long     sum = 0;
+    std::uint64_t pos = 0;
+    bool          set = false;
+};
+ParetoSig ParetoSigOf(const Res& r)
+{
+    ParetoSig g;
+    g.set = true;
+    for (const auto& kv : r)
+    {
+        g.sum += kv.second;
+        if (kv.second > 0) { g.pos |= 1ULL << (std::hash<std::string>{}(kv.first) & 63U); }
+    }
+    return g;
+}
+bool ParetoSigMayCover(const ParetoSig& y, const ParetoSig& x, bool need_strict)
+{
+    if (need_strict ? y.sum <= x.sum : y.sum < x.sum) { return false; }
+    return (x.pos & ~y.pos) == 0;
 }
 bool OrderFoldCheck();
 
@@ -4245,6 +4290,13 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             // admitted the same way in the pass that reached them.
             std::unordered_map<std::uint64_t, std::vector<std::size_t>> live;
             for (std::size_t i = 0; i < fronts.size(); ++i) { if (!fronts[i].pdrop) { live[fronts[i].pkey].push_back(i); } }
+            std::vector<ParetoSig> psig;   // per frontier index, filled on first use (THE PARETO SCREEN)
+            auto sig = [&](std::size_t i) -> ParetoSig
+            {
+                if (psig.size() < fronts.size()) { psig.resize(fronts.size()); }
+                if (!psig[i].set) { psig[i] = ParetoSigOf(fronts[i].pres); }
+                return psig[i];
+            };
             auto release = [&](std::size_t i)
             {
                 FrontierRec& f = fronts[i];
@@ -4259,11 +4311,20 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 std::vector<std::size_t>& b = live[fronts[i].pkey];
                 const Res& xr = fronts[i].pres;
                 bool strict = false;
+                const ParetoSig xs = sig(i);
                 for (std::size_t y : b)
-                { if (ParetoCovers(xr, fronts[y].pres, strict) && strict) { release(y); } }
+                {
+                    if (ParetoSigMayCover(xs, sig(y), /*need_strict=*/true) && ParetoCovers(xr, fronts[y].pres, strict)
+                        && strict)
+                    { release(y); }
+                }
                 bool covered = false;
                 for (std::size_t y : b)
-                { if (!fronts[y].pdrop && ParetoCovers(fronts[y].pres, xr, strict)) { covered = true; break; } }
+                {
+                    if (!fronts[y].pdrop && ParetoSigMayCover(sig(y), xs, /*need_strict=*/false)
+                        && ParetoCovers(fronts[y].pres, xr, strict))
+                    { covered = true; break; }
+                }
                 b.erase(std::remove_if(b.begin(), b.end(), [&](std::size_t y) { return fronts[y].pdrop; }), b.end());
                 if (covered) { release(i); } else { b.push_back(i); }
                 peak_live = std::max(peak_live, t_board_live);
