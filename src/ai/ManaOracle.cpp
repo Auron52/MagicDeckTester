@@ -1837,6 +1837,8 @@ thread_local long t_trc_v[3] = {0, 0, 0};
 // cover, rel-0 strict, reaches) -- printed as rej= on the [refine-trc] line.
 thread_local long t_trc_rej[7] = {0, 0, 0, 0, 0, 0, 0};
 thread_local int  t_trc_site = 0;
+// MTG_PAY_REFINE_TRACE: ReachesByTapping's refusals by kind (more than four sources released / no face combination).
+thread_local long t_trc_rbt[2] = {0, 0};
 
 // The payment search for ONE set-aside: classes in battlefield order, each tapped 0..n times with a
 // non-decreasing face sequence (copies are interchangeable). At an OPTIMISTIC cover the candidate is
@@ -1869,6 +1871,27 @@ struct PayEnum
     std::size_t                     dfs_nodes = 0;
     std::size_t                     node_cap  = static_cast<std::size_t>(-1);
     bool                            capped = false;
+    // THE REFINE'S BUDGET-CHARGED CAP (MTG_PAY_REFINE_BUDGET_CAP; RefinePaymentImpl only). `cap` probes are free; each
+    // one past them charges a unit to the decision's budget (TurnSolver::DecisionBudget) and the enumeration stops
+    // only when that budget is exhausted or overrun (`budget_cut`: the answer then depends on the budget, so the refine
+    // memo does not keep it), when the game's backstop trips, or at the safety ceiling (`ceiling` probes; the only stop
+    // an unlimited root has). Monotone in the budget; inert where the budget is unlimited (nothing charged or read).
+    bool                            budget_cap = false;
+    bool                            budget_cut = false;
+    std::size_t                     ceiling    = 0;
+    std::size_t                     charged    = 0;   // probes charged (stats)
+    // One probe more: true (and `capped`) when the enumeration must stop instead.
+    bool ProbeOut()
+    {
+        if (++probes <= cap) { return false; }
+        if (!budget_cap || probes > ceiling) { capped = true; return true; }
+        if (gamework::Poll()) { capped = budget_cut = true; return true; }
+        SearchBudget* const b = TurnSolver::DecisionBudget();
+        if (b != nullptr && (b->Exhausted() || b->Overrun())) { capped = budget_cut = true; return true; }
+        TurnSolver::ChargePayRefineUnits(b, 1);
+        ++charged;
+        return false;
+    }
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
     int                             line_surplus_taps = 0; // audit-only: one-unit taps saved for a later plan payment
     // LAZY STOP (USER 2026-11-06, lever (c) of docs/design/mana-oracle-memory-time.md): the caller can use at most
@@ -2100,7 +2123,7 @@ struct PayEnum
                 }
             }
         }
-        if (++probes > cap) { capped = true; return false; }
+        if (ProbeOut()) { return false; }
         PayOption o = Build(picks);
         ManaPool offered, left;
         want_tap_key = memo_this; tap_key_ok = false; tap_hit = false;
@@ -2144,7 +2167,7 @@ struct PayEnum
             bool paid = false;
             while (!paid && std::next_permutation(perm.begin(), perm.end()))
             {
-                if (++probes > cap) { capped = true; return false; }
+                if (ProbeOut()) { return false; }
                 o = base;
                 for (std::size_t i = 0; i < nf; ++i) { o.taps[at + i] = base.taps[at + perm[i]]; }
                 g_fed_order_tries.fetch_add(1, std::memory_order_relaxed);
@@ -2168,7 +2191,7 @@ struct PayEnum
             if (c == 6)
             {
                 if (rest != 0 || std::equal(k, k + 6, was)) { return; }
-                if (++probes > cap) { capped = true; return; }
+                if (ProbeOut()) { return; }
                 PayOption o2 = o;
                 o2.stash.white += k[0]; o2.stash.blue += k[1]; o2.stash.black += k[2];
                 o2.stash.red   += k[3]; o2.stash.green += k[4]; o2.stash.colorless += k[5];
@@ -2845,7 +2868,7 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         p.tapped = true;
     }
     if (released.empty()) { return CoversBoards(c, e, true, nullptr); }
-    if (released.size() > 4) { return false; }
+    if (released.size() > 4) { ++t_trc_rbt[0]; return false; }
     // (for_creature: the table then also holds a restricted source's creature-only route.)
     const std::vector<SrcClass> srcs = BuildSources(masked, /*for_creature=*/true, nullptr, 31);
     std::vector<std::vector<std::pair<TurnSolver::PreTap, bool>>> faces_of;   // per released source: (tap, restricted)
@@ -2876,6 +2899,7 @@ bool ReachesByTapping(const GameState& c, const GameState& e)
         while (r < k.size() && ++k[r] == faces_of[r].size()) { k[r] = 0; ++r; }
         if (r == k.size()) { break; }
     }
+    ++t_trc_rbt[1];
     return false;
 }
 } // namespace
@@ -2898,6 +2922,20 @@ static bool RefineVictimSpentOn()
 // counted apart by whether either enumeration hit the probe cap. The recompute pays, so the priced meter moves.
 static thread_local bool t_refine_eager_fed = false;   // the verify's recompute
 static thread_local bool t_refine_capped    = false;   // the last RefinePaymentImpl's enumeration hit the probe cap
+static thread_local bool t_refine_budget_cut = false;  // ...and stopped for want of BUDGET (MTG_PAY_REFINE_BUDGET_CAP)
+// MTG_PAY_REFINE_BUDGET_CAP's census (printed with MTG_PAY_REFINE_STATS): refines past the free allowance, the budget
+// cuts, the safety-ceiling stops, the units charged, and the most probes any refine made (overall / with no budget).
+static std::atomic<long long> g_rcap_over{0}, g_rcap_cut{0}, g_rcap_ceil{0}, g_rcap_units{0}, g_rcap_maxp{0}, g_rcap_maxp_null{0};
+static void AtomicMax(std::atomic<long long>& a, long long v)
+{
+    long long cur = a.load(std::memory_order_relaxed);
+    while (v > cur && !a.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {}
+}
+static std::size_t PayRefineCeiling()
+{
+    static const std::size_t v = static_cast<std::size_t>(std::max(4096LL, static_cast<long long>(EnvInt("MTG_PAY_REFINE_CEILING", 1 << 20))));
+    return v;
+}
 static std::atomic<long long> g_rbound_cmp{0}, g_rbound_bad{0}, g_rbound_bad_capped{0}, g_rbound_capped{0};
 struct RefineBoundReport
 {
@@ -2990,6 +3028,25 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     // MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED=1 (diagnostic, with MTG_PAY_REFINE_BOUND_VERIFY): the eager recompute runs
     // with no probe cap, so every mismatch it reports is one the layers got wrong or left capped.
     { static const bool s_unc = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY_UNCAPPED"); if (s_unc && t_refine_eager_fed) { pe.cap = static_cast<std::size_t>(1) << 40; pe.node_cap = static_cast<std::size_t>(-1); } }
+    // The budget-charged cap (MTG_PAY_REFINE_BUDGET_CAP): not on the verify's recompute, which keeps its own cap.
+    if (PayRefineBudgetCapOn() && !t_refine_eager_fed) { pe.budget_cap = true; pe.ceiling = PayRefineCeiling(); }
+    t_refine_budget_cut = false;
+    struct CapCensus
+    {
+        const PayEnum& pe;
+        ~CapCensus()
+        {
+            t_refine_budget_cut = pe.budget_cut;
+            if (!pe.budget_cap) { return; }
+            const long long p = static_cast<long long>(pe.probes);
+            AtomicMax(g_rcap_maxp, p);
+            if (TurnSolver::DecisionBudget() == nullptr) { AtomicMax(g_rcap_maxp_null, p); }
+            if (pe.probes > pe.cap) { g_rcap_over.fetch_add(1, std::memory_order_relaxed); }
+            if (pe.budget_cut) { g_rcap_cut.fetch_add(1, std::memory_order_relaxed); }
+            else if (pe.capped && !pe.lazy) { g_rcap_ceil.fetch_add(1, std::memory_order_relaxed); }
+            g_rcap_units.fetch_add(static_cast<long long>(pe.charged), std::memory_order_relaxed);
+        }
+    } _capc{ pe };
     if (PayRefineLazyOn() && all_regular) { pe.defer = &slots; }
     // THE SACRIFICE VICTIM IS NOT A RESOURCE (MTG_REFINE_VICTIM_SPENT, DEFAULT ON; =0 the victim counts like any
     // source). While this payment's cast sacrifices a creature as an additional cost (g_pay_sac_victim, Natural
@@ -3120,6 +3177,8 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
     }
     t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
     for (long& r : t_trc_rej) { r = 0; }
+    t_trc_rbt[0] = t_trc_rbt[1] = 0;
+    std::string trc_lay;   // MTG_PAY_REFINE_TRACE: per layer L:probes:records:rej-reaches:rbt-big:rbt-none
     if (!bound) { pe.Dfs(0, col, total); }
     static const bool s_trc = EnvOn("MTG_PAY_REFINE_TRACE");
     std::string trc_taps;
@@ -3130,13 +3189,14 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
         trc_taps += " | float " + PoolText(pre.floating_mana, pre.floating_haste_c);
     }
     struct TrcOut { std::size_t T, nopt, nslot; const std::size_t& nexp; const ManaCost& c; int* rel; bool* f;
-        const std::string& taps; const PayOption& out;
+        const std::string& taps; const PayOption& out; const std::string& lay; const std::size_t& probes; const bool& capd;
         ~TrcOut() { if (s_trc) { std::lock_guard<std::mutex> lk(g_print_mu);
-            std::fprintf(stderr, "[refine-trc] T=%zu bill=%s v=%ld/%ld/%ld opts=%zu slots=%zu/%zu found=%d rel=%d rej=%ld/%ld/%ld/%ld/%ld/%ld/%ld taps=[%s] -> %s\n", T,
+            std::fprintf(stderr, "[refine-trc] T=%zu bill=%s v=%ld/%ld/%ld opts=%zu slots=%zu/%zu found=%d rel=%d rej=%ld/%ld/%ld/%ld/%ld/%ld/%ld rbt=%ld/%ld probes=%zu capped=%d lay=%s taps=[%s] -> %s\n", T,
                          c.ToString().c_str(), t_trc_v[0], t_trc_v[1], t_trc_v[2], nopt, nexp, nslot, *f ? 1 : 0, *rel,
                          t_trc_rej[0], t_trc_rej[1], t_trc_rej[2], t_trc_rej[3], t_trc_rej[4], t_trc_rej[5], t_trc_rej[6],
+                         t_trc_rbt[0], t_trc_rbt[1], probes, capd ? 1 : 0, lay.c_str(),
                          taps.c_str(), *f ? TapsText(out).c_str() : "-"); } } };
-    TrcOut _trc{ taps.size(), opts.size(), slots.size(), expanded, cost, &best_rel, &found, trc_taps, out };
+    TrcOut _trc{ taps.size(), opts.size(), slots.size(), expanded, cost, &best_rel, &found, trc_taps, out, trc_lay, pe.probes, pe.capped };
     if (bound)
     {
         // THE RELEASE LAYERS. Layer L verifies the first pass's sets of exactly L taps (each smaller set's outcome
@@ -3149,6 +3209,8 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
         for (int L = 0; L <= T && !pe.capped; ++L)
         {
             if (found && T - L < best_rel) { break; }
+            const std::size_t trc_p0 = pe.probes, trc_o0 = opts.size();
+            const long trc_r0 = t_trc_rej[6], trc_b0 = t_trc_rbt[0], trc_n0 = t_trc_rbt[1];
             fed_next.clear(); sur_next.clear();
             pe.size_limit = L;
             pe.cur.clear();
@@ -3166,6 +3228,12 @@ static bool RefinePaymentImpl(const GameState& pre, const GameState& post, const
                 ++expanded; pe.SurplusStep(sl);
             }
             fed_slots.swap(fed_next); sur_slots.swap(sur_next);
+            if (s_trc && pe.probes != trc_p0)
+            {
+                trc_lay += std::to_string(L) + ":" + std::to_string(pe.probes - trc_p0) + ":" + std::to_string(opts.size() - trc_o0)
+                         + ":" + std::to_string(t_trc_rej[6] - trc_r0) + ":" + std::to_string(t_trc_rbt[0] - trc_b0) + ":"
+                         + std::to_string(t_trc_rbt[1] - trc_n0) + ",";
+            }
             if (fed_slots.empty() && sur_slots.empty() && L >= T) { break; }
         }
         t_refine_capped = pe.capped;
@@ -3270,6 +3338,9 @@ struct RefineMemoReport
         if (!s_on) { return; }
         std::fprintf(stderr, "=== PAY REFINE MEMO: hits=%lld misses=%lld verify_mismatch=%lld wild_out=%lld ===\n",
                      g_rmemo_hit.load(), g_rmemo_miss.load(), g_rmemo_bad.load(), g_refine_wild_out.load());
+        std::fprintf(stderr, "=== PAY REFINE CAP: past_free=%lld budget_cut=%lld ceiling=%lld units=%lld max_probes=%lld max_probes_unbudgeted=%lld ===\n",
+                     g_rcap_over.load(), g_rcap_cut.load(), g_rcap_ceil.load(), g_rcap_units.load(), g_rcap_maxp.load(),
+                     g_rcap_maxp_null.load());
     }
 } g_refine_memo_report;
 bool SameOption(bool fa, const PayOption& a, bool fb, const PayOption& b)
@@ -3294,10 +3365,12 @@ static bool RefineImplChecked(const GameState& pre, const GameState& post, const
     static const bool s_verify = EnvOn("MTG_PAY_REFINE_BOUND_VERIFY");
     if (!s_verify || t_refine_eager_fed) { return found; }
     const bool cap1 = t_refine_capped;
+    const bool cut1 = t_refine_budget_cut;
     PayOption o2;
     t_refine_eager_fed = true;
     const bool f2 = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, o2);
     t_refine_eager_fed = false;
+    t_refine_budget_cut = cut1;   // the answer kept is the first one's
     const bool capped = cap1 || t_refine_capped;
     g_rbound_cmp.fetch_add(1, std::memory_order_relaxed);
     if (capped) { g_rbound_capped.fetch_add(1, std::memory_order_relaxed); }
@@ -3381,6 +3454,8 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     // entry it left would let a later refine skip the payments it counts -- the priced meter (and through the priced
     // ceiling, the units) then followed plan-pool residency. Hinata regression d5 s3003 gi27, 2026-11-11.
     if (!workctr::StoresAllowedAt(workctr::kRefRefine)) { return found; }
+    // A refine the budget cut (MTG_PAY_REFINE_BUDGET_CAP) answered for THIS budget, not for its boards.
+    if (t_refine_budget_cut) { return found; }
     if (t_refine_memo.size() >= 8192) { t_refine_memo.clear(); }
     t_refine_memo.emplace(std::move(k), std::move(e));
     return found;

@@ -797,6 +797,17 @@ inline bool PayRefineMemoOn()
     static const bool env_on = EnvOn("MTG_PAY_REFINE_MEMO", true);
     return heurarm::Flag(heurarm::PAY_REFINE_MEMO, env_on);
 }
+// MTG_PAY_REFINE_BUDGET_CAP (2026-11-20, Maze's End F5R-3; =0 -> the constant 4,096-probe cap): the refine's probe
+// cap is a PRICE, not a wall. The first 4,096 probes stay free (every refine that finished under the old cap is
+// untouched); each probe past them charges one unit to TurnSolver::DecisionBudget() and the refine stops only when that
+// budget is exhausted or overrun (or the game's backstop trips). At an unlimited root (DecisionBudget() == nullptr)
+// nothing is charged and nothing cuts but a large safety ceiling (MTG_PAY_REFINE_CEILING probes) -- CLAUDE.md, "a
+// budget may re-price work, it may not make a line unfindable". A refine the budget cut is never memoised.
+inline bool PayRefineBudgetCapOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_BUDGET_CAP", false);
+    return heurarm::Flag(heurarm::PAY_REFINE_BUDGET_CAP, env_on);
+}
 inline bool PayRefineWildOutOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_REFINE_WILD_OUT", true);
