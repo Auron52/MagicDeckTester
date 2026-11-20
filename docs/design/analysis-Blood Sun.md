@@ -32,6 +32,19 @@ on the turn of)"* -- the plausibility yardstick for Stage 5b: the turn AFTER Blo
 after) should usually be the explosive one; a game that stalls with Blood Sun down is a lead to read.
 Ask for USER reference games once the deck is viewer-ready.
 
+USER, 2026-11-20 (verbatim), on Diabolic Revelation: *"With Diabolic Revelation I think we will need a
+go-off heuristic for larger X values. The idea is that we can come up with sets of cards that allow
+turns to be chained into the win. Naturally we'll also want heuristics as well, but we should be able
+to avoid large x values messing us up, since once X is high enough the game is over. Once you have 22
+mana and Diabolic Revelation it is easy to search and play Emrakul + get another tutor for next
+turn."* -> design: a provider go-off RECOGNIZER for chainable sets (a proof of a win this round where
+it is one; an ORDER where it is only likely), large-X multisets dominated once the recognizer
+certifies the round; ordinary order-only heuristics below the threshold. Passed to the design agent.
+USER addendum (verbatim): *"But prior to that we can often chain into Time Warp."* -> below the
+Emrakul-loop threshold, Revelation for Time Warp + Revelation bridges extra turns (bounded: 2 Time Warps,
+returned only by an Emrakul graveyard shuffle) while land drops grow the mana. Passed to the design agent.
+
+
 ## Standing decisions (pass to every subagent)
 - Goldfish: the opponent never casts spells, attacks or blocks; opponent-facing clauses are inert,
   but self-binding clauses bind us. Model the full card; goldfish-inert deferrals are PROVISIONAL
