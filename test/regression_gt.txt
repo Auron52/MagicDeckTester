@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 5d0d26067  date 2026-11-20
+# Regression ground truth -- commit 90126b284  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -16,14 +16,16 @@
 # accepted-with-regressions (regression, 2026-11-19): Jumbo order levers MTG_PO_UNLOCK_ORDER + MTG_SEQ_TRAILING_EQUIP default ON (+ MTG_AURA_CEIL_HASTE_UNTAPPER), rebased onto sea-integ-1118: held-out 27,000 games Jumbo net -2 (2 faster/0 slower), Angels/Boars/Bruna/Colossus Hammer/Five Colour/Kitty/Martyr 0/0; tiers: only reach decks (Jumbo, Boars, Five Colour, Bruna) moved, searched 0 slower / 1 faster, d0 0 slower
 # accepted-with-regressions (smoke, 2026-11-20): Maze's End fix batch (I5: F5 joint pay + heapstrict, F5p unpayable prune, F5R, F7, Summit lockstep + twin fold, SHUF, P5c, P7): every searched-slower game recovers at d8 b0 (22/22; martyr g149 and maze s2002 g120 tie the base binary's d8 b0)
 # accepted-with-regressions (regression, 2026-11-20): Maze's End fix batch (I5: F5 joint pay + heapstrict, F5p unpayable prune, F5R, F7, Summit lockstep + twin fold, SHUF, P5c, P7): every searched-slower game recovers at d8 b0 (22/22; martyr g149 and maze s2002 g120 tie the base binary's d8 b0)
+# accepted-with-regressions (smoke, 2026-11-20): Maze's End P5d-6 (prune (a) + defaults-off levers) re-accepted on origin 8fbbc5023: searched smoke 3 slower/7 faster, regression 11 slower/12 faster; d0 +0.007/+0.001; slower games to d8 b0 (ledger P5d-7)
+# accepted-with-regressions (regression, 2026-11-20): Maze's End P5d-6 (prune (a) + defaults-off levers) re-accepted on origin 8fbbc5023: searched smoke 3 slower/7 faster, regression 11 slower/12 faster; d0 +0.007/+0.001; slower games to d8 b0 (ledger P5d-7)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mazesend_smoke_d0_s1001=6.8650/d371ce35d5a9b45f
-mazesend_smoke_d3_s1001=5.2000/be17a074f3c173f1
-mazesend_smoke_d5_s1001=5.6742/786372c07aca1bf0
-mazesend2hg_smoke_d5_s1001=5.3333/bbda1d5c657c8bd9
+mazesend_smoke_d0_s1001=6.8720/e03f53f628a2a7db
+mazesend_smoke_d3_s1001=5.2000/56752f70e06f1ee3
+mazesend_smoke_d5_s1001=5.6515/29fdd8d81b946bec
+mazesend2hg_smoke_d5_s1001=5.3000/c9583e8d48d76567
 mill_smoke_d0_s1001=6.1200/398fc11e7602c763
 mill_smoke_d3_s1001=4.8000/c97ac4a6805a7c6c
 mill_smoke_d5_s1001=4.6000/1b45ef7ca83aae45
@@ -257,12 +259,12 @@ merfolkturns_smoke_d5_s1001=5.6000/d962675fa7d3f958
 merfolkturns2hg_smoke_d3_s1001=6.0000/397b2b9e86b7cc69
 
 # --- regression ---
-mazesend_regression_d0_s2002=6.8640/26c1d31ffbdf08e8
-mazesend_regression_d3_s2002=5.7333/f75a364c4bf6d5f4
-mazesend_regression_d5_s2002=5.5598/cfcc860fa82d6bb4
-mazesend_regression_d5_s3003=5.5867/1fe626c7ab0cd526
-mazesend_regression_d3_s30121=5.0000/d5017d8764559343
-mazesend_regression_d5_s30121=5.0000/d5017d8764559343
+mazesend_regression_d0_s2002=6.8650/bbf0a80eff1f4a7c
+mazesend_regression_d3_s2002=5.8000/9c58916c9ac1100f
+mazesend_regression_d5_s2002=5.5435/8b00c78148e87f67
+mazesend_regression_d5_s3003=5.5933/7223c6845c803954
+mazesend_regression_d3_s30121=5.0000/1219f565045807b3
+mazesend_regression_d5_s30121=5.0000/1219f565045807b3
 mazesend_regression_d3_s30081=4.0000/03186c5673236c69
 mazesend_regression_d5_s30081=5.0000/b68b21fc754a1757
 mill_regression_d0_s2002=6.2000/1319f32d2f0a9448
