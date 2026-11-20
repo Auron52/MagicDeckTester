@@ -70074,6 +70074,52 @@ int MazesEndProvider::MazeWinlessBound(const GameState& s)
     return g0 + std::min(bound_c, bound_p) < need ? 1 : -2;
 }
 
+// Maze's End F6 (USER rejection s6 gi5 T5, 2026-11-19): BALDUR'S GATE IS HELD WHILE ITS FED MODE WILL BE USED.
+// "{2},{T}: Add X mana of any one color, X = the other Gates you control" makes only {C} in its plain face, so the
+// generic ladder ranks it 5 ("least flexible -> spend FIRST") and every generic pip reaches for it before a
+// Guildgate. Board (T5): Baldur's, Gond, Sea, Simic, Thran, two Maze's End, Sylvan Scrying in hand. The plan
+// {ME#43, ME#46} paid #43's {3} with Baldur's {C} + Sea + Simic (fed mode lost at X = 4, before the fetch made it
+// 5), so the continuation -- Scrying + the second activation, {1}{G} + {3} -- had 4 mana, not the 5 Baldur's Gate
+// fed by Thran Portal and the fetched Gate makes. Payment is not searched, so the line was unreachable at every
+// budget.
+// CONDITIONAL (F6-3): rank 61 (the scaled tier) only while (a) the fed mode is live -- ScaledManaNetYield > 0, the
+// engine's own "affordable and better than {C}" test -- and (b) the rest of the line still owes at least
+// {feeder}+1 mana AFTER this payment (LineDemandAfterPayment): the line's later casts plus its pending
+// activations. Without later demand the fed mode is not used, and an UNCONDITIONAL hold (dd0421f20) spent a
+// coloured Gate on a generic pip instead -- 3 slower games that did not recover at d8 b0 (F6 A/B). The plain
+// rank otherwise. The old MAZE'S END hold (rank 69) is gone: holding an untapped Maze's End is right only when the
+// line names its activation, and the plan's own act_src_nums hold (MTG_ACT_LINE_HOLD, ActLineHoldMask) already
+// keeps exactly those sources off a payment; the unconditional rank kept it when the line did not use it (d5
+// g823, d3 g95: Guild Summit slipped a turn -- 16 unrecovered games).
+// ORDER ONLY: TapForCostShared still taps Baldur's Gate when the cost cannot be paid otherwise, and the complete
+// backtracker remains the fallback, so no payable cost becomes unpayable (the ManaSourceRank contract).
+// MTG_MAZE_TAP_BALDUR_LAST (heurarm slot, DEFAULT ON; =0 -> the generic rank).
+// The line hold (g_line_unpaid_cost) carries the casts only, and still includes the cast being paid; a trailing
+// activation's own payment (g_act_line_current) is not in it unless a joint prepay loaded the activations
+// (g_line_hold_has_acts). Pending activations come from the plan traits net of those paid and the one being paid.
+static int LineDemandAfterPayment()
+{
+    const bool paying_act = g_act_line_current.ManaValue() > 0;
+    int later = g_line_unpaid_cost.ManaValue();
+    if (g_pay_need_live && (!paying_act || g_line_hold_has_acts)) { later -= g_pay_full_mv; }
+    if (later < 0) { later = 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt != nullptr && !g_line_hold_has_acts)   // a joint prepay's hold already carries the activations
+    {
+        later += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue());
+    }
+    return later;
+}
+
+int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool s_baldur = EnvOn("MTG_MAZE_TAP_BALDUR_LAST", true);
+    if (IsScaledManaLand(def) && heurarm::Flag(heurarm::MAZE_TAP_BALDUR_LAST, s_baldur)
+        && ScaledManaNetYield(s, def) > 0
+        && LineDemandAfterPayment() >= def.params.mana_per_creature_feeder_generic + 1) { return 61; }
+    return DeckProvider::ManaSourceRank(s, def);
+}
+
 // Maze's End P1b: a fetch of a Gate name we do not control is PROGRESS (one of the ten names) -- scored 200 (two
 // damage-equivalents, the same life-equivalence as NoWinLeafProgress) so the greedy walk takes it over leaving
 // the {3} unspent. A duplicate name and the fail-to-find stay 0 (the activation then only moves Maze's End to

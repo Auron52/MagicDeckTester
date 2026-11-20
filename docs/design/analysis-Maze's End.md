@@ -4461,3 +4461,64 @@ deck-property gated).
 - This is pre-existing on this lineage: R1 measured s6 at T7 on F5's base, e682d7942. The work queue notes s6 is
   knife-edge (the pass-2 start gate) and wins T6 at b20 on 7626b6105.
 - So the reference bar must be re-benched on the INTEGRATED shared tip.
+
+## F6 (2026-11-19): Baldur's Gate's conditional hold + the fed float (USER rejection s6 gi5 T5)
+
+Handoffs: `logs/maze/F6-handoff.md`, `F6-2-handoff.md`, `F6-3-handoff.md`. USER: *"Mana difficulties:
+logs/play/rejections/Maze_s_End_cod_s6_gi5_t5.json In theory this is workable due to lands coming into play untapped."*
+- **Fed float** (`MTG_SCALED_FED_FLOAT`, DEFAULT ON; ManaPayment.cpp `ScaledFedFloatAfter`, `ScaledFedRecolourAfter`):
+  after a payment that tapped a board-scaled land (Baldur's Gate, Three Tree City) for plain {C} beside >= {feeder}
+  other generic, make the same taps with the land in its fed mode and float the surplus (a dominance: same sources,
+  every pip paid, strictly more mana). The recolour re-reads the fed colour after the pay refine (ManaOracle
+  RefinePayment re-made it in WUBRG face order and floated W, stranding Sylvan Scrying's {G}).
+- **Conditional Baldur's Gate hold** (`MTG_MAZE_TAP_BALDUR_LAST`, DEFAULT ON; `MazesEndProvider::ManaSourceRank`):
+  rank 61 only while its fed mode gains AND the line still owes >= {feeder}+1 after this payment (later casts +
+  pending activations); otherwise the generic rank. F6's unconditional Maze's End rank 69 is DELETED: the existing
+  `MTG_ACT_LINE_HOLD` source hold already holds an activating Maze's End.
+- **Held-out A/B** (10,800 games, arms innermost and order-rotated, MTG_PGO=0; Maze's End d5 b20 x600 231001+, d3 b10
+  x300 232001+, 2HG d5 b20 x600 234001+, d0 x600 233001+; Goblins d5 b60 / d0 x300 235001+/236001+; Merfolk Turns
+  d5 b20 / d0 x300 237001+/238001+). Net turns vs base (both levers off):
+
+  | deck | fed | cond | both (shipped) |
+  |---|---|---|---|
+  | mazesend (d5 / d3 / d0) | -15 / -11 / -19 = **-45** | 0 / 0 / -6 = **-6** | -16 / -12 / -25 = **-53** |
+  | mazesend2hg | **-14** (17/3) | **-1** (2/1) | **-16** (18/2) |
+  | goblins, merfolkturns (fed only) | 0, digest-identical | -- | -- |
+
+  Units (order-balanced): both 0.991, fed 0.995, cond 1.000; wall 0.995 / 0.998 / 1.009.
+- **Every slower game recovers at d8 b0** (none abandoned): fed 14/14 (2 faster than base at d8), cond 7/7, both 20/20 (2HG g54 faster at d8).
+- **ref_bench** (11 references, d5 b20): 0/11 short; s6 gi5 T6 = T6; s9 gi8 search T5 vs USER T6. The s6 USER line
+  validates as `legal_not_enumerated` in both orders (reordered `ME#43, ME#46, Scrying` and the queued `Scrying, ME#46,
+  ME#46`): it pays, but the search does not enumerate it (open items below).
+- Unit `Maze's End F2 (gi1)` re-pinned: its "usual payment strands the activation" precondition holds only with the
+  fed float off; with it on, the usual payment already leaves Maze's End's {3} payable.
+- **Open (not fixed here):** CheckLine prices TapTutorPut at 0 on this branch (V3's viewer-maze2 fixes it); the
+  `{ME#43}` single-activation root still pays #43 with Baldur's {C} + ME#46 (no later demand named), so the s6 line is
+  reached only through the `{ME,ME}` root and the fed float; the `{Scrying, ME}` second link needs F5's owed-acts joint
+  prepay.
+- **Suite (smoke + regression, one pooled run, MTG_PGO=0):** units 3720/3720; scenarios pass; 888 refs, 0 play-drift /
+  board-diverged / enum-gap; require-beat 2/2. Moved keys, every one better or equal: smoke mazesend d0 6.8920 ->
+  6.8610, d3 5.3000 -> 5.2000, d5 5.7500 -> 5.6742, mazesend2hg d5 5.3333 -> 5.2667; regression mazesend d0 6.9000 ->
+  6.8630, d3 5.7333 -> 5.6667, d5 s2002 5.6902 -> 5.6467, d5 s3003 5.6933 -> 5.6733; merfolkturns d0 / d5 s2002 score
+  unchanged, digest moved (the fed float is engine-wide for Three Tree City). 24 slower games (2 searched: smoke 2HG
+  gi24 5->6, regression d5 s3003 gi73 5->6; 22 d0): the levers-off arm reproduces the committed GT score at suite
+  settings in all 24, and at d8 b0 23/24 recover (equal or faster). smoke d0 gi234: the arm wins T5 at d8 b0 (47M
+  units); base abandons at the 50M ceiling, and at d8 b2000 both arms win T5 (base also T5 at b0 with a 200M ceiling, 74M units): 24/24 recover.
+- That GT accept (on the 2f67da724 base) was DROPPED when wip/maze-f6 was rebased onto origin/phase-1-2-deck-analyzer
+  (2026-11-20, F6-4): the branch carries origin's GT, and the batch-2 integrator accepts once over the combined tree.
+  Post-rebase smoke: see "F6-4" below.
+
+### F6-4 (2026-11-20): analysis of F6-3's chain, rebase, post-rebase smoke
+- F6-3 chain (`build/scratch/maze/f63/`, binary = this src): the one unit failure (`test_mazes_end_f1.cpp:320/326`,
+  "F2 (gi1)") was CAUSED by the fed float -- the usual payment now floats Baldur's Gate's surplus, so the test's
+  "{3} is unpayable after the usual payment" precondition no longer holds. Not a regression; the test is re-pinned to
+  the fed-float-off arm and gains a fed-on check that the {3} pays with no hold.
+- d8 b0 of every A/B slower game (`f63/ab/d8.out`, abandon 50M, max 22.1M used): fed 14/14, cond 7/7, both 20/20
+  recover; none hit the ceiling.
+- Rebased onto origin/phase-1-2-deck-analyzer 1f3c23fab (conflicts: CMakeLists test list, the P5c2 `MazeFetchDropsSpoken`
+  helper beside `LineDemandAfterPayment`, this doc -- all kept both sides; GT files taken from origin). Units 3792/3792.
+- Post-rebase smoke (`VPC_SKIP=1`, MTG_PGO=0; `build/scratch/maze/f64/smoke.log`): 231 pass, 4 moved, all mazesend*, all
+  better or equal: d0 6.8650 -> 6.8380, d3 5.2000 -> 5.2000 (digest only), d5 5.6742 -> 5.6061, mazesend2hg d5 5.3333
+  -> 5.2333. Searched slower 0 (38 play-changed at equal score). d0 slower 11 (gi212 246 251 328 361 399 481 822 830
+  835 972): each reproduces at d0, and all 11 TIE base at d8 b0 (`f64/d8.out`, max 14.2M units): 11/11 recover.
+  GT NOT accepted on the branch (the batch-2 integrator accepts over the combined tree).
