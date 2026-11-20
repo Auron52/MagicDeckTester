@@ -4345,3 +4345,101 @@ payment).** Both apply worlds call it just before `BatchPrepayMainCasts`. It doe
 
 Which sources pay is the mana-payment exemption, so it is no pick in the search window. It reads no budget. It
 declines any shape the summed bill cannot carry.
+
+### F5 results and adoption (2026-11-19; commits 867111d63, 321c48193, 7641435f7)
+
+**Heapstrict leak (867111d63).** Repro d5 s171015 gi14 T3 committed [Guild Summit, Heap Gate(act)] under
+`MTG_MAZE_HEAP_STRICT`. Three causes, all fixed:
+1. `MazesEndProvider::PlanListFilterLive` read only the battlefield for an untapped Heap Gate, so a menu whose
+   Treasure plans PLAY Heap Gate from hand (or fetch it) was never filtered. It now reads hand and library too.
+2. The search's main-2 host (`EnumerateM2PlansBody`) never applied the provider's plan-list restriction. Both hosts
+   now call `ApplyProviderPlanListFilter`.
+3. The "never empties" keep returned a list whose only plans held the Treasure whole. The filter may now empty a list
+   (an empty list is the ordinary no-castable-play result).
+Heap fix alone (joint off, new vs old binary): d5 -1, d3 +1, hg 0, d0 0, aggregate 0. Its two slower games recover at
+d8 b0 (d3 g47 T6=T6, g110 T4=T4).
+
+**Joint mana payment (`MTG_OWED_ACTS_JOINT_PAY`, default ON; 321c48193).** The duplicate trial solve is removed
+(s192041 gi40 d3: 16.1 s -> 7.2 s). The count gate takes the probe on every other-tap line. Gate verify over 950
+games: **GATE-MISS 0** (r1 had 314, all Heap Gate Treasure lines).
+- Maze A/B (ab3/ab4): d5 +2 (1/3), d3 -1, hg 0, d0 -22 (22/3), so the deck aggregate is **net -21**. Every slower
+  game recovers at d8 b0: d5 g164 / g173 / g193, d0 g297 / g306 / g473, all equal.
+- **No wall verdict.** A pooled A/B with `same_seed_inflight: 1` biases wall by arm order: the second job of a
+  same-seed pair runs faster, and identical arms read B/A 0.844 (AB-ORDER, wip/ab-order a25cd46d6). The
+  "+12-43%" readings were order-inflated. Judge on units. For wall, run arms innermost with
+  `same_seed_inflight: 0` and read with `scripts/ab_wall.py`.
+- The `MTG_OWED_JOINT_REFINE` experiment lever was stripped (7641435f7; patch kept as
+  `logs/maze/owed-joint-refine-lever.patch`). Refine stays ON. Skipping it is a USER decision: surfaced, not taken.
+
+**Tiers (smoke + regression pooled, mtg.f5h = 7641435f7).** The joint pay is engine-wide, so it moves non-Maze decks:
+- Maze keys: mazesend smoke d0/d3/d5, reg d0/d3/d5 s2002/s3003, and mazesend2hg smoke d5. Searched slower 1
+  (smoke d5 gi55 5->6). d0 slower 12 (smoke gi25 234 413 552 650; reg gi76 376 440 624 671 815 947); d0 faster 26 + 41.
+- Non-Maze movers, all faster-or-equal: kithkin (smoke d0/d3/d5, reg d0/d3/d5 s2002/s3003), selesnyav2 smoke d0, bruna
+  smoke d0, edf smoke+reg d0, merfolkturns reg d5 s2002.
+
+**Held-out joint A/B on the non-Maze movers** (fix vs `MTG_OWED_ACTS_JOINT_PAY=0`, arms innermost, held-out seeds;
+`build/scratch/maze/f5/hx/new.out`). Units/game are equal or lower everywhere.
+
+| deck | d0 | d3 | d5 |
+|---|---|---|---|
+| kithkin | x1000: -2 (2/0) | x100: -1 (1/0) | x300: -2 (2/0) |
+| selesnyav2 | x1000: -2 (2/0) | -- | x80: 0, identical |
+| bruna | x1000: 0, identical | -- | x80: 0, identical |
+| edf | x1000: 0 (2 digests moved) | -- | x60: 0, identical |
+| merfolkturns | x1000: 0, identical | -- | x100: 0, identical |
+
+**d8 b0 recovery of the 13 slower Maze tier games** (abandon 50M; new = mtg.f5h, old = mtg.f5d, i.e. joint off, the
+GT engine):
+- 12 are equal: reg d0 g76 T6, g376 / g440 / g624 / g671 / g815 / g947 T5; smoke d0 g25 / g552 / g650 T5, g413 T6;
+  smoke d5 g55 T5.
+- Smoke d0 g234 abandons at 50M units on BOTH arms. At d8 b2000 (the P5 fallback) it is T5 = T5 (new 12.1M units,
+  old 13.5M).
+- The tier replays on mtg.f5d reproduce GT's `.wins` exactly (13/13, turn and play digest), so the old arm is a
+  valid reference.
+
+**Accepted (2026-11-19):** smoke + regression GT, scoped `--deck=mazesend,mazesend2hg,kithkin,selesnyav2,bruna,edf,
+merfolkturns`. Exactly the 20 moved keys changed. `check_gt_logs.py`: 1301 consistent, 0 stale, 0 missing.
+
+**USER rulings (verbatim).**
+- "Honestly the rule is even fine outside of goldfish, so let's turn it on. We don't have interaction of our own to
+  cast in response even if the opponent does something." (heapstrict)
+- "Unpayable plans I think we could try. I assume all of the plans die at some point anyway, so the only question is
+  whether we can stop them early when they are causing issues. For simple decks with no rituals or equivalent (cards
+  that add more mana then they cost) like this one it makes sense to drop plans that cannot pay a subset." (the prune,
+  wip/maze-f5p, below)
+- "For Guild Summit I would prioritize the cards over the treasure here." (no reservation; nothing to implement)
+
+### F5p: the provably-unpayable plan prune (`MTG_MAZE_UNPAYABLE_PRUNE`, wip/maze-f5p)
+
+**Round 1 (b0f3c8228) FAILED the bar:** Maze net +4 (d3 +5 with 0 better / 5 worse; d5 0; hg -1; d0 identical). The
+replays attribute all six worse games to two prune UNSOUNDNESSES, each a drop of a line the engine pays:
+- **Pinned as-enters choice (fix 1).** The optimistic board entered the land with the provider's default colour,
+  because the plan list's view carries no `rad_mode` pin. d3 g72 T1: Thran Portal + Burgeoning dropped. d5 g161 T2:
+  Cliffgate's pinned G is what makes Gond Gate pay Sylvan Scrying.
+- **Multi-Amulet float (fix 2).** A tapped-entering land under k Amulets taps k times; the prune counted one tap.
+  These games all had 2-3 Amulets: d3 g18 T3 (Maze's End drop + activation), g56 T4 (Sylvan Scrying -> Maze's End drop
+  + activation), g89 T5 and g116 T4 (Maze's End replayed).
+Fix (33e5167a5): a pinned-choice land drop is credited as any-colour supply instead of being placed, and `land_credit`
+plus the placed drop's float each gain one per Amulet (controlled or cast by the plan). Two unit tests. Also
+`MTG_UNPAYABLE_PRUNE_TRACE=1` (print-only). Every one of the six replays digest-identical to base on the fixed binary.
+
+**Round 2 (b2 = 33e5167a5, `build/scratch/maze/f5p/abp2/run.out`, 2060 jobs): PASSES.**
+- d5 -1 (1 better / 0 worse: g145 T7 -> T6), d3 0, hg 0 (identical), d0 identical. Maze net **-1**.
+- Units/game: d5 -1.0%, d3 -0.4%.
+- No slower game, so d8 recovery is vacuous.
+- The six same-turn digest changes (d3 g79; d5 g62 g85 g115 g136 g188) were checked against the trace. In none is
+  base's line at the first divergence a dropped plan. g136 and g145 diverge at T1, where nothing is dropped, and g62 at
+  an off-main Burgeoning put. Each is the search spending differently once dropped lookahead subtrees are gone.
+
+**Composition with P7's cast-dominance fold** (wip/maze-f5p7): the prune runs inside the plan-list filter, BEFORE the
+fold, so the fold never keys on an unpayable twin. The unit test's fixture is a REAL hazard from
+`MTG_UNPAYABLE_PRUNE_HAZARD_TRACE` (30,279 instances over the A/B's searched games): T4, Cliffgate (G) + Cliffgate (U)
++ Burgeoning. The prune drops {Burgeoning, Exploration} ({G}{G}, one green source) and keeps {Burgeoning}. The
+enumerator's flat pool reads Cliffgate's printed produces, so it over-affords the pair. Without the prune, the
+menu is [{Burgeoning, Exploration}, {Exploration}]: fold A drops the payable {Burgeoning} for its unpayable twin.
+With the prune, both single casts survive. So the order is load-bearing, and the test pins it.
+
+**Verify (mtg.f5h, after the accept):**
+- PASS: mismatch (seeds 7001/8001 x 60, both arms), play_invariants, viewer, viewer_wiring, coverage, claude_sweep,
+  suite.
+- FAIL: regression_tiers only ("overnight: no GT"). This predates F5 and waits for the periodic overnight run.
