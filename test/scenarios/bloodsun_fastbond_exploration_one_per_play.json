@@ -1,0 +1,43 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Fastbond",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Exploration",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Forest",
+  "Forest",
+  "Forest"
+ ],
+ "human_lines": [
+  "land=Forest",
+  "land=Forest",
+  "land=Forest",
+  "pass",
+  "pass"
+ ],
+ "expect_dropped": [],
+ "expect_active_life": 18,
+ "comment": "Blood Sun step 4: EXPLORATION + FASTBOND -> still one damage per non-first play (ruling 1: 'Such an action can be your regular play a land, one enabled by Fastbond, or ones enabled through other effects'): three lands, 20 -> 18."
+}

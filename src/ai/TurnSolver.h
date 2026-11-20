@@ -2547,6 +2547,13 @@ public:
     // at the first test for every deck without such a card.
     static int  LandDropSnapshot(const GameState& state);
     static bool LandDropNewlyOpen(int snapshot, const GameState& state, bool drop_reserved);
+    // FASTBOND (Blood Sun step 4): true while the active player has UNLIMITED land drops (a Fastbond's
+    // kUnlimitedDrops are in LandDropsAvailable). The extra-drop re-arm passes -- ApplyPlanDirect's deferred loop
+    // (`top_reset_passes <= 4`) and the executor's no-commit twin (`pass < 4`) -- are then bounded by the lands
+    // themselves instead (each drop re-arm needs a land PLAYED by the previous pass and another in hand, and every
+    // play spends one of finitely many drops), so a Fastbond turn's Nth land stays findable at every N. False for
+    // every deck without a Fastbond (no Exploration count reaches 64): their caps are unchanged.
+    static bool DropRearmUnbounded(const GameState& state);
     // THE GRAVEYARD-EQUIPMENT TWIN (Forge Anew, 2026-10-17): an Equipment CARD that sat in the active
     // player's graveyard at the snapshot is on their battlefield NOW. The plan's equip candidates were
     // built from the battlefield and hand only, so a piece returned mid-plan has no Equip action in

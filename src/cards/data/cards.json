@@ -18365,7 +18365,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "You may play an additional land on each of your turns. [STATIC: one extra land drop per copy, copies stack (CR 305.2), folded into the player's bonus land drops (the untap step seeds the controlled-copy total; a copy entering adds its drop that turn). Every extra drop is SEARCHED: a plan carries one land drop, so a section that plays a land while another drop is open and a land is in hand opens the site-10 breakpoint, whose continuation enumerates the next drop (and its own fetch / as-enters choices) -- every sequence of drops is findable at an unlimited budget. Beyond the horizon the greedy drop takes every open drop (the permitted playout policy). Losing a copy mid-turn does not remove its drop this turn (only our own Archdruid's Charm could exile it, never chosen autonomously; disclosed).]",
+   "oracle_text": "You may play an additional land on each of your turns. [STATIC: one extra land drop per copy, copies stack (CR 305.2), folded into the player's bonus land drops (the untap step seeds the controlled-copy total; a copy entering adds its drop that turn). Every extra drop is SEARCHED: a plan carries one land drop, so a section that plays a land while another drop is open and a land is in hand opens the site-10 breakpoint, whose continuation enumerates the next drop (and its own fetch / as-enters choices) -- every sequence of drops is findable at an unlimited budget. Beyond the horizon the greedy drop takes every open drop (the permitted playout policy). A copy LEAVING mid-turn takes its drop back for the rest of the turn (Blood Sun step 4, OnStaticLandDropSourceLeft: dies / sacrifice / exile / bounce through the leave hook, and DestroyAllEnchantments); nothing retroactive.]",
    "template": "custom",
    "parameters": {
     "static_extra_land_drops": 1
@@ -18878,6 +18878,21 @@
    "parameters": {
     "lands_lose_nonmana_abilities": true,
     "etb_self_draw": 1
+   }
+  },
+  {
+   "name": "Fastbond",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may play any number of lands on each of your turns.\nWhenever you play a land, if it wasn't the first land you played this turn, this enchantment deals 1 damage to you. [Clause 1: unlimited_land_plays -- a static, represented EXACTLY as 64 extra land drops per copy (kUnlimitedDrops; no decklist holds 64 lands), folded at load into the Exploration machinery (static_extra_land_drops): the untap step seeds them, a copy entering mid-turn adds them at once, and a copy LEAVING takes them back for the rest of the turn (nothing retroactive). Every extra land is SEARCHED: a plan carries one land drop and the site-10 extra-drop breakpoint re-enumerates the next (its re-arm pass cap does not bind under a Fastbond -- the lands bound it); beyond the horizon the greedy drop takes every open drop. Clause 2: land_play_damage_after_first -- a trigger on the land-PLAY special action only (ruling 1: the regular drop, Fastbond's or Exploration's alike; ruling 2: a land PUT onto the battlefield by an effect -- Burgeoning, a land tutor -- never triggers it), resolved after the land's own enter triggers (we order simultaneous triggers; Fastbond last is never worse). One damage event per Fastbond. A Lotus Vale / Scorched Ruins played into the graveyard (its replacement failed) WAS played (CR 305.1: the special action happened; the drop is spent) and triggers it. Our own death is LIVE in a deck holding this card (armed from this param, USER D1): a land whose damage would take us to 0 is never played autonomously (a loss is the worst outcome).]",
+   "template": "custom",
+   "parameters": {
+    "unlimited_land_plays": true,
+    "land_play_damage_after_first": 1
    }
   },
   {

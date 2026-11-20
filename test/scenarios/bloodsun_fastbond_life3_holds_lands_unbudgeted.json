@@ -1,0 +1,39 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 3,
+ "resume_at": "main1",
+ "library_filler": "Mountain",
+ "library_size": 30,
+ "opponent_life": 15,
+ "battlefield": [
+  {
+   "name": "Fastbond",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Mountain",
+  "Lightning Bolt",
+  "Lightning Bolt",
+  "Lightning Bolt",
+  "Lightning Bolt",
+  "Lightning Bolt"
+ ],
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 5,
+ "expect_win_turn": 4,
+ "comment": "Blood Sun step 4 (USER D1): life 3, opponent at 15, five Bolts and five Mountains. A turn-3 kill needs five mana = four more lands = three pings = our death, so it is NOT a win (own death live); the search holds lands, survives, and kills on turn 4. d3, budget 0."
+}

@@ -1466,3 +1466,63 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
   the Blood Sun row). `test/scenarios.sh` 610/610 (10 step-3 `bloodsun_*`: 6 by implementer 1, 4 here). Smoke: 235/235
   PASS, **0 moved digests** vs `impl2/smoke-step2-batch.log` (City decks Gods and Creature Giving included; Prevent
   Damage has no smoke row); saved as `build/scratch/bloodsun/impl3/smoke-step3-batch.log`.
+
+### Implementation notes (step 4)
+**Commit:** `git log --grep "Blood Sun step 4:"`.
+- **Params** (`CardParams`): `unlimited_land_plays`, `land_play_damage_after_first` (Fastbond), and the CODE SHAPE of
+  step 5's two own-death terms, `lose_life_on_resolve` (0 = none) and `set_all_life_totals` (-1 = absent): parsed, read
+  today only by the own-death arming; their cards and consumers are step 5's.
+- **Representation (§6):** `kUnlimitedDrops = 64` (`CardDatabase.h`) is folded AT LOAD into `static_extra_land_drops`
+  (`unlimited_land_plays` adds it per copy). So the untap seed (both worlds), the mid-turn entry (`FireEtbWatchers`), the
+  deck stamp `deck_has_static_land_drops`, the site-10 extra-drop route and arming, the Maze's End provider readers and all
+  `LandDropsAvailable()` readers see Fastbond unchanged. Audit of the readers that compute a COUNT from the drops: the only
+  ones that would over-credit at 64 are the Gods / Eldrazi Flicker / Snow / AA certificate bounds (upper bounds: safe, and
+  none of those decks holds a Fastbond).
+- **Damage:** `ResolveLandPlayDamage` (`SpellEffects.h`, after `StaticExtraLandDrops`), called by every land-PLAY body:
+  `PlayLandFromHand`, `PlayLandFromLibraryTop` (after `PlayLandCore`, i.e. after the land's own enter triggers -- we order
+  the simultaneous triggers and Fastbond last is never worse) and the graveyard land-play ability
+  (`ApplyGraveyardPlayAbility`). Never `EnterLand` / Burgeoning / tutors (ruling 2). One event per copy; armed decks go
+  through `dmgev::DealDamageEvent`, unarmed decks `life -=` + `MarkPlayerDealtDamage` + a `lifeloss` play event.
+  Deck-gated on `deck_has_static_land_drops`.
+- **R1 SETTLED: it triggers.** A Lotus Vale / Scorched Ruins whose replacement fails was still PLAYED: CR 305.1 (playing a
+  land is a special action; it happened), CR 305.2 (the play counts against the drops; the engine spends the drop), and
+  Fastbond ruling 1 (*"You take damage when you play a land using the 'play a land' action"*) keys on the action, not on
+  the land entering. Implemented for free: the damage hangs off the play body, which every Vale path returns through.
+  Pinned by `bloodsun_fastbond_vale_into_graveyard_pings.json` and the unit test "fastbond R1".
+- **Loop-reader audit:** the two greedy multi-drop loops (`AIEngine::TryPlayLand`, the rollout's `SimulateLandPlay`)
+  were `guard < 8` (nine lands); now bounded by `LandDropsAvailable()` (each pass consumes a land card; identical below
+  ten drops). The two extra-drop RE-ARM pass caps -- ApplyPlanDirect's deferred loop `top_reset_passes++ <= 4` and the
+  executor's no-commit twin `pass < 4` -- no longer bind a drop re-arm when `TurnSolver::DropRearmUnbounded` (the active
+  player's drops exceed 64, i.e. a Fastbond is out): each such pass needs a land played by the previous one and another in
+  hand, so the lands bound it; caps unchanged for every other deck (no Exploration count reaches 64).
+- **No-suicide stop (USER D1):** `LandPlayWouldKill` -- own death live and the next play's land-play damage >= life --
+  stops both greedy drops (the beyond-horizon / depth-0 policy). A sound dominance (a loss is the worst outcome); false
+  for every deck without own death or a land-play damage source. The SEARCH needs no prune: a line whose Fastbond damage
+  kills us is scored as a loss (`OpponentHasLost` requires our life > 0), and the scenarios show it holds lands.
+- **Drop recompute on leave:** `OnStaticLandDropSourceLeft` -- on its controller's own turn, a leaving Exploration /
+  Fastbond takes its `static_extra_land_drops` back out of `bonus_land_drops_this_turn` (nothing retroactive). Hooked in
+  `FireLeavesBattlefieldTriggers` (dies / sacrifice via `OnCreatureDies`, Archdruid's Charm exile, flicker, unearth) and
+  `DestroyAllEnchantments`. Worldfire's exile-all (step 5) must call it or reseed. **Shared-card change:** Exploration's
+  "losing a copy mid-turn does not remove its drop" disclosure is replaced (its oracle note updated); in Maze's End only
+  our own Charm could exile it, never chosen autonomously -- smoke below.
+- **Own death (§7):** the `life_cost_live` lambda (`GoldFishRunner.cpp`) gains the three terms
+  (`land_play_damage_after_first > 0`, `lose_life_on_resolve > 0`, `set_all_life_totals >= 0`). City of Brass alone still
+  does not arm it (unit test strips Fastbond from the list: unarmed).
+- **Scenario harness:** a `resume_at` fixture skips the untap step, which is what seeds the static drops; `main.cpp` now
+  seeds `bonus_land_drops_this_turn = StaticExtraLandDrops` for such fixtures (no existing fixture has a drop-maker out).
+- **NOT built (scope = §12 step 4):** §6's land-batch normal form LB, LB2 and the max-first count axis are in no §12 step.
+  The engine's existing site-10 machinery searches every land count (one land per section; the d3 unlimited unit test and
+  both budgets of the life-3 scenarios find the exact count), so they are pure work-reduction folds for a later step
+  (provider / go-off front) once the Fastbond branching is measured.
+- **Viewer:** no new decision (how many lands = one land drop per click, §10.1 class A); `audit_viewer_decisions.py`
+  classifies both params as INERT_PARAMS (USER sign-off to collect); `--no-sweep` rc 0. No DECISIONS.md row.
+- **Card data:** Fastbond in cards.json; Scryfall snapshot appended (no other entry touched); `audit_card_costs.py` on
+  Fastbond rc 0 (match); `audit_card_fields.py` rc 0 (oracle bracket-note advisory only).
+- **Measurements (step 4 tree):** `mtg-test` 3814 cases, 3814 pass (10 new in `test_bloodsun_fastbond.cpp`: params/fold,
+  4 lands -> 3 damage, 2 Fastbonds -> 2 per play, Exploration + Fastbond -> 1 per play, Burgeoning / EnterLand put -> 0,
+  R1, leave recompute, greedy no-suicide stop + past the old nine-land cap, own-death arming, the d3-unlimited life-3
+  search). `test/scenarios.sh` 618/618 (8 new `bloodsun_fastbond_*`: four human damage fixtures incl. R1; life 3 ->
+  plays exactly three lands and wins at 1 life, and holds lands rather than die, each at budget 0 and d3 b100). Smoke:
+  235/235 PASS, **0 moved digests** vs `impl3/smoke-step3-batch.log` (Maze's End's Exploration rows included); own death
+  stays unarmed elsewhere (no other decklist holds Fastbond; the three params appear only on Fastbond's entry). Saved as
+  `build/scratch/bloodsun/impl4/smoke-step4-batch.log`.

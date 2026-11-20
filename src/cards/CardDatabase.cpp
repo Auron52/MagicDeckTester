@@ -2687,6 +2687,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.untap_own_permanent_entering_tapped = params.value("untap_own_permanent_entering_tapped", false);
     // Maze's End I3: the land-drop engines (see CardDatabase.h).
     p.static_extra_land_drops                  = params.value("static_extra_land_drops", 0);
+    // Blood Sun step 4: Fastbond's unlimited drops ARE kUnlimitedDrops static drops per copy (see CardDatabase.h).
+    p.unlimited_land_plays                     = params.value("unlimited_land_plays", false);
+    if (p.unlimited_land_plays) { p.static_extra_land_drops += kUnlimitedDrops; }
+    p.land_play_damage_after_first             = params.value("land_play_damage_after_first", 0);
+    p.lose_life_on_resolve                     = params.value("lose_life_on_resolve", 0);
+    p.set_all_life_totals                      = params.value("set_all_life_totals", -1);
     p.opponent_land_play_put_land_from_hand    = params.value("opponent_land_play_put_land_from_hand", false);
     p.endstep_may_dump_hand_lands_discard_hand = params.value("endstep_may_dump_hand_lands_discard_hand", false);
     if (params.contains("etb_sacrifice_unless_pay"))

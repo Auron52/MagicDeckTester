@@ -10,6 +10,9 @@
 
 struct MtgTestSeam
 {
+    // The executor's greedy land drop (Blood Sun step 4: Fastbond's every-open-drop loop and its no-suicide stop).
+    static bool TryPlayLand(AIEngine& e, GameState& s) { return e.TryPlayLand(s); }
+
     static bool TapForCost(AIEngine& e, GameState& s, const ManaCost& c, ManaPool& avail,
                            bool for_creature)
     { return e.TapForCost(s, c, avail, for_creature); }
