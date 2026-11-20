@@ -12,7 +12,8 @@
 # Release rule (all must hold for TAIL_SAMPLES consecutive samples, SAMPLE_S apart):
 #   * the 1-minute load average is below nproc/4 (the job is using few cores), and
 #   * MemAvailable >= MIN_AVAIL_GB (a default-budget job, ~RAM/2 of cache, still fits), and
-#   * no OTHER released tail is still alive (at most ONE extra job, never a third).
+#   * no OTHER released tail is still alive (at most ONE extra job, never a third), and
+#   * the command is ONE `mtg --batch` run, not a shell script, build or chain (see TAIL-ELIGIBLE below).
 # The released command keeps running to completion; only the lock moves on. Plain
 # `flock build/heavy.lock <cmd>` waiters are fully compatible (same lock file).
 set -u
@@ -26,6 +27,19 @@ NPROC=$(nproc)
 LOAD_MAX=$(( NPROC / 4 ))
 [ "$#" -ge 1 ] || { echo "usage: heavy_run.sh <cmd> [args...]" >&2; exit 2; }
 mkdir -p "$TAILS"
+
+# TAIL-ELIGIBLE: only a single `--batch` run has a tail worth handing on. A multi-stage command (a chain
+# script, `build_both.sh`, a build whose link step is single-threaded) has LIGHT STAGES that look exactly like
+# a tail, and the stage after one then runs OUTSIDE the lock. 2026-11-20 07:16: an idgate chain was released
+# during a light probe stage, then started a 32-thread batch beside a 12-job build -- MemAvailable 0.7 GB,
+# 13 GB in swap. So: eligible only when an argument is `--batch` and the command is not a shell.
+# MTG_HEAVY_TAIL=0 forces no release for any command. Wrap EACH heavy stage of a chain in its own heavy_run.
+tail_ok=0
+case "$(basename "$1")" in
+  bash|sh|dash|zsh) ;;
+  *) for a in "$@"; do [ "$a" = "--batch" ] && tail_ok=1; done ;;
+esac
+[ "${MTG_HEAVY_TAIL:-1}" = 0 ] && tail_ok=0
 
 exec 9>>"$LOCK"
 flock 9
@@ -48,6 +62,7 @@ released=0 streak=0
 while kill -0 "$pid" 2>/dev/null; do
   sleep "$SAMPLE_S"
   [ "$released" = 1 ] && continue
+  [ "$tail_ok" = 1 ] || continue
   kill -0 "$pid" 2>/dev/null || break
   load=$(cut -d' ' -f1 /proc/loadavg)
   avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
