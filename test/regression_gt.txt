@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 2f9fb3fbb  date 2026-11-19
+# Regression ground truth -- commit b66fa8099  date 2026-11-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
@@ -15,10 +15,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mazesend_smoke_d0_s1001=6.8920/1f1a1e596b8af167
-mazesend_smoke_d3_s1001=5.3000/a9141ffec5420ea4
-mazesend_smoke_d5_s1001=5.7500/bb167a4b67ef2542
-mazesend2hg_smoke_d5_s1001=5.3333/4c205e7a559ef694
+mazesend_smoke_d0_s1001=6.8610/b66e9bd7662d72a9
+mazesend_smoke_d3_s1001=5.2000/365136e72d0f50db
+mazesend_smoke_d5_s1001=5.6742/0d4d8ff583f4cdc4
+mazesend2hg_smoke_d5_s1001=5.2667/852e6e954fc66291
 mill_smoke_d0_s1001=6.1200/398fc11e7602c763
 mill_smoke_d3_s1001=4.8000/c97ac4a6805a7c6c
 mill_smoke_d5_s1001=4.6000/1b45ef7ca83aae45
@@ -248,10 +248,10 @@ merfolkturns_smoke_d5_s1001=5.6000/d962675fa7d3f958
 merfolkturns2hg_smoke_d3_s1001=6.0000/397b2b9e86b7cc69
 
 # --- regression ---
-mazesend_regression_d0_s2002=6.9000/6e67cf8ac53e39c4
-mazesend_regression_d3_s2002=5.7333/fad7487819089e65
-mazesend_regression_d5_s2002=5.6902/c3975522c91ff32d
-mazesend_regression_d5_s3003=5.6933/a7a2b5b153a19dba
+mazesend_regression_d0_s2002=6.8630/3f158be1037b30c6
+mazesend_regression_d3_s2002=5.6667/8928ba7d0c2b2642
+mazesend_regression_d5_s2002=5.6467/9665fcd99e65ee73
+mazesend_regression_d5_s3003=5.6733/23e654b2b121ead1
 mazesend_regression_d3_s30121=5.0000/e841b401e3cde60a
 mazesend_regression_d5_s30121=5.0000/e841b401e3cde60a
 mazesend_regression_d3_s30081=5.0000/156b855f42039436
@@ -612,9 +612,9 @@ spirits_regression_d0_s2002=4.8420/e7bbd552e4f20af3
 spirits_regression_d3_s2002=4.5200/70797a8191c34e57
 spirits_regression_d5_s2002=4.5133/79566b0697c78930
 spirits_regression_d5_s3003=4.4667/f9d6e6712a2b5924
-merfolkturns_regression_d0_s2002=5.9970/31184b9569a18985
+merfolkturns_regression_d0_s2002=5.9970/a128d9667b3e83cc
 merfolkturns_regression_d3_s2002=5.3600/b7ef76fad2286112
-merfolkturns_regression_d5_s2002=5.5667/499f7c03062955a5
+merfolkturns_regression_d5_s2002=5.5667/8dcb37520f81dd08
 merfolkturns_regression_d5_s3003=5.5933/c17312756f626bad
 
 # --- overnight ---

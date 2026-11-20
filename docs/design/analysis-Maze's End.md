@@ -4242,3 +4242,13 @@ logs/play/rejections/Maze_s_End_cod_s6_gi5_t5.json In theory this is workable du
   `{ME#43}` single-activation root still pays #43 with Baldur's {C} + ME#46 (no later demand named), so the s6 line is
   reached only through the `{ME,ME}` root and the fed float; the `{Scrying, ME}` second link needs F5's owed-acts joint
   prepay.
+- **Suite (smoke + regression, one pooled run, MTG_PGO=0):** units 3720/3720; scenarios pass; 888 refs, 0 play-drift /
+  board-diverged / enum-gap; require-beat 2/2. Moved keys, every one better or equal: smoke mazesend d0 6.8920 ->
+  6.8610, d3 5.3000 -> 5.2000, d5 5.7500 -> 5.6742, mazesend2hg d5 5.3333 -> 5.2667; regression mazesend d0 6.9000 ->
+  6.8630, d3 5.7333 -> 5.6667, d5 s2002 5.6902 -> 5.6467, d5 s3003 5.6933 -> 5.6733; merfolkturns d0 / d5 s2002 score
+  unchanged, digest moved (the fed float is engine-wide for Three Tree City). 24 slower games (2 searched: smoke 2HG
+  gi24 5->6, regression d5 s3003 gi73 5->6; 22 d0): the levers-off arm reproduces the committed GT score at suite
+  settings in all 24, and at d8 b0 23/24 recover (equal or faster). smoke d0 gi234: the arm wins T5 at d8 b0 (47M
+  units); base abandons at the 50M ceiling, and at d8 b2000 both arms win T5 (base also T5 at b0 with a 200M ceiling, 74M units): 24/24 recover.
+- Accepted smoke + regression GT scoped `--deck=mazesend,mazesend2hg` / `--deck=mazesend,merfolkturns`: exactly the 10
+  keys above moved; `check_gt_logs` 1316 consistent, 0 stale.
