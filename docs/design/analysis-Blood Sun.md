@@ -180,6 +180,10 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   the start) It doesn't help once fastbond is out, though and generally this wouldn't come up."*
   -> Exploration IS a target again, but only (i) while no Fastbond is on our battlefield and (ii) when our life
   is low (default threshold: life <= 10, a parent-chosen number surfaced to the USER), ordered after Fastbond.
+  USER (verbatim): *"Worst case scenario you maybe end up with 3 City of Brass and take 7 from them before Blood
+  Sun + 2 Grim Tutor 6, so you end up at 7 life and can only play 6 lands with fastbond. In this extreme case it
+  would probably have been better to use Exploration, but this is difficult to hit."* -> the USER's worst case
+  (life 7) sits inside the life <= 10 threshold; threshold kept.
 
 - B4 big lands wait for Blood Sun (USER 2026-11-20, verbatim): *"Generally Scorched Ruins and Lotuses wait for
   Blood Sun to drop. The only exception is when you fail to have the 3 mana or Red needed for Blood Sun. In
