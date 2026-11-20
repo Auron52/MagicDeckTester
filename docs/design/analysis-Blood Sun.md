@@ -154,5 +154,14 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Grim Tutor (excluded by the whitelist); "always get Fastbond" as Exploration-not-searched-while-Fastbond-
   in-library (built as an A/B arm, not the default).
 
+- B4 big lands wait for Blood Sun (USER 2026-11-20, verbatim): *"Generally Scorched Ruins and Lotuses wait for
+  Blood Sun to drop. The only exception is when you fail to have the 3 mana or Red needed for Blood Sun. In
+  that case Lotus Vale is a reasonable drop in order to play it. You lose 2 lands, but can at least start
+  progressing."* -> provider RESTRICTION (same lever family as B3, ON by default, A/B'd and reported): while
+  no Blood Sun is on our battlefield, Lotus Vale / Scorched Ruins / Lotus Field are not played (nor put by
+  Burgeoning); exception: Lotus Vale when a Blood Sun is in hand and our other mana cannot cast it this turn
+  (short of 3 mana or of {R}) but can with the Vale. Ruins (colourless) and Field (enters tapped) never
+  enable a same-turn Blood Sun, so they have no exception.
+
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
