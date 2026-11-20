@@ -79,3 +79,15 @@ both arms at d8 b0, and every slower one is attributed:
 - Owed fix: PD s6006 gi47 T8 -> unwon, from MTG_PD_LATER_HAND_HOLD (636910330) skipping land drops.
 - Unattributed but d8 b0-stable line changes in net-faster decks: Hinata 2, Galadriel 5.
 See docs/design/overnight-accept-2026-11-20.md.
+
+## UPDATE (bisect stopped)
+The bisect STOPPED without a final answer. `FIRST BAD: d6a7ce1a6` in its log is only the current upper
+bound. Index 59 (`fb3517beb`) is good and index 79 (`d6a7ce1a6`) is bad, so the first bad commit is
+index 60..79 of `git rev-list --reverse 1443eeba0..c86a86333 -- src`. Index 69 (`9547ea31b`, "Add reviewed
+Boars heuristic candidates and Stromkirk continuation") does NOT BUILD: TurnSolver.cpp uses
+AppendHeldFetchCrackFirstPlans, HeldFetchCrackFirstOn and CrackPutsUntappedLand before they are declared,
+which means the held-fetch work landed across several commits there.
+Next step: test index 68 or 70 (skip 69), using the loop in bisect_fc.sh with lo=59 hi=79. Prime suspects
+are the held-fetch / Boars fetch commits in that window. Note that MTG_HELD_FETCH_CRACK_FIRST=0 alone did
+not restore the d0 games, so also try MTG_BOARS_FETCH_PIPS / MTG_BOARS_FETCH_PRUNE / other levers added
+there.
