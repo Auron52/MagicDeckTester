@@ -165,6 +165,14 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Burgeoning); exception: Lotus Vale when a Blood Sun is in hand and our other mana cannot cast it this turn
   (short of 3 mana or of {R}) but can with the Vale. Ruins (colourless) and Field (enters tapped) never
   enable a same-turn Blood Sun, so they have no exception.
+  USER refinement (verbatim): *"Note that Lotus Field may be played early like the vale for the same reasons,
+  but is strictly worse at it. The field needs to wait a turn to tap. Also, neither of these should ever be
+  played when there is no Blood Sun and 1 or 0 lands out as they cannot pay the sacrifice cost. Scorched Ruins
+  I don't ever play without Blood Sun."* -> AMENDED rule, no Blood Sun on our battlefield:
+  Scorched Ruins: never played (or put). Lotus Vale / Lotus Field: only when Blood Sun is in hand and our
+  other mana cannot cast it (short of 3 mana or of {R}), and only with >= 2 other lands out (Vale: 2 untapped
+  to sacrifice); Field is allowed for the same reason (its mana arrives next turn) but ORDERED after the Vale
+  (USER: "strictly worse at it"). With 0-1 other lands neither is ever played.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
