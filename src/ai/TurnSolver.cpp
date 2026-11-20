@@ -4153,6 +4153,7 @@ static thread_local int           g_d0_permit_nest     = 0;       // live Greedy
 // preference, CLAUDE.md "WHEN A BUDGET BINDS, FINISH THE TURN BEFORE REACHING THE NEXT").
 static thread_local int           g_decision_root_turn = -1;
 SearchBudget* TurnSolver::DecisionBudget()   { return g_decision_budget; }
+SearchBudget* TurnSolver::SwapDecisionBudgetForTest(SearchBudget* b) { SearchBudget* p = g_decision_budget; g_decision_budget = b; return p; }
 
 void AlchemistComboRouteNoteApplyContext(int other_actions);   // DecisionProviders.cpp (MTG_AA_ROUTE_STATS only)
 int  AlchemistComboRouteOriginId(const GameState& s, int me);  // DecisionProviders.cpp (MTG_AA_ROUTE_ORIGIN only)

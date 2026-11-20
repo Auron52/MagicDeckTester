@@ -327,6 +327,10 @@ namespace manaoracle
     // engine's payment left untapped, so never a guess about the rest of the turn. Works on copies only.
     bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& cost, bool for_creature,
                        bool creature_ability, PayOption& out);
+    // TESTS ONLY: this thread's last RefinePaymentImpl run -- its probes, whether its enumeration stopped short
+    // (`capped`: the probe cap / ceiling, or a budget cut) and whether the decision's budget cut it (`budget_cut`).
+    struct RefineRunStats { std::size_t probes = 0; bool capped = false; bool budget_cut = false; long rbt_units = 0; };
+    RefineRunStats LastRefineRunForTest();
     // An option's taps, through the routes MinimalPayments verified them with (ApplyHumanPreTap /
     // OracleCreatureTap). False = a tap was refused (the state may be part-tapped: the caller restores).
     bool PerformPayTaps(GameState& state, const PayOption& o);

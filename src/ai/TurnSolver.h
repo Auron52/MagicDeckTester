@@ -3021,6 +3021,8 @@ public:
     // to the census's own `aa_route` bucket. No-op on nullptr or n <= 0.
     static void              ChargeAaRouteUnits(SearchBudget* budget, int n);
     static void              ChargePayRefineUnits(SearchBudget* budget, int n);   // ManaOracle.cpp's refine cap
+    // TESTS ONLY: set this thread's DecisionBudget() (nullptr = an unlimited root); returns the previous one.
+    static SearchBudget*     SwapDecisionBudgetForTest(SearchBudget* b);
     // The turn number of the decision frame DecisionBudget() belongs to (-1 when no frame is open).
     static int               DecisionRootTurn();
     // THE COMBO OFF ROUTE'S RESOLUTION TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE): one route link's breakpoint

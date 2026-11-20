@@ -808,6 +808,20 @@ inline bool PayRefineBudgetCapOn()
     static const bool env_on = EnvOn("MTG_PAY_REFINE_BUDGET_CAP", false);
     return heurarm::Flag(heurarm::PAY_REFINE_BUDGET_CAP, env_on);
 }
+// MTG_PAY_REFINE_PRECHECK (2026-11-20, Maze's End F5R-4): see heurarm::PAY_REFINE_PRECHECK. Default OFF until measured.
+inline bool PayRefinePrecheckOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_PRECHECK", false);
+    return heurarm::Flag(heurarm::PAY_REFINE_PRECHECK, env_on);
+}
+// MTG_PAY_REFINE_RBT_PRICED (2026-11-20, Maze's End F5R-4): ReachesByTapping's ">4 released" refusal and its
+// 256-combination guard are constant caps read at every budget -- CLAUDE.md: "a budget may re-price work, it may not
+// make a line unfindable". See heurarm::PAY_REFINE_RBT_PRICED. Default OFF until measured.
+inline bool PayRefineRbtPricedOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_REFINE_RBT_PRICED", false);
+    return heurarm::Flag(heurarm::PAY_REFINE_RBT_PRICED, env_on);
+}
 inline bool PayRefineWildOutOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_REFINE_WILD_OUT", true);

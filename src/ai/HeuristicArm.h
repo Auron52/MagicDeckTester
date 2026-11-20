@@ -1037,6 +1037,8 @@ enum Slot : int
     BP_DROP_REARM,            // MTG_BP_DROP_REARM  a breakpoint continuation that PLAYED a land while a static extra drop (Exploration) is still open, with another land in hand, re-arms site 10 for one more pass of the deferred loop (rollout) and of the executor's no-commit end-of-main re-solve: a continuation carries ONE land, so the second drop after a mid-turn tutor was unfindable at any budget (the USER's Maze's End reference s3 T4: Guild Summit, Sylvan Scrying -> Maze's End, Maze's End, then The Black Gate). A completeness fix; deck-gated (deck_has_static_land_drops). DEFAULT ON; =0 -> as before (the A/B hatch)
     SUMMIT_PIN_LOCKSTEP,      // MTG_SUMMIT_PIN_LOCKSTEP   the search's noncreature-permanent ETB path hands a cast's searched Guild Summit count (chosen_x = N + 1) to the resolution, as the executor always has (AIEngine stamps chosen_x > 0 on the stack entry). Before 2026-11-19 it passed -1, so every pinned clone resolved at the UNPINNED count in search: the count axis was unfindable at any budget and each clone re-scored its unpinned twin. A completeness / lockstep fix. DEFAULT ON; =0 -> the pin dropped as before (A/B hatch only)
     PAY_REFINE_BUDGET_CAP,    // MTG_PAY_REFINE_BUDGET_CAP  the payment refine's 4,096-probe cap becomes a price: probes past it charge one unit each to the decision's budget and stop only when that budget runs out; at an unlimited root nothing cuts but a safety ceiling (MTG_PAY_REFINE_CEILING). A budget-cut refine is never memoised
+    PAY_REFINE_PRECHECK,      // MTG_PAY_REFINE_PRECHECK  the payment refine's release layers skip the work no candidate of the layer can use when ReachesByTapping must refuse every one of them (more than four sources released, no untapper): the acceptance tests and the surplus supersets. Sound (the choice is the eager one); it only moves where the probe cap cuts. Default OFF until measured
+    PAY_REFINE_RBT_PRICED,    // MTG_PAY_REFINE_RBT_PRICED  ReachesByTapping's two fixed caps (more than four released sources refused; 256 face combinations) become a price: the face combinations are folded by their post-tap effect (an identity fold), the first 256 checks of a <= 4-source call stay free, every other check charges one unit to the decision's budget, and at an unlimited root nothing stops but a safety ceiling. A budget-cut refine is never memoised. Default OFF until measured
     SUMMIT_TWIN_FOLD,         // MTG_SUMMIT_TWIN_FOLD      the SUMMIT-TWIN FOLD (TurnSolver.cpp SummitTwinFold): a pinned Guild Summit clone (chosen_x = N + 1) whose count, at the resolution its clean unpinned twin already ran earlier in the same candidate pass, equals the count that twin took is that twin's apply -- declined before its unit charge (an identity fold, a re-price; inert at an unlimited budget). Default ON; =0 -> every twin scored
     COUNT
 };
@@ -2019,6 +2021,8 @@ inline const char* Name(int slot)
         "MTG_BP_DROP_REARM",
         "MTG_SUMMIT_PIN_LOCKSTEP",
         "MTG_PAY_REFINE_BUDGET_CAP",
+        "MTG_PAY_REFINE_PRECHECK",
+        "MTG_PAY_REFINE_RBT_PRICED",
         "MTG_SUMMIT_TWIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
