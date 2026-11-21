@@ -51,6 +51,14 @@ dispatch, before the normal arg parse).
   that won't perturb the interaction: a **dead draw** (e.g. `Swords to Plowshares` when there's no
   creature to target → never cast) keeps the board fixed. A basic land would be drawn and PLAYED,
   handing the AI extra mana and dissolving a "must tap a scarce source" setup.
+- **The opponent's list is NAMED (2026-11-21).** The passive opponent plays lands from a real pool
+  list (`core/OpponentDeckPool.h`). A fixture's opponent is `"opponent_list"` (default
+  `"White Knights"`: Plains + Remote Farm, no ETB-lifegain land; 2HG's second head
+  `"opponent_list2"`, else derived), never the seed: 594 of 596 fixtures use seed 1, which picked
+  Angels, and when the opponent's land entry rules went in, Seraph Sanctuary's ETB gain broke 92
+  fixtures built on "the opponent's life only moves when we move it". Name a list that holds the land
+  you want to test (`opp_seraph_sanctuary_flipped_by_remedy.json` uses Angels). The seed still drives
+  the opponent's shuffle.
 - **Mid-turn frames (2026-09-15).** A board taken from the middle of a hand-played turn (a
   `scripts/ref_handoff.py` frame: some lands already tapped, mana floating, the land drop used) is
   not a "state after turn N-1". `resume_at` starts the playout at that main phase of `turn`
