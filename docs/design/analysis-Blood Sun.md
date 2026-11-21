@@ -289,6 +289,16 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   the mana of lands on the battlefield plus the best land in hand playable with a remaining (or next-turn)
   drop is < 7. Confidence is LOW (USER): the sub-lever's OFF arm (= the B3 list) is A/B'd if Grim Tutor is a
   notable share of the cost; the default after that is the USER's.
+  USER rationale + mana gate (verbatim): *"Essentially, you would prefer to use mana on a Diabolic Revelation
+  since it starts to become very mana efficient after you hit 7 or 8 mana. Wasting some of your mana on Grim
+  Tutor at that point is usually not worth it. That may not be totally correct if you had 2 grim tutors and only
+  1 Diabolic Revelation, (in that case you could use the mana to replace the Grim tutors with 2 cards that are
+  useful) so we'll have to play with it. Once you have 8 mana it becomes obvious that the Diabolic Revelation is
+  a better use."* -> a second Grim sub-lever (ON by default, USER: "obvious" at 8): Grim Tutor is NOT cast while
+  a Diabolic Revelation is in hand and our available mana this turn (untapped sources + floating + a land still
+  playable this turn) is >= 8; the Revelation does the fetching. Below 8 the B12 list applies. Arms to "play
+  with" (measured, reported; default stays the USER's): gate OFF; threshold 7; and the 2-Grim / 1-Revelation
+  case exempted.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
