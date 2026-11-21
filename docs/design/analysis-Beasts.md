@@ -15,9 +15,18 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   14/14 batch-A unit tests pass, cost audit rc 0). Includes the Herald dup-legend upside in
   `DuplicateCastHasUpside`. A tail still owed: full unit suite, `audit_card_fields.py --update`,
   smoke byte-identity (no accept).
-* **TODO (batch B):** Questing Beast's bracket promises the fight resolver honours deathtouch; the
-  Contested Cliffs fight helper must implement it.
-* **Running:** integrator A-tail + batch B (Contested Cliffs) agent.
+* **Batch A tail DONE (integrator B, 2026-11-21):** full unit suite (2 batch-A census failures fixed:
+  kicker count 5 with Cragplate Baloth; decks/Beasts pinned to its INTERIM Boars route in the Pirates
+  routing table -- batch J re-pins it), `audit_card_fields.py --update` + offline rc 0, snapshot committed,
+  `audit_viewer_decisions.py --no-sweep` clean.
+* **Batch B integrated (Contested Cliffs):** NEW PermAbilityMode::TapFight + shared ResolveFight (deathtouch
+  honoured -> Questing Beast's bracket is true; immediate SbaKillDeadCreatures pass fires Thragtusk's LTB and
+  the Packleader draw), both targets searched, emitted in main 1 and any main 2, NOT in DeckUsesSecondMain.
+  6 new unit tests. See the integrator B commits on this branch.
+* **Open gap (batch B, surfaced):** a Packleader draw off a fight-death token in main 1 lands in the
+  trailing pass, so that card cannot be cast the same main (no breakpoint re-solve for a trailing-activation
+  draw). Covered by the per-turn second-main gate planned for the provider batch.
+* **Running:** none (integrator B: smoke byte-identity next).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -70,7 +79,7 @@ Bracket notes to re-check for THIS deck:
 | card | tier | status | notes |
 |---|---|---|---|
 | Thragtusk | 2 | integrated 53e68dcd3 | new ltb_self_creates_tokens on FireLeavesBattlefieldTriggers |
-| Contested Cliffs | 3 | drafted | new PermAbilityMode::TapFight (Kessig shape + Voracious fight); main 2 |
+| Contested Cliffs | 3 | integrated (batch B, see Checkpoint) | NEW PermAbilityMode::TapFight (Kessig shape), shared ResolveFight (deathtouch + immediate SBA death pass); both targets searched (own class x opp class); emitted in main 1 and any main 2; NOT added to DeckUsesSecondMain (USER: second main unsettled) |
 | Cragplate Baloth | 2 | integrated 53e68dcd3 | new kicked_enters_with_plus_counters (pre-entry kicked branch) |
 | Kaheera companion (sideboard) | 3 | planned | companion {3} put-into-hand, once/game, sorcery speed |
 | Krosan Warchief | 1 | integrated 375a50399 | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
@@ -89,7 +98,7 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 
 ## Viewer classifications (2c-ter)
 
-(pending)
+* Contested Cliffs (batch B): bucket A. ONE unpinned main-phase entry under human play; both fight targets (our Beast, then theirs) are `target` board clicks at activation via `g_play_loyalty_chooser` (Voracious precedent). `audit_viewer_decisions.py`: `tap_fight_cost` -> target / activate, `tap_fight_requires_subtype` inert. Registry: tools/play/DECISIONS.md "Targeted tap fight".
 
 ## Verification verdicts (Stage 5)
 

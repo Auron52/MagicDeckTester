@@ -5293,6 +5293,15 @@ struct CardParams
     bool                     tap_target_pump_targets_land = false;
     bool                     tap_target_pump_taps_target_land = false;
     bool                     tap_target_pump_sets_island = false;
+    // Contested Cliffs (Beasts B, 2026-11-21): "{R}{G}, {T}: Choose target Beast creature you control and
+    // target creature an opponent controls. Those creatures fight each other." PermAbilityMode::TapFight --
+    // a {T} mode on a LAND (the Kessig Wolf Run shape: the {T} is paid first, SetPermTapped, so the land's
+    // own {C} never pays toward it). BOTH targets are SEARCHED: our creature on Action::sac_victim_id, the
+    // opponent's on Action::enchant_target (TapFightPinScope; TurnSolver's TapFight emission and
+    // DecisionProvider::TapFightTargets). tap_fight_requires_subtype = the own target's creature subtype
+    // ("Beast"; empty = any creature). Resolution: ResolveFight (CR 701.14, deathtouch honoured). Empty = inert.
+    std::optional<ManaCost>  tap_fight_cost;
+    std::string              tap_fight_requires_subtype;
     std::optional<ManaCost>  tap_tutor_put_cost;
     // ---- Maze's End deck (2026-11-17, docs/design/analysis-Maze's End.md) ----
     // Maze's End: "{3}, {T}, Return this land to its owner's hand: Search your library for a Gate

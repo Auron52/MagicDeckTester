@@ -2359,6 +2359,16 @@ public:
                                       std::vector<int>& targets) const
     { (void)s; (void)source; (void)is_pre_combat; (void)targets; }
 
+    // TapFightTargets -- the two SEARCHED targets of a "{cost}, {T}: target <subtype> creature you control
+    // fights target creature an opponent controls" land (Contested Cliffs; PermAbilityMode::TapFight).
+    // `own` / `opp` arrive as the engine's legal lists -- battlefield indices, one per identity class
+    // (LandfallTargetFoldKey), battlefield order; the engine emits one variant per (own, opp) pair. The
+    // provider may RESTRICT either list (only a stated, tested SOUND prune) or ORDER it. Base: unchanged.
+    // Never consulted in human play (both targets are picked on the live board at activation).
+    virtual void TapFightTargets(const GameState& s, const Permanent& source, bool is_pre_combat,
+                                 std::vector<int>& own, std::vector<int>& opp) const
+    { (void)s; (void)source; (void)is_pre_combat; (void)own; (void)opp; }
+
     // MainPhaseTeamPumpCounts -- MAIN-PHASE activation counts for a stacking P/T team pump with no
     // keyword rider and no {T} (Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get
     // +3/+3"; Action::Kind::ActivatePump mode 2). The combat converter (ApplyFirebreathing) already

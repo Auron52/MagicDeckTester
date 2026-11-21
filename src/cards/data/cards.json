@@ -18885,6 +18885,24 @@
     "lord_excludes_self": true,
     "grants_vigilance": true
    }
+  },
+  {
+   "name": "Contested Cliffs",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{R}{G}, {T}: Target Beast creature you control fights target creature an opponent controls. (Each deals damage equal to its power to the other.) [Both clauses modelled. (1) '{T}: Add {C}' -> produces C (colourless only). (2) PermAbilityMode::TapFight (tap_fight_cost {R}{G}, tap_fight_requires_subtype Beast): a {T} mode on a LAND (the Kessig Wolf Run shape) -- the {T} is paid BEFORE the mana (SetPermTapped, CR 602.2a), so the land never pays toward its own cost; the enumerator debits its own {C} (PermAbilityTapDebitOf) and the R and G must come from other sources. BOTH targets are chosen on activation and SEARCHED (the no-greedy rule): one plan variant per (own Beast identity class x opponent creature identity class, LandfallTargetFoldKey -- the sound identical-in-all-state fold), all one activation family (one {T} per plan), not activating = the empty choice; the deck provider may only restrict/order (DecisionProvider::TapFightTargets, default: all). Without a legal target on BOTH sides the ability cannot be activated (CR 601.2c); an opponent creature exists only as a goldfish spawn (GoldFishRunner::PopulateOpponentSpawns). FIGHT (CR 701.14, ResolveFight): each deals damage equal to its power at resolution to the other, simultaneously; DEATHTOUCH is honoured (a nonzero hit from a deathtouch source is lethal -- CR 702.2b/704.5h; Questing Beast); an immediate SBA creature-death pass in BOTH worlds (SbaKillDeadCreatures: simultaneous deaths, owner's graveyard, leaves/dies triggers -- a Thragtusk that dies makes its 3/3 Beast, which a Garruk's Packleader draws off). The pinned pair rides TapFightPinScope through the liveness check (a target that left is a clean no-op, no substitution) and the resolver. Timing: the instant-speed ability is collapsed to the main phases' TRAILING pass -- emitted in main 1 and in main 2 whenever the deck has one (inert vs the passive opponent: it never attacks, blocks or responds, so no combat-time window adds a line the two mains lack). Human play: ONE main-phase entry; both targets are board clicks at activation over the full rules-legal sets (our Beast first, then theirs; the `target` frame via the loyalty-target chooser). [PARTIAL: fight damage does not run the dealt-damage event pipeline (no Stuffy Doll-class reflection, no enrage) and lifelink on fight damage is not applied -- INERT: no Beast in the pool has lifelink or a damage-dealt trigger. Deathtouch is modelled by raising the victim's marked damage to its lethal toughness, so an indestructible survivor shows the raised number -- nothing reads it.]]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_fight_cost": "{R}{G}",
+    "tap_fight_requires_subtype": "Beast"
+   }
   }
  ]
 }

@@ -558,6 +558,9 @@ MANIFEST = {
     # are main_phase choices. The target is picked on the live battlefield through `target` when the
     # activation occurs, so a land played earlier in the line is included.
     "tap_target_pump_cost":          ("target",      present),
+    # Contested Cliffs (Beasts B): ONE main_phase entry under human play; BOTH fight targets (our Beast, then
+    # theirs) are board clicks at activation through `target` (the loyalty-target chooser, Voracious precedent).
+    "tap_fight_cost":                ("target",      present),
     "tap_tutor_put_cost":             ("main_phase",  present),
     # ---- Maze's End (I1, 2026-11-17) ----
     # Maze's End's "{3}, {T}, Return this land to its owner's hand: Search ... for a Gate card": the same
@@ -985,6 +988,8 @@ BOARD_ACTIVATIONS = {
     "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
     # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
     "tap_target_pump_cost":                      ("activate",       present,  "tap_target_pump_cost"),
+    # Contested Cliffs' fight: the verbless land convention (`cast=Contested Cliffs`), cost {R}{G}.
+    "tap_fight_cost":                            ("activate",       present,  "tap_fight_cost"),
     "tap_tutor_put_cost":                         ("activate",       present,  "tap_tutor_put_cost"),
     "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
     "remove_counter_destroy_art_ench_cost":      ("activate",       truthy,   "remove_counter_destroy_art_ench_cost"),   # Steelbane Hydra
@@ -1088,6 +1093,7 @@ INERT_PARAMS = {
     "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
     # Maze's End (I4, 2026-11-17).
     "mana_per_other_controlled_subtype": "Baldur's Gate -- the scaled mana ability's X (the other Gates you control); colour and amount are the mana-payment exemption (the Three Tree City shape), no choice",
+    "tap_fight_requires_subtype": "Contested Cliffs -- the own target's legality filter (a Beast); the TARGETS ride tap_fight_cost (both chosen on the live battlefield)",
     "tap_target_pump_per_subtype_both": "Basilisk Gate -- the pump's X (the Gates you control at resolution), a computed magnitude; the TARGET rides tap_target_pump_cost (chosen on the live battlefield)",
     # Mill: printed magnitudes and legality thresholds. Their action/target choices
     # are classified above; resolving these riders is mandatory.
@@ -2487,7 +2493,7 @@ def modeled_tokens(card):
     ):
         t.add("target")
     if real_target(p.get("targeting", "none")) or p.get("keranos_first_draw") or p.get("spectacle_cost") \
-            or p.get("target_pump_cost") or "tap_target_pump_cost" in p or p.get("untap_target_land") \
+            or p.get("target_pump_cost") or "tap_target_pump_cost" in p or "tap_fight_cost" in p or p.get("untap_target_land") \
             or p.get("etb_modal_fight_opp_creature") or p.get("remove_counter_destroy_art_ench_cost"):
         t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")

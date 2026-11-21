@@ -2594,6 +2594,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_target_pump_targets_land = params.value("tap_target_pump_targets_land", false);
     p.tap_target_pump_taps_target_land = params.value("tap_target_pump_taps_target_land", false);
     p.tap_target_pump_sets_island = params.value("tap_target_pump_sets_island", false);
+    // Contested Cliffs (Beasts B) -- see CardParams::tap_fight_cost.
+    if (params.contains("tap_fight_cost"))
+        p.tap_fight_cost = ManaCostFromString(params["tap_fight_cost"].get<std::string>());
+    p.tap_fight_requires_subtype = params.value("tap_fight_requires_subtype", std::string());
     if (params.contains("tap_tutor_put_cost"))
         p.tap_tutor_put_cost = ManaCostFromString(params["tap_tutor_put_cost"].get<std::string>());
     p.tap_tutor_put_return_self      = params.value("tap_tutor_put_return_self", false);

@@ -1203,6 +1203,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                                                                         : std::to_string(a.chosen_x))
                          + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                 }
+                // Contested Cliffs' fight: BOTH targets are the decision (unpinned in human play: chosen on the board).
+                if (a.ability_mode == Action::AbilityMode::TapFight && a.sac_victim_id != 0 && a.enchant_target != 0)
+                {
+                    tag += " -- " + EnchantTargetName(s, a.sac_victim_id) + " fights "
+                         + EnchantTargetName(s, a.enchant_target);
+                }
                 if (a.ability_mode == Action::AbilityMode::TargetPump
                     || a.ability_mode == Action::AbilityMode::UntapLand
                     || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)   // Steelbane: destroy target
@@ -3595,6 +3601,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (ac.ability_mode == Action::AbilityMode::TapTargetPump)
                 { os << ", \"pump_x\": " << (ac.chosen_x == kTapTargetPumpXAll ? -1 : ac.chosen_x); }
                 else { os << ", \"pump_count\": " << ac.chosen_x; }
+            }
+            // Contested Cliffs' fight (TapFight): our creature and theirs, so the protocol can tell the
+            // pair variants apart (both 0 under human play: the board picks them at activation).
+            if (ac.kind == Action::Kind::ActivatePermAbility && ac.ability_mode == Action::AbilityMode::TapFight)
+            {
+                os << ", \"fight_own\": " << ac.sac_victim_id
+                   << ", \"fight_own_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                os << ", \"fight_opp\": " << ac.enchant_target
+                   << ", \"fight_opp_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
             }
             if (ac.kind == Action::Kind::ActivatePermAbility
                 && ac.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)   // Steelbane Hydra

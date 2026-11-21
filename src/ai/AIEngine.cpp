@@ -7841,6 +7841,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
             if (tpump && g_play_target_chooser != nullptr) { g_tap_target_pump_pin.target = 0; }
+            // Contested Cliffs' searched fight pair (TapFight: ours on sac_victim_id, theirs on enchant_target),
+            // read by the liveness check and the resolver. {0, 0} for every other mode. Twin in the other world.
+            const bool tfight = a.ability_mode == Action::AbilityMode::TapFight;
+            const TapFightPinScope _tfight_pin(tfight ? a.sac_victim_id : 0, tfight ? a.enchant_target : 0);
             // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
             const CounterPingTargetPinScope _cp_pin(
                 a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
@@ -7851,6 +7855,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (tpump && g_play_target_chooser != nullptr)
                 { g_tap_target_pump_pin.target = ChooseTapTargetPumpTargetAtActivation(
                     state, state.active_player_index, *a.def, a.sac_victim_id); }
+                // Human play picks both fight targets on the live board now (null chooser: pins stand).
+                if (tfight) { ChooseTapFightTargetsAtActivation(state, state.active_player_index, *a.def); }
                 // {T} half first -- see the rollout twin and SetPermTapped.
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 // Lockstep twin of the rollout's creature-source pay scope (D12: Secluded Courtyard
