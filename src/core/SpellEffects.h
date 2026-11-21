@@ -18529,6 +18529,60 @@ inline std::vector<FixedBurnPin> FixedBurnCandidates(const GameState& s, int cas
     }
     return out;
 }
+// ---- HUMAN-PLAY DEFAULT for a PAIRED (Targeting::Multi -- Searing Blaze) burn pin --------------------
+// In human play the pin is not a menu sub (TurnSolver's human signature keys only the burn COST prefix),
+// so plans that differ only in their targets collapse to one representative. That representative held
+// the FIRST enumerated pin, i.e. battlefield order, which is `{you, own creature}` whenever our creature
+// entered before the opponent's. PrepareFixedBurnPin then re-asked both targets with that pin
+// preselected, and the menu labelled every Blaze plan "you + <own creature>": a human who accepted the
+// defaults burned their own face and creature (Creature Burn claude-play sweep, seed 50009 gi 8, T4,
+// while the search itself aimed at the opponent and its 6/6).
+//
+// So the human default is ranked here: an opponent-side pin first (the opponent's face, then a walker
+// of theirs; our own face last), and within a side the creature with the most toughness left -- the
+// target MidrangeBurnProvider's PrunesPassiveBurnTargets keeps. Ties keep list order, so the OPTION
+// ORDER of both prompts never moves (recorded `--choices` replay unchanged); only the default does.
+// `want_first` != kAnyBurnFirst restricts to pins whose player/walker half is that target (the second
+// prompt). Returns an index into `legal`, or -1 when nothing matches. Read only under a human target
+// chooser and by the human menu label, so autonomous play is structurally untouched.
+inline constexpr int kAnyBurnFirst = -1000000;
+inline int HumanPairedBurnDefault(const GameState& s, int caster, const std::vector<FixedBurnPin>& legal,
+                                  int want_first = kAnyBurnFirst)
+{
+    auto side = [&](const FixedBurnPin& p) -> int
+    {
+        if (p.first == 0) { return 0; }                                    // the opponent's face
+        if (p.first == -1) { return 2; }                                   // our own face
+        return BurnTargetController(s, caster, p.first) == caster ? 2 : 1; // a walker: whose?
+    };
+    auto survival = [&](const FixedBurnPin& p) -> int
+    {
+        for (const Permanent& q : s.battlefield)
+        { if (q.card.m_number == p.second) { return LethalToughness(q, s) - q.damage; } }
+        return -1000000;   // not on the battlefield (a same-plan target still in hand)
+    };
+    int best = -1, best_side = 0, best_survival = 0;
+    for (int i = 0; i < static_cast<int>(legal.size()); ++i)
+    {
+        const FixedBurnPin& p = legal[static_cast<std::size_t>(i)];
+        if (want_first != kAnyBurnFirst && p.first != want_first) { continue; }
+        const int sd = side(p), sv = survival(p);
+        if (best < 0 || sd < best_side || (sd == best_side && sv > best_survival))
+        { best = i; best_side = sd; best_survival = sv; }
+    }
+    return best;
+}
+// The pin a HUMAN-PLAY menu label names for a plan's fixed-burn cast. A paired pin there is only the
+// collapsed representative (above), so the label names the default the cast prompt will preselect on
+// this board instead; every other pin, and every pin outside human play, is the plan's own.
+inline FixedBurnPin DisplayedFixedBurnPin(const GameState& s, int caster, const CardDefinition* d,
+                                          const FixedBurnPin& pin)
+{
+    if (!HumanPlayActive() || d == nullptr || d->params.targeting != Targeting::Multi) { return pin; }
+    const auto legal = FixedBurnCandidates(s, caster, *d);
+    const int pref = HumanPairedBurnDefault(s, caster, legal);
+    return pref >= 0 ? legal[static_cast<std::size_t>(pref)] : pin;
+}
 inline ChosenTarget BurnChoiceForPin(const GameState& s, int caster, int target)
 {
     if (target <= 0) { return {0, target == -1 ? caster : 1 - caster, 0}; }
@@ -18552,6 +18606,15 @@ inline bool PrepareFixedBurnPin(const GameState& s, int caster, const CardDefini
     // Human decisions use the existing target protocol twice, with a filtered second set.
     if (g_play_target_chooser)
     {
+        // A paired pin is preselected from the human ranking, never from the plan's collapsed
+        // representative (HumanPairedBurnDefault states why). Human play only: a host that installs a
+        // chooser outside it keeps the plan's pin.
+        const bool human_paired = d.params.targeting == Targeting::Multi && HumanPlayActive();
+        if (human_paired)
+        {
+            const int pref = HumanPairedBurnDefault(s, caster, legal);
+            if (pref >= 0) { selected = legal[static_cast<std::size_t>(pref)]; }
+        }
         const int old_stage = g_paired_burn_stage, old_ctrl = g_paired_burn_controller;
         g_paired_burn_stage = d.params.targeting == Targeting::Multi ? 1 : 0;
         // Searing Blaze's landfall amount is already fixed at this cast. Show
@@ -18565,8 +18628,13 @@ inline bool PrepareFixedBurnPin(const GameState& s, int caster, const CardDefini
         if (d.params.targeting == Targeting::Multi)
         {
             selected.paired_controller = BurnTargetController(s, caster, selected.first);
-            for (const auto& p : legal)
-            { if (p.first == selected.first) { selected.second = p.second; break; } }
+            const int pref = human_paired ? HumanPairedBurnDefault(s, caster, legal, selected.first) : -1;
+            if (pref >= 0) { selected.second = legal[static_cast<std::size_t>(pref)].second; }
+            else
+            {
+                for (const auto& p : legal)
+                { if (p.first == selected.first) { selected.second = p.second; break; } }
+            }
             g_paired_burn_stage = 2; g_paired_burn_controller = selected.paired_controller;
             got = (*g_play_target_chooser)(s, d, caster, 1, prompt_damage,
                                           {BurnChoiceForPin(s, caster, selected.second)});

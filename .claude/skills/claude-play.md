@@ -169,7 +169,9 @@ deterministic game applying the prior `--choices`, then prints the next decision
   bottoms, BD banks to hand, CT leaves it exiled). `"demonstrate"` — copy yes/no: reply
   **1** to copy, **0** not to. `"target"` — an option-list pick at resolution (e.g.
   Sakashima's Protege's copy-an-entrant choice; `min_targets: 0` means an empty pick
-  declines). `"attach_host"` — pick which permanent an entering object attaches or pairs
+  declines). **In an option-list `target` frame reply `options[].index`, NOT `legal_targets[].index`**:
+  the latter is the game-object index (player seat / battlefield slot), not a reply (the
+  `random_damage` frame is the one exception; its `note` says so). `"attach_host"` — pick which permanent an entering object attaches or pairs
   to: reply the `options` index, or **-1** to decline. Covers Equipment/Aura hosts **and
   soulbond pairing** (Silverblade Paladin). Each self-documents via its `note` field. All
   decision types share the one `--choices` stream in the order they occur (mulligan/bottom

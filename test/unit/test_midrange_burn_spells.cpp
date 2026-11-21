@@ -102,6 +102,66 @@ TEST_CASE("midrange burn: autonomous burn folds inert spawn targets but keeps th
     CHECK(std::any_of(with_own.begin(), with_own.end(), [](const FixedBurnPin& p) { return p.first == -1; }) == complete);
 }
 
+// Creature Burn claude-play sweep, seed 50009 gi 8 (T4): our creature entered first, so the first
+// enumerated Blaze pin -- the human menu's collapsed representative -- was {you, own creature}, and both
+// cast-time prompts preselected it. The human default is now an opponent-side pin, toughest creature.
+TEST_CASE("searing blaze: human default prefers the opponent side and the toughest creature")
+{
+    GameState s; s.active_player_index = 0;
+    MBPut(s, "Monastery Swiftspear", 10, 0);      // ours, FIRST in battlefield order
+    for (int i = 0; i < 2; ++i)
+    {
+        Permanent p;
+        p.card.m_name = i == 0 ? "1/1 Creature" : "6/6 Creature";
+        p.card.RehashName(); p.card.AddType(CardType::Creature);
+        p.card.m_power = p.card.m_toughness = i == 0 ? 1 : 6;
+        p.card.m_number = 500000 + i;
+        p.controller_index = p.owner_index = 1;
+        s.battlefield.push_back(p);
+    }
+    const CardDefinition& blaze = MBDef("Searing Blaze");
+    const std::vector<FixedBurnPin> legal = {{-1, 10, 0}, {0, 500000, 1}, {0, 500001, 1}};
+    const int any = HumanPairedBurnDefault(s, 0, legal);
+    REQUIRE(any == 2);                                           // opponent + 6/6, not you + Swiftspear
+    CHECK(HumanPairedBurnDefault(s, 0, legal, 0) == 2);          // second prompt after "opponent"
+    CHECK(HumanPairedBurnDefault(s, 0, legal, -1) == 0);         // after "you": our only creature
+    CHECK(HumanPairedBurnDefault(s, 0, legal, 42) == -1);        // no pin with that first target
+    s.battlefield[2].damage = 6;                                 // the 6/6 has no toughness left now
+    CHECK(HumanPairedBurnDefault(s, 0, legal) == 1);
+    s.battlefield[2].damage = 0;
+    // Only our own side legal (the opponent has no creature): the default stays on it.
+    CHECK(HumanPairedBurnDefault(s, 0, {{-1, 10, 0}}) == 0);
+
+    // The cast-time prompts: first the player/walker, then the creature. In human play both are
+    // preselected from that ranking; outside it, a chooser keeps the plan's own (first) pin.
+    MBHooks hooks;
+    std::vector<std::vector<ChosenTarget>> asked;
+    TargetChooser chooser = [&](const GameState&, const CardDefinition&, int, int, int,
+                                const std::vector<ChosenTarget>& heur)
+    { asked.push_back(heur); return heur; };   // accept every default
+    g_play_target_chooser = &chooser;
+    FixedBurnPin got;
+    const auto cast_legal = FixedBurnCandidates(s, 0, blaze);
+    REQUIRE(!cast_legal.empty());
+    REQUIRE(PrepareFixedBurnPin(s, 0, blaze, WithFixedBurnPin("", cast_legal.front()), got));
+    REQUIRE(asked.size() == 2);
+    if (HumanPlayActive())
+    {
+        CHECK(got.first == 0);
+        CHECK(got.second == 500001);
+        CHECK(asked[0].front().kind == 0);
+        CHECK(asked[0].front().index == 1);                       // the opponent's face
+        CHECK(asked[1].front().index == 2);                       // the 6/6's battlefield slot
+    }
+    else
+    {
+        CHECK(got.first == cast_legal.front().first);
+    }
+    // The menu label follows the same default under human play only.
+    const FixedBurnPin shown = DisplayedFixedBurnPin(s, 0, &blaze, cast_legal.front());
+    CHECK(shown.first == (HumanPlayActive() ? 0 : cast_legal.front().first));
+}
+
 TEST_CASE("midrange burn: cleanup sheds dead burn before optional mana and protects the core")
 {
     GameState s; s.active_player_index = 0;

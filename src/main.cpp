@@ -849,6 +849,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 else if ([&]() { FixedBurnPin bp; return DecodeFixedBurnPin(a.tutor_target.str(), bp); }())
                 {
                     FixedBurnPin bp; DecodeFixedBurnPin(a.tutor_target.str(), bp);
+                    // Human play names the paired (Blaze) default the cast will preselect, not the
+                    // collapsed representative's pin (DisplayedFixedBurnPin).
+                    bp = DisplayedFixedBurnPin(s, s.active_player_index,
+                                               a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name), bp);
                     tag += " → " + FixedBurnPinLabel(s, s.active_player_index, bp);
                     if (a.tutor_target.str().compare(0, 10, "fireblast:") == 0)
                     { tag += " (sacrifice two Mountains)"; }
@@ -3516,7 +3520,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             FixedBurnPin burn_pin;
             if (DecodeFixedBurnPin(ac.tutor_target.str(), burn_pin))
-            { os << ", \"burn_target\": "; JsonStr(os, FixedBurnPinLabel(s, s.active_player_index, burn_pin)); }
+            {
+                // Same displayed pin as the summary (DisplayedFixedBurnPin): the human default, not
+                // the collapsed representative's.
+                burn_pin = DisplayedFixedBurnPin(s, s.active_player_index,
+                                                 ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name), burn_pin);
+                os << ", \"burn_target\": "; JsonStr(os, FixedBurnPinLabel(s, s.active_player_index, burn_pin));
+            }
             else if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             // Kitesail Larcenist: the searched own-side Treasure target (0 = none, -2 = choose on
@@ -4294,6 +4304,11 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     int pull_ask_again = -1)
 {
     DecisionJson d(os, decision_index);
+    // Every option-list note opens with this: a reply is an index into `options`, and
+    // `legal_targets[].index` is a GAME-OBJECT index (player seat / battlefield slot), not a reply
+    // (a Creature Burn sweep agent read one as the other; the field names are kept for the tools).
+    static const std::string kReplyOpt =
+        "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index)";
     d.Type("target").Source(source).Turn(s);
     // Shaman en-Kor's pull (step 9f): the option index of "no pull now -- ask again at this chain's next damage
     // event"; the plain no-creature option declines for the rest of the chain. The viewer shows it as a button.
@@ -4361,30 +4376,30 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // claude-play note misled sweep agents (SelesnyaLifegain v2 sweep, 8 of 16 agents, 2026-10-22).
     // `per_target_damage` still carries the amount for the historic layout; nothing is damaged.
     if (pull_ask_again >= 0)
-    { d.Note("reply an option index -- the creatures whose damage from this event's source is dealt to " + source
+    { d.Note(kReplyOpt + " -- the creatures whose damage from this event's source is dealt to " + source
              + " instead, one pull (and its mana) per creature. The (no target) option declines for the REST OF THIS "
              "DAMAGE CHAIN (this event and every event its triggers cause -- a Guilty Conscience loop is one chain); "
              "option " + std::to_string(pull_ask_again) + " declines only now and asks again at the chain's next "
              "event that damages a creature. Default = the AI's pick."); }
     else if (!choose_player_desc.empty())
-    { d.Note("reply an option index -- the PLAYER " + choose_player_desc + " (a choice, not a target; "
+    { d.Note(kReplyOpt + " -- the PLAYER " + choose_player_desc + " (a choice, not a target; "
              "no damage is dealt now). Default = the AI's pick (heuristic_default)."); }
     else if (!lifegain_desc.empty())
-    { d.Note("reply an option index -- the PLAYER who " + lifegain_desc + " (no damage is dealt). "
+    { d.Note(kReplyOpt + " -- the PLAYER who " + lifegain_desc + " (no damage is dealt). "
              "Default = the AI's pick (heuristic_default)."); }
     else if (mills_target_player)
-    { d.Note("reply an option index -- the chosen player mills " + std::to_string(per_target)
+    { d.Note(kReplyOpt + " -- the chosen player mills " + std::to_string(per_target)
              + " cards (no damage is dealt). Default = the AI's pick (heuristic_default)."); }
     else if (!loyalty_desc.empty())
-    { d.Note("reply an option index -- the permanent this ability (" + source + ") targets. It is "
+    { d.Note(kReplyOpt + " -- the permanent this ability (" + source + ") targets. It is "
              + loyalty_desc + ". Default = the AI's pick."); }
     else if (!pump_desc.empty())
-    { d.Note("reply an option index. The chosen creature gets " + pump_desc
+    { d.Note(kReplyOpt + ". The chosen creature gets " + pump_desc
              + ". Default = the AI's pick (best attacker)."); }
     else if (source == "Sink into Stupor")
-    { d.Note("reply an option index -- return the chosen spell on the stack or opponent nonland permanent to its owner's hand. Every legal target is offered."); }
+    { d.Note(kReplyOpt + " -- return the chosen spell on the stack or opponent nonland permanent to its owner's hand. Every legal target is offered."); }
     else if (!remove_desc.empty())
-    { d.Note(std::string("reply an option index. The chosen ")
+    { d.Note(kReplyOpt + ". The chosen "
              + (remove_desc.rfind("returned to its owner's hand", 0) == 0 ? "permanent" : "creature")
              + " is " + remove_desc
              + ". Only legal targets are listed. Default = the AI's pick."); }
@@ -4398,10 +4413,23 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
              + std::to_string(min_targets) + "-" + std::to_string(max_targets) + " targets. The options "
              "list only illustrates sets; options[heuristic_default] is the AI's pick."); }
     else if (!copy_desc.empty())
-    { d.Note("reply an option index. This creature may enter as a copy of a listed permanent; "
+    { d.Note(kReplyOpt + ". This creature may enter as a copy of a listed permanent; "
              "pick the (no target) option to decline. Default = the AI's pick."); }
+    // SEARING BLAZE (Targeting::Multi) asks its two targets as two frames (PrepareFixedBurnPin's
+    // g_paired_burn_stage). The generic note below claimed "Default = the AI's pick (face)" while the
+    // default was the menu plan's collapsed pin -- often YOUR face and YOUR creature (Creature Burn
+    // sweep, seed 50009 gi 8). The default is now HumanPairedBurnDefault's, and the note says so.
+    else if (g_paired_burn_stage == 1)
+    { d.Note(kReplyOpt + ". " + source + ", target 1 of 2: the player or planeswalker, dealt "
+             + std::to_string(per_target) + " damage. The creature (one that player, or that planeswalker's "
+             "controller, controls) is asked next and takes the same damage. Default = an opponent-side "
+             "target (the opponent's face first), the side the search aims at."); }
+    else if (g_paired_burn_stage == 2)
+    { d.Note(kReplyOpt + ". " + source + ", target 2 of 2: the creature, dealt " + std::to_string(per_target)
+             + " damage; only creatures controlled by the player chosen first (or that planeswalker's "
+             "controller) are listed. Default = the one with the most toughness left."); }
     else
-    { d.Note("reply an option index. Each chosen target takes " + std::to_string(per_target)
+    { d.Note(kReplyOpt + ". Each chosen target takes " + std::to_string(per_target)
              + " damage (up to " + std::to_string(max_targets) + " target(s)). Default = the AI's pick (face)."); }
 }
 

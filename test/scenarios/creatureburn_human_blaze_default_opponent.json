@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 16,
+  "battlefield": [
+    { "name": "Figure of Destiny", "controller": 0 },
+    { "name": "Mountain", "controller": 0 },
+    { "name": "Mountain", "controller": 0 },
+    { "name": "Mountain", "controller": 0 },
+    { "token": true, "power": 6, "toughness": 6, "token_name": "6/6 Creature", "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "token_name": "1/1 Creature", "controller": 1 }
+  ],
+  "hand": [ "Searing Blaze", "Mountain" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": [
+    "CREATURE BURN claude-play sweep, seed 50009 gi 8 (T4 pre_main, choices 1,0,0,0,1,0,0,0,11,0,0): every Searing Blaze plan in the human menu read 'Searing Blaze -> you + Figure of Destiny', and the cast-time target prompt then preselected 'You (face)' while its note claimed 'Default = the AI's pick (face)'. Accepting the defaults burned our own face and creature; the search itself aims at the opponent and the 6/6.",
+    "Mechanism: in human play the burn pin is no menu sub, so the Blaze target variants collapse to one representative, and that representative held the FIRST enumerated pin -- battlefield order, so {you, own creature} because our creature is listed first (as here). Fix: HumanPairedBurnDefault (SpellEffects.h) ranks the human default (opponent side first, then the creature with the most toughness left), PrepareFixedBurnPin preselects it in both prompts, and the menu label names it (DisplayedFixedBurnPin). Option ORDER is untouched, so recorded --choices replay unchanged.",
+    "This fixture pins the label: no Blaze row names 'you', and the Blaze rows name the opponent plus the 6/6. The prompt defaults are pinned by the unit test 'searing blaze: human default prefers the opponent side and the toughest creature'."
+  ],
+  "expect_menu": [
+    { "summary_contains": "Searing Blaze → you", "count": 0 },
+    { "summary_contains": "Searing Blaze → opponent + 6/6 Creature", "count": 4 }
+  ]
+}
