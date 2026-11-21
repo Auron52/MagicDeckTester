@@ -1549,7 +1549,21 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // continuation, so do not reserve its red over that named cast.
         static const bool s_named_priority = EnvOn("MTG_PD_NAMED_LINE_PRIORITY", true);
         const bool named_priority = heurarm::Flag(heurarm::PD_NAMED_LINE_PRIORITY, s_named_priority);
-        const bool later_hand_hold = state.dmg_events_armed && (!named_line || !named_priority)
+        // A CASTLESS LINE HOLDS NOTHING FOR THE HAND (MTG_PD_CASTLESS_LINE_NO_HOLD; DEFAULT ON, =0 restores the
+        // hold on every armed bill). The hold exists for a continuation that casts the in-hand Earthquake (or the
+        // Spellshock) after this payment within the same line. A plan whose live traits name no mana cast and
+        // that opens nothing unseen has no such continuation: it pays only activations (Vito's lifelink), so
+        // the extra pain buys a red no step of this line can spend. Overnight s6006 gi47 T7: the lifelink
+        // {3}{B}{B} was paid with Ancient Tomb (14 -> 8) instead of City + Citadel and three painless {C}
+        // (14 -> 10), to keep a Forge for the Earthquake nothing that turn cast; the T8 kill lands at 1 life,
+        // so the two lost life made every land-drop line lose its win (also at --depth 8 --budget-ms 0) and
+        // the search stopped playing lands on T4/T5. No plan traits at all (pt == nullptr) still holds: there
+        // nothing says what the line casts.
+        static const bool s_castless_no_hold = EnvOn("MTG_PD_CASTLESS_LINE_NO_HOLD", true);
+        const bool castless_line = pt != nullptr && pt->mana_casts == 0 && !g_line_opens_unseen
+            && heurarm::Flag(heurarm::PD_CASTLESS_LINE_NO_HOLD, s_castless_no_hold);
+        const bool later_hand_hold = state.dmg_events_armed && !castless_line
+            && (!named_line || !named_priority)
             && (cost_in.red == 0 || s_multi_quake)
             && heurarm::Flag(heurarm::PD_LATER_HAND_HOLD, s_later_hand_hold);
         std::vector<ManaCost> hand_holds = later_hand_hold
