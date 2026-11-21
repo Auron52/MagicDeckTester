@@ -2292,7 +2292,15 @@ static bool DuplicateCastHasUpside(const GameState& s, int controller,
     {
         if (p.controller_index != controller) { continue; }
         const CardDefinition* watcher = CardDatabase::Instance().LookupCached(p.card);
-        if (watcher == nullptr || watcher->params.cast_trigger_creates_tokens <= 0
+        if (watcher == nullptr) { continue; }
+        // Herald of Ilharg (Beasts 2026-11-21): "Whenever you cast a CREATURE spell, put two +1/+1 counters on
+        // this creature" (FireOnCastTriggers). The counters land on the RESIDENT Herald when the duplicate is
+        // CAST, before it resolves and dies to the legend rule, so a second Questing Beast / Kaheera is never
+        // board-null under a Herald. Unfiltered by subtype (any creature spell). Only Herald carries the param,
+        // and the one Herald list with a legendary creature (Boars: Ilharg) is already offered through
+        // dies_to_library_position, so every other deck is byte-identical.
+        if (watcher->params.creature_cast_trigger_plus_counters > 0 && def.card.IsCreature()) { return true; }
+        if (watcher->params.cast_trigger_creates_tokens <= 0
             || watcher->params.cast_trigger_subtype.empty()) { continue; }
         if (CardHasSubtype(def.card, watcher->params.cast_trigger_subtype)) { return true; }
     }
