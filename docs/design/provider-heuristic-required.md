@@ -120,7 +120,10 @@ pre-2026-11-20 play), `searched` (every legal match), `policy` (`MTG_KN_ETBDIG_R
 
 ## Open USER questions
 
-* Knights: `MTG_KN_ETBDIG_RANK` is default ON (one revertable commit). Overrule? Numbers above: play-identical to the
-  searched default, ~1.6-1.8% cheaper; 7 games in 6000 faster than the old 3-cap.
-* Should the Contender re-open stay closed? Library-order picking is not the cause of its poor screens.
+* ~~Knights: `MTG_KN_ETBDIG_RANK` default ON, overrule?~~ KEPT ON. USER 2026-11-21: "That is potentially a reasonable
+  rule. Even better might be to project damage it could deal based on what you have in hand, but your idea gets pretty
+  close." **Owed (idea, not started):** rank the dig's matches by the damage each projects to deal this turn and next,
+  given the hand and the board (the lord bonus is today's proxy for it); measure against the current rank.
+* ~~Should the Contender re-open stay closed?~~ CLOSED. USER 2026-11-21: "We'll close it. You are correct that it is
+  slow compared to some other cards. It's just that this bad rule didn't help matters at all."
 * Selesnya / Landfall draft policies: pending the pw_main A/B.
