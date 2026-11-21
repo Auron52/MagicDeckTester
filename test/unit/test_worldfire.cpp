@@ -428,10 +428,10 @@ TEST_CASE("worldfire keep order: Ponder keeps a set that fills a missing quota, 
     GameState s = WFTutorBase(5);
     s.players[0].hand = {WFCard("Rift Bolt", 30), WFCard("Mountain", 31)};
     const std::vector<Card> look = {WFCard("Island", 40), WFCard("Memory Lapse", 41), WFCard("Worldfire", 42)};
-    CHECK_FALSE(prov.ReorderSingleCandidate(s));
-    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
-    CHECK(prov.ReorderSingleCandidate(s));
     CHECK_FALSE(prov.ReorderKeepShuffleOnly(s));
+    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
+    CHECK_FALSE(prov.ReorderSingleCandidate(s));
+    CHECK(prov.ReorderKeepShuffleOnly(s));                   // the order is the rule's; keep vs shuffle is searched
     CHECK(prov.KeepReorderTop(s, look));
     const TopDisposition keep = prov.TopDispositionPick(s, look, LookKind::Reorder, -1);
     CHECK_FALSE(keep.shuffle);
@@ -446,9 +446,9 @@ TEST_CASE("worldfire keep order: Ponder keeps a set that fills a missing quota, 
     CHECK(prov.TopDispositionPick(t, junk, LookKind::Reorder, -1).shuffle);
     CHECK_FALSE(prov.TopDispositionPick(t, junk, LookKind::Reorder, 1).shuffle);   // a forced keep is honoured
 
-    WFArm ks{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_PONDER_SINGLE, 0}};
-    CHECK_FALSE(prov.ReorderSingleCandidate(s));
-    CHECK(prov.ReorderKeepShuffleOnly(s));                   // keep-in-the-rule's-order vs shuffle is searched
+    WFArm single{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_PONDER_SINGLE, 1}};
+    CHECK(prov.ReorderSingleCandidate(s));                   // the sub-lever: the rule's keep/shuffle, one option
+    CHECK_FALSE(prov.ReorderKeepShuffleOnly(s));
 }
 
 TEST_CASE("worldfire keep order: Preordain keeps the quota-fillers best first, bottoms the rest (lever-gated)")
@@ -464,6 +464,45 @@ TEST_CASE("worldfire keep order: Preordain keeps the quota-fillers best first, b
 
     const std::vector<Card> look2 = {WFCard("Worldfire", 40), WFCard("Rift Bolt", 41)};
     CHECK(prov.TopDispositionPick(s, look2, LookKind::Scry, -1).top_order.empty());   // both duplicates
+}
+
+TEST_CASE("worldfire keep order: Preordain bottoms aggressively while a piece is genuinely missing (sub-levers)")
+{
+    WorldfireProvider prov;
+    GameState s = WFTutorBase(4);
+    s.players[0].hand = {WFCard("Rift Bolt", 31), WFCard("Mountain", 32)};   // no Worldfire, no tutor
+    const std::vector<Card> look = {WFCard("Seething Song", 40), WFCard("Ponder", 41)};
+    const std::vector<Card> hit  = {WFCard("Seething Song", 40), WFCard("Worldfire", 41)};
+    const std::vector<Card> tut  = {WFCard("Ponder", 40), WFCard("Personal Tutor", 41)};
+    {
+        WFArm arm{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}};
+        CHECK(prov.TopDispositionPick(s, look, LookKind::Scry, -1).top_order.empty());   // mana and dig: bottomed
+        const TopDisposition d = prov.TopDispositionPick(s, hit, LookKind::Scry, -1);
+        REQUIRE(d.top_order.size() == 1);
+        CHECK(d.top_order.front() == 1);                     // only Worldfire stays
+        const TopDisposition t = prov.TopDispositionPick(s, tut, LookKind::Scry, -1);
+        REQUIRE(t.top_order.size() == 1);
+        CHECK(t.top_order.front() == 1);                     // ... or a tutor that finds it
+    }
+    {
+        WFArm arm{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}, {heurarm::WORLDFIRE_PREORDAIN_AGGR_DIG, 0}};
+        const TopDisposition d = prov.TopDispositionPick(s, look, LookKind::Scry, -1);
+        REQUIRE(d.top_order.size() == 1);
+        CHECK(d.top_order.front() == 1);                     // AGGR_DIG=0: a quota dig spell stays
+    }
+    {
+        WFArm arm{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}, {heurarm::WORLDFIRE_PREORDAIN_AGGRESSIVE, 0}};
+        CHECK(prov.TopDispositionPick(s, look, LookKind::Scry, -1).top_order.size() == 2);   // the quota rule
+    }
+    {
+        // A missing FINISHER triggers it too, unless AGGR_FINISHER=0.
+        GameState f = WFTutorBase(4);
+        f.players[0].hand = {WFCard("Worldfire", 31), WFCard("Mountain", 32)};
+        WFArm arm{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}};
+        CHECK(prov.TopDispositionPick(f, look, LookKind::Scry, -1).top_order.empty());
+        WFArm off{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}, {heurarm::WORLDFIRE_PREORDAIN_AGGR_FINISHER, 0}};
+        CHECK(prov.TopDispositionPick(f, look, LookKind::Scry, -1).top_order.size() == 2);
+    }
 }
 
 TEST_CASE("worldfire keep order: Lotus Bloom only where it can pull the go-off forward")

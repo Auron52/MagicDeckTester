@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing; MANA fill order: colours, next land drop, castable acceleration); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -74,6 +74,24 @@ T\* are the MANA quota; the rest of the mana is overflow.
 | **DIG** | Brainstorm, Ponder, Preordain, Overmaster (tutors are not dig: they fill COMBO / FINISHER first; a tutor beyond the missing pieces whose only target is an Irencrag Feat ranks with the rituals) | **While short: 1 + the number of missing pieces (COMBO and FINISHER count one each), at least 2 -- so 2 with one piece missing, 3 with both -- and dig beyond that quota is still kept above surplus mana (USER 2026-11-21: *"If we are missing combo pieces holding multiple dig is potentially worthwhile."*); 1 once both are filled; 0 once COMBO + FINISHER + MANA are all filled. A piece filled only by a TUTOR counts as missing here until it is in hand** (USER 2026-11-21: *"The other advantage of keeping draw is that it can help get the tutored cards."*): a cantrip cast after the tutor draws the tutored card the same turn, which is what the projection credits when it shortens the tutor's wait. **But that slot ranks BELOW every MANA quota card** (USER: *"But I wouldn't say that it is worth keeping over ensuring we have the mana to go off."*): the dig kept to draw a tutored card sits after the mana the projection needs and above surplus mana; the "slot 1 above every mana card" priority applies only to a piece that is genuinely missing (no card, no tutor). While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
 | **BACKUP** | **the second finisher of the OTHER type** (a Rift Bolt beside a held or pending Halberdier, or a Halberdier beside a held or pending Rift Bolt); 1 extra land beyond the drops; 1 extra ritual; a 2nd Halberdier | 0 (kept only after every quota) | reverse of that order: the other-type finisher is the LAST overflow card shed (USER 2026-11-21: *"we should keep the second Finisher (of the second type) before any dead cards, just in case the arithmetic changes"*) |
 | **DEAD** | Memory Lapse (goldfish-inert); a 2nd Worldfire / Rift Bolt / Irencrag Feat; a tutor with nothing missing (`TutorNeedsCandidate`: it would not be cast) | 0 | always first |
+
+**Inside MANA** (USER 2026-11-21: *"We probably should have similar rules about what we keep in the mana camp.
+Keeping the next land drop is important, though not much really beats the fast acceleration unless we are unable to
+cast it. We need to ensure we have the colours we need, also."*). Fill order of the MANA quota, best first:
+
+1. **Colours first.** The cards that, with the board, give the colours the plan needs by T\*: **R** -- one red
+   source to cast Seething Song or suspend Rift Bolt, three red for Irencrag Feat ({1}{R}{R}{R}); Worldfire's RRR
+   can come from a red ritual's output (Song adds RRRRR, Feat seven R), so a castable ritual covers it -- and **U**
+   while we hold a blue dig spell or tutor (Brainstorm, Ponder, Preordain, Mystical / Personal Tutor). Sandstone
+   Needle counts RR, a fetch counts as the colour it can fetch, Mercadian Bazaar as R once charged.
+2. **The next land drop** (one land, the best by colour need, then the land keep order below), unless one has
+   already been played this turn.
+3. **Fast acceleration that we CAN cast by T\*:** Seething Song (needs 3 mana incl. R before it), Irencrag Feat
+   (needs 4 incl. RRR, and must be the last spell before Worldfire), a Lotus Bloom that makes the go-off earlier
+   (the Bloom rule above). Kept above every further land drop: *"not much really beats the fast acceleration"*.
+   **Uncastable acceleration** (the board plus the kept land drops cannot pay for it by T\*) ranks BELOW the
+   further land drops, and above surplus mana only if the further drops would make it castable.
+4. **Further land drops** through T\*, in the land keep order.
 
 **Land keep order** (best first): Sandstone Needle (RR, the red the deck needs) > Steam Vents > Scalding Tarn >
 Flooded Strand (the fetches also shuffle away a Brainstorm put-back) > Mountain > Mercadian Bazaar (only while

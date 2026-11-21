@@ -5112,10 +5112,16 @@ public:
     //   * MTG_WORLDFIRE_BRAINSTORM_RULE   -- Brainstorm puts back the two lowest-ranked, the higher on top; the
     //                                        searched put-back fan is pruned to that pick (MTG_WORLDFIRE_BRAINSTORM_SINGLE,
     //                                        on under the rule; =0 keeps the rule as the fan's ORDER only);
-    //   * MTG_WORLDFIRE_PONDER_RULE       -- keep (best first) iff a looked card fills an unfilled quota, else
-    //                                        shuffle; the fan is pruned to that disposition (MTG_WORLDFIRE_PONDER_SINGLE,
-    //                                        on under the rule; =0 searches keep-in-the-rule's-order vs shuffle);
-    //   * MTG_WORLDFIRE_PREORDAIN_RULE    -- scry 2: keep a card iff it fills a still-unfilled quota, best first.
+    //   * MTG_WORLDFIRE_PONDER_RULE       -- the ranking fixes the ORDER of the three (best first); keep-in-that-order
+    //                                        vs shuffle stays SEARCHED (ReorderKeepShuffleOnly). MTG_WORLDFIRE_PONDER_SINGLE
+    //                                        (OFF) also lets the ranking decide the shuffle (keep iff a looked card fills
+    //                                        an unfilled quota) and prunes the fan to that one disposition;
+    //   * MTG_WORLDFIRE_PREORDAIN_RULE    -- scry 2: keep a card iff it fills a still-unfilled quota, best first;
+    //                                        with a piece GENUINELY missing (MTG_WORLDFIRE_PREORDAIN_AGGRESSIVE, on under
+    //                                        the rule) keep only that piece or a tutor for it, bottoming the rest --
+    //                                        dig included (MTG_WORLDFIRE_PREORDAIN_AGGR_DIG=0 keeps a quota dig spell);
+    //                                        a missing finisher triggers it too (MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER=0:
+    //                                        only a missing Worldfire).
     // Human play and the unpruned audit see every option (the rules are only their defaults).
     TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
                                       LookKind kind, int keep_decision) const override;
@@ -5143,10 +5149,15 @@ struct WorldfireKeepRank
         int  key         = 0;    // keep value: HIGHER keeps; the shed order is ascending key
         bool quota       = false;// fills a bucket quota (else overflow / BACKUP / DEAD)
         const char* bucket = "";
+        // What the card IS (Preordain's aggressive mode reads it): Worldfire, a finisher (Rift Bolt / Halberdier),
+        // a library tutor, a dig spell (Brainstorm / Ponder / Preordain / Overmaster).
+        bool is_worldfire = false, is_finisher = false, is_tutor = false, is_dig = false;
     };
     std::vector<Entry> entries;   // hand cards (non-staged) in hand order, then looked cards in look order
     int  t_star  = -1;            // the projected go-off turn OFFSET (0 = this turn); -1 = "far" (nothing by now+4)
     bool combo_filled = false, finisher_filled = false;
+    // GENUINELY missing: neither the card (held, pending) nor a tutor in hand for it.
+    bool combo_missing = false, finisher_missing = false;
     int  dig_quota = 0;
     static WorldfireKeepRank Of(const GameState& s, int controller, const std::vector<Card>* looked, bool turn_over);
 };

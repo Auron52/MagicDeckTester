@@ -38946,6 +38946,17 @@ bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const 
 // Village; a land that enters tapped drops below every untapped land when no drop remains before T*.
 // Classified from PARAMS, never names. A looked-at card only takes a slot the HAND has not filled (hand cards are
 // assigned first), so Ponder / Preordain keep a looked card only when it adds what the hand lacks.
+// THE CONSUMERS (USER 2026-11-21: "So for Brainstorm this tells us what we want to put on top, (the lowest priority
+// cards using this rule) and for Ponder it tells us how to order the top 3 and for preordain it can help us decide how
+// to order (though we may leave shuffle searched) and what to put on the bottom ... if you are really missing a piece
+// like worldfire you need to be aggressive about bottoming other cards with Preordain."):
+//   * cleanup discard -- shed the lowest card; one index, re-ranked after each shed (this turn is over).
+//   * Brainstorm       -- put back the two lowest cards of the post-draw hand, the higher of the two on top (drawn
+//                         first); the searched put-back fan is that one pick.
+//   * Ponder           -- the three go back in the ranking's order, best on top; keep-in-that-order vs shuffle is
+//                         searched (two options).
+//   * Preordain        -- keep a card iff it fills a still-unfilled quota, best on top; bottom the rest. With a piece
+//                         GENUINELY missing (Worldfire, or the finisher): keep only that piece or one tutor for it.
 namespace
 {
 enum WfRole : int
@@ -39390,8 +39401,17 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
         }
     }
     for (int i = 0; i < n; ++i) { if (!done[static_cast<std::size_t>(i)]) { set(i, kWfKeyOther, false, "other"); } }
+    out.combo_missing    = wf.empty() && combo_tutor < 0;
+    out.finisher_missing = fin.kind == kFinNone;
     out.entries.reserve(it.size());
-    for (const Item& x : it) { out.entries.push_back(x.e); }
+    for (Item& x : it)
+    {
+        x.e.is_worldfire = x.role == kWfWorldfire;
+        x.e.is_finisher  = x.role == kWfBolt || x.role == kWfHalberdier;
+        x.e.is_tutor     = WfIsTutor(x.role);
+        x.e.is_dig       = WfIsDig(x.role);
+        out.entries.push_back(x.e);
+    }
     return out;
 }
 
@@ -39419,13 +39439,30 @@ bool WfPonderRuleOn()
 }
 bool WfPonderSingleOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_SINGLE", true);       // ON under the rule; =0 -> keep vs shuffle searched
+    // OFF (USER 2026-11-21: Ponder's keep vs shuffle stays SEARCHED, the ranking fixes the order); =1 -> the ranking
+    // also decides the shuffle and the fan is that one disposition.
+    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_SINGLE");
     return WfPonderRuleOn() && heurarm::Flag(heurarm::WORLDFIRE_PONDER_SINGLE, on);
 }
 bool WfPreordainRuleOn()
 {
     static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_RULE");     // DEFAULT OFF until the USER approves
     return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_RULE, on);
+}
+bool WfPreordainAggressiveOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_AGGRESSIVE", true);   // ON under the rule (USER 2026-11-21)
+    return WfPreordainRuleOn() && heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_AGGRESSIVE, on);
+}
+bool WfPreordainAggrDigOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_AGGR_DIG", true);     // an open default: dig is bottomed too
+    return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_AGGR_DIG, on);
+}
+bool WfPreordainAggrFinisherOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER", true); // an open default: a missing finisher too
+    return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_AGGR_FINISHER, on);
 }
 // The looked-at cards' disposition: the cards that fill a quota, best first (Ponder also keeps the rest, below).
 std::vector<int> WfLookedKept(const WorldfireKeepRank& r, bool quota_only)
@@ -39466,14 +39503,44 @@ TopDisposition WorldfireProvider::TopDispositionPick(const GameState& s, const s
     TopDisposition disp;
     if (reorder)
     {
-        // PONDER: keep iff a looked card fills a quota the hand has not filled; all three stay, best first.
+        // PONDER: the three stay in the ranking's order, best first. Keep vs shuffle is SEARCHED (ReorderKeepShuffleOnly;
+        // USER 2026-11-21); the unpinned default (-1: the base plan, the playout) keeps iff a looked card fills a quota
+        // the hand has not filled -- which MTG_WORLDFIRE_PONDER_SINGLE makes the whole fan.
         const bool keep = !WfLookedKept(r, true).empty();
         if (keep_decision == 0 || (keep_decision == -1 && !keep)) { disp.shuffle = true; return disp; }
         disp.top_order = WfLookedKept(r, false);
         return disp;
     }
     // PREORDAIN: keep the quota-filling cards on top, best first; bottom the rest.
-    disp.top_order = WfLookedKept(r, true);
+    const bool aggr = WfPreordainAggressiveOn()
+                   && (r.combo_missing || (r.finisher_missing && WfPreordainAggrFinisherOn()));
+    if (!aggr) { disp.top_order = WfLookedKept(r, true); return disp; }
+    // AGGRESSIVE (a piece is genuinely missing): keep only that piece (the quota card the ranking gave it) or, when
+    // the look holds none, ONE tutor for it; everything else goes to the bottom -- mana and, by default, dig too.
+    const bool want_combo = r.combo_missing;
+    const bool want_fin   = r.finisher_missing && WfPreordainAggrFinisherOn();
+    std::vector<const WorldfireKeepRank::Entry*> v;
+    for (const WorldfireKeepRank::Entry& e : r.entries) { if (e.look_index >= 0) { v.push_back(&e); } }
+    std::stable_sort(v.begin(), v.end(), [](const WorldfireKeepRank::Entry* a, const WorldfireKeepRank::Entry* b)
+    { return a->key > b->key; });
+    std::vector<char> kept(looked.size(), 0);
+    auto keep_gap = [&](bool want, bool WorldfireKeepRank::Entry::*piece)
+    {
+        if (!want) { return; }
+        bool got = false;
+        for (const auto* e : v) { if (e->*piece && e->quota) { kept[static_cast<std::size_t>(e->look_index)] = 1; got = true; } }
+        if (got) { return; }
+        for (const auto* e : v)
+        {
+            if (e->is_tutor && !kept[static_cast<std::size_t>(e->look_index)])
+            { kept[static_cast<std::size_t>(e->look_index)] = 1; return; }
+        }
+    };
+    keep_gap(want_combo, &WorldfireKeepRank::Entry::is_worldfire);
+    keep_gap(want_fin, &WorldfireKeepRank::Entry::is_finisher);
+    if (!WfPreordainAggrDigOn())
+    { for (const auto* e : v) { if (e->is_dig && e->quota) { kept[static_cast<std::size_t>(e->look_index)] = 1; } } }
+    for (const auto* e : v) { if (kept[static_cast<std::size_t>(e->look_index)]) { disp.top_order.push_back(e->look_index); } }
     return disp;
 }
 

@@ -1077,8 +1077,11 @@ enum Slot : int
     WORLDFIRE_BRAINSTORM_RULE,// MTG_WORLDFIRE_BRAINSTORM_RULE  Worldfire: Brainstorm puts back the two lowest cards of the keep order, the higher of them on top (PutBackRanking per card). DEFAULT OFF until the USER approves; =1 enables
     WORLDFIRE_BRAINSTORM_SINGLE,// MTG_WORLDFIRE_BRAINSTORM_SINGLE  sub-lever: the searched put-back fan is pruned to the rule's pick (PutBackSingleCandidate). DEFAULT ON under MTG_WORLDFIRE_BRAINSTORM_RULE; =0 keeps the rule as the fan's ORDER only. Inert unless the rule is on
     WORLDFIRE_PONDER_RULE,    // MTG_WORLDFIRE_PONDER_RULE  Worldfire: Ponder keeps (best first) iff a looked card fills an unfilled quota of the keep order, else shuffles. DEFAULT OFF until the USER approves; =1 enables
-    WORLDFIRE_PONDER_SINGLE,  // MTG_WORLDFIRE_PONDER_SINGLE  sub-lever: Ponder's searched fan is pruned to the rule's disposition (ReorderSingleCandidate). DEFAULT ON under MTG_WORLDFIRE_PONDER_RULE; =0 searches keep-in-the-rule's-order vs shuffle (ReorderKeepShuffleOnly). Inert unless the rule is on
+    WORLDFIRE_PONDER_SINGLE,  // MTG_WORLDFIRE_PONDER_SINGLE  sub-lever: the ranking also decides Ponder's keep vs shuffle (keep iff a looked card fills an unfilled quota) and the searched fan is pruned to that one disposition (ReorderSingleCandidate). DEFAULT OFF (USER 2026-11-21: keep vs shuffle stays searched -- the rule's default is ReorderKeepShuffleOnly); =1 enables. Inert unless the rule is on
     WORLDFIRE_PREORDAIN_RULE, // MTG_WORLDFIRE_PREORDAIN_RULE  Worldfire: Preordain's scry 2 keeps a card iff it fills a still-unfilled quota of the keep order (counting cards kept above it), best first; bottoms the rest. DEFAULT OFF until the USER approves; =1 enables
+    WORLDFIRE_PREORDAIN_AGGRESSIVE, // MTG_WORLDFIRE_PREORDAIN_AGGRESSIVE  sub-lever (USER 2026-11-21 "if you are really missing a piece like worldfire you need to be aggressive about bottoming other cards with Preordain"): with a piece GENUINELY missing (no card, no tutor) the scry keeps only that piece or a tutor for it and bottoms everything else. DEFAULT ON under the rule; =0 -> the quota rule throughout. Inert unless the rule is on
+    WORLDFIRE_PREORDAIN_AGGR_DIG, // MTG_WORLDFIRE_PREORDAIN_AGGR_DIG  sub-lever of the aggressive mode (an open default): a dig spell on top is bottomed too. DEFAULT ON; =0 keeps a dig spell that fills a quota. Inert unless the aggressive mode is on
+    WORLDFIRE_PREORDAIN_AGGR_FINISHER, // MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER  sub-lever of the aggressive mode (an open default): a genuinely missing FINISHER triggers it as well as a missing Worldfire. DEFAULT ON; =0 -> only a missing Worldfire. Inert unless the aggressive mode is on
     COUNT
 };
 
@@ -2102,6 +2105,9 @@ inline const char* Name(int slot)
         "MTG_WORLDFIRE_PONDER_RULE",
         "MTG_WORLDFIRE_PONDER_SINGLE",
         "MTG_WORLDFIRE_PREORDAIN_RULE",
+        "MTG_WORLDFIRE_PREORDAIN_AGGRESSIVE",
+        "MTG_WORLDFIRE_PREORDAIN_AGGR_DIG",
+        "MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
