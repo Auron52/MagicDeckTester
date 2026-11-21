@@ -81,6 +81,10 @@ exactly 0).
 Known risk carried from the research: Keldon Champion's echo payment created by applying a plan at a
 single-main boundary (`BoundaryFan(state, /*with_echo=*/false)`) is not branched -> measure with
 `MTG_ECHO_AXIS_STATS=1` once the deck plays.
+**MEASURED 2026-11-21 (`c5f3b7610`, 200 games, seeds 2002/3003 x100, play settings d5 b20): NO GAP.**
+`[echo-axis] obligations=22115 covered=10910 inverted=5423 uncovered_in_window=8703 uncovered_beyond=2502 | real:
+obligations=15 uncovered=0`; split `searched=0 playout=8703 constant_leaf_edge_fold=0`. Every in-window miss is in the
+permitted playout beyond the horizon; no searched frame resolved an uncovered echo, and every real upkeep was covered.
 
 ## Stage 2 — Batch 2 — implemented (integrator 2, 2026-11-20)
 
