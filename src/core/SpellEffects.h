@@ -6394,16 +6394,31 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
     {
         if (a.controller_index != creature.controller_index) { return false; }
         if (a.def_absent) { return false; }
+        // ONE cached lookup per permanent for both grant shapes below (the CreatureHasLifelink shape).
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
         if (a.equipped_to == creature.card.m_number)
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
             if (d && d->params.is_equipment && d->params.equip_grants_vigilance) { return true; }
+        }
+        // Kaheera, the Orphanguard: "Each OTHER creature you control that's a Cat, Elemental, Nightmare, Dinosaur,
+        // or Beast ... has vigilance" -- the grants_lifelink lord shape (CreatureHasLifelink). False for every
+        // permanent without the param.
+        {
+            if (d && d->params.grants_vigilance
+                && !(d->params.lord_excludes_self && a.card.m_number == creature.card.m_number))
+            {
+                if (d->params.affects_all_creatures) { return true; }
+                if (creature.AnimatedAllTypes() && !d->params.subtypes_affected.empty()) { return true; }
+                for (const std::string& sub : d->params.subtypes_affected)
+                {
+                    for (const std::string& cs : creature.card.m_subtypes) { if (cs == sub) { return true; } }
+                }
+            }
         }
         // Rick, Steadfast Leader's chosen vigilance (see the lifelink twin above). Zero mask on
         // every other permanent -> the equipment-only behaviour is byte-identical.
         if ((a.chosen_keyword_mask & kChosenKwVigilance) != 0)
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
             if (d && KeywordGrantReaches(d->params, creature)) { return true; }
         }
         return false;
@@ -8462,7 +8477,8 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         // CreatureHasVigilance's granters: every Aura/Equipment (the list `attached` already is --
         // Combat.cpp used to pass that one) plus a chosen-keyword granter (Rick). A SUPERSET, so an
         // empty list remains a proof; byte-identical for every deck without a keyword chooser.
-        if (pp.is_aura || pp.is_equipment || pp.etb_choose_keyword_count > 0)
+        if (pp.is_aura || pp.is_equipment || pp.etb_choose_keyword_count > 0
+            || pp.grants_vigilance)   // Kaheera's vigilance lord
         { bs.vigilance.push_back(i); }
         // Any Aura or Equipment, attached or not. Deliberately NOT narrowed to the attached ones:
         // the three consumers each test `aura_attached_to`/`equipped_to` against a specific host's
@@ -15372,6 +15388,24 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
     if (d && d->params.ltb_exiled_owner_illusion_token) { FireExiledOwnerIllusion(state, left); }
     // Champion's LEAVE half: the championed card returns as a new object (CR 702.72a).
     if (d && !d->params.champion_subtype.empty()) { ReturnChampionedCard(state, left); }
+    // Thragtusk (Beasts 2026-11-21): "When this creature leaves the battlefield, create a 3/3 green Beast creature
+    // token." The left card's own trigger, under its last controller; CreateTokens = the doubler chokepoint + the
+    // enter cascade (a Packleader draws off the 3/3). Every leave route funnels here, so death, sacrifice and blink
+    // all make it. 0 for every other card.
+    if (d && d->params.ltb_self_creates_tokens > 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xF0\x9F\x90\xBE " + left.m_name.str() + " left the battlefield -- create "
+                          + std::to_string(d->params.ltb_self_creates_tokens) + " "
+                          + std::to_string(d->params.ltb_token_power) + "/"
+                          + std::to_string(d->params.ltb_token_toughness) + " token(s)");
+        }
+        CreateTokens(state, controller, d->params.ltb_self_creates_tokens,
+                     d->params.ltb_token_power, d->params.ltb_token_toughness,
+                     d->params.ltb_token_subtypes, d->params.created_token_color);
+    }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -15461,6 +15495,7 @@ inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int so
     if (!src) { return false; }
     const CardDefinition* sd = CardDatabase::Instance().LookupCached(src->card);
     if (sd && sd->params.persist && MinusCountersOn(*src) == 0) { return true; }
+    if (sd && sd->params.ltb_self_creates_tokens > 0) { return true; }   // Thragtusk: its own leave makes a token
     for (const Permanent& w : state.battlefield)
     {
         if (w.controller_index != controller || w.card.m_number == source_id) { continue; }
@@ -19034,9 +19069,10 @@ inline int DefaultSacExpendabilityRank(const Permanent& v, int source_id,
 {
     int rank = v.EffectivePower();                 // base: sac the weakest first
     const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
-    const bool self_replacing = d && (d->params.dies_trigger_creates_tokens > 0
+    const bool self_replacing = d && (((d->params.dies_trigger_creates_tokens > 0
                                   || (d->params.dies_trigger_tokens_per_counter && TotalCountersOn(v) > 0))
-                                  && !d->params.dies_token_subtypes.empty();     // Mogg War Marshal
+                                  && !d->params.dies_token_subtypes.empty())     // Mogg War Marshal
+                                  || d->params.ltb_self_creates_tokens > 0);     // Thragtusk (its LTB token)
     const bool scaling = d && (
           (!d->params.subtypes_affected.empty()
            && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
@@ -22984,7 +23020,7 @@ inline bool SacOutletEatHasValue(const GameState& state, int controller, const C
         if (hp.own_creature_dies_lifegain > 0 || hp.sacrifice_watch_pump_power > 0) { return true; }
         if (!hd->card.IsCreature()) { continue; }
         if (!need_sub.empty() && !CardHasSubtype(hd->card, need_sub)) { continue; }
-        if (hp.persist || hp.ltb_return_creatures > 0) { return true; }
+        if (hp.persist || hp.ltb_return_creatures > 0 || hp.ltb_self_creates_tokens > 0) { return true; }
         const bool pays = hp.dies_trigger_damage > 0 || hp.dies_trigger_creates_tokens > 0
                        || hp.dies_trigger_tokens_per_counter
                        || hp.dies_trigger_self_gain > 0 || hp.dies_trigger_impulse_exile;
@@ -23011,6 +23047,7 @@ inline bool SacOutletEatHasValue(const GameState& state, int controller, const C
                        || vp.dies_trigger_self_gain > 0 || vp.dies_trigger_impulse_exile;
         if (pays && vp.dies_watch_includes_self) { return true; }
         if (vp.ltb_return_creatures > 0) { return true; }
+        if (vp.ltb_self_creates_tokens > 0) { return true; }   // Thragtusk: its own leave makes a token
     }
     return false;
 }

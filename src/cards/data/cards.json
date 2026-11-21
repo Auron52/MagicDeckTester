@@ -18802,6 +18802,89 @@
    "oracle_text": "Vigilance, deathtouch, haste\nQuesting Beast can't be blocked by creatures with power 2 or less.\nCombat damage that would be dealt by creatures you control can't be prevented.\nWhenever Questing Beast deals combat damage to an opponent, it deals that much damage to target planeswalker that player controls. [HASTE + VIGILANCE: printed keywords, live (it attacks the turn it is cast and stays untapped). LEGENDARY: legend rule via EnforceLegendRule, which copy to keep searched (Action::legend_keep) / the viewer's legend_keep. A second copy is still offered when its CAST or ENTRY pays (Herald of Ilharg's +2 counters cast trigger, Garruk's Packleader's draw) -- DuplicateCastHasUpside / DuplicateEntryOrDeathHasUpside. DEATHTOUCH: honoured by the shared fight resolver (Contested Cliffs; CR 702.2b: any nonzero damage from a deathtouch source is lethal); combat deathtouch is inert (the opponent never blocks). PARTIAL, PROVISIONAL (user sign-off pending): D2 the power-2-or-less block restriction is not modelled -- the opponent never blocks. D3 'combat damage can't be prevented' is not modelled -- no combat-damage prevention exists in the engine and the goldfish opponent never prevents. D4 the planeswalker redirect is not modelled -- the opponent controls no planeswalkers, so the trigger has no legal target (CR 603.3d), in 2HG for either head as well.]",
    "template": "vanilla_creature",
    "parameters": {}
+  },
+  {
+   "name": "Thragtusk",
+   "mana_cost": "{4}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 5,
+   "toughness": 3,
+   "oracle_text": "When this creature enters, you gain 5 life.\nWhen this creature leaves the battlefield, create a 3/3 green Beast creature token. [Fully modelled. ETB LIFEGAIN via etb_self_lifegain 5 (the Kitchen Finks creature-ETB clause in FireOwnEtbTriggers, a real GainLife event); inert in Beasts (nothing reads our life) but faithful. LTB TOKEN via ltb_self_creates_tokens 1 + ltb_token_power/toughness 3/3 + ltb_token_subtypes [Beast] + created_token_color G, fired from FireLeavesBattlefieldTriggers: a LEAVES trigger, NOT a dies watcher, so every leave route makes it (death, sacrifice, bounce, blink, exile), in both worlds, through CreateTokens (doubler-aware; the 3/3 Beast enters through the shared cascade, so Garruk's Packleader draws off it and Kaheera pumps it). The sac-payoff predicates (SelfSacHasDeathPayoff, SacOutletEatHasValue, DefaultSacExpendabilityRank's self-replacing class, the sac-claim walk's body routes) count it. In Beasts the only leave route is a Contested Cliffs fight Thragtusk loses -- legal, searched, and usually dominated vs the passive opponent.]",
+   "template": "custom",
+   "parameters": {
+    "etb_self_lifegain": 5,
+    "ltb_self_creates_tokens": 1,
+    "ltb_token_power": 3,
+    "ltb_token_toughness": 3,
+    "ltb_token_subtypes": [
+     "Beast"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Cragplate Baloth",
+   "mana_cost": "{5}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Hexproof",
+    "Haste"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Kicker {2}{G}\nThis spell can't be countered.\nHexproof, haste\nIf this creature was kicked, it enters with four +1/+1 counters on it. [KICKER: kicker_cost {2}{G} -> the DB-synthesized '(Kicked)' face ({7}{G}{G}{G}, an additional cost added into the total, CR 601.2b; Krosan Warchief / Urza's Incubator reduce the TOTAL, CR 601.2f); the kicked cast is a searched cast variant beside the unkicked one, never gated. KICKED COUNTERS: kicked_enters_with_plus_counters 4, read only on the kicked face, put in the pre-push window of BOTH cast-entry sites (EffectHandler::EnterBattlefield and TurnSolver's apply_one twin) as an as-enters replacement (CR 614.1c) through PutPlusCounters -- a kicked Baloth enters as a hasty 10/10, and the enter watchers (Garruk's Packleader) see the counters. An unkicked cast enters with none; the permanent is the printed card either way. HASTE: printed keyword, live. HEXPROOF recorded: it stops only OPPONENTS' targeting (CR 702.11b), so our own Contested Cliffs fight stays legal, and the passive opponent never targets. CAN'T BE COUNTERED: cant_be_countered, inert (the goldfish opponent casts no counterspells). Known simplification, disclosed: the kicked face reports mana value 10 rather than 7 (additional costs never change MV, CR 202.3); nothing in this list reads Baloth's MV except Herald of Ilharg's MV >= 5 test, which both values pass.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "kicker_cost": "{2}{G}",
+    "kicked_enters_with_plus_counters": 4,
+    "cant_be_countered": true
+   }
+  },
+  {
+   "name": "Kaheera, the Orphanguard",
+   "mana_cost": "{1}{G/W}{G/W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Cat",
+    "Beast"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Companion"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "Companion — Each creature card in your starting deck is a Cat, Elemental, Nightmare, Dinosaur, or Beast card. (If this card is your chosen companion, you may put it into your hand from outside the game for {3} as a sorcery.)\nVigilance\nEach other creature you control that's a Cat, Elemental, Nightmare, Dinosaur, or Beast gets +1/+1 and has vigilance. [LORD: lord_effect + subtypes_affected [Cat, Elemental, Nightmare, Dinosaur, Beast] (any-of, the Sporecrown Thallid multi-subtype shape) + lord_excludes_self (per-copy), applied in ComputeLordBonus (combat, SBA, eval and the enter watchers' live-power read all use it): Garruk's 3/3 Beast tokens and Thragtusk's 3/3 Beast are pumped (subtype string 'Beast'), a Krosan Warchief becomes a 3/3 that Garruk's Packleader draws off; Garruk's 6/6 Wurm is not a Beast and is not pumped. VIGILANCE GRANT: grants_vigilance, read in CreatureHasVigilance (the combat core's attack-tap) and admitted to BoardSources::vigilance; Kaheera's own vigilance is the printed keyword. HYBRID pips are real G-or-W pips (both payable by green). LEGENDARY: EnforceLegendRule, keep searched (Action::legend_keep); a duplicate is offered when its cast/entry pays (Herald's counters, Packleader's draw). COMPANION: inert tag pending the companion batch -- the sideboard Kaheera is not yet reachable; the main-deck copy is an ordinary card.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Cat",
+     "Elemental",
+     "Nightmare",
+     "Dinosaur",
+     "Beast"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "grants_vigilance": true
+   }
   }
  ]
 }

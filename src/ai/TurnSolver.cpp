@@ -16458,6 +16458,14 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             dyn += def.params.enters_with_plus_counters
                    << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
         }
+        // Cragplate Baloth's KICKED face enters with four +1/+1 counters (kicked_enters_with_plus_counters, read only
+        // on the "(Kicked)" face): price the 10/10 the kicked variant is, doubler-aware, or the dearer cast scores as
+        // the same 6/6. 0 for every other creature and for the unkicked face.
+        if (def.params.kicked_enters_with_plus_counters > 0 && !def.params.kicked_base_name.empty())
+        {
+            dyn += def.params.kicked_enters_with_plus_counters
+                   << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
+        }
         // Sin, Unending Cataclysm: enters with N x the counters its UNPINNED harvest would remove (the provider
         // default on the board as it stands) -- the body it is likely to be, doubler-aware. An ordering / greedy-
         // leaf score only; the searched subset and a Saga's replayed chapters are the search's to value.
@@ -24205,7 +24213,8 @@ static bool SubsetOverclaimsSacCostVictims(const GameState& state,
             || pp.return_target_from_graveyard || pp.etb_put_creature_cards_from_hand
             || pp.look_top_put_creature_count > 0 || !pp.etb_reveal_put_subtypes.empty() || pp.reveal_x_put_permanents
             || pp.ltb_return_creatures > 0 || pp.can_animate || pp.persist || pp.etb_blink_permanent
-            || pp.tap_put_from_hand_cost.has_value() || pp.ripple > 0;
+            || pp.tap_put_from_hand_cost.has_value() || pp.ripple > 0
+            || pp.ltb_self_creates_tokens > 0;   // Thragtusk: a sacrificed body leaves a 3/3 behind
     };
 
     const int me = state.active_player_index;
@@ -77056,6 +77065,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (def.params.kicked_etb_target_land_island)
                 { perm.islandize_target = SelectIslandLandTarget(state, enchant_target); }
                 perm.card = UnkickedSpellCard(def, perm.card);
+                // Cragplate Baloth: "If this creature was kicked, it enters with four +1/+1 counters" -- the as-enters
+                // replacement (CR 614.1c) in the pre-push window, through PutPlusCounters (doubler-aware). Lockstep
+                // twin: EffectHandler::EnterBattlefield. 0 for every other kicked card.
+                if (def.params.kicked_enters_with_plus_counters > 0)
+                { PutPlusCounters(state, perm, def.params.kicked_enters_with_plus_counters); }
             }
             // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, applied in this pre-push
             // window so the fodder is gone and the counters are on before the watchers see the body.

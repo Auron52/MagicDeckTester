@@ -129,6 +129,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         if (def.params.kicked_etb_target_land_island)
         { perm.islandize_target = SelectIslandLandTarget(state, entry.enchant_target); }
         perm.card = UnkickedSpellCard(def, perm.card);
+        // Cragplate Baloth: "If this creature was kicked, it enters with four +1/+1 counters on it" -- an AS-ENTERS
+        // replacement (CR 614.1c), so it sits in this pre-push window (the watchers see a 10/10), through
+        // PutPlusCounters (doubler-aware). Lockstep twin: TurnSolver's apply_one creature-enter branch.
+        if (def.params.kicked_enters_with_plus_counters > 0)
+        { PutPlusCounters(state, perm, def.params.kicked_enters_with_plus_counters); }
     }
     // Fire Diamond: "This artifact enters tapped." enters_tapped was previously honored only on the
     // land-drop path, so a CAST permanent carrying it entered untapped and was tappable for mana

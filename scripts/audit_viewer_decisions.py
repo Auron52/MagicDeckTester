@@ -1101,6 +1101,13 @@ INERT_PARAMS = {
     "spell_mill_opponent": "printed mill count; cast timing and Glimpse's player target are classified separately",
     # Spirits (2026-11-13, integrator C2): Skyclave Apparition's LTB.
     "ltb_exiled_owner_illusion_token": "mandatory LTB: the exiled card's owner creates an X/X Illusion (X = its MV) -- no target, no 'may', no choice",
+    # Beasts (2026-11-21, integrator A): Thragtusk's LTB token, Cragplate Baloth's kicked counters, Kaheera's vigilance lord.
+    "ltb_self_creates_tokens": "Thragtusk -- mandatory LTB: create N tokens of the printed spec -- no target, no 'may', no choice",
+    "ltb_token_power": "token spec constant (Thragtusk's 3/3) on a mandatory LTB token -- no choice",
+    "ltb_token_toughness": "token spec constant (Thragtusk's 3/3) on a mandatory LTB token -- no choice",
+    "ltb_token_subtypes": "token spec constant (Thragtusk's Beast) on a mandatory LTB token -- no choice",
+    "kicked_enters_with_plus_counters": "Cragplate Baloth -- the kicked face's as-enters +1/+1 counters; WHETHER to kick is kicker_cost's main_phase variant, no choice of its own",
+    "grants_vigilance": "static subtype keyword lord (Kaheera, the Orphanguard) -- continuous, no choice",
     # Spirits (2026-11-13): Geist of Saint Traft's Angel and Spirit of the Labyrinth's guard.
     "attack_token_keywords": "token spec constant (Geist of Saint Traft's Angel 'with flying') -- printed keywords on a mandatory attack-trigger token; no choice",
     "attack_token_exile_end_of_combat": "mandatory delayed exile of the attack-trigger token at end of combat (Geist of Saint Traft) -- no 'may', no target, no choice",
