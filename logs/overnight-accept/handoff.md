@@ -101,3 +101,12 @@ differs (new slower at d8 b0) 90 = Gods 24 (dredge lever) + Midrange Burn 24 (op
 table) + PD 1 (MTG_PD_LATER_HAND_HOLD) + unattributed 31 (Creature Giving 20, Galadriel 5, Hinata 2, Antilife 1,
 Antilife2HG 1, Minotaur 1, Alchemist 1); new deck 1 (Red Elemental).
 Every Cyclone PERSISTS game recovers. Use these numbers for the doc's classification table.
+
+## FINAL (successor agent, 2026-11-21)
+- Bisect finished (`bisect_step.sh`, lane-based): idx 64 `86db981f1` good, idx 70 `ba307d48a` bad; idx 65..69 do
+  not build. Culprit = the Windswept Heath `cards.json` rewrite in `9344fa594` (Boars I1: `produces` [W,B,R,G] ->
+  [] + `hand_fixing_produces`). Proof: new binary + c86 cards.json with only the Heath record reverted restores
+  6/6 Five Colour d0 games, Antilife gi117 x2 and 10/20 Creature Giving at case settings (`$A/heath/`,
+  `$A/heathflip/`). Classified REAL (card-data defect); fix candidate in the doc, not applied.
+- d8 b0 final counts and the 19 still-unattributed games are in the doc; the accept note is under
+  "Proposed `--accept-with-regressions` note". No jobs running. Worktree src restored to HEAD.
