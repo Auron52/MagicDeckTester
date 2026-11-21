@@ -1,0 +1,62 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 20,
+ "opponent_life": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 6,
+ "expect_win_turn": 4,
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0"
+ },
+ "hand": [
+  "Dimir Machinations"
+ ],
+ "library": [
+  "Grim Tutor",
+  "Lightning Bolt"
+ ],
+ "comment": "Blood Sun step 6d (design \u00a714): the non-Revelation probe of the nested-acquisition fix, and the deck's Machinations -> Grim chain. Six Swamps + a Mountain, opponent at 3: Dimir Machinations' transmute (mana value 3) can only find Grim Tutor; Grim Tutor, cast in the transmute's continuation, fetches the Lightning Bolt (a nested breakpoint), and the Bolt kills this turn. Win turn 5 before 6d. MTG_BLOODSUN_USER_PRUNE=0 (Bolt is not a USER target). d3 b100."
+}
