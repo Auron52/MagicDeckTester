@@ -2015,9 +2015,15 @@ does, but doesn't hardcast. Cyclone should be deploying multiples at times."*
   Machinations. Shared with Extra Turns (Time Warp, Walk the Aeons), whose 10 references were recorded without that
   prompt, so wiring it would shift their choice streams. In a goldfish the opponent's extra turn only gives it a land
   play (a Burgeoning trigger) and costs ours, so it is near-dominated; the USER decides.
-- **UX finding, not fixed:** in seed 13 turn 4 (Revelation, hand City of Brass / Rot Farm / Scorched Ruins, 5 lands) the
-  menu listed each "land=Golgari Rot Farm; cast: Diabolic Revelation (X=k)" SEVEN times and the City of Brass X=0/1
-  plans seven times, byte-identical JSON and an identical next state when picked (a hidden plan axis the summary does
-  not name). 147 plans where ~60 are distinct.
+- **Revelation menu twins: NOT a viewer defect (re-checked, part 2).** The 7 index-stripped byte-identical entries per
+  X (seed 13, the main phase before the Revelation cast) exist only in the UNCAPPED protocol mode
+  (`MTG_PLAY_PLANS_CAP=0`, which the 5h census and the reference protocol checker use so every REAL index stays
+  visible): 115 plans, 19 distinct. At the viewer's own cap (200, the default) the existing human-play display folds
+  (main.cpp, capped mode only) already hide them: 19 plans emitted, 19 distinct, 0 twins, so no emitter change was
+  needed and nothing that differs is hidden. The later main phases of that game carry no twins in either mode.
+- **Part 2 checks on the built tree:** the Machinations `target` fires before `exile_reorder` (seed 18, choices
+  `1,0,1,0,0,0,14,14,0,0,0,0,0,1,1`: decision 15 is `target`, players only, default = us; picking the opponent
+  leads to `exile_reorder` on "Dimir Machinations (opponent's library)"); seed 509's Burgeoning Tomb put
+  (`land_entry`, opponent's turn) now defaults to 0 (tapped) with both answers still offered.
 - **Viewer default to flag:** `land_entry` ships "let AI decide" by default in the viewer's options menu (DECISIONS.md
   "Surfacing options"). In this deck life is a resource (B1), so the USER may want Overgrown Tomb's prompt surfaced.
