@@ -10285,11 +10285,12 @@ bool RampFilterStranded(const GameState& pre, const GameState& post)
 // solve over the line's remaining bill, starting from what floats -- behind the payer's own fail-fast
 // AMOUNT bound (PaymentManaCovers: a short total is a proof of unpayability), which also tells the caller
 // when the board is short of mana outright rather than of a route (`amount_short`).
-bool RampLaterPayable(const GameState& s, const ManaCost& later, const CardDefinition* rock,
-                      bool* amount_short = nullptr)
+// RampLaterPayable's body on a board the caller gives up: `c` is consumed (the rock is put on it and the solve taps
+// it). For a caller whose board is already a scratch copy it will not read again, this saves RampLaterPayable's own
+// copy (ScaledLandRouteHold's trial board).
+bool RampLaterPayableConsume(GameState& c, const ManaCost& later, const CardDefinition* rock,
+                             bool* amount_short = nullptr)
 {
-    RampScratch sc(s);
-    GameState& c = sc.Board();
     if (rock != nullptr)
     {
         Permanent perm;
@@ -10307,6 +10308,13 @@ bool RampLaterPayable(const GameState& s, const ManaCost& later, const CardDefin
     }
     ManaPool start = c.floating_mana;
     return TapForCostBacktrack(c, later, /*for_creature=*/false, start);
+}
+
+bool RampLaterPayable(const GameState& s, const ManaCost& later, const CardDefinition* rock,
+                      bool* amount_short = nullptr)
+{
+    RampScratch sc(s);
+    return RampLaterPayableConsume(sc.Board(), later, rock, amount_short);
 }
 }   // namespace
 
@@ -11023,14 +11031,14 @@ static int AnyFilterFeedRouteHold(const GameState& state, const ManaCost& cost_i
 // Maze's End (Baldur's Gate).
 namespace
 {
-std::atomic<unsigned long long> g_slr_trial{0}, g_slr_strand{0}, g_slr_fired{0};
+std::atomic<unsigned long long> g_slr_trial{0}, g_slr_strand{0}, g_slr_fired{0}, g_slr_us{0};
 struct ScaledLandRouteStats
 {
     ~ScaledLandRouteStats()
     {
         if (!EnvOn("MTG_ANY_FILTER_ROUTE_STATS")) { return; }
-        std::fprintf(stderr, "[scaled-land-route] trials=%llu stranded=%llu fired=%llu\n",
-                     g_slr_trial.load(), g_slr_strand.load(), g_slr_fired.load());
+        std::fprintf(stderr, "[scaled-land-route] trials=%llu stranded=%llu fired=%llu ms=%llu\n",
+                     g_slr_trial.load(), g_slr_strand.load(), g_slr_fired.load(), g_slr_us.load() / 1000);
     }
 };
 ScaledLandRouteStats g_slr_stats;
@@ -11062,17 +11070,38 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         if (d != nullptr && d->params.mana_rock && !d->card.IsCreature() && !d->params.enters_tapped) { rock = d; }
     }
     g_slr_trial.fetch_add(1, std::memory_order_relaxed);
+    static const bool s_clock = EnvOn("MTG_ANY_FILTER_ROUTE_STATS");
+    struct Clock
+    {
+        bool on;
+        std::chrono::steady_clock::time_point t0;
+        explicit Clock(bool o) : on(o) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        ~Clock()
+        {
+            if (!on) { return; }
+            g_slr_us.fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+        }
+    } clock(s_clock);
     TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
     RevealLogPause _quiet;
     g_play_tap_pref_chooser = tap_pref;   // the pause's destructor restores the same pointer
+    {
+        // The trial board is a scratch copy nothing reads again, so the rest is solved ON it (no second copy).
+        RampScratch t(state);
+        ManaPool av_t = available ? *available : ManaPool{};
+        if (!TapForCostSharedDiag(t.Board(), cost_in, for_creature, available ? &av_t : nullptr, honor_legacy_cco))
+        { return 0; }
+        // (No amount-short exit, unlike the ramp route: a fed scaled land MAKES mana, so a trial board short of the
+        // rest's amount can still be the greedy's strand.)
+        if (RampLaterPayableConsume(t.Board(), later, rock)) { return 0; }
+    }
+    if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
+    // A strand (rare): the same trial again, for the sources it tapped.
     RampScratch a(state);
     ManaPool av_a = available ? *available : ManaPool{};
     if (!TapForCostSharedDiag(a.Board(), cost_in, for_creature, available ? &av_a : nullptr, honor_legacy_cco))
     { return 0; }
-    // (No amount-short exit, unlike the ramp route: a fed scaled land MAKES mana, so a trial board short of the rest's
-    // amount can still be the greedy's strand.)
-    if (RampLaterPayable(a.Board(), later, rock)) { return 0; }
-    if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
     g_slr_strand.fetch_add(1, std::memory_order_relaxed);
     std::vector<int> tapped;
     PaymentTapped(state, a.Board(), tapped, nullptr);
@@ -11082,7 +11111,7 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         ManaPool av_b = available ? *available : ManaPool{};
         if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
         { continue; }
-        if (!RampLaterPayable(b.Board(), later, rock)) { continue; }
+        if (!RampLaterPayableConsume(b.Board(), later, rock)) { continue; }
         g_slr_fired.fetch_add(1, std::memory_order_relaxed);
         return held;
     }
@@ -11116,6 +11145,8 @@ namespace
 {
 thread_local bool t_pay_refining = false;
 std::atomic<long long> g_refine_seen{0}, g_refine_trig{0}, g_refine_found{0}, g_refine_fail{0}, g_refine_us{0};
+// The MTG_PAY_REFINE_SCALED trigger alone (neither `spent` nor `surplus`): its share of the counts and the time.
+std::atomic<long long> g_refine_trig_sc{0}, g_refine_found_sc{0}, g_refine_us_sc{0};
 struct RefineStatsReport
 {
     ~RefineStatsReport()
@@ -11125,6 +11156,8 @@ struct RefineStatsReport
         std::fprintf(stderr, "=== PAY REFINE: payments=%lld triggered=%lld refined=%lld commit_failed=%lld ms=%lld ===\n",
                      g_refine_seen.load(), g_refine_trig.load(), g_refine_found.load(), g_refine_fail.load(),
                      g_refine_us.load() / 1000);
+        std::fprintf(stderr, "=== PAY REFINE (scaled trigger only): triggered=%lld refined=%lld ms=%lld ===\n",
+                     g_refine_trig_sc.load(), g_refine_found_sc.load(), g_refine_us_sc.load() / 1000);
     }
 } g_refine_stats_report;
 
@@ -11218,22 +11251,47 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
             if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
             scaled = ScaledManaCreatureCount(state, &p) >= d->params.mana_per_creature_feeder_generic + 2;
         }
+        if (scaled)
+        {
+            // ONLY A PLAIN TAP (the trigger's premise; the Maze's End CPU cut, 2026-11-21). Did every newly tapped
+            // source make its plain yield (the scaled land its {C})? ScaledFedFloatAfter's accounting: the mana made is
+            // the float's growth plus the bill. A payment that already took the fed mode is not the plain-{C}-first
+            // strand this trigger exists for: on Maze's End (Baldur's Gate) such payments were 27% of the trigger's
+            // refines and found a cheaper payment 0.3% of the time (57 of 17,799, 60 games; plain taps: 48,650 of
+            // 48,657), so the refine there cost ~4% of the deck's instructions for nothing the realised game used
+            // (identical .wins over 360 games across Maze's End, Merfolk Turns and Goblins). Not a dominance proof:
+            // the trigger's reach, narrowed to its premise; the two original triggers never looked at these either.
+            int plain = 0;
+            for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != a || !p.tapped || pre.bf[i].tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr) { plain = -1000; break; }
+                plain += (IsScaledManaLand(*d) && !LandTypeChangedToIsland(state, p)) ? 1 : PermanentManaYield(state, p, *d);
+            }
+            if (FloatTotal(state) - float_pre + cost_in.ManaValue() != plain) { scaled = false; }
+        }
     }
     if (!spent && !surplus && !scaled) { return; }
     g_refine_trig.fetch_add(1, std::memory_order_relaxed);
+    if (scaled) { g_refine_trig_sc.fetch_add(1, std::memory_order_relaxed); }
     static const bool s_clock = EnvOn("MTG_PAY_REFINE_STATS");
     struct Clock
     {
         bool on;
+        bool sc;
         std::chrono::steady_clock::time_point t0;
-        explicit Clock(bool o) : on(o) { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        Clock(bool o, bool scaled_only) : on(o), sc(scaled_only) { if (on) { t0 = std::chrono::steady_clock::now(); } }
         ~Clock()
         {
             if (!on) { return; }
-            g_refine_us.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(
-                                      std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
+            const long long us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                     std::chrono::steady_clock::now() - t0).count();
+            g_refine_us.fetch_add(us, std::memory_order_relaxed);
+            if (sc) { g_refine_us_sc.fetch_add(us, std::memory_order_relaxed); }
         }
-    } clock(s_clock);
+    } clock(s_clock, scaled);
     RampScratch before_scr(state);   // the warm scratch board (a copy-assign, not a fresh copy per trigger)
     GameState& before = before_scr.Board();
     pre.Restore(before, nullptr);
@@ -11247,6 +11305,7 @@ void PayRefineAfter(GameState& state, const ManaCost& cost_in, bool for_creature
         if (!found) { return; }
     }
     g_refine_found.fetch_add(1, std::memory_order_relaxed);
+    if (scaled) { g_refine_found_sc.fetch_add(1, std::memory_order_relaxed); }
     // Make it on the real board: back to the pre-payment fields, the option's taps, the bill float-only.
     PayRefineSnap made;
     made.Take(state, available);

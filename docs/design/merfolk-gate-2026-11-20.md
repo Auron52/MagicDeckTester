@@ -88,13 +88,59 @@ b20; the current tree, keep tables live), loss = 9. `build/scratch/claude_merfol
 | Maze's End | 400 | 1 | 1 | 0 | 13 | 1.0010 | 1.074 |
 
 Whole batch (`scripts/ab_wall.py`, BALANCED): ms off/on 0.976, cpu 0.970, units 1.000. The one slower game is Maze's
-End gi126 (T5 -> T6); its d8 b0 replay on both arms is queued (`build/scratch/claude_merfolk_gate/d8b0/`).
+End gi126 (T5 -> T6). **At `--depth 8 --budget-ms 0` both arms win T5** (`build/scratch/claude_merfolk_gate/d8b0/`):
+the slower game recovers, so the bar holds.
+
+### 4.3 The oracle-on gate slice (Merfolk Turns, gate deck files, both arms; `slice_s1/`, `gap_shapes.py`)
+
+| class | off | on |
+|---|---|---|
+| APPLY-DROP | 3,093 | 4 |
+| ORACLE-GAP | 87 | 44 |
+| ENUM-GAP | 120 | 118 |
+| DOMINATED-LAND | 7,239 | 5,470 |
+| APPLY-DROP-ORDER | 4 | 4 |
+| DROP-COVERED / CONTINUATION-DIFFERS | 6,827 / 4,482 | 6,828 / 4,487 |
+
+APPLY-DROP off is 2,692 Wanderwine Prophets + 357 Deeproot Pilgrimage + 44 others; on it is 2 Deeproot Pilgrimage + 2
+Seahunter. The residual ORACLE-GAP is the "1/1 Merfolk Token only in oracle" shape (24 + 6 + 6 of 44).
+
+### 4.4 Smoke + regression (`THREADS=4 MTG_PGO=0 regression.sh --both`, pre-rebase tree a121d871f)
+
+Only Maze's End, Maze's End 2HG and Merfolk Turns rows moved. Searched: smoke slower 0 / faster 3 / play-changed 6;
+regression slower 0 / faster 1 / play-changed 7. d0: smoke 1 slower (mazesend d0 gi830 7 -> 8, beside gi772 7 -> 6,
+net 0), 1 faster; regression 0 slower, 2 faster. Scenarios 594/594, units 3,780/3,780.
 
 Reading: the levers realise plans the menu already offered (the oracle's APPLY-DROP / ORACLE-GAP counts fall sharply on
 the repro games) but the search rarely CHOSE those plans, so win turns do not move on Merfolk Turns. Maze's End pays
 for Baldur's Gate's trials: ~+7% CPU for no measured gain (USER rule: a fix's CPU cost is to be cut, not justified).
 
+### 4.5 The Maze's End CPU cut (2026-11-21, rebased onto 69af1be5f)
+
+Instructions (`perf stat -e instructions:u`, Maze's End held-out gi 0-59, 1 thread each; `build/scratch/claude_merfolk_gate/cpu/`).
+Pre-rebase split: both on +5.76% vs off, route only +0.62%, `MTG_PAY_REFINE_SCALED` only +5.16% -- the refine trigger
+was ~90% of the cost. Counters (rebased, uncut): the scaled trigger ran 66,456 refines; payments with Baldur's Gate's
+PLAIN {C} (48,657) found a cheaper payment 48,650 times, payments that had already taken the fed mode (17,799) found
+one 57 times.
+
+| arm (rebased tree) | instructions vs levers off |
+|---|---|
+| levers on, uncut | +8.15% |
+| levers on, cut | +3.94% |
+
+Two cuts: (A) the route solves the rest of the line ON its trial board instead of a second copy (exact); (B) the scaled
+trigger requires the plain tap, its own premise (not a dominance proof: the 57 fed-mode finds are dropped; the trigger
+never existed before 2026-11-20, so nothing the committed tree did is lost). `.wins` and digests are byte-identical cut vs
+uncut on Maze's End (60), Merfolk Turns (150) and Goblins (150). What is left is the plain-tap refine, which finds a
+better payment 99.99% of the time (its work is the play change), plus the search's own +0.8% units on the changed play.
+
 
 ## 5. Open items
+
+**USER ruling 2026-11-21 (verbatim), on the section 3 ENUM-GAP cast order:** *"I'm fine with trying either option as
+needed. Whatever does better can win out. We are looking for the cheapest that corrects the issue."* Both options
+(reorder-on-failure growing an untapped Three Tree City first; a Merfolk Turns cast-order rule, cheaper City-growing
+Merfolk first) are to be built behind a temporary selector, measured (gate-slice ENUM-GAP count, held-out A/B, d8 b0 on
+slower games, CPU), and the cheapest that corrects the issue and meets the bar ships; the other is deleted.
 
 (pending)
