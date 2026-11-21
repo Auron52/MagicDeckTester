@@ -270,3 +270,9 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
+- Two-deviation completeness gap (step 6e diagnosis, design §14): a line needing two simultaneous non-default
+  breakpoint picks (Machinations -> Grim -> Revelation X=2 -> kill) is unfindable at default settings at any budget
+  (a documented single-deviation bound, `docs/design/bp-empty-arm-deferred-site.md` §6.1). 6e repaired the dead
+  `MTG_BP_DEV_SEQ_ALL` lever (default off; T5 -> T4 on that chain, +12-25% search work). SCHEDULED as step 7b:
+  re-measure `_ALL`, then a scoped default-on version (sequences only at acquisition / cantrip resolution sites)
+  through the prune/adoption bar. Whether a scoped `_ALL` becomes default is presented to the USER with numbers.
