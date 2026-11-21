@@ -3322,6 +3322,11 @@ public:
     // Test hook (Boars I5a): AppendSubdecisionAxes over `plans` (the base plans of one enumeration node), exactly
     // as the search fans them; returns the list with every axis variant appended.
     static std::vector<Plan> SubdecisionAxesForTest(const GameState& state, bool is_pre_combat, std::vector<Plan> plans);
+    // Test hook (Blood Sun perf part 3): the same axes with the LAZY clone layout requested (MTG_PB_LAZY_CANDS), as
+    // SolveWithLookahead asks for it. Returns the list as the scorer indexes it (the lazy view, position by position)
+    // and sets `lazy_entries` to how many of its entries were held lazily (never built as Plans by the axes).
+    static std::vector<Plan> LazySubdecisionAxesViewForTest(const GameState& state, bool is_pre_combat,
+                                                            std::vector<Plan> plans, std::size_t& lazy_entries);
     // Test hook (searched echo, MTG_ECHO_AXIS): the rollout's turn boundary itself (end step, cleanup,
     // untap, upkeep -- echo included -- and the draw), exactly as every search host runs it. False = the
     // game ended on the boundary (an empty-library draw).
