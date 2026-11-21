@@ -1,0 +1,27 @@
+{
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Cinder Pyromancer", "controller": 0 },
+    { "name": "Mountain", "controller": 0 }
+  ],
+  "hand": [ "Lightning Bolt" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": [
+    "USER 2026-11-21: 'Let's leave the auto-tap, but add the option to manually tap.' The ordering the human must be able to express: tap Pyromancer (1), cast Lightning Bolt (3; the red cast's trigger UNTAPS the tapped Pyromancer -- no response ping, it was tapped), tap it again (1). Each manual tap is its own segment (the viewer commits a queued `tapping=` alone), then the human passes. The end-step sweep finds Pyromancer tapped and pings nothing more: 20 - 5 = 15. (Pyromancer is a 0/1, so its attack deals nothing.)"
+  ],
+  "human_lines": [ "tapping=Cinder Pyromancer", "cast=Lightning Bolt", "tapping=Cinder Pyromancer", "pass" ],
+  "expect_history_contains": [ "Cinder Pyromancer taps: 1 damage to the opponent (20", "Cinder Pyromancer taps: 1 damage to the opponent (16" ],
+  "expect_opponent_life": 15,
+  "expect_no_win": true
+}

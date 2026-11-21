@@ -2966,6 +2966,20 @@ public:
     // like the search; ApplyPlan runs the canonical execution order (land, casts, Land's
     // Edge) via the same path the rollouts use. Not used by the normal AI path.
     static std::vector<Plan> EnumerateMainPlans(const GameState& state, bool is_pre_combat);
+    // A TAP PINGER'S MANUAL PING (human play only; USER 2026-11-21: "leave the auto-tap, but add the option
+    // to manually tap"). EnumerateMainPlans APPENDS one standalone plan per own ready pinger (Goblin
+    // Fireslinger / Cinder Pyromancer / Vulshok Sorcerer -- SpellEffects.h TapPingerReady), after every other
+    // plan, so no index a saved reference names moves: a single ActivatePermAbility action, mode TapPing, no
+    // land. The search never emits the mode (its pings are sound folds), so this is a human-menu-only shape.
+    static bool IsHumanManualPingPlan(const Plan& p);
+    // When the human menu's base enumeration is EMPTY and manual pings are appended, the menu first gets the
+    // pass entry the AIEngine segment loop would have synthesised (so index 0 stays "cast nothing"), tagged
+    // so that loop still reads the frame as an empty one (its frame-ordinal rule). Untagged everywhere else.
+    static bool IsHumanSynthPassPlan(const Plan& p);
+    // Was the human menu's BASE enumeration empty (`plans` holds nothing but the tagged pass entry and manual
+    // pings, or nothing at all)? The AIEngine segment loop's frame rules read this, so a frame numbers
+    // exactly as it did before the manual pings existed.
+    static bool HumanMenuBaseEmpty(const std::vector<Plan>& plans);
     // THE SAME MENU, HELD LAZILY (MTG_PB_LAZY_CANDS). Position i holds exactly the plan EnumerateMainPlans'
     // vector holds at i, but a fanned sub-decision axis (put-back, Ponder order, look-top pins, the Prophets
     // champion / sacrifice pins) stays ONE prototype per fan instead of one Plan per entry. The mana oracle's
@@ -4316,6 +4330,11 @@ public:
         // cannot say whether the human meant the board activation or a hard cast of the copy in hand.
         // EMPTY keeps the legacy name-in-casts matching.
         std::vector<std::string> self_pings;
+        // "tapping=<source name>": a tap pinger's MANUAL {T} ping (PermAbilityMode::TapPing; Goblin
+        // Fireslinger / Cinder Pyromancer / Vulshok Sorcerer, human play only). ALWAYS its own verb -- the
+        // mode is new, so there is no legacy cast= matching: a plan holding a TapPing action matches only a
+        // line that declares exactly its tapping= names, and `cast=Cinder Pyromancer` stays the hand cast.
+        std::vector<std::string> tap_pings;
         // "tap=<card name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this
         // source for this face into the float before the line's payments run (see
         // TurnSolver::PreTap). NOT part of the plan multiset: a pre-tap changes how the line is

@@ -134,6 +134,8 @@
   //               "<source>[#<source m_number>][@<target m_number>]"       (LineSpec::untap_acts)
   //   tapdraw=    Staff of Domination's "{5},{T}: draw" (names the SOURCE)  (LineSpec::tap_draws)
   //   selfping=   Stuffy Doll's "{T}: 1 damage to itself" (names the SOURCE)  (LineSpec::self_pings)
+  //   tapping=    a tap pinger's manual "{T}: 1 damage" (Goblin Fireslinger / Cinder Pyromancer / Vulshok
+  //               Sorcerer; names the SOURCE; a standalone segment, `alone`) (LineSpec::tap_pings)
   //   untaploop=  the closed-form untap LOOP on an untapper (same "#src@target" shape as untapact=;
   //               runs until the float funds the kill -- chunk C2b)        (LineSpec::untap_acts, loop)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
@@ -232,8 +234,14 @@
       // a plan holds one cycle, so "cast A, cycle B, cast C" commits as [A, cycle B] then [C] -- the queue
       // order, exactly. On a deck whose cycles are standalone plans (`alone`, stamped at queue time from
       // the decision's own plans) the cycle is a segment by itself.
-      const cut = (i > 0 && (isDeferred(p) || (p.kind === 'cycle' && p.alone))) || (k && seen[k])
-               || (p.kind === 'land' && hasLand) || (i > 0 && cur.length && cur[cur.length - 1].kind === 'cycle');
+      // A STANDALONE board activation (`alone`, published by the engine on the action: a tap pinger's manual
+      // ping, `tapping=` -- the engine offers it only as a one-action plan) is a segment by itself the same way:
+      // it starts one and ends one, so "tap Pyromancer, cast Bolt, tap it again" commits as three segments,
+      // in the queued order.
+      const aloneAct = q => q && q.kind === 'activate' && !!q.alone;
+      const cut = (i > 0 && (isDeferred(p) || (p.kind === 'cycle' && p.alone) || aloneAct(p))) || (k && seen[k])
+               || (p.kind === 'land' && hasLand)
+               || (i > 0 && cur.length && (cur[cur.length - 1].kind === 'cycle' || aloneAct(cur[cur.length - 1])));
       if (cut) { flush(); }
       if (k) { seen[k] = true; }
       if (p.kind === 'land') { hasLand = true; }

@@ -352,3 +352,93 @@ TEST_CASE("Browbeat flip: emitted only for a tap-pinger deck with a pinger live,
     GameState none = Cb2Board(3, {"Browbeat"});           // no pinger anywhere
     CHECK(flips(none).second == 0);
 }
+
+// ---- the MANUAL ping (human play only; USER 2026-11-21: "leave the auto-tap, but add the option to manually tap") ----
+// HumanPlayActive() is a process-static MTG_HUMAN_PLAY read a unit test cannot switch on, so the human menu itself
+// (AppendHumanManualPingPlans: one standalone plan per READY pinger, appended last) and the "tap Pyromancer, cast
+// Bolt, tap it again" sequence are pinned by the scenarios (test/scenarios/cb_human_manual_ping_*.json). HERE: the
+// autonomous half (the search never emits the mode), the shared readiness gate and resolver the apply runs, and
+// the menu-shape helpers the AIEngine segment loop reads.
+
+TEST_CASE("Manual ping: autonomous enumeration never offers a TapPing action (the search keeps its folds)")
+{
+    GameState s = Cb2Board(2, {"Lightning Bolt"});
+    Cb2Put(s, "Goblin Fireslinger", 11);
+    Cb2Put(s, "Cinder Pyromancer", 12);
+    Cb2Put(s, "Vulshok Sorcerer", 13, /*sick=*/true);   // haste: ready
+    REQUIRE_FALSE(HumanPlayActive());
+    int pings = 0, plans = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        ++plans;
+        if (TurnSolver::IsHumanManualPingPlan(p)) { ++pings; }
+        for (const Action& a : p.actions)
+        { CHECK_FALSE((a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == PermAbilityMode::TapPing)); }
+    }
+    CHECK(plans > 0);
+    CHECK(pings == 0);
+}
+
+TEST_CASE("Manual ping: the activation is live for a READY pinger only (tapped / summoning-sick refused, haste lifts it)")
+{
+    GameState s = Cb2Board(0, {});
+    Cb2Put(s, "Goblin Fireslinger", 11);                       // ready
+    Cb2Put(s, "Cinder Pyromancer", 12).tapped = true;          // tapped
+    Cb2Put(s, "Goblin Fireslinger", 14, /*sick=*/true);        // summoning sick
+    Cb2Put(s, "Vulshok Sorcerer", 13, /*sick=*/true);          // haste
+    Cb2Put(s, "Mountain", 15);                                 // not a pinger
+    CHECK(PermAbilitySourceLive(s, 0, 11, PermAbilityMode::TapPing));
+    CHECK_FALSE(PermAbilitySourceLive(s, 0, 12, PermAbilityMode::TapPing));
+    CHECK_FALSE(PermAbilitySourceLive(s, 0, 14, PermAbilityMode::TapPing));
+    CHECK(PermAbilitySourceLive(s, 0, 13, PermAbilityMode::TapPing));
+    CHECK_FALSE(PermAbilitySourceLive(s, 0, 15, PermAbilityMode::TapPing));
+    CHECK_FALSE(PermAbilitySourceLive(s, 1, 11, PermAbilityMode::TapPing));   // not the controller's
+    CHECK(PermAbilityTaps(PermAbilityMode::TapPing));                         // {T} is the cost
+    CHECK(PermAbilityLabelFor(PermAbilityMode::TapPing, &Cb2Def("Goblin Fireslinger"))
+          == "it deals 1 damage to target player or planeswalker");
+    CHECK(PermAbilityLabelFor(PermAbilityMode::TapPing, &Cb2Def("Vulshok Sorcerer"))
+          == "it deals 1 damage to any target");
+}
+
+TEST_CASE("Manual ping: tap Pyromancer, a red cast untaps it, tap it again -- 1 + 1, and the sweep finds it tapped")
+{
+    GameState s = Cb2Board(0, {});
+    Cb2Put(s, "Cinder Pyromancer", 12);
+    ApplyPermAbility(s, 0, 12, PermAbilityMode::TapPing);            // the manual ping (no chooser: the face)
+    CHECK(s.players[1].life == 19);
+    REQUIRE(Cb2Find(s, "Cinder Pyromancer") != nullptr);
+    CHECK(Cb2Find(s, "Cinder Pyromancer")->tapped);
+    CHECK_FALSE(PermAbilitySourceLive(s, 0, 12, PermAbilityMode::TapPing));
+    TapPingCastUntap(s, 0, Cb2Def("Lightning Bolt"));                // the red cast's trigger: untap only
+    CHECK(s.players[1].life == 19);
+    CHECK_FALSE(Cb2Find(s, "Cinder Pyromancer")->tapped);
+    CHECK(PermAbilitySourceLive(s, 0, 12, PermAbilityMode::TapPing));
+    ApplyPermAbility(s, 0, 12, PermAbilityMode::TapPing);            // tap it again
+    CHECK(s.players[1].life == 18);
+    CHECK(PingDorkEndSweep(s, 0) == 0);                              // already tapped: the sweep skips it
+    CHECK(s.players[1].life == 18);
+}
+
+TEST_CASE("Manual ping: the human-menu shape helpers (standalone plan, tagged pass, base-empty test)")
+{
+    TurnSolver::Plan ping;
+    ping.land_decided = true;
+    Action a;
+    a.kind         = Action::Kind::ActivatePermAbility;
+    a.card_name    = "Goblin Fireslinger";
+    a.ability_mode = PermAbilityMode::TapPing;
+    ping.actions.push_back(a);
+    CHECK(TurnSolver::IsHumanManualPingPlan(ping));
+    TurnSolver::Plan two = ping;
+    two.actions.push_back(Cb2Cast("Lightning Bolt"));
+    CHECK_FALSE(TurnSolver::IsHumanManualPingPlan(two));             // never combined with a cast
+    TurnSolver::Plan selfping = ping;
+    selfping.actions[0].ability_mode = PermAbilityMode::SelfPing;
+    CHECK_FALSE(TurnSolver::IsHumanManualPingPlan(selfping));
+    TurnSolver::Plan pass;                                           // an ENUMERATED empty plan: untagged
+    CHECK_FALSE(TurnSolver::IsHumanSynthPassPlan(pass));
+    CHECK(TurnSolver::HumanMenuBaseEmpty({}));
+    CHECK(TurnSolver::HumanMenuBaseEmpty({ ping, ping }));
+    CHECK_FALSE(TurnSolver::HumanMenuBaseEmpty({ pass, ping }));     // a real (enumerated) pass is a base entry
+    CHECK_FALSE(TurnSolver::HumanMenuBaseEmpty({ two }));
+}

@@ -1524,6 +1524,9 @@ function activatableSources(){
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
                                          target:a.target||undefined,
                                          repeatable:!!a.repeatable, inCombat,
+                                         // A STANDALONE activation (the engine's `alone`: a tap
+                                         // pinger's manual ping) -- its own segment (LB.segmentParts).
+                                         alone:!!a.alone,
                                          // What the picker SHOWS for this ability. Without it two
                                          // abilities of one permanent render as the same bare card
                                          // name even once they stop deduping.
@@ -1863,6 +1866,8 @@ function queueActivation(src, opt, clickedNum){
                 sacMana: (sac && opt.sacMana) || undefined,
                 // Stackable: repeats of this entry commit as their own consecutive segments.
                 repeatable: opt.repeatable || undefined,
+                // A standalone activation (a tap pinger's manual ping) commits as a segment of its own.
+                alone: opt.alone || undefined,
                 // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and
                 // CheckLine can tell two target variants of one outlet apart. blinkCount rides along
                 // for the same reason -- it separates one blink from the go-off FINISH plan.
@@ -1889,6 +1894,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='taplife' ? `${src}: tapping it to gain life. Commit the phase to resolve it.`
     : opt.verb==='tapdraw' ? `${src}: tapping it to draw a card. Commit the phase to resolve it.`
     : opt.verb==='selfping' ? `${src}: tapping it to deal 1 damage to itself (its chosen player is dealt that much). Commit the phase to resolve it.`
+    : opt.verb==='tapping' ? `${src}: tapping it for ${opt.actLabel ? opt.actLabel.replace(/^it deals /, '') : '1 damage'} — it runs at this point in your line (you pick the target as it resolves). Queue spells after it to cast them after the ping; a Cinder Pyromancer untapped by a red spell can be clicked again.`
     : (opt.verb==='untapact' && opt.untapLoop) ? `${src}: ${untapActText(opt)}. Commit the phase to run the loop; the rest of the main phase then spends the floating mana.`
     : opt.verb==='untapact' ? `${src}: ${untapActText(opt)}. Click again to repeat it, then commit.`
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
@@ -2955,6 +2961,7 @@ function renderPlanbar() {
               : p.verb==='taplife'   ? ' ⟳ gain life'
               : p.verb==='tapdraw'   ? ' ⟳ draw a card'
               : p.verb==='selfping'  ? ' ⟳ 1 damage to itself'
+              : p.verb==='tapping'   ? ' ⟳ ping'
               : p.verb==='untapact'  ? ' ⟳ ' + untapActText(p)
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
@@ -4804,6 +4811,7 @@ function activationPickerHtml(pick){
                    : o.verb==='taplife'   ? `Tap ${o.name} — gain life`
                    : o.verb==='tapdraw'   ? `Tap ${o.name} — draw a card`
                    : o.verb==='selfping'  ? `Tap ${o.name} — 1 damage to itself`
+                   : o.verb==='tapping'   ? `Tap ${o.name} — ${o.actLabel ? o.actLabel.replace(/^it /, '') : 'deal 1 damage'}`
                    : o.verb==='untapact'  ? `${o.name} — ${untapActText(o)}`
                    : o.verb==='landsearch' ? `${o.name} — sacrifice it: search for land(s) (you pick them as it resolves)`
                    : o.verb==='steal'     ? `${o.name} — tap five untapped Vampires: gain control of target creature (you pick it and the five as it resolves)`

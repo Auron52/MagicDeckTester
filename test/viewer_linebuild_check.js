@@ -1403,6 +1403,18 @@ function checkSegmentOrder() {
     fails.push(`encodeLine(cast, cast, cycle) -> ${LB.encodeLine([A, B, C])}`);
   if (JSON.stringify(LB.sequenceTokens([A, B, C])) !== JSON.stringify(['cast=A', 'cast=B', 'cycle=Curator of Mysteries']))
     fails.push(`sequenceTokens(cast, cast, cycle) -> ${JSON.stringify(LB.sequenceTokens([A, B, C]))}`);
+  // A tap pinger's MANUAL ping (USER 2026-11-21: "add the option to manually tap"): the engine offers it as a
+  // standalone one-action plan (`alone`, `repeatable`, verb tapping=), so each queued tap is a segment of its own
+  // and "tap Pyromancer, cast Bolt (it untaps), tap it again" commits as three segments in that order.
+  const tap = () => ({ name: 'Cinder Pyromancer', src: 'Cinder Pyromancer', kind: 'activate', verb: 'tapping',
+                       repeatable: true, alone: true });
+  const t1 = tap(), t2 = tap(), Bolt = { name: 'Lightning Bolt', kind: 'nonpermanent' };
+  got = names(LB.segmentParts([t1, Bolt, t2]));
+  if (!eq(got, [['Cinder Pyromancer'], ['Lightning Bolt'], ['Cinder Pyromancer']]))
+    fails.push(`tap, cast, tap -> ${JSON.stringify(got)}`);
+  got = names(LB.segmentParts([L1, A, t1, B]));
+  if (!eq(got, [['Forest', 'A'], ['Cinder Pyromancer'], ['B']])) fails.push(`land, cast, tap, cast -> ${JSON.stringify(got)}`);
+  if (LB.encodeLine([t1]) !== 'tapping=Cinder Pyromancer') fails.push(`encodeLine(tap) -> ${LB.encodeLine([t1])}`);
   return fails;
 }
 

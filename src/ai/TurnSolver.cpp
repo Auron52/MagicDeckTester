@@ -131713,6 +131713,77 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     return best_plan;
 }
 
+// ---- A TAP PINGER'S MANUAL PING (human play only; Creature Burn, USER 2026-11-21) -------------------------------
+// USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot be manually tapped. Let's leave the
+// auto-tap, but add the option to manually tap." Every ping a tap pinger makes is a FOLD (SpellEffects.h TAP
+// PINGERS: the end-step sweep, Pyromancer's response ping on a red cast, the post-combat lethal finish, the
+// Browbeat pre-ping), and the folds stay exactly as they are -- a pinger the human already tapped is simply not
+// ready for them. What a human could not do is SEQUENCE a ping: "tap Pyromancer, cast Bolt (the trigger untaps
+// it), tap it again". So the human menu offers, per own READY pinger (TapPingerReady: untapped, may {T} now), ONE
+// standalone plan -- a single ActivatePermAbility / PermAbilityMode::TapPing action, no land (land_decided, the
+// dig's shape: it spends no land drop) -- APPENDED after every other plan so no index a saved reference names
+// moves. The apply is the shared ResolveTapPing(..., ask_human=true): the same board-click `target` decision as
+// every folded ping. The viewer commits each queued tap as a segment of its own (`alone`), and the main phase
+// re-prompts after it, so a queued "tap, cast, tap" runs in exactly that order.
+//
+// When the BASE menu was empty, the pass entry the AIEngine segment loop would have synthesised goes in first
+// (index 0 stays "cast nothing"), tagged (kHumanSynthPassTag in Plan::land_tie_key -- enumeration scratch, read
+// only inside EnumeratePlansWithLand, which has returned by now) so that loop still treats the frame as empty.
+//
+// HUMAN PLAY ONLY BY CONSTRUCTION (HumanPlayActive() is false in every rollout and every autonomous game): in the
+// search a manual ping is dominated by its folds, so emitting it would only add branching (COLLAPSE WASTED
+// SEARCH). Autonomous play is byte-identical.
+static constexpr int kHumanSynthPassTag = std::numeric_limits<int>::min() + 7;
+bool TurnSolver::IsHumanManualPingPlan(const Plan& p)
+{
+    return p.actions.size() == 1 && p.land_to_play.empty()
+        && p.actions[0].kind == Action::Kind::ActivatePermAbility
+        && p.actions[0].ability_mode == Action::AbilityMode::TapPing;
+}
+bool TurnSolver::IsHumanSynthPassPlan(const Plan& p)
+{
+    return p.land_tie_key == kHumanSynthPassTag && p.actions.empty() && p.land_to_play.empty();
+}
+bool TurnSolver::HumanMenuBaseEmpty(const std::vector<Plan>& plans)
+{
+    return std::all_of(plans.begin(), plans.end(), [](const Plan& p)
+                       { return IsHumanManualPingPlan(p) || IsHumanSynthPassPlan(p); });
+}
+static void AppendHumanManualPingPlans(const GameState& state, std::vector<TurnSolver::Plan>& plans)
+{
+    if (!HumanPlayActive()) { return; }
+    const int me = state.active_player_index;
+    if (state.players[me].life <= 0 || state.players[1 - me].life <= 0) { return; }
+    std::vector<TurnSolver::Plan> pings;
+    for (const Permanent& q : state.battlefield)
+    {
+        const CardDefinition* d = nullptr;
+        if (!TapPingerReady(state, q, me, &d)) { continue; }
+        TurnSolver::Plan v;
+        v.land_decided = true;   // spends no land drop; never greedy-play a land
+        Action a;
+        a.kind          = Action::Kind::ActivatePermAbility;
+        a.card_name     = q.card.m_name;
+        a.def           = d;
+        a.hand_index    = -1;
+        a.sac_source_id = q.card.m_number;
+        a.ability_mode  = Action::AbilityMode::TapPing;
+        a.chosen_x      = 1;
+        a.cost          = ManaCost{};   // {T} is the whole cost
+        a.eval          = d->params.tap_ping_damage;
+        v.actions.push_back(std::move(a));
+        pings.push_back(std::move(v));
+    }
+    if (pings.empty()) { return; }
+    if (plans.empty())
+    {
+        TurnSolver::Plan pass;
+        pass.land_tie_key = kHumanSynthPassTag;
+        plans.push_back(std::move(pass));
+    }
+    for (TurnSolver::Plan& v : pings) { plans.push_back(std::move(v)); }
+}
+
 // ---- SPLIT-LINE DOUBLER MENU (MTG_DOUBLER_COMBAT_PAY; Morph INT-17) ------------------------------------------
 // USER 2026-11-13 (verbatim): "Okay, let's add in the doubler fix for separated lines just to be safe." A human line
 // that casts a power doubler after exalted pays it combat-style (GameState::dbl_cp), tapping the sources the
@@ -132361,6 +132432,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     // INT-17 (after every other append, so no index a saved reference names moves): the lines an earlier line's
     // combat-armed doubler hides. Human play only.
     AppendDoublerUndoPlans(state, is_pre_combat, plans);
+    // ...and LAST, after every other append: a tap pinger's manual ping (human play only; see
+    // AppendHumanManualPingPlans).
+    AppendHumanManualPingPlans(state, plans);
     return plans;
 }
 
@@ -136893,6 +136967,17 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
 
     // --- selfping= : Stuffy Doll's "{T}: deals 1 damage to itself". Source presence + the ability.
     // (A sick or tapped Doll is the search's LegalNotEnumerated grade, as taplife= explains.)
+    // --- tapping= : a tap pinger's manual {T} ping (human play). Source presence + the ability; a tapped or
+    // summoning-sick pinger is the search's LegalNotEnumerated grade (no plan offers it), as taplife= explains.
+    for (const std::string& name : spec.tap_pings)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && d->params.tap_ping_damage <= 0)
+        { return "'" + name + "' has no '{T}: deals damage' ability"; }
+    }
+
     for (const std::string& name : spec.self_pings)
     {
         if (!live(name))
@@ -137608,7 +137693,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       && spec.face_downs.empty() && spec.face_down_ups.empty()
                       && spec.sac_nameds.empty()
                       && spec.untap_acts.empty() && spec.tap_draws.empty()
-                      && spec.self_pings.empty()))
+                      && spec.self_pings.empty() && spec.tap_pings.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -137807,6 +137892,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     std::vector<std::string> sortedSelfPings = spec.self_pings;
     std::sort(sortedSelfPings.begin(), sortedSelfPings.end());
     const bool selfping_declared  = !spec.self_pings.empty();
+    // tapping= (a tap pinger's manual ping): NO declared-vs-legacy split -- the mode is new and human-only, so a
+    // TapPing action is matched by this verb alone (an undeclared line never matches a manual-ping plan).
+    std::vector<std::string> sortedTapPings = spec.tap_pings;
+    std::sort(sortedTapPings.begin(), sortedTapPings.end());
     // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
     // split every verb above uses -- an undeclared line keeps matching the action's card name in
     // the ordinary cast multiset, so saved references are unaffected.
@@ -137896,6 +137985,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
         std::vector<std::string> tapLifeNames;
         std::vector<std::string> selfPingNames;
+        std::vector<std::string> tapPingNames;
         std::vector<std::string> landSearchNames;
         std::vector<std::string> stealNames;
         std::vector<std::string> transformNames;
@@ -138012,6 +138102,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (selfping_declared && a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::SelfPing)
             { selfPingNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapPing)
+            { tapPingNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::ActivateUntap)
             { untapActs.push_back({ a.card_name.str(), a.sac_source_id, a.sac_victim_id,
                                     a.chosen_x >= kUntapLoopToNeed }); continue; }
@@ -138175,6 +138267,11 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = tapDrawNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTapDraws) { continue; }
+        }
+        {
+            std::vector<std::string> v2 = tapPingNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedTapPings) { continue; }
         }
         if (selfping_declared)
         {

@@ -974,6 +974,10 @@ BOARD_ACTIVATIONS = {
     # line by linebuild.js -- so no new manifest entry; DECISIONS.md carries its own row.
     "tap_lifegain_cost":                         ("verb:taplife",   truthy,   "tap_lifegain_cost"),  # Staff {2},{T}
     "self_ping_damage":                          ("verb:selfping",  positive, None),  # Stuffy Doll's {T}
+    # Creature Burn (USER 2026-11-21: "add the option to manually tap"): a tap pinger's MANUAL {T} ping, a
+    # standalone human-only plan (TurnSolver::AppendHumanManualPingPlans), verb tapping=. Its auto-taps stay
+    # folds (the `target` row in the decision manifest above).
+    "tap_ping_damage":                           ("verb:tapping",   positive, None),  # Fireslinger / Pyromancer / Vulshok {T}
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     # Lizard Blades: reconfigure's ATTACH half rides the Equip kind, so it is offered as verb:equip at
     # the reconfigure cost. (Its UNATTACH half is a verbless `activate` ActivatePermAbility on the
