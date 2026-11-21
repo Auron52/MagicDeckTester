@@ -4380,6 +4380,7 @@ struct Rec
     long long dec = 0, greedy = 0, other = 0;
     long long null_attempts = 0;   // a charging site reached with no budget to charge
     long long subsearch = 0;       // a decision-memoising charging sub-search ran (TurnSolver::NoteChargingSubsearch)
+    long long uo = 0;              // MTG_UO_BUDGET_REPLAY: of `dec`, the unlock-order price's units (uoprice::Meter)
     bool had_dec = false, had_greedy = false;
     long long add[workctr::kKinds] = {};   // MTG_CACHE_READ_GUARD_KIND: work of budget-reading entries served FREE inside
     Rec* outer = nullptr;
@@ -4468,6 +4469,13 @@ struct Scope
         if (t_rec == &rec) { t_rec = rec.outer; }
         live = false;
         c.dec = rec.dec; c.greedy = rec.greedy; c.other = rec.other; c.null_attempts = rec.null_attempts;
+        // MTG_UO_BUDGET_REPLAY: decision units charged ONLY by the unlock-order price (uoprice::Meter, ceil per search)
+        // do not make the computation unstorable in mode 1. That search keeps no memo of its own (the equip memo
+        // MTG_SPS_EQUIP_MEMO stands down while the price is on), so a recompute charges exactly what the first run
+        // charged, and the hit replays those units (CacheHitCharge, `c.dec`) -- hit-equals-miss pricing -- where
+        // Affordable says a recompute would not be cut either. The residual mode (MTG_UO_BUDGET_RESID) carries a
+        // residual between searches, so its raw units are not replayable: it never counts here.
+        const long long uo_dec = rec.uo;
         c.had_dec = rec.had_dec; c.had_greedy = rec.had_greedy;
         const bool dec_cut = c.dec > 0 && g_decision_budget != nullptr && g_decision_budget->Exhausted();
         const bool gr_cut  = c.greedy > 0 && g_greedy_charge_budget != nullptr && g_greedy_charge_budget->Exhausted();
@@ -4488,7 +4496,7 @@ struct Scope
         c.storable = c.other == 0 && !dec_cut && !gr_cut && !read_cut
                   && !meter_changed && !greedy_residual_changed && !decisionwork::Exceeded()
                   && !decisionwork::PricedExceededQuiet()
-                  && (Mode() != 1 || (c.dec == 0 && c.greedy == 0 && rec.subsearch == 0));
+                  && (Mode() != 1 || (c.dec - uo_dec == 0 && c.greedy == 0 && rec.subsearch == 0));
         g_computations.fetch_add(1, std::memory_order_relaxed);
         if (c.dec + c.greedy + c.other > 0) { g_charging.fetch_add(1, std::memory_order_relaxed); }
         if (!c.storable) { g_unstorable.fetch_add(1, std::memory_order_relaxed); }
@@ -4506,6 +4514,13 @@ static void CacheChargeNote(SearchBudget* budget, long long n)
         else if (budget == g_greedy_charge_budget) { r->greedy += n; }
         else                                       { r->other += n; }
     }
+}
+// MTG_UO_BUDGET_REPLAY: attribute `n` decision units just charged by the unlock-order price (uoprice::Meter) to every
+// open computation's `uo`, beside the `dec` CacheChargeNote already added them to.
+static void CacheChargeNoteUo(SearchBudget* budget, long long n)
+{
+    if (budget != g_decision_budget) { return; }
+    for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer) { r->uo += n; }
 }
 bool cachecharge::ReadGuardOn() { static const bool v = EnvOn("MTG_CACHE_READ_GUARD", true); return v; }
 // ---- THE READ GUARD, BY THE PREDICATE THAT WAS READ (MTG_CACHE_READ_GUARD_KIND, DEFAULT ON; =0 -> every such lookup
@@ -12927,6 +12942,13 @@ inline int StepsPerUnit()
 // time it reaches W -- steps/W units per decision, no floor -- and the cut is tested only where a unit would be
 // charged, so a search that charges nothing reads no budget either. Deterministic: the residual is scoped to the
 // decision frame (DecisionBudgetScope). Inert at an unlimited root like the rest (no budget, no residual).
+inline bool ReplayOn()
+{
+    const int job = valuearm::t_arm.uo_price_replay;
+    if (job >= 0) { return job != 0; }
+    static const bool env = EnvOn("MTG_UO_BUDGET_REPLAY");
+    return env;
+}
 inline bool ResidOn()
 {
     const int job = valuearm::t_arm.uo_price_resid;
@@ -12970,6 +12992,7 @@ struct Meter
     SearchBudget* budget = nullptr;
     int           w      = 1;
     bool          resid  = false;   // MTG_UO_BUDGET_RESID: carry the decision's residual (g_uo_resid), no floor
+    bool          replay = false;   // MTG_UO_BUDGET_REPLAY: these units leave a plan-cache computation storable
     bool          cut_ok = false;
     bool          cut    = false;
     long long     steps  = 0;    // charged (chargeable) steps
@@ -12984,6 +13007,7 @@ struct Meter
             budget = TurnSolver::DecisionBudget();
             w      = StepsPerUnit();
             resid  = ResidOn();
+            replay = !resid && ReplayOn();
             cut_ok = cut_allowed && CutOn();
         }
         if (StatsOn()) { t0 = std::chrono::steady_clock::now(); }
@@ -13023,6 +13047,7 @@ struct Meter
         {
             if (cut_ok && (budget->Exhausted() || budget->Overrun())) { cut = true; return false; }
             ConsumeAtN(budget, unitsite::kUnlockOrder, 1);
+            if (replay && cachecharge::t_rec != nullptr) { CacheChargeNoteUo(budget, 1); }
             ++units;
         }
         ++steps;
@@ -13040,7 +13065,12 @@ struct Meter
         }
         for (long long i = 0; i < k; ++i)
         {
-            if (budget != nullptr && steps % w == 0) { ConsumeAtN(budget, unitsite::kUnlockOrder, 1); ++units; }
+            if (budget != nullptr && steps % w == 0)
+            {
+                ConsumeAtN(budget, unitsite::kUnlockOrder, 1);
+                if (replay && cachecharge::t_rec != nullptr) { CacheChargeNoteUo(budget, 1); }
+                ++units;
+            }
             ++steps;
         }
     }
