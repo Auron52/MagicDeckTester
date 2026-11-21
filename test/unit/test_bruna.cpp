@@ -203,6 +203,97 @@ TEST_CASE("Bruna: the Sage's burst takes the colour the line's unrestricted sour
     }
 }
 
+// MTG_CREATURE_LEFTOVER_EXACT (default ON): inside a creature spell's payment the Sage's creature-only units pay
+// FIRST, so a unit the payment over-produced is booked general whenever the bill could absorb the restricted ones.
+// Bruna mana-clean gate: the legacy min(restricted produced, leftover) booking put the over-produced unit in the
+// creature-only reserve and stranded the noncreature spell that followed.
+TEST_CASE("Bruna: a creature payment's over-produced unit stays GENERAL when the Sage's units fit the bill")
+{
+    SUBCASE("s30051277 T3: Bruna, then Glittering Wish {G}{W}")
+    {
+        BoardBr b;
+        b.Put("Sol Ring");
+        b.Put("Somberwald Sage");
+        b.Put("Azorius Chancery");
+        b.Put("Razorverge Thicket");
+        ManaCost bruna; bruna.generic = 3; bruna.white = 2; bruna.blue = 1;
+        ManaCost wish;  wish.white = 1; wish.green = 1;
+        ManaCost line = bruna;
+        AddManaCost(line, wish);
+        {
+            LineUnpaidCostScope hold(line);
+            REQUIRE(TapForCostShared(b.s, bruna, /*for_creature=*/true, nullptr, true));
+        }
+        CHECK(b.s.floating_creature_mana.Total() == 0);
+        {
+            LineUnpaidCostScope hold(wish);
+            CHECK(TapForCostShared(b.s, wish, /*for_creature=*/false, nullptr, true));
+        }
+    }
+    SUBCASE("s30054069 T4: Bruna, then Arcanum Wings {1}{U}")
+    {
+        BoardBr b;
+        b.Put("Avacyn's Pilgrim");
+        b.Put("Forest");
+        b.Put("Somberwald Sage");
+        b.Put("Azorius Chancery");
+        b.Put("Razorverge Thicket");
+        ManaCost bruna; bruna.generic = 3; bruna.white = 2; bruna.blue = 1;
+        ManaCost wings; wings.generic = 1; wings.blue = 1;
+        ManaCost line = bruna;
+        AddManaCost(line, wings);
+        {
+            LineUnpaidCostScope hold(line);
+            REQUIRE(TapForCostShared(b.s, bruna, /*for_creature=*/true, nullptr, true));
+        }
+        CHECK(b.s.floating_creature_mana.Total() == 0);
+        {
+            LineUnpaidCostScope hold(wings);
+            CHECK(TapForCostShared(b.s, wings, /*for_creature=*/false, nullptr, true));
+        }
+    }
+    SUBCASE("a genuine restricted surplus stays restricted: Sage alone for {1}{W} leaves one creature-only unit")
+    {
+        BoardBr b;
+        b.Put("Somberwald Sage");
+        ManaCost c; c.generic = 1; c.white = 1;
+        REQUIRE(TapForCostShared(b.s, c, /*for_creature=*/true, nullptr, true));
+        CHECK(b.s.floating_mana.Total() == 0);
+        CHECK(b.s.floating_creature_mana.Total() == 1);
+    }
+}
+
+// MTG_AURA_HOST_LINE_KEEP (default ON): a land Aura's host is hidden while the Aura pays only when that does not strand
+// the rest of the line an unheld payment keeps.
+TEST_CASE("Bruna: the Wild Growth host hold yields when it strands the rest of the line")
+{
+    SUBCASE("s30053757 T2: Wild Growth on Razorverge Thicket, then Arcanum Wings {1}{U} -- do NOT hold")
+    {
+        BoardBr b;
+        const int host = b.Put("Razorverge Thicket");
+        b.Put("Avacyn's Pilgrim");
+        b.Put("Botanical Sanctum");
+        ManaCost wg;    wg.green = 1;
+        ManaCost wings; wings.generic = 1; wings.blue = 1;
+        ManaCost line = wg;
+        AddManaCost(line, wings);
+        LineUnpaidCostScope hold(line);
+        CHECK_FALSE(AuraHostHoldKeepsLine(b.s, CardBr("Wild Growth", 90), host, wg, false));
+    }
+    SUBCASE("EDF seed 2 T2: Wild Growth on Conservatory, then Eladamri's Call {W}{G} -- hold")
+    {
+        BoardBr b;
+        const int host = b.Put("Conservatory");
+        b.Put("Yavimaya Coast");
+        ManaCost wg;   wg.green = 1;
+        ManaCost call; call.white = 1; call.green = 1;
+        ManaCost line = wg;
+        AddManaCost(line, call);
+        LineUnpaidCostScope hold(line);
+        CHECK(AuraHostHoldKeepsLine(b.s, CardBr("Wild Growth", 90), host, wg, false));
+    }
+}
+
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
 {
     BoardBr b;

@@ -11393,7 +11393,8 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             // legal "Aura here, then the spell it enables" line reads as unpayable. Retried unreserved
             // on failure, so this can only ADD payable subsets. Same fix as SubsetPayableSequential's.
             int reserved_host = -1;
-            if (is_aura && a.enchant_target > 0)
+            if (is_aura && a.enchant_target > 0
+                && AuraHostHoldKeepsLine(cp, def->card, a.enchant_target, a.cost, for_creature))
             {
                 for (Permanent& lp : cp.battlefield)
                 {
@@ -12574,7 +12575,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // atomically, so the retry starts from an untouched board.)
             int reserved_host = -1;
             if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
-                && a.enchant_target > 0)
+                && a.enchant_target > 0
+                && AuraHostHoldKeepsLine(cp, def.card, a.enchant_target, ec, def.card.IsCreature()))
             {
                 for (Permanent& lp : cp.battlefield)
                 {
@@ -75347,7 +75349,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // the host's included -- see ManaOracle.h. An oracle ENGINE step makes it, as an unhooked
             // apply does: the held attempt and its retry are ONE step, so the span owns both.)
             manaoracle::EngineStepSpan _esp(state, oracle_owns);
-            if (((def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
+            if (((def.params.is_land_aura && def.params.land_aura_extra_mana > 0
+                  && AuraHostHoldKeepsLine(state, def.card, enchant_target, ec, is_creature))
                   || riders.awaken)
                 && enchant_target > 0 && (!oracle_owns || _esp.h != nullptr))
             {
