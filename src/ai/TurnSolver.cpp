@@ -12902,6 +12902,8 @@ inline bool CutOn()
 inline constexpr int kDefaultW = 16;
 inline int StepsPerUnit()
 {
+    const int job = valuearm::t_arm.uo_price_w;   // per-job manifest "uo_price_w" (a W sweep in one pool)
+    if (job > 0) { return job; }
     static const int v = std::max(1, EnvInt("MTG_UO_BUDGET_PRICE_W", kDefaultW));
     return v;
 }
