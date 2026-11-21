@@ -69227,8 +69227,8 @@ MAZE_P5_LEVER(MazeIdleFetchOn,        MAZE_IDLE_FETCH,         "MTG_MAZE_IDLE_FE
 // "But I don't really like leaving the deck fully inoperable. Anything crucial or important should go in."
 MAZE_P5_LEVER(MazeIdleFetchRevealOn,  MAZE_IDLE_FETCH_REVEAL,  "MTG_MAZE_IDLE_FETCH_REVEAL",  true)    // P5d-5 amendment of (a)
 MAZE_P5_LEVER(MazeFetchTierFullOn,    MAZE_FETCH_TIER_FULL,    "MTG_MAZE_FETCH_TIER_FULL",    false)   // P5d-6 Q1 (C2)
-MAZE_P5_LEVER(MazeFetchRankCondOn,    MAZE_FETCH_RANK_COND,    "MTG_MAZE_FETCH_RANK_COND",    false)   // P5d-6 Q1
-MAZE_P5_LEVER(MazeManabondDiscardOn,  MAZE_MANABOND_DISCARD,   "MTG_MAZE_MANABOND_DISCARD",   false)   // P5d-6 Q2
+MAZE_P5_LEVER(MazeFetchRankCondOn,    MAZE_FETCH_RANK_COND,    "MTG_MAZE_FETCH_RANK_COND",    true)    // P5d-6 Q1; DEFAULT ON batch 3 (USER Q5 2026-11-21)
+MAZE_P5_LEVER(MazeManabondDiscardOn,  MAZE_MANABOND_DISCARD,   "MTG_MAZE_MANABOND_DISCARD",   true)    // P5d-6 Q2; DEFAULT ON batch 3 (USER Q4/Q6 2026-11-21)
 MAZE_P5_LEVER(MazeDiscardBurgeoningOn, MAZE_DISCARD_BURGEONING, "MTG_MAZE_DISCARD_BURGEONING", true)   // P5d-6 Q2 sub-lever
 MAZE_P5_LEVER(MazeManabondTutorPruneOn, MAZE_MANABOND_TUTOR_PRUNE, "MTG_MAZE_MANABOND_TUTOR_PRUNE", true)   // batch 3, USER Q4 sub-lever
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant

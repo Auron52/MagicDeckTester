@@ -86,6 +86,7 @@ TEST_CASE("Maze's End P5d-6 Q2: the Manabond discard-value rule (CrossingDumpYes
     LoadCards();
     const MazesEndProvider prov;
     {
+        const Arm off(heurarm::MAZE_MANABOND_DISCARD, 0);             // DEFAULT ON since batch 3
         const GameState s = Board(prov, 2, 1, { "Gates Ablaze" });
         CHECK(Order(prov, s) == 0);                                   // lever OFF: engine default
     }
@@ -146,8 +147,9 @@ TEST_CASE("Maze's End P5d-6 Q1: the fetch's lands-short tier (TapTutorPutEval)")
         return s;
     };
     // An empty hand cannot fill this turn's drop plus next turn's: the lands-short tier.
-    CHECK(prov.TapTutorPutEval(board(3, false), *maze, "Simic Guildgate") == 1000);   // shipped: "win out"
     {
+        const Arm nocond(heurarm::MAZE_FETCH_RANK_COND, 0);           // DEFAULT ON since batch 3
+        CHECK(prov.TapTutorPutEval(board(3, false), *maze, "Simic Guildgate") == 1000);   // pre-batch-3: "win out"
         const Arm c2(heurarm::MAZE_FETCH_TIER_FULL, 1);
         CHECK(prov.TapTutorPutEval(board(3, false), *maze, "Simic Guildgate") == 100);
     }
