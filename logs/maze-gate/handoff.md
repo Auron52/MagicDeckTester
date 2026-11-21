@@ -94,3 +94,11 @@ Capped repros (tap-choice binary, before the screen): g30 T6 priced 189 s / orac
 Queued in the lane (all on bin/mtg.ps = b05457892): ps_g167 (identity vs new_g167), capps_g{30t6,14t5,4t7} (chain pid
 3979046, cap.sh), unit2.log, gap_g115 (ORACLE-GAP repro, level 3). DONE markers in build/scratch/claude_maze_gate/:
 ps.DONE capps.DONE unit2.DONE gap_g115.DONE. Lane was held by another session's 4-slot regression --both.
+
+## UPDATE 2026-11-21 ~00:30 UTC (second agent, stopping)
+All queued jobs finished; nothing running. Pushed wip/maze-gate at 58a990bcd. Results are in
+docs/design/maze-oracle-gate-2026-11-20.md sections 1-5. Screen: identical counters wherever uncapped (g21, g167,
+g14 T5); g167 oracle 101.8 -> 25.4 s; capped g30 T6 / g4 T7 still WALL-BP-CAP but audit 61 / 27 plans (was 14 / 4);
+unit 3780/3780. Next, in order: (1) gate re-run on this branch (box lock); (2) residual capped cost: Realize's bucket
+scan (21% self) -> index live frontiers by sum, then the census of a capped decision's 6-8M applies for a sound
+collapse; (3) ORACLE-GAP gi115 T4 (continuation re-decides land drops; doc section 3).
