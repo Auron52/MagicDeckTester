@@ -230,6 +230,10 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   only). Implemented as its own sub-lever, default ON on the USER's lean, measured in the Stage 5 A/B and
   presented; the residual line it removes is a hand with {2}{B} but not {1}{B}{B}, or a top-3 look worth more
   than any mana-value-3 card.
+  USER (verbatim, 2026-11-21): *"For Machinations the AI should not even be considering the cast."* -> DECIDED:
+  the self-target cast prune (`MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST`) is ON by USER decision; the Stage 5 A/B of
+  it is dropped. The perf census confirms the AI considers zero casts (its Machinations share is all transmute).
+  Human play stays unpruned (the viewer offers the cast and now asks its target player).
 - B6 go-off bridge (U5) (USER 2026-11-21, verbatim): *"If they are handled smartly there should be no way to
   get stuck on this assuming you have Blood Sun out. We'll have to discuss more if you think you have found a
   counterexample. In my experience on the turn when you can Revelation -> Time Warp (needing something like
