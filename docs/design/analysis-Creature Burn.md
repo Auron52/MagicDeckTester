@@ -169,27 +169,23 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~05:50 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~06:55 UTC) — resume here after compaction
 DONE: Stages 1-5 + verify_deck GATE PASS (f0e61328b); 5c2 tie-break KEEP ON (878737457); Browbeat every-turn M2
-probe (90e4fd025); Phase-2 burn-target deferral doc (77e9e5787).
+probe (90e4fd025); Phase-2 burn-target deferral doc (77e9e5787); Browbeat per-turn fold `1328b46b0` (DEFAULT OFF,
+measured not an identity; default tree byte-identical, so verify_deck's runtime gates stand). Worktree cb-m2fold
+removed (branch wip/cb-m2fold kept locally).
 
-RUNNING: the Browbeat per-turn restricted main-2 FOLD (MTG_CB_BROWBEAT_M2_RESTRICT), second agent (the first handed
-off at ~277K; handoff `logs/creature-burn/m2fold-handoff.md`, brief `logs/creature-burn/m2fold-brief.md`). Worktree
-`.claude/worktrees/cb-m2fold`, branch `wip/cb-m2fold`, base WIP d98366b70. Held-out A/B (seed 4000001, 2000/arm/cell):
-d5b20 ON 4.7925 vs OFF 4.7815 (ON +0.011 t at 0.64x units); d3b10 ON 4.7965 (OFF pending at last report). The agent
-then began REBUILDING WITH THE LEVER DEFAULT OFF (the brief's rule when the fold is not provably an identity) -- read its
-final report for the d8 b0 recovery / d5 b0 identity evidence. If shipped default OFF it is a USER item (surface the
-mechanism + numbers; do not settle).
+RUNNING: primary Release build (for the viewer: picks up c5f3b7610, the Searing Blaze human default).
 
-NEXT: (1) on its completion: review its commits on wip/cb-m2fold, cherry-pick onto phase-1-2-deck-analyzer, rerun
-verify_deck runtime gates if play moved, remove the worktree (`check_references_safe.py`, then `bash
-scripts/safe_worktree_remove.sh`). (2) Stage 6 report + 6a disclosure (USER items: PEAKS_PLAIN_FOLD default ON; Browbeat
-out of the provider signature; extra Peaks land positions; Browbeat M2 cost + the fold verdict; echo census; Pyromancer
-response ping / accounting un-ping; 1-power pinger attack exemption; Peaks inert-class premise; Price of Progress vs Peaks
-self-damage; heavy unbudgeted tail; provider cert NotAssessed). (3) ONE `push_queue.py join` (slow box: <=1 per 4 h);
-at turn: rebase, check_references_safe, under `hold`: Release + unit + smoke (MTG_PGO=0) + check_gt_logs, `land`, CI
-watch --interval 60 in background. Unpushed local commits include 591d4c115 + 631822f14 (1 Drop Burn Fireblast order).
-(4) CronDelete b718d9a3 at the end; check_references_safe at session close.
+NEXT: (1) tell the USER the viewer is ready for Creature Burn references once the build lands. (2) Stage 6 report +
+6a disclosure in chat (USER items: fold OFF verdict; main-1 "attack, then Browbeat" completeness gap; PEAKS_PLAIN_FOLD
+default ON; Browbeat out of the provider signature; extra Peaks land positions; echo census; Pyromancer response
+ping / accounting un-ping; 1-power pinger attack exemption; Peaks inert-class premise; Price of Progress vs Peaks
+self-damage; heavy unbudgeted tail; provider cert NotAssessed; PROVISIONAL Hellspark unearth routing; Browbeat
+SECOND-MAIN RELEVANT). (3) ONE `push_queue.py join` (slow box: <=1 per 4 h); at turn: rebase, check_references_safe,
+under `hold`: Release + unit + smoke (MTG_PGO=0) + check_gt_logs, `land`, CI watch --interval 60 in background.
+Unpushed local commits include 591d4c115 + 631822f14 (1 Drop Burn Fireblast order). (4) CronDelete b718d9a3 at the
+end; check_references_safe at session close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
@@ -332,6 +328,38 @@ The every-turn main 2 costs **1.63x units at d5, 1.59x at d3** and buys **0.000 
 is NOT allowed as such: a main-2 Browbeat ("attack, then Browbeat" meets a lower-life choice) would become unfindable
 at every budget. The sound shape is the per-turn restricted main (`RestrictedSecondMainLive`, the Giada/Omnitool
 hook): open it only on turns a Browbeat is in hand post-combat. Being built as a follow-up; see the checkpoint.
+
+### The per-turn fold: built, measured NOT an identity, ships DEFAULT OFF (2026-11-21, `1328b46b0`)
+
+`MTG_CB_BROWBEAT_M2_RESTRICT` (heurarm `CB_BROWBEAT_M2_RESTRICT`): `CreatureBurnProvider::RestrictedSecondMainLive`
+opens the full post-combat main only on turns a castable Browbeat is in hand after combat, and
+`DeckUsesSecondMain` drops Browbeat's every-turn trigger for this provider (one reader for both halves). Held-out
+A/B, one pooled batch, seeds 4000001.., 2000 paired games per arm per cell (scratch `build/scratch/cb-m2fold/`):
+
+| cell | units ON/OFF | ms/game ON vs OFF | avg ON vs OFF | changed (same turn) | ON better / worse | net turns |
+|---|---|---|---|---|---|---|
+| d3 b10 | 0.692x | 1503 vs 2563 | 4.7965 vs 4.7920 | 553 (498) | 23 / 32 | +9 |
+| d5 b20 | 0.641x | 2215 vs 3878 | 4.7925 vs 4.7815 | 585 (547) | 8 / 30 | +22 |
+
+d5 b0 spot checks ON vs OFF: gi480 4 vs 5, gi189 6 vs 5, gi702 5 vs 4; gi1024 / gi61 / gi720 equal. Different win
+turns at an unlimited budget, so it is not a re-pricing; d8 b0 recovery was not run (already fails net <= 0).
+**Mechanism:** the soundness argument covers only the searched main 2 inside the window. `uses_second_main = false`
+also (a) stands down `MainPhaseFilterActive`, changing main 1's menu shape, and (b) closes the rollout's / d0
+runner's GREEDY per-turn main 2 beyond the horizon, which spends leftover mana (e.g. a Rift Bolt suspend after a
+creature; d0 smoke 25 slower / 0 faster). An amended fold would keep both of those intact on closed turns.
+Default tree byte-identical (creatureburn + 2hg smoke play-changed 0; `=1` smoke on the other burn decks + redelem
+PASS). **USER item** (surfaced 2026-11-21): ship OFF as is, or fund the amended fold.
+
+### Completeness gap: "attack, then Browbeat" is unfound from the MAIN-1 frame (2026-11-21, open)
+
+Turn 5, opponent at 10, Keldon Champion untapped, hand Browbeat + an unplayable Mountain, three Lightning Bolts on
+top, six Mountains. Line: attack (10 -> 7), main-2 Browbeat (7 <= 8 while holding -> declined), draw the Bolts, cast
+three: win T5. From the main-1 frame the full-depth search does NOT find it on EITHER arm at d2, d3 or d5 with
+budget 0 (commits a T6 line, "PROVEN NO-WIN" for the turn), although the executor's own main-2 solve does (scenario
+`creatureburn_browbeat_m2_post_combat_browbeat`, which resumes at main 2). The one line the every-turn main 2 exists
+for is unreachable from main 1 at any budget -- likely why that main 2 measured 0.000 turns. Suspected cause (not
+confirmed): the nested post-combat main does not continue search after a draw. A CLAUDE.md COMPLETENESS defect,
+pre-existing, not caused by the fold. Owed: root-cause + fix (follow-up engine task).
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)
