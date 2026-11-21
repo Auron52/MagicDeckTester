@@ -57,11 +57,15 @@ haste and its rollout attack; suspend after Irencrag).
 Provider: `WorldfireProvider : DeckProvider` (Certificate NotAssessed). Without it the deck rode
 AntiLifegainProvider (fetchlands' `fetch_land_types` + the tutors' `tutor_to_top` set `anti`). Routed at
 the top of `DetectDecisionProvider` on Worldfire's two params OR a creature with suspend; pinned in
-`test_pirates_provider.cpp`'s routing table. NOT a pure empty derivation: ONE coverage hook,
-`TutorSearchWidth() = 32` (`MTG_WORLDFIRE_TUTOR_WIDTH=0` gives the base 6), because Mystical Tutor's ~10
-legal names exceed the base width of 6 taken in library order, so in some shuffles Worldfire itself was
-unreachable at any budget. It ranks and drops nothing (Cyclone / Maze's End precedent). Default ON
-(lossless); USER sign-off requested.
+`test_pirates_provider.cpp`'s routing table. NOT a pure empty derivation: ONE hook, `TutorCandidates`,
+a USER-directed prune (2026-11-21: *"Mystical tutor should be heavily pruned and should look for missing
+combo pieces. Worldfire, Suspend card (rift bolt) and acceleration (Seething Song or Irencrag) based on what
+the current situation needs."* / *"(Same deal for Personal Tutor of course)"* / *"(except that Seething Song
+is not a target)"* / *"And, to be clear, we can prune further than that based on what is in hand."*).
+Kept: Worldfire while none in hand; a suspend threat while none suspended or in hand; acceleration while
+no ritual in hand (acceleration only once every piece is present); the full list only if no piece is left
+in the library. `MTG_WORLDFIRE_TUTOR_PIECES=0` gives the base list. It replaced integrator #1's width-32
+coverage hook (`MTG_WORLDFIRE_TUTOR_WIDTH`, deleted).
 
 Gates (second integrator, 2026-11-21): units -- test_worldfire 6/6 cases (336 assertions); the
 `test_pirates_provider` routing table gained its Worldfire row; the only other failure, shadowborn INT-9
@@ -94,6 +98,14 @@ game log JSON writes NO action for a suspend (pre-existing, true of Rift Bolt de
 visible only as a card leaving the hand.
 
 ## USER rulings this analysis
+
+- 2026-11-21: free-turn search depth -- *"I guess its potentially okay to keep it that way. The main cost
+  lever is budget rather than depth anyway."* (no ply cost, like extra turns).
+- 2026-11-21: the four deferrals (Overmaster / Mistrise riders inert, Halberdier always cast + first
+  strike inert, Worldfire LTB triggers not fired) -- *"Yes, those are fine."* -> APPROVED.
+- 2026-11-21: INERT_PARAMS for Worldfire's two params -- *"it is true that there are no choices associated
+  with the Worldfire card beyond casting it or not."* -> APPROVED.
+- 2026-11-21: the tutors' prune (see Provider below).
 
 - 2026-11-21: opponent-lockdown FREE TURNS -- see `docs/design/opponent-lockdown-free-turns.md`
   (verbatim proposal + provisional defaults).

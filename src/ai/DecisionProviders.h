@@ -5077,24 +5077,32 @@ public:
 };
 
 // WORLDFIRE (onboarding 2026-11-21, docs/design/analysis-Worldfire.md). DERIVES FROM DeckProvider (the
-// archetype-neutral default). It ranks and drops nothing: its one hook (below) widens coverage only.
+// archetype-neutral default). Its one hook (below) PRUNES the tutors to missing combo pieces.
 // Without its own signature the deck rode AntiLifegainProvider (Scalding Tarn / Flooded Strand's
 // fetch_land_types and the two tutors' tutor_to_top trip `anti`) -- the archetype-neutral misroute class.
 // Routed at the TOP of DetectDecisionProvider by its own signature (`worldfire`: Worldfire's exile-all and
 // life-becomes params, or a CREATURE with suspend -- Keldon Halberdier), carried by no other deck.
 //
-// One hook, a COVERAGE fix rather than a heuristic (the Cyclone / Maze's End precedent): TutorSearchWidth 32.
-// Mystical Tutor reaches every instant and sorcery NAME in the list (about ten), Personal Tutor every sorcery;
-// the base width 6 over the library-order candidate list left the rest -- Worldfire itself, in some shuffles --
-// unreachable by any budget, chosen by the shuffle. Nothing is ranked or dropped. MTG_WORLDFIRE_TUTOR_WIDTH=0
-// -> the base 6.
+// One hook, TutorCandidates (USER 2026-11-21, quoted at the definition): Mystical / Personal Tutor keep only
+// the MISSING combo pieces -- Worldfire, a suspend threat (Rift Bolt), acceleration (Seething Song, Irencrag
+// Feat) -- each kept only while missing (no duplicates; acceleration only while mana is short; a suspended
+// threat counts once it arrives by next turn). A restriction; the search branches over what is kept (<= 4
+// names, inside the base width 6). Nothing missing -> the tutor is not cast. Replaced a width-32 hook.
+// MTG_WORLDFIRE_TUTOR_PIECES=0 -> the base list.
 class WorldfireProvider : public DeckProvider
 {
 public:
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Check the Worldfire reach (nine mana from rituals, Lotus Bloom, storage and depletion lands) and next-upkeep suspend arrivals (Rift Bolt, Halberdier) before proving a winless turn." }; }
     const char* Name() const override { return "Worldfire"; }
-    int TutorSearchWidth() const override;
+    // Mystical / Personal Tutor fetch ONLY a missing combo piece (USER 2026-11-21, below).
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    // An empty prune means nothing is missing: the tutor is not cast at all.
+    bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+    // Rift Bolt is held for the combo (USER 2026-11-21): cast only when lethal, suspended only on a turn
+    // Worldfire can go off (or once the opponent is already within reach).
+    bool OffersCastNow(const GameState& s, int controller, const CardDefinition& def) const override;
+    bool OffersSuspend(const GameState& s, int controller, const CardDefinition& def) const override;
 };
 
 // MAZE'S END (onboarding 2026-11-17, docs/design/analysis-Maze's End.md). DERIVES FROM DeckProvider (the

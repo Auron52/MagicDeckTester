@@ -3,6 +3,7 @@
 // staged cards; floating mana), and Keldon Halberdier's suspend haste (CR 702.62a).
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
+#include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -228,4 +229,94 @@ TEST_CASE("worldfire: suspending Halberdier is not a cast, so it stays legal aft
     REQUIRE(s.players[0].suspended_cards.size() == 1);
     CHECK(s.players[0].suspended_cards[0].arrive_turn == s.TurnSeq() + 4);
     CHECK(s.spells_cast_this_turn == 0);
+}
+
+// ---- WorldfireProvider prunes (USER 2026-11-21) ------------------------------------------------------
+// The tutors fetch ONLY missing combo pieces; Rift Bolt is held for the combo. See the rulings quoted at
+// WorldfireProvider::TutorCandidates / OffersSuspend (DecisionProviders.cpp).
+namespace {
+GameState WFTutorBase(int mountains)
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 3;
+    for (int i = 0; i < mountains; ++i) { WFPut(s, "Mountain", 10 + i); }
+    int id = 200;
+    for (const char* nm : {"Ponder", "Worldfire", "Brainstorm", "Rift Bolt", "Seething Song", "Irencrag Feat",
+                           "Preordain", "Memory Lapse"})
+    { s.players[0].library.push_back(WFCard(nm, id++)); }
+    s.players[1].life = 20;
+    return s;
+}
+std::vector<std::string> WFSorted(std::vector<std::string> v)
+{ std::sort(v.begin(), v.end()); v.erase(std::unique(v.begin(), v.end()), v.end()); return v; }
+using VS = std::vector<std::string>;
+}
+
+TEST_CASE("worldfire provider: the tutors fetch only missing combo pieces")
+{
+    WorldfireProvider prov;
+    const CardParams& mystical = WFDef("Mystical Tutor").params;
+    const CardParams& personal = WFDef("Personal Tutor").params;
+
+    SUBCASE("nothing in hand: every piece; Personal Tutor never offers the instant Seething Song")
+    {
+        GameState s = WFTutorBase(3);
+        CHECK(WFSorted(prov.TutorCandidates(s, 0, mystical))
+              == VS{"Irencrag Feat", "Rift Bolt", "Seething Song", "Worldfire"});
+        CHECK(WFSorted(prov.TutorCandidates(s, 0, personal)) == VS{"Irencrag Feat", "Rift Bolt", "Worldfire"});
+    }
+    SUBCASE("no duplicate Worldfire / Rift Bolt / Irencrag; acceleration while the mana is short")
+    {
+        GameState s = WFTutorBase(3);
+        s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31)};
+        CHECK(WFSorted(prov.TutorCandidates(s, 0, mystical)) == VS{"Irencrag Feat", "Seething Song"});
+        s.players[0].hand.push_back(WFCard("Irencrag Feat", 32));   // 3 lands + Feat's net 3 = 6 < 9
+        CHECK(WFSorted(prov.TutorCandidates(s, 0, mystical)) == VS{"Seething Song"});
+    }
+    SUBCASE("everything present: the tutor is not cast")
+    {
+        GameState s = WFTutorBase(9);
+        s.players[0].hand = {WFCard("Worldfire", 30)};
+        s.players[0].suspended_cards.push_back({WFCard("Rift Bolt", 31), s.TurnSeq() + 1});
+        CHECK(prov.TutorCandidates(s, 0, mystical).empty());
+        CHECK(prov.TutorNeedsCandidate(s, 0, mystical));
+    }
+    SUBCASE("a pending Halberdier makes Rift Bolt low priority, not absent")
+    {
+        GameState s = WFTutorBase(3);
+        s.players[0].suspended_cards.push_back({WFCard("Keldon Halberdier", 31), s.TurnSeq() + 3});
+        CHECK(WFSorted(prov.TutorCandidates(s, 0, mystical))
+              == VS{"Irencrag Feat", "Seething Song", "Worldfire"});
+        GameState t = WFTutorBase(9);
+        t.players[0].hand = {WFCard("Worldfire", 30)};
+        t.players[0].suspended_cards.push_back({WFCard("Keldon Halberdier", 31), t.TurnSeq() + 3});
+        CHECK(WFSorted(prov.TutorCandidates(t, 0, mystical)) == VS{"Rift Bolt"});
+    }
+}
+
+TEST_CASE("worldfire provider: Rift Bolt is held until the combo; Halberdier is never held")
+{
+    WorldfireProvider prov;
+    const CardDefinition& bolt = WFDef("Rift Bolt");
+    const CardDefinition& halb = WFDef("Keldon Halberdier");
+    GameState s = WFTutorBase(3);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31)};
+    CHECK_FALSE(prov.OffersSuspend(s, 0, bolt));     // 3 mana: not a go-off turn
+    CHECK_FALSE(prov.OffersCastNow(s, 0, bolt));     // 3 damage into 20 life
+    CHECK(prov.OffersSuspend(s, 0, halb));
+    CHECK(prov.OffersCastNow(s, 0, halb));
+
+    GameState g = WFTutorBase(9);                     // 9 lands + a land drop = Worldfire + {R}
+    g.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Mountain", 32)};
+    CHECK(prov.OffersSuspend(g, 0, bolt));
+    g.players[0].lands_played_this_turn = 1;          // drop spent: 9 < 10
+    CHECK_FALSE(prov.OffersSuspend(g, 0, bolt));
+    g.players[0].hand = {WFCard("Rift Bolt", 31)};    // no Worldfire in hand
+    g.players[0].lands_played_this_turn = 0;
+    CHECK_FALSE(prov.OffersSuspend(g, 0, bolt));
+
+    GameState after = WFTutorBase(1);                 // post-Worldfire: the opponent is at 1
+    after.players[1].life = 1;
+    after.players[0].hand = {WFCard("Rift Bolt", 31)};
+    CHECK(prov.OffersSuspend(after, 0, bolt));
+    CHECK(prov.OffersCastNow(after, 0, bolt));
 }

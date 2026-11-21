@@ -42998,6 +42998,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (def.params.cast_only_before_combat_damage && state.phase == Phase::PostCombatMain) { continue; }
         // A spell the deck's provider proves can have no effect (Snow's Skred) is never offered.
         if (ResolveProvider(state).NeverCast(def)) { continue; }
+        // ...and its state-aware sibling (Worldfire holds Rift Bolt until the combo). Default true.
+        if (!ResolveProvider(state).OffersCastNow(state, state.active_player_index, def)) { continue; }
         // A live cast cap (Irencrag Feat resolved): the provider names what may take the last slot
         // (Dragonstorm: only the closer -- USER order, MTG_DRAGONSTORM_USER_ORDER). One int test first.
         if (state.casts_remaining_this_turn >= 0 && !ResolveProvider(state).CastUnderCastCap(state, def))
@@ -47061,6 +47063,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (ap.hand[i].m_is_staged && !s_legacy_staged_suspend) { continue; }
         auto sdef = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!sdef || sdef->params.suspend_time_counters <= 0) { continue; }
+        // Provider prune (Worldfire: Rift Bolt is suspended only on the go-off turn). Default true.
+        if (!ResolveProvider(state).OffersSuspend(state, state.active_player_index, *sdef)) { continue; }
         Action a;
         a.kind           = Action::Kind::Suspend;
         a.card_name      = ap.hand[i].m_name;

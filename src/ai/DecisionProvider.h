@@ -1389,6 +1389,15 @@ public:
     // it." Default false -> every deck without a provider rule is byte-identical.
     virtual bool NeverCast(const CardDefinition& /*def*/) const { return false; }
 
+    // OffersCastNow / OffersSuspend -- STATE-aware siblings of NeverCast, asked at the same CollectActions
+    // choke point (search, breakpoint continuations, rollouts and d0 re-solves inherit them): may `def` be
+    // CAST from hand / SUSPENDED from hand in this state? A provider prune (restrict, never pick). Default
+    // true -> every deck without a rule is byte-identical. WorldfireProvider holds Rift Bolt for the combo.
+    virtual bool OffersCastNow(const GameState& /*s*/, int /*controller*/, const CardDefinition& /*def*/) const
+    { return true; }
+    virtual bool OffersSuspend(const GameState& /*s*/, int /*controller*/, const CardDefinition& /*def*/) const
+    { return true; }
+
     // Whether autonomous play offers a permanent's paid self-bounce ability.
     // The printed ability remains available to human play.
     virtual bool OffersSelfBounce(const GameState&, const CardDefinition&) const { return true; }

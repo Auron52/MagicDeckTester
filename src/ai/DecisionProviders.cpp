@@ -38687,13 +38687,172 @@ int LandfallElementalsProvider::TutorSearchWidth() const
     return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
 }
 
-// ---- WorldfireProvider::TutorSearchWidth -------------------------------------
-// Mystical / Personal Tutor must reach every distinct instant / sorcery NAME; the base 6 over the
-// library-order list left the rest unreachable, chosen by the shuffle. A coverage fix (header note).
-int WorldfireProvider::TutorSearchWidth() const
+// ---- WorldfireProvider::TutorCandidates ---------------------------------------
+// USER 2026-11-21: "Mystical tutor should be heavily pruned and should look for missing combo pieces.
+// Worldfire, Suspend card (rift bolt) and acceleration (Seething Song or Irencrag) based on what the
+// current situation needs." -- "(Same deal for Personal Tutor of course)" -- "(except that Seething Song
+// is not a target)" -- "And, to be clear, we can prune further than that based on what is in hand." --
+// "(we don't need duplicate Worldfire or Rift Bolt or Irencrag and may not need more mana either)" --
+// "Potentially we can even drop the Rift Bolt option if we have a suspended Halberdier, but this isn't as
+// obvious." -- "That Halberdier rule is wrong, since we usually need to wait a turn or two." -- "It really
+// depends on when we project to go off." -- "But, either way, rift bolt is not a high-priority target if
+// you have a Halberdier. It should be dropped if one of the others is high priority."
+//
+// A provider PRUNE (restrict, never pick): the search still branches over every name kept.
+//   * Worldfire       -- kept while none is in hand.
+//   * a suspend THREAT -- (Rift Bolt: suspend_time_counters, not a Lotus Bloom-style mana suspend) kept while
+//                        none is in hand and no Rift Bolt is pending on suspend. A pending Halberdier makes
+//                        the Bolt LOW priority: dropped when Worldfire or acceleration is also kept, kept
+//                        when it is the only piece missing (whether the Halberdier replaces it depends on
+//                        the go-off turn, which is not projected here).
+//   * acceleration    -- (a ritual) kept while the mana is SHORT: untapped mana now (LooseManaCeiling) + Lotus
+//                        Bloom on the battlefield + the net of rituals in hand < 9 for Worldfire, +1 for the
+//                        threat's suspend cost when one is missing. The estimate only UNDER-counts (no land
+//                        drop, no arriving Bloom, storage lands as their printed yield), so it can keep a
+//                        needless ritual but never drops a needed one. An Irencrag Feat is never fetched
+//                        beside one in hand: after a Feat only ONE more spell is castable, so a second adds
+//                        nothing to a Worldfire turn. A second Seething Song does add mana and stays.
+// Nothing missing -> {} and TutorNeedsCandidate: the tutor is not cast (it can only fetch a duplicate).
+// Something missing but none of it left in the library -> the full legal list (the tutor is then a dig).
+// Human play and the unpruned audit see every legal name. MTG_WORLDFIRE_TUTOR_PIECES=0 -> the base list.
+static bool WorldfireIsFinisher(const CardDefinition* d)
+{ return d != nullptr && d->params.exile_all_permanents_hands_graveyards; }
+static bool WorldfireIsSuspendThreat(const CardDefinition* d)
+{ return d != nullptr && d->params.suspend_time_counters > 0 && d->params.sac_for_mana_amount == 0; }
+static bool WorldfireIsAccel(const CardDefinition* d)
+{ return d != nullptr && d->params.ritual_floating_mana > 0; }
+static bool WorldfireTutorPiecesOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
-    return on ? 32 : DeckProvider::TutorSearchWidth();
+    static const bool on = EnvOn("MTG_WORLDFIRE_TUTOR_PIECES", true);   // DEFAULT ON (USER ruling)
+    return on && !HumanPlayActive() && !DecisionUnpruned();
+}
+static constexpr int kWorldfireMana = 9;   // {6}{R}{R}{R}
+
+std::vector<std::string>
+WorldfireProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    if (all.empty() || !WorldfireTutorPiecesOn()) { return all; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool have_finisher = false, have_threat = false, have_feat = false, halberdier_pending = false;
+    int mana = LooseManaCeiling(s, controller);
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        have_finisher = have_finisher || WorldfireIsFinisher(d);
+        have_threat   = have_threat   || WorldfireIsSuspendThreat(d);
+        if (WorldfireIsAccel(d))
+        {
+            mana += std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue());
+            have_feat = have_feat || d->params.max_casts_after > 0;
+        }
+    }
+    for (const SuspendedCard& sc : pl.suspended_cards)
+    {
+        // arrive_turn < 0 = declined (exiled with no counters, never arrives). Only a pending threat that
+        // is NOT a creature (Rift Bolt) counts. A suspended Halberdier does not drop the Rift Bolt option:
+        // USER 2026-11-21 "That Halberdier rule is wrong, since we usually need to wait a turn or two." /
+        // "It really depends on when we project to go off." -- a Halberdier landing BEFORE the go-off turn
+        // is spent, and no projection of that turn is modelled here, so the search keeps the choice.
+        // "But, either way, rift bolt is not a high-priority target if you have a Halberdier. It should be
+        // dropped if one of the others is high priority." -> halberdier_pending (applied below).
+        if (sc.arrive_turn < 0) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(sc.card);
+        if (!WorldfireIsSuspendThreat(sd)) { continue; }
+        if (sd->card.IsCreature()) { halberdier_pending = true; }
+        else                       { have_threat = true; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.sac_for_mana_amount > 0) { mana += d->params.sac_for_mana_amount; }
+    }
+    // The +1 is the {R} to suspend a Rift Bolt the turn we go off. A pending Halberdier needs no such
+    // mana (it arrives later with haste and swings into life 1), so it is not charged then.
+    const bool mana_short = mana < kWorldfireMana + ((have_threat || halberdier_pending) ? 0 : 1);
+    if (have_finisher && have_threat && !mana_short) { return {}; }   // nothing missing
+    std::vector<std::string> finisher, threat, accel;
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (WorldfireIsFinisher(d))           { if (!have_finisher) { finisher.push_back(nm); } }
+        else if (WorldfireIsSuspendThreat(d)) { if (!have_threat)   { threat.push_back(nm); } }
+        else if (WorldfireIsAccel(d))
+        { if (mana_short && !(have_feat && d->params.max_casts_after > 0)) { accel.push_back(nm); } }
+    }
+    if (halberdier_pending && (!finisher.empty() || !accel.empty())) { threat.clear(); }
+    std::vector<std::string> kept;
+    kept.insert(kept.end(), finisher.begin(), finisher.end());
+    kept.insert(kept.end(), threat.begin(), threat.end());
+    kept.insert(kept.end(), accel.begin(), accel.end());
+    return kept.empty() ? all : kept;
+}
+
+bool WorldfireProvider::TutorNeedsCandidate(const GameState&, int, const CardParams&) const
+{ return WorldfireTutorPiecesOn(); }
+
+// ---- WorldfireProvider: Rift Bolt is held for the combo -----------------------
+// USER 2026-11-21: "We should prune casting Rift Bolt and suspending it on a non-Worldfire turn most
+// likely." -- "Typically Halberdiers are just suspended early and then we try to go off before they land."
+// -- "But Rift Bolt you hold until the combo."
+// Rift Bolt's 3 damage only matters once Worldfire has set the opponent's life to 1, and Worldfire exiles
+// the hand, so the suspend must come BEFORE Worldfire on the go-off turn. So, for a NON-creature suspend
+// threat (Rift Bolt; a Halberdier is never gated -- it goes down early):
+//   * hard cast -- only when its damage is lethal (opponent life <= damage);
+//   * suspend   -- when the opponent is already within its damage (post-Worldfire), or when a Worldfire is in
+//                  hand and an OVER-count of this turn's mana covers Worldfire + the suspend cost. The bound
+//                  is LooseManaCeiling (untapped sources; storage at its counters, depletion at 2) + 1 if a
+//                  land drop is still open + each Lotus Bloom on the battlefield + every ritual's net in
+//                  hand. Over-counting keeps a doubtful turn open; it never refuses a real go-off turn.
+//                  A Worldfire DRAWN mid-turn (Brainstorm / Ponder) re-enumerates at the draw's breakpoint.
+// Human play and the unpruned audit offer everything. MTG_WORLDFIRE_HOLD_BOLT=0 -> no gate.
+static bool WorldfireHoldBoltOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_HOLD_BOLT", true);   // DEFAULT ON (USER ruling)
+    return on && !HumanPlayActive() && !DecisionUnpruned();
+}
+static bool WorldfireIsHeldBolt(const CardDefinition& d)
+{ return WorldfireIsSuspendThreat(&d) && !d.card.IsCreature() && d.params.damage > 0; }
+static bool WorldfireBoltLethal(const GameState& s, int controller, const CardDefinition& d)
+{
+    const int opp = controller == 0 ? 1 : 0;
+    return s.players[static_cast<std::size_t>(opp)].life <= d.params.damage;
+}
+
+bool WorldfireProvider::OffersCastNow(const GameState& s, int controller, const CardDefinition& def) const
+{
+    if (!WorldfireIsHeldBolt(def) || !WorldfireHoldBoltOn()) { return true; }
+    return WorldfireBoltLethal(s, controller, def);
+}
+
+bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const CardDefinition& def) const
+{
+    if (!WorldfireIsHeldBolt(def) || !WorldfireHoldBoltOn()) { return true; }
+    if (WorldfireBoltLethal(s, controller, def)) { return true; }
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool have_finisher = false, have_land = false;
+    int mana = LooseManaCeiling(s, controller);
+    for (const Card& c : pl.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        have_finisher = have_finisher || WorldfireIsFinisher(d);
+        have_land     = have_land || d->card.IsLand();
+        if (WorldfireIsAccel(d))
+        { mana += std::max(0, d->params.ritual_floating_mana - d->card.m_mana_cost.ManaValue()); }
+    }
+    if (!have_finisher) { return false; }
+    if (have_land && pl.lands_played_this_turn == 0) { mana += 1; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.sac_for_mana_amount > 0) { mana += d->params.sac_for_mana_amount; }
+    }
+    const int suspend_cost = def.params.suspend_cost.has_value() ? def.params.suspend_cost->ManaValue() : 0;
+    return mana >= kWorldfireMana + suspend_cost;
 }
 
 // ---- CycloneProvider::TutorSearchWidth --------------------------------------
