@@ -1,13 +1,3 @@
 {
- "entries": [
-  {
-   "branch": "alch-t3-1119",
-   "head_since": "2026-11-20T23:55:30Z",
-   "heartbeat": "2026-11-21T01:23:28Z",
-   "host": "67d5329561c0",
-   "id": "67d5329561c0:alch-t3-1119",
-   "joined": "2026-11-20T23:55:30Z",
-   "note": "67766a0b: Alchemist T3 lever set + provider registry/Knights (rebase + both tiers re-accept under hold)"
-  }
- ]
+ "entries": []
 }
