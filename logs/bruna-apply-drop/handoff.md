@@ -127,3 +127,91 @@ Wish from {Wish, Sol Ring} 81/14; Wings from {Wings, Sol Ring} 64/6; Sage from {
   holds -- pass -P 3 next time). Baseline `plain` arm, APPLY-DROP counts (all reproduce): s30054921 T2 9 (+ORDER 10),
   s30051257 T2 8, s30053757 T2 8, s30051968 T2 3, s30051119 T2 3, s30054069 T4 12, s30051713 T2 30,
   s30051079 T3 16, s30051277 T3 8. The tap/lka arms were still running; marker `DONE` in repros_base.log.
+
+---
+# Handoff 2 (2026-11-21 10:25 UTC, successor 1 -> successor 2; coordinator-requested)
+
+## Done
+- Baseline repros finished (`build/scratch/bad/repros_base.log` has DONE). Counts plain/tap/lka:
+  s30054921 T2 9/9/0, s30051257 T2 8/8/8, s30053757 T2 8/8/8, s30051968 T2 3/3/0, s30051119 T2 3/3/3,
+  s30054069 T4 12/12/3, s30051713 T2 30/30/22, s30051079 T3 16/16/16, s30051277 T3 8/8/2, s30051794 T4 20/20/12,
+  s30051111 T5 60/60/36. (LKA = MTG_LINE_KEEP_ALL=1, USER-parked lever; it does NOT reach the Wild Growth shape.)
+- **Commit c8f363ac6** (WIP, both fixes in one commit, default ON, heurarm slots, UNBUILT / UNMEASURED):
+  1. **MTG_CREATURE_LEFTOVER_EXACT** (`CreatureLeftoverExactOn`, EngineFlags.h; slot CREATURE_LEFTOVER_EXACT).
+     MECHANISM (confirmed from the tap traces): commit_leftover in TapForCostSharedOnceImpl (ManaPayment.cpp ~4205)
+     booked a creature payment's over-produced unit into `floating_creature_mana` as min(restricted produced,
+     leftover), i.e. it treated the Sage's restricted units as spent LAST. s30054069 T4 {Bruna, Wings}: Sage {U}{U}{U}
+     + Forest + Chancery + Thicket pay Bruna with one unit over; the unit became creature-only {U} and Wings {1}{U}
+     dropped. s30051277 T3 {Wish, Bruna}: same, creature-only {W}, Wish {G}{W} dropped. This explains the ~56
+     "Sage, no opener" games of the census AND part of the opener+Sage family (the opener was a red herring there).
+     FIX: book only restricted_made - (max matching of restricted units to the bill's pips: own colour or generic,
+     {S} excluded). Colours known on the greedy path (tap_source records the creature_mana_only, non-subtype taps;
+     used only if the counts sum to the tap-diff yield and no wild unit); backtracker paths use the colour-blind
+     bound min(R, generic). Booked units drawn from colours a restricted unit can still hold, else legacy pick.
+     Sound dominance (general unit >= restricted unit of the same colour); the twin of MTG_SUBTYPE_LEFTOVER_EXACT.
+     Decks it can move: Bruna(+2HG), Boars (Somberwald Sage), Slivers(+2HG) (Ancient Ziggurat) -- the only
+     creature_mana_only non-subtype cards in cards.json.
+  2. **MTG_AURA_HOST_LINE_KEEP** (`AuraHostLineKeepOn`; slot AURA_HOST_LINE_KEEP; helper `AuraHostHoldKeepsLine`,
+     ManaPayment.cpp just after the LineBillPayable/PayHoldingSet namespace, declared in ManaPayment.h).
+     MECHANISM: the unconditional "reserve the Aura's own host" at AIEngine.cpp ~11238, TurnSolver.cpp ~11395
+     (SubsetPayableWithFilters), ~12575 (SubsetPayableSequential), ~75345 (ApplyPlanDirect) pushes Wild Growth's {G}
+     onto the line's only {U} source. s30053757 T2: Thicket held, Sanctum paid {G}, Wings {1}{U} dropped (oracle:
+     Thicket pays WG, Pilgrim + Sanctum pay Wings). Same in s30051079 T3 (Seaside Citadel).
+     FIX: hold unless (held payment on a scratch copy, Aura attached, leaves rest = g_line_unpaid_cost - bill
+     unpayable by LineBillPayable as one noncreature bill) AND (unheld payment leaves it payable). Only evaluated when
+     the rest owes a coloured pip. All four sites call the same helper (lockstep). The whole-turn prepay's
+     MTG_PREPAY_AURA_HOST (TurnSolver ~66351) is NOT changed. Moves any deck with Wild Growth / Fertile Ground /
+     land Auras with extra mana (Bruna, EDF, others: grep cards.json is_land_aura + land_aura_extra_mana, then decks).
+  - Unit tests added in test/unit/test_bruna.cpp: "a creature payment's over-produced unit stays GENERAL..." (3
+    subcases) and "the Wild Growth host hold yields when it strands the rest of the line" (2 subcases, incl. the EDF
+    seed 2 Conservatory case that must still HOLD).
+
+## Running job (mine; leave it)
+- Lane build `scripts/box_lane.sh --slots 4 --cap-gb 3 -- ./build.sh` from the worktree, PID **83321** (parent bash
+  81801), log `/workspaces/MagicDeckTester/build/scratch/bad_build2.log`, DONE marker = a line `rc=<n>` in that log
+  (the log is empty while queued). Queued since 08:49 UTC behind a congested lane (FIFO; a 2-slot ninja and several
+  4-slot jobs ahead). Last src edit was ~10:21:50 UTC. **9p clock lag: if the build started before ~10:25:10 UTC,
+  check it picked up the edits** -- the Wild Growth unit test and the leftover test failing would show a stale
+  object; if in doubt delete `build/wt/bruna-apply-drop/CMakeFiles/mtg-core.dir/Release/src/ai/{ManaPayment,
+  AIEngine,TurnSolver}.cpp.o` and `.../mtg-test.dir/Release/test/unit/test_bruna.cpp.o` and rebuild.
+  HeuristicArm.h / EngineFlags.h changed, so this is a near-full rebuild.
+
+## Next steps, in order
+1. Build rc=0 -> copy `build/Release/mtg` to `build/scratch/bad/fix12/mtg` (so later rebuilds cannot touch a
+   running measurement). Units in the lane: `bash scripts/box_lane.sh --slots 4 --cap-gb 3 -- build/Release/mtg-test`
+   (all pass; the new Bruna cases pass; spot-check the leftover case FAILS with MTG_CREATURE_LEFTOVER_EXACT=0).
+2. Repros: `bash scripts/box_lane.sh --slots 3 --cap-gb 2 -- build/scratch/bad/repros2.sh <bin> build/scratch/bad/r_fix 3`
+   (11 seeds; arms `plain` = both fixes on, `leg` = MTG_CREATURE_LEFTOVER_EXACT=0; `-P 3` matches the slots; ends with
+   DONE). Add an arm with MTG_AURA_HOST_LINE_KEEP=0 if attribution is needed. Expected: s30054069/s30051277/s30051111
+   (creature-float families) and s30053757/s30051079 (WG) drop sharply; s30051257/s30051119/s30051968/s30051794/
+   s30051713 (Sol Ring in plan / Wish+Sol Ring) are NOT addressed (see residue below).
+3. Gate slice (BIG run, under `flock /workspaces/MagicDeckTester/build/scratch/claude_box.lock`):
+   `build/scratch/bad/gate/run.sh <bin>` runs the gate's 5,000 Bruna games (manifest `build/scratch/bad/gate/
+   manifest.json`, both arms of MTG_CREATURE_LEFTOVER_EXACT per job, names onbruna__/offbruna__) at
+   MTG_MANA_ORACLE=2, MTG_RSS_CAP_GB=40, all cores; DONE marker `build/scratch/bad/gate/DONE`. NOTE the manifest pins
+   only fix 1; both arms have fix 2 ON -- regenerate it with flags {fix1, fix2} both true/false for a clean
+   before/after (the off/off arm should reproduce the gate's 1,891 Bruna APPLY-DROPs exactly: identity check).
+   Count: `grep 'APPLY-DROP ' err.txt | grep -c 'job=onbruna'` etc.; classify with `build/scratch/bad/cls.py`.
+4. Held-out A/B (BIG run, under the box lock, MTG_PGO=0 is irrelevant here since both arms are one binary):
+   `build/scratch/bad/ab/mk_ab.py <FLAG> 710000 <manifest>` currently pins ONE flag over boars 3000 / bruna 10000 /
+   slivers 6000 pairs. Extend it for fix 2: pin BOTH flags per arm (or one arm per flag) and add the land-Aura decks
+   (EDF at least). `build/scratch/bad/ab/run.sh <bin>` (DONE marker ab/DONE), `python3 build/scratch/bad/ab/compare.py`.
+   Bar: every deck net <= 0; every slower game recovers at --depth 8 --budget-ms 0 (lane, 1 slot each; clear
+   clairvoyance only may stay, test with MTG_NC_SEARCH=1); report cpu on/off and cut fix 2's scratch cost if visible.
+5. `bash test/regression.sh --both` under the box lock; audit changed games; `--both --accept`;
+   `python3 test/check_gt_logs.py`. Then split c8f363ac6 into two commits (fix 1, fix 2) if both are kept, fix the
+   "about half of its 1,891" comment in ManaPayment.cpp with the measured number, push wip/bruna-apply-drop only.
+
+## Residue NOT addressed (report these)
+- **Sol Ring in plan / dork-vs-land** (s30051257 {Wings, Sol Ring}, s30051119 {Sage, Sol Ring}): the engine casts
+  Sol Ring first and pays its {1} with the land that is the line's only {U}/{G} instead of Avacyn's Pilgrim. Fixing
+  needs a creature ahead of a land: the standing "no creature ever ranks ahead of any land" law (six variants
+  refuted, docs/design/handoff-bruna-mana.md). Left as re-pay-only; MTG_PAY_ROLLBACK recovers these at depth 1.
+- **Wish/Armory + Sol Ring land-vs-land** (s30051794 T4, s30051968 T2: Sol Ring's {1} off Forest, the only {G}, where
+  the Chancery/Remote Farm should pay): needs BOTH a line-critical-land rung (MTG_PAY_LINE_CRITICAL_LAND, DROPPED
+  2026-11-04 for Cyclone +3) AND the line order inside an opener line (g_line_opens_unseen turns
+  LineGenericOrderLive off for tutor_to_hand lines). The "certain prefix" hold was judged USER-sized (~15 bind sites:
+  grep LineOpensUnseenScope). Surface to the USER; not attempted.
+- Somberwald Sage "no opener" (~56 games): EXPLAINED by fix 1's mechanism (creature-only leftover booking), pending
+  the gate measurement to confirm.
+- USER-owned: MTG_LINE_KEEP_ALL stays parked (not touched).
