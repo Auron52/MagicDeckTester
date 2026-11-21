@@ -215,3 +215,8 @@ Wish from {Wish, Sol Ring} 81/14; Wings from {Wings, Sol Ring} 64/6; Sage from {
 - Somberwald Sage "no opener" (~56 games): EXPLAINED by fix 1's mechanism (creature-only leftover booking), pending
   the gate measurement to confirm.
 - USER-owned: MTG_LINE_KEEP_ALL stays parked (not touched).
+
+## Update 11:58 UTC
+- BUILD DONE: `bad_build2.log` ends `rc=0`; it was admitted to the lane at 11:27 UTC, more than an hour after the last
+  src edit (10:21:50), so the 9p clock-lag concern does NOT apply. `build/Release/{mtg,mtg-test}` hold c8f363ac6's src.
+  Start at step 1 (copy the binary aside, units, repros).
