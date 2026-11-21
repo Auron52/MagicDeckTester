@@ -73339,7 +73339,7 @@ int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinit
         auto red = [](const CardDefinition& d) { return d.card.IsLand() && BsProducesRed(d.params); };
         bool r_bf = false, r_hand = false;
         BsHave(s, controller, red, r_bf, r_hand);
-        return (r_bf || r_hand) ? 0 : kBloodSunAnyCopies;
+        return (r_bf || r_hand) ? 0 : 1;   // step 6d item 3 (USER): "we only need one red source"
     }
     return 0;   // Grim Tutor (transmute only), Machinations, Burgeoning, Ulamog, the Karoos, fastlands, Cairns, Tomb, ...
 }
@@ -73403,6 +73403,23 @@ void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_in
     if (!another) { x_min = std::max(x_min, 2); }
 }
 
+// Step 6d item 3 (USER, VERBATIM): "On the Red-source exception we only need one red source." -> Rakdos Carnarium and
+// City of Brass (the exception's two names; each already capped at 1 by BloodSunTutorTargetCap) share one group of
+// cap 1, so no package takes both. Lever-gated like every other B3 restriction.
+void BloodSunProvider::RevelationPackageGroups(const GameState& /*s*/, const std::vector<const CardDefinition*>& class_defs,
+                                               std::vector<int>& group, std::vector<int>& group_cap) const
+{
+    if (!BloodSunPruneLive()) { return; }
+    bool any = false;
+    for (std::size_t k = 0; k < class_defs.size() && k < group.size(); ++k)
+    {
+        if (class_defs[k] == nullptr) { continue; }
+        const std::string& nm = class_defs[k]->card.m_name.str();
+        if (nm == "Rakdos Carnarium" || nm == "City of Brass") { group[k] = 0; any = true; }
+    }
+    if (any) { group_cap.assign(1, 1); }
+}
+
 // (c of B3) USER: "with blood sun out, Lotus Field and Vale are the same so they can be collapsed" -> F-R2 holds under
 // any Blood Sun, even while our Ulamog (whose cast trigger could exile our own Blood Sun) is reachable.
 bool BloodSunProvider::RevelationTwinFoldForced(const GameState& /*s*/) const
@@ -73419,10 +73436,55 @@ bool BloodSunProvider::RevelationTwinFoldForced(const GameState& /*s*/) const
 //  * Scorched Ruins (a big land that cannot add {R}): never;
 //  * Lotus Vale: only with a Blood Sun in hand that our other mana cannot cast this turn (a probe payment on a copy:
 //    short of three mana or of {R}) but the Vale's own three of one colour can, and >= 2 untapped lands of ours to
-//    sacrifice. On the opponent's turn (a Burgeoning put) Blood Sun cannot be cast this turn at all, so never;
+//    sacrifice;
 //  * Lotus Field: the same Blood-Sun-in-hand / cannot-cast condition (its mana arrives next turn), >= 2 lands of ours
-//    out, and NO Lotus Vale in hand (USER: dominated now, identical once Blood Sun lands).
+//    out, and NO Lotus Vale in hand (USER: dominated now, identical once Blood Sun lands);
+//  * step 6d item 3 (USER): either Lotus only when NO non-sacrificing land in hand would make Blood Sun castable
+//    instead; and a Burgeoning put (the opponent's turn) judges Vale and Field by ONE rule for our next turn.
 // A RESTRICTION of the land menu, never a pick: every admitted land is still searched.
+// Step 6d item 3 (USER, ledger 80f27768b, VERBATIM): "On Burgeoning the Lotus Field and Lotus Vale are equivalent
+// there, so I'm not sure why we would have different rules for them."; "Realistically the red-source exception is for
+// Grim Tutor for the most part. "Your other lands couldn't cast it on your next turn." This is fine, but we should drop
+// a non-sacrificing land to reach sufficient mana and red for Blood Sun if one is available. The Lotus plan is just a
+// backup plan, not the intended way to do things."
+// Could our Blood Sun be cast -- THIS turn, or on our NEXT turn (every permanent of ours untapped) -- after the hand
+// land at `hi` (-1: none) is played / put? A probe on a copy (the MazePlazaPayable shape): the land enters through
+// PlayLandFromHand (its own enters-tapped / ETB rules), then the cost is paid with TapForCostDirect.
+static bool BsSunCastableWith(const GameState& s, int controller, const CardDefinition& sun, int hi, bool next_turn)
+{
+    GameState probe = s;
+    probe.active_player_index = controller;
+    auto untap_ours = [&]()
+    { for (Permanent& pm : probe.battlefield) { if (pm.controller_index == controller) { pm.tapped = false; } } };
+    if (next_turn) { untap_ours(); }
+    if (hi >= 0)
+    {
+        Player& pl = probe.players[static_cast<std::size_t>(controller)];
+        if (hi >= static_cast<int>(pl.hand.size())) { return false; }
+        const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(pl.hand[static_cast<std::size_t>(hi)]));
+        if (d == nullptr || !PlayLandFromHand(probe, static_cast<std::size_t>(hi), *d, LandPlayOptions{})) { return false; }
+        if (next_turn) { untap_ours(); }
+    }
+    return TapForCostDirect(probe, sun.card.m_mana_cost, /*for_creature=*/false);
+}
+// ...and does a NON-SACRIFICING land in hand (one whose entry sacrifices no land: not a Lotus, not Scorched Ruins)
+// make it castable instead? Then the Lotus is not the drop (USER: "The Lotus plan is just a backup plan").
+static bool BsNonSacLandCastsSun(const GameState& s, int controller, const CardDefinition& sun, bool next_turn)
+{
+    const std::vector<Card>& hand = s.players[static_cast<std::size_t>(controller)].hand;
+    std::vector<std::string> tried;
+    for (int j = 0; j < static_cast<int>(hand.size()); ++j)
+    {
+        const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(j)]));
+        if (d == nullptr || !d->card.IsLand() || hand[static_cast<std::size_t>(j)].m_impulse_no_land) { continue; }
+        if (d->params.etb_replace_sacrifice_untapped_lands > 0 || d->params.etb_sacrifice_lands > 0) { continue; }
+        const std::string& nm = hand[static_cast<std::size_t>(j)].m_name.str();
+        if (std::find(tried.begin(), tried.end(), nm) != tried.end()) { continue; }
+        tried.push_back(nm);
+        if (BsSunCastableWith(s, controller, sun, j, next_turn)) { return true; }
+    }
+    return false;
+}
 bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const
 {
     if (!BloodSunPruneLive() || !BsIsBigLand(def) || LandNonManaAbilitiesSuppressed(s)) { return true; }
@@ -73448,19 +73510,30 @@ bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const
         if (!pm.tapped) { ++untapped; }
     }
     const bool our_turn = controller == s.active_player_index;
-    auto other_mana_casts_sun = [&]() -> bool
+    // Step 6d item 3: a put on the OPPONENT's turn (Burgeoning) -- Lotus Vale and Lotus Field alike (USER: "equivalent
+    // there"), judged for OUR NEXT TURN: >= 2 other lands of ours, our other mana could not cast Blood Sun then, and no
+    // non-sacrificing land in hand, put instead, would. The Field-only-without-a-Vale prune is our land PLAY's only.
+    if (!our_turn)
     {
-        if (!our_turn) { return false; }
-        GameState probe = s;
-        return TapForCostDirect(probe, sun->card.m_mana_cost, /*for_creature=*/false);
+        const int need = std::max(p.etb_replace_sacrifice_untapped_lands, p.etb_sacrifice_lands);
+        if (lands < need) { return false; }
+        return !BsSunCastableWith(s, controller, *sun, -1, /*next_turn=*/true)
+            && !BsNonSacLandCastsSun(s, controller, *sun, /*next_turn=*/true);
+    }
+    // Our land play: the other mana cannot cast Blood Sun this turn, and no non-sacrificing land in hand, played
+    // instead, would (USER: "The Lotus plan is just a backup plan").
+    auto lotus_needed = [&]() -> bool
+    {
+        return !BsSunCastableWith(s, controller, *sun, -1, /*next_turn=*/false)
+            && !BsNonSacLandCastsSun(s, controller, *sun, /*next_turn=*/false);
     };
     if (p.etb_replace_sacrifice_untapped_lands > 0)                     // Lotus Vale
     {
-        if (!our_turn || untapped < p.etb_replace_sacrifice_untapped_lands) { return false; }
+        if (untapped < p.etb_replace_sacrifice_untapped_lands) { return false; }
         if (sun->card.m_mana_cost.ManaValue() > p.produces_amount) { return false; }   // the Vale alone must pay it
-        return !other_mana_casts_sun();
+        return lotus_needed();
     }
     // Lotus Field
     if (lands < p.etb_sacrifice_lands || vale_in_hand) { return false; }
-    return !other_mana_casts_sun();
+    return lotus_needed();
 }

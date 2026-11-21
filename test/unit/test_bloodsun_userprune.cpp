@@ -407,11 +407,36 @@ TEST_CASE("bloodsun prune (c): pre-Blood Sun land plays -- Ruins never, a Lotus 
         GameState f1 = fo;
         f1.battlefield.pop_back();
         CHECK_FALSE(MenuPlays(f1, "Lotus Field"));
-        // The hook directly: on the opponent's turn (a Burgeoning put) the Vale can never cast Blood Sun this turn.
-        GameState opp = s;
+        // The hook directly, a Burgeoning put on the opponent's turn (step 6d item 3, USER: Vale and Field "equivalent
+        // there"): ONE rule for both, judged for our next turn -- two Swamps cannot cast Blood Sun then, so either Lotus
+        // is offered, the Field even with a Vale in hand (that prune is the land PLAY's only). Ruins never.
+        GameState opp = f;
         opp.active_player_index = 1;
-        CHECK_FALSE(ProvUp().LandPlayOffered(opp, 0, DefUp("Lotus Vale")));
+        CHECK(ProvUp().LandPlayOffered(opp, 0, DefUp("Lotus Vale")));
+        CHECK(ProvUp().LandPlayOffered(opp, 0, DefUp("Lotus Field")));
         CHECK_FALSE(ProvUp().LandPlayOffered(opp, 0, DefUp("Scorched Ruins")));
+        // ...not with one other land, nor when a Mountain on the battlefield would cast it next turn, nor when a
+        // non-sacrificing land in hand (a Mountain), put instead, would.
+        GameState opp1 = opp;
+        opp1.battlefield.pop_back();
+        CHECK_FALSE(ProvUp().LandPlayOffered(opp1, 0, DefUp("Lotus Vale")));
+        CHECK_FALSE(ProvUp().LandPlayOffered(opp1, 0, DefUp("Lotus Field")));
+        GameState oppm = opp;
+        PutUp(oppm, "Mountain", 12, /*tapped=*/true);
+        CHECK_FALSE(ProvUp().LandPlayOffered(oppm, 0, DefUp("Lotus Vale")));
+        GameState opph = opp;
+        opph.players[0].hand.push_back(CardUp("Mountain", 5));
+        CHECK_FALSE(ProvUp().LandPlayOffered(opph, 0, DefUp("Lotus Vale")));
+        CHECK_FALSE(ProvUp().LandPlayOffered(opph, 0, DefUp("Lotus Field")));
+        // Our own play, the same backup rule (USER: "drop a non-sacrificing land ... if one is available"): a Mountain
+        // in hand casts Blood Sun with the two Swamps, so neither Lotus is the drop; a Swamp in hand would not.
+        GameState hm = s;
+        hm.players[0].hand.push_back(CardUp("Mountain", 5));
+        CHECK_FALSE(MenuPlays(hm, "Lotus Vale"));
+        CHECK(MenuPlays(hm, "Mountain"));
+        GameState hs = s;
+        hs.players[0].hand.push_back(CardUp("Swamp", 5));
+        CHECK(MenuPlays(hs, "Lotus Vale"));
     }
     {
         PruneArm arm(false);
@@ -455,5 +480,40 @@ TEST_CASE("bloodsun prune (c), playout: the greedy land choice skips a land the 
     {
         PruneArm arm(false);
         CHECK(GreedyLandChoiceIndex(s) >= 0);
+    }
+}
+
+// Step 6d item 3 (USER, VERBATIM): "On the Red-source exception we only need one red source." Blood Sun in hand, no red
+// source anywhere, a library holding both exception names: each is a target (cap 1), but no package holds both.
+TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source per package")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 7; ++k) { PutUp(s, "Swamp", 10 + k); }
+    s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
+    s.players[0].hand.push_back(CardUp("Blood Sun", 2));
+    Lib(s, { "Rakdos Carnarium", "Rakdos Carnarium", "City of Brass", "City of Brass", "Swamp" });
+    {
+        PruneArm arm(true);
+        const std::vector<std::string> g = GrimTargets(s);
+        CHECK(Has(g, "Rakdos Carnarium"));
+        CHECK(Has(g, "City of Brass"));
+        int with_red = 0;
+        for (const std::vector<std::string>& pk : AllPackages(s))
+        {
+            const long red = std::count(pk.begin(), pk.end(), "Rakdos Carnarium") + std::count(pk.begin(), pk.end(), "City of Brass");
+            CHECK(red <= 1);
+            if (red == 1) { ++with_red; }
+        }
+        CHECK(with_red >= 2);   // {Carnarium} and {City of Brass} are both packages
+    }
+    {
+        PruneArm arm(false);
+        bool both = false;
+        for (const std::vector<std::string>& pk : AllPackages(s))
+        {
+            both = both || (std::count(pk.begin(), pk.end(), "Rakdos Carnarium") > 0
+                             && std::count(pk.begin(), pk.end(), "City of Brass") > 0);
+        }
+        CHECK(both);   // the unrestricted space holds them together
     }
 }

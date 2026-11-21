@@ -5360,6 +5360,14 @@ public:
     virtual void RevelationPackageRestrict(const GameState&, int /*hand_index*/,
                                            const std::vector<const CardDefinition*>& /*class_defs*/,
                                            std::vector<int>& /*caps*/, int& /*x_min*/) const {}
+    // RevelationPackageGroups -- a JOINT cap over several classes (Blood Sun step 6d, USER: "On the Red-source exception
+    // we only need one red source": Rakdos Carnarium and City of Brass are two classes, at most one of either per
+    // package). `class_defs` is the restricted, index-aligned rank list; fill `group[k]` (-1 = none; resized by the
+    // caller to class_defs.size(), all -1) and `group_cap[g]`. A RESTRICTION: the emitter skips a multiset over a group's
+    // cap, and a skipped multiset takes no wave ordinal, so the restricted space is still enumerated exactly once.
+    // Default: no group -> byte-identical. Never consulted in human play.
+    virtual void RevelationPackageGroups(const GameState&, const std::vector<const CardDefinition*>& /*class_defs*/,
+                                         std::vector<int>& /*group*/, std::vector<int>& /*group_cap*/) const {}
     // RevelationTwinFoldForced -- true holds fold F-R2 (Lotus Vale == Lotus Field) whenever a Blood Sun suppresses land
     // abilities, even while a card that could end that Blood Sun is reachable (revpkg::TwinFoldLive's conservative
     // scan). A provider-owned identity the USER ruled (B3 (c): "with blood sun out, Lotus Field and Vale are the same

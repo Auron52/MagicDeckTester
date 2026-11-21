@@ -31044,6 +31044,14 @@ static bool BpPlainCantripSiteEnabled()
 // replay" (AIEngine's deferred_cantrip twin), so a rollout that truncates inline while the executor
 // replays post-loop would commit a line the search never scored -- the recurring divergence class.
 // Both sides read THIS function; there is deliberately no second flag.
+// MTG_BP_NEST_REARM (DEFAULT ON; =0 -> the step-6c one-pass loop, byte-identical): Blood Sun step 6d's nested
+// acquisition re-arm in ApplyPlanDirect's deferred re-solve loop (see deferred_nest_rearm). Kept as the A/B hatch.
+static bool BpNestRearmOn()
+{
+    static const bool on = EnvOn("MTG_BP_NEST_REARM", true);
+    return on;
+}
+
 static bool BpPartitionCantripEnabled()
 {
     static const bool on = EnvOn("MTG_BP_PARTITION_CANTRIP");
@@ -44262,6 +44270,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     caps.resize(w);
                 }
                 x_min = std::max(1, x_min);
+                // A joint cap over classes (RevelationPackageGroups; Blood Sun step 6d): a multiset over a group's cap
+                // is skipped and takes no ordinal. Empty for every other provider -> the loop below is unchanged.
+                std::vector<int> grp, grp_cap;
+                {
+                    std::vector<const CardDefinition*> gdefs;
+                    for (int r : ranked) { gdefs.push_back(classes[static_cast<std::size_t>(r)].def); }
+                    grp.assign(gdefs.size(), -1);
+                    rprov.RevelationPackageGroups(state, gdefs, grp, grp_cap);
+                    if (grp_cap.empty()) { grp.clear(); }
+                }
+                auto over_group_cap = [&](const std::vector<int>& cc) -> bool
+                {
+                    if (grp.empty()) { return false; }
+                    std::vector<int> used(grp_cap.size(), 0);
+                    for (std::size_t r = 0; r < cc.size() && r < grp.size(); ++r)
+                    {
+                        const int g = grp[r];
+                        if (g < 0 || g >= static_cast<int>(used.size())) { continue; }
+                        if ((used[static_cast<std::size_t>(g)] += cc[r]) > grp_cap[static_cast<std::size_t>(g)]) { return true; }
+                    }
+                    return false;
+                };
                 std::vector<int> cls_eval;
                 for (int r : ranked)
                 {
@@ -44276,6 +44306,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     long long o = 0;
                     do
                     {
+                        if (over_group_cap(c)) { continue; }   // -> the NextLex condition below
                         if (o >= end) { revwave::g_state.pending = true; break; }
                         int ev = 0;
                         for (std::size_t r = 0; r < c.size(); ++r) { ev += c[r] * cls_eval[r]; }
@@ -74916,7 +74947,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     auto deferred_cont_top = [&]() -> bool { return in_deferred_cont && cont_apply_depth == deferred_cont_base + 1; };
     // May an acquisition-class cast arm the deferred re-solve here? The main level (no sink: the historical rule),
     // or the top of the deferred loop's continuation, where the recorded world has pushed exactly out_breakpoint.
-    auto acq_arm_ok = [&]() -> bool { return sink_stack.empty() || deferred_cont_top(); };
+    auto acq_arm_ok = [&]() -> bool { return sink_stack.empty() || (BpNestRearmOn() && deferred_cont_top()); };
     // The cast that armed the deferred re-solve (registry-stable pointer; nullptr when unarmed).
     // Carried so the continuation can bind the MTG_CANTRIP_ORDER watermark to its site; with
     // several arming casts in one plan the LAST one wins, which matches whose continuation the
@@ -75019,7 +75050,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // opens the next pass, numbered at the acquisition's own site (3).
     auto note_acq_nest_rearm = [&]()
     {
-        if (!deferred_cont_top()) { return; }
+        if (!BpNestRearmOn() || !deferred_cont_top()) { return; }
+        static const bool s_trace = EnvOn("MTG_BP_NEST_TRACE");   // diagnostic only: one line per nested re-arm
+        if (s_trace)
+        {
+            std::fprintf(stderr, "[bp-nest] T%d %s armer=%s recorded=%d nest=%d\n", state.turn_number,
+                         is_pre_combat ? "m1" : "m2",
+                         deferred_cantrip_site != nullptr ? deferred_cantrip_site->card.m_name.c_str() : "?",
+                         out_breakpoint != nullptr ? 1 : 0, g_rollout_nest);
+        }
         deferred_nest_rearm  = true;
         deferred_trick_armed = false;
         deferred_equip_armed = false;
