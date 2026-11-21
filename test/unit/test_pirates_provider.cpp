@@ -247,6 +247,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Mill now routes by its dedicated mill signature, above fetch-land AntiLifegain.
         {"Mill", "Mill"},                     {"Unpredictable Cyclone", "Cyclone"},
         {"Boars", "Boars"},   // Boars I1: own provider (Flinthoof's self_haste_cost), above the fetchlands' anti
+        // Beasts (onboarding 2026-11-21): INTERIM pin of today's route -- Herald of Ilharg's
+        // creature_cast_trigger_plus_counters carries the Boars signature. A KNOWN Stage-4a misroute
+        // (docs/design/analysis-Beasts.md, "Provider routing"): batch J's BeastsProvider re-pins this row.
+        {"Beasts", "Boars"},
         {"Sea Creatures", "SeaCreatures"},   // Sea I1: own provider (interim staple signature), above the fetchlands' anti
         // Morph (onboarded 2026-11-11, INT-1): MorphProvider, routed at the TOP by its own signature -- it
         // would otherwise ride AntiLifegain via Wooded Foothills' fetch.
