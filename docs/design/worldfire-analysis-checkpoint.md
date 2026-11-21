@@ -1,4 +1,4 @@
-# Worldfire analysis -- checkpoint (2026-11-21 ~12:20 UTC)
+# Worldfire analysis -- checkpoint (2026-11-21 ~12:50 UTC)
 
 Owner: the session analyzing `decks/Worldfire/Worldfire.cod` (USER asked: "Please analyze the
 Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldfire`, branch
@@ -24,12 +24,36 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   unit_par.sh miscounts shards (exit 3 when green); provider_audit red on Landfall/Selesnya; suspend
   writes no JSON-log action.
 
+- Windows CI 44900654317 (b4a74b519): success.
+- USER rulings 2026-11-21 (verbatim in analysis-Worldfire.md): free-turn depth = no ply cost; the four
+  deferrals APPROVED; INERT_PARAMS APPROVED; the tutors prune to missing combo pieces; Rift Bolt held for
+  the combo.
+
+## UNCOMMITTED in the worldfire worktree (NOT YET BUILT -- wait for the profile chain to exit first)
+- `WorldfireProvider::TutorCandidates` + `TutorNeedsCandidate` (replaced TutorSearchWidth 32 /
+  MTG_WORLDFIRE_TUTOR_WIDTH): Worldfire while none in hand; Rift Bolt while none in hand / suspended (a
+  pending Halberdier makes it low priority: dropped when Worldfire or accel also kept); accel only while
+  mana short (LooseManaCeiling + Lotus + ritual nets < 9 [+1 if threat missing]; under-count), no second
+  Irencrag; nothing missing -> {} -> tutor not cast; no piece in library -> full list.
+  MTG_WORLDFIRE_TUTOR_PIECES=0 off.
+- New generic hooks `OffersCastNow` / `OffersSuspend` (DecisionProvider.h, default true) asked in
+  TurnSolver.cpp CollectActions next to NeverCast and at the Suspend emitter. Worldfire: Rift Bolt hard
+  cast only when lethal; suspend only if opp life <= 3 or (Worldfire in hand AND over-count mana >= 9 +
+  suspend cost: LooseManaCeiling + 1 open land drop + Lotus + ritual nets). Halberdier never gated.
+  MTG_WORLDFIRE_HOLD_BOLT=0 off.
+- test/unit/test_worldfire.cpp: two new TEST_CASEs (tutor prune subcases; Bolt hold).
+- Then: ./build.sh, units (per-shard rc), smoke byte-identity (new hooks default true -> expect 0 moved),
+  sanity A/B prunes on vs off (d5 b20, seed 9100001, >=40 games each, now WITH the profile), commit.
+- NOTE: the Stage 4 profile was generated BEFORE these prunes -> re-run analyze_deck after them.
+
 ## Running
-- Land-play agent (Opus, background) in `.claude/worktrees/opp-landplay` (branch wip/opp-landplay
-  from b4a74b519): MDFC backs, bouncelands, Lake of the Dead, sequencing; units, smoke + regression
-  (no accept), per-key mechanisms.
-- Stage 4 baseline profile (worldfire worktree, heavy_run): `logs/worldfire/stage4_profile.log`.
-- CI watch for 44900654317 (wip/worldfire).
+- Stage 4 profile chain (heavy_run, PID 3393436): `logs/worldfire/stage4_profile.log`, last step =
+  single-thread discard evidence (400 g d3). Profile json already written; cost diag COST_NEUTRAL.
+  Card-score games 85-130 s each -> 3x Hinata cost gate is a concern.
+- Land-play agent (Opus, ~214K ctx -> handoff soon) in `.claude/worktrees/opp-landplay`, branch
+  wip/opp-landplay: told to build/smoke/regression WITHOUT the heavy lock (my chain held it 40 min on one
+  core). Handoff file if it stops: `logs/opp-landplay/handoff.md` (in that worktree).
+- heavy_run.sh gap: does not release the lock for a script chain on a single-thread step (note only).
 
 ## Next, in order
 1. (done) integrator #2.
