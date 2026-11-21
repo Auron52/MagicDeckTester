@@ -1,4 +1,4 @@
-# Worldfire analysis -- checkpoint (2026-11-21 ~11:15 UTC)
+# Worldfire analysis -- checkpoint (2026-11-21 ~12:20 UTC)
 
 Owner: the session analyzing `decks/Worldfire/Worldfire.cod` (USER asked: "Please analyze the
 Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldfire`, branch
@@ -17,14 +17,22 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 - Parent: clean `./build.sh` at 742c81b11 (9p "Cannot allocate memory" needed retries).
 - 2-hourly session-only status cron cf1c0324 (`7 */2 * * *`).
 
+- Stage 2 gates (integrator #2, b4a74b519): all pass; smoke byte-identical (235, play-changed=0);
+  coverage 22/22 full; costs + fields clean; rules review clean. Sanity d5 b20 40 games: 39/40 won,
+  avg 6.0 over wins; Worldfire cast 28/40, 23 won next turn; 2 casts with nothing suspended (gi28 T3
+  blind cast -> Stage 5). Pre-existing: test_shadowborn_int9 Thrumming Stone fails at bd5a2c93f;
+  unit_par.sh miscounts shards (exit 3 when green); provider_audit red on Landfall/Selesnya; suspend
+  writes no JSON-log action.
+
 ## Running
-- Integrator #2 (Opus, background): handoff steps 2-9 -- unit tests, coverage, cost audit, field audit
-  (Overmaster + Mistrise missing from scryfall_reference.json after 429s), provider_audit --check,
-  40-game sanity run (self-destruct Worldfire? crash after mid-plan Worldfire?), smoke byte-identity
-  (no accept), mtg-rules Step-4 review, commit.
+- Land-play agent (Opus, background) in `.claude/worktrees/opp-landplay` (branch wip/opp-landplay
+  from b4a74b519): MDFC backs, bouncelands, Lake of the Dead, sequencing; units, smoke + regression
+  (no accept), per-key mechanisms.
+- Stage 4 baseline profile (worldfire worktree, heavy_run): `logs/worldfire/stage4_profile.log`.
+- CI watch for 44900654317 (wip/worldfire).
 
 ## Next, in order
-1. Read integrator #2's report; relay to USER; fix/loop if a gate failed.
+1. (done) integrator #2.
 2. Opponent land-play fixes (own measured commit): MDFC land faces played (`PlayableAsLand`),
    bouncelands bounce (oldest other land, else itself), Lake of the Dead sacrifices a Swamp. Smoke +
    regression: show which decks move; accept flow.

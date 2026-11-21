@@ -87,6 +87,9 @@ Worldfire turn itself -- the USER's "usually a win" in real play.
    *"Yes, for 2HG, which makes it a bigger hurdle for some lockdown decks. I do believe the lockdown
    decks will still be undervalued by the engine, but this should still help a bit."* (The rule is a
    partial credit by design; lockdown decks stay undervalued vs real play.)
+   Implementation note: both heads' lands sit on ONE battlefield under controller 1, so "this head's
+   lands" is read from the card-number band (`kNumberBase` vs `kNumberBase2`, `OpponentDeck.h`); the
+   creature condition is the shared board (any opposing creature fails it for every head).
 4. **Cap.** DEFAULT: none; a free turn only matters in a game that is won.
 5. **Search depth.** USER 2026-11-21: *"On search depth it's a tougher call. What did we do for
    Extra Turns?"* Extra turns: depth counts ROUNDS -- an extra turn costs no ply
