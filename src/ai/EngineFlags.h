@@ -1057,6 +1057,28 @@ inline bool AuraHostLineKeepOn()
     return heurarm::Flag(heurarm::AURA_HOST_LINE_KEEP, env_on);
 }
 
+// MEASUREMENT-ONLY levers for two USER-owned rule overrides (Bruna mana-clean residue, 2026-11-21; default OFF, the
+// USER decides adoption). MTG_PAY_LINE_CRIT_LAND: the dropped (2026-11-04) line-critical land rung -- a land that pays
+// a generic pip and is the last source of a colour the rest of the line owes taps after every other land.
+// MTG_PAY_LINE_CRIT_OPENER: that rule is live in an opener (tutor) line too, where LineGenericOrderLive() is false.
+// MTG_PAY_LINE_CRIT_BEHIND_DORKS: a line-critical land ranks behind the creature band (overrides "no creature ever ranks
+// ahead of any land"). ManaPayment.cpp crit_hold. Per-job slots.
+inline bool PayLineCritLandOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_LAND");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_LAND, env_on);
+}
+inline bool PayLineCritOpenerOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_OPENER");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_OPENER, env_on);
+}
+inline bool PayLineCritBehindDorksOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_BEHIND_DORKS");
+    return heurarm::Flag(heurarm::PAY_LINE_CRIT_BEHIND_DORKS, env_on);
+}
+
 inline bool PayNarrowRestrictedFirstOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);

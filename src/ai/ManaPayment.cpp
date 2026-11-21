@@ -3446,6 +3446,65 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (mine_short && deficit > static_cast<int>(fl.wild)) { ps_hold = 1; }
                     }
                 }
+                // LINE-CRITICAL LAND -- MEASUREMENT ONLY, default OFF, USER-owned (Bruna mana-clean residue 2026-11-21;
+                // the dropped 2026-11-04 rung of a251d56ad, re-measured on the USER's brief). A GENERIC pip paid by the
+                // last land that makes a colour the rest of the line still owes strands that colour. A land is CRITICAL
+                // for a colour it makes when the line's later pips of it (LineOwedAfterOwnPips plus this payment's own
+                // unpaid ones) exceed the other untapped unrestricted sources' units of it plus what this land's tap
+                // would leave floating. MTG_PAY_LINE_CRIT_LAND: it taps after every other land (key[2] += 2 x kPainBand,
+                // still ahead of the creatures). MTG_PAY_LINE_CRIT_BEHIND_DORKS: it ranks behind the creature band
+                // (Bruna s30051257 T2 {Wings, Sol Ring}: Pilgrim, not the only {U} land, pays Sol Ring's {1}).
+                // MTG_PAY_LINE_CRIT_OPENER: live in a breakpoint-opener line too (s30051968 T2 {Forest, Glittering Wish,
+                // Sol Ring}: Remote Farm, not the only {G} land, pays the {1}). ORDERING ONLY: still pays when nothing
+                // else can; outside a line the later pips are zero and the key is the historical one.
+                int crit_hold = 0;
+                const bool crit_land = PayLineCritLandOn();
+                const bool crit_behind = PayLineCritBehindDorksOn();
+                if ((crit_land || crit_behind) && kind == 1 && any && rank >= 0 && rank < 60 && p.card.IsLand()
+                    && !def->params.colored_creature_only && g_line_unpaid_cost.ManaValue() > 0
+                    && (LineGenericOrderLive() || (PayLineCritOpenerOn() && AutoLineGenericOn())))
+                {
+                    int later[5];
+                    LineOwedAfterOwnPips(later);
+                    int need[5], mine = 0;
+                    bool any_need = false;
+                    for (int ci = 0; ci < 5; ++ci) { need[ci] = later[ci] + nd_left[ci]; }
+                    for (Color c : pay_produces(*def, &p))
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci >= 0 && ci < 5) { mine |= 1 << ci; if (need[ci] > 0) { any_need = true; } }
+                    }
+                    if (any_need)
+                    {
+                        const ManaPool& fl = state.floating_mana;
+                        int sup[5] = { fl.white + floating.white, fl.blue + floating.blue, fl.black + floating.black,
+                                       fl.red + floating.red, fl.green + floating.green };
+                        for (int q = 0; q < bn; ++q)
+                        {
+                            if (q == i) { continue; }
+                            const Permanent& o = state.battlefield[q];
+                            if (o.controller_index != active || o.tapped || o.def_absent) { continue; }
+                            const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                            if (od == nullptr || od->params.creature_mana_only || od->params.colored_creature_only
+                                || BigSpellOnlySource(od->params)) { continue; }
+                            const bool dork = od->tmpl == CardTemplate::ManaDork && CanTapNow(o, state.battlefield);
+                            if (!dork && !o.card.IsLand() && !od->params.mana_rock) { continue; }
+                            int seen = 0, n = 0;
+                            for (Color c : EffectiveProduces(state, active, *od))
+                            {
+                                const int ci = static_cast<int>(c);
+                                if (ci >= 0 && ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++n; }
+                            }
+                            if (n == 0) { continue; }
+                            const int amt = std::max(1, ManaProducedPerTap(*od));
+                            const int each = n == 1 ? amt : std::max(1, amt / n);
+                            for (int ci = 0; ci < 5; ++ci) { if (seen & (1 << ci)) { sup[ci] += each; } }
+                        }
+                        const int left = std::max(0, ManaProducedPerTap(*def) - 1);   // what the tap floats past the pip
+                        for (int ci = 0; ci < 5 && !crit_hold; ++ci)
+                        { if ((mine & (1 << ci)) && need[ci] > 0 && sup[ci] + left < need[ci]) { crit_hold = 1; } }
+                    }
+                }
                 // DEPLETION WASTE (MTG_PAY_DEPLETION_WASTE / _ANY, default OFF): a depletion land whose
                 // tap makes more mana than this payment and the rest of the line can still use is banded
                 // with pain. Niv seed 1 (2026-10-22): {2}{U} took Skerry's {U}{U} and the Needle's LAST
@@ -3498,9 +3557,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // Ordering only; outside a plan apply (no traits) nothing is doomed.
                 const int doomed = (kind == 1 && IsDoomedPlanBody(state, active, p)) ? 1 : 0;
                 int key[4];
-                if (kind != 5 && rank >= 0 && rank < 60)
+                if (crit_hold && crit_behind)
+                {
+                    // Behind the creature band (64+), ahead of the §2b fodder (500+). MEASUREMENT ONLY (see crit_hold).
+                    key[0] = 499; key[1] = harm / kNdScale; key[2] = rank; key[3] = (harm % kNdScale) * 2 + broad;
+                }
+                else if (kind != 5 && rank >= 0 && rank < 60)
                 { key[0] = 0;    key[1] = harm / kNdScale;
-                  key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + ((cco_hold || ps_hold) ? 2 * kPainBand : 0);
+                  key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold
+                         + ((cco_hold || ps_hold || crit_hold) ? 2 * kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
                 else if (doomed && rank >= 0 && DoomedBodyAheadOfLandsOn())
                 {

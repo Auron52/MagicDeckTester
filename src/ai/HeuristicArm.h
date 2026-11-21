@@ -1084,6 +1084,9 @@ enum Slot : int
     CAST_SCRY_SEARCH,         // MTG_CAST_SCRY_SEARCH  a DirectDamage spell's own scry (Magma Jet's cast_scry) is SEARCHED: every cast is twinned per alternative disposition (Action::scry_pin, the step-9d mechanism), sized off the look count, the pin consumed by the spell's ScryTop in both worlds. USER 2026-11-17: every scry site is searched, then pruned by the provider (ScryVerdict). Creature Burn s6 gi5 / s8 gi7 references. Default ON; =0 -> the provider's single pick, byte-identical to before
     CREATURE_LEFTOVER_EXACT,  // MTG_CREATURE_LEFTOVER_EXACT  a creature payment's over-produced unit is creature-only only when the restricted units could not all pay this bill's pips (Bruna mana-clean, Somberwald Sage). =0 -> the legacy min(restricted, leftover) booking
     AURA_HOST_LINE_KEEP,      // MTG_AURA_HOST_LINE_KEEP  a land Aura's host is held while it pays only when the hold does not strand the rest of the line that an unheld payment keeps (Bruna mana-clean, Wild Growth). =0 -> the unconditional hold
+    PAY_LINE_CRIT_LAND,       // MTG_PAY_LINE_CRIT_LAND  MEASUREMENT ONLY (USER-owned rule override, Bruna 2026-11-21): a land paying a generic pip that is the last source of a colour the rest of the line owes taps after every other land. Default OFF
+    PAY_LINE_CRIT_OPENER,     // MTG_PAY_LINE_CRIT_OPENER  MEASUREMENT ONLY: the line-critical land rule is live in a line that casts a breakpoint opener (tutor) too. Default OFF; read only with PAY_LINE_CRIT_LAND or PAY_LINE_CRIT_BEHIND_DORKS
+    PAY_LINE_CRIT_BEHIND_DORKS, // MTG_PAY_LINE_CRIT_BEHIND_DORKS  MEASUREMENT ONLY (overrides "no creature ever ranks ahead of any land"): a line-critical land ranks behind the creature band. Default OFF
     COUNT
 };
 
@@ -2112,6 +2115,9 @@ inline const char* Name(int slot)
         "MTG_CAST_SCRY_SEARCH",
         "MTG_CREATURE_LEFTOVER_EXACT",
         "MTG_AURA_HOST_LINE_KEEP",
+        "MTG_PAY_LINE_CRIT_LAND",
+        "MTG_PAY_LINE_CRIT_OPENER",
+        "MTG_PAY_LINE_CRIT_BEHIND_DORKS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
