@@ -404,6 +404,11 @@ struct CardParams
     // waves from each Archangel of Thune, and the fuel for Righteous Valkyrie's life-threshold
     // anthem and Resplendent Angel's gained-5-life end step.
     bool grants_lifelink     = false;  // Lyra Dawnbringer
+    // VIGILANCE subtype lord (Kaheera, the Orphanguard; Beasts 2026-11-21): "Each other creature you control that's a
+    // <subtypes_affected> ... has vigilance." The grants_lifelink shape (same-controller, subtypes_affected any-of,
+    // affects_all_creatures, an all-types animated land, lord_excludes_self by per-copy m_number), read ONLY by
+    // CreatureHasVigilance -- the combat core's attack-tap -- and admitted to BoardSources::vigilance.
+    bool grants_vigilance    = false;
     // FIRST STRIKE subtype lord (Vampires, 2026-10-18): "<subtypes_affected> [you control] have first
     // strike" -- Stromkirk Captain, Field Marshal, Neheb, the Worthy, Striking Sliver. The sibling of
     // grants_double_strike / grants_lifelink; honours lord_excludes_self by per-copy m_number (the
@@ -3550,6 +3555,16 @@ struct CardParams
     // the etb_damage_any precedent; x1 in 2HG, a single target). The source is the departed creature
     // (last known information, CR 603.10a). > 0 gates it; the value is the damage.
     int                      ltb_damage_any = 0;
+    // --- Thragtusk (Beasts 2026-11-21). ---
+    // "When this creature leaves the battlefield, create a 3/3 green Beast creature token." The LEFT card's OWN
+    // leaves trigger (the Reveillark family, NOT a dies watcher): fired from FireLeavesBattlefieldTriggers, so every
+    // leave route counts -- death (OnCreatureDies), sacrifice, blink/exile -- in both worlds. N tokens of
+    // ltb_token_power/ltb_token_toughness with ltb_token_subtypes, coloured by the shared created_token_color,
+    // through CreateTokens (the doubler chokepoint and the enter cascade). 0 = none -> byte-identical.
+    int                      ltb_self_creates_tokens = 0;
+    int                      ltb_token_power         = 0;
+    int                      ltb_token_toughness     = 0;
+    std::vector<std::string> ltb_token_subtypes;
     // Evoke (Reveillark {5}{W}): an alternate-cost cast variant (Action::evoke, mutually exclusive
     // with the hard cast by hand_index) that self-sacrifices the just-entered creature -- which
     // routes through the ordinary death cascade and thus fires the LTB. Here evoke costs MORE than
@@ -3922,6 +3937,13 @@ struct CardParams
     // so solo_target_trick is inherited). Kicked solo-target tricks fan PER TARGET in CollectActions.
     int  kicked_power_bonus = 0;
     int  kicked_tough_bonus = 0;
+    // Cragplate Baloth (Beasts 2026-11-21): "If this creature was kicked, it enters with four +1/+1 counters on it."
+    // An AS-ENTERS replacement (CR 614.1c) read ONLY on the DB-synthesized "(Kicked)" face (kicked_base_name set), in
+    // the pre-push window of both cast-entry sites (EffectHandler::EnterBattlefield and TurnSolver's apply_one twin),
+    // through PutPlusCounters (a put: a counter doubler applies). Not enters_with_plus_counters: that one fires at the
+    // universal enter cascade off the PRINTED card, which the kicked face has already been swapped back to. An
+    // unkicked cast and every put route enter with none. 0 = none -> byte-identical.
+    int  kicked_enters_with_plus_counters = 0;
     // Berserk: "At the beginning of the next end step, destroy that creature if it attacked this
     // turn." -> Permanent::destroy_at_end_if_attacked on the target, swept at the beginning of the end
     // step in BOTH worlds (DestroyAttackedAtEndStep): DESTROYED (indestructible survives, no sacrifice

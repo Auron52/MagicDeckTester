@@ -8,6 +8,7 @@
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
+#include "core/EffectHandler.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
@@ -195,4 +196,192 @@ TEST_CASE("Questing Beast: a second copy is offered when Herald's cast trigger o
         BeEnter(s, "Questing Beast", 94);
         CHECK(s.players[0].hand.size() == 1);
     }
+}
+
+// ---- Thragtusk (ltb_self_creates_tokens) --------------------------------------------------------
+
+namespace
+{
+int BeCountTokens(const GameState& s, const char* subtype, int controller = 0)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.is_token) { continue; }
+        for (const std::string& cs : p.card.m_subtypes) { if (cs == subtype) { ++n; break; } }
+    }
+    return n;
+}
+int BeIndexOf(const GameState& s, int number)
+{
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { if (s.battlefield[i].card.m_number == number) { return static_cast<int>(i); } }
+    return -1;
+}
+}   // namespace
+
+TEST_CASE("Thragtusk: enters gaining 5; leaving (a death) leaves a 3/3 green Beast token")
+{
+    const CardDefinition& tt = BeDef("Thragtusk");
+    CHECK(tt.params.ltb_self_creates_tokens == 1);
+    CHECK(tt.params.ltb_token_subtypes == std::vector<std::string>{ "Beast" });
+    GameState s = BeState();
+    s.players[0].life = 20;
+    BeEnter(s, "Thragtusk", 50);
+    CHECK(s.players[0].life == 25);
+    CHECK(BeCountTokens(s, "Beast") == 0);
+    CHECK(SelfSacHasDeathPayoff(s, 0, 50));          // its own leave pays
+    BeAdd(s, "Questing Beast", 51);
+    CHECK_FALSE(SelfSacHasDeathPayoff(s, 0, 51));    // a plain body's does not
+    SacrificePermanentAt(s, 0, BeIndexOf(s, 50));
+    CHECK(BeIndexOf(s, 50) < 0);
+    REQUIRE(BeCountTokens(s, "Beast") == 1);
+    const Permanent& tok = s.battlefield.back();
+    CHECK(tok.is_token);
+    CHECK(tok.card.m_power.value_or(0) == 3);
+    CHECK(tok.card.m_toughness.value_or(0) == 3);
+    CHECK(tok.card.HasColor(Color::Green));
+    CHECK(tok.card.IsCreature());
+}
+
+TEST_CASE("Thragtusk: the LTB token enters through the cascade (Packleader draws), and a body without it makes none")
+{
+    {
+        GameState s = BeState();
+        BeAdd(s, "Garruk's Packleader", 60);
+        BeAdd(s, "Thragtusk", 61);
+        SacrificePermanentAt(s, 0, BeIndexOf(s, 61));
+        CHECK(BeCountTokens(s, "Beast") == 1);
+        CHECK(s.players[0].hand.size() == 1);       // the 3/3 Beast is power 3
+    }
+    {   // byte-identity guard: a creature without the param leaves nothing behind
+        GameState s = BeState();
+        BeAdd(s, "Questing Beast", 62);
+        SacrificePermanentAt(s, 0, BeIndexOf(s, 62));
+        CHECK(BeCountTokens(s, "Beast") == 0);
+    }
+}
+
+// ---- Cragplate Baloth (kicked_enters_with_plus_counters) -----------------------------------------
+
+namespace
+{
+GameState BalothBoard()
+{
+    GameState s = BeState();
+    for (int k = 0; k < 10; ++k) { BeAdd(s, "Forest", 300 + k); }
+    Card c = BeDef("Cragplate Baloth").card;
+    c.m_number = 40;
+    s.players[0].hand.push_back(c);
+    return s;
+}
+const Permanent* BeBaloth(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == 40) { return &p; } }
+    return nullptr;
+}
+}   // namespace
+
+TEST_CASE("Cragplate Baloth: the kicked face carries the counters; the printed card is what enters")
+{
+    const CardDefinition& base = BeDef("Cragplate Baloth");
+    const CardDefinition& kick = BeDef("Cragplate Baloth (Kicked)");
+    CHECK(base.params.kicked_enters_with_plus_counters == 4);
+    CHECK(kick.params.kicked_base_name == "Cragplate Baloth");
+    CHECK(kick.card.m_mana_cost.generic == 7);
+    CHECK(kick.card.m_mana_cost.green == 3);
+    CHECK(base.card.HasKeyword(Keyword::Haste));
+}
+
+TEST_CASE("Cragplate Baloth: executor site -- kicked enters with four +1/+1 counters, unkicked with none")
+{
+    for (int kicked = 0; kicked < 2; ++kicked)
+    {
+        GameState s = BeState();
+        BeAdd(s, "Garruk's Packleader", 60);
+        const CardDefinition& def = BeDef(kicked ? "Cragplate Baloth (Kicked)" : "Cragplate Baloth");
+        StackEntry e;
+        e.type = StackEntry::EntryType::Spell;
+        e.source = def.card;
+        e.source.m_number = 40;
+        e.controller_index = 0;
+        EffectHandler::Resolve(s, e, def);
+        const Permanent* b = BeBaloth(s);
+        REQUIRE(b != nullptr);
+        CHECK(b->card.m_name.str() == "Cragplate Baloth");     // the printed card, never the face
+        CHECK(PlusCountersOn(*b) == (kicked ? 4 : 0));
+        CHECK(s.players[0].hand.size() == 1);                  // Packleader: a 6/6 or a 10/10 draws either way
+    }
+}
+
+TEST_CASE("Cragplate Baloth: rollout site -- the kicked plan variant enters as a 10/10, the unkicked as a 6/6")
+{
+    BoarsProvider provider;
+    GameState s = BalothBoard();
+    s.m_provider = &provider;
+    BeSearchedScope on(true);
+    bool saw_kicked = false, saw_plain = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const Action* cast = nullptr;
+        for (const Action& a : plan.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name == "Cragplate Baloth") { cast = &a; } }
+        if (cast == nullptr) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, plan, true);
+        const Permanent* b = BeBaloth(t);
+        REQUIRE(b != nullptr);
+        CHECK(b->card.m_name.str() == "Cragplate Baloth");
+        if (cast->kicked) { saw_kicked = true; CHECK(PlusCountersOn(*b) == 4); }
+        else              { saw_plain  = true; CHECK(PlusCountersOn(*b) == 0); }
+    }
+    CHECK(saw_kicked);
+    CHECK(saw_plain);
+}
+
+// ---- Kaheera, the Orphanguard (lord + grants_vigilance) ------------------------------------------
+
+TEST_CASE("Kaheera: pumps and grants vigilance to another Beast (tokens included), never to itself")
+{
+    GameState s = BeState();
+    const int k = BeAdd(s, "Kaheera, the Orphanguard", 70);
+    CreateToken(s, 0, 3, 3, { "Beast" }, "G");
+    const int tok = static_cast<int>(s.battlefield.size()) - 1;
+    CreateToken(s, 0, 6, 6, { "Wurm" }, "G");
+    const int wurm = static_cast<int>(s.battlefield.size()) - 1;
+    CreateToken(s, 1, 3, 3, { "Beast" }, "G");
+    const int opp = static_cast<int>(s.battlefield.size()) - 1;
+    auto bonus = [&](int i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        return ComputeLordBonus(p.card, s, p.controller_index, false, &p);
+    };
+    CHECK(bonus(tok) == std::pair<int, int>{ 1, 1 });
+    CHECK(bonus(wurm) == std::pair<int, int>{ 0, 0 });
+    CHECK(bonus(opp) == std::pair<int, int>{ 0, 0 });
+    CHECK(bonus(k) == std::pair<int, int>{ 0, 0 });            // "each OTHER creature"
+    CHECK(CreatureHasVigilance(s.battlefield[tok], s));
+    CHECK_FALSE(CreatureHasVigilance(s.battlefield[wurm], s));
+    CHECK_FALSE(CreatureHasVigilance(s.battlefield[opp], s));
+    // Through the combat core's prefilter too (BoardSources::vigilance must admit the lord).
+    const BoardSources bs = GatherBoardSources(s.battlefield, 0);
+    CHECK(CreatureHasVigilance(s.battlefield[tok], s, &bs.vigilance));
+    // Kaheera's own vigilance is the PRINTED keyword: strip it and the grant does not reach her.
+    s.battlefield[static_cast<std::size_t>(k)].card.RemoveKeyword(Keyword::Vigilance);
+    CHECK_FALSE(CreatureHasVigilance(s.battlefield[k], s));
+    // No Kaheera: the Beast token has no vigilance.
+    GameState t = BeState();
+    CreateToken(t, 0, 3, 3, { "Beast" }, "G");
+    CHECK_FALSE(CreatureHasVigilance(t.battlefield.back(), t));
+}
+
+TEST_CASE("Kaheera: a Krosan Warchief entering under her is a 3/3, so Garruk's Packleader draws")
+{
+    GameState s = BeState();
+    BeAdd(s, "Garruk's Packleader", 60);
+    BeEnter(s, "Krosan Warchief", 61);
+    CHECK(s.players[0].hand.empty());
+    BeAdd(s, "Kaheera, the Orphanguard", 70);
+    BeEnter(s, "Krosan Warchief", 62);
+    CHECK(s.players[0].hand.size() == 1);
 }

@@ -1275,6 +1275,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_haste           = params.value("grants_haste", false);
     p.grants_double_strike   = params.value("grants_double_strike", false);
     p.grants_lifelink        = params.value("grants_lifelink", false);
+    p.grants_vigilance       = params.value("grants_vigilance", false);   // Kaheera (Beasts 2026-11-21)
     p.grants_first_strike    = params.value("grants_first_strike", false);   // Vampires 2026-10-18
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
     p.cost_less_per_creature_on_battlefield = params.value("cost_less_per_creature_on_battlefield", false);
@@ -2067,6 +2068,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.ltb_return_creatures      = params.value("ltb_return_creatures", 0);
     p.ltb_return_max_power      = params.value("ltb_return_max_power", 0);
     p.ltb_damage_any            = params.value("ltb_damage_any", 0);
+    p.ltb_self_creates_tokens   = params.value("ltb_self_creates_tokens", 0);   // Thragtusk
+    p.ltb_token_power           = params.value("ltb_token_power", 0);
+    p.ltb_token_toughness       = params.value("ltb_token_toughness", 0);
+    for (const std::string& s : params.value("ltb_token_subtypes", json::array()))
+        p.ltb_token_subtypes.push_back(s);
     if (params.contains("evoke_cost"))
         p.evoke_cost = ManaCostFromString(params["evoke_cost"].get<std::string>());
     // lfe-fury cluster (Fury / Incandescent Soulstoke / Smokebraider) -- see the CardParams block.
@@ -2210,6 +2216,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mainphase_tough_bonus       = params.value("mainphase_tough_bonus", 0);
     p.kicked_power_bonus          = params.value("kicked_power_bonus", 0);
     p.kicked_tough_bonus          = params.value("kicked_tough_bonus", 0);
+    p.kicked_enters_with_plus_counters = params.value("kicked_enters_with_plus_counters", 0);   // Cragplate Baloth
+    if (p.kicked_enters_with_plus_counters < 0)
+        throw std::runtime_error("kicked_enters_with_plus_counters must be >= 0");
     p.trick_destroy_at_end_if_attacked = params.value("trick_destroy_at_end_if_attacked", false);
     p.cast_only_before_combat_damage   = params.value("cast_only_before_combat_damage", false);
     p.redirects_spell_target_to_self   = params.value("redirects_spell_target_to_self", false);
