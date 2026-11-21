@@ -425,6 +425,7 @@ bool SacFodderStagePlayoutOn();   // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging a
 bool SacFodderWaveEarlyOn();      // MTG_SAC_FODDER_WAVE_EARLY (WIP arm, default OFF)
 bool SacFodderWaveCtxOn();        // MTG_SAC_FODDER_WAVE_CTX (WIP arm, default OFF)
 bool SacFodderWaveInwinOn();      // MTG_SAC_FODDER_WAVE_INWIN (WIP arm, default OFF)
+bool SacFodderWaveBpEnumOn();     // MTG_SAC_FODDER_WAVE_BPENUM (WIP arm, default OFF)
 // Does this action put a permanent onto the battlefield (cast, Vial, Bronze put, retrace)?
 bool SacFodderPutKind(const Action& a);
 // The legal fodder bodies this action adds for an outlet with params `op`: its own body (a matching

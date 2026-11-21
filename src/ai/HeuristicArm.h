@@ -1011,6 +1011,7 @@ enum Slot : int
     SAC_FODDER_WAVE_EARLY,    // MTG_SAC_FODDER_WAVE_EARLY  under MTG_SAC_FODDER_MENU + _WAVE: the first pass drops a credited subset right after the flat mana check (before the colour / walk gates). WIP arm
     SAC_FODDER_WAVE_CTX,      // MTG_SAC_FODDER_WAVE_CTX  under MTG_SAC_FODDER_MENU + _WAVE: the first pass enumerates the lever-off menu exactly and records a latent occurrence wherever the fodder context is live. WIP arm
     SAC_FODDER_WAVE_INWIN,    // MTG_SAC_FODDER_WAVE_INWIN  under MTG_SAC_FODDER_MENU + _WAVE: a first-pass node whose only latent occurrences were wave drops keeps its in-window answer in the inwin cache under a pass-1-only tag (read by a first pass alone, as a wave latent). WIP arm
+    SAC_FODDER_WAVE_BPENUM,   // MTG_SAC_FODDER_WAVE_BPENUM  under MTG_SAC_FODDER_MENU + _WAVE: the first pass also withholds credited plans inside breakpoint enumerations (g_bp_enum_depth > 0); re-test of the old STAGE_BPENUM after the 7f322b6d3 memo-key fix. WIP arm
     STUFFY_OPP_CREATURE_PRUNE,// MTG_STUFFY_OPP_CREATURE_PRUNE  per-job override of the Stuffy Doll opponent-creature reflection-target prune (StuffyDollProvider::ReflectTargetCandidates; DEFAULT ON, ADOPTED by the USER 2026-11-20 after the held-out A/B). Slot added so the prune A/B runs as ONE pooled batch
     STUFFY_UNPRUNE_9B,        // MTG_STUFFY_UNPRUNE_9B  per-job form of MTG_UNPRUNE=redirectwindow,gchost,escapetarget (the three step-9b StuffyDollProvider prunes): MTG_UNPRUNE is one process-wide mask, so without this a pooled batch cannot carry the unpruned arm. DEFAULT OFF; =1 lifts the three prunes exactly as the mask does (same human-play / hand-back suppression)
     SEA_BUCKET_DISCARD,       // MTG_SEA_BUCKET_DISCARD  Sea Creatures: the USER's cleanup-discard buckets (2026-11-18, docs/design/sea-creatures-discard-policy-proposal.md): MANA (6-8 counting the board; cheap accelerants + one MV-3 accelerant early, a land drop per turn clamped to 1-2 lands) and THREATS (Spawning Kraken + Koma auto-keeps, a 6-drop and a 7-drop to start, the rest by P/T x castability, Sin conditional on a Saga line); 5 mana + 2 threats until board + the best 4 mana cards cast the kept threats, then 4 + 3; Whelming Wave shed first. SeaCreaturesProvider::CleanupDiscardCandidates. Default ON (USER rule); =0 -> the generic max-MV ranking
@@ -2083,6 +2084,7 @@ inline const char* Name(int slot)
         "MTG_SAC_FODDER_WAVE_EARLY",
         "MTG_SAC_FODDER_WAVE_CTX",
         "MTG_SAC_FODDER_WAVE_INWIN",
+        "MTG_SAC_FODDER_WAVE_BPENUM",
         "MTG_STUFFY_OPP_CREATURE_PRUNE",
         "MTG_STUFFY_UNPRUNE_9B",
         "MTG_SEA_BUCKET_DISCARD",
