@@ -111,6 +111,12 @@ TEST_CASE("Maze's End P5d-6 Q2: the Manabond discard-value rule (CrossingDumpYes
         const Arm tp(heurarm::MAZE_MANABOND_TUTOR_PRUNE, 0);
         CHECK(Order(prov, s) == -1);                         // sub-lever off: "no" only ordered first
     }
+    {   // ...but with a Guild Summit of ours out, the yes's Gates each draw a card: no prune, "no" only ordered first
+        // (regression std d5 s3003 gi100 at d8 b0)
+        GameState s = Board(prov, 2, 3, { "Sylvan Scrying" }, { "Guild Summit" });
+        s.battlefield.erase(s.battlefield.begin() + 1);   // Maze's End (701)
+        CHECK(Order(prov, s) == -1);
+    }
     {   // the same hand with Maze's End IN HAND (not on the battlefield): ours, so the 3-land yes frees the tutor
         GameState s = Board(prov, 2, 3, { "Sylvan Scrying" });
         s.players[0].hand.push_back(s.battlefield[1].card);

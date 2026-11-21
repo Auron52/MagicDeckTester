@@ -70340,7 +70340,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
 //    Maze's End 2HG blind seed 202022 gi 21 salt 3 at d8 b0: a T4 end-step yes discarded the only Sylvan Scrying with
 //    no Maze's End anywhere, and the game was never won).
 //  * Everything else (Amulet of Vigor, a deck change) is KEPT.
-struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; bool maze_ours = false; };
+struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; bool maze_ours = false; bool summit_out = false; };
 static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, const std::vector<int>* skip = nullptr)
 {
     MazeDumpView v;
@@ -70395,6 +70395,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
     const bool tutors_free = maze_held && (lands_put >= 3 || (lands_put == 2 && tutors <= 1) || sets_up_win);
     if (tutors_free) { v.free += tutors; } else { v.held_tutors = tutors; }
     v.maze_ours = maze_held;
+    v.summit_out = summit_out;
     return v;
 }
 // Does Manabond put a held Maze's End back before our next turn without discarding a card we care about (P5d-6 Q2)?
@@ -70770,7 +70771,13 @@ int MazesEndProvider::CrossingDumpYesOrder(const GameState& s, int controller, i
     if (v.free == v.nonland) { return mazedumpcensus::Note(mazedumpcensus::kClearPrune, 2); }
     if (v.held_tutors > 0)
     {
-        if (!v.maze_ours && MazeManabondTutorPruneOn()) { return mazedumpcensus::Note(mazedumpcensus::kTutorPruneYes, -2); }
+        // Q4 tutor prune (USER 2026-11-21: "that is a probable hold case") -- but NOT with a Guild Summit of ours out:
+        // then every Gate the yes puts draws a card, so the yes refills the hand it discards and the tutor is no longer
+        // the only route to Maze's End. Regression std d5 s3003 gi100 at d8 b0: the T3 end-step yes (Summit out,
+        // Archdruid's Charm held, no Maze's End) put three Gates, drew three, and won T4 (blind T5); the prune forced
+        // "no" and won T5 (blind T6). There the hold is only ORDERED first (-1), and both answers stay searched.
+        if (!v.maze_ours && !v.summit_out && MazeManabondTutorPruneOn())
+        { return mazedumpcensus::Note(mazedumpcensus::kTutorPruneYes, -2); }
         return mazedumpcensus::Note(mazedumpcensus::kCloseTutor, -1);
     }
     if (v.kept > 0 && lands_put < 2) { return mazedumpcensus::Note(mazedumpcensus::kCloseKept1, -1); }
