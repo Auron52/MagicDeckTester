@@ -1,9 +1,8 @@
-# Regression ground truth -- commit a1b9896a7  date 2026-11-21
+# Regression ground truth -- commit 7f8dc4b9a  date 2026-11-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
-# accepted-with-regressions (smoke, 2026-11-21): Maze's End batch 3 (fold-seen + fetch-rank-cond + manabond-discard/tutor-prune ON): 12 searched slower games all recover at d8 b0; held-out A/B net std -44/-75, 2hg -2/-29 (clairvoyant/blind)
 # accepted-with-regressions (regression, 2026-11-21): Maze's End batch 3 (fold-seen + fetch-rank-cond + manabond-discard/tutor-prune ON): 12 searched slower games all recover at d8 b0; held-out A/B net std -44/-75, 2hg -2/-29 (clairvoyant/blind)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -49,14 +48,14 @@ merfolk_smoke_d0_s1001=4.4750/45cb6d8e414af22d
 merfolk_smoke_d3_s1001=4.1400/8a191513e5031fd1
 merfolk_smoke_d5_s1001=4.1500/d22df3f9c5538206
 merfolk2hg_smoke_d3_s1001=4.9200/59fac5cecf5dd127
-midrangeburn_smoke_d0_s1001=5.2170/150ea77c6705d19d
-midrangeburn_smoke_d3_s1001=4.4800/3fc73c2768ad9f71
-midrangeburn_smoke_d5_s1001=4.3800/cee2ab31d08f6726
+midrangeburn_smoke_d0_s1001=5.0930/3d1e6c60d4a5ea54
+midrangeburn_smoke_d3_s1001=4.4600/585940868b26de5b
+midrangeburn_smoke_d5_s1001=4.3600/cf3c92a7eaf18202
 midrangeburn2hg_smoke_d5_s1001=5.3200/56d3174626e7f3fe
-onedropburn_smoke_d0_s1001=4.2310/ae3af5d60c144166
-onedropburn_smoke_d3_s1001=3.5200/335c6c969a7610ab
-onedropburn_smoke_d5_s1001=3.5800/96f69d6d2117276a
-onedropburn2hg_smoke_d5_s1001=4.8000/763b609da09eec1e
+onedropburn_smoke_d0_s1001=4.2080/597239497b70d461
+onedropburn_smoke_d3_s1001=3.5200/b1c6fbcd9e45e9f0
+onedropburn_smoke_d5_s1001=3.5700/063171c30b0ef711
+onedropburn2hg_smoke_d5_s1001=4.8000/4ccce3405e675f2a
 modernrwburn_smoke_d0_s1001=4.0540/2cee42fb7b07c4ac
 modernrwburn_smoke_d3_s1001=3.7200/af1a98b2a4c17dc9
 modernrwburn_smoke_d5_s1001=3.7000/f1965d1cc2dad1b0
@@ -311,9 +310,9 @@ midrangeburn_regression_d3_s30021=4.0000/a2365362c9bdc8f5
 midrangeburn_regression_d5_s30021=4.0000/a2365362c9bdc8f5
 onedropburn_regression_d3_s30261=3.2000/2ae507a87b66d5fd
 onedropburn_regression_d5_s30261=3.2000/2ae507a87b66d5fd
-alchemist_regression_d3_s30211=5.0000/a195f5d25c4e6fb4
 creatureburn_regression_d3_s30161=4.6000/b45128e8bdf1b72a
 creatureburn_regression_d5_s30161=4.6000/b45128e8bdf1b72a
+alchemist_regression_d3_s30211=5.0000/a195f5d25c4e6fb4
 alchemist_regression_d5_s30211=5.0000/cb30eadab9d9409a
 angels_regression_d3_s30001=4.7000/1c192408cceafe7b
 angels_regression_d5_s30001=4.7000/1c192408cceafe7b
@@ -591,16 +590,16 @@ elementals_regression_d0_s2002=5.5970/1685ceae877bb33e
 elementals_regression_d3_s2002=4.3800/fcd127baf81d3bce
 elementals_regression_d5_s2002=4.2800/1a3e1e5644eeeb15
 elementals_regression_d5_s3003=4.2333/770a57c468ff0e45
-midrangeburn_regression_d0_s2002=5.1930/4a4ef7024c395e2f
-midrangeburn_regression_d3_s2002=4.4933/4d1330a80fbc317c
-midrangeburn_regression_d5_s2002=4.3867/a9618460faa56a67
-midrangeburn_regression_d5_s3003=4.3000/39734f848d13568e
-midrangeburn2hg_regression_d5_s2002=5.6533/26029ee0b53c4af2
-onedropburn_regression_d0_s2002=4.2380/ccd3328b6e6abfc5
-onedropburn_regression_d3_s2002=3.6533/2ede21c57c5a1110
-onedropburn_regression_d5_s2002=3.7133/c3cced7fc991db81
-onedropburn_regression_d5_s3003=3.6133/b63bcb82bd445e0c
-onedropburn2hg_regression_d5_s2002=4.9200/1ff224338127ea24
+midrangeburn_regression_d0_s2002=5.0690/5e70ef441d6f90bf
+midrangeburn_regression_d3_s2002=4.4800/8d1d41538eae794c
+midrangeburn_regression_d5_s2002=4.3800/3ef7232317089121
+midrangeburn_regression_d5_s3003=4.2733/c9f175142f0f2402
+midrangeburn2hg_regression_d5_s2002=5.6267/04a6795267be7904
+onedropburn_regression_d0_s2002=4.2100/9ff48f1e191c6d2c
+onedropburn_regression_d3_s2002=3.6400/412446ab5841dd10
+onedropburn_regression_d5_s2002=3.7067/08517c16f93707f3
+onedropburn_regression_d5_s3003=3.6067/ea6d17ddccd8713e
+onedropburn2hg_regression_d5_s2002=4.9067/6da47083d5f8ba2c
 modernrwburn_regression_d0_s2002=4.0600/eb49a72833f0983f
 modernrwburn_regression_d3_s2002=3.8933/54475e855a3937b1
 modernrwburn_regression_d5_s2002=3.8133/875bc9d9b43d0f22
@@ -608,7 +607,7 @@ modernrwburn_regression_d5_s3003=3.8667/7202da235ccfce7b
 modernrwburn2hg_regression_d5_s2002=4.7600/7ffd3e954bd6ba4b
 creatureburn_regression_d0_s2002=5.8830/2b074b93c25b563f
 creatureburn_regression_d3_s2002=4.8400/3dd258a4ca7d07f8
-creatureburn_regression_d5_s2002=4.7600/2370dae87229f9e7
+creatureburn_regression_d5_s2002=4.7600/34d83f7703f6d1f3
 creatureburn_regression_d5_s3003=4.7667/26c6c0e3b288861e
 creatureburn2hg_regression_d5_s2002=6.0400/fe337a3f95c57665
 merfolk_regression_d0_s2002=4.4220/8339c0ed8e3acf8d
