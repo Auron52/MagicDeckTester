@@ -339,7 +339,9 @@ TEST_CASE("Bruna: line-critical land variants (measurement levers)")
     {
         ArmPin pin(on ? 1 : 0, on ? 1 : 0, 0);
         BoardBr b;
-        b.Put("Remote Farm");
+        const int farm = b.Put("Remote Farm");
+        for (Permanent& q : b.s.battlefield)
+        { if (q.card.m_number == farm) { q.counters.push_back(Counter{ Counter::Type::Depletion, 2 }); } }
         b.Put("Forest");
         ManaCost sol;  sol.generic = 1;
         ManaCost wish; wish.white = 1; wish.green = 1;
