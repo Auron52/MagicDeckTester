@@ -61553,8 +61553,13 @@ static void BuildSpectacleCreditCtx(const GameState& state, const std::vector<Ac
             // MTG_PO_DAMAGE_ORDER: when the rank order puts the burn after the spectacle cast, both apply worlds
             // move the burn ahead whenever the rank order cannot pay (TurnSolver::DamagePayableOrder), so every
             // face-burn cast of the selection can precede it (gate claude-queue-20261120b ENUM-GAP: 1 Drop Burn T2
-            // {Mountain, Skewer, Fireblast, suspend Rift Bolt}, Fireblast > Skewer pays every action).
-            const bool before = PoDamageOrderOn() || CastOrderLess(state, cands[k], cands[j])
+            // {Mountain, Skewer, Fireblast, suspend Rift Bolt}, Fireblast > Skewer pays every action). Only a burn
+            // that order search can move and whose damage its walk models (a DirectDamage hand cast, no reveal
+            // cost): a Vexing Devil trigger ranked after is not reordered, so crediting it would be unrealisable.
+            const Action& tk = cands[k];
+            const bool dmg_movable = tk.kind == Action::Kind::CastFromHand && tk.def != nullptr
+                && tk.def->tmpl == CardTemplate::DirectDamage && !IsRevealCostCast(tk);
+            const bool before = (dmg_movable && PoDamageOrderOn()) || CastOrderLess(state, cands[k], cands[j])
                 || (!CastOrderLess(state, cands[j], cands[k]) && k < j);
             if (before) { out.prior_trig[j].push_back(static_cast<int>(k)); out.live = true; }
         }
