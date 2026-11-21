@@ -1,4 +1,4 @@
-# Worldfire analysis -- checkpoint (2026-11-21 ~20:15 UTC)
+# Worldfire analysis -- checkpoint (2026-11-21 ~22:30 UTC)
 
 Owner: the session analyzing `decks/Worldfire/Worldfire.cod` (USER asked: "Please analyze the
 Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldfire`, branch
@@ -61,23 +61,29 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   push_queue. Windows CI 44935787667: success. Feat-fix slower game gi52 recovers at b200 (40bd2d0c5);
   verify_deck --write-ledger GATE PASS (7d2067a9c). Those two docs commits ride along with the next landing.
 
-## Running (~20:15 UTC)
-- stage5b (heavy_run, build/scratch/worldfire/stage5b.sh): 5c2 leaf_tiebreak_check -> logs/worldfire/
-  leaf_tiebreak.log (rc= line), then 5b depth sweep d3b10 / d5b20 / d5b200, 96 games, seed 9400001 ->
-  build/scratch/worldfire/s5b/*.out + DONE.
-- gi4 (seed 9300005) d8 b0 replay, PID 3629867 -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
-- Free-turn chain1 (freeturn worktree, build/scratch/freeturn/chain1.sh, PID 3724929): build, units,
-  scenarios, flags-OFF smoke -> build/scratch/freeturn/chain1.{out,DONE}. Agent #2 has finished; the parent
-  owns the measurement (handoff logs/freeturn/handoff.md step 3; off arm = build/scratch/freeturn/offarm_parent).
+## Done since (~22:30 UTC)
+- 5c2 tie-break KEEP; 5b monotone; 5c budget-bound at d5 b20 (d5 b200 17 better / 0 worse) -- ledger 2ecb24d7b.
+- Scratch worktrees wf-featfix, opp-landplay-base removed (references verified safe).
+- Free-turn (wip/freeturn 2d373428c + d35211372, pushed): flags-OFF smoke 243/243 byte-identical, scenarios
+  605/605 both flag states; flag-ON regression measured (ledger 4a7ff87ea). Worldfire credited ~1 turn, raw
+  rounds slower. Pre-adoption holes: Creature Burn ref claude_s9_gi8 drifts under the flag; steal_tap_count lock
+  trait (Vampires 3x units); passive opponent's oldest-first cleanup hands Burn / Extra Turns / RW Burn free
+  turns.
+
+## Running
+- Free-turn follow-up agent (fresh, Opus) in the freeturn worktree: fixes those three, units, flags-OFF smoke,
+  one flag-ON regression tier, doc update, push wip/freeturn. Handoff file if it hits 250K:
+  logs/freeturn/handoff2.md.
+- Windows CI 44952777971 (wip/freeturn) -- watch in background.
+- gi4 (seed 9300005) d8 b0 replay, PID 3629867 (5h+) -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
 
 ## Next, in order
-1. Read 5c2 (KEEP / NEUTRAL / NO SIGN -> re-run at suggested --blocks / OPT OUT -> GradesNoWinLeaf false) and
-   5b monotonicity (d5b20 vs d3b10; b200 recovery = budget starvation, note in 5c); ledger.
-2. gi4 d8 b0 result -> ledger (misplay candidate: Claude T5 vs search T6).
-3. Free-turn: after chain1, MTG_FREE_TURNS=1 regression + Worldfire direct, report (a)-(d), doc Implementation
-   section, push wip/freeturn (flags OFF; adoption is the USER's).
-4. Stage 6 report; remove scratch worktrees wf-featfix + opp-landplay-base (check_references_safe first);
-   CronDelete cf1c0324.
+1. gi4 d8 b0 result -> ledger.
+2. Relay the follow-up agent's report; surface USER questions 1-8 (free-turn defaults + cap/tie-break, cleanup
+   lands-first, steal_tap_count).
+3. Push the unpushed worldfire docs commits (40bd2d0c5 .. 4a7ff87ea; ungated docs -- batch with next landing
+   or push directly as docs-only).
+4. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
 ## Open USER questions (defaults taken)
 - Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
