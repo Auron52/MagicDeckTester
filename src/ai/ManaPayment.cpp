@@ -5760,6 +5760,11 @@ bool SacFodderWaveInwinOn()
     static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_INWIN");
     return heurarm::Flag(heurarm::SAC_FODDER_WAVE_INWIN, env_on);
 }
+bool SacFodderWaveBpEnumOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_BPENUM");
+    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_BPENUM, env_on);
+}
 bool SacFodderNeededOnlyOn()
 {
     // MTG_SAC_FODDER_NEEDED_ONLY (DEFAULT ON; read only under MTG_SAC_FODDER_MENU): EnumeratePlansCore credits the

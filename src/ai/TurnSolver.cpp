@@ -35147,7 +35147,9 @@ static inline void SfmWaveLatent(int turn)
 }
 static inline bool SfmWaveDropHere()
 {
-    return g_devseq_suppress > 0 && g_rollout_nest == 0 && g_bp_enum_depth == 0 && SacFodderWaveOn() && BpDevSeqOn();
+    // MTG_SAC_FODDER_WAVE_BPENUM (WIP arm): the first pass also withholds credited plans inside breakpoint enumerations.
+    return g_devseq_suppress > 0 && g_rollout_nest == 0 && (g_bp_enum_depth == 0 || SacFodderWaveBpEnumOn())
+        && SacFodderWaveOn() && BpDevSeqOn();
 }
 struct DvsPassLmtScope
 {
@@ -131556,7 +131558,7 @@ static int SacFodderAdmitMode(const GameState& state)
     if (!state.deck_has_sac_mana_outlet || !SacFodderMenuLeverOn()) { return 0; }
     if (!SacOutletInReach(state)) { return 0; }
     if (!SacFodderMenuOn()) { return 1; }
-    if (g_devseq_suppress > 0 && g_rollout_nest == 0 && g_bp_enum_depth == 0 && SacFodderWaveOn() && BpDevSeqOn())
+    if (SfmWaveDropHere())   // the wave first pass (MTG_SAC_FODDER_WAVE; _BPENUM widens it to breakpoint enumerations)
     { return 2; }
     return 3;
 }
