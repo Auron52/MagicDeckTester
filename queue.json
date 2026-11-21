@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/maze-batch3",
-   "head_since": "2026-11-21T04:11:54Z",
-   "heartbeat": "2026-11-21T07:25:53Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/maze-batch3",
-   "joined": "2026-11-21T04:11:01Z",
-   "note": ""
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-21T07:27:00Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-21T06:41:49Z",
