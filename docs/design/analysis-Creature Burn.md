@@ -373,3 +373,23 @@ s2400000 gi142 5->6, s2900000 gi272 6->7) re-run with the tie-break ON at d5 `--
 (`build/scratch/cb-orch/gate2/`) all recover the base win turn (5, 4, 5, 6): recoverable, no line deleted.
 **VERDICT: KEEP THE DEFAULT (ON). No opt-out.** Outputs: `logs/leaf_tiebreak/creatureburn{,-ext}.{json,out}`
 (run 1's `.out` also copied to `build/scratch/cb-orch/tiebreak-run1.out`).
+
+## Browbeat second-main cost (probe, 2026-11-21)
+
+Browbeat (`opp_may_take_damage_instead_of_draw`) is this deck's only `GoldFishRunner::DeckUsesSecondMain` trigger,
+so it opens a full searched post-combat main on EVERY turn. Priced with a never-landed probe binary
+(worktree `.claude/worktrees/cb-m2probe`, `MTG_CB_PROBE_BROWBEAT_M2=0` drops the trigger), both arms on the same
+binary, back to back, alone on the box, regression seed 1001 x 300 games per cell (`build/scratch/cb-orch/m2cost/`;
+units reproduce exactly on a rerun):
+
+| cell | arm | avg win turn | units | ms/game | changed games (ON better / worse) |
+|---|---|---|---|---|---|
+| d5 b20 | M2 ON (shipped) | 4.8467 | 7,154,532 | 3887 | 6 (3 / 3), net 0 |
+| d5 b20 | M2 OFF | 4.8467 | 4,384,041 | 2101 | |
+| d3 b10 | M2 ON (shipped) | 4.8567 | 4,875,796 | 2553 | 10 (5 / 5), net 0 |
+| d3 b10 | M2 OFF | 4.8567 | 3,073,558 | 1341 | |
+
+The every-turn main 2 costs **1.63x units at d5, 1.59x at d3** and buys **0.000 turns** on this sample. Dropping it
+is NOT allowed as such: a main-2 Browbeat ("attack, then Browbeat" meets a lower-life choice) would become unfindable
+at every budget. The sound shape is the per-turn restricted main (`RestrictedSecondMainLive`, the Giada/Omnitool
+hook): open it only on turns a Browbeat is in hand post-combat. Being built as a follow-up; see the checkpoint.
