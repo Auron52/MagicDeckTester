@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "ft-land-1121",
-   "head_since": "2026-11-21T08:38:38Z",
-   "heartbeat": "2026-11-21T10:36:35Z",
-   "host": "67d5329561c0",
-   "id": "67d5329561c0:ft-land-1121",
-   "joined": "2026-11-21T08:14:29Z",
-   "note": "RULE6 ON + Cyclone lounge-idle/amend + S9 mana skip r4 + deferral doc"
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-21T10:41:18Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-21T08:38:38Z",
