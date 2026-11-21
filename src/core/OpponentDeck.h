@@ -182,12 +182,27 @@ struct LandPlayResult
     bool searched = false;
     std::string land_name;
     std::string fetched_name;
+    // What the land's entry did, in order, for the play-event sink ("enters as Turntimber, Serpentine
+    // Wood (tapped)", "returns Forest to hand", "sacrifices Swamp", "gains 2 life"). Empty for a plain land.
+    std::vector<std::string> notes;
+    std::vector<std::string> fetched_notes;   // the same, for the land a fetch put onto the battlefield
+    // ETB life gains (source name, amount) the caller applies through OpponentGainsLife after its events.
+    std::vector<std::pair<std::string, int>> life_gains;
 };
 
-// The passive land policy: play the leftmost land in hand, then crack
-// an immediately usable fetch. Choose the first eligible library land; this is
-// an opponent policy, not a search branch for our solver. The caller performs
-// the shuffle and offers the Archive Trap instant window after resolution.
+// 2HG HEAD OWNERSHIP. Both heads' permanents sit on the shared battlefield under controller 1; which
+// head a card belongs to is its card-number band (Deal numbers head 1 from kNumberBase, head 2 from
+// kNumberBase2). Anything else under controller 1 (a card of ours they gained, an untracked token, a
+// hand-built test card) counts as head 1's: the targeted head that every single-opponent effect addresses.
+inline constexpr int kHeadBandWidth = 10000;
+inline int HeadOfNumber(int number)
+{ return (number >= kNumberBase2 && number < kNumberBase2 + kHeadBandWidth) ? 2 : 1; }
+inline bool HeadControls(const Permanent& p, int head)
+{ return p.controller_index == 1 && HeadOfNumber(p.card.m_number) == head; }
+// A nontoken land that head controls.
+inline bool HeadControlsLand(const Permanent& p, int head)
+{ return !p.is_token && p.card.IsLand() && HeadControls(p, head); }
+
 // ORDER-CANONICAL PLACEMENT (MTG_OPP_LANDS_FRONT, DEFAULT ON; =0 restores push_back). The
 // opponent's lands enter as ONE block at the FRONT of the shared battlefield, in their own arrival
 // order, ahead of all of ours: the layout the legacy three-land board always had. push_back
@@ -205,88 +220,9 @@ inline bool OpponentLandsFrontOn()
     return v;
 }
 
-// One head's land play from the given hand and library (players[1]'s, or 2HG's second head's with
-// graveyard == nullptr: nothing reads that head's graveyard). Life is the opponent's (team) life.
-inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& hand, Library& library,
-                                           std::vector<Card>* graveyard)
-{
-    LandPlayResult result;
-    if (!state.opponent_plays_lands || state.opponent_decked) { return result; }
-    Player& opp = state.players[1];
-    auto held = std::find_if(hand.begin(), hand.end(), [](const Card& c) {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        return d != nullptr && d->card.IsLand();
-    });
-    if (held == hand.end()) { return result; }
-    const Card card = *held;
-    const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
-    hand.erase(held);
-    result.played = true;
-    result.land_name = card.m_name.str();
-    auto enter = [&](const Card& entering, const CardDefinition& land_def, bool force_tapped) {
-        Permanent perm;
-        perm.card = land_def.card;
-        perm.card.m_number = entering.m_number;
-        perm.controller_index = 1;
-        perm.owner_index = 1;
-        perm.entered_this_turn = true;
-        // The passive opponent declines optional shock-land life payments.
-        perm.tapped = force_tapped || land_def.params.enters_tapped
-            || land_def.params.etb_pay_life_to_untap > 0;
-        if (OpponentLandsFrontOn())
-        {
-            auto pos = state.battlefield.begin();
-            while (pos != state.battlefield.end() && pos->controller_index == 1) { ++pos; }
-            state.battlefield.insert(pos, std::move(perm));
-            return;
-        }
-        state.battlefield.push_back(std::move(perm));
-    };
-    const bool typed_fetch = !def->params.fetch_land_types.empty();
-    const bool basic_fetch = def->params.land_search_activation_sacrifice_self
-        && def->params.land_search_basic_only && def->params.land_search_count == 1
-        && def->params.land_search_activation_cost.has_value()
-        && def->params.land_search_activation_cost->ManaValue() == 0;
-    // Older typed-fetch definitions omit the activation fields because the
-    // normal fetch resolver charges their printed one life directly.
-    const int life_cost = typed_fetch
-        ? std::max(1, def->params.land_search_activation_life_cost)
-        : def->params.land_search_activation_life_cost;
-    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost)
-    {
-        enter(card, *def, false);
-        return result;
-    }
-    // Fetch activation: tap and sacrifice this just-played land as costs.
-    opp.life -= life_cost;
-    if (graveyard != nullptr) { graveyard->push_back(card); }
-    result.searched = true;
-    auto pick = std::find_if(library.begin(), library.end(), [&](const Card& candidate) {
-        const CardDefinition* land = CardDatabase::Instance().LookupCached(candidate);
-        if (land == nullptr || !land->card.IsLand()) { return false; }
-        if (basic_fetch) { return land->card.HasSupertype(Supertype::Basic); }
-        for (const std::string& type : def->params.fetch_land_types)
-        for (const std::string& subtype : land->card.m_subtypes)
-        { if (type == subtype) { return true; } }
-        return false;
-    });
-    if (pick != library.end())
-    {
-        const Card fetched = *pick;
-        const CardDefinition* land = CardDatabase::Instance().LookupCached(fetched);
-        library.erase(pick);
-        result.fetched_name = fetched.m_name.str();
-        // A passive opponent never pays a shock land's optional two life.
-        enter(fetched, *land, basic_fetch && def->params.land_search_tapped);
-    }
-    return result;
-}
-
-inline LandPlayResult PlayLeftmostLand(GameState& state)
-{
-    Player& opp = state.players[1];
-    return PlayLeftmostLandFrom(state, opp.hand, opp.library, &opp.graveyard);
-}
+// PlayLeftmostLandFrom / PlayLeftmostLand -- the land policy itself -- live in SpellEffects.h, beside
+// ResolvePassiveOpponentLandTurn: a land's entry (an MDFC's land face, a Karoo bounce, Lake of the Dead's
+// replacement, an enters-tapped condition, an ETB life gain) reads the shared land helpers defined there.
 
 // The opponent's DRAW, simulated at the end of each of OUR turns.
 //

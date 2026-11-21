@@ -3037,6 +3037,307 @@ inline int StaticExtraLandDrops(const GameState& state, int player)
 // Burgeoning's triggers on the opponent's land play (defined with the crossing land puts, after EnterLand).
 inline void ResolveBurgeoningTriggers(GameState& state);
 
+// ---- THE PASSIVE OPPONENT'S LAND DROP (one head's) ---------------------------------------------
+//
+// The opponent is not searched: this is a fixed, deterministic policy, not a branch for our solver.
+// Every land's entry follows the card's own rules, for that head (USER 2026-11-21: "the opponent can
+// play lands without the triggers. So bouncelands don't bounce. This means that they play them out
+// faster than they should be able to."):
+//   * a spell//land MDFC (Turntimber Symbiosis, Sink into Stupor, Legion Leadership) may be the drop
+//     and enters as its land face (LandFaceDefOf), never as the spell;
+//   * enters-tapped conditions are judged for THAT head: a shock or an MDFC back's life payment is
+//     declined; a fastland counts the head's other lands; a checkland reads the head's land types; a
+//     reveal land reveals when the head's hand holds a card it wants (revealing is free);
+//   * a Karoo (etb_bounce_land) returns one of the head's lands to that head's hand: the oldest OTHER
+//     land that is not a Karoo, else the oldest other land, else itself (a fixed default, not a choice
+//     the USER has ruled on);
+//   * Lake of the Dead's replacement sacrifices the head's oldest Swamp, else the Lake goes to the
+//     graveyard instead of entering;
+//   * a second copy of a legendary land the head already controls is legend-ruled at once (the old
+//     copy stays: the two are interchangeable to a passive player);
+//   * an ETB life gain (Radiant Fountain, Seraph Sanctuary) is gained by the team, through
+//     OpponentGainsLife (so a gain lock or Tainted Remedy applies). The CALLER applies it from
+//     LandPlayResult::life_gains, after its play event, so the history reads in order.
+// Ownership is the card-number band (HeadOfNumber), so a 2HG head never bounces, sacrifices, counts
+// or legend-rules its teammate's land.
+namespace opponentdeck {
+
+// The name-only placeholder Deal gives every opponent card, for a card leaving the battlefield, under
+// its FRONT name: off the battlefield an MDFC is its front face (CR 712.8a), so a bounced Turntimber,
+// Serpentine Wood is Turntimber Symbiosis in hand again.
+inline Card OffBattlefieldCard(const Card& c)
+{
+    Card out;
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d != nullptr && !d->params.mdfc_front_name.empty()) { out.m_name = d->params.mdfc_front_name; }
+    else                                                     { out.m_name = c.m_name.str(); }
+    out.RehashName();
+    out.m_number = c.m_number;
+    return out;
+}
+
+inline bool HeadControlsLandSubtype(const GameState& state, int head, const std::string& subtype)
+{
+    for (const Permanent& p : state.battlefield)
+    { if (HeadControlsLand(p, head) && LandHasSubtypeNow(state, p, subtype)) { return true; } }
+    return false;
+}
+
+inline bool HeadControlsAnyLand(const GameState& state, int head)
+{
+    for (const Permanent& p : state.battlefield) { if (HeadControlsLand(p, head)) { return true; } }
+    return false;
+}
+
+// LandWouldEnterTapped's clauses, in its order, for an opponent head: the head's own lands, permanents
+// and hand, and a passive player's answer to every optional payment (decline). Call after the card has
+// left `hand`. Gond Gate's Gate clause is not mirrored (no pool list holds a Gate).
+inline bool OpponentLandEntersTapped(const GameState& state, const CardDefinition& face, int head,
+                                     const std::vector<Card>& hand)
+{
+    const CardParams& pp = face.params;
+    if (pp.etb_pay_life_to_untap > 0) { return true; }   // declines the shock / MDFC-back life
+    for (const std::string& want : pp.etb_untap_control_subtypes)   // Fortified Beachhead: controls a Soldier
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (HeadControls(p, head) && CardHasSubtype(p.card, want)) { return false; } }
+    }
+    if (!pp.etb_untap_reveal_subtypes.empty())
+    {
+        for (const Card& c : hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            const SubtypeSet& subs = d ? d->card.m_subtypes : c.m_subtypes;
+            for (const std::string& s : subs)
+            for (const std::string& want : pp.etb_untap_reveal_subtypes)
+            { if (s == want) { return false; } }
+        }
+        return true;
+    }
+    if (!pp.etb_untap_control_subtypes.empty()) { return true; }
+    if (pp.fastland_max_other_lands >= 0)
+    {
+        int other = 0;
+        for (const Permanent& p : state.battlefield) { if (HeadControlsLand(p, head)) { ++other; } }
+        return other > pp.fastland_max_other_lands;
+    }
+    if (!pp.checkland_subtypes.empty())
+    {
+        for (const std::string& want : pp.checkland_subtypes)
+        { if (HeadControlsLandSubtype(state, head, want)) { return false; } }
+        return true;
+    }
+    return pp.enters_tapped;
+}
+
+// A land drop whose entry has nothing to work with: a Karoo with no other land of the head's to return
+// (it returns itself), a Lake of the Dead with no Swamp (it goes to the graveyard), or a second copy of
+// a legendary land the head controls (legend-ruled). The drop policy plays one of these only when the
+// hand has nothing else.
+inline bool OpponentDropWasted(const GameState& state, const CardDefinition& face, int head)
+{
+    if (face.params.etb_bounce_land && !HeadControlsAnyLand(state, head)) { return true; }
+    if (!face.params.etb_replace_sacrifice_land_subtype.empty()
+        && !HeadControlsLandSubtype(state, head, face.params.etb_replace_sacrifice_land_subtype))
+    { return true; }
+    if (face.card.HasSupertype(Supertype::Legendary))
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (HeadControls(p, head) && p.card.m_name == face.card.m_name) { return true; } }
+    }
+    return false;
+}
+
+// WHICH card is the drop: the leftmost card playable as a land, in three tiers -- a real land whose entry
+// does something, then a spell//land MDFC (a player keeps the spell side while another land is
+// available), then a wasted drop (OpponentDropWasted). PROVISIONAL: the tiers are an agent's default
+// for "any player would do this" (USER: "Any player does that"), not a ruled policy. -1 = no land.
+inline int OpponentLandDropIndex(const GameState& state, const std::vector<Card>& hand, int head)
+{
+    int best = -1, best_tier = 3;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+        const CardDefinition* face = LandFaceDefOf(def);
+        if (face == nullptr) { continue; }
+        const int tier = OpponentDropWasted(state, *face, head) ? 2 : (def->card.IsLand() ? 0 : 1);
+        if (tier < best_tier) { best = i; best_tier = tier; }
+        if (best_tier == 0) { break; }
+    }
+    return best;
+}
+
+// One land (played, or put by a fetch) entering for `head`: replacement, then the permanent, then the
+// legend rule, then its enter triggers. `notes` collects what happened, for the play event.
+inline void OpponentLandEnters(GameState& state, const Card& entering, const CardDefinition& face,
+                               bool force_tapped, int head, std::vector<Card>& hand,
+                               std::vector<Card>* graveyard, std::vector<std::string>& notes,
+                               std::vector<std::pair<std::string, int>>& life_gains)
+{
+    const std::string& name = face.card.m_name.str();
+    if (entering.m_name != face.card.m_name) { notes.push_back("as " + name); }
+    // LAKE OF THE DEAD (CR 614.1c, a replacement: the land never enters without its sacrifice).
+    const std::string& sac_sub = face.params.etb_replace_sacrifice_land_subtype;
+    if (!sac_sub.empty())
+    {
+        int victim = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (HeadControlsLand(p, head) && LandHasSubtypeNow(state, p, sac_sub)) { victim = i; break; }
+        }
+        if (victim < 0)
+        {
+            if (graveyard != nullptr) { graveyard->push_back(OffBattlefieldCard(entering)); }
+            notes.push_back("no " + sac_sub + " to sacrifice, so it goes to the graveyard");
+            return;
+        }
+        const Card gone = state.battlefield[static_cast<std::size_t>(victim)].card;
+        state.battlefield.erase(state.battlefield.begin() + victim);
+        if (graveyard != nullptr) { graveyard->push_back(OffBattlefieldCard(gone)); }
+        notes.push_back("sacrifices " + gone.m_name.str());
+    }
+
+    Permanent perm;
+    perm.card = face.card;
+    perm.card.m_number = entering.m_number;
+    perm.controller_index = 1;
+    perm.owner_index = 1;
+    perm.entered_this_turn = true;
+    perm.tapped = force_tapped || OpponentLandEntersTapped(state, face, head, hand);
+    if (perm.tapped) { notes.push_back("tapped"); }
+    std::size_t idx = state.battlefield.size();
+    if (OpponentLandsFrontOn())
+    {
+        idx = 0;
+        while (idx < state.battlefield.size() && state.battlefield[idx].controller_index == 1) { ++idx; }
+        state.battlefield.insert(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx), std::move(perm));
+    }
+    else
+    {
+        state.battlefield.push_back(std::move(perm));
+    }
+    bool on_battlefield = true;
+
+    // The legend rule (CR 704.5j), checked as it enters: the head keeps its older copy.
+    if (face.card.HasSupertype(Supertype::Legendary))
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (i == idx || !HeadControls(p, head) || p.card.m_name != face.card.m_name) { continue; }
+            const Card dead = state.battlefield[idx].card;
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
+            if (graveyard != nullptr) { graveyard->push_back(OffBattlefieldCard(dead)); }
+            notes.push_back("legend rule: it goes to the graveyard");
+            on_battlefield = false;
+            break;
+        }
+    }
+
+    // KAROO (etb_bounce_land): "return a land you control to its owner's hand" -- that head's land, to
+    // that head's hand (its right end).
+    if (face.params.etb_bounce_land)
+    {
+        int pick = -1, karoo = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if ((on_battlefield && static_cast<std::size_t>(i) == idx) || !HeadControlsLand(p, head)) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.etb_bounce_land) { if (karoo < 0) { karoo = i; } continue; }
+            pick = i;
+            break;
+        }
+        if (pick < 0) { pick = karoo; }
+        if (pick < 0 && on_battlefield) { pick = static_cast<int>(idx); }
+        if (pick >= 0)
+        {
+            const Card back = OffBattlefieldCard(state.battlefield[static_cast<std::size_t>(pick)].card);
+            state.battlefield.erase(state.battlefield.begin() + pick);
+            hand.push_back(back);
+            notes.push_back(on_battlefield && pick == static_cast<int>(idx)
+                            ? std::string("returns itself to hand") : "returns " + back.m_name.str() + " to hand");
+        }
+    }
+    if (face.params.etb_lifegain > 0) { life_gains.emplace_back(name, face.params.etb_lifegain); }
+}
+
+// One head's land drop from the given hand and library: players[1]'s (head 1), or 2HG's second head's
+// (head 2, graveyard == nullptr: nothing reads that head's graveyard). Life is the team's. A fetch that
+// can be cracked at once is cracked (tap and sacrifice as costs) for the first eligible library land; the
+// caller performs the shuffle and offers the Archive Trap window, and applies `life_gains`.
+inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& hand, Library& library,
+                                           std::vector<Card>* graveyard, int head = 1)
+{
+    LandPlayResult result;
+    if (!state.opponent_plays_lands || state.opponent_decked) { return result; }
+    Player& opp = state.players[1];
+    const int at = OpponentLandDropIndex(state, hand, head);
+    if (at < 0) { return result; }
+    const Card card = hand[static_cast<std::size_t>(at)];
+    const CardDefinition* face = LandFaceDefOf(CardDatabase::Instance().LookupCached(card));
+    hand.erase(hand.begin() + at);
+    result.played = true;
+    result.land_name = card.m_name.str();
+    const CardParams& fp = face->params;
+    const bool typed_fetch = !fp.fetch_land_types.empty();
+    const bool basic_fetch = fp.land_search_activation_sacrifice_self
+        && fp.land_search_basic_only && fp.land_search_count == 1
+        && fp.land_search_activation_cost.has_value()
+        && fp.land_search_activation_cost->ManaValue() == 0;
+    // Older typed-fetch definitions omit the activation fields because the
+    // normal fetch resolver charges their printed one life directly.
+    const int life_cost = typed_fetch
+        ? std::max(1, fp.land_search_activation_life_cost)
+        : fp.land_search_activation_life_cost;
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost)
+    {
+        OpponentLandEnters(state, card, *face, false, head, hand, graveyard, result.notes, result.life_gains);
+        return result;
+    }
+    // Fetch activation: tap and sacrifice this just-played land as costs.
+    opp.life -= life_cost;
+    if (graveyard != nullptr) { graveyard->push_back(card); }
+    result.searched = true;
+    auto pick = std::find_if(library.begin(), library.end(), [&](const Card& candidate) {
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(candidate);
+        if (land == nullptr || !land->card.IsLand()) { return false; }
+        if (basic_fetch) { return land->card.HasSupertype(Supertype::Basic); }
+        for (const std::string& type : fp.fetch_land_types)
+        for (const std::string& subtype : land->card.m_subtypes)
+        { if (type == subtype) { return true; } }
+        return false;
+    });
+    if (pick != library.end())
+    {
+        const Card fetched = *pick;
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(fetched);
+        library.erase(pick);
+        result.fetched_name = fetched.m_name.str();
+        OpponentLandEnters(state, fetched, *land, basic_fetch && fp.land_search_tapped, head, hand, graveyard,
+                           result.fetched_notes, result.life_gains);
+    }
+    return result;
+}
+
+inline LandPlayResult PlayLeftmostLand(GameState& state)
+{
+    Player& opp = state.players[1];
+    return PlayLeftmostLandFrom(state, opp.hand, opp.library, &opp.graveyard, 1);
+}
+
+// " (note, note)" for the play event, or "".
+inline std::string LandPlayNotes(const std::vector<std::string>& notes)
+{
+    if (notes.empty()) { return std::string(); }
+    std::string out = " (";
+    for (std::size_t i = 0; i < notes.size(); ++i) { out += (i ? ", " : "") + notes[i]; }
+    return out + ")";
+}
+
+} // namespace opponentdeck
+
 // The passive opponent plays one land from hand during its simplified main phase. A
 // fetch search opens a real opponent-turn instant window for each Archive Trap
 // already in our hand; the autonomous policy casts it for {0} immediately.
@@ -3058,7 +3359,10 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
     if (play.played)
     {
         if (g_play_event_sink && !g_tap_speculating)
-        { EmitPlayEvent(state.turn_number, "land", "opponent plays " + play.land_name); }
+        {
+            EmitPlayEvent(state.turn_number, "land",
+                          "opponent plays " + play.land_name + opponentdeck::LandPlayNotes(play.notes));
+        }
         // Burgeoning (Maze's End I3): "whenever an opponent PLAYS a land" -- the play, not a fetch's search.
         if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
         if (play.searched)
@@ -3069,20 +3373,25 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
             if (g_play_event_sink && !g_tap_speculating)
             {
                 EmitPlayEvent(state.turn_number, "fetch", "opponent cracks " + play.land_name
-                    + (play.fetched_name.empty() ? " (no land found)" : " for " + play.fetched_name));
+                    + (play.fetched_name.empty() ? " (no land found)"
+                       : " for " + play.fetched_name + opponentdeck::LandPlayNotes(play.fetched_notes)));
             }
         }
+        for (const std::pair<std::string, int>& g : play.life_gains) { OpponentGainsLife(state, 0, g.second, g.first); }
     }
     // 2HG's second head plays its own land the same way (its lands join the team's board under
     // controller 1). Its fetch pays the TEAM's life and shuffles its own library on its own ordinal.
     if (opponentdeck::HasSecondHead(state) && !state.opponent_decked)
     {
         const opponentdeck::LandPlayResult play2 = opponentdeck::PlayLeftmostLandFrom(
-            state, state.opponent2_hand, state.opponent2_library, nullptr);
+            state, state.opponent2_hand, state.opponent2_library, nullptr, 2);
         if (play2.played)
         {
             if (g_play_event_sink && !g_tap_speculating)
-            { EmitPlayEvent(state.turn_number, "land", "opponent (second head) plays " + play2.land_name); }
+            {
+                EmitPlayEvent(state.turn_number, "land", "opponent (second head) plays " + play2.land_name
+                              + opponentdeck::LandPlayNotes(play2.notes));
+            }
             // Burgeoning: the second head is an opponent too, and its land PLAY triggers it the same way.
             if (state.deck_has_crossing_land_put) { ResolveBurgeoningTriggers(state); }
             if (play2.searched)
@@ -3101,9 +3410,12 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
                 if (g_play_event_sink && !g_tap_speculating)
                 {
                     EmitPlayEvent(state.turn_number, "fetch", "opponent (second head) cracks " + play2.land_name
-                        + (play2.fetched_name.empty() ? " (no land found)" : " for " + play2.fetched_name));
+                        + (play2.fetched_name.empty() ? " (no land found)"
+                           : " for " + play2.fetched_name + opponentdeck::LandPlayNotes(play2.fetched_notes)));
                 }
             }
+            for (const std::pair<std::string, int>& g : play2.life_gains)
+            { OpponentGainsLife(state, 0, g.second, g.first); }
         }
     }
     if (!searched) { return; }
@@ -30531,6 +30843,15 @@ inline int SweepOrphanedAuras(GameState& state)
 // with no legendaries (burn, slivers) are untouched (no legendary permanents -> no-op).
 // Called at combat start so duplicate legendary lords (e.g. Haytham Kenway x3) cannot
 // double-count their continuous buffs in the damage step.
+// 2HG: both opponent heads sit under controller 1, but the legend rule is per PLAYER (CR 704.5j), so a
+// legend of each head's is not a duplicate. The head is the card-number band (opponentdeck::HeadOfNumber);
+// for a single opponent every card is head 1's, so this is always true outside 2HG.
+inline bool LegendSameHead(int controller, const Permanent& a, const Permanent& b)
+{
+    return controller != 1
+        || opponentdeck::HeadOfNumber(a.card.m_number) == opponentdeck::HeadOfNumber(b.card.m_number);
+}
+
 inline void EnforceLegendRule(GameState& state, int controller_index)
 {
     // WHICH copy survives is the controller's choice (CR 704.5j) and is provider-owned
@@ -30547,7 +30868,11 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
         if (p.controller_index != controller_index
             || !p.card.HasSupertype(Supertype::Legendary)) { continue; }
         bool found = false;
-        for (auto& g : groups) { if (g.first == p.card.m_name) { g.second.push_back(i); found = true; break; } }
+        for (auto& g : groups)
+        {
+            if (g.first == p.card.m_name && LegendSameHead(controller_index, state.battlefield[g.second.front()], p))
+            { g.second.push_back(i); found = true; break; }
+        }
         if (!found) { groups.emplace_back(p.card.m_name.str(), std::vector<int>{ i }); }
     }
     std::vector<int> doomed;
@@ -30670,7 +30995,8 @@ inline bool HasDuplicateLegend(const GameState& state, int controller)
         {
             const Permanent& b = state.battlefield[j];
             if (b.controller_index == controller && b.card.m_name == a.card.m_name
-                && b.card.HasSupertype(Supertype::Legendary)) { return true; }
+                && b.card.HasSupertype(Supertype::Legendary)
+                && LegendSameHead(controller, a, b)) { return true; }
         }
     }
     return false;
