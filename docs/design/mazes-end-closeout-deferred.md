@@ -151,8 +151,10 @@ Run as `m_ab2.json`. Net turns, all defaults against the fold alone:
     cq2ta), so it is clairvoyance only. The same holds for std d5 g224.
   - Blind replays: 106 recover, 38 are still slower, 6 hit the 50M-unit ceiling, and 5 were not run (the
     batch's tail was stopped so the landing could take the heavy lock).
-  - Blind d8 searches sampled worlds, so these results were reported, not gated on. A follow-up, if the USER
-    wants one: replay the 38 with several blind salts.
+  - Blind replays are not part of the recovery bar. USER 2026-11-21: *"Only the clairvoyant search is expected to
+    recover every game."* The blind arms feed the per-deck net bar and attribute clairvoyant persists (a persist
+    that ties blind is clairvoyance only). They are not a d8 recovery check. A multi-salt replay of the 38 was
+    started, then stopped after this ruling.
 - **The tiers:** smoke and regression moved only the 10 Maze's End keys, with 12 searched slower games. All 12
   recover at d8 b0 (`m_t8.json`, `t8.out`). GT accepted, `check_gt_logs` 1358 consistent.
 
