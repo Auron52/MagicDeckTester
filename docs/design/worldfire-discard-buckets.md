@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing; MANA fill order: colours, next land drop, castable acceleration); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing; MANA fill order: colours, next land drop, castable acceleration; 1 blue always, 2 often); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -81,8 +81,13 @@ cast it. We need to ensure we have the colours we need, also."*). Fill order of 
 
 1. **Colours first.** The cards that, with the board, give the colours the plan needs by T\*: **R** -- one red
    source to cast Seething Song or suspend Rift Bolt, three red for Irencrag Feat ({1}{R}{R}{R}); Worldfire's RRR
-   can come from a red ritual's output (Song adds RRRRR, Feat seven R), so a castable ritual covers it -- and **U**
-   while we hold a blue dig spell or tutor (Brainstorm, Ponder, Preordain, Mystical / Personal Tutor). Sandstone
+   can come from a red ritual's output (Song adds RRRRR, Feat seven R), so a castable ritual covers it -- and **U**:
+   the combo is all red, but the dig and tutors are blue (Brainstorm, Ponder, Preordain, Mystical / Personal Tutor),
+   so **at least one blue source always, and a second is good** (USER 2026-11-21: *"The combo itself is all red,
+   but we usually need to blue for dig or tutors, so we need at least one blue and often 2 are good."*). The first
+   U source is in this colour tier; a second U source (wanted while we hold two or more blue spells, or expect to
+   cast two in one turn) ranks first among the further land drops (tier 4). Saprazzan Skerry's UU covers both from
+   one land for a turn; Steam Vents and the fetches count as either colour, not both at once. Sandstone
    Needle counts RR, a fetch counts as the colour it can fetch, Mercadian Bazaar as R once charged.
 2. **The next land drop** (one land, the best by colour need, then the land keep order below), unless one has
    already been played this turn.
