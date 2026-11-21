@@ -169,88 +169,42 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~00:45 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~03:45 UTC) — resume here after compaction
 
-* Done (all local, NOTHING PUSHED yet): Stages 1-4, 4a provider, 4-bis rows in all 3 tiers + GT accepted
-  (`a478b813c`), claude-play sweep (`3cf881139`; its one real flag fixed by `c5f3b7610`, ledger `57744efa4`),
-  DECISIONS.md echo row (`690bded3b`), echo census NO GAP (`d89428098`), Scryfall subset refresh of all 19 deck cards
-  (snapshot unchanged; hard fields all match). verify_deck `--no-sweep`: every gate PASS except claude_sweep, which
-  should now pass (0 unresolved).
-* RUNNING (my own probes, killable):
-  1. Leaf tie-break EXTENSION, pid in `build/scratch/cb-orch/tiebreak-ext.pid`, log
-     `build/scratch/cb-orch/tiebreak-ext.log` (EXIT line at end), batch out `logs/leaf_tiebreak/creatureburn-ext.out`.
-     `--seed-base 2200000 --blocks 12`, MTG_PGO=0. Run 1 (seeds 1000000..2100000, saved in
-     `build/scratch/cb-orch/tiebreak-run1.{log,out}`): 12000 paired, 6 changed, net -8 turns, 0 worse / 6 better,
-     both halves -4 => NO SIGN (needs 20). Pool run1 + ext (24 blocks); if still < 20 changed, default ON stands
-     ("a lever that never fires costs nothing"); a consistent sign that helps also means keep ON (no opt-out).
-  2. Browbeat second-main PROBE build in worktree `.claude/worktrees/cb-m2probe` (detached HEAD 57744efa4 -- same src as HEAD, one
-     uncommitted line in `GoldFishRunner::DeckUsesSecondMain`: `MTG_CB_PROBE_BROWBEAT_M2=0` drops Browbeat's
-     trigger; NEVER land it), log `build/scratch/cb-orch/m2probe-build.log`, run via `scripts/box_lane.sh --slots 4`.
+* Done (all local, NOTHING PUSHED; the 1 Drop Burn Fireblast commits 591d4c115 + 631822f14 ride along too):
+  Stages 1-4, 4a provider, rows in all 3 tiers + GT (`a478b813c`), claude-play sweep (`3cf881139`, flag fixed
+  `c5f3b7610`), echo census NO GAP, Scryfall refresh, Stage 5c2 tie-break KEEP ON (`878737457`), Browbeat M2 cost
+  measured (`90e4fd025`: 1.6x units, 0.000 turns). USER settled the Searing Blaze default (toughest; goldfish only;
+  Phase 2 doc `docs/design/burn-target-default-phase2.md`).
+* RUNNING:
+  1. `verify_deck.py --write-ledger` (full, MTG_PGO=0): pid `build/scratch/cb-orch/verify.pid`, out
+     `build/scratch/cb-orch/verify.out` (EXIT line). When it ends, `touch build/scratch/cb-orch/VERIFY_DONE`
+     (the fold agent waits on it before any batch).
+  2. Fold agent (Opus), brief `logs/creature-burn/m2fold-brief.md`: per-turn restricted main 2 for Browbeat via
+     `RestrictedSecondMainLive`, lever `MTG_CB_BROWBEAT_M2_RESTRICT` default ON, worktree `.claude/worktrees/cb-m2fold`
+     branch `wip/cb-m2fold`; it A/Bs, accepts creatureburn smoke+regression GT, commits, stops. Handoff file
+     `logs/creature-burn/m2fold-handoff.md` if it runs long.
 * NEXT, in order:
-  1. When BOTH are done: one pooled batch ALONE on the box with the probe binary, both arms same binary
-     (lever on vs off), d3 b10 and d5 b20, ~150 games/arm on regression seeds; report ms/game + avg win turn per
-     arm to the USER (cost of Browbeat opening main 2; soundness says keep it ON). Then remove the probe worktree
-     with `scripts/safe_worktree_remove.sh` (after `check_references_safe.py`).
-  2. DONE 2026-11-21 03:20 UTC: tie-break pooled 24000 paired, 18 changed, net -13 (4 worse / 14 better), gate 2
-     recovers all 4 worse games at d5 b0 => KEEP ON (section "Stage 5c2").
-  3. `python3 scripts/verify_deck.py "decks/Creature Burn/Creature Burn.cod" --write-ledger` to a clean gate.
-  4. Stage 6 report with the 6a disclosure + USER items: MTG_CB_PEAKS_PLAIN_FOLD default ON (provider prune, sound
-     only under attack-all vs never-blocking goldfish); Browbeat dropped from the provider signature; extra Peaks
-     land positions; Browbeat second-main cost; echo census result; Pyromancer human-play response ping +
-     accounting un-ping; 1-power pinger attack-vs-ping exemption; Peaks inert-class premise (revisit with a
-     Fling-type card); Price of Progress vs Peaks self-damage (inert); heavy unbudgeted tail; provider cert
-     NotAssessed. (The Blaze default question is SETTLED: USER 2026-11-21, *"The opponent's toughest creature is good
-     for searing blaze."* *"(in Goldfishing. In a real game you would probably target the best creature you can kill)"*.
-     Keep toughest-first for goldfish (Phase 2: the best killable creature); the Midrange_Burn `claude_s10_gi9` label change "1/1"->"2/2" stands.)
-  5. Push: `python3 scripts/push_queue.py join` once (slow box, <= once / 4 h); at the turn: rebase,
-     `check_references_safe.py`, Release + unit + smoke (MTG_PGO=0) + `check_gt_logs.py` under `push_queue.py hold`,
-     then `land`; watch CI in background `gh run watch <id> --interval 60 --exit-status`.
-  6. CronDelete the status timer `b718d9a3` once done; `check_references_safe.py` at session close.
-* Never commit `.vscode/settings.json` or `test/ref_bench.json` (not ours). Note: `build/PGO` is stale (a PGO build
-  failed while the fix agent's edits sat in the primary tree); harness falls back to Release, byte-identical.
-* Status timer: session-only cron `7 */2 * * *` (id b718d9a3).
-
-Browbeat policy relabel (USER ruling 2026-11-20, relayed by the coordinator; NO behaviour change): the code comment
-and the cards.json bracket note now read USER-ruled, quoting *"I would probably do the same thing as devil, which
-is take the damage unless it puts you within 3 life."* and *"No, your idea is good. (hand empty = take the damage
-unless lethal)"* -- policy A exactly as batch 1 (take iff life > 5 + (holding ? 3 : 0)). The play-event strings
-dropped their "[PROVISIONAL policy A]" suffix; `BrowbeatTakeThreshold(amount, holding)` names the same value.
-
-Scripts / viewer: `audit_viewer_decisions.py` MANIFEST `tap_ping_damage -> target`, INERT_PARAMS `tap_ping_target`
-and `cast_color_untap_self`, the oracle cross-check counts a tap pinger as modelling `target` (static audit clean);
-`tools/play/DECISIONS.md` rows for the pinger `target` reuse and the Browbeat `main_phase` "pre-ping" variant.
-
-Tests: `test/unit/test_creature_burn_batch2.cpp` (12 cases: parse; end-step sweep -- ready / summoning sick /
-haste, nothing twice; 2HG x1 per ping; post-combat finish only when lethal; Pyromancer two red casts = two response
-pings + one end-step ping in BOTH worlds with `opt_pings` 2; summoning-sick copy pings nothing, tapped copy just
-untaps; a cast off suspend (Rift Bolt) triggers it and a non-red spell does not; the 0-power attack hold, a 1/1
-pinger attacks, a pumped Pyromancer attacks; Browbeat flip base TAKE -> one ping first -> DECLINE in both worlds,
-the second pinger still pings at the end step; base DECLINE -> withhold the response ping -> TAKE in both worlds;
-no-flip-exists cases equal the base; emission only with the stamp and a live pinger). Scenarios
-`cb_cinder_pyromancer_response_ping_lethal` (opp 5, Bolt + response ping + held Pyromancer's finish = T3 win) and
-`cb_cinder_pyromancer_held_finish_lethal` (opp 2, Fireslinger attacks, held Pyromancer's finish = T3 win). Test
-seam `MtgTestSeam::CastBrowbeatFlipFromHand`. **Unit 3775/3775, scenarios 593/593** on the post-change Release
-build.
-
-Audits: `audit_card_costs.py` on the batch's cards (3 + Browbeat) rc 0, 4/4 compared; `audit_card_fields.py
---update` merged the three into `scryfall_reference.json`; offline diff rc 0 (oracle advisories = bracket notes).
-Coverage: all three `full`; only Teetering Peaks missing.
-
-**Byte-identity of other decks: NOT YET RUN** (integrator handed off on the context rule). Owed: `bash
-test/regression.sh --smoke --deck=boars,pd,onedropburn,burn,landfall,hinata,redelem,lhc,midrangeburn,goblins`,
-play-changed must be 0 (pre-change binary kept at `build/scratch/cb2/mtg.base`). Expected 0 by construction: every
-new path is gated on `tap_ping_damage` / `cast_color_untap_self` / `deck_has_tap_ping` / a nonzero
-`browbeat_flip`, the Druid branch of `TapReadyPingDorks` is tested first and unchanged, and sizeof(GameState) is
-unchanged (1712).
-
-**PROVISIONAL / disclosed (surface to the USER):**
-1. Human play: Cinder Pyromancer's response ping is always fired (with its `target` decision); a human withholds
-   it only through the Browbeat "pre-ping" plan variant, whose withdraw is an accounting un-ping (life restored).
-   The 5h viewer check of that variant (and whether `tools/play/linebuild.js` needs a composer token) is owed.
-2. A 1-power pinger attacking vs pinging is the standing attack-all exemption (equal damage); its combat damage
-   before a main-2 Browbeat is the same as any attacker's.
-3. `BrowbeatFlipPrePings` assumes 1-damage pingers (all three cards) and does not withdraw while the damage-event
-   layer or the noncombat-damage trackers are armed (no deck with a pinger arms them).
+  1. Review the fold agent's commits; cherry-pick them onto the primary branch; rerun the runtime verify gates.
+  2. Remove both probe worktrees with `scripts/safe_worktree_remove.sh`, after running `check_references_safe.py`.
+  3. Stage 6 report with the 6a disclosure. USER items:
+     - MTG_CB_PEAKS_PLAIN_FOLD default ON (a provider prune, sound only under attack-all against the never-blocking
+       goldfish);
+     - Browbeat dropped from the provider signature;
+     - the extra Peaks land positions;
+     - the Browbeat M2 cost and the fold;
+     - the echo census;
+     - the Pyromancer human-play response ping and the accounting un-ping;
+     - the 1-power pinger attack-vs-ping exemption;
+     - the Peaks inert-class premise;
+     - Price of Progress vs Peaks self-damage (inert);
+     - the heavy unbudgeted tail;
+     - provider cert NotAssessed.
+  4. Push. `python3 scripts/push_queue.py join` once (slow box, at most once per 4 h). At my turn:
+     - rebase (origin was 109 ahead at 01:40 UTC) and run `check_references_safe.py`;
+     - under `push_queue.py hold`: Release build, unit tests, smoke (MTG_PGO=0) and `check_gt_logs.py`;
+     - `land`, then watch CI in the background with `--interval 60`.
+  5. CronDelete the status timer `b718d9a3` once done, and run `check_references_safe.py` at session close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
