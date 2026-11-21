@@ -1,0 +1,445 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [27] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 6, "name": "Cinder Pyromancer" }, { "num": 23, "name": "Lightning Bolt" }, { "num": 51, "name": "Rift Bolt" }, { "num": 49, "name": "Price of Progress" }, { "num": 52, "name": "Rift Bolt" }, { "num": 14, "name": "Goblin Fireslinger" }, { "num": 8, "name": "Figure of Destiny" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 2, "name": "Ball Lightning" }, { "num": 27, "name": "Magma Jet" }, { "num": 31, "name": "Mountain" }, { "num": 59, "name": "Vulshok Sorcerer" }, { "num": 32, "name": "Mountain" }, { "num": 57, "name": "Teetering Peaks" }, { "num": 29, "name": "Magma Jet" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 2, "name": "Ball Lightning", "win_optimal": true }, { "num": 27, "name": "Magma Jet", "win_optimal": true }, { "num": 31, "name": "Mountain", "win_optimal": true }, { "num": 59, "name": "Vulshok Sorcerer", "win_optimal": true }, { "num": 32, "name": "Mountain", "win_optimal": true }, { "num": 57, "name": "Teetering Peaks", "win_optimal": true }, { "num": 29, "name": "Magma Jet", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 31, "name": "Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "trigger", "text": "⛰ Teetering Peaks (enters): 1/1 Creature gets +2/+0 until end of turn" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Teetering Peaks", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 3, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Teetering Peaks", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 3, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Magma Jet"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Ball Lightning" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Sandstone Needle" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Teetering Peaks", "idx": 2, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "tapped": true, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "target",
+  "source": "Magma Jet",
+  "turn": 2,
+  "per_target_damage": 2, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 31, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 2, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "tapped": true, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 0, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 3, "label": "1/1 Creature (opponent)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 0 }] }, { "index": 3, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index). Each chosen target takes 2 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "scry",
+  "source": "Magma Jet",
+  "turn": 2,
+  "away_zone": "bottom",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 2, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "tapped": true, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "looked": [{ "name": "Mountain", "is_land": true }, { "name": "Flame Javelin", "is_land": false }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Mountain", "Flame Javelin"] }, { "index": 1, "label": "Top: Mountain  (rest to bottom)", "shuffle": false, "top": ["Mountain"], "away": ["Flame Javelin"] }, { "index": 2, "label": "Top: Flame Javelin  (rest to bottom)", "shuffle": false, "top": ["Flame Javelin"], "away": ["Mountain"] }, { "index": 3, "label": "Top: Mountain, Flame Javelin", "shuffle": false, "top": ["Mountain", "Flame Javelin"], "away": [] }, { "index": 4, "label": "Top: Flame Javelin, Mountain", "shuffle": false, "top": ["Flame Javelin", "Mountain"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Magma Jet", "cards": [{ "name": "Mountain", "disposition": "kept" }, { "name": "Flame Javelin", "disposition": "to the bottom" }] }],
+  "events": [{ "turn": 2, "kind": "damage", "text": "🔥 Magma Jet: 2 to opponent (20→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 2, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Magma Jet"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "tapped": true, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 31, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 2, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Magma Jet"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "tapped": true, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Ball Lightning"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Mountain" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Mountain" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 5, "num": 31, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 3, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Magma Jet"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Vulshok Sorcerer", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vulshok Sorcerer"], "actions": [{ "card": "Vulshok Sorcerer" }] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 8, "num": 2, "is_land": false, "power": 6, "toughness": 1 }, { "name": "Mountain", "idx": 5, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 3, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Magma Jet"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Ball Lightning (6) — 6 to opponent (18→12)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 8, "num": 2, "tapped": true, "is_land": false, "power": 6, "toughness": 1 }, { "name": "Mountain", "idx": 5, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 32, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 3, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Magma Jet"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Ball Lightning"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "events": [{ "turn": 3, "kind": "trigger", "text": "⏳ Ball Lightning -- sacrificed at the beginning of the end step (its own trigger)" }, { "turn": 3, "kind": "land", "text": "opponent plays Mountain" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 6, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 8, "num": 32, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Ball Lightning", "Magma Jet"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 1, "summary": "land=none; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": null, "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Vulshok Sorcerer", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vulshok Sorcerer"], "actions": [{ "card": "Vulshok Sorcerer" }] },
+    { "index": 3, "summary": "land=none; cast: Vulshok Sorcerer", "declared_order_payability": "not_verified", "land": null, "casts": ["Vulshok Sorcerer"], "actions": [{ "card": "Vulshok Sorcerer" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 10, "num": 3, "is_land": false, "power": 6, "toughness": 1 }, { "name": "Mountain", "idx": 6, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 47, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Ball Lightning", "Magma Jet"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Ball Lightning (6) — 6 to opponent (12→6)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 10, "num": 3, "tapped": true, "is_land": false, "power": 6, "toughness": 1 }, { "name": "Mountain", "idx": 6, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 47, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Ball Lightning", "Magma Jet"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Mountain", "suspend=Rift Bolt", "cast=Vulshok Sorcerer"], "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Rift Bolt" }],
+  "events": [{ "turn": 4, "kind": "trigger", "text": "⏳ Ball Lightning -- sacrificed at the beginning of the end step (its own trigger)" }, { "turn": 4, "kind": "land", "text": "opponent plays Mercadian Bazaar" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 7, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 9, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 47, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 51, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 59, "name": "Vulshok Sorcerer", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=none; cast: Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Vulshok Sorcerer", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vulshok Sorcerer"], "actions": [{ "card": "Vulshok Sorcerer" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Vulshok Sorcerer, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Vulshok Sorcerer", "Rift Bolt"], "actions": [{ "card": "Vulshok Sorcerer" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 4, "summary": "land=none; cast: Vulshok Sorcerer", "declared_order_payability": "not_verified", "land": null, "casts": ["Vulshok Sorcerer"], "actions": [{ "card": "Vulshok Sorcerer" }] },
+    { "index": 5, "summary": "land=none; cast: Vulshok Sorcerer, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Vulshok Sorcerer", "Rift Bolt"], "actions": [{ "card": "Vulshok Sorcerer" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Mountain; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "suspend", "text": "⌛ Rift Bolt -- suspended (arrives T6)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 7, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 47, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 11, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "tapped": true, "is_land": true }, { "name": "Vulshok Sorcerer", "idx": 12, "num": 59, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 6 }], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Vulshok Sorcerer (1) — 1 to opponent (6→5)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 7, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 9, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 47, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 11, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "tapped": true, "is_land": true }, { "name": "Vulshok Sorcerer", "idx": 12, "num": 59, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 6 }], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 8, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "free_cast",
+  "source": "Rift Bolt (suspend)",
+  "turn": 6,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 8, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 47, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 12, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 6, "num": 57, "is_land": true, "taps": "R" }, { "name": "Vulshok Sorcerer", "idx": 13, "num": 59, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 100036, "tapped": true, "is_land": true }], "library_size": 48, "hand_size": 7, "graveyard": [] },
+  "heuristic_default": 0,
+  "operation": "suspend_cast",
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "target",
+  "source": "Rift Bolt",
+  "turn": 6,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 8, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 47, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 12, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 6, "num": 57, "is_land": true, "taps": "R" }, { "name": "Vulshok Sorcerer", "idx": 13, "num": 59, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 100036, "tapped": true, "is_land": true }], "library_size": 48, "hand_size": 7, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 0, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 9, "label": "2/2 Creature (opponent)" }, { "kind": "permanent", "index": 13, "label": "Vulshok Sorcerer (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 0 }] }, { "index": 3, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 4, "label": "2/2 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 5, "label": "Vulshok Sorcerer (yours)", "targets": [{ "kind": "permanent", "index": 13 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index). Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Hellspark Elemental" }],
+  "events": [{ "turn": 5, "kind": "land", "text": "opponent plays Sandstone Needle" }, { "turn": 6, "kind": "suspend", "text": "⌛ Rift Bolt -- cast off suspend" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 8, "num": 31, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 10, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 47, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 12, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 6, "num": 57, "is_land": true, "taps": "R" }, { "name": "Vulshok Sorcerer", "idx": 13, "num": 59, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 18, "name": "Hellspark Elemental", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet", "Rift Bolt"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 100036, "tapped": true, "is_land": true }], "library_size": 48, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Hellspark Elemental", "declared_order_payability": "not_verified", "land": null, "casts": ["Hellspark Elemental"], "actions": [{ "card": "Hellspark Elemental" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Hellspark Elemental", "idx": 14, "num": 18, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Mountain", "idx": 8, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 11, "num": 47, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 12, "num": 36, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 6, "num": 57, "tapped": true, "is_land": true }, { "name": "Vulshok Sorcerer", "idx": 13, "num": 59, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [], "graveyard": ["Ball Lightning", "Ball Lightning", "Magma Jet", "Rift Bolt"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mercadian Bazaar", "idx": 4, "num": 100034, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 100045, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 100046, "is_land": true }, { "name": "Sandstone Needle", "idx": 1, "num": 100037, "is_land": true }, { "name": "Sandstone Needle", "idx": 5, "num": 100036, "tapped": true, "is_land": true }], "library_size": 48, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Vulshok Sorcerer (1), Hellspark Elemental (3) — 4 to opponent (2→-2)" }
+  ]
+}
