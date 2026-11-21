@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Contested Cliffs"/>
+        <card number="2" name="Thragtusk"/>
+        <card number="6" name="Forest"/>
+        <card number="1" name="Gruul Turf"/>
+        <card number="1" name="Garruk, Primal Hunter"/>
+        <card number="4" name="Krosan Warchief"/>
+        <card number="1" name="Mountain"/>
+        <card number="4" name="Elder Gargaroth"/>
+        <card number="2" name="Questing Beast"/>
+        <card number="1" name="Woodland Bellower"/>
+        <card number="3" name="Stomping Ground"/>
+        <card number="4" name="Wooded Foothills"/>
+        <card number="1" name="Cragplate Baloth"/>
+        <card number="1" name="Craterhoof Behemoth"/>
+        <card number="2" name="Garruk's Packleader"/>
+        <card number="1" name="Garruk's Harbinger"/>
+        <card number="4" name="Herald of Ilharg"/>
+        <card number="2" name="Migloz, Maze Crusher"/>
+        <card number="2" name="Urza's Incubator"/>
+        <card number="1" name="Nykthos, Shrine to Nyx"/>
+        <card number="1" name="Bloated Contaminator"/>
+        <card number="4" name="Utopia Sprawl"/>
+        <card number="4" name="Wild Growth"/>
+        <card number="1" name="Kaheera, the Orphanguard"/>
+        <card number="3" name="Windswept Heath"/>
+        <card number="2" name="Cavern of Souls"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Kaheera, the Orphanguard"/>
+    </zone>
+</cockatrice_deck>
