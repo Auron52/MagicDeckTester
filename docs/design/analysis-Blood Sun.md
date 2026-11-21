@@ -278,6 +278,17 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   (B10) is unchanged; the chain then fetches whichever of the two is missing. Parent's readings surfaced to
   the USER: (i) "Revelation missing" = none in HAND (a Revelation in the library does not count); (ii) the
   red-source exception kept. Human play stays unpruned. Implemented by the perf agent (bloodsun-perf).
+  USER revision (verbatim, same day): *"I'm not entirely sure how confident I should be in that ruling, though.
+  Maybe there is an argument to allow the others in your list. We'll have to test it out if it is a notable
+  cost. I would probably not bother with fetching the lands except for the red source or if you don't have
+  enough land to get to 7 mana in this case. The rest can be fetched when you get multiple cards with Diabolic
+  Revelation."* -> AMENDED Grim list: Blood Sun (none on battlefield/hand), Diabolic Revelation (none in hand),
+  the one red source (B3 exception), and the big lands (Lotus Vale / Lotus Field / Scorched Ruins, B3's land
+  classes and folds) ONLY when our lands cannot reach 7 mana (= Revelation at X = 2). Time Warp, Emrakul,
+  Fastbond come through Revelation packages, not Grim. Parent's reading of "enough land to get to 7 mana":
+  the mana of lands on the battlefield plus the best land in hand playable with a remaining (or next-turn)
+  drop is < 7. Confidence is LOW (USER): the sub-lever's OFF arm (= the B3 list) is A/B'd if Grim Tutor is a
+  notable share of the cost; the default after that is the USER's.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
