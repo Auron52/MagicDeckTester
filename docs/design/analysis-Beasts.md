@@ -11,9 +11,13 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   Warchief, Questing Beast, Elder Gargaroth, Garruk's Harbinger, Kaheera(+Cavern recheck), Migloz,
   Nykthos).
 * **Baseline build:** done, rc 0 (Release, worktree base c9a2e1ff6).
-* **Running:** integrator batch A (Packleader, Warchief, Questing Beast + dup-legend check,
-  Thragtusk, Cragplate Baloth, Kaheera lord/vigilance) — background agent; handoff file if it
-  stops early: `logs/beasts/integrator-A-handoff.md`.
+* **Batch A integrated:** A1 `375a50399`, A2 `53e68dcd3` (handoff `logs/beasts/integrator-A-handoff.md`;
+  14/14 batch-A unit tests pass, cost audit rc 0). Includes the Herald dup-legend upside in
+  `DuplicateCastHasUpside`. A tail still owed: full unit suite, `audit_card_fields.py --update`,
+  smoke byte-identity (no accept).
+* **TODO (batch B):** Questing Beast's bracket promises the fight resolver honours deathtouch; the
+  Contested Cliffs fight helper must implement it.
+* **Running:** integrator A-tail + batch B (Contested Cliffs) agent.
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -65,21 +69,21 @@ Bracket notes to re-check for THIS deck:
 
 | card | tier | status | notes |
 |---|---|---|---|
-| Thragtusk | 2 | drafted | new ltb_self_creates_tokens on FireLeavesBattlefieldTriggers |
+| Thragtusk | 2 | integrated 53e68dcd3 | new ltb_self_creates_tokens on FireLeavesBattlefieldTriggers |
 | Contested Cliffs | 3 | drafted | new PermAbilityMode::TapFight (Kessig shape + Voracious fight); main 2 |
-| Cragplate Baloth | 2 | drafted | new kicked_enters_with_plus_counters (pre-entry kicked branch) |
+| Cragplate Baloth | 2 | integrated 53e68dcd3 | new kicked_enters_with_plus_counters (pre-entry kicked branch) |
 | Kaheera companion (sideboard) | 3 | planned | companion {3} put-into-hand, once/game, sorcery speed |
-| Krosan Warchief | 1 | drafted | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
-| Questing Beast | 1 | drafted | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
+| Krosan Warchief | 1 | integrated 375a50399 | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
+| Questing Beast | 1 | integrated 375a50399 | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
 | Elder Gargaroth | 3 | drafted | new attack_choose_one 3-mode searched axis (Tectonic-style), viewer attack_mode widened to 3; 'or blocks' PROVISIONAL; life mode = provider dominance fold |
 | Garruk's Harbinger | 3 | drafted | new combat-damage dig (PerformLookTakeDig, random bottom), searched card-number pin (Lackey shape); hexproof-from-black + PW PROVISIONAL |
-| Kaheera | 2 | drafted | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
+| Kaheera | 2 | lord+vigilance integrated 53e68dcd3; companion pending (batch I) | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
 | Migloz | 3 | drafted | oil_counters int; searched pump (ActivatePump mode 4); Steelbane destroy w/ oil + own-target provider prune; vig/menace PROVISIONAL |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
 | Nykthos | 2 | drafted | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, cache key!) |
 | Bloated Contaminator | 2 (+3) | drafted | NEW toxic + combat_damage_self_proliferate (closed-table dominant set, viewer dragon multi-pick); poison in sim key + no-win bounds; 2HG 15 poison |
 | Woodland Bellower | 2 | drafted | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order PROVISIONAL |
-| Garruk's Packleader | 1 | drafted | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
+| Garruk's Packleader | 1 | integrated 375a50399 | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
 
 Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 
