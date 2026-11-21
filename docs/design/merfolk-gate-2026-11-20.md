@@ -135,6 +135,20 @@ uncut on Maze's End (60), Merfolk Turns (150) and Goblins (150). What is left is
 better payment 99.99% of the time (its work is the play change), plus the search's own +0.8% units on the changed play.
 
 
+**Cut (B) is a NARROWING of the new lever, not an exact identity.** The refine trigger now fires only when Baldur's Gate
+/ Three Tree City was tapped for its plain {C}; the 57 cheaper payments (per 60 games) that the uncut trigger found after
+a FED-mode tap are no longer found. Nothing the committed tree did is lost (the trigger is new), but the cut lever is a
+strictly smaller version of what was A/B'd uncut; the tier run below measures the cut form.
+
+### 4.6 Smoke + regression on the rebased, cut tree (2026-11-21, accepted ddc28771c)
+
+`MTG_BIN=t2/mtg.final` (built from b8f076da0, clean src), `MTG_PGO=0 regression.sh --both`, tier wall 1,984 s. Only
+`mazesend*` and `merfolkturns*` rows moved (no 2HG row, no Goblins row). Searched: 0 slower in both tiers (smoke 1
+faster + 3 play-changed at the same score, regression 1 faster + 7). d0: smoke `mazesend_smoke_d0_s1001` gi592 T5 -> T7 and
+gi781 loss -> T6; regression d0 4 faster, 0 slower. gi592 (seed 1593) reproduces at d0 (off T5, on T7) and recovers at
+`--depth 8 --budget-ms 0` (T4 on both arms). Every deck is net <= 0. Units 3,805/3,805; `check_gt_logs.py` 1,358
+consistent.
+
 ## 5. Open items
 
 **USER ruling 2026-11-21 (verbatim), on the section 3 ENUM-GAP cast order:** *"I'm fine with trying either option as
