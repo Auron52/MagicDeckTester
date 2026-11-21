@@ -38947,8 +38947,9 @@ bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const 
 // overflow: BACKUP (other-type finisher > extra land > extra ritual > 2nd Halberdier) > dig beyond quota > rituals
 // beyond > lands beyond > a Bloom near the combo turn > DEAD (tutor > duplicate > Memory Lapse).
 // LAND KEEP ORDER: Sandstone Needle > Steam Vents > Scalding Tarn > Flooded Strand > Mountain > Mercadian Bazaar
-// (only while 2+ turns of charging remain before T*; else below Mistrise) > Saprazzan Skerry > Island > Mistrise
-// Village; a land that enters tapped drops below every untapped land when no drop remains before T*.
+// (only on our turns 1-2 -- kWorldfireBazaarEarlyTurns -- and while 2+ turns of charging remain before T*; else the
+// LAST land, unless T* is far) > Saprazzan Skerry > Island > Mistrise Village; a land that enters tapped drops below
+// every untapped land when no drop remains before T*.
 // Classified from PARAMS, never names. A looked-at card only takes a slot the HAND has not filled (hand cards are
 // assigned first), so Ponder / Preordain keep a looked card only when it adds what the hand lacks.
 // THE CONSUMERS (USER 2026-11-21: "So for Brainstorm this tells us what we want to put on top, (the lowest priority
@@ -39101,6 +39102,7 @@ constexpr int kWfKeyDigBeyond = 300, kWfKeyOther = 250, kWfKeyRitualBeyond = 200
 constexpr int kWfKeyBloomNear = 50;
 constexpr int kWfKeyDeadTutor = 3, kWfKeyDeadDup = 2, kWfKeyDeadInert = 1;
 constexpr int kWfHorizon = 4;
+constexpr int kWorldfireBazaarEarlyTurns = 2;   // "early in the game" for Mercadian Bazaar: our turns 1-2 (tunable)
 }   // namespace
 
 WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::vector<Card>* looked, bool turn_over)
@@ -39386,6 +39388,11 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
             const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(i)].d);
             int o = l.order;
             if (l.storage && !far && tstar - first_drop < 2) { o = 0; }   // Bazaar cannot charge in time
+            // USER 2026-11-21: "Mercadian Bazaar should be greatly deprioritized if we are not early in the game. It is
+            // pretty slow if you don't drop it early." -- "Naturally, if we are really short on mana it might still be
+            // worth keeping just because it eventually builds up." So after our early turns it is the LAST land (the
+            // first shed), unless T* is far.
+            if (l.storage && !far && s.turn_number > kWorldfireBazaarEarlyTurns) { o = -20; }
             if (l.tapped && !far && first_drop >= tstar) { o -= 10; }    // no drop left before T*
             return o;
         };
