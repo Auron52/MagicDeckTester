@@ -942,6 +942,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     { j.arm.two_stage_fold_prefix = jspec["two_stage_fold_prefix"].get<bool>() ? 1 : 0; }
     if (jspec.contains("aa_route_units")) { j.arm.aa_route_units = jspec["aa_route_units"].get<int>(); }
     if (jspec.contains("uo_price_w"))     { j.arm.uo_price_w     = jspec["uo_price_w"].get<int>(); }
+    if (jspec.contains("uo_price_resid")) { j.arm.uo_price_resid = jspec["uo_price_resid"].get<bool>() ? 1 : 0; }
     if (jspec.contains("bp_chain_slot")) { j.arm.bp_chain_slot = jspec["bp_chain_slot"].get<int>(); }
     if (jspec.contains("cyclone_remand_max_mv"))
     { j.arm.cyclone_remand_max_mv = jspec["cyclone_remand_max_mv"].get<int>(); }

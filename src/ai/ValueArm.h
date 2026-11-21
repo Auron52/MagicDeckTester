@@ -173,6 +173,10 @@ struct Arm
     // charged unit. Per-job so the price arms at several W share one pooled batch with the off/on arms.
     // -1 unset => env (default 16) | > 0 that W.
     int         uo_price_w        = -1;
+    // UNLOCK-ORDER PRICE, CARRIED RESIDUAL (MTG_UO_BUDGET_RESID; uoprice::ResidOn in TurnSolver.cpp): the walks' steps
+    // accumulate across the decision's unlock-order searches and a unit is charged per W of them (no one-unit floor
+    // per search). -1 env (default off) | 0 off | 1 on.
+    int         uo_price_resid    = -1;
     // CHAIN-SLOT COUNT (MTG_BP_CHAIN_SLOT): how many chain continuations get a reserved breakpoint
     // slot. Here rather than in heurarm for the same reason as solve_charge_w -- the knob is an int
     // (0 = arm off, 1 = shipped default, 2 = reachable) and heurarm::Arm is boolean-only -- and for
