@@ -315,13 +315,20 @@ Validation (Release, post-change):
   Disjoint from every suite seed. Games 0 and 2 were dealt the same hand (the two player agents read the seed
   convention differently), so 15 distinct deals. Results: `logs/creature-burn/claude-sweep-50001.json`.
 - result: 16/16 completed; the player tied the search's win turn in every game (T4 x6, T5 x9, T8 x1); none faster.
-- flags: 1 unresolved
-  - g8 (seed 50009, game-index 8), REAL, low severity, human-play surface only: every Searing Blaze plan in the
+- flags: 0 unresolved (1 real flag, FIXED in `c5f3b7610`)
+  - g8 (seed 50009, game-index 8), REAL, RESOLVED, low severity, human-play surface only: every Searing Blaze plan in the
     main-phase menu is labelled "-> you + <own creature>" and the cast-time target prompt defaults to "You (face)",
     while the note claims "Default = the AI's pick". Accepting the defaults burns our own face and creature. The
     search's own line is right (opponent + its 6/6). Cause: `FixedBurnCandidates` lists Multi pins in battlefield
     order, human play collapses target-only variants to the first pin, and `PrepareFixedBurnPin` defaults to it.
-    Pre-existing (shared with Burn and other Searing Blaze decks). Fix agent assigned 2026-11-20.
+    Pre-existing (shared with Burn and other Searing Blaze decks).
+    FIXED `c5f3b7610` (human play only): `HumanPairedBurnDefault` ranks the default pin (opponent face, then
+    opponent planeswalker, own face last; then the toughest creature, the one `PrunesPassiveBurnTargets` keeps),
+    used for both cast-time prompts and the menu label under `HumanPlayActive()`. Option order unchanged, so
+    recorded `--choices` replay as before. Unit test + scenario `creatureburn_human_blaze_default_opponent`
+    (fails on the old binary). Smoke on the 8 burn decks: play-changed 0. References of Burn, Midrange_Burn,
+    Modern_RW_Burn, 1_Drop_Burn (46) replay identically on both binaries (21 ok, 25 repaired as before, 0 drift).
 - dismissed: g2 T3, the frame's `legal_targets[].index` (object index) vs the reply `options[].index`. FALSE
-  POSITIVE: the engine did what the reply said, and the note says "reply an option index". The fix agent is
-  making the note more explicit (usability only).
+  POSITIVE: the engine did what the reply said, and the note says "reply an option index". Every option-list
+  `target` note now names `options[].index` vs `legal_targets[].index` explicitly, and so does `claude-play.md`
+  (`c5f3b7610`, usability only).
