@@ -111816,11 +111816,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             if (t_leaf_stored_states.size() > 8192) { t_leaf_stored_states.clear(); }
             t_leaf_stored_states[key] = LeafVerifyStored{ std::move(leaf_vcopy), cutoff_turn, result };
         }
-        if (win_store_clean) { PROF_INC(tt_stores); tt->Store(key, result); }
-    if (tt != nullptr && result <= max_turns)
-    {
-        PROF_INC(tt_stores); tt->Store(key, result);
-        if (lt_live && result > state_turn_at_entry && !lt_mark.Clean()) { tt->MarkCutWin(key); }   // P5b-3
+        if (win_store_clean)
+        {
+            PROF_INC(tt_stores); tt->Store(key, result);
+            if (lt_live && result > state_turn_at_entry && !lt_mark.Clean()) { tt->MarkCutWin(key); }   // P5b-3
+        }
     }
     else if (tt != nullptr)
     {
@@ -112147,9 +112147,14 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
 // TRUNCATED, and the later duplicate -- the same board looked at again, caches warm -- finds a strictly better win
 // (std 183662 gi661 T2: Azorius-first twin 7, Talon-first twin 6 at b1; both 6 at b3). Not net <= 0 on Maze's End,
 // so DEFAULT OFF: the USER's call (=1 arms it).
+// P5b-3 + the RC-1 cache fix (RC-2/RC-3, 2026-11-20): with the uncut-twin form (a twin is skipped only after an
+// UNCUT evaluation) on the wip/maze-rc1-p5b tree, 2,800 games per deck: std 4 better / 2 worse, net -2; 2HG 2/1,
+// net -1; units -0.29% / -0.56%. The 3 slower games (std d1b3 g781, g686; 2HG d1b1 g783) recover at d8 b0 with the
+// same digest on both arms. ADOPTED by the USER 2026-11-21 ("Okay, we can adopt. Folding those makes sense to me."):
+// DEFAULT ON; =0 restores the unfolded enumeration (A/B control).
 static bool FoldLandOrderSeenFlag()
 {
-    static const bool env = EnvOn("MTG_FOLD_LAND_ORDER_SEEN", false);
+    static const bool env = EnvOn("MTG_FOLD_LAND_ORDER_SEEN", true);
     return heurarm::Flag(heurarm::FOLD_LAND_ORDER_SEEN, env);
 }
 static bool FoldLandOrderSeenLive(const GameState& state)
