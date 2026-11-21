@@ -114,6 +114,10 @@ int GreedyLandChoiceIndex(const GameState& state);
 // playable top it returns exactly GreedyLandChoiceIndex's pick, so every other deck is unchanged.
 struct GreedyLandPick { int hand_index = -1; bool from_top = false; };
 GreedyLandPick GreedyLandChoice(const GameState& state);
+// Blood Sun step 6d: does the active provider's land-menu restriction refuse `def` for the greedy beyond-horizon drop?
+// Only for a provider that opts in (DecisionProvider::GreedyLandHonoursOffer); never in human play or under the
+// unpruned gate (the menu filter's own conditions). False for every other deck, so their playout is unchanged.
+bool GreedyLandRefused(const GameState& state, const CardDefinition& def);
 
 // THE ACTIVATION-COLOUR NEED (MTG_ROLLOUT_LAND_ACT_COLOR -- the rollout's land drop; see the call
 // site in TurnSolver's SimulateLandPlay). Bit i (i = Color: W U B R G C) is set when a permanent the

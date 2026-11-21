@@ -6,6 +6,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/LandPlay.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -421,5 +422,38 @@ TEST_CASE("bloodsun prune (c): pre-Blood Sun land plays -- Ruins never, a Lotus 
         GameState f = s;
         f.players[0].hand.push_back(CardUp("Lotus Field", 4));
         CHECK(MenuPlays(f, "Lotus Field"));
+    }
+}
+
+// Step 6d item 2: the BEYOND-HORIZON greedy drop honours (c) for this provider only (GreedyLandHonoursOffer). Hand:
+// Scorched Ruins and Lotus Vale, no Blood Sun anywhere: the menu refuses both, and so does the greedy ranker (no drop);
+// with the lever off, or under any other provider (the generic one here), the greedy drops a land as before.
+TEST_CASE("bloodsun prune (c), playout: the greedy land choice skips a land the menu refuses (opt-in provider only)")
+{
+    GameState s = BaseUp();
+    PutUp(s, "Swamp", 10);
+    PutUp(s, "Swamp", 11);
+    s.players[0].hand.push_back(CardUp("Scorched Ruins", 2));
+    s.players[0].hand.push_back(CardUp("Lotus Vale", 3));
+    Lib(s, { "Swamp", "Swamp", "Swamp" });
+    {
+        PruneArm arm(true);
+        CHECK_FALSE(MenuPlays(s, "Scorched Ruins"));
+        CHECK_FALSE(MenuPlays(s, "Lotus Vale"));
+        CHECK(GreedyLandChoiceIndex(s) == -1);
+        CHECK(GreedyLandChoice(s).hand_index == -1);
+        // A Swamp in hand is still the greedy's drop.
+        GameState t = s;
+        t.players[0].hand.push_back(CardUp("Swamp", 4));
+        CHECK(GreedyLandChoiceIndex(t) == 2);
+        // Another provider never opts in: its greedy is unchanged.
+        static const GenericProvider gp;
+        GameState g = s;
+        g.m_provider = &gp;
+        CHECK(GreedyLandChoiceIndex(g) >= 0);
+    }
+    {
+        PruneArm arm(false);
+        CHECK(GreedyLandChoiceIndex(s) >= 0);
     }
 }

@@ -84716,6 +84716,7 @@ static std::string SimulateLandPlayOne(GameState& state)
         if (!top_ok) { return false; }
         const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.library.front()));
         if (!def) { return false; }
+        if (GreedyLandRefused(state, *def)) { return false; }   // the provider's opt-in restriction (step 6d)
         if (EffectiveLandDef(state, *def).params.etb_bounce_land && !has_other_land) { return false; }
         if (LakeDropWithoutVictim(state, *def)) { return false; }
         return pass != 0 || def->params.produces.size() > 1;
@@ -84730,6 +84731,7 @@ static std::string SimulateLandPlayOne(GameState& state)
             auto front = CardDatabase::Instance().LookupCached(c);
             const CardDefinition* def = LandFaceDefOf(front);   // spell//land plays its back face
             if (!def) { continue; }
+            if (GreedyLandRefused(state, *def)) { continue; }   // the provider's opt-in restriction (step 6d)
 
             // A Karoo bounce land with no other land in play must return ITSELF (the bounce is
             // mandatory) -- net no land in play and a wasted drop. Never the greedy choice; play a

@@ -458,6 +458,13 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
 // hand-only ranker it was factored out of. The top is judged by the same per-card tests as a hand
 // card (it is a candidate "in the same four passes"); within a pass it is tried BEFORE the hand when
 // `top_first` (the provider's tie rule), after it otherwise.
+bool GreedyLandRefused(const GameState& state, const CardDefinition& def)
+{
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (!prov.GreedyLandHonoursOffer() || HumanPlayActive() || DecisionUnpruned()) { return false; }
+    return !prov.LandPlayOffered(state, state.active_player_index, def);
+}
+
 static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bool top_first)
 {
     const Player& ap = state.ActivePlayer();
@@ -625,6 +632,7 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             const CardDefinition* front = CardDatabase::Instance().LookupCached(cand);
             const CardDefinition* def   = LandFaceDefOf(front);   // spell//land plays its back face
             if (!def) { continue; }
+            if (GreedyLandRefused(state, *def)) { continue; }   // the provider's opt-in restriction (step 6d)
             if (hold_top_consumer && front != nullptr
                 && front->params.look_top_put_creature_count > 0) { continue; }   // combo piece, not the drop
             if (EffectiveLandDef(state, *def).params.etb_bounce_land && (!has_other_land || karoo_returns_karoo())) { continue; }
@@ -753,7 +761,7 @@ int ActivationColorLandIndex(const GameState& state, int preferred)
     const auto supplies = [&](int i) -> bool {
         if (i < 0 || i >= n) { return false; }
         const CardDefinition* def = LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[i]));
-        if (def == nullptr) { return false; }
+        if (def == nullptr || GreedyLandRefused(state, *def)) { return false; }   // step 6d (opt-in)
         for (Color c : EffectiveProduces(state, active, *def, /*in_hand=*/true))
         { if (need & (1 << static_cast<int>(c))) { return true; } }
         return false;

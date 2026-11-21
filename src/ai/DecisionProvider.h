@@ -5215,6 +5215,12 @@ public:
     // entry -- the forced sacrifice is dominated by keeping the card). Default true: every land offered. Never
     // consulted in human play or under the unpruned gate.
     virtual bool LandPlayOffered(const GameState&, int /*controller*/, const CardDefinition&) const { return true; }
+    // ...and does the BEYOND-HORIZON greedy land choice honour LandPlayOffered too (Blood Sun step 6d)? The playout's
+    // drop (GreedyLandChoice / GreedyLandChoiceIndex -- the d0 runner's TryPlayLand, the executor's greedy drop --
+    // ActivationColorLandIndex, and the rollout's SimulateLandPlayOne) then skips a land the provider's restriction
+    // refuses, so a leaf does not value a line the search never plays (Blood Sun: a Scorched Ruins dropped before
+    // Blood Sun). OPT-IN, default false: every other provider's playout is unchanged (Maze's End keeps its greedy).
+    virtual bool GreedyLandHonoursOffer() const { return false; }
 
     // CrossingDumpAllLandsDominatesNo -- Manabond's "you may reveal your hand and put all land cards ..." when the
     // hand is ALL lands: "yes" puts every card and discards nothing. True drops "no" from the searched menu (Maze's
