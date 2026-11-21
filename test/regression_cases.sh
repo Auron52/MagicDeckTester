@@ -100,6 +100,7 @@ declare -A DECK_FILE=(
   [boars]=decks/Boars/Boars.cod
   [sea]="decks/Sea Creatures/Sea Creatures.cod"
   [mazesend]="decks/Maze's End/Maze's End.cod"
+  [worldfire]=decks/Worldfire/Worldfire.cod
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.cod"
 )
 declare -A DECK_PROF=(
@@ -163,6 +164,7 @@ declare -A DECK_PROF=(
   [boars]=decks/Boars/Boars.profile.json
   [sea]="decks/Sea Creatures/Sea Creatures.profile.json"
   [mazesend]="decks/Maze's End/Maze's End.profile.json"
+  [worldfire]=decks/Worldfire/Worldfire.profile.json
   [stuffy]="decks/Stuffy Doll/Stuffy Doll.profile.json"
 )
 
@@ -209,6 +211,14 @@ SMOKE_CASES=(
   # b10, at about equal cost (measured on the P5 tree, 50 games seed 1001: d3 b10 76.7K units/game, d5 b20 130.5K;
   # 50 x 76.7K = 3.83M = 29 d5 games -> 30). GT NOT accepted (the coordinator's next shared accept).
   "mazesend2hg  5 1001   30 20"
+  # worldfire (Worldfire): ADDED 2026-11-21 by the analysis (docs/design/analysis-Worldfire.md), all three tiers
+  # at once, pre-keep-table ENTRY set, P5 shape (d5 b20 play rows, one small d3 b10 sanity row). WorldfireProvider,
+  # no value_play block -> play rows are d5 b20. No keep table / value leaf yet, so GT WILL move when they land.
+  # worldfire2hg: small searched 2HG canary -- Worldfire sets the TEAM life to 1 and exiles the second head's hand.
+  "worldfire    0 1001 1000 0"
+  "worldfire    3 1001   10 10"
+  "worldfire    5 1001   40 20"
+  "worldfire2hg 5 1001   20 20"
   # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
   "mill 0 1001 100 0"
   "mill 3 1001   5 10"
@@ -835,6 +845,18 @@ REGRESSION_CASES=(
   "mazesend     3 2002   15 10"
   "mazesend     5 2002  184 20"
   "mazesend     5 3003  150 20"
+  # worldfire: see the SMOKE block (2026-11-21 entry set).
+  "worldfire    0 2002 1000 0"
+  "worldfire    3 2002   15 10"
+  "worldfire    5 2002   60 20"
+  "worldfire    5 3003   60 20"
+  "worldfire2hg 5 2002   30 20"
+  # Worldfire unlimited backstop (2026-11-21): budget-0 play is DEGENERATE on this deck -- screened 28 blocks
+  # (30001..30541 step 20, 3 games each, d3+d5, abandon_units 2000000, MTG_SLOW_GAME_MS=5000, 32 workers): most
+  # games hit the 2M-unit cap (50-360 s each). Only 30401 and 30521 have a first game under 5 s at BOTH depths, so
+  # each row is ONE game (the block's gi0): 30401 here, 30521 in OVERNIGHT.
+  "worldfire    3 30401    1 0"
+  "worldfire    5 30401    1 0"
   # Maze's End unlimited backstop (2026-11-18): budget-0 play is DEGENERATE on this deck -- screened 28 blocks
   # (30001..30541 step 20; 10 games each for 30001..30181, 3 for the rest; d3+d5, abandon_units 2000000,
   # MTG_SLOW_GAME_MS=5000, 8 workers): 171 of 246 games hit the 2M-unit cap (12-110 s each). No block's first
@@ -1410,6 +1432,20 @@ OVERNIGHT_CASES=(
   "mazesend     5  5005  300 20"
   "mazesend     5  6006  300 20"
   "mazesend     5  7007  357 20"
+  # worldfire: overnight ENTRY set (2026-11-21; Hinata's pre-keep-table shape, P5: one d3 sanity row). No
+  # worldfire2hg overnight rows (the smoke/regression canary covers the 2HG team-life path).
+  "worldfire    0  4004 2000 0"
+  "worldfire    0  6006 2000 0"
+  "worldfire    0  8008 2000 0"
+  "worldfire    0 10010 2000 0"
+  "worldfire    3  4004   25 10"
+  "worldfire    5  4004  300 20"
+  "worldfire    5  5005  300 20"
+  "worldfire    5  6006  300 20"
+  "worldfire    5  7007  300 20"
+  # Worldfire unlimited backstop: see the REGRESSION block (screen 2026-11-21); 30521 gi0 under 5 s at both depths.
+  "worldfire    3 30521    1 0"
+  "worldfire    5 30521    1 0"
   # Maze's End unlimited backstop: same 2026-11-18 screen (see the REGRESSION half). 30341 gi0 and 30441 gi0
   # finished under 5 s at both depths.
   "mazesend     3 30341    1 0"
