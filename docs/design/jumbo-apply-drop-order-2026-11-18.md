@@ -354,3 +354,95 @@ have the same turn outcomes: the same three slower games, no faster games, and n
 The cut arm is cheaper (Jumbo CPU x0.924 vs x0.946 of `on`; units x1.080 vs x1.103) but moves more digests without
 changing a turn (29 vs 12 Jumbo digest-only moves; both are small). On the evidence, pc matches p on quality and beats it on CPU.
 
+
+### Large held-out re-measure, as averages against the lever OFF (ran 2026-11-21)
+
+USER, 2026-11-21: *"How is the quality comparison with this on vs off? I'm looking for averages, not absolute numbers.
+I'm talking about vs lever off. Maybe we should also test each option on a larger set of games to get more accurate
+numbers."*
+
+**Setup.** One pooled `mtg --batch` (`build/scratch/claude_jumbo_uo_budget/ab2.json`, 8,000 jobs, 400,000 games,
+32 threads, heartbeat 32/32, 05:04-06:26 UTC), binary `mtg.w` = 900f472e4 (bfac80e72 + a per-job manifest field
+`uo_price_w`, so the W sweep shares one pool; unset it reads `MTG_UO_BUDGET_PRICE_W` as before). A pre-check
+(`logs/jumbo-uo-budget/valcheck.py`, 200 Jumbo games) confirmed `uo_price_w: 16` == the env default game for game,
+and `on`/`pc` on the new binary == `mtg.w16` game for game. `MTG_PGO=0`, `MTG_RSS_CAP_GB=40`, play settings
+(profile), seed = 30000000+gi, game_index = gi, **gi 900000+** (fresh: no overlap with 640000-660299, 115000-116999,
+719000-729999). Arms: off = `MTG_PO_UNLOCK_ORDER=0`; on = shipped (unlock on, price off); pc16 / pc32 / pc64 =
+price + cut at W = 16 / 32 / 64; p16 = price only at W = 16 (Jumbo and Bruna only). Jumbo 50,000 games an arm
+(gi 900000-949999), Bruna 10,000 (900000-909999), Angels / Boars / Five Colour / Kitty Equipment 2,000 (900000-901999).
+
+**Columns.** Delta = mean per-game turn difference, PAIRED on the same gi (a non-win scored 9; `+` = slower),
+with its SE and 95% CI (mean +- 1.96 SE); f/s = games faster / slower. win T = mean win turn over won games; mean T =
+mean turn with a non-win scored 9. CPU = summed per-job CPU / games.
+
+| deck | arm | win% | win T | mean T | delta vs OFF (95% CI) | f/s vs off | delta vs ON (95% CI) | f/s vs on | CPU ms/g | CPU vs off | CPU vs on |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Jumbo (50k) | off | 99.72 | 4.063 | 4.0771 | 0 | - | +0.00018 | 3/12 | 191.0 | 1 | x0.846 |
+| | on | 99.72 | 4.063 | 4.0769 | **-0.00018** (-0.00033, -0.00003) | 12/3 | 0 | - | 225.9 | **x1.183** | 1 |
+| | pc16 | 99.72 | 4.063 | 4.0771 | -0.00002 (-0.00023, +0.00019) | 14/12 | +0.00016 (+0.00001, +0.00031) | 2/9 | 207.1 | x1.084 | x0.916 |
+| | pc32 | 99.72 | 4.063 | 4.0770 | -0.00008 (-0.00028, +0.00012) | 14/9 | +0.00010 (-0.00003, +0.00023) | 2/6 | 209.7 | x1.098 | x0.928 |
+| | pc64 | 99.72 | 4.063 | 4.0770 | -0.00010 (-0.00030, +0.00010) | 14/8 | +0.00008 (-0.00004, +0.00020) | 2/5 | 212.2 | x1.111 | x0.939 |
+| | p16 | 99.72 | 4.063 | 4.0771 | -0.00002 (-0.00023, +0.00019) | 14/12 | +0.00016 (+0.00001, +0.00031) | 2/9 | 213.0 | x1.115 | x0.943 |
+| Bruna (10k) | off | 99.17 | 4.777 | 4.8119 | 0 | - | +0.00080 | 0/8 | 764.0 | 1 | x0.994 |
+| | on | 99.17 | 4.776 | 4.8111 | **-0.00080** (-0.00135, -0.00025) | 8/0 | 0 | - | 768.5 | x1.006 | 1 |
+| | pc16 / pc32 / pc64 | 99.17 | 4.777 | 4.8117 | -0.00020 (-0.00093, +0.00053) | 8/6 | +0.00060 (+0.00012, +0.00108) | 0/6 | 765-767 | x1.002-1.004 | x0.996-0.998 |
+| | p16 | 99.17 | 4.777 | 4.8116 | -0.00030 (-0.00101, +0.00041) | 8/5 | +0.00050 (+0.00006, +0.00094) | 0/5 | 766.6 | x1.003 | x0.998 |
+| Angels (2k) | all | 99.95 | 4.629 | 4.6315 | 0 | 0/0 | 0 | 0/0 | 51-52 | x0.99-1.01 | noise |
+| Boars (2k) | all | 100 | 4.771 | 4.7705 | 0 | 0/0 | 0 | 0/0 | 287-293 | x1.00-1.02 | noise |
+| Five Colour (2k) | all | 99.80 | 4.805 | 4.8135 | 0 | 0/0 | 0 | 0/0 | 1845-1884 | x1.01-1.02 | noise |
+| Kitty Equipment (2k) | all | 98.70 | 3.717 | 3.7860 | 0 | 0/0 | 0 | 0/0 | 637-639 | x1.00 | noise |
+
+(Bruna's three pc arms are game-for-game identical: W does not move Bruna at all. Its price arms differ from `on` only
+through the one-unit-a-search floor and the cut's bind accounting, not through the weight. Per-deck CPU noise
+between arms that do not move a turn is about +-2% here: Boars `on` x1.021 and Five Colour x1.010 vs off.)
+
+**What the averages say.**
+* **The unlock lever itself (on vs off) is now a measured gain:** Jumbo -0.00018 turns a game (12 faster / 3
+  slower), and Bruna -0.00080 (8 / 0). Both CIs exclude 0. That is roughly one turn saved per 5,500 Jumbo games and
+  per 1,250 Bruna games, at +18.3% Jumbo CPU.
+* **Every price arm gives back part of that gain.** Against off, no price arm's CI excludes 0 (each is a wash or a
+  small gain). Against on, pc16 and p16 are worse in Jumbo (+0.00016, CI just above 0), and all four are worse in
+  Bruna (+0.00050 to +0.00060, CI above 0). pc32 and pc64 lose less in Jumbo (+0.00010 / +0.00008; CIs include 0).
+* **The lighter price buys quality back and gives CPU back, monotonically.** Jumbo CPU vs off: pc16 +8.4%, pc32
+  +9.8%, pc64 +11.1% (on +18.3%). Jumbo delta vs on: +0.00016, +0.00010, +0.00008. The cut pays: p16 (no cut) has
+  pc16's quality at +11.5% CPU.
+* **Hinata.** `test/suite_cost.json` (pre-lever, the d5 b20 regression shape): Jumbo 3,391.5 ms a game, Hinata
+  6,434.4, 0.527x. Scaled by these play-settings ratios (a projection, not a suite-shape measurement): on ~0.62x,
+  pc16 ~0.57x, pc32 ~0.58x, pc64 ~0.59x, p16 ~0.59x Hinata. Every arm is far inside the 3x entry limit.
+
+**d8 b0 recovery** (`rec2.json`: every game a non-off arm made slower than `on` or than `off`, re-run at `--depth 8
+--budget-ms 0` under `on` and each slower arm at its own W, 4-core lane; recovered = d8 b0 turn <= the base arm's
+budgeted turn). 18 games (Bruna 6, Jumbo 12), 82 replays: **every pair recovers** (pc16>on 15/15, pc16>off 18/18,
+pc32>on 12/12, pc32>off 15/15, pc64>on 11/11, pc64>off 14/14, p16>on 14/14, p16>off 17/17, and the shipped lever's own
+on>off 3/3), and at every game all re-run arms are byte-identical to `on` at d8 b0. The price stays inert at an
+unlimited root. Each loss is the finite budget being re-spent.
+
+| deck | gi | budgeted off / on / pc16 / pc32 / pc64 / p16 | d8 b0 (all arms) |
+|---|---|---|---|
+| Bruna | 900389 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+| Bruna | 901553 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+| Bruna | 904788 | 6 / 6 / 7 / 7 / 7 / 7 | 6 |
+| Bruna | 905149 | 5 / 5 / 6 / 6 / 6 / 5 | 5 |
+| Bruna | 905415 | 5 / 5 / 6 / 6 / 6 / 6 | 5 |
+| Bruna | 908617 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+| Jumbo | 903443 | 4 / 4 / 5 / 5 / 4 / 5 | 4 |
+| Jumbo | 905970 | 4 / 5 / 5 / 5 / 5 / 5 | 4 |
+| Jumbo | 907113 | 3 / 3 / 4 / 3 / 3 / 4 | 3 |
+| Jumbo | 909869 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+| Jumbo | 911159 | 3 / 3 / 4 / 3 / 3 / 4 | 3 |
+| Jumbo | 914249 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+| Jumbo | 918851 | 4 / 4 / 5 / 4 / 4 / 5 | 4 |
+| Jumbo | 922405 | 3 / 4 / 4 / 4 / 4 / 4 | 3 |
+| Jumbo | 929661 | 4 / 5 / 5 / 5 / 5 / 5 | 4 |
+| Jumbo | 940683 | 3 / 3 / 4 / 4 / 4 / 4 | 3 |
+| Jumbo | 941946 | 4 / 4 / 6 / 6 / 6 / 6 | 4 |
+| Jumbo | 943482 | 4 / 4 / 5 / 5 / 5 / 5 | 4 |
+
+**Verdict against the bar (the USER decides).** Every slower game recovers at d8 b0. Per-deck net against the
+committed (shipped, `on`) play: Jumbo pc16 +8, pc32 +5, pc64 +4, p16 +8; Bruna +6 on every pc arm, p16 +5.
+**No price arm meets "net <= 0 vs the committed tree"**, and the larger sample makes the Bruna loss (CI above 0 on
+every arm, W-invariant) the clearest result. Against the lever OFF, every price arm is net <= 0 in every deck
+(Jumbo -1 / -4 / -5 / -1, Bruna -2 / -2 / -2 / -3), i.e. each still keeps part of the lever's gain.
+
+Raw outputs: `logs/jumbo-uo-budget/ab2/compare2.txt`, `recov2.txt` (worktree), and
+`build/scratch/claude_jumbo_uo_budget/{ab2,rec2}/`.
