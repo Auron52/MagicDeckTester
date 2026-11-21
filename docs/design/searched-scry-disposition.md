@@ -295,3 +295,29 @@ base, which is enumerated first and wins the tie). The land-ETB scry search (`Pl
 `EnumeratePlansWithLand`, ~TurnSolver.cpp:93195) still sizes off the unseen top: put it in the same shape as part of
 the engine-wide inventory. Sites seen but not inventoried yet: `ScryTop` (land-ETB), spell `cast_scry` (Magma Jet,
 Preordain), Curator discard-scry triggers, the Galadriel chain, `SurveilTop`, `ReorderTopOrShuffle` (Ponder).
+
+## 2026-11-21: the DirectDamage `cast_scry` site (Magma Jet) is searched
+
+Second site of the engine-wide inventory above. `EffectHandler::ResolveDirectDamage` and apply_one's DirectDamage
+branch called `ScryTop` with no pin, so Magma Jet's scry 2 was the provider's single pick at every node
+(`GenericProvider::ScryKeepOnTop`: keep every nonland, keep a land only below two lands in play). Two Creature Burn
+references were a turn slower than the USER for exactly this reason, and neither recovered at `--depth 8
+--budget-ms 0`:
+- **s6 gi5** (USER T4, search T5): T2 the USER cast Magma Jet face and kept one Mountain on top (the 4th land for
+  T4 Ball Lightning + Lightning Bolt). The heuristic bottoms both Mountains (2 lands in play), so the Jet line has no
+  T4 kill and the search correctly prefers Bolt on T2 -- leaving the 2-mana Jet stranded beside the T4 Ball
+  Lightning. Hand-off: Jet + scry "bottom both" -> T5; Jet + "keep one" -> T4.
+- **s8 gi7** (USER T5, search T6): T2 Magma Jet face, the look is Browbeat + Goblin Fireslinger with Keldon
+  Champion (4 mana) in hand and 3 lands total. The heuristic keeps both nonlands, the search misses its 4th land
+  until T6. The USER bottomed both (draws: Bolt, Mountain). Hand-off: "bottom both" -> T5, every other disposition -> T6.
+
+Fix (`MTG_CAST_SCRY_SEARCH`, default ON, per-job lever `heurarm::CAST_SCRY_SEARCH`): a CollectActions post-pass,
+after the fixed-burn target fan, twins every DirectDamage `cast_scry` cast per alternative disposition
+(`Action::scry_pin`, the step-9d mechanism, sized off the look count and capped by `MTG_SCRY_WIDTH`), and both
+resolvers install the pin around the spell's `ScryTop`. Rollout leaves and human play emit only the base.
+Unit test: `test/unit/test_cast_scry_search.cpp`.
+
+**Open for the USER:** `MTG_SCRY_WIDTH` defaults to 2, which for a 2-card look keeps the heuristic plus ONE
+alternative (the first other disposition in `EnumerateTopDispositions` order) out of five. Both references happen to
+need exactly that alternative. Width 5 would make every disposition findable (the completeness invariant) at 5x the
+Jet variants; a Creature Burn `ScryVerdict` prune is the sanctioned way to buy that width back.

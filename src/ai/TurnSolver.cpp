@@ -29770,6 +29770,15 @@ static std::size_t ScrySearchWidth()
     return w;
 }
 
+// MTG_CAST_SCRY_SEARCH (default ON; per-job lever heurarm::CAST_SCRY_SEARCH): a DirectDamage spell's own scry
+// (Magma Jet's cast_scry) is a SEARCHED axis -- see the CollectActions post-pass that twins each cast per
+// alternative disposition. =0 -> the provider's single in-window pick, byte-identical to before.
+static bool CastScrySearchOn()
+{
+    static const bool s_on = EnvOn("MTG_CAST_SCRY_SEARCH", true);
+    return heurarm::Flag(heurarm::CAST_SCRY_SEARCH, s_on);
+}
+
 // How many dispositions a look of `look` cards has, SIZED OFF THE COUNT ALONE: every ordered subset kept
 // on top (sum_j look!/(look-j)!; the rest go to the bottom / graveyard). 2 for a one-card look.
 static std::size_t ScryLookDispositionCount(int look)
@@ -56087,6 +56096,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
     actions.swap(burn_targets);
+    // A BURN SPELL'S OWN SCRY IS SEARCHED (Magma Jet: "deals 2 damage to any target. Scry 2."). USER 2026-11-17
+    // (docs/design/searched-scry-disposition.md): "It should be searched and typically overridden by a provider and
+    // yes, this should be engine-wide." Until now the DirectDamage resolver's ScryTop took the provider's ONE
+    // disposition at every node -- an in-window single pick. Creature Burn s6 gi5 / s8 gi7: the USER's line (keep a
+    // Mountain for the 4-land turn; bottom Browbeat + Fireslinger to dig for Keldon Champion's fourth land) was
+    // unfindable at --depth 8 --budget-ms 0, and both games were a turn slow.
+    // The step-9d (Loran's Escape) shape, applied AFTER the target fan so every target variant is twinned: candidate
+    // 0 is the untwinned cast (scry_pin -1, the provider's disposition), each k >= 1 pins TopDispositionCandidates[k].
+    // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is sized off the look COUNT (capped by MTG_SCRY_WIDTH), never off the
+    // cards now on top; the provider's ScryVerdict prune applies at RESOLUTION on the seen cards, where a pin past the
+    // surviving candidates clamps (the twin then duplicates its base, which is enumerated first and wins the tie).
+    // A ROLLOUT LEAF emits only the base (beyond the horizon the permitted playout policy is the provider's
+    // default). Never under human play (the viewer asks the scry at resolution).
+    if (CastScrySearchOn() && !HumanPlayActive() && (g_search_candidate_enum || g_condemn_root_turn < 0)
+        && !ap.library.empty())
+    {
+        std::vector<Action> scry_twins;
+        scry_twins.reserve(actions.size());
+        for (Action& a : actions)
+        {
+            const CardDefinition* d = (a.kind == Action::Kind::CastFromHand)
+                ? (a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name)) : nullptr;
+            if (d == nullptr || d->tmpl != CardTemplate::DirectDamage || d->params.cast_scry <= 0 || a.scry_pin >= 0)
+            { scry_twins.push_back(std::move(a)); continue; }
+            const int look = std::min(d->params.cast_scry, static_cast<int>(ap.library.size()));
+            const int alts = std::min(126, static_cast<int>(std::min(ScryLookDispositionCount(look),
+                                                                     ScrySearchWidth())) - 1);
+            const Action base = a;
+            scry_twins.push_back(std::move(a));
+            for (int k = 1; k <= alts; ++k)
+            {
+                Action v = base;
+                v.scry_pin = static_cast<std::int8_t>(k);
+                scry_twins.push_back(std::move(v));
+            }
+        }
+        actions.swap(scry_twins);
+    }
     // MORPH INT-10 (b): after combat, a face-up entry of an end-step-sacrifice creature is dominated by not making it
     // (DecisionProvider::EndStepSacFaceUpDeadAfterCombat states the proof). BEFORE the fold tags, so a hand slot left
     // with only its face-down cast can join the interchangeable-copy fold. No-op without a face-down-capable deck.
@@ -77428,7 +77475,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             { ResolveNonbasicLandDamage(state, state.active_player_index, def.params.damage_per_nonbasic_land); }
             ContinueChainLightning(state, def, chain_hit_controller);
             if (def.params.cast_scry > 0)
-            { ScryTop(state, def.params.cast_scry, def.card.m_name); }
+            {
+                // The burn's own searched scry (Action::scry_pin; Magma Jet, CastScrySearchOn): the pin the search
+                // scored, consumed by this ScryTop. Lockstep with EffectHandler::ResolveDirectDamage's entry pin.
+                std::optional<ScriptedTopChoice> stc_pin;
+                if (riders.scry_pin >= 0) { stc_pin.emplace(riders.scry_pin); }
+                ScryTop(state, def.params.cast_scry, def.card.m_name);
+            }
             // Magma Opus rider: "draw two cards." Mirrors EffectHandler (lockstep).
             if (def.params.cast_draw > 0)
             {

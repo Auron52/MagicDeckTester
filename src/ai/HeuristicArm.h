@@ -1081,6 +1081,7 @@ enum Slot : int
     PO_DAMAGE_ORDER,          // MTG_PO_DAMAGE_ORDER  the DAMAGE-ORDER domain of the payable-order search (mana-clean gate claude-queue-20261120b, 1 Drop Burn / Midrange Burn APPLY-DROP-ORDER): a line holding a cast whose legality or cost needs same-turn damage (Needle Drop, a not-yet-live spectacle cast, Chandra's Incinerator) beside a face-burn cast is priced by the sequential walk with the damage modelled; the given order is kept when it pays, else the nearest order that pays. Default lives at the reader (TurnSolver.cpp PoDamageOrderOn)
     LAVAMANCER_TARGET_PRUNE,  // MTG_LAVAMANCER_TARGET_PRUNE  Grim Lavamancer's ping (gy-exile mode 3) targets only the OPPONENT and opponent-controlled creatures / planeswalkers in autonomous play (Midrange Burn / 1 Drop Burn GraveyardDamageTargetCandidates; USER 2026-11-21: "This indeed should be pruned. In fact everything but the opponent should be pruned."). Human play and MTG_UNPRUNE=fixedburntarget keep every target. DEFAULT ON; =0 -> every legal target
     FIREBLAST_COPY_PINS,      // MTG_FIREBLAST_COPY_PINS  two Fireblast alternative casts whose pinned Mountains overlap are one physically impossible selection (SubsetHasDuplicateSacSource kDupFireblast; the apply silently dropped the second), and under a provider's one-pair fold each further Fireblast copy is pinned to the best pair DISJOINT from the earlier copies' pins, so two Fireblasts on four Mountains stay findable. Sound (rejects only selections no order can pay). DEFAULT ON; =0 -> the pre-2026-11-21 shared pins
+    CAST_SCRY_SEARCH,         // MTG_CAST_SCRY_SEARCH  a DirectDamage spell's own scry (Magma Jet's cast_scry) is SEARCHED: every cast is twinned per alternative disposition (Action::scry_pin, the step-9d mechanism), sized off the look count, the pin consumed by the spell's ScryTop in both worlds. USER 2026-11-17: every scry site is searched, then pruned by the provider (ScryVerdict). Creature Burn s6 gi5 / s8 gi7 references. Default ON; =0 -> the provider's single pick, byte-identical to before
     COUNT
 };
 
@@ -2106,6 +2107,7 @@ inline const char* Name(int slot)
         "MTG_PO_DAMAGE_ORDER",
         "MTG_LAVAMANCER_TARGET_PRUNE",
         "MTG_FIREBLAST_COPY_PINS",
+        "MTG_CAST_SCRY_SEARCH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
