@@ -306,6 +306,16 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   an arm of the threshold-7 variant, never at >= 8). EXCEPTION kept at every mana: Grim Tutor -> Time Warp is
   offered whenever Grim ({1}{B}{B}) and then Time Warp ({3}{U}{U}) are both castable this turn from the
   available mana (colours included); it is the one Grim line the >= 8 gate does not prune.
+  USER (verbatim): *"I'm not sure. We might find some other lines with Grim Tutor that have to do with dropping
+  things this turn. For example Grim Tutor -> Fastbond which you play into mutliple lands + Time Warp in hand.
+  It's possible pruning Fastbond is also dicey for this reason. We'll just have to play with it. I may also be
+  getting ahead of myself. We should probably be measuring branching and performance more first."*
+  -> B12 is PROVISIONAL and MEASUREMENT-FIRST: the perf agent measures branching and cost by site (Phase A)
+  before any Grim prune is built; a Grim prune is built only if Grim Tutor is a notable share, and then as
+  levered arms including a "same-turn deploy" exception (Grim -> a card cast this turn that enables this-turn
+  plays: Time Warp; Fastbond with >= 2 lands in hand to play), all measured and presented; no default chosen
+  by an agent. The same caution applies to the B3 "no Fastbond target once Fastbond is held" and any other
+  tutor-list prune.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
