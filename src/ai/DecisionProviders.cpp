@@ -39508,8 +39508,24 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
         }
     }
     for (int i = 0; i < n; ++i) { if (!done[static_cast<std::size_t>(i)]) { set(i, kWfKeyOther, false, "other"); } }
-    out.combo_missing    = wf.empty() && combo_tutor < 0;
-    out.finisher_missing = fin.kind == kFinNone;
+    // GENUINELY missing, judged on the HAND and the board (never the look -- a looked-at Worldfire is what Preordain's
+    // aggressive mode is digging for): no such card held or pending, and no tutor in hand for it.
+    {
+        bool hand_wf = false, hand_fin = false, hand_tutor = false;
+        for (const Item& x : it)
+        {
+            if (x.is_look) { continue; }
+            hand_wf    = hand_wf || x.role == kWfWorldfire;
+            hand_fin   = hand_fin || x.role == kWfBolt || x.role == kWfHalberdier;
+            hand_tutor = hand_tutor || (WfIsTutor(x.role) && !tneed.NothingMissing());
+        }
+        const int hand_tutors = static_cast<int>(tutors.size());
+        out.combo_missing    = !hand_wf && !hand_tutor;
+        const bool pend = bolt_pending_arrival >= 0 || halb_pending_arrival >= 0;
+        // A tutor serves the finisher only when it is not already spent on Worldfire.
+        const int spare = hand_tutors - (hand_wf ? 0 : 1);
+        out.finisher_missing = !hand_fin && !pend && spare <= 0;
+    }
     out.entries.reserve(it.size());
     for (Item& x : it)
     {
