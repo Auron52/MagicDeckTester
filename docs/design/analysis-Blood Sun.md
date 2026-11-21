@@ -276,3 +276,8 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   `MTG_BP_DEV_SEQ_ALL` lever (default off; T5 -> T4 on that chain, +12-25% search work). SCHEDULED as step 7b:
   re-measure `_ALL`, then a scoped default-on version (sequences only at acquisition / cantrip resolution sites)
   through the prune/adoption bar. Whether a scoped `_ALL` becomes default is presented to the USER with numbers.
+- Step 7 parent readings (2026-11-21, of existing USER rulings, not new decisions): (1) B3's "X = 1 only with another
+  Revelation in hand" applies only when X = 1 is the largest X our mana affords (USER: "My guidance on duplicates is for
+  when you have 6 mana"), so the 21-mana Revelation X = 1 -> Emrakul kill stays findable; (2) an Overgrown Tomb put on
+  the opponent's turn enters tapped without paying -- a sound fold (no instant-speed use exists in this deck; it untaps
+  before our first sorcery-speed use).
