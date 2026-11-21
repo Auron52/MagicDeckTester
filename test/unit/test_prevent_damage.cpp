@@ -1583,6 +1583,66 @@ TEST_CASE("Prevent Damage holds red for a known later Earthquake after Living Wi
     }
 }
 
+// Overnight s6006 gi47 (2026-11-20 rebaseline): T8 win -> unwon, also at d8 b0. The T8 kill is Ancient Tomb +
+// Rolling Earthquake X=2 + Vito's lifelink, and it lands at 1 life, so it needs every land drop from T4 on and the
+// minimum-pain T7 lifelink payment. T7 (old line): Brushland, City of Brass, Tarnished Citadel, two Battlefield
+// Forges and Ancient Tomb untapped, 14 life, the just-drawn Earthquake in hand, and the turn's plan is Vito's
+// {3}{B}{B} lifelink activation alone. The cheapest payment is City + Citadel for {B}{B} and the three painless {C}
+// (4 damage), which leaves Ancient Tomb. The later-hand hold read that as "no red left for the Earthquake" and
+// re-paid with Ancient Tomb to keep a Forge (6 damage) for an Earthquake nothing this turn casts; the two life
+// made the T8 kill lethal, so every land-drop line lost its win and the search stopped playing lands on T4/T5.
+TEST_CASE("Prevent Damage: the later-hand Earthquake hold pays no pain for a line that does not cast it (s6006 gi47 T7)")
+{
+    PainPayArm pay(true);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 7;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 14;
+        Put(s, "Brushland");
+        Put(s, "City of Brass");
+        Put(s, "Dina, Soul Steeper");
+        Put(s, "Tarnished Citadel");
+        Put(s, "Battlefield Forge");
+        Put(s, "Battlefield Forge");
+        Put(s, "Ancient Tomb");
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        for (const char* n : { "Spellshock", "Rolling Earthquake" })
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+            REQUIRE(d != nullptr);
+            s.players[0].hand.push_back(d->card);
+        }
+        return s;
+    };
+    const ManaCost lifelink = Cost(3, 0, /*b=*/2);
+    {
+        HeurArmSet off(heurarm::PD_LATER_HAND_HOLD, false);
+        GameState s = board();
+        REQUIRE(Pay(s, lifelink));
+        CHECK(Me(s) == 10);                 // City + Citadel for {B}{B}, three painless {C}
+        CHECK_FALSE(s.battlefield[6].tapped);   // Ancient Tomb left
+    }
+    {
+        HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
+        GameState s = board();
+        REQUIRE(Pay(s, lifelink));
+        MESSAGE("hold on, no line: life " << Me(s) << ", Tomb tapped " << s.battlefield[6].tapped);
+        CHECK(Me(s) == 10);
+        CHECK_FALSE(s.battlefield[6].tapped);
+    }
+    {
+        HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
+        LineUnpaidCostScope line(lifelink);   // the applying line: the activation alone
+        GameState s = board();
+        REQUIRE(Pay(s, lifelink));
+        MESSAGE("hold on, line bound: life " << Me(s) << ", Tomb tapped " << s.battlefield[6].tapped);
+        CHECK(Me(s) == 10);
+        CHECK_FALSE(s.battlefield[6].tapped);
+    }
+}
+
 TEST_CASE("Prevent Damage holds two visible Earthquake reds across a Dina breakpoint (seed 30064758 T5)")
 {
     PainPayArm pay(true);
