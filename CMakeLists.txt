@@ -553,6 +553,7 @@ add_executable(mtg-test
     test/unit/test_th_held_drop.cpp
     test/unit/test_freecast_x_zero.cpp
     test/unit/test_bp_wave_empty.cpp
+    test/unit/test_bp_node_host_gate.cpp
     test/unit/test_bp_dev_seq.cpp
     test/unit/test_dev_seq_tail_skip.cpp
     test/unit/test_edf_cast_order.cpp

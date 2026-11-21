@@ -94075,6 +94075,53 @@ namespace
         static const bool on = EnvOn("MTG_BP_WAVE_UNHOSTED_SITES", true);   // DEFAULT ON; =0 reverts
         return heurarm::Flag(heurarm::BP_WAVE_UNHOSTED_SITES, on);
     }
+    // MTG_BP_NODE_HOST_GATE -- gate the node's wave stand-down on the HOST, not only on the TURN.
+    //
+    // THE HOLE (RC-3, 2026-11-20; docs/design/bp-node-wave-drop-in-lookahead-host.md). BpWaveSiteMask
+    // drops the node's sites (BpNodeWaveDropAt) whenever BpNodeHostsThisTurn says the TURN is a node
+    // turn (g_condemn_root_turn, +1 under MTG_BP_NODE_HOST2). The premise -- "the node searches these
+    // continuations itself" -- holds only in a host that really pends at the node: FSLineWin's and
+    // FSLineTail's plan loops when node_host_here, which is exactly what the walker's `host_pends` says.
+    // MTG_BP_WAVE_UNHOSTED_SITES restored the full mask for a non-pending host, but only in a SEARCHED
+    // apply (g_rollout_nest == 0 && g_bp_enum_depth == 0). Inside a rollout or a continuation-list
+    // derivation a non-pending host -- SolveWithLookahead's candidate loop (reached through
+    // RolloutPreCombatSolve), both group-wave tranches, an FSLine host with node_host_here false -- still
+    // got the turn-keyed drop: on the root turn and root+1 a site-3 plan there had no wave-0 variant
+    // (MTG_BP_SITE3_DEFER), no deferred slot and no node, so the base canon was its only continuation at
+    // any budget. Because the drop reads the OUTERMOST decision's turn, the same rollout state also
+    // rolled out differently under different root turns, which is not in BuildSimKey: the leaf table
+    // and the game-persistent rollout cache served values computed with and without the hole.
+    //
+    // REPRO (Maze's End 2HG d3 b10; MTG_START_LIFE=30 MTG_OPPONENT_HEADS=2 MTG_LEAF_VERIFY=1
+    // MTG_NOWIN_VERIFY=1 --seed 434023 --game-index 22 --threads 1): 3 leaf STALE hits of the
+    // SAME-STATE DRIFT kind (keys 983036f572f4ce2 t7 and 4c3548248d696b95 t6). At store time the turn-7
+    // lookahead solve's walker opened 36 slots and found Sylvan Scrying + Maze's End>Gond Gate (T8); at
+    // hit time, under a later root turn, it opened 0 and kept the T9 line. MTG_BP_NODE=0 gives 0.
+    //
+    // THE FIX: a walker whose host does not pend walks the full BpSiteMask in every apply. A hosting
+    // walker keeps the stand-down unchanged. Folding the hosting bit into BuildSimKey instead would only
+    // make the cache honest about the hole. The wave-0 mask (BpWave0SiteMask) is built at ENUMERATION
+    // time, where no host is known; its node drop is an ordering only, because a plan wave 0 did not
+    // fan (bp_wave0 false) opens its walker slots at rank 0 -- so once this walker keeps the sites,
+    // nothing is unreachable there either.
+    //
+    // USER 2026-11-21 (verbatim): "Okay, if there is a potential hole in our design it should be closed."
+    // DEFAULT ON (a soundness fix); =0 restores the searched-apply-only rule byte-identically.
+    inline bool BpNodeHostGateOn()
+    {
+        static const bool on = EnvOn("MTG_BP_NODE_HOST_GATE", true);   // DEFAULT ON; =0 reverts
+        return heurarm::Flag(heurarm::BP_NODE_HOST_GATE, on);
+    }
+    // The site mask a BpWaveWalker selects its bases by (and so its nested discovery inherits). A host
+    // that pends at the node keeps the node's turn-keyed stand-down (BpWaveSiteMask); one that does not
+    // walks the full BpSiteMask -- in a searched apply under MTG_BP_WAVE_UNHOSTED_SITES, and in every
+    // apply under MTG_BP_NODE_HOST_GATE. See BpNodeHostGateOn.
+    inline int BpWalkerSiteMask(const GameState& state, bool host_pends, bool searched_apply)
+    {
+        const bool full = !host_pends
+                       && ((searched_apply && BpWaveUnhostedSitesOn()) || BpNodeHostGateOn());
+        return full ? BpSiteMask() : BpWaveSiteMask(state);
+    }
     // MTG_BP_NODE_NESTED_SLOTS -- see BpWaveWalker::AddHostedNested.
     inline bool BpNodeNestedSlotsOn()
     {
@@ -94361,8 +94408,7 @@ public:
         // the sequences are relative to. Rides on nested discovery, whose generalisation it is.
         m_devseq = searched_apply && BpDevSeqOn() && BpNestDiscover() && g_devseq_suppress == 0;
         m_devseq_all = m_devseq && BpDevSeqAllOn();
-        const int  sites  = (!host_pends && searched_apply && BpWaveUnhostedSitesOn())
-                          ? BpSiteMask() : BpWaveSiteMask(state);
+        const int  sites  = BpWalkerSiteMask(state, host_pends, searched_apply);
         const bool dig_bp = BpDigFanoutPending(state, sites);
         if (limit > plans.size()) { limit = plans.size(); }
         for (std::size_t i = 0; i < limit; ++i)
@@ -95191,6 +95237,19 @@ TurnSolver::PoW0Probe TurnSolver::PoW0ProbeForTest(const GameState& state, const
         out.same.push_back(twin_key != nullptr && k == *twin_key);
     }
     return out;
+}
+
+// MTG_BP_NODE_HOST_GATE's unit test: the walker's base-selection mask for a host that does / does not
+// pend at the node, in a searched apply or not (a playout / a derivation), with the outermost decision's
+// turn pinned to `root_turn` (-1 = no root, which BpNodeHostsThisTurn reads as a node turn).
+int TurnSolver::WalkerSiteMaskForTest(const GameState& state, bool host_pends, bool searched_apply,
+                                      int root_turn)
+{
+    const int saved = g_condemn_root_turn;
+    g_condemn_root_turn = root_turn;
+    const int m = BpWalkerSiteMask(state, host_pends, searched_apply);
+    g_condemn_root_turn = saved;
+    return m;
 }
 
 std::vector<TurnSolver::WalkerStep> TurnSolver::WaveWalkerTraceForTest(const GameState& state,

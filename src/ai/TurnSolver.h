@@ -3339,6 +3339,10 @@ public:
     static int PoW0SkipReasonForTest(const Plan& p, bool clean, int classon, int n0, int ci0,
                                      int n_ci, int rank_ci_classon, int w);
     struct WalkerStep { int base; int bp_choice; int bp_at; bool scored; };
+    // MTG_BP_NODE_HOST_GATE: the deferred wave walker's site mask (BpWalkerSiteMask) for a host that
+    // does / does not pend at the breakpoint node, in a searched apply or not, under root turn `root_turn`.
+    static int WalkerSiteMaskForTest(const GameState& state, bool host_pends, bool searched_apply,
+                                     int root_turn);
     static std::vector<WalkerStep> WaveWalkerTraceForTest(const GameState& state,
                                                           const std::vector<Plan>& plans,
                                                           int list_len, int seen, bool host_pends,

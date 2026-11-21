@@ -206,8 +206,17 @@ TEST_CASE("on the node's turn a pending host leaves site 3 to the node; a non-pe
         CHECK(!TurnSolver::WaveWalkerTraceForTest(s, plans, 2, 1, /*host_pends=*/false).empty());
     }
     {
+        // MTG_BP_NODE_HOST_GATE (default ON) alone also keeps site 3 for a non-pending host.
+        LeverScope gate_only(1, /*unhosted=*/0);
+        heurarm::t_arm[heurarm::BP_NODE_HOST_GATE] = 1;
+        CHECK(!TurnSolver::WaveWalkerTraceForTest(s, plans, 2, 1, /*host_pends=*/false).empty());
+        heurarm::t_arm[heurarm::BP_NODE_HOST_GATE] = -1;
+    }
+    {
         LeverScope off(1, /*unhosted=*/0);   // the turn-keyed mask everywhere: no slot at all
+        heurarm::t_arm[heurarm::BP_NODE_HOST_GATE] = 0;
         CHECK(TurnSolver::WaveWalkerTraceForTest(s, plans, 2, 1, /*host_pends=*/false).empty());
+        heurarm::t_arm[heurarm::BP_NODE_HOST_GATE] = -1;
     }
 }
 
