@@ -40,16 +40,24 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   slow games 3 vs 11). Proposed Bolt race-release (MTG_WORLDFIRE_BOLT_RACE) measured net worse -> OFF.
 - Smoke byte-identical with the prunes (235, play-changed=0).
 
-## Running (2026-11-21 ~14:30 UTC)
-- Stage 4 re-run WITH prunes (heavy_run): logs/worldfire/stage4_profile2.log (rc= line). Pre-prune profile copy:
-  build/scratch/worldfire/Worldfire.profile.preprune.json.
-- Then backstop screen (heavy_run): build/scratch/worldfire/bstop/{manifest.json,out.txt,err.txt,DONE};
-  seeds 30001..30541 step 20, d3+d5, 3 games, b0, abandon 2M, MTG_SLOW_GAME_MS=5000.
-- UNCOMMITTED: test/regression_cases.sh worldfire rows (smoke/regression/overnight + worldfire2hg canary);
-  backstop rows to add from the screen; then suite_gate.py --cost decks/Worldfire/Worldfire.cod (heavy), then
-  run + --accept each tier with --deck=worldfire,worldfire2hg.
-- Land-play agent #2 (wip/opp-landplay): scenario setup fixed (life-gain lands), units + regression --both on
-  heavy_run. Free-turn agent (wip/freeturn, ~275K) handing off -> relaunch from logs/freeturn/handoff.md.
+## Done since (2026-11-21 ~16:00 UTC)
+- Stage 4 re-run WITH prunes: profile committed b67de3cf3 (COST_NEUTRAL, discard STATUS_QUO_OK, policy PASS).
+  provider_audit: Worldfire clean (pre-existing reds only: Landfall, Selesnya).
+- Suite rows (all three tiers + worldfire2hg canary + backstop 30401/30521, screened: b0 is DEGENERATE --
+  most games hit the 2M cap) f01bff837; cost gate 2.06x Hinata PASS (suite_cost.json 70fc1c321).
+- Land-play fix (agent #2) DONE: wip/opp-landplay 53eb009bc + b8d66c163 (scenarios name their opponent list,
+  default White Knights). Cherry-picked here as 4668b69b7, 355e5282f. Its tiers: smoke 176/235, regression
+  277/375 keys move; 32 better / 213 worse games, 199 of the worse vs life-gain lists (correct rules).
+
+## Running
+- ACCEPT RUN (heavy_run, build/scratch/worldfire/accept_run.sh): regression.sh --both (logs/worldfire/
+  tiers_both.log, BOTH_EXIT=) then --overnight --deck=worldfire,worldfire2hg (tiers_on_wf.log, ON_EXIT=);
+  marker logs/worldfire/ACCEPT_RUN.DONE. Then: inspect, --both --accept, --overnight --deck=worldfire,
+  worldfire2hg --accept, check_gt_logs, commit; message the free-turn agent.
+- Claude-play sweep: 4 Opus agents x 4 games, seed 9300001 gi 0-15 (scratch build/scratch/worldfire/sweep/a1..a4).
+  DO NOT rebuild this worktree while they run.
+- Free-turn agent #2 in .claude/worktrees/freeturn: rebasing wip/freeturn onto wip/worldfire; waits for the
+  accept before smoke; handoff2 at logs/freeturn/handoff2.md if it stops.
 
 ## Next, in order
 1. (done) integrator #2.
