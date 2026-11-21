@@ -1616,6 +1616,11 @@ public:
     // identity; MTG_PB_LAZY_CANDS_VERIFY checks it) -- only clones nothing reads are never built. Opt-in per provider so
     // every other deck stays byte-identical by construction (Blood Sun perf part 3). Default false.
     virtual bool LazyCastTriggerTargetFan() const { return false; }
+    // PlanListPricePer -- bill the decision budget ONE unit per this many MATERIALISED plans of every m1 enumeration
+    // (EnumeratePlansWithLandUncached; unitsite plan_price). A re-pricing only: inert at an unlimited budget
+    // (DecisionBudget() is nullptr), so it can make no line unfindable there. 0 = no price (default; every other deck
+    // byte-identical by construction).
+    virtual int PlanListPricePer() const { return 0; }
 
     // Extra Turns may try a depth-zero continuation through consecutive own turns.
     // The solver accepts it only after simulation reaches a real same-round win.

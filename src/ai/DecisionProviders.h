@@ -4467,6 +4467,8 @@ public:
     bool NestedRoundWinStop() const override;
     // MTG_BLOODSUN_LAZY_CTT (DEFAULT ON, exact): see DecisionProvider::LazyCastTriggerTargetFan.
     bool LazyCastTriggerTargetFan() const override;
+    // MTG_BLOODSUN_PLAN_PRICE (DEFAULT OFF; it moves budgeted play): see DecisionProvider::PlanListPricePer.
+    int PlanListPricePer() const override;
     // THE GO-OFF FRONT ("Combo Off", design §5, step 8; MTG_BLOODSUN_GOOFF, DEFAULT ON): ORDER only -- a plan whose
     // extra-turn chain this round is projected to deal the opponent's life (or that fetches the Emrakul it can still
     // hard-cast this turn) is tried first; nothing is removed, the nested round-win stop then ends the list.

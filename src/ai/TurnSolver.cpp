@@ -1557,6 +1557,7 @@ enum Site
     kMeterGreedyWalk,      // EnumeratePlans' subset walk with no budget, billed to the meter
     kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
     kRfxFan,               // the damage-reflection fans (AppendSubdecisionAxes): one unit per probe (MTG_RFX_FAN_CHARGE)
+    kPlanPrice,            // a plan list's build price: one unit per N materialised plans (DecisionProvider::PlanListPricePer)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1564,7 +1565,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "plan_price"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -5526,10 +5527,14 @@ inline Dump g_dump;
 }   // namespace pblazycands
 
 // Builds the full list in place from L + the layout and retires the layout.
-static void PbLazyMaterialize(std::vector<TurnSolver::Plan>& all, PbLazyLayout& lz)
+static void PbLazyMaterialize(std::vector<TurnSolver::Plan>& all, PbLazyLayout& lz, int dbg_line = __builtin_LINE())
 {
     if (!lz.active) { return; }
     pblazycands::g_materialised.fetch_add(1, std::memory_order_relaxed);
+    // MTG_PB_LAZY_MAT_TRACE=1 (diagnostic, print-only, DEFAULT OFF): name the CALLER line of every materialisation
+    // (Blood Sun perf part 4: which consumer gives a lazy list back as the eager one).
+    static const bool s_mat_trace = EnvOn("MTG_PB_LAZY_MAT_TRACE");
+    if (s_mat_trace) { std::fprintf(stderr, "[pb-lazy-mat] line %d lazy=%zu real=%zu\n", dbg_line, lz.P, all.size()); }
     const std::size_t total = all.size() + lz.P;
     std::vector<TurnSolver::Plan> full;
     full.reserve(total);
@@ -106446,6 +106451,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                                                                     PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat, pb_lazy);
+    // THE PLAN-LIST PRICE (DecisionProvider::PlanListPricePer; Blood Sun MTG_BLOODSUN_PLAN_PRICE, DEFAULT OFF). Building a
+    // plan list is real work no unit ever billed: a list of tens of thousands of entries cost seconds while the budget
+    // read it as free, so the decision's ceiling never saw it. Charged here, inside the m1 memo's cachecharge scope, so
+    // a hit replays it (hit-equals-miss). ONE unit per `per` MATERIALISED plans (entries the lazy layout holds are not
+    // built, so not billed). A pure re-pricing: at an unlimited budget DecisionBudget() is nullptr and nothing is
+    // charged, so every line stays findable there; at a finite one only the budget left for the rest moves.
+    if (const int per = ResolveProvider(state).PlanListPricePer(); per > 0 && !all.empty())
+    {
+        SearchBudget* const d = TurnSolver::DecisionBudget();
+        if (d == nullptr) { if (cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } }
+        else { ConsumeAtN(d, unitsite::kPlanPrice, static_cast<long long>((all.size() + per - 1) / per)); }
+    }
     // The fixed-victim provider's one payable fallback is a deterministic
     // repair of an otherwise unpayable cast order. Filter before any plan is
     // searched; the viewer and unpruned menus retain their ordinary variants.
@@ -142215,6 +142232,7 @@ static long long MtgTurnCensusFlag(int f)   // nodekind's non-exclusive plan fla
     X(u_meter_greedy_walk,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterGreedyWalk]))    \
     X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
     X(u_rfx_fan,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRfxFan]))               \
+    X(u_plan_price,       MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kPlanPrice]))            \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \

@@ -272,6 +272,11 @@ GameState UlamogBoardPf()
 {
     GameState s = BasePf(3, 20);
     s.deck_has_cast_target_trigger = true;
+    // GameState's deck_has_dredge DEFAULTS TO TRUE (a missing stamp must not lose the axis); the runner clears it for
+    // a deck with no dredger (GoldFishRunner: garth || dredge), Blood Sun included. Left set, the dredge axis
+    // materialises every lazy layout (it replays each plan), which is the eager list again: correct, but the lazy
+    // count below would read 0 for a reason real Blood Sun play never meets.
+    s.deck_has_dredge = false;
     PutPf(s, "Forest", 200);
     PutPf(s, "Island", 201);
     PutPf(s, "Mountain", 202);
