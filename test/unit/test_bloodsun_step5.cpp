@@ -408,3 +408,73 @@ TEST_CASE("worldfire: everything exiled (no Emrakul shuffle), both totals 1, ext
     }
     CHECK(applied);
 }
+
+// Stage 5h (Blood Sun step 11): the viewer's Machinations plan carries the SELF cast only, so its "target player" is
+// asked at apply_one's resolution (HumanLookTargetPlayer) over both players, default = the plan's. With no chooser
+// installed (search / rollout) the plan's target stands.
+TEST_CASE("dimir machinations human play: the target player is asked at resolution (players only, default = plan)")
+{
+    const Unrestricted5 unrestricted;   // the USER's B5 sub-lever drops the autonomous cast; human play keeps it
+    GameState s = Base5();
+    s.opponent_library_dealt = true;
+    for (int k = 0; k < 3; ++k) { Put5(s, "Swamp", 700 + k); }
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(Card5("Dimir Machinations", 800));
+    for (int k = 0; k < 5; ++k) { s.players[0].library.push_back(Card5("Swamp", 910 + k)); }
+    for (int k = 0; k < 6; ++k) { s.players[1].library.push_back(Card5("Lightning Bolt", 100010 + k)); }
+    TurnSolver::Plan self_cast;
+    bool found = false;
+    for (TurnSolver::Plan p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        if (p.actions.size() != 1) { continue; }
+        const Action& a = p.actions[0];
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Dimir Machinations" && a.player_target == 0)
+        { self_cast = p; found = true; break; }
+    }
+    REQUIRE(found);
+    // No chooser: the plan's (self) target -- our library is looked at, the opponent's untouched.
+    {
+        GameState c = s;
+        TurnSolver::ApplyPlanWithRecordsForTest(c, self_cast, /*is_pre_combat=*/true);
+        CHECK(c.players[1].library.size() == 6);
+    }
+    // The human picks the opponent: asked once, players only, the plan's target (us) as the default.
+    {
+        int asked = 0;
+        std::vector<ChosenTarget> seen_default;
+        TargetChooser choose = [&](const GameState&, const CardDefinition& d, int ctrl, int max_t, int,
+                                   const std::vector<ChosenTarget>& heur) {
+            ++asked;
+            CHECK(d.card.m_name.str() == "Dimir Machinations");
+            CHECK(ctrl == 0);
+            CHECK(max_t == 1);
+            seen_default = heur;
+            return std::vector<ChosenTarget>{{0, 1, 0}};
+        };
+        TargetChooser* saved = g_play_target_chooser;
+        g_play_target_chooser = &choose;
+        GameState c = s;
+        CHECK(HumanLookTargetPlayer(c, Def5("Dimir Machinations"), 0, 0) == 1);
+        asked = 0;
+        TurnSolver::ApplyPlanWithRecordsForTest(c, self_cast, /*is_pre_combat=*/true);
+        g_play_target_chooser = saved;
+        CHECK(asked == 1);
+        REQUIRE(seen_default.size() == 1);
+        CHECK(seen_default[0].kind == 0);
+        CHECK(seen_default[0].index == 0);
+        CHECK(c.players[1].library.size() < 6);   // the look took the opponent's top cards (provider default: exile)
+    }
+    // An undealt opponent library is never offered (the look at it is a no-op).
+    {
+        int asked = 0;
+        TargetChooser choose = [&](const GameState&, const CardDefinition&, int, int, int,
+                                   const std::vector<ChosenTarget>&) { ++asked; return std::vector<ChosenTarget>{{0, 1, 0}}; };
+        TargetChooser* saved = g_play_target_chooser;
+        g_play_target_chooser = &choose;
+        GameState c = s;
+        c.opponent_library_dealt = false;
+        CHECK(HumanLookTargetPlayer(c, Def5("Dimir Machinations"), 0, 0) == 0);
+        g_play_target_chooser = saved;
+        CHECK(asked == 0);
+    }
+}

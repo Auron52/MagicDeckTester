@@ -3607,11 +3607,25 @@ inline std::string LandPlayNotes(const std::vector<std::string>& notes)
 
 } // namespace opponentdeck
 
+// THE PASSIVE OPPONENT'S TURN IS IN PROGRESS (> 0 inside ResolvePassiveOpponentLandTurn, both worlds). The goldfish never
+// hands the turn over: active_player_index stays OUR seat through the opponent's simplified turn, so "is it our turn" can
+// not be read off the active player there. Read only by ShockPayDominatedOffTurn (Blood Sun 5h: that fold tested
+// ctrl == active_player_index alone, which is always true in a real game, so a Burgeoning put never reached it).
+inline thread_local int t_passive_opponent_turn = 0;
+struct PassiveOpponentTurnScope
+{
+    PassiveOpponentTurnScope()  { ++t_passive_opponent_turn; }
+    ~PassiveOpponentTurnScope() { --t_passive_opponent_turn; }
+    PassiveOpponentTurnScope(const PassiveOpponentTurnScope&) = delete;
+    PassiveOpponentTurnScope& operator=(const PassiveOpponentTurnScope&) = delete;
+};
+
 // The passive opponent plays one land from hand during its simplified main phase. A
 // fetch search opens a real opponent-turn instant window for each Archive Trap
 // already in our hand; the autonomous policy casts it for {0} immediately.
 inline void ResolvePassiveOpponentLandTurn(GameState& state)
 {
+    const PassiveOpponentTurnScope opp_turn;   // the opponent's turn, though active_player_index stays ours
     if (state.opponent_plays_lands)
     {
         // Its simplified turn still has an untap step. A fetched shock land
@@ -50842,7 +50856,9 @@ inline bool GateEntersUntappedByGond(const GameState& state, const CardDefinitio
 // (SearchesShockLandPay, BloodSunProvider), so every other deck keeps the always-pay rule byte-identically.
 inline bool ShockPayDominatedOffTurn(const GameState& state, int ctrl)
 {
-    if (ctrl == state.active_player_index) { return false; }
+    // Off our turn: another seat is active, or the passive opponent's turn is being resolved (the goldfish keeps OUR seat
+    // active through it -- t_passive_opponent_turn; Blood Sun 5h found the active-seat test alone never true in a game).
+    if (ctrl == state.active_player_index && t_passive_opponent_turn == 0) { return false; }
     if (!state.own_death_live || !ResolveProvider(state).SearchesShockLandPay()) { return false; }
     auto offturn_cost = [](const std::string& key)
     { return key != "flashback_cost" && key != "unearth_cost" && key != "eternalize_cost" && key != "transmute_cost"; };
@@ -52470,6 +52486,29 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
 // same-name copies). Unpinned: the human chooser (the `exile_reorder` decision), else the provider default --
 // beyond the horizon only. It does NOT read the scry pin (g_scripted_top_choice): that belongs to the plan's scry.
 // Lockstep: TurnSolver apply_one and EffectHandler both call this one body.
+inline void LookTopExileReorder(GameState& state, int target_player, int n, const std::string& source);
+
+// DIMIR MACHINATIONS' "target player" in HUMAN PLAY (Blood Sun step 11 / Stage 5h). The search carries the target on the
+// plan (Action::player_target; both players, the opponent's copy subject to the provider's restriction), but human play
+// enumerates only the self cast (TurnSolver's opponent-target post-pass is !HumanPlayActive()), and the board-click
+// pick in AIEngine::CastSpellFromHand sits on the AUTONOMOUS executor's cast path, which a viewer plan never takes (it
+// runs through ApplyPlan's apply_one). So the viewer never offered the opponent's library. The human is asked HERE,
+// from apply_one's resolution, over both players (the Glimpse shape, ResolveOpponentLibrarySpell); the default is the
+// plan's target. Asking at resolution rather than at the cast is the same game in a goldfish: the opponent never
+// responds, so nothing happens between the two. Not asked when the opponent's library was never dealt (the look at it
+// is a no-op, LookTopExileReorder). g_play_target_chooser is null in every search / rollout scope (RevealLogPause), so
+// autonomous play is unchanged. Returns the target player's INDEX.
+inline int HumanLookTargetPlayer(GameState& state, const CardDefinition& def, int controller, int planned_player)
+{
+    if (g_play_target_chooser == nullptr || !state.opponent_library_dealt) { return planned_player; }
+    const int opp = 1 - controller;
+    const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+        state, def, controller, 1, 0, { ChosenTarget{ 0, planned_player, 0 } });
+    if (!picked.empty() && picked[0].kind == 0 && (picked[0].index == controller || picked[0].index == opp))
+    { return picked[0].index; }
+    return planned_player;
+}
+
 inline void LookTopExileReorder(GameState& state, int target_player, int n, const std::string& source)
 {
     if (n <= 0 || target_player < 0 || target_player > 1) { return; }
