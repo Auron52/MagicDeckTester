@@ -38926,10 +38926,15 @@ bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const 
 //      is DEAD; a further Halberdier is BACKUP.
 //   4. MANA: a Lotus Bloom only when the go-off projected WITHOUT the pool's Blooms (T0) is later than the Bloom's
 //      arrival (or far) -- a second only if T* is still far with the first; any other Bloom is the first overflow
-//      card shed after DEAD. Lands: the land drops through T* (best first in the land keep order below), one extra
-//      land is BACKUP, the rest overflow. Rituals: the fewest (Song, then Feat, then a spare tutor -- its target is
-//      acceleration) that bring T*'s mana to the need; one extra is BACKUP; a second Feat is DEAD; a spare tutor
-//      with the mana already covered is DEAD. Far: every mana card is quota.
+//      card shed after DEAD. Lands: the land drops through T*, one extra land is BACKUP, the rest overflow. Rituals:
+//      the fewest (Song, then Feat, then a spare tutor -- its target is acceleration) that bring T*'s mana to the
+//      need; one extra is BACKUP; a second Feat is DEAD; a spare tutor with the mana already covered is DEAD. Far:
+//      every mana card is quota. INSIDE MANA, best first: (a) COLOUR sources -- red to 1 (Song / a Rift Bolt
+//      suspend) or 3 (Feat, or Worldfire's RRR with no ritual kept), blue to 1 always (the dig and tutors are blue);
+//      Needle counts RR, Skerry UU, Bazaar R, Steam Vents and the fetches either colour (not both); (b) the next land
+//      drop; (c) castable acceleration (Song with 3 incl. R before it, Feat with 4 incl. RRR or a Song first, a kept
+//      Bloom); (d) a second blue source while two or more blue spells are held; (e) further land drops; (f)
+//      acceleration castable only with the further drops.
 //   5. DIG (Brainstorm > Ponder > Preordain > Overmaster): quota 1 + the missing pieces (at least 2) while a piece
 //      is missing -- a piece only a tutor fills counts as missing here (a cantrip draws the tutored card); 1 once
 //      both are in hand; 0 once the mana is also covered (T* not far). Dig beyond the quota is overflow above
@@ -38937,8 +38942,8 @@ bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const 
 //   6. DEAD: Memory Lapse (goldfish-inert), a duplicate Worldfire / Feat / same-type Rift Bolt, every tutor when
 //      nothing is missing (TutorNeedsCandidate: it would not be cast).
 // KEEP ORDER (best first). A piece GENUINELY missing (no card, no tutor): COMBO > FINISHER > dig slot 1 > the next
-// land drop > dig slot 2 > Bloom > rituals > the other quota lands > further dig slots. Otherwise: COMBO > FINISHER
-// > Bloom > rituals > lands > dig (a dig kept only to draw a tutored card ranks below the go-off mana). Then the
+// land drop > dig slot 2 > the rest of MANA (in its inside order) > further dig slots. Otherwise: COMBO > FINISHER >
+// MANA > dig (a dig kept only to draw a tutored card ranks below the go-off mana). Then the
 // overflow: BACKUP (other-type finisher > extra land > extra ritual > 2nd Halberdier) > dig beyond quota > rituals
 // beyond > lands beyond > a Bloom near the combo turn > DEAD (tutor > duplicate > Memory Lapse).
 // LAND KEEP ORDER: Sandstone Needle > Steam Vents > Scalding Tarn > Flooded Strand > Mountain > Mercadian Bazaar
@@ -39005,6 +39010,10 @@ struct WfLand
     bool tapped  = false; // enters tapped
     bool storage = false; // Mercadian Bazaar
     int  per_tap = 1;
+    // Colours for the MANA colour tier: dedicated red / blue sources (Needle RR, Skerry UU), or FLEX -- either colour,
+    // not both at once (Steam Vents; a fetch, as what it can fetch).
+    int  r = 0, u = 0;
+    bool flex = false;
 };
 bool WfControlsSubtype(const GameState& s, int me, const std::vector<std::string>& subs)
 {
@@ -39042,6 +39051,10 @@ WfLand WfLandOf(const GameState& s, int me, const CardDefinition& d)
         l.tapped = p.enters_tapped;
     }
     if (l.storage) { l.per_tap = 0; }
+    const bool blue = std::find(p.produces.begin(), p.produces.end(), Color::Blue) != p.produces.end();
+    if (!p.fetch_land_types.empty() || (red && blue)) { l.flex = true; }
+    else if (red)  { l.r = l.storage ? 1 : std::max(1, p.produces_amount); }
+    else if (blue) { l.u = std::max(1, p.produces_amount); }
     return l;
 }
 // A land played on drop turn j, tapped for mana on turn k (k >= j).
@@ -39079,7 +39092,10 @@ int WfLandsYield(const std::vector<WfLand>& lands, int first_drop, int k)
 // Keys: HIGHER keeps. The shed order is ascending key.
 constexpr int kWfKeyCombo = 1000, kWfKeyComboTutor = 990, kWfKeyFinisher = 900, kWfKeyFinisherTutor = 890;
 constexpr int kWfKeyDig1Short = 850, kWfKeyNextLandShort = 820, kWfKeyDig2Short = 810;
-constexpr int kWfKeyBloom = 800, kWfKeyRitual = 700, kWfKeyLand = 600, kWfKeyDig = 500;
+// Inside MANA (USER 2026-11-21, best first): colour sources > the next land drop > castable acceleration > a second
+// blue source > further land drops > acceleration only the further drops make castable.
+constexpr int kWfKeyColour = 780, kWfKeyNextLand = 760, kWfKeyAccel = 750, kWfKeySecondBlue = 740;
+constexpr int kWfKeyLand = 720, kWfKeyAccelLate = 700, kWfKeyDig = 500;
 constexpr int kWfKeyBackupOther = 440, kWfKeyBackupLand = 430, kWfKeyBackupRitual = 420, kWfKeyBackupHalb = 410;
 constexpr int kWfKeyDigBeyond = 300, kWfKeyOther = 250, kWfKeyRitualBeyond = 200, kWfKeyLandBeyond = 100;
 constexpr int kWfKeyBloomNear = 50;
@@ -39326,38 +39342,18 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
     const int missing = genuine + tutored;
     const bool shortp = genuine > 0;   // the PRIORITISED dig (slot 1 above every mana card) is for genuine gaps only
 
-    // ---- MANA: Blooms ----
+    // ---- MANA: Blooms (kept only where they pull the go-off forward: castable acceleration) ----
     {
         const std::vector<int> bl = ordered(is(kWfBloom), no_pref);
         for (std::size_t q = 0; q < bl.size(); ++q)
         {
-            if (static_cast<int>(q) < blooms_kept) { set(bl[q], kWfKeyBloom, true, "mana"); }
+            if (static_cast<int>(q) < blooms_kept) { set(bl[q], kWfKeyAccel, true, "mana"); }
             else                                   { set(bl[q], kWfKeyBloomNear, false, "bloom-near"); }
         }
     }
-    // ---- MANA: lands ----
-    {
-        auto adj_order = [&](int i)
-        {
-            const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(i)].d);
-            int o = l.order;
-            if (l.storage && !far && tstar - first_drop < 2) { o = 0; }   // Bazaar cannot charge in time
-            if (l.tapped && !far && first_drop >= tstar) { o -= 10; }    // no drop left before T*
-            return o;
-        };
-        const std::vector<int> la = ordered(is(kWfLand), [&](int a, int b) { return adj_order(a) > adj_order(b); });
-        const int drops = far ? static_cast<int>(la.size()) : std::max(0, tstar - first_drop + 1);
-        for (std::size_t q = 0; q < la.size(); ++q)
-        {
-            const int o = adj_order(la[q]);
-            const int qi = static_cast<int>(q);
-            if (qi < drops) { set(la[q], (shortp && q == 0) ? kWfKeyNextLandShort : kWfKeyLand + 20 + o, true, "mana"); }
-            else if (qi == drops) { set(la[q], kWfKeyBackupLand, false, "backup"); }
-            else                  { set(la[q], kWfKeyLandBeyond + 20 + o, false, "land-beyond"); }
-        }
-    }
-    // ---- MANA: rituals -- the fewest (Song before Feat; then a spare tutor, whose target is acceleration) that
-    // bring T*'s mana to the need ----
+    // ---- MANA: the rituals the projection uses -- the fewest (Song, Feat, then a spare tutor: its target is
+    // acceleration) that bring T*'s mana to the need. Marked here, keyed after the lands (castability reads them). ----
+    std::vector<int> rit_quota;   // quota rituals, in fill order
     {
         const std::vector<int> ri = ordered([](WfRole r) { return r == kWfSong || r == kWfFeat || WfIsTutor(r); },
                                             [&](int a, int b)
@@ -39376,9 +39372,113 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
             if (WfIsTutor(r) && !tneed.mana_short) { set(i, kWfKeyDeadTutor, false, "dead"); continue; }
             const int gain = r == kWfSong ? 2 : r == kWfFeat ? 3 : (feats > 0 ? (r == kWfTutorInstant ? 2 : 0) : 3);
             const int sub = r == kWfSong ? 2 : r == kWfFeat ? 1 : 0;
-            if (far || deficit > 0)  { set(i, kWfKeyRitual + sub, true, "mana"); deficit -= gain; }
+            if (far || deficit > 0)  { rit_quota.push_back(i); deficit -= gain; }
             else if (!backup_given)  { set(i, kWfKeyBackupRitual, false, "backup"); backup_given = true; }
             else                     { set(i, kWfKeyRitualBeyond + sub, false, "ritual-beyond"); }
+        }
+    }
+    // ---- MANA: lands -- colours first, then the next drop, then the further drops (the land keep order) ----
+    std::vector<int> drop_lands;   // the quota lands, in drop order
+    int red_have = 0, blue_have = 0;
+    {
+        auto adj_order = [&](int i)
+        {
+            const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(i)].d);
+            int o = l.order;
+            if (l.storage && !far && tstar - first_drop < 2) { o = 0; }   // Bazaar cannot charge in time
+            if (l.tapped && !far && first_drop >= tstar) { o -= 10; }    // no drop left before T*
+            return o;
+        };
+        const std::vector<int> la = ordered(is(kWfLand), [&](int a, int b) { return adj_order(a) > adj_order(b); });
+        const int drops = far ? static_cast<int>(la.size()) : std::max(0, tstar - first_drop + 1);
+        // The colours the plan needs by T*. R: one to cast Seething Song / suspend a Rift Bolt, three for Irencrag
+        // Feat, and Worldfire's RRR unless a castable ritual makes it (the kept rituals stand in for that here). U:
+        // one always (the dig and the tutors are blue); a second is wanted with two or more blue spells held.
+        bool feat_q = false, song_q = false;
+        for (int i : rit_quota) { feat_q = feat_q || role(i) == kWfFeat; song_q = song_q || role(i) == kWfSong; }
+        const int red_need = (feat_q || (!song_q && !feat_q)) ? 3 : 1;
+        int blue_spells = 0;
+        for (const Item& x : it) { if (!x.is_look && (WfIsDig(x.role) || WfIsTutor(x.role))) { ++blue_spells; } }
+        int board_flex = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.sac_for_mana_amount > 0) { red_have += d->params.sac_for_mana_amount; continue; }   // Bloom
+            if (!p.card.IsLand()) { continue; }
+            const WfLand l = WfLandOf(s, me, *d);
+            red_have += l.r; blue_have += l.u; board_flex += l.flex ? 1 : 0;
+        }
+        for (; board_flex > 0 && red_have < red_need; --board_flex) { ++red_have; }
+        for (; board_flex > 0 && blue_have < 1; --board_flex) { ++blue_have; }
+        std::vector<char> colour(la.size(), 0);
+        int n_colour = 0;
+        auto take_colour = [&](const std::function<bool(const WfLand&)>& fits, bool red)
+        {
+            for (std::size_t q = 0; q < la.size() && n_colour < drops; ++q)
+            {
+                if ((red ? red_have >= red_need : blue_have >= 1)) { return; }
+                if (colour[q]) { continue; }
+                const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(la[q])].d);
+                if (!fits(l)) { continue; }
+                colour[q] = 1; ++n_colour;
+                if (red) { red_have += l.flex ? 1 : l.r; } else { blue_have += l.flex ? 1 : l.u; }
+            }
+        };
+        take_colour([](const WfLand& l) { return l.r > 0; }, true);    // dedicated red first
+        take_colour([](const WfLand& l) { return l.u > 0; }, false);   // dedicated blue
+        take_colour([](const WfLand& l) { return l.flex; }, true);     // then a flex land for what is still short
+        take_colour([](const WfLand& l) { return l.flex; }, false);
+        // The drop order: the colour lands, then the rest in the land keep order.
+        std::vector<int> rest;
+        for (std::size_t q = 0; q < la.size(); ++q) { (colour[q] ? drop_lands : rest).push_back(la[q]); }
+        const int n_col = static_cast<int>(drop_lands.size());
+        drop_lands.insert(drop_lands.end(), rest.begin(), rest.end());
+        // A second blue source ranks first among the further drops (USER 2026-11-21: "often 2 are good").
+        int second_blue = -1;
+        if (blue_spells >= 2 && blue_have < 2)
+        {
+            for (int q = n_col; q < static_cast<int>(drop_lands.size()) && q < drops; ++q)
+            {
+                const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(drop_lands[q])].d);
+                if (l.u > 0 || l.flex) { second_blue = q; break; }
+            }
+        }
+        for (int q = 0; q < static_cast<int>(drop_lands.size()); ++q)
+        {
+            const int i = drop_lands[static_cast<std::size_t>(q)];
+            const int o = adj_order(i);
+            if (q < drops)
+            {
+                // The first drop is the NEXT land drop: a colour land when one is needed, else the keep order's best.
+                int key;
+                if (shortp && q == 0)      { key = kWfKeyNextLandShort; }   // genuinely short: above dig slot 2
+                else if (q < n_col)        { key = kWfKeyColour + 10 + o; }
+                else if (q == 0)           { key = kWfKeyNextLand + o; }
+                else if (q == second_blue) { key = kWfKeySecondBlue + o; }
+                else                       { key = kWfKeyLand + 10 + o; }
+                set(i, key, true, "mana");
+            }
+            else if (q == drops) { set(i, kWfKeyBackupLand, false, "backup"); }
+            else                 { set(i, kWfKeyLandBeyond + 20 + o, false, "land-beyond"); }
+        }
+    }
+    // ---- MANA: the quota rituals, by castability at T* ("not much really beats the fast acceleration unless we are
+    // unable to cast it"): castable -> above every further land drop; only castable with the further drops -> below
+    // them. Seething Song needs 3 incl. R before it; Irencrag Feat 4 incl. RRR (a Song before it makes the RRR). ----
+    {
+        const int base_tstar = far ? kWfHorizon : tstar;
+        const int pre = supply_at(base_tstar, blooms_kept, 0, 0);
+        bool song_castable = false;
+        for (int i : rit_quota)
+        {
+            const WfRole r = role(i);
+            const int sub = r == kWfSong ? 2 : r == kWfFeat ? 1 : 0;
+            bool castable = true;
+            if (r == kWfSong) { castable = pre >= 3 && red_have >= 1; song_castable = song_castable || castable; }
+            else if (r == kWfFeat) { castable = pre >= 4 && (red_have >= 3 || song_castable); }
+            set(i, (castable ? kWfKeyAccel : kWfKeyAccelLate) + sub, true, "mana");
         }
     }
     // ---- DIG (Brainstorm > Ponder > Preordain > Overmaster) ----
