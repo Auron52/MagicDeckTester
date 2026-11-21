@@ -38728,13 +38728,22 @@ static bool WorldfireTutorPiecesOn()
 }
 static constexpr int kWorldfireMana = 9;   // {6}{R}{R}{R}
 
-std::vector<std::string>
-WorldfireProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+// The tutors' "missing combo piece" census -- ONE notion, read by TutorCandidates and by the keep order's
+// tutor buckets (a tutor with nothing missing is DEAD there; see WorldfireKeepRank).
+struct WorldfireTutorNeed
 {
-    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
-    if (all.empty() || !WorldfireTutorPiecesOn()) { return all; }
-    const Player& pl = s.players[static_cast<std::size_t>(controller)];
     bool have_finisher = false, have_threat = false, have_feat = false, halberdier_pending = false;
+    bool mana_short = false;
+    bool NothingMissing() const { return have_finisher && have_threat && !mana_short; }
+};
+static WorldfireTutorNeed WorldfireTutorNeedOf(const GameState& s, int controller)
+{
+    WorldfireTutorNeed n;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool& have_finisher = n.have_finisher;
+    bool& have_threat = n.have_threat;
+    bool& have_feat = n.have_feat;
+    bool& halberdier_pending = n.halberdier_pending;
     int mana = LooseManaCeiling(s, controller);
     for (const Card& c : pl.hand)
     {
@@ -38770,8 +38779,19 @@ WorldfireProvider::TutorCandidates(const GameState& s, int controller, const Car
     }
     // The +1 is the {R} to suspend a Rift Bolt the turn we go off. A pending Halberdier needs no such
     // mana (it arrives later with haste and swings into life 1), so it is not charged then.
-    const bool mana_short = mana < kWorldfireMana + ((have_threat || halberdier_pending) ? 0 : 1);
-    if (have_finisher && have_threat && !mana_short) { return {}; }   // nothing missing
+    n.mana_short = mana < kWorldfireMana + ((have_threat || halberdier_pending) ? 0 : 1);
+    return n;
+}
+
+std::vector<std::string>
+WorldfireProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = DeckProvider::TutorCandidates(s, controller, pp);
+    if (all.empty() || !WorldfireTutorPiecesOn()) { return all; }
+    const WorldfireTutorNeed need = WorldfireTutorNeedOf(s, controller);
+    const bool have_finisher = need.have_finisher, have_threat = need.have_threat, have_feat = need.have_feat,
+               halberdier_pending = need.halberdier_pending, mana_short = need.mana_short;
+    if (need.NothingMissing()) { return {}; }   // nothing missing
     std::vector<std::string> finisher, threat, accel;
     for (const std::string& nm : all)
     {
