@@ -258,6 +258,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // tutor_to_hand. See the PreventDamageProvider note in DecisionProviders.h.
         {"Prevent Damage", "PreventDamage"},
         {"Maze's End", "MazesEnd"},   // Maze's End I1: own provider (alt_win_distinct_named_count / etb_tap_subtype_draw / damage_all_creatures_x_per_subtype), routed first
+        {"Worldfire", "Worldfire"},   // Worldfire Stage 2: own provider (exile_all_permanents_hands_graveyards / each_player_life_becomes, or a suspend creature), routed first
         // SelesnyaLifegain (onboarded 2026-09-30): its OWN provider, routed at the top of the chain.
         // This pin previously read "Stompy", recording a MEASURED capture: Craterhoef's
         // etb_team_pump_per_creature and Priest of Titania / Elvish Archdruid's creature-side
