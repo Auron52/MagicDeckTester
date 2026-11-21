@@ -19,7 +19,7 @@
 #include "DrawCap.h"
 #include "OpponentDeckPool.h"
 #include "../cards/CardDatabase.h"
-#include "../ai/EngineFlags.h"   // FreeTurnHurdlesOn: the free-turn rule's land-first cleanup
+#include "../ai/EngineFlags.h"   // FreeTurnHurdlesOn: the free-turn rule's cleanup floor
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -305,38 +305,48 @@ inline void EndOfTurnDrawHead1(GameState& state)
 // It makes no discard decisions: repeatedly move the first card in hand to its graveyard.
 // Keeping this separate from EndOfTurnDraw also covers extra draws such as Howling Mine.
 //
-// UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn: MTG_FREE_TURNS, hurdles on) it sheds the oldest LAND card first, and
-// a nonland only when the hand holds no land card (CleanupShedIndex). Oldest-first shed the opening hand's nonlands
-// -- the two the flood hurdle guarantees -- once one of OUR cards grew the opponent's hand past seven (Goblin Guide's
-// reveal, Howling Mine, Horn of Greed), so a land-heavy list kept a hand of lands only and "locked" with no lock
-// card in play (Burn s3664 gi661 vs Galadriel). A real player discards its excess lands and keeps its spells. An
-// MDFC spell//land is a nonland card in hand (front face), as the lock reads it. Off the rule: oldest first, as ever.
-inline int CleanupShedIndex(const std::vector<Card>& hand, bool lands_first)
+// UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn: MTG_FREE_TURNS, hurdles on) the cleanup keeps the flood hurdle's
+// floor: it still sheds the oldest card, except that it never sheds a NONLAND card that would leave the hand with
+// fewer than kCleanupNonlandFloor (2) nonlands -- it sheds the oldest land instead (CleanupShedIndex). Plain
+// oldest-first shed the opening hand's nonlands -- the two the hurdle guarantees -- once one of OUR cards grew the
+// opponent's hand past seven (Goblin Guide's reveal, Howling Mine, Horn of Greed), so a land-heavy list kept a hand
+// of lands only and "locked" with no lock card in play (Burn s3664 gi661 vs Galadriel). The opponent never casts and
+// a land drop takes only lands, so with the floor its nonlands fall below two only to one of OUR effects (the USER's
+// "the opponent needing to show that they can remove things"). The floor binds only in that case, so the
+// opponent's land development is otherwise untouched (an unconditional lands-first shed measured as moving long
+// games of nearly every deck: it discards the lands the opponent would have played). An MDFC spell//land is a
+// nonland card in hand (front face), as the lock reads it. Off the rule: oldest first, as ever.
+inline constexpr int kCleanupNonlandFloor = 2;
+inline bool CleanupIsLand(const Card& c)
 {
-    if (!lands_first) { return 0; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d != nullptr ? d->card.IsLand() : c.IsLand();
+}
+inline int CleanupShedIndex(const std::vector<Card>& hand, bool keep_floor)
+{
+    if (!keep_floor || hand.empty() || CleanupIsLand(hand.front())) { return 0; }
+    int nonlands = 0;
+    for (const Card& c : hand) { if (!CleanupIsLand(c)) { ++nonlands; } }
+    if (nonlands > kCleanupNonlandFloor) { return 0; }
     for (int i = 0; i < static_cast<int>(hand.size()); ++i)
-    {
-        const Card& c = hand[static_cast<std::size_t>(i)];
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr ? d->card.IsLand() : c.IsLand()) { return i; }
-    }
-    return 0;
+    { if (CleanupIsLand(hand[static_cast<std::size_t>(i)])) { return i; } }
+    return 0;   // no land: the hand is over seven nonlands, so the floor cannot bind
 }
 inline void EndOfTurnCleanup(GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return; }
     Player& opp = state.players[1];
-    const bool lands_first = FreeTurnHurdlesOn();
+    const bool keep_floor = FreeTurnHurdlesOn();
     while (opp.hand.size() > 7)
     {
-        const int at = CleanupShedIndex(opp.hand, lands_first);
+        const int at = CleanupShedIndex(opp.hand, keep_floor);
         opp.graveyard.push_back(opp.hand[static_cast<std::size_t>(at)]);
         opp.hand.erase(opp.hand.begin() + at);
     }
     // The second head discards the same way (into no modelled zone: nothing reads it).
     while (state.opponent2_hand.size() > 7)
     {
-        const int at = CleanupShedIndex(state.opponent2_hand, lands_first);
+        const int at = CleanupShedIndex(state.opponent2_hand, keep_floor);
         state.opponent2_hand.erase(state.opponent2_hand.begin() + at);
     }
 }

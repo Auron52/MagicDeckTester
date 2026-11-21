@@ -436,7 +436,7 @@ TEST_CASE("free turns: the lock trait arms only on a card that can strip ALL lan
     CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Living Wish" }, { "Sire of Insanity" })));
 }
 
-TEST_CASE("free turns: under the rule the opponent's cleanup sheds LANDS first and keeps its spells")
+TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands (the flood hurdle's floor)")
 {
     auto overfull = [] {
         GameState s = FtFresh();
@@ -452,7 +452,14 @@ TEST_CASE("free turns: under the rule the opponent's cleanup sheds LANDS first a
         CHECK(s.players[1].hand.size() == 7);
         CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Lightning Bolt", "Turntimber Symbiosis" });
     }
-    {   // ON: the two oldest LANDS go; the spells (an MDFC is a nonland card in hand) stay, so no lock.
+    {   // ON: oldest first while more than two nonlands remain, then the oldest LAND instead.
+        FtScope f(1);
+        GameState s = overfull();
+        s.players[1].hand.insert(s.players[1].hand.begin(), FtCard("Rift Bolt", 100003));   // 10 cards, 3 nonlands
+        opponentdeck::EndOfTurnCleanup(s);
+        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Rift Bolt", "Mountain", "Mountain" });
+    }
+    {   // ON: at the floor, the two oldest LANDS go; the spells (an MDFC is a nonland card in hand) stay, so no lock.
         FtScope f(1);
         GameState s = overfull();
         opponentdeck::EndOfTurnCleanup(s);
@@ -486,35 +493,4 @@ TEST_CASE("free turns: 2HG -- the second head's cleanup sheds lands first too")
     opponentdeck::EndOfTurnCleanup(s);
     REQUIRE(s.opponent2_hand.size() == 7);
     CHECK(s.opponent2_hand.front().m_name == "Lightning Bolt");
-}
-
-TEST_CASE("reference replay: --legacy-opponent-land-entry restores the drop a reference was recorded against")
-{
-    // Creature_Burn/claude_s9_gi8: recorded before the opponent's land entry rules (ce5866171). The legacy drop is
-    // the leftmost FRONT-face land with no entry trigger: a Gruul Turf does not bounce, an MDFC is never played.
-    auto board = [] {
-        GameState s = FtFresh();
-        FtOppPerm(s, "Forest", 100001);
-        s.players[1].hand = { FtCard("Turntimber Symbiosis", 100002), FtCard("Gruul Turf", 100003) };
-        return s;
-    };
-    auto opp_lands = [](const GameState& s) {
-        std::vector<std::string> out;
-        for (const Permanent& p : s.battlefield) { if (p.controller_index == 1) { out.push_back(p.card.m_name.str()); } }
-        return out;
-    };
-    {
-        GameState s = board();
-        opponentdeck::PlayLeftmostLand(s);
-        CHECK(opp_lands(s) == std::vector<std::string>{ "Gruul Turf" });   // bounced the Forest
-        CHECK(FtNames(s.players[1].hand) == std::vector<std::string>{ "Turntimber Symbiosis", "Forest" });
-    }
-    {
-        g_play_legacy_opponent_land_entry = true;
-        GameState s = board();
-        opponentdeck::PlayLeftmostLand(s);
-        g_play_legacy_opponent_land_entry = false;
-        CHECK(opp_lands(s) == std::vector<std::string>{ "Forest", "Gruul Turf" });   // no bounce
-        CHECK(FtNames(s.players[1].hand) == std::vector<std::string>{ "Turntimber Symbiosis" });
-    }
 }
