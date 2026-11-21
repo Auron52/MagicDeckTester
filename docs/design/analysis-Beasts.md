@@ -10,8 +10,10 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   `logs/beasts/drafts/*.md` (Thragtusk, Contested Cliffs, Packleader, Cragplate Baloth, Krosan
   Warchief, Questing Beast, Elder Gargaroth, Garruk's Harbinger, Kaheera(+Cavern recheck), Migloz,
   Nykthos).
-* **Baseline build:** `./build.sh` (Release) of the worktree, log
-  `/workspaces/MagicDeckTester/build/scratch/beasts_build0.log` (rc appended at the end).
+* **Baseline build:** done, rc 0 (Release, worktree base c9a2e1ff6).
+* **Running:** integrator batch A (Packleader, Warchief, Questing Beast + dup-legend check,
+  Thragtusk, Cragplate Baloth, Kaheera lord/vigilance) — background agent; handoff file if it
+  stops early: `logs/beasts/integrator-A-handoff.md`.
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -89,6 +91,33 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 
 (pending)
 
+## USER rulings (2026-11-21, verbatim, on the open questions)
+
+1. Companion: *"Yes, Kaheera is a companion in the deck."* -> implement (batch I).
+2. Second main: *"I'm not sure about this for cost reasons at least if we search everything this
+   way. This will require some thought."* -> NOT settled. Build the cheap per-turn shape
+   (`ProviderSecondMainLive` in BeastsProvider: open a searched main 2 only on a turn where a
+   combat-time event put a card in hand -- Harbinger dig, Gargaroth draw mode, a Packleader draw off a
+   combat-created token), keep deck-wide reachable via `MTG_FORCE_USES_M2`, and at Stage 4 measure
+   none / per-turn / deck-wide (units, ms/game, avg win turn) for the USER. Per-turn is the
+   provisional shape in the suite rows.
+3. Gargaroth life mode: *"Yes, we don't need this in the search."* -> provider fold approved.
+4. Packleader/Bellower order: *"That's fine."* -> disclose as ordering collapse (approved).
+5. Merfolk Turns Cavern/Seahunter: *"That should be fixed, but only when there is time."* -> deferred,
+   `docs/design/cavern-of-souls-creature-type.md`.
+6. Omnitool dig: *"If choosing the top is built into the search this is a notable problem, yes.
+   However, if it is just that the provider returns one item it is not an issue."* -> checked: it IS
+   the former (EtbDigCandidates returns the legal set unpruned; the combat fire site takes the top,
+   no searched pin). Unreachable in shipped play (Omnitool is sideboard on the shipped list, deck
+   stamp is mainboard-only). Fix = reuse Harbinger's combat-dig pin (batch D) after it lands; deferred
+   doc `docs/design/omnitool-combat-dig-greedy.md`.
+7. Deferrals: *"For Migloz we should include the power pump mode for sure. The other two can be
+   heuristically pruned."* -> Migloz +2/+2 pump searched; vigilance/menace and destroy pruned in the
+   provider (APPROVED). Warchief regenerate, Questing Beast D2-D4, Gargaroth "or blocks", Harbinger
+   hexproof-from-black/PW, Packleader "may": still awaiting an explicit word. Bellower: asked what the
+   issue is -- answered (it is the fail-to-find-while-legal-cards-remain option only).
+8. Cast order: *"Okay, I'll try to look over what you draft tomorrow."*
+
 ## Open USER questions (surfaced, not blocking)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
@@ -124,4 +153,7 @@ Beasts-only params from several new cards.
 
 ## Approved deferrals
 
-(none yet)
+* Migloz {1}/-1 oil vigilance+menace: pruned (USER 2026-11-21).
+* Migloz {3}/-3 oil destroy artifact/enchantment: provider-pruned (USER 2026-11-21).
+* Elder Gargaroth gain-3 mode: provider fold (USER 2026-11-21).
+* Packleader/Bellower trigger order collapse (USER 2026-11-21).
