@@ -4443,6 +4443,8 @@ public:
     bool LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const override;
     // Step 6d: the playout's greedy drop honours (c) as well (LandPlayOffered answers true with the lever off).
     bool GreedyLandHonoursOffer() const override { return true; }
+    // Step 7: Overgrown Tomb's pay-2-or-tapped is a searched land option (own death is live in this deck, B1).
+    bool SearchesShockLandPay() const override { return true; }
     void RevelationPackageRestrict(const GameState& s, int hand_index,
                                    const std::vector<const CardDefinition*>& class_defs,
                                    std::vector<int>& caps, int& x_min) const override;

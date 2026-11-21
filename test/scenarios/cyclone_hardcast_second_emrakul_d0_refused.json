@@ -1,0 +1,102 @@
+{
+ "deck": "decks/Unpredictable Cyclone/Unpredictable Cyclone.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 30,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Island",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Emrakul, the Aeons Torn"
+ ],
+ "library_filler": "Island",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "max_turns": 4,
+ "expect_no_win": true,
+ "comment": "Blood Sun step 7: the same board at autonomous depth 0 -- the duplicate-legend prune's d0 gate (USER 2026-08-29, restored 2026-11-18) still refuses the second Emrakul, so Emrakul #1 attacks once (15 left) and round 4 ends without a win."
+}

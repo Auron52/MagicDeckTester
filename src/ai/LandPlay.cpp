@@ -175,7 +175,11 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     }
     else
     {
-        tapped = LandEntersTapped(state, fdef, opts.allow_shock_pay);
+        // The searched shock pay (Blood Sun step 7, LandShockPayPinned): pin 1 = pay, 0 = enter tapped. Unpinned (-1),
+        // or no longer a choice on this board, the drop keeps the engine rule exactly.
+        bool allow_pay = opts.allow_shock_pay;
+        if (opts.rad_mode >= 0 && LandShockPayPinned(state, fdef)) { allow_pay = opts.rad_mode != 0; }
+        tapped = LandEntersTapped(state, fdef, allow_pay);
     }
 
     // "You may have this land enter tapped. If you do, you get N rad counters." Resolved here, after

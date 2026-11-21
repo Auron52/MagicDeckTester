@@ -2245,6 +2245,13 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
     // owner's library third from the top"; Boars I5b item 3): the legend-rule death puts a known card back into the
     // draws, and the searched "may" (Action::dies_tuck) weighs it -- not the tie the prune assumes.
     if (def.params.dies_to_library_position > 0) { return true; }
+    // The legendary card's OWN "put into a graveyard from anywhere" clause (Emrakul, the Aeons Torn: "its owner
+    // shuffles their graveyard into their library"; Blood Sun step 7, design §8): the legend-rule death of either copy
+    // shuffles the graveyard back -- the spent Revelations and Time Warps return to the draws (the Emrakul loop).
+    // Upside only when there is something to shuffle back; an empty graveyard is the tie the prune assumes.
+    if (def.params.put_into_graveyard_shuffles_graveyard
+        && !s.players[static_cast<std::size_t>(controller)].graveyard.empty())
+    { return true; }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -2290,6 +2297,13 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
 static bool DuplicateCastHasUpside(const GameState& s, int controller,
                                    const CardDefinition& def)
 {
+    // The duplicate's OWN cast trigger (Emrakul, the Aeons Torn: "When you cast this spell, take an extra turn after
+    // this one"; Blood Sun step 7, USER B7: *"It should be because of the extra turn."*). It triggers as the spell is
+    // cast and resolves BEFORE the spell, even if the spell is removed from the stack (Emrakul ruling 1), so the legend
+    // rule eating one copy afterwards takes nothing back: a second Emrakul is a whole extra turn for {15}, never the tie
+    // this prune assumes. Card data only -> any deck holding such a legend (Unpredictable Cyclone hard-casting a second
+    // Emrakul; the Blood Sun loop). Below the d0 gate like every other upside here.
+    if (def.params.cast_trigger_extra_turns > 0) { return true; }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }

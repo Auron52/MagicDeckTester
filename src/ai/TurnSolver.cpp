@@ -42737,6 +42737,81 @@ namespace revwave
     { if (t_cont_scope != nullptr && t_cont_scope->nest == rollout_nest) { ++t_cont_scope->n; } }
 }
 
+// FOLD F-E1 (Blood Sun step 7, design §8; SOUND DOMINANCE, MTG_LEGEND_KEEP_OLD_FOLD, DEFAULT ON, =0 restores both
+// LEGEND-KEEP twins). Casting a `vanilla_creature` legend beside a same-name copy of ours: the LEGEND-KEEP pass twins
+// the cast, keep-oldest / keep-newest. When the two copies can differ ONLY in the new one having entered this turn,
+// keeping the newest is dominated:
+//   * both keeps put the same card into the graveyard in the same event, so every death watcher and the card's own
+//     "put into a graveyard" clause (Emrakul's shuffle) fire identically; the new copy's cast and enter triggers
+//     already happened either way (CR 603.2 / 603.6a; the legend rule is an SBA after them);
+//   * the survivor's only difference is summoning sickness (CR 302.6): the old copy can attack and {T} now, the new
+//     one cannot, and after the next untap step they are interchangeable.
+// "Only age differs" is PROVED fail-closed from what the cast-time board can show, never assumed:
+//   * the old copy is plain: untapped, not entered this turn, not a token, no counters, no damage, nothing attached,
+//     no temp pump / keyword / rider, no copy effect or chosen value, has not attacked (every field
+//     LegendCopiesInterchangeable compares, except `entered_this_turn`, which is the difference this fold is about);
+//   * the new copy enters plain: the card carries no as-enters / self-entry parameter (counters, dice, devour,
+//     chosen type / keyword, a copy entry, soulbond, an Equipment attach, enters tapped);
+//   * nothing else we control can give the ENTERING creature something lasting: no other creature at all (Giada,
+//     Metallic Mimic, every creature watcher class), no Equipment or Aura (an attach), and no noncreature permanent
+//     carrying an entrant-counter watcher parameter.
+// Anything outside that keeps both twins -- the pre-fold behaviour -- so a missed case costs one extra twin, never a
+// line. Emrakul, the Aeons Torn in the Blood Sun loop is exactly this shape (lands and enchantments beside it).
+static bool LegendKeepOldDominates(const GameState& state, int me, const CardDefinition& d)
+{
+    static const bool s_on = EnvOn("MTG_LEGEND_KEEP_OLD_FOLD", true);   // DEFAULT ON; =0 keeps both twins
+    if (!s_on) { return false; }
+    if (d.tmpl != CardTemplate::VanillaCreature || !d.card.IsCreature()
+        || !d.card.HasSupertype(Supertype::Legendary)) { return false; }
+    const CardParams& np = d.params;
+    if (np.enters_with_plus_counters != 0 || np.enters_with_x_plus_counters || np.enters_with_x_dice_sides != 0
+        || np.enters_with_gy_creature_counters || !np.enters_with_plus_counters_per_other_subtype.empty()
+        || np.as_enters_harvest_counters != 0 || np.etb_modal_self_counters != 0 || np.etb_modal_double_self_counters
+        || np.devour != 0 || np.choose_type_on_enter || np.chooses_creature_type || np.etb_choose_keyword_count != 0
+        || np.enter_as_copy_of_entrant || np.enter_as_copy_of_creature || np.soulbond || np.attach_equipment_on_etb
+        || np.etb_return_equipment_from_gy || np.enters_tapped || np.is_equipment || np.is_aura)
+    { return false; }
+    int old_idx = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me) { continue; }
+        if (p.card.HasSupertype(Supertype::Legendary) && p.card.m_name == d.card.m_name)
+        {
+            if (old_idx >= 0) { return false; }   // two copies already: not this shape
+            old_idx = i;
+            continue;
+        }
+        if (p.card.IsLand()) { continue; }
+        if (p.card.IsCreature()) { return false; }
+        const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
+        if (od == nullptr) { return false; }
+        const CardParams& op = od->params;
+        if (op.is_equipment || op.is_aura || op.soulbond || op.attach_equipment_on_etb
+            || op.other_creature_etb_counters != 0 || op.other_creature_etb_counters_subtype != 0
+            || op.other_subtype_enters_counters_per_each != 0 || op.other_chosen_subtype_enters_counters != 0
+            || op.other_nontoken_enters_counter_haste != 0 || op.opp_lost_life_other_enters_counters != 0
+            || op.other_creature_gy_enter_team_counters != 0)
+        { return false; }
+    }
+    if (old_idx < 0) { return false; }
+    const Permanent& q = state.battlefield[static_cast<std::size_t>(old_idx)];
+    if (q.entered_this_turn || q.tapped || q.is_token || q.gained_control_this_turn || !q.counters.empty()
+        || q.damage != 0 || q.pending_death_trigger != 0 || q.aura_attached_to != 0 || q.equipped_to != 0
+        || q.marked_for_destruction || q.temp_power_bonus != 0 || q.temp_tough_bonus != 0
+        || q.charge_counters != 0 || q.verse_counters != 0 || q.storage_counters != 0 || q.loyalty != 0
+        || q.loyalty_activated_this_turn || q.temp_haste || q.temp_lifelink || q.temp_double_strike
+        || q.temp_vigilance || q.temp_indestructible || q.exile_at_end || q.sac_at_end_step
+        || q.destroy_at_end_if_attacked || q.return_at_end_step || q.AttacksThisTurn() != 0 || q.is_animated
+        || !static_cast<const std::string&>(q.copy_printed_name).empty() || q.chosen_color != -1
+        || q.chosen_subtype_id != 0 || q.chosen_keyword_mask != 0 || q.linked_exile_number != 0
+        || q.chosen_player >= 0 || q.once_per_turn_used || q.skip_next_untap || q.paired_with != 0)
+    { return false; }
+    for (const Permanent& o : state.battlefield)
+    { if (o.aura_attached_to == q.card.m_number || o.equipped_to == q.card.m_number) { return false; } }
+    return true;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -55151,6 +55226,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             Action o = a;
             o.legend_keep = 1;   // keep the oldest
             out.push_back(std::move(o));
+            // FOLD F-E1 (LegendKeepOldDominates above): the copies can differ only in age -> keep-newest is dominated.
+            const CardDefinition* fd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (fd != nullptr && LegendKeepOldDominates(state, me, *fd)) { continue; }
             Action n = a;
             n.legend_keep = 2;   // keep the newest (the cast copy)
             out.push_back(std::move(n));
@@ -107158,6 +107236,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 for (int pin : pins) { add_for_land(ln, "", "", false, false, pin); }
                 continue;
             }
+        }
+        // A shock land whose pay is SEARCHED (Blood Sun step 7, LandShockPayPinned: an opted-in provider, own death
+        // live, the life covers it, the ability not removed): two land options, PAY (pin 1, the engine rule's answer,
+        // first) and TAPPED (pin 0), each enumerating its casts on the board that answer makes.
+        if (ld != nullptr && !HumanPlayActive() && LandShockPayPinned(state, *ld))
+        {
+            add_for_land(ln, "", "", false, false, 1);
+            add_for_land(ln, "", "", false, false, 0);
+            continue;
         }
         add_for_land(ln, "");   // ordinary land, a fetch with nothing to find, or the held modern fetch
         // Three Tree City can float its free {C} immediately before a second copy enters and the
