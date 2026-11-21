@@ -213,6 +213,13 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   -> Burgeoning puts (opponent's turn) pre-Blood Sun: Vale and Field get the SAME rule (both judged on our next
   turn: Blood Sun in hand, other mana cannot cast it, >= 2 other lands) and are one class there (the Field-only-
   without-Vale prune is for our own land PLAY); red-source exception: at most ONE red source fetched.
+  USER (verbatim): *"Realistically the red-source exception is for Grim Tutor for the most part. "Your other
+  lands couldn't cast it on your next turn." This is fine, but we should drop a non-sacrificing land to reach
+  sufficient mana and red for Blood Sun if one is available. The Lotus plan is just a backup plan, not the
+  intended way to do things."* -> the pre-Blood Sun Lotus exception (play AND Burgeoning put) additionally
+  requires that NO non-sacrificing land in hand would, played/put instead, make Blood Sun castable (this turn
+  for our play; our next turn for a Burgeoning put). Red-source exception stays on every tutor (USER: "for
+  the most part" Grim Tutor), capped at one.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
