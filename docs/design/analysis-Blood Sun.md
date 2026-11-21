@@ -208,6 +208,11 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Field because it is worse at that point and the same later."* -> pre-Blood Sun, Lotus Field is NOT offered
   while a Lotus Vale is in hand (dominated now, identical once Blood Sun lands).
   USER (verbatim, confirming): *"Field is strictly for when you don't have a Vale in this situation."*
+  USER (verbatim, 2026-11-21): *"On Burgeoning the Lotus Field and Lotus Vale are equivalent there, so I'm not
+  sure why we would have different rules for them. On the Red-source exception we only need one red source."*
+  -> Burgeoning puts (opponent's turn) pre-Blood Sun: Vale and Field get the SAME rule (both judged on our next
+  turn: Blood Sun in hand, other mana cannot cast it, >= 2 other lands) and are one class there (the Field-only-
+  without-Vale prune is for our own land PLAY); red-source exception: at most ONE red source fetched.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
