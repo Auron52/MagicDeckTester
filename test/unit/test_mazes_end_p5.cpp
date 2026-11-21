@@ -283,7 +283,12 @@ TEST_CASE("Maze's End P5: the v5 fetch weight, P1's one colour and the Talon var
     {   // A drop open and the hand's lands short of this turn's plus next turn's drops: the fetch outranks spells.
         GameState o = s;
         o.players[0].lands_played_this_turn = 0;
-        CHECK(prov.TapTutorPutEval(o, D("Maze's End"), "Simic Guildgate") == 1000);
+        {   // MTG_MAZE_FETCH_RANK_COND (DEFAULT ON since batch 3): one Gate is far from the win, so `full` (one spell's
+            // worth, 100), not kMazeFetchWins; the unconditional tier is 1000.
+            CHECK(prov.TapTutorPutEval(o, D("Maze's End"), "Simic Guildgate") == 100);
+            const Arm nocond(heurarm::MAZE_FETCH_RANK_COND, 0);
+            CHECK(prov.TapTutorPutEval(o, D("Maze's End"), "Simic Guildgate") == 1000);
+        }
         // Plenty of lands in hand (one per drop this turn and next): 1, taken only when the {3} is idle.
         o.players[0].hand.push_back(C("Boros Guildgate", 102));
         o.players[0].hand.push_back(C("Dimir Guildgate", 103));
