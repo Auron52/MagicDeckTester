@@ -2056,3 +2056,20 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
 - **Phase B order:** (1) the nested round-win stop (sound identity, `DecisionProvider::NestedRoundWinStop`, Blood Sun
   opt-in so other decks stay byte-identical); (2) the go-off front (`PlanMoveOrderFront`, ORDER only) so the kill is
   the first candidate and (1) ends the list; (3) only then prunes, re-measured.
+
+### Implementation notes (perf part 2, 2026-11-21; commits ba55b5149, 091690f2f, 7756097a4)
+- **Built and tested:** Release builds; unit tests 3,856 cases, all pass after one test fix (B13 F-L1's assertion
+  read "never the untapped Swamp" where the rule is "never the untapped Swamp while its tapped twin is kept");
+  `test/scenarios.sh` 655 / 655. Per-job heurarm slots added so every A/B arm pools in one batch:
+  `MTG_BLOODSUN_ROUND_WIN_STOP`, `MTG_BLOODSUN_GOOFF`, `MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI`, and
+  `MTG_BLOODSUN_GRIM_REV_MANA7` (the threshold-7 arm; `MTG_BLOODSUN_GRIM_REV_MANA` stays the env value).
+- **Repros (forced-mulligan replays):** no arm moves a win turn (both T7; phase A's "trial 15 = T6" was a mislabel).
+  The round-win stop cuts units 14x (fm1: 930k -> 66k) but NOT wall: 99.99% of the 8.27M candidates per slow decision
+  are now never scored, yet they are still MATERIALISED (AppendSubdecisionAxes passes + Plan/Action copies are ~60% of
+  the flat profile; revelation-package-cast nodes 90.7% of wall at 6.9 ms/node). That work is unpriced, and the 25x
+  unit ceiling that used to bound it (by rolling the pass back) no longer trips, so the shipped arm can be SLOWER in
+  wall than the snapshot (fm1 257-593 s vs 108 s, noisy box). The go-off front helps only under the stop (383 -> 257 s).
+  Full tables: `build/scratch/bloodsun/perf/diagnosis.md` "Perf part 2".
+- **Next lever (proposal):** remove the materialisation, not the scoring: the step-8 chain walk (U8) as a pre-list
+  same-round witness, or a staged nested list (go-off front built and scored first, the rest only without a round-R
+  win). Pricing the materialisation only restores the ceiling's rollback.
