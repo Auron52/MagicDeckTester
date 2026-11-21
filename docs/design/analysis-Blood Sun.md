@@ -299,6 +299,13 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   playable this turn) is >= 8; the Revelation does the fetching. Below 8 the B12 list applies. Arms to "play
   with" (measured, reported; default stays the USER's): gate OFF; threshold 7; and the 2-Grim / 1-Revelation
   case exempted.
+  USER clarification (verbatim): *"Yes, the reason I mentioned 8 is that at 8 mana+ multiple grim tutors lose
+  out to one Diabolic Revelation even when you consider that the Revelation needs to replace itself. At 8 mana
+  the only arguable play that might be better with Grim Tutor we may want to leave on the table is tutoring and
+  playing Time Warp. We probably should not prune that."* -> the 2-Grim exemption applies only BELOW 8 (it is
+  an arm of the threshold-7 variant, never at >= 8). EXCEPTION kept at every mana: Grim Tutor -> Time Warp is
+  offered whenever Grim ({1}{B}{B}) and then Time Warp ({3}{U}{U}) are both castable this turn from the
+  available mana (colours included); it is the one Grim line the >= 8 gate does not prune.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
