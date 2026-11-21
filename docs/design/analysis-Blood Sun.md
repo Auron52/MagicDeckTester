@@ -246,5 +246,22 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Cyclone's free casts do not pass through that prune, so its multiples were already offered; Extra Turns
   (1 Emrakul) cannot move; Cyclone moves only where it would hard-cast a second copy.
 
+- B8 Revelation packages (U7) (USER 2026-11-21, verbatim): *"Revelation for X=0 should be pruned entirely in
+  the heuristic provider. It is a net negative. I don't know what you mean by same-name copies? Searching for
+  only Revelation wouldn't be worth it and should be pruned. (i.e. keep the mana)"* -> provider restrictions
+  behind `MTG_BLOODSUN_USER_PRUNE`: no Revelation cast with X = 0; no package whose every card is a Diabolic
+  Revelation (keep the mana). "Same-name copies" = WHICH of the four library Scorched Ruins a package takes:
+  a pure identity (the copies are interchangeable), folded, nothing for the USER to decide.
+- B9 depth-0 chain walk (U8) (USER 2026-11-21, verbatim): *"Okay, I'll leave this part up to you."* -> the
+  agent's call: enable the walk, decouple the priced limit, measure both in step 8.
+- B10 Machinations transmute (USER 2026-11-21, verbatim): *"we only need one Blood Sun, so we already have one
+  or the first retrieved one, it should get Grim Tutor."* -> confirms B3: once a Blood Sun is on the battlefield
+  or in hand (including one fetched earlier this turn), every Machinations transmute takes Grim Tutor only. The
+  disclosed "second Machinations takes the default" was about the CAST mode's top-3 look, not the transmute; it
+  is moot while the cast-mode prune (B5) is on.
+- B11 USER-owned heuristics (USER 2026-11-21, verbatim): *"Yes, I'll help you work through cast order and
+  discard heuristic, but you should give them a shot first."* -> the agent drafts cast order, discard buckets
+  (and the mulligan policy) with measurements, and presents them; nothing is adopted until the USER answers.
+
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
