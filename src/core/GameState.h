@@ -2099,6 +2099,19 @@ struct GameState
     // ApplyAttackChooseOneTriggers (both worlds), cleared at both turn starts. FUTURE-DETERMINING: folded
     // value-gated in dominance::Build(), BuildDedupKey's combat pins and the plan-cache scalar key.
     std::int16_t             scripted_attack_choose_mode  = -1;
+    // GARRUK'S HARBINGER (Beasts D, 2026-11-21). DECK CONSTANT (StampDeckTraits), never folded: the MAINBOARD holds
+    // a combat_damage_dig_per_damage card, so the shared combat core's FireCombatDamageDig and the main-phase dig
+    // axis walk the board for one. DEFAULT TRUE, the safe direction (it only skips a walk that would find nothing).
+    bool                     deck_has_combat_damage_dig   = true;
+    // THE SEARCHED COMBAT-TIME DIG PICK (Plan::combat_dig_choice): PACKED 4 bits per combat-time dig-trigger ordinal
+    // (CombatDigPackRanks, SpellEffects.h; ordinal 0 lowest; a field of 0 = that ordinal unpinned, r + 1 = RANK r
+    // into the provider's EtbDigCandidates list at resolution, clamped); -1 = nothing pinned (every trigger takes the
+    // provider's front -- legal only beyond the horizon, at the depth-0 runner, or with no searching apply). Ordinal
+    // k is the k-th combat-time dig of THIS combat in resolution order (CombatDigPinShift after each), so a later
+    // attack-step dig (Adaptive Omnitool, docs/design/omnitool-combat-dig-greedy.md) can share it. Decided in a main
+    // phase, spent at the end of THIS combat's damage (Combat.cpp), cleared at both turn starts. FUTURE-DETERMINING:
+    // folded value-gated in dominance::Build(), BuildDedupKey's combat pins and the plan-cache scalar key.
+    std::int16_t             scripted_combat_dig          = -1;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

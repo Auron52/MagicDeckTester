@@ -4763,6 +4763,19 @@ struct CardParams
     // per combat-damage event (two events under double strike). "May" is folded to "draw iff the library
     // is non-empty" (the Curiosity fold -- PROVISIONAL, USER sign-off owed).
     int  combat_damage_self_may_draw = 0;
+    // GARRUK'S HARBINGER (Beasts D, 2026-11-21): "Whenever this creature deals combat damage to a player or
+    // planeswalker, look at that many cards from the top of your library. You may reveal a creature card or Garruk
+    // planeswalker card from among them and put it into your hand. Put the rest on the bottom of your library in a
+    // random order." Fired by the shared FireCombatDamageDig (SpellEffects.cpp) from BOTH damage-step shapes of
+    // the shared combat core (Combat.cpp), so the executor and the rollout resolve it identically.
+    //   combat_damage_dig_per_damage -- cards looked at PER POINT of combat damage this creature dealt in that
+    //     damage event (the post-lord / post-anthem / post-counter `power` the damage loop subtracted). 0 = no dig.
+    //   combat_damage_dig_types -- the take filter, each name through CardMatchesTypeName on the PRINTED card
+    //     ("Creature" tests the type; "Garruk" falls back to the subtype scan = a Garruk planeswalker card).
+    // The PICK is SEARCHED (Plan::combat_dig_choice -> GameState::scripted_combat_dig, a per-trigger-ordinal rank
+    // into the provider's EtbDigCandidates); the rest go to the bottom via BottomInRandomOrder.
+    int                      combat_damage_dig_per_damage = 0;
+    std::vector<std::string> combat_damage_dig_types;
     // Den Protector: "When this creature is turned face up, return target card from your graveyard to your
     // hand." The target is SEARCHED (named variants; a human gets the dig chooser).
     bool turned_face_up_return_gy_to_hand = false;

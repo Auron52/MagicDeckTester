@@ -173,6 +173,13 @@ MANIFEST = {
     # executor + rollout combat) over the FULL legal menu; autonomous play searches the mode per trigger ordinal
     # (Plan::attack_choose_mode_choice), the provider folding the life mode away when nothing reads our life.
     "attack_choose_one":     ("attack_mode",          truthy),
+    # ---- Beasts D (2026-11-21) ----
+    # Garruk's Harbinger's "whenever this creature deals combat damage to a player ..., look at that many cards ...
+    # you may reveal a creature card or Garruk planeswalker card ... put it into your hand" REUSES `dig`: the shared
+    # PerformLookTakeDig asks g_play_dig_chooser (source "Garruk's Harbinger (combat damage dig)") with decline (-1)
+    # = the printed "may". Fired by FireCombatDamageDig in both damage-step shapes of the shared combat core;
+    # autonomous play searches the pick (Plan::combat_dig_choice, a rank pin; the axis is skipped in human play).
+    "combat_damage_dig_per_damage": ("dig",               positive),
     "etb_modal_fight_opp_creature":   ("target",      truthy),
     # ---- SelesnyaLifegain (2026-09-30) ----
     # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
@@ -1106,6 +1113,7 @@ INERT_PARAMS = {
     "attack_choose_token_color": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_lifegain": "Elder Gargaroth's life-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_draw": "Elder Gargaroth's draw-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "combat_damage_dig_types": "Garruk's Harbinger -- the dig's take FILTER (Creature / Garruk), a legality predicate; WHICH match is taken rides combat_damage_dig_per_damage -> dig",
     "tap_fight_requires_subtype": "Contested Cliffs -- the own target's legality filter (a Beast); the TARGETS ride tap_fight_cost (both chosen on the live battlefield)",
     "tap_target_pump_per_subtype_both": "Basilisk Gate -- the pump's X (the Gates you control at resolution), a computed magnitude; the TARGET rides tap_target_pump_cost (chosen on the live battlefield)",
     # Mill: printed magnitudes and legality thresholds. Their action/target choices

@@ -2031,6 +2031,12 @@ public:
         // takes the provider's front. Copied onto GameState::scripted_attack_choose_mode (decided in main,
         // consumed at declare-attackers -- the attack_reanimate_choice route).
         int attack_choose_mode_choice = -1;
+        // GARRUK'S HARBINGER's combat-damage dig pick: PACKED 4 bits per combat-time dig-trigger ordinal
+        // (CombatDigPackRanks, SpellEffects.h; field 0 = unpinned, r + 1 = RANK r into the provider's EtbDigCandidates
+        // at resolution, clamped); -1 == every dig takes the provider's front. Copied onto GameState::scripted_combat_dig
+        // (decided in main, consumed at combat damage -- the lackey_choice route). Never a decline: taking weakly
+        // dominates declining in this goldfish (the viewer still offers the printed "may").
+        int combat_dig_choice = -1;
         // Set only on the depth<=0 HORIZON LEAF plan (SolveWithLookahead): the one plan the
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.

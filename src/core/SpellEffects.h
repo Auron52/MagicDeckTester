@@ -6696,6 +6696,52 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // entering hand adds no power to a declared attacker.
 void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 
+// ---- THE SEARCHED COMBAT-TIME DIG PIN (Garruk's Harbinger, Beasts D, 2026-11-21) -----------------------------------
+// GameState::scripted_combat_dig / Plan::combat_dig_choice: PACKED 4 bits per combat-time dig-trigger ORDINAL (ordinal 0
+// in bits 0-3), a field of 0 = that ordinal unpinned (the provider's front), r + 1 = RANK r into the provider's
+// EtbDigCandidates list as it stands at RESOLUTION (clamped to its last entry, the etb-dig convention); -1 = nothing
+// pinned. A RANK rather than a card number, and that is the completeness argument: the examined set is the library's
+// top N at combat damage, where N = the damage dealt and the library has been shifted by every draw before it (a
+// Packleader draw, Gargaroth's draw mode) -- a card-number pin would need the enumerator to predict that window, a
+// rank pin needs only a bound on N, and ranks 0 .. N-1 then reach every legal pick whatever the window turns out to
+// hold. Each dig trigger reads ordinal 0 and SHIFTS the rest down (CombatDigPinShift), so the k-th combat-time dig
+// of a combat reads ordinal k with no shared counter -- which is what lets Adaptive Omnitool's attack-step dig
+// (FireAttackEquipDigHand, today an in-window front pick: docs/design/omnitool-combat-dig-greedy.md) be pointed at
+// the same pin later: its trigger resolves first, so it would simply take ordinal 0. NOT wired to it in batch D.
+constexpr int kCombatDigMaxOrdinals = 3;    // 12 bits: fits the int16 state pin
+constexpr int kCombatDigMaxRank     = 14;   // a field holds rank + 1 <= 15
+inline int CombatDigRankAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kCombatDigMaxOrdinals) { return -1; }
+    return ((packed >> (4 * k)) & 15) - 1;
+}
+inline int CombatDigPackRanks(const int* ranks, int n)
+{
+    int v = 0;
+    for (int k = 0; k < n && k < kCombatDigMaxOrdinals; ++k)
+    {
+        const int r = ranks[k];
+        if (r >= 0) { v |= (std::min(r, kCombatDigMaxRank) + 1) << (4 * k); }
+    }
+    return v != 0 ? v : -1;
+}
+inline int CombatDigPinShift(int packed)
+{
+    if (packed < 0) { return -1; }
+    const int v = packed >> 4;
+    return v != 0 ? v : -1;
+}
+
+// FireCombatDamageDig -- body in SpellEffects.cpp. Garruk's Harbinger's combat-damage trigger: per connecting source
+// carrying combat_damage_dig_per_damage (SELF watch: "whenever THIS creature deals combat damage"), look at
+// (damage dealt x per_damage) cards, the shared PerformLookTakeDig with combat_damage_dig_types, the searched rank pin
+// (scripted_combat_dig ordinal 0, then shifted), the human dig chooser with decline (the printed "may"), the rest to
+// the bottom in a random order. `damaging_idx` / `damaging_pw` are the combat core's aligned connector lists (the
+// Shroofus inputs). Skipped once the game is over (the opponent dead -- SBA end a lethal combat first). Called from
+// BOTH damage-step shapes of Combat.cpp's shared core, so the executor and the rollout stay lockstep.
+void FireCombatDamageDig(GameState& state, int controller, const std::vector<int>& damaging_idx,
+                         const std::vector<int>& damaging_pw);
+
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
 // `balan_id` through the shared ApplyEquip -- Grafted Wargear's re-host sacrifice fires exactly
@@ -32430,9 +32476,12 @@ bool PerformEtbDig(GameState& state, int controller_index,
 // hand is not ordered by arrival. Read BEFORE EnterHand, so it is safe whether that consumes the
 // card or not. Used by FireAttackEquipDigHand to record the combat arrival the restricted second main
 // is allowed to consider (GameState::combat_hand).
+// `bottom_random` (default false -- every pre-existing call site is byte-identical): the rest go to the bottom "in a
+// RANDOM order" through BottomInRandomOrder (Garruk's Harbinger) instead of in look order.
 bool PerformLookTakeDig(GameState& state, int controller_index, int count,
                         const std::vector<std::string>& types, int max_mv,
-                        const std::string& src_name, int* took_number = nullptr);
+                        const std::string& src_name, int* took_number = nullptr,
+                        bool bottom_random = false);
 // Indices (into the top `count` of `controller`'s library, look order) of the cards a
 // PerformLookTakeDig with these filters would accept RIGHT NOW -- the SAME predicate, so an
 // enumerator sizing a searched pick axis or dropping a whiff agrees with resolution exactly.

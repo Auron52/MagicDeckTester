@@ -51,5 +51,8 @@
  },
  "Wanderwine Prophets": {
   "keywords": "Champion is modeled by champion_merfolk with linked exile, return, sacrifice if no champion, and searched human choice. The engine has no generic champion keyword tag. Reviewed 2026-11-14 (Merfolk Turns)."
+ },
+ "Garruk's Harbinger": {
+  "keywords": "'Hexproof from black' is a real keyword but INERT here (PROVISIONAL, user sign-off pending; disclosed in the card's bracket): the passive goldfish opponent never casts a spell or activates an ability that targets, and the Beasts list has no black cards. Scryfall reports it as ['Hexproof', 'Hexproof from']; tagging plain Hexproof would be WRONG (full hexproof is broader than hexproof from black), and 'Hexproof from' is not an engine keyword (the loader rejects it). Mirrors the Auriok Champion / Goblin Piledriver protection precedent. Reviewed 2026-11-21 (Beasts D)."
  }
 }

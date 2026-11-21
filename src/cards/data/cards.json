@@ -18933,6 +18933,28 @@
     "attack_choose_lifegain": 3,
     "attack_choose_draw": 1
    }
+  },
+  {
+   "name": "Garruk's Harbinger",
+   "mana_cost": "{1}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 3,
+   "oracle_text": "Hexproof from black\nWhenever this creature deals combat damage to a player or planeswalker, look at that many cards from the top of your library. You may reveal a creature card or Garruk planeswalker card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [COMBAT-DAMAGE DIG (combat_damage_dig_per_damage 1): once per combat-damage event in which THIS creature deals damage to the opponent (a double striker's two steps are two events), look at the top N cards where N = the damage it actually dealt -- every pump, +1/+1 counter, lord and anthem included (the damage the combat core subtracted). The shared PerformLookTakeDig with the filter combat_damage_dig_types Creature / Garruk (CardMatchesTypeName on the printed card: Creature tests the type, Garruk is the planeswalker subtype -- in this list only Garruk, Primal Hunter carries it). The rest go to the bottom in a seeded random order (BottomInRandomOrder, the common-random-numbers keyed order every world shares). Fired by FireCombatDamageDig in BOTH damage-step shapes of the shared combat core (Combat.cpp), so executor and rollout resolve it identically; skipped once the opponent is dead (a lethal combat ends at the state-based-action check). The PICK is SEARCHED (NO-GREEDY): Plan::combat_dig_choice -> GameState::scripted_combat_dig, a RANK into the provider's EtbDigCandidates list at resolution (packed 4 bits per combat-time dig ordinal, up to 3 ordinals, product capped at 27 variants per base plan), decided in the main phase and spent at the end of combat damage. A rank rather than a card number because the looked-at cards are the library top N AFTER this turn's earlier draws (Packleader, Gargaroth's draw mode). Axis width = min(15, matching cards left in the library, (power now incl. counters and lords + 2) x per_damage); DISCLOSED REPRESENTATION LIMIT: a Harbinger pumped by more than +2 beyond its plan-time power (a non-lethal Craterhoof turn) can look at more matches than the width, and ranks past it are not branched. The printed 'may' (decline) is not a search variant (taking a card weakly dominates leaving it on the bottom in a goldfish; the cleanup discard is itself searched); the human dig chooser still offers it. A card dug in combat is castable from the next main phase the deck plays: the Beasts list has no searched second main yet (USER: unsettled), so it waits until next turn -- a disclosed gap the planned per-turn second-main gate is to close. PARTIAL, PROVISIONAL (user sign-off pending): 'Hexproof from black' is inert -- the passive opponent never casts or targets and the deck has no black cards; 'or planeswalker' is inert -- the goldfish opponent has no planeswalkers.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "combat_damage_dig_per_damage": 1,
+    "combat_damage_dig_types": [
+     "Creature",
+     "Garruk"
+    ]
+   }
   }
  ]
 }
