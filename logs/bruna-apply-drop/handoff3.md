@@ -118,3 +118,7 @@ Read `handoff.md` in this directory first (handoffs 1-2 plus the "Agent 3 progre
   /workspaces/MagicDeckTester/.claude/worktrees/<name> path.
 - Batch `--log-dir` = JSON game traces; per-game `<job>.wins` need `--game-log-dir`.
 - CounterList has `Add(type, n)`, not push_back.
+
+## Update (after handoff was written)
+- fix3 BUILD DONE: build_fix3.log `rc=0`; build/scratch/bad/fix3/{mtg,mtg-test} hold 7b621e156. `mtg-test -tc='Bruna*'`
+  49/49 pass. Step 1 now starts at the full unit run + repros on fix3.
