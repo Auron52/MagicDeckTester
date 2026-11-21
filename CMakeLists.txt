@@ -426,6 +426,7 @@ add_executable(mtg-test
     test/unit/test_pirates.cpp
     test/unit/test_vial_target_from_decklist.cpp
     test/unit/test_passive_opponent_lands.cpp
+    test/unit/test_opponent_land_entry.cpp
     test/unit/test_pirates_provider.cpp
     test/unit/test_shadowborn_int1.cpp
     test/unit/test_shadowborn_int2.cpp
