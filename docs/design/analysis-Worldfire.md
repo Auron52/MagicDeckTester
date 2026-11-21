@@ -210,6 +210,24 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
   SETTINGS question for the USER (the depth matrix / play budget), not a search change: raising the budget
   roughly 10x the per-game cost (worldfire is 2.06x Hinata at b20 today).
 
+## Free-turn rule (MTG_FREE_TURNS, default OFF -- adoption is the USER's) -- measured 2026-11-21
+Branch `wip/freeturn` (2d373428c implementation, d35211372 doc; spec + measurement in
+`docs/design/opponent-lockdown-free-turns.md`). Flags OFF: smoke 243/243 byte-identical, scenarios 605/605.
+Flag ON, regression tier:
+
+| key | off | on (credited) | on (raw rounds) |
+|---|---|---|---|
+| worldfire d5 s2002 | 5.567 | 4.500 | 6.467 |
+| worldfire d5 s3003 | 5.483 | 4.300 | 6.550 |
+| worldfire d3 s2002 | 5.533 | 4.533 | 6.800 |
+| worldfire2hg d5 s2002 | 5.733 | 4.633 | 5.933 |
+
+Direct 64 games d5 b20 seed 9100001: off 5.547, on 4.422. Every Worldfire d5 game takes at least one free turn.
+Raw rounds get SLOWER (nothing tie-breaks toward fewer taken turns at an equal credited turn; one game took 10).
+Follow-ups in progress before the USER can adopt: a Creature Burn reference drifts under the flag, the
+`steal_tap_count` lock trait (Vampires pays 3x units for a lock it cannot make), and the passive opponent's
+oldest-first cleanup handing non-lock burn decks a free turn.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)
 
