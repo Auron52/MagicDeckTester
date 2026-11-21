@@ -218,7 +218,7 @@ GameState NoSunPf(const std::vector<std::string>& lands)
 }
 }   // namespace
 
-TEST_CASE("Blood Sun B13: the Lotus Vale sacrifice collapses to one pair keeping R, G and two B (lever on / off)")
+TEST_CASE("Blood Sun B13: the Lotus Vale sacrifice collapses to one pair -- Karoo kept, then R, G and two B (on / off)")
 {
     GameState s = NoSunPf({ "Swamp", "Swamp", "Swamp", "Mountain", "Forest", "Rakdos Carnarium" });
     {
@@ -244,11 +244,11 @@ TEST_CASE("Blood Sun B13: the Lotus Vale sacrifice collapses to one pair keeping
     CHECK(b >= 2);
 }
 
-TEST_CASE("Blood Sun B13: Lotus Field keeps the colours and takes the tapped twin first (F-L1)")
+TEST_CASE("Blood Sun B13: Lotus Field takes the tapped twin before the untapped one (F-L1)")
 {
-    // Field (trigger: any land, itself included). Lands: Forest, Swamp (tapped), Swamp, the Field. {Forest, tapped
-    // Swamp} leaves Swamp + Field (an any-colour land): R, G and two B -- shortfall 0, and the tapped Swamp before the
-    // untapped one.
+    // Field (trigger: any land, itself included). Lands: Forest, Swamp (tapped), Swamp, the Field. Every pair leaves
+    // the same colour shortfall (a kept Field is ONE any-colour source), so (3) decides: never the untapped Swamp
+    // while its tapped twin is still there.
     GameState s = NoSunPf({ "Forest", "Swamp", "Swamp", "Lotus Field" });
     s.battlefield[1].tapped = true;
     LotusArm arm(1);
