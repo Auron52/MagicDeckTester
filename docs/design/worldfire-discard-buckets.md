@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -52,7 +52,7 @@ T\* are the MANA quota; the rest of the mana is overflow.
 |---|---|---|---|
 | **COMBO** | Worldfire. **A tutor with a missing target stands in** while no Worldfire is held (Mystical Tutor > Personal Tutor; the Cyclone/Long-Term Plans precedent) | 1 | a second Worldfire is DEAD (USER: *"we don't need duplicate Worldfire"*) |
 | **FINISHER** | Rift Bolt in hand; Keldon Halberdier in hand | 1, met by: a Rift Bolt pending on suspend; or a Halberdier pending that arrives on or after T\*+1; or one Rift Bolt in hand; or one Halberdier in hand (suspended now it arrives on now+4, so it suits a go-off on now+3 or later) | a second Rift Bolt is DEAD (USER: no duplicate Rift Bolt). With both in hand and nothing pending: Halberdier first when T\* >= now+3 (it keeps the go-off need at 9), Rift Bolt first when T\* is sooner (the Halberdier would arrive too late). With a Halberdier pending, the Rift Bolt drops to BACKUP below (USER: *"rift bolt is not a high-priority target if you have a Halberdier"*) |
-| **MANA: Bloom** | Lotus Bloom in hand | the Blooms the projection uses (normally: 1 early; a 2nd if T\* is "far") | a Bloom that can no longer arrive by T\* or T\*+1 ranks with EXTRA |
+| **MANA: Bloom** | Lotus Bloom in hand | **only a Bloom that makes the go-off EARLIER**: project T0 without the Blooms in hand; keep one only when T0 is later than now+3 (or "far"), i.e. when its arrival on now+3 pulls the go-off forward; a 2nd only if T\* is still "far" with the first | **a Bloom near the combo turn is dropped** (USER 2026-11-21: *"Bloom should be dropped if we are anywhere near the combo turn."*): with T0 <= now+3 it is the first overflow card shed after DEAD |
 | **MANA: lands** | every land | the land drops through T\* (one per turn, net of a drop already made this turn) | keep order below |
 | **MANA: rituals** | Seething Song, Irencrag Feat | the rituals the projection uses | a second Irencrag Feat is DEAD (USER: no duplicate Irencrag); Song is kept over Feat (cheaper, and does not end the turn) |
 | **DIG** | Brainstorm, Ponder, Preordain, Overmaster; a tutor with a missing target that is not already standing in | **2 while COMBO or FINISHER is unfilled, 1 once both are filled, 0 once COMBO + FINISHER + MANA are all filled.** While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Mystical Tutor > Personal Tutor > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
@@ -69,10 +69,10 @@ untapped land ranks above it.
 
 1. **DEAD:** Memory Lapse, then a 2nd Worldfire / Irencrag Feat / same-type Rift Bolt, then a tutor with nothing
    missing. (A finisher of the other type is never dead: it is BACKUP.)
-2. Lands beyond the drops + 1.
-3. Rituals beyond the projection + 1.
-4. Dig beyond its quota (reverse fill order: Overmaster first).
-5. A Bloom that cannot arrive in time.
+2. A Lotus Bloom near the combo turn (T0 <= now+3).
+3. Lands beyond the drops + 1.
+4. Rituals beyond the projection + 1.
+5. Dig beyond its quota (reverse fill order: Overmaster first).
 6. BACKUP: a 2nd Halberdier, the extra ritual, the extra land, and last the second finisher of the other type.
 
 When only quota cards remain, shed in reverse importance. **Short a combo piece** (COMBO or FINISHER unfilled):

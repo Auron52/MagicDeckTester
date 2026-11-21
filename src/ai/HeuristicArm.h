@@ -1084,6 +1084,12 @@ enum Slot : int
     CAST_SCRY_SEARCH,         // MTG_CAST_SCRY_SEARCH  a DirectDamage spell's own scry (Magma Jet's cast_scry) is SEARCHED: every cast is twinned per alternative disposition (Action::scry_pin, the step-9d mechanism), sized off the look count, the pin consumed by the spell's ScryTop in both worlds. USER 2026-11-17: every scry site is searched, then pruned by the provider (ScryVerdict). Creature Burn s6 gi5 / s8 gi7 references. Default ON; =0 -> the provider's single pick, byte-identical to before
     SCALED_GROWTH_BOUND,      // MTG_SCALED_GROWTH_BOUND  a scaled LAND's same-turn growth is credited where the mana is priced: EnumeratePlans' scalar bound (+1 per matching creature cand per untapped Three Tree City, each emitted selection re-priced with its own growers), the filter rescue's supply pre-gate (SpwfProvablySupplyShort), and the scaled-land route's rest-of-line check (the creature being cast, or a cast trigger's entrants: Emperor Mihail II's cast creature and token). Upper bounds, so it can only prune less. Merfolk Turns gate claude-queue-20261119i s30000762 T4 (ENUM-GAP {Seahunter + Rishadan Dockhand}); s30000034 / s30000075 T5 (Mihail's {1} off City's {C}). Default ON; =0 -> City priced at its current count
     SCALED_GROWER_DECIDER,    // MTG_SCALED_GROWER_DECIDER  the apply's payable-order decider, when the given order pays in neither the whole-turn prepay nor the sequential walk, tries the order with City-growing creature casts cheapest-first among comparator ties (ScaledLandGrowerOrder) and takes it when the walk pays it (s30000762 T4: Dockhand before Seahunter). Default ON; =0 -> the given order
+    WORLDFIRE_BUCKET_DISCARD, // MTG_WORLDFIRE_BUCKET_DISCARD  Worldfire: cleanup sheds the lowest card of the bucketed keep order (WorldfireKeepRank; docs/design/worldfire-discard-buckets.md, a DESIGN for USER review -- buckets are USER-owned, analyze-deck 5i). DEFAULT OFF until the USER approves; =1 enables
+    WORLDFIRE_BRAINSTORM_RULE,// MTG_WORLDFIRE_BRAINSTORM_RULE  Worldfire: Brainstorm puts back the two lowest cards of the keep order, the higher of them on top (PutBackRanking per card). DEFAULT OFF until the USER approves; =1 enables
+    WORLDFIRE_BRAINSTORM_SINGLE,// MTG_WORLDFIRE_BRAINSTORM_SINGLE  sub-lever: the searched put-back fan is pruned to the rule's pick (PutBackSingleCandidate). DEFAULT ON under MTG_WORLDFIRE_BRAINSTORM_RULE; =0 keeps the rule as the fan's ORDER only. Inert unless the rule is on
+    WORLDFIRE_PONDER_RULE,    // MTG_WORLDFIRE_PONDER_RULE  Worldfire: Ponder keeps (best first) iff a looked card fills an unfilled quota of the keep order, else shuffles. DEFAULT OFF until the USER approves; =1 enables
+    WORLDFIRE_PONDER_SINGLE,  // MTG_WORLDFIRE_PONDER_SINGLE  sub-lever: Ponder's searched fan is pruned to the rule's disposition (ReorderSingleCandidate). DEFAULT ON under MTG_WORLDFIRE_PONDER_RULE; =0 searches keep-in-the-rule's-order vs shuffle (ReorderKeepShuffleOnly). Inert unless the rule is on
+    WORLDFIRE_PREORDAIN_RULE, // MTG_WORLDFIRE_PREORDAIN_RULE  Worldfire: Preordain's scry 2 keeps a card iff it fills a still-unfilled quota of the keep order (counting cards kept above it), best first; bottoms the rest. DEFAULT OFF until the USER approves; =1 enables
     COUNT
 };
 
@@ -2112,6 +2118,12 @@ inline const char* Name(int slot)
         "MTG_CAST_SCRY_SEARCH",
         "MTG_SCALED_GROWTH_BOUND",
         "MTG_SCALED_GROWER_DECIDER",
+        "MTG_WORLDFIRE_BUCKET_DISCARD",
+        "MTG_WORLDFIRE_BRAINSTORM_RULE",
+        "MTG_WORLDFIRE_BRAINSTORM_SINGLE",
+        "MTG_WORLDFIRE_PONDER_RULE",
+        "MTG_WORLDFIRE_PONDER_SINGLE",
+        "MTG_WORLDFIRE_PREORDAIN_RULE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
