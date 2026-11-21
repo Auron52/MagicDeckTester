@@ -4238,11 +4238,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // what silently swallowed every post-combat main. Synthesize the pass-only menu instead
             // and let the human look at the board. Committing it is an empty plan, which the break
             // further down already reads as the pass it is, so this cannot loop.
-            const bool menu_was_empty = plans.empty();
+            // A tap pinger's MANUAL pings (TurnSolver::AppendHumanManualPingPlans, appended last, with the
+            // tagged pass entry ahead of them when the base menu was empty) are not part of the base menu
+            // for these frame rules: a frame offering only them is the empty frame it always was, so it
+            // takes no ordinal and every later main_ordinal -- what a recorded cast-order pin is keyed on --
+            // is unchanged.
+            const bool menu_was_empty = TurnSolver::HumanMenuBaseEmpty(plans);
             if (menu_was_empty)
             {
                 if (!s_segment_always) { break; }   // legacy rule keeps its old exit
-                plans.emplace_back();               // one entry: "cast nothing" == pass
+                if (plans.empty()) { plans.emplace_back(); }   // one entry: "cast nothing" == pass
             }
             std::set<std::string> cur_inplay = inplay_sac(state);
             std::set<std::string> cur_offer  = offer_sac(plans);
@@ -4250,7 +4255,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // is always enumerated, so a menu with no action is a menu with nothing in it.
             bool any_play = false;
             for (const TurnSolver::Plan& p : plans)
-            { if (!p.actions.empty() || !p.land_to_play.empty()) { any_play = true; break; } }
+            {
+                if (TurnSolver::IsHumanManualPingPlan(p)) { continue; }   // not a base-menu play (above)
+                if (!p.actions.empty() || !p.land_to_play.empty()) { any_play = true; break; }
+            }
 
             if (s_segment_always)
             {

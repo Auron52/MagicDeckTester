@@ -388,6 +388,16 @@ enum class PermAbilityMode
     // creature-damage pipeline (dmgrx::DealDamageBatch), so the Doll's "whenever this creature is dealt
     // damage" reflection triggers off it. Appended LAST (plan signatures, ActKey slots).
     SelfPing,
+    // {T}: This creature deals N damage to target player or planeswalker / any target  (Goblin Fireslinger,
+    // Cinder Pyromancer, Vulshok Sorcerer; CardParams::tap_ping_damage). HUMAN PLAY ONLY: the MANUAL
+    // activation (USER 2026-11-21: "leave the auto-tap, but add the option to manually tap"). The search
+    // never emits it -- every ping there is a sound fold (SpellEffects.h TAP PINGERS: the end-step sweep,
+    // Pyromancer's response ping, the lethal finish, the Browbeat pre-ping), so a manual one is dominated
+    // and would only add branching. It reaches a menu only through TurnSolver's AppendHumanManualPingPlans
+    // (one standalone plan per ready pinger, appended after every other plan). Resolution is the shared
+    // ResolveTapPing(..., ask_human=true), so it asks the same board-click `target` as every other ping.
+    // A {T} mode (summoning sickness applies). Appended LAST.
+    TapPing,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)

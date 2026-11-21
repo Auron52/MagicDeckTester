@@ -39527,6 +39527,10 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             }
             else if (CountSacNamed(state, controller, p.card.m_name) < n) { return false; }
         }
+        // A tap pinger's manual {T} (human play): the source must still be an own, untapped pinger that may
+        // {T} now (summoning sickness, CR 302.6) -- the one predicate every folded ping reads. A stale plan
+        // (it was tapped by an earlier step, or left) is a clean no-op.
+        if (mode == PermAbilityMode::TapPing && !TapPingerReady(state, p, controller, nullptr)) { return false; }
         if (mode == PermAbilityMode::TapTutorPut)
         {
             const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
@@ -39712,6 +39716,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::UntapLand:      return "untap target land";
         case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
         case PermAbilityMode::SelfPing:       return "it deals 1 damage to itself";
+        case PermAbilityMode::TapPing:        return "it deals 1 damage to target player or planeswalker";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
@@ -39858,6 +39863,13 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
     }
     if (mode == PermAbilityMode::SelfPing && d != nullptr && d->params.self_ping_damage != 1)
     { return "it deals " + std::to_string(d->params.self_ping_damage) + " damage to itself"; }
+    // A tap pinger's manual {T} (human play): the damage and the target class off the params (Vulshok
+    // Sorcerer's "any target" vs Fireslinger / Pyromancer's "target player or planeswalker").
+    if (mode == PermAbilityMode::TapPing && d != nullptr && d->params.tap_ping_damage > 0)
+    {
+        return "it deals " + std::to_string(d->params.tap_ping_damage) + " damage to "
+             + (d->params.tap_ping_any_target ? "any target" : "target player or planeswalker");
+    }
     if (mode == PermAbilityMode::TapLifegain && d != nullptr && d->params.tap_lifegain_per_subtype.empty()
         && d->params.tap_lifegain_flat > 0)
     { return "gain " + std::to_string(d->params.tap_lifegain_flat) + " life"; }
@@ -41028,6 +41040,16 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // Stuffy Doll: "{T}: This creature deals 1 damage to itself." ONE pipeline damage event
             // (dmgrx::SelfPingAt), so the Doll's reflection deals that much to its chosen player.
             dmgrx::SelfPingAt(state, controller, idx, *d);
+            break;
+        }
+        case PermAbilityMode::TapPing:
+        {
+            // A tap pinger's MANUAL activation (human play only -- AppendHumanManualPingPlans). The {T}
+            // is already paid by the caller (SetPermTapped); ResolveTapPing re-marks it and resolves the
+            // ping exactly as every folded ping does in human play: the board-click `target` decision
+            // (players only for "target player or planeswalker", the full set for Vulshok's "any target").
+            if (d->params.tap_ping_damage > 0)
+            { ResolveTapPing(state, controller, static_cast<std::size_t>(idx), *d, /*ask_human=*/true); }
             break;
         }
         case PermAbilityMode::TapLifegain:

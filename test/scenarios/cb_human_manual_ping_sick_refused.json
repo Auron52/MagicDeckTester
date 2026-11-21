@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Cinder Pyromancer", "controller": 0, "sick": true },
+    { "name": "Mountain", "controller": 0 }
+  ],
+  "hand": [],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": [
+    "A summoning-sick Cinder Pyromancer cannot {T} (CR 302.6): the human menu offers no manual ping, so `tapping=Cinder Pyromancer` is not an accepted line."
+  ],
+  "validate_line": "tapping=Cinder Pyromancer",
+  "expect_verdict": "legal_not_enumerated"
+}

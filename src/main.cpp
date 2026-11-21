@@ -635,6 +635,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
     {
         return DigActionLabel(plan.actions[0], s, plan);
     }
+    // A tap pinger's MANUAL ping (human play; TurnSolver::AppendHumanManualPingPlans): a standalone line
+    // that spends no land drop and casts nothing -- name the ability, like a dig.
+    if (TurnSolver::IsHumanManualPingPlan(plan))
+    {
+        const Action& a = plan.actions[0];
+        return "tap " + a.card_name.str() + ": " + PermAbilityLabelFor(a.ability_mode, a.def);
+    }
     if (plan.land_decided && !plan.land_to_play.empty())
     {
         os << "land=" << plan.land_to_play;
@@ -2536,6 +2543,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             { continue; }
             emit_order.push_back(i); taken[i] = 1; break;
         }
+        // ...and every tap pinger's MANUAL ping (TurnSolver::AppendHumanManualPingPlans) for the same
+        // reason: they are appended LAST, and the viewer finds a pinger's click affordance in the emitted
+        // slice. One slot per ready pinger.
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            if (hide_bundle[i] || taken[i] || !TurnSolver::IsHumanManualPingPlan(plans[i])) { continue; }
+            emit_order.push_back(i); taken[i] = 1;
+        }
         // PAYLOAD COVERAGE FIRST -- one emitted plan per distinct (action, target, count).
         //
         // USER 2026-09-10: "sometimes the emiel or displacer can no longer choose targets". The
@@ -3262,6 +3277,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::SelfPing)
                 { os << ", \"verb\": \"selfping\""; }
+                // A tap pinger's MANUAL ping (Goblin Fireslinger / Cinder Pyromancer / Vulshok Sorcerer; human
+                // play only, TurnSolver::AppendHumanManualPingPlans). Always its own verb -- the mode is new,
+                // so there is no legacy `cast=` matching to keep -- and `cast=Cinder Pyromancer` is a hand
+                // cast. `alone`: the engine offers it as a STANDALONE one-action plan, so the viewer commits
+                // it as a segment of its own (LineBuild.segmentParts) and the queue order is the play order
+                // ("tap Pyromancer, cast Bolt (it untaps), tap it again" = three segments). `repeatable`
+                // lets the second click queue a second tap; the engine refuses one that is not ready yet.
+                else if (ac.kind == Action::Kind::ActivatePermAbility
+                         && ac.ability_mode == Action::AbilityMode::TapPing)
+                { os << ", \"verb\": \"tapping\", \"alone\": true"; }
                 // Evolving Wilds / Terramorphic Expanse / Myriad Landscape / Khalni Heart Expedition:
                 // an activated land search names its SOURCE (a land is never cast; a Khalni may also
                 // sit in hand). The basics it finds are asked at resolution (`tutor_etb`).
@@ -3643,7 +3668,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || (ac.kind == Action::Kind::ActivatePermAbility
                     && (ac.ability_mode == Action::AbilityMode::Drain
                         || ac.ability_mode == Action::AbilityMode::ExileTop
-                        || ac.ability_mode == Action::AbilityMode::TargetPump)))
+                        || ac.ability_mode == Action::AbilityMode::TargetPump
+                        // A tap pinger's manual ping (human play): {T}, but Cinder Pyromancer untaps on
+                        // each red cast, so a second tap in the same main is a real line -- the click
+                        // stacks and the engine refuses a tap whose source is not ready by then.
+                        || ac.ability_mode == Action::AbilityMode::TapPing)))
             { os << ", \"repeatable\": true"; }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             // Solo-target trick (Zada/Mirrorwing): the target is chosen at RESOLUTION via the
@@ -6281,6 +6310,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         // taplife= reason. A LAND tap-draw source keeps the verbless cast= matching.
         else if (key == "tapdraw")   { ls.tap_draws.push_back(val); }
         else if (key == "selfping")  { ls.self_pings.push_back(val); }    // Stuffy Doll "{T}: 1 damage to itself"
+        else if (key == "tapping")   { ls.tap_pings.push_back(val); }     // a tap pinger's manual {T} (human play)
     }
     return ls;
 }

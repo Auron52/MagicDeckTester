@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Cinder Pyromancer", "controller": 0 },
+    { "name": "Goblin Fireslinger", "controller": 0, "tapped": true },
+    { "name": "Goblin Fireslinger", "controller": 0, "sick": true },
+    { "name": "Vulshok Sorcerer", "controller": 0, "sick": true },
+    { "name": "Mountain", "controller": 0 }
+  ],
+  "hand": [ "Lightning Bolt" ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": [
+    "USER 2026-11-21: 'It seems like Cinder Pyromancer auto-taps in the viewer, but cannot be manually tapped. Let's leave the auto-tap, but add the option to manually tap.'",
+    "The human main-phase menu offers ONE standalone 'tap <pinger>' plan per READY pinger (TurnSolver::AppendHumanManualPingPlans): the untapped Pyromancer and the hasty (sick) Vulshok Sorcerer -- not the tapped Fireslinger, not the summoning-sick one. They are appended after every other plan; the Bolt lines are still there."
+  ],
+  "expect_menu": [
+    { "summary_contains": "tap Cinder Pyromancer: it deals 1 damage to target player or planeswalker", "count": 1 },
+    { "summary_contains": "tap Vulshok Sorcerer: it deals 1 damage to any target", "count": 1 },
+    { "summary_contains": "tap Goblin Fireslinger", "count": 0 },
+    { "summary_contains": "Lightning Bolt", "count": 1 }
+  ]
+}
