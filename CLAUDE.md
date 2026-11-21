@@ -285,6 +285,39 @@ the CPU if possible."*), checking memory (`free -g`) first.
     so it stays off", and never fall back to a generic default. *"There is no case where we should do
     that."*
 
+- **A QUESTION FOR THE USER IS AN AREA WAITING ON THE USER'S INPUT — NOT ON YOUR INVESTIGATION OR TESTS
+  (user directive, 2026-11-21).** The user's words: *"questions for me should all be something that is
+  blocking a part of the work or integration"*, and *"I don't mean blocking as in you can't do anything
+  else. I mean blocking as-in you don't know how to proceed on an area and need my input on it."*
+  * **What prompted it.** 2026-11-21 an agent's "outstanding questions" list for the Blood Sun analysis
+    had ten items. One was still being measured (*"This shouldn't be in the question list until you are
+    finished with it"*). Others the standing rules already settled: a sound fold defaults ON, and an
+    agent's own dead lever gets deleted. Others were just status or notes. By the user's test, not one of
+    the ten was a question. A list like that buries the real ones.
+  * **The test, per item: do you know how to proceed on this area without the user?** If not, ask. If you
+    do, it is not a question.
+  * **Not a question (report it as status, or just do it):**
+    * Anything still waiting on an agent's investigation, a test, a measurement or a running job. It
+      becomes a question when that work is FINISHED and the user's decision is what is left, for example
+      a user-owned default once its A/B and recovery checks are in.
+    * Anything a rule in this file or a recorded user ruling already decides. Act on it and say what you
+      did.
+    * Information the user may want, such as a viewer default they can toggle or a known gap you chose
+      to leave. Say it as information.
+  * **Still a question, so ask it (this rule must NOT suppress these):**
+    * Any USER-OWNED decision whose data is in (the rule above): cast order, mulligan or keep policy,
+      discard buckets, card deferrals, the default of a heuristic prune or lossy lever.
+    * Anything where the request is ambiguous, or two user rulings conflict.
+    * Card or deck facts only the user knows, such as how they play a card or what a placeholder stands
+      for.
+    * A design fork no rule settles where either choice changes the work.
+    * Any action that is destructive or hard to reverse.
+    * When unsure which kind an item is, ask. A real question left out costs far more than one
+      borderline question asked.
+  * **This changes WHAT counts as a question, never HOW you ask.** NEVER BLOCK ON A QUESTION above still
+    applies: state the question and your default, keep working, and repeat open questions in the closing
+    summary.
+
 - **THE OVERNIGHT TIER IS AN OCCASIONAL RUN, USUALLY ONCE A DAY -- NEVER BETWEEN FIXES OR
   OPTIMIZATIONS (the user's design all along, restated 2026-10-10).** The user's words: *"It isn't
   intended to be run in between each fix (or optimization)"*, *"That was always the design. Whoever set
