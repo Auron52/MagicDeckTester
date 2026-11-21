@@ -91,3 +91,13 @@ Next step: test index 68 or 70 (skip 69), using the loop in bisect_fc.sh with lo
 are the held-fetch / Boars fetch commits in that window. Note that MTG_HELD_FETCH_CRACK_FIRST=0 alone did
 not restore the d0 games, so also try MTG_BOARS_FETCH_PIPS / MTG_BOARS_FETCH_PRUNE / other levers added
 there.
+
+## UPDATE (d8 b0 run COMPLETE; box lock released)
+Final classification of 178 games (the 6 'fivecolour' pending rows are d0 trace rows with no d8b0 job; ignore them):
+recovers 76 (Cyclone 53/53, Hinata 13, Gods 4, Alchemist 2, Hinata2HG 2, MB2HG 1, Snow 1);
+same turn both arms 9 (Hinata 6, Hinata2HG 2, Gods2HG 1); new better 2 (Mill: the old arm is UNWON at the case
+setting AND at d8 b0 for s5005 gi3/gi4, so the old GT win does not replay from 1443eeba0, which is worth a note);
+differs (new slower at d8 b0) 90 = Gods 24 (dredge lever) + Midrange Burn 24 (opponent lands) + Spirits 10 (keep
+table) + PD 1 (MTG_PD_LATER_HAND_HOLD) + unattributed 31 (Creature Giving 20, Galadriel 5, Hinata 2, Antilife 1,
+Antilife2HG 1, Minotaur 1, Alchemist 1); new deck 1 (Red Elemental).
+Every Cyclone PERSISTS game recovers. Use these numbers for the doc's classification table.
