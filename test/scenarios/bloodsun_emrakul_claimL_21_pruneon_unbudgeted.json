@@ -1,0 +1,145 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 30,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Diabolic Revelation"
+ ],
+ "library": [
+  "Emrakul, the Aeons Torn",
+  "Diabolic Revelation"
+ ],
+ "library_filler": "Swamp",
+ "library_size": 12,
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 6,
+ "expect_win_turn": 5,
+ "expect_log_sequence": [
+  "CAST_SPELL Diabolic Revelation",
+  "CAST_SPELL Emrakul, the Aeons Torn"
+ ],
+ "comment": "Blood Sun step 7: the _pruneoff Claim-L board with the USER prune at its default (ON). B3 (a)'s 'X = 1 only with another Revelation in hand' is scoped to the case where X = 1 is the largest X the mana affords (6 mana; USER: 'My guidance on duplicates is for when you have 6 mana.'), so at 21 mana the X = 1 {Emrakul} + Emrakul line is offered and wins at round 5."
+}

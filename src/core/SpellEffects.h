@@ -50827,6 +50827,45 @@ inline bool GateEntersUntappedByGond(const GameState& state, const CardDefinitio
     return false;
 }
 
+// THE SHOCK PAY OFF OUR TURN IS DOMINATED (Blood Sun step 7; a SOUND dominance fold, not a heuristic). A shock land put
+// onto OUR battlefield on a turn that is NOT ours (Burgeoning, after the opponent's land play) untaps in our own untap
+// step before we could use it at sorcery speed, so the 2 life pay buys an untapped land only for what could still use
+// it THIS turn: an instant / flash spell, an activated ability that costs mana (any timing a non-sorcery ability has),
+// or an "untapped lands" consumer that a later put of the same turn can feed (Lotus Vale / Scorched Ruins' sacrifice of
+// two UNTAPPED lands). With none of them, tapped and untapped reach the same next decision with 2 more life on the
+// tapped side -- and where own death is live the life is a resource (B1), so paying is strictly worse. Read off the card
+// data, FAIL-CLOSED (any doubt is a use, and the engine rule -- pay -- stands): hand cards that are instants, have
+// flash, carry a non-graveyard param mana cost (transmute is sorcery-speed only, CR 702.53a, so it is not a use) or are
+// an untapped-lands consumer; our permanents with a non-graveyard param mana cost, a fetch, or a non-mana land ability
+// the Blood Sun inventory could not classify (land_ungated_ability). Mana abilities are not uses (Graven Cairns'
+// filter is one: it only makes mana, which has nothing to buy). Scope: own death live and an opted-in provider
+// (SearchesShockLandPay, BloodSunProvider), so every other deck keeps the always-pay rule byte-identically.
+inline bool ShockPayDominatedOffTurn(const GameState& state, int ctrl)
+{
+    if (ctrl == state.active_player_index) { return false; }
+    if (!state.own_death_live || !ResolveProvider(state).SearchesShockLandPay()) { return false; }
+    auto offturn_cost = [](const std::string& key)
+    { return key != "flashback_cost" && key != "unearth_cost" && key != "eternalize_cost" && key != "transmute_cost"; };
+    const Player& pl = state.players[static_cast<std::size_t>(ctrl)];
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return false; }
+        if (d->card.IsInstant() || d->card.HasKeyword(Keyword::Flash)) { return false; }
+        if (d->card.IsLand() && d->params.etb_replace_sacrifice_untapped_lands > 0) { return false; }
+        for (const auto& kc : d->param_mana_costs) { if (offturn_cost(kc.first)) { return false; } }
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ctrl) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || p.def_absent) { return false; }
+        if (!d->params.fetch_land_types.empty() || !d->land_ungated_ability.empty()) { return false; }
+        for (const auto& kc : d->param_mana_costs) { if (offturn_cost(kc.first)) { return false; } }
+    }
+    return true;
+}
+
 // Pure heuristic predicate: would this land enter tapped under autonomous play? Does NOT mutate
 // state (no life payment). Call while the card is still in hand (the reveal check scans the hand).
 //   - Gond Gate: a Gate whose controller controls a Gond Gate enters untapped (checked FIRST: the
@@ -50852,7 +50891,8 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
     if (pp.etb_pay_life_to_untap > 0)
     {
         const bool heur = allow_pay_life
-                       && state.players[static_cast<std::size_t>(ctrl)].life > pp.etb_pay_life_to_untap;
+                       && state.players[static_cast<std::size_t>(ctrl)].life > pp.etb_pay_life_to_untap
+                       && !ShockPayDominatedOffTurn(state, ctrl);   // Blood Sun step 7 (own death; inert elsewhere)
         return !ResolveProvider(state).LandEntersUntapped(state, def, heur);
     }
     // Controlling a listed subtype forces the land untapped BEFORE the provider's reveal hook: there

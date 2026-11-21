@@ -183,6 +183,16 @@ TEST_CASE("Blood Sun step 7: fold F-E1 keeps only the older copy when the copies
         Put7(s, "Fastbond", 63);
         CHECK(EmrakulKeeps(s) == std::vector<int>{ 1 });
     }
+    {   // a creature in HAND the same plan could cast first (step 7 smoke, minotaur2hg gi61): fail closed, both keeps
+        GameState s = EmrakulBoard(Bs7());
+        s.players[0].hand.push_back(Card7("Monastery Swiftspear", 64));
+        CHECK(EmrakulKeeps(s) == std::vector<int>{ 1, 2 });
+    }
+    {   // a noncreature, non-watcher card in hand (Time Warp) does not: still the fold
+        GameState s = EmrakulBoard(Bs7());
+        s.players[0].hand.push_back(Card7("Time Warp", 65));
+        CHECK(EmrakulKeeps(s) == std::vector<int>{ 1 });
+    }
 }
 
 TEST_CASE("Blood Sun step 7: Overgrown Tomb under Blood Sun enters untapped, pays nothing, asks nothing")
@@ -251,5 +261,49 @@ TEST_CASE("Blood Sun step 7: without Blood Sun the Tomb's pay / tapped answer is
         Put7(s, "Swamp", 51);
         s.players[0].hand.push_back(Card7(kTomb, 70));
         CHECK_FALSE(LandShockPayPinned(s, Def7(kTomb)));
+    }
+}
+
+// Parent resolution 2 (step 7): a Tomb put onto our battlefield on the OPPONENT's turn (Burgeoning) untaps in our untap
+// step before any sorcery-speed use, so with no instant / flash / mana-costed ability / untapped-lands consumer the pay
+// is dominated: tapped, no life paid (ShockPayDominatedOffTurn). Fail-closed: any such use keeps the engine rule (pay).
+TEST_CASE("Blood Sun step 7: a Tomb put on the opponent's turn enters tapped unless something could use it")
+{
+    auto put = [](GameState s) -> std::pair<bool, int>
+    {
+        s.active_player_index = 1;   // the opponent's turn; the land is ours (controller 0)
+        EnterLand(s, Def7(kTomb), 70, /*resolve_full_etb=*/true, /*fire_landfall=*/true, LandEntryTap::Natural, 0);
+        const Permanent& t = s.battlefield.back();
+        REQUIRE(t.card.m_name.str() == kTomb);
+        return { t.tapped, s.players[0].life };
+    };
+    auto with_hand = [](const DecisionProvider& prov, std::vector<const char*> hand) -> GameState
+    {
+        GameState s = Base7(prov);
+        Put7(s, "Swamp", 51, /*tapped=*/true);
+        Put7(s, "Burgeoning", 52);
+        int n = 80;
+        for (const char* h : hand) { s.players[0].hand.push_back(Card7(h, n++)); }
+        return s;
+    };
+    // Nothing could use it this turn (a sorcery, a creature, a transmute -- sorcery speed only): tapped, 20 life.
+    CHECK(put(with_hand(Bs7(), { "Time Warp", kEmrakul, "Dimir Machinations" })) == std::make_pair(true, 20));
+    // An instant in hand could: the engine rule pays.
+    CHECK(put(with_hand(Bs7(), { "Time Warp", "Lightning Bolt" })) == std::make_pair(false, 18));
+    // A Lotus Vale in hand: a later put of the same turn sacrifices two UNTAPPED lands -- a use, pays.
+    CHECK(put(with_hand(Bs7(), { "Lotus Vale" })) == std::make_pair(false, 18));
+    // Our own turn (a land drop or our own put): not this fold (the drop's pay is the searched pin).
+    {
+        GameState s = with_hand(Bs7(), { "Time Warp" });
+        CHECK_FALSE(ShockPayDominatedOffTurn(s, 0));
+        s.active_player_index = 1;
+        CHECK(ShockPayDominatedOffTurn(s, 0));
+    }
+    // Scope: another provider, or own death not live, keeps always-pay.
+    CHECK(put(with_hand(Gen7(), { "Time Warp" })) == std::make_pair(false, 18));
+    {
+        GameState s = with_hand(Bs7(), { "Time Warp" });
+        s.own_death_live = false;
+        CHECK(put(s) == std::make_pair(false, 18));
     }
 }

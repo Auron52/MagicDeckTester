@@ -134,8 +134,12 @@
  "library_filler": "Swamp",
  "library_size": 12,
  "depth": 3,
- "budget_ms": 0,
- "max_turns": 5,
- "expect_no_win": true,
- "comment": "Blood Sun step 7: the _pruneoff Claim-L board with the USER prune at its default (ON). B3 (a) as implemented refuses Revelation X = 1 without a second Revelation in hand, so the only round-5 kill (X = 1 {Emrakul} + Emrakul, 21 mana) is unreachable at any budget: no win by round 5. PINS A SURFACED CONFLICT, not a target: the USER's words were 'My guidance on duplicates is for when you have 6 mana' -- if the USER narrows (a) to the 6-mana case, flip this to expect_win_turn 5."
+ "budget_ms": 100,
+ "max_turns": 6,
+ "expect_win_turn": 5,
+ "expect_log_sequence": [
+  "CAST_SPELL Diabolic Revelation",
+  "CAST_SPELL Emrakul, the Aeons Torn"
+ ],
+ "comment": "Blood Sun step 7: the _pruneoff Claim-L board with the USER prune at its default (ON). B3 (a)'s 'X = 1 only with another Revelation in hand' is scoped to the case where X = 1 is the largest X the mana affords (6 mana; USER: 'My guidance on duplicates is for when you have 6 mana.'), so at 21 mana the X = 1 {Emrakul} + Emrakul line is offered and wins at round 5."
 }

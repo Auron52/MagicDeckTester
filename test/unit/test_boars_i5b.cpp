@@ -401,9 +401,16 @@ TEST_CASE("I5b dies clause: the enumeration twins every cast that kills an Ilhar
         return out;
     };
     {   // a legendary duplicate on the battlefield: tuck / leave, no untwinned cast (each also twinned on the
-        // legend-rule keep since I5b item 4 -- two casts per answer)
-        const GameState s = ILegendBoard();
+        // legend-rule keep since I5b item 4 -- two casts per answer). The old copy entered this turn, so the copies
+        // differ in more than age and fold F-E1 (Blood Sun step 7) keeps both keep twins.
+        GameState s = ILegendBoard();
+        for (Permanent& p : s.battlefield) { if (p.card.m_name == kIlharg) { p.entered_this_turn = true; } }
         CHECK(tucks(s, kIlharg, false) == std::vector<int>{ 1, 1, 2, 2 });
+    }
+    {   // the old copy plain and un-sick: fold F-E1 (LegendKeepOldDominates) drops keep-newest -- same death event,
+        // same tuck answer, and the old copy can attack now -- so one cast per tuck answer
+        const GameState s = ILegendBoard();
+        CHECK(tucks(s, kIlharg, false) == std::vector<int>{ 1, 2 });
     }
     {   // the emerge cast whose victim is Ilharg: twinned
         const GameState s = IEmergeBoard();
