@@ -560,3 +560,31 @@ TEST_CASE("worldfire keep order: a pending Halberdier pins T* to its arrival - 1
     for (const auto& e : r.entries)
     { if (!e.quota && e.hand_index != 1) { CHECK(e.key < bolt.key); } }
 }
+
+TEST_CASE("worldfire keep order: inside MANA the colours come first, then the next drop, then castable acceleration")
+{
+    // Six Mountains and no blue source: the Island (the only blue) outranks the Sandstone Needle the keep order prefers.
+    GameState s = WFTutorBase(6);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Sandstone Needle", 32),
+                         WFCard("Island", 33), WFCard("Ponder", 34)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(WFHandEntry(r, 3).quota);
+    CHECK(WFHandEntry(r, 2).quota);
+    CHECK(WFHandEntry(r, 3).key > WFHandEntry(r, 2).key);
+
+    // Six Islands and no red: a castable Seething Song needs one red source, so the Mountain is the colour land; the
+    // Song (castable acceleration) ranks above the further land drop.
+    GameState t;
+    t.active_player_index = 0; t.turn_number = 3;
+    for (int i = 0; i < 6; ++i) { WFPut(t, "Island", 10 + i); }
+    t.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Seething Song", 32),
+                         WFCard("Island", 33), WFCard("Mountain", 34)};
+    const WorldfireKeepRank q = WorldfireKeepRank::Of(t, 0, nullptr, false);
+    CHECK(q.t_star == 1);
+    const auto& song = WFHandEntry(q, 2);
+    const auto& island = WFHandEntry(q, 3);
+    const auto& mountain = WFHandEntry(q, 4);
+    CHECK(song.quota); CHECK(island.quota); CHECK(mountain.quota);
+    CHECK(mountain.key > song.key);
+    CHECK(song.key > island.key);
+}

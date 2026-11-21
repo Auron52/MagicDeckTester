@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing; MANA fill order: colours, next land drop, castable acceleration; 1 blue always, 2 often); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing; MANA fill order: colours, next land drop, castable acceleration; 1 blue always, 2 often; Bazaar only early); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -99,8 +99,9 @@ cast it. We need to ensure we have the colours we need, also."*). Fill order of 
 4. **Further land drops** through T\*, in the land keep order.
 
 **Land keep order** (best first): Sandstone Needle (RR, the red the deck needs) > Steam Vents > Scalding Tarn >
-Flooded Strand (the fetches also shuffle away a Brainstorm put-back) > Mountain > Mercadian Bazaar (only while
-T\* is 2+ turns away, so it can charge; otherwise after Mistrise) > Saprazzan Skerry (UU: generic only) > Island >
+Flooded Strand (the fetches also shuffle away a Brainstorm put-back) > Mountain > Mercadian Bazaar (ONLY EARLY: on our turns 1-2, when it can charge for several turns; from turn 3 on it is
+**the last land of all, below Mistrise Village, and the first land shed** -- USER 2026-11-21: *"Mercadian Bazaar
+should be greatly deprioritized if we are not early in the game. It is pretty slow if you don't drop it early."*) > Saprazzan Skerry (UU: generic only) > Island >
 Mistrise Village. A tapped land (Needle, Skerry, Bazaar) is only worth its yield before T\*; on T\*-1 or later an
 untapped land ranks above it.
 
