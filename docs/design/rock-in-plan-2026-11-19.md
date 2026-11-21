@@ -174,4 +174,41 @@ ON is approved on one condition: the Niv probe game that went from a T8 win to u
 unwon game counts 9 in `avg`), so the off arm's budgeted win was on the LAST turn. At d8 b0 BOTH arms are unwon (no
 win by T8; digests differ). The lever is therefore not worse than off at unlimited budget, but the game does not
 "recover" to the off arm's budgeted T8 -- the unbudgeted search does not find that win on either arm. Whether that
-counts as "looks okay" is reported to the USER; GT is not accepted until it is settled.
+counts as "looks okay" was then root-caused (below): clear clairvoyance, so GT was accepted.
+
+## gi152 root cause and verdict (agent 5, 2026-11-21): CLEAR CLAIRVOYANCE
+
+Replays (binary bc710d3f3-era `mtg.gi152`; scratch `build/scratch/claude_rock_plan/`):
+
+* **Play settings, with logs** (`g152p_{on,off}/`): reproduced, off T8, on unwon. Identical through T4. They first
+  diverge at **T5 main 1** on Spirebluff Canal + Cascade Bluffs + Island + Sol Ring with {Signet, Curiosity, Preordain,
+  Remand} in hand. Off: Izzet Signet (Sol Ring) + Curiosity, holding Remand and Preordain. On: Izzet Signet + Preordain +
+  Remand on its own Preordain (cantrip, draws the second Signet) + Curiosity. The four-spell line is one the rung makes
+  payable (the greedy strands it). The search CHOSE it, and the off arm's two-spell line stays available to it, so the
+  lever adds an option and removes none. The draws then differ. Off has Niv-Mizzet, the Firemind with three Curiosities
+  by T8 and draws out in combat. On reaches Niv only in T8 main 2 and ends with the opponent at 5.
+* **`MTG_NC_SEARCH=1` at play settings** (`logs_nc152/`): **BOTH arms unwon** (off 0f96fefd64562e4f, on
+  a091cce042f7233f). The unpruned (lever-off) arm loses its T8 win once it cannot see the library. That is the repo test
+  for clear clairvoyance.
+* **d8 b0, max_turns 8**: both unwon (agent 4). **d8 b0, max_turns 10** (`logs_mt10/`): **both arms win T9** (off
+  4de8cc5a7ff62b58, on 7beeba6db861d178). At unlimited budget the lever's line is exactly as fast as off's.
+
+Verdict: the off arm's budgeted T8 is a clairvoyant budget artefact, absent without clairvoyance and absent at
+unlimited budget. The lever does not remove a capability. GT accepted on that basis.
+
+## Default-ON tiers (chain7, full cores, binary da3d3cb61) and accept
+
+Gates: build ok; units rc 0; `MTG_LKR_TIGHT_CHECK=1` Niv 200: 0 `[lkr-tight-bad]`; SIGNET_PAIR 0/1 vs pfx1: 0 diffs;
+exactness slice vs ab3: 0 of 192 diffs. Tiers: smoke 13 cases changed, regression 18 (all fingerprint-only or small).
+
+Per-deck net (games x turns, loss = max_turns+1), searched / d0:
+smoke -- every searched cell 0 (8 play-changed at same score); d0 hinata -4, galadriel -1, **niv +20**, the rest 0.
+regression -- searched: dragons -1, hinata -1, niv -2 (d3 +1, d5 s2002 -3), the rest 0; d0: bruna -3, fivecolour -1,
+galadriel -4, niv -6, sea -2, the rest 0.
+The one searched SLOWER game, niv_regression_d3_s2002 gi17 (seed 2019) T4 -> T5, **recovers at d8 b0** (T4 on both
+arms, identical digest). Niv d0 (the greedy runner, lighter bar) nets +14 over the two tiers (smoke +20 / 1000, regression
+-6 / 1000), reported to the USER.
+
+CPU (Signet-pair cut, paired Niv 200, 1 thread): rung 15,034 ms -> 13,833 ms (-8%), table 6,901 -> 6,062 ms,
+process CPU 204.3 s -> 200.3 s (-2%), fired identical (126,399). Exact slice at 32 threads: Niv on/off CPU **1.0630**
+(units 0.9942). The lever's remaining Niv cost is about +6%, uncut.
