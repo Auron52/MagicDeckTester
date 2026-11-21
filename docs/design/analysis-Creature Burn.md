@@ -198,8 +198,9 @@ exemption, unchanged by this batch.
      land positions; Browbeat second-main cost; echo census result; Pyromancer human-play response ping +
      accounting un-ping; 1-power pinger attack-vs-ping exemption; Peaks inert-class premise (revisit with a
      Fling-type card); Price of Progress vs Peaks self-damage (inert); heavy unbudgeted tail; provider cert
-     NotAssessed; the Blaze fix agent's open question (default prefers the TOUGHEST opponent creature; Midrange_Burn
-     `claude_s10_gi9` label changes "1/1"->"2/2"; one-line change to keep list order).
+     NotAssessed. (The Blaze default question is SETTLED: USER 2026-11-21, *"The opponent's toughest creature is good
+     for searing blaze."* *"(in Goldfishing. In a real game you would probably target the best creature you can kill)"*.
+     Keep toughest-first for goldfish (Phase 2: the best killable creature); the Midrange_Burn `claude_s10_gi9` label change "1/1"->"2/2" stands.)
   5. Push: `python3 scripts/push_queue.py join` once (slow box, <= once / 4 h); at the turn: rebase,
      `check_references_safe.py`, Release + unit + smoke (MTG_PGO=0) + `check_gt_logs.py` under `push_queue.py hold`,
      then `land`; watch CI in background `gh run watch <id> --interval 60 --exit-status`.
@@ -346,6 +347,9 @@ Validation (Release, post-change):
     recorded `--choices` replay as before. Unit test + scenario `creatureburn_human_blaze_default_opponent`
     (fails on the old binary). Smoke on the 8 burn decks: play-changed 0. References of Burn, Midrange_Burn,
     Modern_RW_Burn, 1_Drop_Burn (46) replay identically on both binaries (21 ok, 25 repaired as before, 0 drift).
+    Toughest-first default CONFIRMED by the USER 2026-11-21: *"The opponent's toughest creature is good for searing
+    blaze."* and *"(in Goldfishing. In a real game you would probably target the best creature you can kill)"*. So this ranking is for goldfish only; Phase 2 (a real
+    opponent) should default to the best creature the burn can kill.
 - dismissed: g2 T3, the frame's `legal_targets[].index` (object index) vs the reply `options[].index`. FALSE
   POSITIVE: the engine did what the reply said, and the note says "reply an option index". Every option-list
   `target` note now names `options[].index` vs `legal_targets[].index` explicitly, and so does `claude-play.md`
