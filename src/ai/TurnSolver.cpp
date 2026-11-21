@@ -26395,8 +26395,14 @@ static bool RemandCountersCast(const Action& a)
 // draw a card" and realised as plain X -- the greedy pick and the search's static value both read the
 // wrong line. Rejecting it loses nothing: what it realises is exactly the plain {Irencrag, X} subset,
 // which the enumerators admit on less mana. Every non-remand action counts one (byte-identical).
+// A SUSPEND is not a cast (CR 702.62a: suspending exiles the card from hand; it is CAST later, when its last
+// time counter is removed), so it counts ZERO against a restrictor. Counting it as one refused the Worldfire
+// deck's core kill turn -- suspend Rift Bolt + Irencrag Feat + Worldfire -- at every budget (claude-play sweep
+// 2026-11-21, seed 9300009 / 9300012: legal_not_enumerated; Rift Bolt ranks 20 > Feat's 18). Both apply
+// worlds already let a suspend follow the Feat (it never touches casts_remaining_this_turn).
 static int RestrictorCastsOf(const Action& a)
 {
+    if (a.kind == Action::Kind::Suspend) { return 0; }
     return a.remand_by.empty() ? 1 : (a.remand_chain_by.empty() ? 2 : 3);   // Remand-on-Remand: X, A, B
 }
 

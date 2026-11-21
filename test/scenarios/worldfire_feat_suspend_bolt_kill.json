@@ -1,0 +1,59 @@
+{
+  "comment": "Irencrag Feat restrictor vs SUSPEND (claude-play sweep 2026-11-21, seeds 9300009/9300012): a suspend is not a cast, so 'suspend Rift Bolt + Irencrag Feat + Worldfire' is legal and must be enumerated. Seven Mountains: Feat on four floats 7, three more = 10 = {R} suspend + Worldfire {6}{R}{R}{R}; Worldfire sets life to 1, the Bolt kills at the T5 upkeep. Before the fix the restrictor counted the suspend as a second spell after Feat and the line was unfindable at any budget.",
+  "deck": "decks/Worldfire/Worldfire.cod",
+  "profile": "decks/Worldfire/Worldfire.profile.json",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Rift Bolt",
+    "Irencrag Feat",
+    "Worldfire"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "expect_win_turn": 5
+}
