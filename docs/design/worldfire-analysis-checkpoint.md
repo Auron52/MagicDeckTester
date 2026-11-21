@@ -70,20 +70,29 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   trait (Vampires 3x units); passive opponent's oldest-first cleanup hands Burn / Extra Turns / RW Burn free
   turns.
 
+## Done since (~23:00 UTC)
+- Budget curve d5 b20/50/100/200, 200 held-out games (ledger 5a3c9d2be); gi53 wins T6 at d8 b0 (548ab8969).
+- Windows CI 44952777971 (wip/freeturn d35211372): success.
+- Bucket design for the cantrips + discard (USER request + 12 USER amendments, verbatim):
+  docs/design/worldfire-discard-buckets.md (latest 36f17f841).
+- Free-turn follow-up agent stopped at 269K: handoff /workspaces/MagicDeckTester/.claude/worktrees/freeturn/logs/freeturn/handoff2.md
+  (b861f7160 measured; 3abd94208 cleanup-floor WIP UNBUILT; its 5 USER questions are in its report / handoff).
+- FOUND: my landing 42d819bc0 shipped a reference play-drift (Creature_Burn/claude_s9_gi8; tiers_land.log said
+  REGRESSION DETECTED). Every session's regression tier inherits it.
+
 ## Running
-- Free-turn follow-up agent (fresh, Opus) in the freeturn worktree: fixes those three, units, flags-OFF smoke,
-  one flag-ON regression tier, doc update, push wip/freeturn. Handoff file if it hits 250K:
-  logs/freeturn/handoff2.md.
-- Windows CI 44952777971 (wip/freeturn) -- watch in background.
-- gi4 (seed 9300005) d8 b0 replay, PID 3629867 (5h+) -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
+- URGENT ref-fix agent: ports only the opponent_land_entry stamp + --legacy-opponent-land-entry replay from
+  b861f7160 onto origin in worktree .claude/worktrees/refland (branch wip/refland); validates; parent lands with
+  `push_queue.py join --urgent` (fix ONLY in that landing).
+- Cantrip/discard bucket agent in the worldfire worktree (flags default OFF; A/B 9100001 x64 + 9200001 x96).
+- gi4 (seed 9300005) d8 b0 replay, PID 3629867 (6h+) -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
 
 ## Next, in order
-1. gi4 d8 b0 result -> ledger.
-2. Relay the follow-up agent's report; surface USER questions 1-8 (free-turn defaults + cap/tie-break, cleanup
-   lands-first, steal_tap_count).
-3. Push the unpushed worldfire docs commits (40bd2d0c5 .. 4a7ff87ea; ungated docs -- batch with next landing
-   or push directly as docs-only).
-4. Stage 6 report; CronDelete cf1c0324 when everything is reported.
+1. Land wip/refland urgently once validated (join --urgent; land; CI watch).
+2. Then a fresh free-turn agent from handoff2.md (floor version: build, units, smoke, one flag-ON tier, doc, push).
+3. Relay the bucket agent's A/B; surface the bucket doc's open questions.
+4. gi4 d8 b0 result -> ledger.
+5. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
 ## Open USER questions (defaults taken)
 - Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
