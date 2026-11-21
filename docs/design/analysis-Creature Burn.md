@@ -169,30 +169,44 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-20 ~15:20 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~00:45 UTC) — resume here after compaction
 
-* Done: Stage 1; Stage 2 batch 1 (`8245ff278` after rebase) and batch 2 (`85531beaa`, integrator 2; handoff
-  `logs/creature-burn/integrator2-handoff.md`). Browbeat policy A is USER-ruled (item 1 above).
-* Rebased onto origin 2026-11-20 ~14:00 UTC (114 commits incl. the USER's slow-reference fix `08b13f602`);
-  pre-rebase branch kept as `backup/cb-prerebase-20261120`. Conflicts: GT header line, `job_cost.tsv` (took the
-  replayed 1 Drop Burn accept), CLAUDE.md (kept both rulings), `scryfall_reference.json` (key-level union).
-  `check_gt_logs.py` 1345 consistent / 0 stale. Post-rebase Release EXIT 0; unit 3807/3807; scenarios 598/598.
-* RUNNING: post-rebase smoke subset (byte-identity of batches 1+2 on boars/pd/onedropburn/burn/landfall/hinata/
-  redelem/lhc/midrangeburn/goblins + 2HG), log `build/scratch/cb-orch/smoke.log`, marker
-  `build/scratch/cb-orch/SMOKE_DONE`. Integrator 3 (subagent; brief `logs/creature-burn/integrator3-brief.md`):
-  Teetering Peaks + `CreatureBurnProvider` + the pre-ping linebuild token check; waits on SMOKE_DONE before
-  building. Handoff, if any: `logs/creature-burn/integrator3-handoff.md`.
+* Done (all local, NOTHING PUSHED yet): Stages 1-4, 4a provider, 4-bis rows in all 3 tiers + GT accepted
+  (`a478b813c`), claude-play sweep (`3cf881139`; its one real flag fixed by `c5f3b7610`, ledger `57744efa4`),
+  DECISIONS.md echo row (`690bded3b`), echo census NO GAP (`d89428098`), Scryfall subset refresh of all 19 deck cards
+  (snapshot unchanged; hard fields all match). verify_deck `--no-sweep`: every gate PASS except claude_sweep, which
+  should now pass (0 unresolved).
+* RUNNING (my own probes, killable):
+  1. Leaf tie-break EXTENSION, pid in `build/scratch/cb-orch/tiebreak-ext.pid`, log
+     `build/scratch/cb-orch/tiebreak-ext.log` (EXIT line at end), batch out `logs/leaf_tiebreak/creatureburn-ext.out`.
+     `--seed-base 2200000 --blocks 12`, MTG_PGO=0. Run 1 (seeds 1000000..2100000, saved in
+     `build/scratch/cb-orch/tiebreak-run1.{log,out}`): 12000 paired, 6 changed, net -8 turns, 0 worse / 6 better,
+     both halves -4 => NO SIGN (needs 20). Pool run1 + ext (24 blocks); if still < 20 changed, default ON stands
+     ("a lever that never fires costs nothing"); a consistent sign that helps also means keep ON (no opt-out).
+  2. Browbeat second-main PROBE build in worktree `.claude/worktrees/cb-m2probe` (detached HEAD 57744efa4 -- same src as HEAD, one
+     uncommitted line in `GoldFishRunner::DeckUsesSecondMain`: `MTG_CB_PROBE_BROWBEAT_M2=0` drops Browbeat's
+     trigger; NEVER land it), log `build/scratch/cb-orch/m2probe-build.log`, run via `scripts/box_lane.sh --slots 4`.
 * NEXT, in order:
-  1. Integrator 3 commits -> Stage 3 coverage (all full) -> Stage 4 `analyze_deck.py` profile -> 4-bis suite rows
-     (all 3 tiers; copy the onedropburn shape; `suite_gate.py --cost` vs Hinata 3x) -> Stage 5 (`verify_deck.py`,
-     nonconv/fd-diverge, multi-depth, leaf tie-break, claude-play sweep ~15-20 games, viewer audit 5h, discard
-     buckets 5i).
-  2. Measure + surface: Browbeat's DeckUsesSecondMain cost (d3/d5 ms/game with vs without); Keldon Champion echo
-     boundary gap (`MTG_ECHO_AXIS_STATS=1`).
-  3. Full Scryfall `audit_card_fields.py --update` re-run (the 2026-11-20 run hit network errors; batch cards were
-     merged via subsets).
-* Status timer: session-only cron `7 */2 * * *`. Push: slow 12-thread box — join the push queue at most once per
-  4 h; subagents never push. Nothing pushed yet this session.
+  1. When BOTH are done: one pooled batch ALONE on the box with the probe binary, both arms same binary
+     (lever on vs off), d3 b10 and d5 b20, ~150 games/arm on regression seeds; report ms/game + avg win turn per
+     arm to the USER (cost of Browbeat opening main 2; soundness says keep it ON). Then remove the probe worktree
+     with `scripts/safe_worktree_remove.sh` (after `check_references_safe.py`).
+  2. Pool the tie-break verdict; act (record in ledger; opt-out only if it measurably HURTS).
+  3. `python3 scripts/verify_deck.py "decks/Creature Burn/Creature Burn.cod" --write-ledger` to a clean gate.
+  4. Stage 6 report with the 6a disclosure + USER items: MTG_CB_PEAKS_PLAIN_FOLD default ON (provider prune, sound
+     only under attack-all vs never-blocking goldfish); Browbeat dropped from the provider signature; extra Peaks
+     land positions; Browbeat second-main cost; echo census result; Pyromancer human-play response ping +
+     accounting un-ping; 1-power pinger attack-vs-ping exemption; Peaks inert-class premise (revisit with a
+     Fling-type card); Price of Progress vs Peaks self-damage (inert); heavy unbudgeted tail; provider cert
+     NotAssessed; the Blaze fix agent's open question (default prefers the TOUGHEST opponent creature; Midrange_Burn
+     `claude_s10_gi9` label changes "1/1"->"2/2"; one-line change to keep list order).
+  5. Push: `python3 scripts/push_queue.py join` once (slow box, <= once / 4 h); at the turn: rebase,
+     `check_references_safe.py`, Release + unit + smoke (MTG_PGO=0) + `check_gt_logs.py` under `push_queue.py hold`,
+     then `land`; watch CI in background `gh run watch <id> --interval 60 --exit-status`.
+  6. CronDelete the status timer `b718d9a3` once done; `check_references_safe.py` at session close.
+* Never commit `.vscode/settings.json` or `test/ref_bench.json` (not ours). Note: `build/PGO` is stale (a PGO build
+  failed while the fix agent's edits sat in the primary tree); harness falls back to Release, byte-identical.
+* Status timer: session-only cron `7 */2 * * *` (id b718d9a3).
 
 Browbeat policy relabel (USER ruling 2026-11-20, relayed by the coordinator; NO behaviour change): the code comment
 and the cards.json bracket note now read USER-ruled, quoting *"I would probably do the same thing as devil, which
