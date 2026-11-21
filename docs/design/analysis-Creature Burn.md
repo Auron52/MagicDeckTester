@@ -169,23 +169,29 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~06:55 UTC) — resume here after compaction
-DONE: Stages 1-5 + verify_deck GATE PASS (f0e61328b); 5c2 tie-break KEEP ON (878737457); Browbeat every-turn M2
-probe (90e4fd025); Phase-2 burn-target deferral doc (77e9e5787); Browbeat per-turn fold `1328b46b0` (DEFAULT OFF,
-measured not an identity; default tree byte-identical, so verify_deck's runtime gates stand). Worktree cb-m2fold
-removed (branch wip/cb-m2fold kept locally).
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~09:20 UTC) — resume here after compaction
+DONE: Stages 1-5 + verify_deck GATE PASS; 5c2 tie-break KEEP ON; Browbeat fold (DEFAULT OFF, measured not an
+identity; ledger section "The per-turn fold"); worktree cb-m2fold removed. REBASED onto origin 449702ab3 (28 local
+commits). Conflicts: GT files -> origin's numbers + the new creatureburn keys (so midrangeburn/onedropburn GT halves
+are SPLIT until re-accepted); HeuristicArm.h -> origin's slots + CB_BROWBEAT_M2_RESTRICT last. Primary Release built
+09:14 UTC on the rebased tree; USER told the VIEWER IS READY for Creature Burn references.
 
-RUNNING: primary Release build (for the viewer: picks up c5f3b7610, the Searing Blaze human default).
+RUNNING: landing chain `build/scratch/cb-orch/landing/chain.sh` (PID 697752, under push_queue hold; status in
+`landing/status`, DONE marker `landing/DONE`): build OK -> unit_par -> scenarios -> full smoke (MTG_PGO=0) ->
+regression --deck=midrangeburn,midrangeburn2hg,onedropburn,onedropburn2hg,creatureburn,creatureburn2hg. Push queue:
+REQUEUED at 08:39 (a waiting session, ft-land-1121, is head); `push_queue.py wait` armed.
 
-NEXT: (1) tell the USER the viewer is ready for Creature Burn references once the build lands. (2) Stage 6 report +
-6a disclosure in chat (USER items: fold OFF verdict; main-1 "attack, then Browbeat" completeness gap; PEAKS_PLAIN_FOLD
-default ON; Browbeat out of the provider signature; extra Peaks land positions; echo census; Pyromancer response
-ping / accounting un-ping; 1-power pinger attack exemption; Peaks inert-class premise; Price of Progress vs Peaks
-self-damage; heavy unbudgeted tail; provider cert NotAssessed; PROVISIONAL Hellspark unearth routing; Browbeat
-SECOND-MAIN RELEVANT). (3) ONE `push_queue.py join` (slow box: <=1 per 4 h); at turn: rebase, check_references_safe,
-under `hold`: Release + unit + smoke (MTG_PGO=0) + check_gt_logs, `land`, CI watch --interval 60 in background.
-Unpushed local commits include 591d4c115 + 631822f14 (1 Drop Burn Fireblast order). (4) CronDelete b718d9a3 at the
-end; check_references_safe at session close.
+NEXT: (1) chain DONE: inspect smoke -- expected changes only on the burn decks (Fireblast order, 591d4c115) and
+creatureburn (origin's engine moves); anything else = investigate. Back up regression_gt.txt + gt_logs, accept smoke
+and the scoped regression (`--deck=...` same list, `--accept`), `python3 test/check_gt_logs.py`, commit GT.
+(2) At turn: fetch + rebase onto origin, check_references_safe; if the rebase replayed gated src changes, rebuild +
+unit + smoke (+ re-accept moved keys) under `hold`; `land`; CI watch --interval 60 in background. (3) Stage 6 report
++ 6a disclosure in chat (USER items: fold OFF verdict; main-1 "attack, then Browbeat" completeness gap;
+PEAKS_PLAIN_FOLD default ON; Browbeat out of the provider signature; extra Peaks land positions; echo census (NO GAP);
+Pyromancer response ping / accounting un-ping; 1-power pinger attack exemption; Peaks inert-class premise; Price of
+Progress vs Peaks self-damage; heavy unbudgeted tail (backstop screen: 36 games > 5 s, clean blocks chosen); provider
+cert NotAssessed; PROVISIONAL Hellspark unearth routing; Browbeat SECOND-MAIN RELEVANT). (4) Commit any new
+references/Creature_Burn the USER saves. (5) CronDelete b718d9a3 at the end; check_references_safe at session close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
