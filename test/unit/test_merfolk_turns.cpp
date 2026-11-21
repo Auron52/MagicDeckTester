@@ -1411,3 +1411,102 @@ TEST_CASE("Sol Ring's {1} keeps Three Tree City for Wanderwine Prophets (MTG_SCA
         CHECK(prophets_paid == on);
     }
 }
+
+// The mana-clean gate claude-queue-20261119i, s30000762 T4 (ENUM-GAP x6): Island, Island, Three Tree City and three
+// Merfolk (Tidal Warrior, Silvergill Douser, Emperor Mihail II) with Seahunter, Rishadan Dockhand and two Islands in
+// hand. Dockhand first ({U} off the new Island) makes four Merfolk, and the other two Islands feeding City pay
+// Seahunter's {2}{U}{U}. MTG_SCALED_GROWTH_BOUND puts {Island + Seahunter + Dockhand} on the menu; the grower order
+// (option (a) the decider fallback, option (b) the Merfolk Turns rule) makes the apply cast both.
+namespace
+{
+GameState SeahunterDockhandBoard(MerfolkTurnsProvider& provider)
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 4;
+    state.m_provider = &provider;
+    AddPermanent(state, "Island", 10);
+    AddPermanent(state, "Tidal Warrior", 53);
+    AddPermanent(state, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+    AddPermanent(state, "Silvergill Douser", 42);
+    AddPermanent(state, "Island", 11);
+    AddPermanent(state, "Emperor Mihail II", 8);
+    for (const auto& [name, number] : std::vector<std::pair<const char*, int>>{
+             {"Seahunter", 38}, {"Rishadan Dockhand", 31}, {"Island", 12}, {"Island", 13}})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card card = def->card;
+        card.m_number = number;
+        state.players[0].hand.push_back(card);
+    }
+    return state;
+}
+struct GrowerArms
+{
+    GrowerArms(int bound, int decider, int rule)
+    {
+        heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = static_cast<std::int8_t>(bound);
+        heurarm::t_arm[heurarm::SCALED_GROWER_DECIDER] = static_cast<std::int8_t>(decider);
+        heurarm::t_arm[heurarm::MERFOLK_GROWER_ORDER] = static_cast<std::int8_t>(rule);
+    }
+    ~GrowerArms()
+    {
+        heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = -1;
+        heurarm::t_arm[heurarm::SCALED_GROWER_DECIDER] = -1;
+        heurarm::t_arm[heurarm::MERFOLK_GROWER_ORDER] = -1;
+    }
+};
+// {offered, applied}: the menu holds Island + Seahunter + Dockhand, and applying it puts both creatures in play.
+std::pair<bool, bool> SeahunterDockhandProbe()
+{
+    MerfolkTurnsProvider provider;
+    const GameState state = SeahunterDockhandBoard(provider);
+    bool offered = false, applied = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        if (plan.land_to_play != "Island") { continue; }
+        bool sea = false, dock = false;
+        for (const Action& a : plan.actions)
+        {
+            sea  |= a.kind == Action::Kind::CastFromHand && a.card_name == "Seahunter";
+            dock |= a.kind == Action::Kind::CastFromHand && a.card_name == "Rishadan Dockhand";
+        }
+        if (!(sea && dock)) { continue; }
+        offered = true;
+        GameState after = state;
+        TurnSolver::ApplyPlan(after, plan, true);
+        int both = 0;
+        for (const Permanent& p : after.battlefield) { both += p.card.m_number == 38 || p.card.m_number == 31; }
+        applied |= both == 2;
+    }
+    return { offered, applied };
+}
+}   // namespace
+
+TEST_CASE("Three Tree City: Dockhand before Seahunter is on the menu and applies (s30000762 T4)")
+{
+    {
+        const GrowerArms arms(0, 0, 0);
+        CHECK_FALSE(SeahunterDockhandProbe().first);   // the scalar bound prices City at three Merfolk
+    }
+    {
+        const GrowerArms arms(1, 1, 0);   // option (a): the decider fallback
+        const auto [offered, applied] = SeahunterDockhandProbe();
+        CHECK(offered);
+        CHECK(applied);
+    }
+    {
+        const GrowerArms arms(1, 0, 1);   // option (b): the Merfolk Turns cast-order rule
+        const auto [offered, applied] = SeahunterDockhandProbe();
+        CHECK(offered);
+        CHECK(applied);
+    }
+    {
+        const GrowerArms arms(1, 0, 0);   // the bound alone moves the hole to the apply
+        const auto [offered, applied] = SeahunterDockhandProbe();
+        CHECK(offered);
+        MESSAGE("bound alone: applied=" << applied);
+    }
+}

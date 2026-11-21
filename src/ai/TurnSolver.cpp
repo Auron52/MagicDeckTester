@@ -10801,6 +10801,29 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
     BigSpellBatchScope   _bbs(-1);
     int supply = floating + aura_extra + UntappedManaUpperBound(state, /*for_creature=*/true, 0);
     if (demand <= supply) { return false; }
+    // MTG_SCALED_GROWTH_BOUND: an untapped Three Tree City yields one more per creature of its type the walk pays
+    // before it taps (the walk's grower order), which the bound reads at the board's current count. +1 per matching
+    // selected creature cast per such land: an upper bound. Merfolk Turns s30000762 T4: {Seahunter, Dockhand} is 5
+    // against a bound of 4 before Dockhand grows City to four Merfolk.
+    if (ScaledGrowthBoundOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
+            if (land == nullptr || !IsScaledManaLand(*land) || land->params.mana_per_creature_subtype.empty()
+                || LandTypeChangedToIsland(state, p)) { continue; }
+            const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
+                ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
+            for (int j : sel)
+            {
+                const Action& a = cands[static_cast<std::size_t>(j)];
+                if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->card.IsCreature()
+                    && a.def->card.m_subtypes.HasId(chosen)) { ++supply; }
+            }
+        }
+        if (demand <= supply) { return false; }
+    }
     if (untap_lands > 0)
     {
         int best_land = 0;
@@ -89728,6 +89751,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         }
         growth_bound += dg.per_feeder() * matches;
     }
+    // MTG_SCALED_GROWTH_BOUND: the same addend for a scaled LAND. Each untapped Three Tree City yields one more mana per
+    // creature of its type cast before it taps, which the per-subset rescue (SubsetPayableWithFilters' grower walk)
+    // credits and the pool prices at the current count. Upper bound: +1 per matching creature cand per such land, so it
+    // can only prune less. Merfolk Turns s30000762 T4: {Seahunter, Dockhand} = 5 against bound 4. 0 without a City.
+    int land_growth_bound = 0;
+    if (ScaledGrowthBoundOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
+            if (land == nullptr || !IsScaledManaLand(*land) || land->params.mana_per_creature_subtype.empty()
+                || LandTypeChangedToIsland(state, p)) { continue; }
+            const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
+                ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
+            for (const Action& a : cands)
+            {
+                if (a.kind == Action::Kind::CastFromHand && a.def && a.def->card.IsCreature()
+                    && a.def->card.m_subtypes.HasId(chosen)) { ++land_growth_bound; }
+            }
+        }
+    }
     // Same-subset HINATA credit the per-subset credit below can grant (the metalcraft lesson,
     // verbatim: "the position has to survive to be priced"). Without this addend the scalar bound
     // charges every X spell its FULL undiscounted X while SameTurnHinataCredit would forgive up to
@@ -89752,7 +89797,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         ? std::numeric_limits<int>::max()
         : ManaPruneBound(pool, cands,
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
-                         haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound
+                         haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound + land_growth_bound
                              + widen_bound + spec_ctx.bound_credit
                              + sacfod.bound,   // MTG_SAC_FODDER_MENU: plan-made fodder (0 when inert)
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
@@ -89811,7 +89856,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork
-        && enter_haste_unlock.empty() && growth_bound == 0
+        && enter_haste_unlock.empty() && growth_bound == 0 && land_growth_bound == 0
         && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe
         && !sacfod.live)   // MTG_SAC_FODDER_MENU: its terms cannot see plan-made fodder -- the same bail
     {
@@ -89832,7 +89877,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // where the reducer discount is the one per-subset credit in play (no metalcraft equip credit, no
     // first-equip waiver, no scaled-dork growth, no cost reframe).
     const bool red_gate = gate_on && SelGateExactOn() && !CostReframeEnabled() && !any_metalcraft
-                       && waiver_bound == 0 && growth_bound == 0;
+                       && waiver_bound == 0 && growth_bound == 0 && land_growth_bound == 0;
     auto eval_and_push_gated = [&](const std::vector<int>& s)
     {
         if (red_gate && SelGateExactRefuses(*gate, s))

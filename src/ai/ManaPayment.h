@@ -165,6 +165,13 @@ void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction);
 // that ordering). Was a byte-identical twin pair (TurnSolver statics / AIEngine's CastOrderLessAI
 // and OrderingOpaqueAI kept in lockstep by comment); both now share these definitions.
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
+// THE SCALED-LAND GROWER ORDER (Merfolk Turns ENUM-GAP, 2026-11-21): when the order holds a creature cast that grows an
+// untapped scaled land (Three Tree City naming its type), put the creature casts cheapest-first among CastOrderLess
+// TIES, every other position kept.
+// The enumeration's rescue (SubsetPayableWithFilters) already walks growers this way. Returns true when `order` moved.
+// Read by option (a), the apply decider's fallback (MTG_SCALED_GROWER_DECIDER), and option (b), the Merfolk Turns
+// cast-order rule (MTG_MERFOLK_GROWER_ORDER).
+bool ScaledLandGrowerOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
 // The per-action key CastOrderLess ranks by: CastOrderLess(s, a, b) ==
 // CastOrderLessRanked(s, a, CastOrderKeyOf(s, a), b, CastOrderKeyOf(s, b)), so a caller sorting many
 // casts can compute each key once.

@@ -781,6 +781,27 @@ inline bool ScaledLandRouteOn()
     return heurarm::Flag(heurarm::SCALED_LAND_ROUTE, env_on);
 }
 
+// THE MERFOLK TURNS ENUM-GAP (2026-11-21, merfolk-gate doc section 3; TEMPORARY selectors under measurement, all default
+// OFF). s30000762 T4: {Seahunter + Rishadan Dockhand} pays only with Dockhand first (it grows Three Tree City to four
+// Merfolk). MTG_SCALED_GROWTH_BOUND puts the subset on the menu (the scalar bound's land-growth addend); one of the two
+// orders then makes the apply realise it: (a) MTG_SCALED_GROWER_DECIDER, the generic decider fallback (only when the
+// given order does not pay), or (b) MTG_MERFOLK_GROWER_ORDER, the Merfolk Turns cast-order rule (always).
+inline bool ScaledGrowthBoundOn()
+{
+    static const bool env_on = EnvOn("MTG_SCALED_GROWTH_BOUND", false);
+    return heurarm::Flag(heurarm::SCALED_GROWTH_BOUND, env_on);
+}
+inline bool ScaledGrowerDeciderOn()
+{
+    static const bool env_on = EnvOn("MTG_SCALED_GROWER_DECIDER", false);
+    return heurarm::Flag(heurarm::SCALED_GROWER_DECIDER, env_on);
+}
+inline bool MerfolkGrowerOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_MERFOLK_GROWER_ORDER", false);
+    return heurarm::Flag(heurarm::MERFOLK_GROWER_ORDER, env_on);
+}
+
 // MTG_PAY_EXCESS_RELEASE (2026-11-11, item 5d of the mana-clean chain; DEFAULT ON, =0 -> as before): release a source
 // a payment's mana exceeded its bill by, where the release is a dominance. Read by the whole-turn prepay's give-back
 // (TurnSolver BatchPrepayMainCasts, MTG_PREPAY_SHRINK). The per-cast refine's half is MTG_PAY_REFINE_C_FOLD.
