@@ -1057,6 +1057,9 @@ enum Slot : int
     MAZE_DISCARD_BURGEONING,  // MTG_MAZE_DISCARD_BURGEONING  sub-lever of MAZE_MANABOND_DISCARD (USER 2026-11-20: "Yes, Burgeoning is probably droppable. It is a bit too unreliable."; "It's a lot better in 2HG, though." -- the 2HG treatment is the USER's call, per-format numbers owed): Burgeoning counts as a droppable accelerator. Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> Burgeoning is a kept card
     PAY_REFINE_SCALED,        // MTG_PAY_REFINE_SCALED  the payment refine (MTG_PAY_REFINE) also runs after an exact payment of four or more taps that tapped a scaled land (Three Tree City, Baldur's Gate) whose fed mode makes >= {feeder} + 2: the plain-{C}-first backtracker can pay off more sources than the fed mode needs. Merfolk Turns gate claude-queue-20261119i s30001289 T5 (ORACLE-GAP: Prophets off four Islands + City's {C}, Mihail's {1} stranded). Default ON; =0 -> the refine's two triggers only
     SCALED_LAND_ROUTE,        // MTG_SCALED_LAND_ROUTE  a payment of an applying line that leaves an untapped scaled land (Three Tree City, Baldur's Gate) unable to fund the rest of the line is re-made with one of the greedy's sources held out when that keeps the rest payable (ScaledLandRouteHold, ManaPayment.cpp; the rock being cast is credited, the rest is net of the line's reducer credit). Merfolk Turns gate claude-queue-20261119i s30000073 T7: Sol Ring's {1} off City's {C} dropped Wanderwine Prophets. Default ON; =0 -> the greedy payment
+    SCALED_GROWTH_BOUND,      // MTG_SCALED_GROWTH_BOUND  EnumeratePlans' scalar mana bound adds +1 per matching creature cand for each untapped scaled land with a creature subtype (Three Tree City): an UPPER bound on same-turn growth, so it can only prune less. Merfolk Turns gate claude-queue-20261119i s30000762 T4 (ENUM-GAP {Seahunter + Rishadan Dockhand}). TEMPORARY selector under measurement (merfolk-gate doc section 3)
+    SCALED_GROWER_DECIDER,    // MTG_SCALED_GROWER_DECIDER  OPTION (a), generic: the apply's payable-order decider, when the given order pays in neither the whole-turn prepay nor the sequential walk, tries the order with City-growing creature casts cheapest-first among comparator ties (ScaledLandGrowerOrder) and takes it when the walk pays it. TEMPORARY selector under measurement
+    MERFOLK_GROWER_ORDER,     // MTG_MERFOLK_GROWER_ORDER   OPTION (b), deck rule: MerfolkTurnsProvider::ArrangeCastOrder puts City-growing Merfolk cheapest-first among comparator ties (ScaledLandGrowerOrder), always. TEMPORARY selector under measurement
     COUNT
 };
 
@@ -2058,6 +2061,9 @@ inline const char* Name(int slot)
         "MTG_MAZE_DISCARD_BURGEONING",
         "MTG_PAY_REFINE_SCALED",
         "MTG_SCALED_LAND_ROUTE",
+        "MTG_SCALED_GROWTH_BOUND",
+        "MTG_SCALED_GROWER_DECIDER",
+        "MTG_MERFOLK_GROWER_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -4985,6 +4985,10 @@ public:
                               bool is_pre_combat, std::vector<int>& targets) const override;
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                      const CardDefinition& entering) const override;
+    // OPTION (b) of the ENUM-GAP (MTG_MERFOLK_GROWER_ORDER): City-growing Merfolk cheapest-first among comparator ties
+    // (ScaledLandGrowerOrder): Rishadan Dockhand before Seahunter grows City in time to pay Seahunter (s30000762 T4).
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
 };
 
 // MAZE'S END (onboarding 2026-11-17, docs/design/analysis-Maze's End.md). DERIVES FROM DeckProvider (the
