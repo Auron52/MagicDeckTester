@@ -72181,40 +72181,282 @@ void MazesEndProvider::PlanListAdmit(const GameState& s, const std::vector<PlanV
     if (MazeIdleFetchLive(s))  { MazeIdleFetchAdmit(s, plans, admit); }
 }
 
-// BLOOD SUN step 6: Diabolic Revelation's ordinary package order (design §5.4). A stable sort of the classes by a
-// static role key read off each class's params (and, for Blood Sun itself, whether one is already out -- a non-land
-// battlefield read, which no land variant of a node changes). ORDER only: the enumeration is complete whatever this
-// returns (core/RevelationPackages.h).
+// MTG_BLOODSUN_USER_PRUNE (heurarm BLOODSUN_USER_PRUNE): the USER's B3 / B4 restrictions, DEFAULT ON (USER-authored,
+// 2026-11-20); =0 -> the unrestricted step-6b search, the A/B arm the parent reports against (adoption is the USER's).
+bool BloodSunUserPruneOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_USER_PRUNE", true);   // DEFAULT ON; =0 the unrestricted search
+    return heurarm::Flag(heurarm::BLOODSUN_USER_PRUNE, on);
+}
+// MTG_BLOODSUN_EXPLORATION_ANYLIFE: the A/B arm "Exploration a target at any life" (still never with a Fastbond on our
+// battlefield). DEFAULT OFF (the USER's low-life reading); inert while the prune is off.
+bool BloodSunExplorationAnyLifeOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_EXPLORATION_ANYLIFE");   // DEFAULT OFF; =1 the any-life arm
+    return heurarm::Flag(heurarm::BLOODSUN_EXPLORATION_ANYLIFE, on);
+}
+
+namespace
+{
+// The USER's "life is looking dicey" threshold for Exploration (B3; a PARENT-chosen number surfaced to the USER, who
+// confirmed his worst case -- life 7 -- sits inside it).
+constexpr int kBloodSunExplorationLife = 10;
+constexpr int kBloodSunAnyCopies = 1 << 20;
+// The prune's autonomous gate: never in human play (the person is offered everything), never under the unpruned gate.
+bool BloodSunPruneLive()
+{
+    return BloodSunUserPruneOn() && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Tutor);
+}
+bool BsProducesRed(const CardParams& p)
+{
+    return std::find(p.produces.begin(), p.produces.end(), Color::Red) != p.produces.end();
+}
+// Is a card matching `pred` on OUR battlefield / in our hand?
+template <class Pred>
+void BsHave(const GameState& s, int controller, Pred pred, bool& on_bf, bool& in_hand)
+{
+    on_bf = false;
+    in_hand = false;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller || pm.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d != nullptr && pred(*d)) { on_bf = true; break; }
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && pred(*d)) { in_hand = true; break; }
+    }
+}
+bool BsIsSun(const CardDefinition& d)      { return d.params.lands_lose_nonmana_abilities; }
+bool BsIsFastbond(const CardDefinition& d) { return d.params.unlimited_land_plays; }
+// The Lotus lands and Scorched Ruins: a land that costs two lands to put out and adds three or more.
+bool BsIsBigLand(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    return d.card.IsLand() && (p.etb_replace_sacrifice_untapped_lands > 0 || p.etb_sacrifice_lands > 0)
+        && p.produces_amount >= 3;
+}
+
+// Diabolic Revelation's ordinary package order (design §5.4) and, under the prune, Grim Tutor's / the transmute's
+// candidate order: a static role key read off each card's params (and, for Blood Sun itself, whether one is already
+// out -- a non-land battlefield read, which no land variant of a node changes). ORDER only.
+int BloodSunRole(const GameState& s, const CardDefinition* d, bool sun_out, bool user)
+{
+    if (d == nullptr) { return 60; }
+    const CardParams& p = d->params;
+    if (d->card.IsLand())
+    {
+        // The mana the land adds once it is out, net of the lands it costs (Lotus Vale / Field, a Karoo's
+        // bounce) -- read through the land's EFFECTIVE definition (under Blood Sun every one is a plain land).
+        const CardParams& e = EffectiveLandDef(s, *d).params;
+        int net = std::max(1, e.produces_amount);
+        net -= std::max(e.etb_replace_sacrifice_untapped_lands, e.etb_sacrifice_lands);
+        if (e.etb_bounce_land) { net -= 1; }
+        return 10 - std::clamp(net, -5, 9);                 // 1 (adds 9) .. 15
+    }
+    // The USER (B3): Fastbond FIRST among the acceleration, Exploration after it ("we might just want to always get
+    // fastbond"). Under the prune only: the unrestricted arm keeps the step-6b order.
+    if (user && p.unlimited_land_plays)          { return 19; }
+    if (p.static_extra_land_drops > 0 || p.opponent_land_play_put_land_from_hand) { return 20; }   // drop-makers
+    if (p.tutor_up_to_x)                         { return 21; }   // the next Revelation
+    if (p.extra_turns_on_resolve > 0)            { return 22; }   // Time Warp
+    if (p.lands_lose_nonmana_abilities)          { return sun_out ? 45 : 23; }
+    if (p.cast_trigger_extra_turns > 0)          { return 24; }   // Emrakul
+    if (p.tutor_to_hand || p.look_top_target_player_exile_reorder > 0) { return 25; }   // Grim Tutor, Machinations
+    if (p.cast_trigger_exile_target_permanents > 0) { return 26; }   // Ulamog
+    if (p.exile_all_permanents)                  { return 50; }   // Worldfire last (§9.3)
+    return 30;
+}
+}   // namespace
+
+// BLOOD SUN step 6: Diabolic Revelation's ordinary package order (design §5.4). A stable sort of the classes by
+// BloodSunRole. ORDER only: the enumeration is complete whatever this returns (core/RevelationPackages.h).
 void BloodSunProvider::RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                                             std::vector<int>& order) const
 {
     const bool sun_out = LandNonManaAbilitiesSuppressed(s);
-    auto role = [&](const CardDefinition* d) -> int
-    {
-        if (d == nullptr) { return 60; }
-        const CardParams& p = d->params;
-        if (d->card.IsLand())
-        {
-            // The mana the land adds once it is out, net of the lands it costs (Lotus Vale / Field, a Karoo's
-            // bounce) -- read through the land's EFFECTIVE definition (under Blood Sun every one is a plain land).
-            const CardParams& e = EffectiveLandDef(s, *d).params;
-            int net = std::max(1, e.produces_amount);
-            net -= std::max(e.etb_replace_sacrifice_untapped_lands, e.etb_sacrifice_lands);
-            if (e.etb_bounce_land) { net -= 1; }
-            return 10 - std::clamp(net, -5, 9);                 // 1 (adds 9) .. 15
-        }
-        if (p.static_extra_land_drops > 0 || p.opponent_land_play_put_land_from_hand) { return 20; }   // drop-makers
-        if (p.tutor_up_to_x)                         { return 21; }   // the next Revelation
-        if (p.extra_turns_on_resolve > 0)            { return 22; }   // Time Warp
-        if (p.lands_lose_nonmana_abilities)          { return sun_out ? 45 : 23; }
-        if (p.cast_trigger_extra_turns > 0)          { return 24; }   // Emrakul
-        if (p.tutor_to_hand || p.look_top_target_player_exile_reorder > 0) { return 25; }   // Grim Tutor, Machinations
-        if (p.cast_trigger_exile_target_permanents > 0) { return 26; }   // Ulamog
-        if (p.exile_all_permanents)                  { return 50; }   // Worldfire last (§9.3)
-        return 30;
-    };
+    const bool user = BloodSunPruneLive();
     std::vector<int> key(class_defs.size());
-    for (std::size_t i = 0; i < class_defs.size(); ++i) { key[i] = role(class_defs[i]); }
+    for (std::size_t i = 0; i < class_defs.size(); ++i) { key[i] = BloodSunRole(s, class_defs[i], sun_out, user); }
     std::stable_sort(order.begin(), order.end(), [&](int a, int b)
                      { return key[static_cast<std::size_t>(a)] < key[static_cast<std::size_t>(b)]; });
+}
+
+// ---- BLOOD SUN step 6c: the USER's tutor targets (B3), USER 2026-11-20, VERBATIM excerpts (the ledger holds the rest):
+// "a number of cards in the deck are not worth searching at all. Blood Sun should be searched early with Grim Tutor or
+// Dimir Machinations if it is missing, but is not necessary to search once we have one. The only lands we should be
+// searching for produce 3 (lotuses) or 4 mana (scorched ruins) ... The only acceleration enchantments we want to
+// consider are Exploration and Fastbond ... Obvious search targets beyond that would be Time Warp (earlier), Emrakul
+// (later) and almost always a replacement Diabolic Revelation."; "For Machinations ... We must be able to find Grim
+// Tutor in that case ... If you have blood sun out or in hand, Grim Tutor should be the only target."; "if you have
+// 1BB but no Red and blood sun in hand we might want to leave in a red producing land like Rakdos Carnarium ... or
+// City of Brass"; Exploration "when life is looking dicey ... It doesn't help once fastbond is out".
+// A RESTRICTION of the search's targets, never a pick: every admitted target (and every multiset of them) is still
+// searched. Blood Sun and Fastbond cap at ONE copy (the second is the "once we have one" case); the rest are uncapped.
+int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute)
+{
+    const CardParams& p = def.params;
+    bool sun_bf = false, sun_hand = false;
+    BsHave(s, controller, BsIsSun, sun_bf, sun_hand);
+    if (p.lands_lose_nonmana_abilities) { return (sun_bf || sun_hand) ? 0 : 1; }
+    // Machinations' transmute (mana value 3): Grim Tutor (the Machinations -> Grim -> Revelation chain), and Blood Sun
+    // while we have none (above). Nothing else.
+    if (transmute)
+    {
+        return (p.tutor_to_hand && !p.tutor_up_to_x && !p.wish_from_sideboard && !p.tutor_from_graveyard)
+            ? kBloodSunAnyCopies : 0;
+    }
+    if (p.unlimited_land_plays)
+    {
+        bool fb_bf = false, fb_hand = false;
+        BsHave(s, controller, BsIsFastbond, fb_bf, fb_hand);
+        return (fb_bf || fb_hand) ? 0 : 1;
+    }
+    if (p.static_extra_land_drops > 0 && !def.card.IsLand())   // Exploration
+    {
+        bool fb_bf = false, fb_hand = false;
+        BsHave(s, controller, BsIsFastbond, fb_bf, fb_hand);
+        if (fb_bf) { return 0; }
+        const bool low = s.players[static_cast<std::size_t>(controller)].life <= kBloodSunExplorationLife;
+        return (low || BloodSunExplorationAnyLifeOn()) ? kBloodSunAnyCopies : 0;
+    }
+    if (BsIsBigLand(def))                 { return kBloodSunAnyCopies; }   // Lotus Vale / Lotus Field / Scorched Ruins
+    if (p.extra_turns_on_resolve > 0)     { return kBloodSunAnyCopies; }   // Time Warp
+    if (p.tutor_up_to_x)                  { return kBloodSunAnyCopies; }   // Diabolic Revelation (a replacement)
+    if (p.cast_trigger_extra_turns > 0)   { return kBloodSunAnyCopies; }   // Emrakul, the Aeons Torn
+    // The red-source exception, by the USER's own two names: Blood Sun in hand, none on our battlefield, and no red
+    // source on our battlefield or in hand (a land of ours that can add {R}).
+    const std::string& nm = def.card.m_name.str();
+    if (nm == "Rakdos Carnarium" || nm == "City of Brass")
+    {
+        if (!sun_hand || sun_bf) { return 0; }
+        auto red = [](const CardDefinition& d) { return d.card.IsLand() && BsProducesRed(d.params); };
+        bool r_bf = false, r_hand = false;
+        BsHave(s, controller, red, r_bf, r_hand);
+        return (r_bf || r_hand) ? 0 : kBloodSunAnyCopies;
+    }
+    return 0;   // Grim Tutor (transmute only), Machinations, Burgeoning, Ulamog, the Karoos, fastlands, Cairns, Tomb, ...
+}
+
+// Grim Tutor (and the transmute's synthesized exact-MV search): the generic list restricted to the USER's targets,
+// ordered by BloodSunRole (the per-cast named axis searches every name; the order is its in-place first combination and
+// the beyond-horizon front). Diabolic Revelation's packages ride RevelationPackageRestrict instead.
+std::vector<std::string> BloodSunProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!BloodSunPruneLive() || !pp.tutor_to_hand || pp.tutor_up_to_x || pp.wish_from_sideboard
+        || pp.tutor_from_graveyard) { return all; }
+    const bool transmute = pp.tutor_exact_mv >= 0;
+    const bool sun_out = LandNonManaAbilitiesSuppressed(s);
+    std::vector<std::pair<int, std::string>> keep;
+    for (std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr || BloodSunTutorTargetCap(s, controller, *d, transmute) <= 0) { continue; }
+        keep.emplace_back(BloodSunRole(s, d, sun_out, true), std::move(nm));
+    }
+    std::stable_sort(keep.begin(), keep.end(),
+                     [](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b)
+                     { return a.first < b.first; });
+    std::vector<std::string> out;
+    out.reserve(keep.size());
+    for (auto& k : keep) { out.push_back(std::move(k.second)); }
+    return out;
+}
+
+// A Grim Tutor with no admitted target is not cast (it would only pay 3 life and shuffle): the restriction's own
+// consequence, never a pick. The transmute's empty list is already not offered by the emitter.
+bool BloodSunProvider::TutorNeedsCandidate(const GameState& /*s*/, int /*controller*/, const CardParams& pp) const
+{
+    return BloodSunPruneLive() && pp.tutor_to_hand && !pp.tutor_up_to_x && !pp.wish_from_sideboard
+        && !pp.tutor_from_graveyard;
+}
+
+// (a) Diabolic Revelation, USER (verbatim): "Right at 5 mana the Revelation is useless and should never be cast. My
+// guidance on duplicates is for when you have 6 mana." -> X = 0 never (fold F-R4 already), X = 1 only with another
+// Revelation in hand, X >= 2 unrestricted. (b) every class capped by BloodSunTutorTargetCap.
+void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_index,
+                                                 const std::vector<const CardDefinition*>& class_defs,
+                                                 std::vector<int>& caps, int& x_min) const
+{
+    if (!BloodSunPruneLive()) { return; }
+    const int me = s.active_player_index;
+    for (std::size_t k = 0; k < class_defs.size() && k < caps.size(); ++k)
+    {
+        const int cap = class_defs[k] != nullptr ? BloodSunTutorTargetCap(s, me, *class_defs[k], false) : 0;
+        caps[k] = std::min(caps[k], cap);
+    }
+    bool another = false;
+    const std::vector<Card>& hand = s.players[static_cast<std::size_t>(me)].hand;
+    for (int j = 0; j < static_cast<int>(hand.size()) && !another; ++j)
+    {
+        if (j == hand_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(j)]);
+        another = d != nullptr && d->params.tutor_up_to_x;
+    }
+    if (!another) { x_min = std::max(x_min, 2); }
+}
+
+// (c of B3) USER: "with blood sun out, Lotus Field and Vale are the same so they can be collapsed" -> F-R2 holds under
+// any Blood Sun, even while our Ulamog (whose cast trigger could exile our own Blood Sun) is reachable.
+bool BloodSunProvider::RevelationTwinFoldForced(const GameState& /*s*/) const
+{
+    return BloodSunPruneLive();
+}
+
+// B4, USER (verbatim): "Generally Scorched Ruins and Lotuses wait for Blood Sun to drop. The only exception is when you
+// fail to have the 3 mana or Red needed for Blood Sun. In that case Lotus Vale is a reasonable drop in order to play
+// it."; "Lotus Field may be played early like the vale for the same reasons, but is strictly worse at it ... neither of
+// these should ever be played when there is no Blood Sun and 1 or 0 lands out ... Scorched Ruins I don't ever play
+// without Blood Sun."; "you can prune trying Field when Vale is in hand."; "Field is strictly for when you don't have a
+// Vale in this situation." While no Blood Sun suppresses land abilities, a land drop or a Burgeoning put of:
+//  * Scorched Ruins (a big land that cannot add {R}): never;
+//  * Lotus Vale: only with a Blood Sun in hand that our other mana cannot cast this turn (a probe payment on a copy:
+//    short of three mana or of {R}) but the Vale's own three of one colour can, and >= 2 untapped lands of ours to
+//    sacrifice. On the opponent's turn (a Burgeoning put) Blood Sun cannot be cast this turn at all, so never;
+//  * Lotus Field: the same Blood-Sun-in-hand / cannot-cast condition (its mana arrives next turn), >= 2 lands of ours
+//    out, and NO Lotus Vale in hand (USER: dominated now, identical once Blood Sun lands).
+// A RESTRICTION of the land menu, never a pick: every admitted land is still searched.
+bool BloodSunProvider::LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const
+{
+    if (!BloodSunPruneLive() || !BsIsBigLand(def) || LandNonManaAbilitiesSuppressed(s)) { return true; }
+    const CardParams& p = def.params;
+    if (!BsProducesRed(p)) { return false; }                           // Scorched Ruins
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    const CardDefinition* sun = nullptr;
+    bool vale_in_hand = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (sun == nullptr && BsIsSun(*d)) { sun = d; }
+        if (BsIsBigLand(*d) && BsProducesRed(d->params) && d->params.etb_replace_sacrifice_untapped_lands > 0)
+        { vale_in_hand = true; }
+    }
+    if (sun == nullptr) { return false; }
+    int lands = 0, untapped = 0;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller || pm.def_absent || !pm.card.IsLand()) { continue; }
+        ++lands;
+        if (!pm.tapped) { ++untapped; }
+    }
+    const bool our_turn = controller == s.active_player_index;
+    auto other_mana_casts_sun = [&]() -> bool
+    {
+        if (!our_turn) { return false; }
+        GameState probe = s;
+        return TapForCostDirect(probe, sun->card.m_mana_cost, /*for_creature=*/false);
+    };
+    if (p.etb_replace_sacrifice_untapped_lands > 0)                     // Lotus Vale
+    {
+        if (!our_turn || untapped < p.etb_replace_sacrifice_untapped_lands) { return false; }
+        if (sun->card.m_mana_cost.ManaValue() > p.produces_amount) { return false; }   // the Vale alone must pay it
+        return !other_mana_casts_sun();
+    }
+    // Lotus Field
+    if (lands < p.etb_sacrifice_lands || vale_in_hand) { return false; }
+    return !other_mana_casts_sun();
 }

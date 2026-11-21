@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -66,6 +67,13 @@ GameState Base6()
     s.own_death_live      = true;
     return s;
 }
+// These tests pin the GENERATOR's mechanics on libraries of non-deck cards (Lightning Bolt, basics), so they run with
+// the step-6c USER target restriction OFF (MTG_BLOODSUN_USER_PRUNE; test_bloodsun_userprune.cpp tests it ON).
+struct Unrestricted6
+{
+    Unrestricted6()  { heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE] = 0; }
+    ~Unrestricted6() { heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE] = -1; }
+};
 int Count6(const std::vector<Card>& zone, const std::string& name)
 {
     int n = 0;
@@ -76,6 +84,7 @@ int Count6(const std::vector<Card>& zone, const std::string& name)
 
 TEST_CASE("revelation: params, and the rank-lex generator yields every multiset exactly once (closed form)")
 {
+    const Unrestricted6 unrestricted;
     EnsureCards6();
     const CardDefinition& dr = Def6("Diabolic Revelation");
     CHECK(dr.params.tutor_up_to_x);
@@ -121,6 +130,7 @@ TEST_CASE("revelation: params, and the rank-lex generator yields every multiset 
 
 TEST_CASE("revelation F-R2: Lotus Vale == Lotus Field under a Blood Sun nothing can end, and only then")
 {
+    const Unrestricted6 unrestricted;
     auto lotus_classes = [](const GameState& s) -> int
     {
         int n = 0;
@@ -151,6 +161,7 @@ TEST_CASE("revelation F-R2: Lotus Vale == Lotus Field under a Blood Sun nothing 
 
 TEST_CASE("revelation: resolution moves the package to hand and shuffles ONCE, in both worlds")
 {
+    const Unrestricted6 unrestricted;
     GameState s = Base6();
     for (int k = 0; k < 5; ++k) { s.players[0].library.push_back(Card6("Swamp", 100 + k)); }
     s.players[0].library.push_back(Card6("Lightning Bolt", 200));
@@ -178,6 +189,7 @@ TEST_CASE("revelation: resolution moves the package to hand and shuffles ONCE, i
 
 TEST_CASE("revelation: wave 0 emits the first K0 packages of every X; X = |S| >= 1; every cast carries a package")
 {
+    const Unrestricted6 unrestricted;
     GameState s = Base6();
     for (int k = 0; k < 9; ++k) { Put6(s, "Swamp", 10 + k); }   // 9 mana: X <= 4
     s.players[0].hand.push_back(Card6("Diabolic Revelation", 1));
@@ -206,6 +218,7 @@ TEST_CASE("revelation: wave 0 emits the first K0 packages of every X; X = |S| >=
 
 TEST_CASE("revelation generator-stop: a wave-0 win this round generates no wave package; a wave-1 win is found")
 {
+    const Unrestricted6 unrestricted;
     auto run = [](const std::vector<std::string>& lib, bool& won_now) -> long long
     {
         GameState s = Base6();
@@ -262,6 +275,7 @@ bool IsBoltPackage6(const Action& a, int min_wave)
 
 TEST_CASE("revelation waves, executor fallback host (SolveWithLookahead): a wave-1-only package is reached")
 {
+    const Unrestricted6 unrestricted;
     const GameState s = WaveOneBolt6();
     TurnSolver::ResetRevelationWaveCountersForTest();
     int win = -1;
@@ -276,6 +290,7 @@ TEST_CASE("revelation waves, executor fallback host (SolveWithLookahead): a wave
 
 TEST_CASE("revelation waves, exhaustive menu host (EnumerateMainPlansExhaustive): the wave-1 package is on the menu")
 {
+    const Unrestricted6 unrestricted;
     const GameState s = WaveOneBolt6();
     bool truncated = true;
     int n_bolt = 0;
@@ -292,6 +307,7 @@ TEST_CASE("revelation waves, exhaustive menu host (EnumerateMainPlansExhaustive)
 
 TEST_CASE("revelation waves, breakpoint continuation host: the wave-k continuation list holds the wave-k packages")
 {
+    const Unrestricted6 unrestricted;
     // A continuation list (the one a breakpoint's continuation, in the rollout AND the executor, indexes) admits wave 0;
     // the wave-k list (Plan::rv_cont_wave) holds exactly wave k's tranche. The kill package is wave 1 here.
     const GameState s = WaveOneBolt6();

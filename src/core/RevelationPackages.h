@@ -92,10 +92,12 @@ inline bool TwinFoldLive(const GameState& s, int controller)
 }
 
 // The library's classes, in CANONICAL order (by first member name). Deterministic in the library's CONTENT (never
-// its order), so every enumeration of one node -- every land variant -- sees the same classes.
-inline std::vector<Class> BuildClasses(const GameState& s, int controller)
+// its order), so every enumeration of one node -- every land variant -- sees the same classes. `twin_forced` (a
+// provider's RevelationTwinFoldForced, Blood Sun step 6c: the USER's "Lotus Field and Vale are the same" under Blood
+// Sun) holds F-R2 whenever land abilities are suppressed, whatever TwinFoldLive's conservative scan finds.
+inline std::vector<Class> BuildClasses(const GameState& s, int controller, bool twin_forced = false)
 {
-    const bool twin = TwinFoldLive(s, controller);
+    const bool twin = twin_forced ? LandNonManaAbilitiesSuppressed(s) : TwinFoldLive(s, controller);
     std::vector<Class> out;
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
     {

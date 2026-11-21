@@ -5290,6 +5290,23 @@ public:
     // draw triggers, say). -1 = order-sensitive (never folded). The engine adds the turn-level conditions (land-only
     // turn so far, pool empty, the land held since main 1). Default -1 for every land: byte-identical.
     virtual int LandEntryOrderClass(const GameState&, int /*controller*/, const CardDefinition&) const { return -1; }
+
+    // RevelationPackageRestrict -- a provider RESTRICTION of Diabolic Revelation's AUTONOMOUS package space
+    // (CardParams::tutor_up_to_x; TurnSolver CollectActions' package emitter; Blood Sun step 6c, the USER's B3).
+    // `class_defs` / `caps` are index-aligned, in the provider's RevelationClassOrder rank order: a provider may only
+    // LOWER a cap (0 = the class is not a target) and RAISE `x_min` (the smallest X offered; it arrives as 1, fold
+    // F-R4). The rank-lex enumeration then runs over the restricted caps, so every multiset of the restricted space is
+    // still enumerated exactly once (a restriction, never a pick). `hand_index` is the cast copy. It must read only
+    // what every enumeration of one node agrees on (the union of hand and battlefield, the life total), never the
+    // mana or the land drop of the moment. Default: nothing restricted -> byte-identical. Never consulted in human play.
+    virtual void RevelationPackageRestrict(const GameState&, int /*hand_index*/,
+                                           const std::vector<const CardDefinition*>& /*class_defs*/,
+                                           std::vector<int>& /*caps*/, int& /*x_min*/) const {}
+    // RevelationTwinFoldForced -- true holds fold F-R2 (Lotus Vale == Lotus Field) whenever a Blood Sun suppresses land
+    // abilities, even while a card that could end that Blood Sun is reachable (revpkg::TwinFoldLive's conservative
+    // scan). A provider-owned identity the USER ruled (B3 (c): "with blood sun out, Lotus Field and Vale are the same
+    // so they can be collapsed"). Default false: the engine's conservative condition -> byte-identical.
+    virtual bool RevelationTwinFoldForced(const GameState&) const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

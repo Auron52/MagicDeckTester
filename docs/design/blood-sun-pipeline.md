@@ -1700,3 +1700,66 @@ engine change. Cost audit 2d-bis: N/A (lands, empty cost; the audit skips them).
   Smoke: 235/235 PASS, **0 moved digests** vs `impl5/smoke-step5-batch.log` (the shared edits -- the {X} block branch,
   the tutor resolution sites, the signature terms, the enum-memo gate's hand scan -- are all param-gated); saved as
   `build/scratch/bloodsun/impl6/smoke-step6-batch.log`.
+
+### Implementation notes (step 6c)
+**Commit:** `git log --grep "Blood Sun step 6c:"`. The USER's B3 / B4 rulings (ledger "Decided by the USER") as
+`BloodSunProvider` RESTRICTIONS, restrict / order only, behind ONE lever **`MTG_BLOODSUN_USER_PRUNE`** (heurarm slot
+`BLOODSUN_USER_PRUNE`, `EnvOn(..., true)`: DEFAULT ON; `=0` is the unrestricted step-6b search, byte-identical to it,
+the A/B arm) plus the arm **`MTG_BLOODSUN_EXPLORATION_ANYLIFE`** (slot `BLOODSUN_EXPLORATION_ANYLIFE`, default OFF:
+Exploration a target at any life, still never with a Fastbond on our battlefield). Every hook answers the default in
+human play and under `DecisionUnpruned(UnprunedGate::Tutor)`. Adoption stays the USER's.
+- **Two new provider hooks** (appended to `DecisionProvider`; defaults inert -> every other deck byte-identical):
+  `RevelationPackageRestrict(s, hand_index, class_defs, caps, x_min)` (caps may only fall, x_min only rise; the emitter
+  drops cap-0 classes from the ranking -- an identity -- and enumerates the rank-lex multisets over the rest, so the
+  restricted space is still complete and duplicate-free across the waves) and `RevelationTwinFoldForced(s)`
+  (`revpkg::BuildClasses(..., twin_forced)`: F-R2 under any Blood Sun).
+- **(a) Revelation X:** X = 0 is already fold F-R4; the hook raises x_min to 2 unless ANOTHER `tutor_up_to_x` card is in
+  hand. So 5 mana: never cast; 6 mana: cast only with a spare Revelation; X >= 2 unrestricted.
+- **(b) Targets** -- one predicate, `BloodSunTutorTargetCap(s, controller, def, transmute)` (DecisionProviders.cpp),
+  read by the Revelation class caps, Grim Tutor's `TutorCandidates` (which also feeds the per-cast named axis) and the
+  transmute's (`tutor_exact_mv >= 0`, the synthesized search): Blood Sun cap 1 while none on our battlefield or in hand;
+  Fastbond (`unlimited_land_plays`) cap 1 until one is out or in hand; Exploration (`static_extra_land_drops`, nonland)
+  only with no Fastbond on our battlefield and life <= 10 (`kBloodSunExplorationLife`, the parent-chosen threshold);
+  the big lands (`etb_replace_sacrifice_untapped_lands` / `etb_sacrifice_lands`, adds >= 3: Lotus Vale, Lotus Field,
+  Scorched Ruins), Time Warp, Revelation, Emrakul uncapped; the red-source exception by the USER's two NAMES (Rakdos
+  Carnarium, City of Brass) when a Blood Sun is in hand, none on our battlefield and no land of ours on the battlefield
+  or in hand adds {R}; transmute: Grim Tutor (a single-target to-hand library tutor) plus Blood Sun while we have none.
+  Everything else is cap 0. **Order (under the lever only):** `BloodSunRole` -- the step-6 role key, with Fastbond
+  moved to 19 (first among the acceleration; it read 30 before, since Fastbond carries `unlimited_land_plays`, not
+  `static_extra_land_drops`), Exploration 20; Grim / transmute candidates are stable-sorted by the same key. A Grim
+  Tutor left with no admitted target is not cast (`TutorNeedsCandidate`): it would only pay 3 life and shuffle.
+- **(b) twin fold:** under any Blood Sun Lotus Vale == Lotus Field even while our Ulamog (whose cast trigger can
+  exile our own Blood Sun) is reachable -- the USER's answer to the step-6 F-R2 question.
+- **(c) Land plays** -- `BloodSunProvider::LandPlayOffered` (the existing Maze's End hook: the plan land menu, both
+  enumeration paths, and the autonomous Burgeoning put), only while no Blood Sun suppresses land abilities: a big land
+  that cannot add {R} (Scorched Ruins) never; Lotus Vale only with a Blood Sun in hand that the other mana cannot cast
+  (a `TapForCostDirect` probe on a copy, the `MazePlazaPayable` shape) and the Vale's own three can, with >= 2 untapped
+  lands of ours, on OUR turn (a Burgeoning put on the opponent's turn cannot cast Blood Sun this turn: never); Lotus
+  Field under the same in-hand / cannot-cast condition, >= 2 lands of ours out, and no Lotus Vale in hand (so "ordered
+  after any Vale option" holds trivially: the two are never offered together).
+- **Invariance:** every restriction reads the UNION of hand and battlefield (invariant when a land moves between
+  them) or the life total, so the land variants of one node agree on the package space. Exception, stated: a land
+  variant that changes our life (Overgrown Tomb's 2, a Fastbond ping) can cross the Exploration threshold in that
+  variant only; each variant's own enumeration (and its waves) stays self-consistent.
+- **Not covered / disclosed:** (1) two Grim Tutors in one plan read one candidate list (the named axis' cross product),
+  so both may pick Blood Sun / Fastbond -- a second copy the "once we have one" rule would refuse after the first
+  resolves; (2) the beyond-horizon greedy land choice (`GreedyLandChoice`, the d0 runner's `TryPlayLand`) does not read
+  `LandPlayOffered` (as for Maze's End), so a playout may still drop a Ruins pre-Blood Sun -- the sanctioned greedy,
+  but its leaf values a line the search never plays; (3) the step-6b nested-breakpoint gap (a Revelation cast inside a
+  continuation) is untouched and no test depends on it.
+- **Tests changed:** `test_bloodsun_revelation.cpp` (generator mechanics on Bolt / basics libraries) and the two
+  `bloodsun_grimtutor_life4_fetches_and_kills_*` fixtures run with the lever OFF (they pin card mechanics).
+- **New tests:** `test_bloodsun_userprune.cpp` (6 cases, each restriction ON and OFF: Revelation at 5 mana never (both
+  arms, F-R4), at 6 mana not with one Revelation / cast with two, X = 2 at 7; the restricted package space holds no
+  Burgeoning / Ulamog / Marsh / Grim / Machinations / Rot Farm, at most one Fastbond / Blood Sun, and its size equals
+  `CountMultisets` of the restricted caps (11 at X = 2; 7 with a Blood Sun in hand); the forced twin fold with an Ulamog
+  reachable; transmute = {Blood Sun, Grim Tutor}, {Grim Tutor} with Blood Sun in hand or out; Grim Tutor's list,
+  Exploration at life 8 / not 20 / never with Fastbond out (and the any-life arm), Fastbond before Exploration, Time
+  Warp before Emrakul, the red-source exception and its two cancellations, a target-less Grim Tutor not cast; the land
+  rules on the plan menu). Scenarios (12 new): `bloodsun_prune_grim_bolt_not_target_*` (Grim Tutor not cast, no win,
+  life 4: the lever-off twins are the life4 fixtures) and five ON/OFF `expect_menu` pairs: Ruins rows 0 / 1; Vale for
+  the Blood Sun 15 / 15; Vale with a Mountain already casting it 0 / 44 (menu 8 vs 52 rows); Field with a Vale in hand
+  0 / 2; one other land 0 / 0 (the engine's step-2 folds already hold both Lotuses back there -- the USER rule is
+  redundant on that board, pinned).
+- **Measurements (step 6c tree):** `mtg-test` 3835 cases, all pass. `test/scenarios.sh` 638/638. Smoke 235/235 PASS,
+  **0 moved digests** vs `impl6b/smoke-step6b-batch.log`; saved as `build/scratch/bloodsun/impl6c/smoke-step6c-batch.log`.

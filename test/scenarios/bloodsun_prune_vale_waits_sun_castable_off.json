@@ -1,0 +1,44 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Blood Sun",
+  "Lotus Vale"
+ ],
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0"
+ },
+ "expect_menu": [
+  {
+   "summary_contains": "Lotus Vale",
+   "count": 44
+  }
+ ],
+ "comment": "Blood Sun step 6c, MTG_BLOODSUN_USER_PRUNE OFF (the unrestricted twin): pre-Blood Sun, the other mana (Swamp, Swamp, Mountain) already casts Blood Sun: the Lotus Vale waits for it. The autonomous main-phase menu on the board as authored, counted by summary substring \"Lotus Vale\"."
+}

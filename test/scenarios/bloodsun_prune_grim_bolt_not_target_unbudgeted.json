@@ -1,0 +1,47 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 4,
+ "opponent_life": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Grim Tutor"
+ ],
+ "library": [
+  "Lightning Bolt"
+ ],
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 4,
+ "expect_active_life": 4,
+ "comment": "Blood Sun step 6c (USER B3, MTG_BLOODSUN_USER_PRUNE ON): the board of bloodsun_grimtutor_life4_fetches_and_kills_unbudgeted (its lever-OFF twin, which fetches the Bolt and wins this turn at 1 life). Lightning Bolt is not one of the USER's tutor targets and the Swamp filler is not either, so Grim Tutor has no admitted target and is NOT cast (TutorNeedsCandidate): no win, life stays 4.",
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "1"
+ },
+ "expect_no_win": true
+}
