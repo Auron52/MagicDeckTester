@@ -167,7 +167,8 @@ enum class UnprunedGate
                   // face-ping offer opened to the generic full set instead of the deck provider's
                   // CounterPingCounts narrowing (LifegainHeliodComboProvider, MTG_LHC_PING_PRUNE). The
                   // 33rd gate: the masks were widened to 64 bits for it. Human play always sees every ping.
-    FixedBurnTarget, // fixed direct-damage targets/pairs: full rules-legal axis
+    FixedBurnTarget, // fixed direct-damage targets/pairs: full rules-legal axis (also Grim Lavamancer's ping
+                     // targets, DecisionProvider::GraveyardDamageTargetCandidates -- the gate masks are full)
     FireblastPair,   // Midrange Burn: restore every legal Mountain pair for Fireblast's alternative cost
     FireblastPaid,   // Midrange Burn: restore the printed-cost cast below its optimistic mana ceiling
     LavamancerFuel,  // Midrange Burn: restore every graveyard fuel pair for Grim Lavamancer
@@ -1840,6 +1841,7 @@ public:
         const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
     void GraveyardDamageFuelCandidates(
         const GameState& s, std::vector<std::string>& pairs) const override;
+    void GraveyardDamageTargetCandidates(const GameState& s, std::vector<int>& targets) const override;
     bool OffersPaidFireblastCast(const GameState& s) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
@@ -1878,6 +1880,7 @@ public:
         const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
     void GraveyardDamageFuelCandidates(
         const GameState& s, std::vector<std::string>& pairs) const override;
+    void GraveyardDamageTargetCandidates(const GameState& s, std::vector<int>& targets) const override;
     bool OffersPaidFireblastCast(const GameState& s) const override;
     // THE USER'S MAIN-2 RULE (2026-11-18), part of MTG_ONEDROPBURN_ORDER: main 2 casts only Needle Drop /
     // Skewer the Critics when COMBAT is the opponent's only damage source this turn, plus the card(s) a
