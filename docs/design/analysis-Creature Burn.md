@@ -191,7 +191,8 @@ exemption, unchanged by this batch.
      (lever on vs off), d3 b10 and d5 b20, ~150 games/arm on regression seeds; report ms/game + avg win turn per
      arm to the USER (cost of Browbeat opening main 2; soundness says keep it ON). Then remove the probe worktree
      with `scripts/safe_worktree_remove.sh` (after `check_references_safe.py`).
-  2. Pool the tie-break verdict; act (record in ledger; opt-out only if it measurably HURTS).
+  2. DONE 2026-11-21 03:20 UTC: tie-break pooled 24000 paired, 18 changed, net -13 (4 worse / 14 better), gate 2
+     recovers all 4 worse games at d5 b0 => KEEP ON (section "Stage 5c2").
   3. `python3 scripts/verify_deck.py "decks/Creature Burn/Creature Burn.cod" --write-ledger` to a clean gate.
   4. Stage 6 report with the 6a disclosure + USER items: MTG_CB_PEAKS_PLAIN_FOLD default ON (provider prune, sound
      only under attack-all vs never-blocking goldfish); Browbeat dropped from the provider signature; extra Peaks
@@ -354,3 +355,21 @@ Validation (Release, post-change):
   POSITIVE: the engine did what the reply said, and the note says "reply an option index". Every option-list
   `target` note now names `options[].index` vs `legal_targets[].index` explicitly, and so does `claude-play.md`
   (`c5f3b7610`, usability only).
+
+## Stage 5c2 — horizon-honest tie-break check (2026-11-21)
+
+`scripts/leaf_tiebreak_check.py` at the deck's PLAY settings (d5 b20, source=default), MTG_PGO=0, two runs pooled:
+
+| run | seeds | paired | changed | net turns | worse | better |
+|---|---|---|---|---|---|---|
+| run 1 (`--blocks 12`) | 1000000..2100000 | 12000 | 6 | -8 | 0 | 6 |
+| extension (`--seed-base 2200000 --blocks 12`) | 2200000..3300000 | 12000 | 12 | -5 | 4 | 8 |
+| **pooled** | | **24000** | **18** | **-13** | **4** | **14** |
+
+Every half of both runs is negative (helps). Binding rate 0.075%, so 18 changed games stays under the script's
+20-game sign threshold even at 24 blocks: the lever almost never fires, and when it does it helps 14:4.
+Gate 1 (aggregate): helps. Gate 2 (game by game): the 4 worse games (s2200000 gi267 5->6, s2300000 gi526 4->5,
+s2400000 gi142 5->6, s2900000 gi272 6->7) re-run with the tie-break ON at d5 `--budget-ms 0`
+(`build/scratch/cb-orch/gate2/`) all recover the base win turn (5, 4, 5, 6): recoverable, no line deleted.
+**VERDICT: KEEP THE DEFAULT (ON). No opt-out.** Outputs: `logs/leaf_tiebreak/creatureburn{,-ext}.{json,out}`
+(run 1's `.out` also copied to `build/scratch/cb-orch/tiebreak-run1.out`).
