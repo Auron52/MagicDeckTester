@@ -11,7 +11,13 @@ so variants 1/2 (keyed on the line cost) never fired there; variant "castless pl
 chain3 (Release, rebased tree): all 3804 unit cases pass; mana-clean seeds 0 APPLY-DROP on/off (byte-identical);
 gi47 case on = T8 (off unwon); gi47 d8 b0 on = T8, 362K units (off unwon, 2.87M units).
 
-Running: A/B `logs/pd-landdrop/run_ab.sh` (box lock; out build/scratch/claude_pd_landdrop/ab/, DONE marker ab/DONE;
+Was running: A/B `logs/pd-landdrop/run_ab.sh` (box lock; out build/scratch/claude_pd_landdrop/ab/, DONE marker ab/DONE;
 compare with `python3 logs/pd-landdrop/cmp_ab.py build/scratch/claude_pd_landdrop/ab`), then
 `logs/pd-landdrop/run_tiers.sh` (smoke+regression, MTG_PGO=0, tiers.status / tiers.log / tiers.DONE).
-Remaining: d8 b0 every slower A/B game; audit tiers; accept smoke+regression GT here if net <= 0 per deck; check_gt_logs.
+
+## DONE 2026-11-21 15:00 UTC
+A/B (Release, 32 threads, 9 min, seeds 9,100,001+ PD / 9,200,001+ PD 2HG, lever =0 vs =1): PD 4000 pairs 5.4410 vs
+5.4410, net 0, 0 faster / 0 slower, 1 digest changed, units +0.01%; PD 2HG 2000 pairs 5.6550 vs 5.6550, net 0, 0/0,
+0 digests changed, units -0.00%. No slower game -> no d8 b0 owed beyond gi47 (recovers T8).
+Tiers (smoke+regression, Release, 43 min): ALL PASS, 235 + 375 cases byte-identical, viewer 0 drift -> no GT to accept.
+check_gt_logs: 1358 consistent. Overnight GT (s6006 gi47 should go unwon -> T8) left for the periodic overnight run.
