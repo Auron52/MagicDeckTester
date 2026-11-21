@@ -106,7 +106,20 @@ TEST_CASE("Maze's End P5d-6 Q2: the Manabond discard-value rule (CrossingDumpYes
     {   // no Maze's End ours anywhere: the tutor is how the deck finds it -- held even for three lands
         GameState s = Board(prov, 2, 3, { "Sylvan Scrying" });
         s.battlefield.erase(s.battlefield.begin() + 1);   // Maze's End (701)
-        CHECK(Order(prov, s) == -1);
+        CHECK(Order(prov, s) == -2);                         // batch 3 (USER Q4): "yes" pruned
+        const Arm tp(heurarm::MAZE_MANABOND_TUTOR_PRUNE, 0);
+        CHECK(Order(prov, s) == -1);                         // sub-lever off: "no" only ordered first
+    }
+    {   // the same hand with Maze's End IN HAND (not on the battlefield): ours, so the 3-land yes frees the tutor
+        GameState s = Board(prov, 2, 3, { "Sylvan Scrying" });
+        s.players[0].hand.push_back(s.battlefield[1].card);
+        s.battlefield.erase(s.battlefield.begin() + 1);
+        CHECK(Order(prov, s) == 2);
+    }
+    {   // no Maze's End anywhere, no tutor in hand: nothing held, so the prune does not fire
+        GameState s = Board(prov, 2, 1, { "Gates Ablaze" });
+        s.battlefield.erase(s.battlefield.begin() + 1);
+        CHECK(Order(prov, s) == 2);
     }
     {
         const Arm nb(heurarm::MAZE_DISCARD_BURGEONING, 0);

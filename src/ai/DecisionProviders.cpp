@@ -69230,6 +69230,7 @@ MAZE_P5_LEVER(MazeFetchTierFullOn,    MAZE_FETCH_TIER_FULL,    "MTG_MAZE_FETCH_T
 MAZE_P5_LEVER(MazeFetchRankCondOn,    MAZE_FETCH_RANK_COND,    "MTG_MAZE_FETCH_RANK_COND",    false)   // P5d-6 Q1
 MAZE_P5_LEVER(MazeManabondDiscardOn,  MAZE_MANABOND_DISCARD,   "MTG_MAZE_MANABOND_DISCARD",   false)   // P5d-6 Q2
 MAZE_P5_LEVER(MazeDiscardBurgeoningOn, MAZE_DISCARD_BURGEONING, "MTG_MAZE_DISCARD_BURGEONING", true)   // P5d-6 Q2 sub-lever
+MAZE_P5_LEVER(MazeManabondTutorPruneOn, MAZE_MANABOND_TUTOR_PRUNE, "MTG_MAZE_MANABOND_TUTOR_PRUNE", true)   // batch 3, USER Q4 sub-lever
 MAZE_P5_LEVER(MazeTalonLackDropsOn,   MAZE_TALON_LACKDROPS,    "MTG_MAZE_TALON_LACKDROPS",    false)   // A/B variant
 bool MazeHeapStrictOn() { return MazeHeapStrictLever(); }   // one reader, shared with SpellEffects.h
 MAZE_P5_LEVER(MazeTalonAtMost1On,     MAZE_TALON_ATMOST1,      "MTG_MAZE_TALON_ATMOST1",      false)   // A/B variant
@@ -70339,7 +70340,7 @@ int MazesEndProvider::ManaSourceRank(const GameState& s, const CardDefinition& d
 //    Maze's End 2HG blind seed 202022 gi 21 salt 3 at d8 b0: a T4 end-step yes discarded the only Sylvan Scrying with
 //    no Maze's End anywhere, and the game was never won).
 //  * Everything else (Amulet of Vigor, a deck change) is KEPT.
-struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; };
+struct MazeDumpView { int nonland = 0; int free = 0; int held_tutors = 0; int kept = 0; bool maze_ours = false; };
 static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, const std::vector<int>* skip = nullptr)
 {
     MazeDumpView v;
@@ -70393,6 +70394,7 @@ static MazeDumpView MazeDumpDiscards(const GameState& s, int me, int lands_put, 
     const bool sets_up_win = CountDistinctNamedLandsWithSubtype(s, me, sub, need) + new_names + 1 >= need;
     const bool tutors_free = maze_held && (lands_put >= 3 || (lands_put == 2 && tutors <= 1) || sets_up_win);
     if (tutors_free) { v.free += tutors; } else { v.held_tutors = tutors; }
+    v.maze_ours = maze_held;
     return v;
 }
 // Does Manabond put a held Maze's End back before our next turn without discarding a card we care about (P5d-6 Q2)?
@@ -70718,6 +70720,12 @@ bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int c
 //  * CLEAR -> prune: every nonland card the yes discards is FREE (with at least one land to put) -- "no" keeps nothing
 //    we care about and forgoes the lands, the all-land hand's premise (CrossingDumpAllLandsDominatesNo) with discards
 //    that do nothing in goldfish. Returns 2.
+//  * CLEAR -> prune "yes" (MTG_MAZE_MANABOND_TUTOR_PRUNE, sub-lever, DEFAULT ON under the rule; USER 2026-11-21 on Q4:
+//    "Good point, that is a probable hold case, which didn't occur to me at the time. We should try it before moving
+//    on."): the yes would discard a held land tutor while NO Maze's End is ours on the battlefield or in hand. The
+//    tutor is the deck's route to its only win condition, and the lands it puts cannot win without Maze's End
+//    (Maze's End 2HG blind seed 202022 gi 21 salt 3: a T4 end-step yes discarded the only Sylvan Scrying with no
+//    Maze's End anywhere and the game was never won). Returns -2 (the menu is {no}).
 //  * CLOSE -> order "no" first, both searched: a land tutor is HELD (one land, or two with several tutors and not
 //    setting up the win: "cast it first" / "delay one turn"), or a KEPT card (Amulet, the one Exploration with none out,
 //    the one Guild Summit with none out) would go for a single land. Returns -1.
@@ -70726,7 +70734,7 @@ bool MazesEndProvider::CrossingDumpAllLandsDominatesNo(const GameState& s, int c
 // vs search. Counters are atomics read by nothing but the exit report, so nothing here can reach play.
 namespace mazedumpcensus
 {
-    enum Cls { kClearPrune = 0, kCloseTutor, kCloseKept1, kCloseDefault, kCount };
+    enum Cls { kClearPrune = 0, kCloseTutor, kCloseKept1, kCloseDefault, kTutorPruneYes, kCount };
     inline bool On() { static const bool on = EnvOn("MTG_MAZE_DUMP_CENSUS"); return on; }
     struct Census
     {
@@ -70735,7 +70743,8 @@ namespace mazedumpcensus
         {
             if (!On()) { return; }
             static const char* nm[kCount] = { "clear_prune(all_free)", "close_no_first(tutor_held)",
-                                              "close_no_first(kept_for_1_land)", "close_default(other)" };
+                                              "close_no_first(kept_for_1_land)", "close_default(other)",
+                                              "clear_prune_yes(tutor_no_maze)" };
             for (int r = 0; r < 2; ++r)
             {
                 std::fprintf(stderr, "[maze-dump-census] %s", r ? "real" : "search");
@@ -70759,7 +70768,11 @@ int MazesEndProvider::CrossingDumpYesOrder(const GameState& s, int controller, i
     const MazeDumpView v = MazeDumpDiscards(s, controller, lands_put);
     if (v.nonland == 0) { return 0; }
     if (v.free == v.nonland) { return mazedumpcensus::Note(mazedumpcensus::kClearPrune, 2); }
-    if (v.held_tutors > 0) { return mazedumpcensus::Note(mazedumpcensus::kCloseTutor, -1); }
+    if (v.held_tutors > 0)
+    {
+        if (!v.maze_ours && MazeManabondTutorPruneOn()) { return mazedumpcensus::Note(mazedumpcensus::kTutorPruneYes, -2); }
+        return mazedumpcensus::Note(mazedumpcensus::kCloseTutor, -1);
+    }
     if (v.kept > 0 && lands_put < 2) { return mazedumpcensus::Note(mazedumpcensus::kCloseKept1, -1); }
     return mazedumpcensus::Note(mazedumpcensus::kCloseDefault, 0);
 }

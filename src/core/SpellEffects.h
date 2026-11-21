@@ -54343,12 +54343,14 @@ inline void PerformEndStepManabond(GameState& state)
         // makes of an empty one); rank 1 = the other.
         // P5d-6: the provider's order / restriction when nonland cards would be discarded (Maze's End: the discard-value
         // rule, MazesEndProvider::CrossingDumpYesOrder). 2 restricts to {yes} (no rank consumed, like all_lands_yes);
+        // -2 restricts to {no} (no rank consumed; batch 3, the held-tutor prune);
         // +-1 swaps which answer is rank 0 (both still searched).
         const int yes_order = (!all_lands_yes && lands + resp > 0 && !(g_play_dig_chooser && !g_tap_speculating))
             ? ResolveProvider(state).CrossingDumpYesOrder(state, me, lands + resp) : 0;
         const bool default_yes = yes_order == -1 ? false
                                : (yes_order == 1 ? true : (lands > 0 || (resp > 0 && p.hand.empty())));
         bool yes = (all_lands_yes || yes_order == 2) ? true
+                 : yes_order == -2 ? false
                  : (TakeCrossingLandRank(state, 2) == 0 ? default_yes : !default_yes);
         if (g_play_dig_chooser && !g_tap_speculating)
         {
