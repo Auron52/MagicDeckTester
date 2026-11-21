@@ -169,30 +169,38 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~03:45 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~04:20 UTC) — resume here after compaction
 
 * Done (all local, NOTHING PUSHED; the 1 Drop Burn Fireblast commits 591d4c115 + 631822f14 ride along too):
-  Stages 1-4, 4a provider, rows in all 3 tiers + GT (`a478b813c`), claude-play sweep (`3cf881139`, flag fixed
-  `c5f3b7610`), echo census NO GAP, Scryfall refresh, Stage 5c2 tie-break KEEP ON (`878737457`), Browbeat M2 cost
-  measured (`90e4fd025`: 1.6x units, 0.000 turns). USER settled the Searing Blaze default (toughest; goldfish only;
-  Phase 2 doc `docs/design/burn-target-default-phase2.md`).
-* RUNNING:
-  1. `verify_deck.py --write-ledger` (full, MTG_PGO=0): pid `build/scratch/cb-orch/verify.pid`, out
-     `build/scratch/cb-orch/verify.out` (EXIT line). When it ends, `touch build/scratch/cb-orch/VERIFY_DONE`
-     (the fold agent waits on it before any batch).
-  2. Fold agent (Opus), brief `logs/creature-burn/m2fold-brief.md`: per-turn restricted main 2 for Browbeat via
-     `RestrictedSecondMainLive`, lever `MTG_CB_BROWBEAT_M2_RESTRICT` default ON, worktree `.claude/worktrees/cb-m2fold`
-     branch `wip/cb-m2fold`; it A/Bs, accepts creatureburn smoke+regression GT, commits, stops. Handoff file
-     `logs/creature-burn/m2fold-handoff.md` if it runs long.
+  - Stages 1-4 and the 4a provider.
+  - Rows in all 3 tiers with GT (`a478b813c`).
+  - claude-play sweep (`3cf881139`); its flag fixed in `c5f3b7610`.
+  - Echo census: NO GAP. Scryfall refresh done.
+  - Tie-break check: KEEP ON (`878737457`).
+  - Browbeat main-2 cost measured (`90e4fd025`): 1.6x units for 0.000 turns.
+  - **verify_deck full run with --write-ledger: GATE PASS** (`f0e61328b`).
+  - Probe worktree cb-m2probe removed; its diff is in `logs/creature-burn/m2probe.diff`.
+  - USER settled the Searing Blaze default: toughest creature, goldfish only. Phase 2 doc:
+    `docs/design/burn-target-default-phase2.md`.
+* RUNNING: the fold agent (Opus, brief `logs/creature-burn/m2fold-brief.md`), in worktree
+  `.claude/worktrees/cb-m2fold` on branch `wip/cb-m2fold`.
+  - It builds a per-turn restricted main 2 for Browbeat via `RestrictedSecondMainLive`, behind
+    `MTG_CB_BROWBEAT_M2_RESTRICT` (default ON).
+  - It passed 250K context, so it was told to finish its build, commit WIP and write
+    `logs/creature-burn/m2fold-handoff.md`, then stop.
+  - `build/scratch/cb-orch/VERIFY_DONE` exists, so the box is free for its batches.
 * NEXT, in order:
-  1. Review the fold agent's commits; cherry-pick them onto the primary branch; rerun the runtime verify gates.
-  2. Remove both probe worktrees with `scripts/safe_worktree_remove.sh`, after running `check_references_safe.py`.
+  1. When the agent stops, read the handoff and launch a FRESH Opus agent from it. Its work: finish, validate
+     (unit + scenarios + byte-identity smoke on the other decks), held-out A/B, the gate-2 recoveries, accept
+     creatureburn smoke+regression GT, commit on wip/cb-m2fold.
+  2. Review the commits, cherry-pick them onto the primary branch, rerun verify_deck's runtime gates, then remove
+     the worktree with `safe_worktree_remove.sh` (after `check_references_safe.py`).
   3. Stage 6 report with the 6a disclosure. USER items:
      - MTG_CB_PEAKS_PLAIN_FOLD default ON (a provider prune, sound only under attack-all against the never-blocking
        goldfish);
      - Browbeat dropped from the provider signature;
      - the extra Peaks land positions;
-     - the Browbeat M2 cost and the fold;
+     - the Browbeat main-2 cost and the fold;
      - the echo census;
      - the Pyromancer human-play response ping and the accounting un-ping;
      - the 1-power pinger attack-vs-ping exemption;
@@ -200,8 +208,9 @@ exemption, unchanged by this batch.
      - Price of Progress vs Peaks self-damage (inert);
      - the heavy unbudgeted tail;
      - provider cert NotAssessed.
-  4. Push. `python3 scripts/push_queue.py join` once (slow box, at most once per 4 h). At my turn:
-     - rebase (origin was 109 ahead at 01:40 UTC) and run `check_references_safe.py`;
+  4. Push. Run `python3 scripts/push_queue.py join` once, after the fold is integrated (the slow box joins at most
+     once per 4 h; at 03:50 UTC only wip/maze-batch3 was in the queue, at the head). At my turn:
+     - rebase (origin was 109 ahead) and run `check_references_safe.py`;
      - under `push_queue.py hold`: Release build, unit tests, smoke (MTG_PGO=0) and `check_gt_logs.py`;
      - `land`, then watch CI in the background with `--interval 60`.
   5. CronDelete the status timer `b718d9a3` once done, and run `check_references_safe.py` at session close.
