@@ -1082,6 +1082,9 @@ enum Slot : int
     LAVAMANCER_TARGET_PRUNE,  // MTG_LAVAMANCER_TARGET_PRUNE  Grim Lavamancer's ping (gy-exile mode 3) targets only the OPPONENT and opponent-controlled creatures / planeswalkers in autonomous play (Midrange Burn / 1 Drop Burn GraveyardDamageTargetCandidates; USER 2026-11-21: "This indeed should be pruned. In fact everything but the opponent should be pruned."). Human play and MTG_UNPRUNE=fixedburntarget keep every target. DEFAULT ON; =0 -> every legal target
     FIREBLAST_COPY_PINS,      // MTG_FIREBLAST_COPY_PINS  two Fireblast alternative casts whose pinned Mountains overlap are one physically impossible selection (SubsetHasDuplicateSacSource kDupFireblast; the apply silently dropped the second), and under a provider's one-pair fold each further Fireblast copy is pinned to the best pair DISJOINT from the earlier copies' pins, so two Fireblasts on four Mountains stay findable. Sound (rejects only selections no order can pay). DEFAULT ON; =0 -> the pre-2026-11-21 shared pins
     CAST_SCRY_SEARCH,         // MTG_CAST_SCRY_SEARCH  a DirectDamage spell's own scry (Magma Jet's cast_scry) is SEARCHED: every cast is twinned per alternative disposition (Action::scry_pin, the step-9d mechanism), sized off the look count, the pin consumed by the spell's ScryTop in both worlds. USER 2026-11-17: every scry site is searched, then pruned by the provider (ScryVerdict). Creature Burn s6 gi5 / s8 gi7 references. Default ON; =0 -> the provider's single pick, byte-identical to before
+    SCALED_GROWTH_BOUND,      // MTG_SCALED_GROWTH_BOUND  EnumeratePlans' scalar mana bound adds +1 per matching creature cand for each untapped scaled land with a creature subtype (Three Tree City): an UPPER bound on same-turn growth, so it can only prune less. Merfolk Turns gate claude-queue-20261119i s30000762 T4 (ENUM-GAP {Seahunter + Rishadan Dockhand}). TEMPORARY selector under measurement (merfolk-gate doc section 3)
+    SCALED_GROWER_DECIDER,    // MTG_SCALED_GROWER_DECIDER  OPTION (a), generic: the apply's payable-order decider, when the given order pays in neither the whole-turn prepay nor the sequential walk, tries the order with City-growing creature casts cheapest-first among comparator ties (ScaledLandGrowerOrder) and takes it when the walk pays it. TEMPORARY selector under measurement
+    MERFOLK_GROWER_ORDER,     // MTG_MERFOLK_GROWER_ORDER   OPTION (b), deck rule: MerfolkTurnsProvider::ArrangeCastOrder puts City-growing Merfolk cheapest-first among comparator ties (ScaledLandGrowerOrder), always. TEMPORARY selector under measurement
     COUNT
 };
 
@@ -2108,6 +2111,9 @@ inline const char* Name(int slot)
         "MTG_LAVAMANCER_TARGET_PRUNE",
         "MTG_FIREBLAST_COPY_PINS",
         "MTG_CAST_SCRY_SEARCH",
+        "MTG_SCALED_GROWTH_BOUND",
+        "MTG_SCALED_GROWER_DECIDER",
+        "MTG_MERFOLK_GROWER_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

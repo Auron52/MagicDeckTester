@@ -5169,6 +5169,64 @@ bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
     return CastOrderLessRanked(state, a, CastOrderKeyOf(state, a), b, CastOrderKeyOf(state, b));
 }
 
+bool ScaledLandGrowerOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    if (order.size() < 2) { return false; }
+    std::uint16_t grown[4];
+    int ng = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped || ng == 4) { continue; }
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
+        if (land == nullptr || !IsScaledManaLand(*land) || land->params.mana_per_creature_subtype.empty()
+            || LandTypeChangedToIsland(state, p)) { continue; }
+        grown[ng++] = p.chosen_subtype_id != SubtypeRegistry::kNone
+            ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
+    }
+    if (ng == 0) { return false; }
+    auto grows = [&](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        // A champion (Wanderwine Prophets) or a devourer does not leave one more body behind (the walks' rule,
+        // ScaledLandCreaturePersists).
+        if (d == nullptr || !d->card.IsCreature() || d->params.champion_merfolk || d->params.devour > 0) { return false; }
+        for (int g = 0; g < ng; ++g) { if (d->card.m_subtypes.HasId(grown[g])) { return true; } }
+        return false;
+    };
+    // With a grower in the order, EVERY creature cast walks cheapest-first among comparator ties -- the rescue walk's
+    // order exactly, so the apply realises what the menu priced: Dockhand ahead of a champion Prophets (which grows
+    // nothing itself) is the same funding as Dockhand ahead of Seahunter.
+    thread_local std::vector<int> pos, sub;
+    pos.clear(); sub.clear();
+    bool any_grower = false;
+    for (std::size_t k = 0; k < order.size(); ++k)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[k])];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        any_grower |= grows(a);
+        pos.push_back(static_cast<int>(k)); sub.push_back(order[k]);
+    }
+    if (!any_grower || sub.size() < 2) { return false; }
+    std::stable_sort(sub.begin(), sub.end(), [&](int x, int y)
+    {
+        const Action& ax = acts[static_cast<std::size_t>(x)];
+        const Action& ay = acts[static_cast<std::size_t>(y)];
+        if (CastOrderLess(state, ax, ay)) { return true; }
+        if (CastOrderLess(state, ay, ax)) { return false; }
+        return ax.cost.ManaValue() < ay.cost.ManaValue();
+    });
+    bool moved = false;
+    for (std::size_t k = 0; k < pos.size(); ++k)
+    {
+        int& slot = order[static_cast<std::size_t>(pos[k])];
+        if (slot != sub[k]) { slot = sub[k]; moved = true; }
+    }
+    return moved;
+}
+
 void ApplyDeckCastArrangement(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
 {
     // The one shared entry, so the executor and the rollout apply cannot drift (see the header).
@@ -7872,9 +7930,21 @@ static void PayableCastOrderCore(const GameState& state, const std::vector<Actio
     // UnlockOrderSearch). The enumeration site runs the same search inside SubsetPayableSequentialTail.
     // MTG_PO_DAMAGE_ORDER: ...and a cast that needs same-turn damage (Needle Drop, spectacle, Incinerator) ordered
     // before the burn that supplies it -- the same walk with the damage modelled (TurnSolver::DamagePayableOrder).
-    if (!PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site) && site == 0)
+    if (!PayableCastOrderCoreImpl(state, acts, order, hand_exits, extra_wild, site) && site == 0
+        && !TurnSolver::UnlockPayableOrder(state, acts, order) && !TurnSolver::DamagePayableOrder(state, acts, order)
+        && ScaledGrowerDeciderOn())
     {
-        if (!TurnSolver::UnlockPayableOrder(state, acts, order)) { (void)TurnSolver::DamagePayableOrder(state, acts, order); }
+        // OPTION (a) of the Merfolk Turns ENUM-GAP (MTG_SCALED_GROWER_DECIDER): nothing above moved the order, and a
+        // creature cast that grows an untapped Three Tree City may be what funds a later cast -- growth no pool walk
+        // here sees. The grower order is taken only when the given order pays in neither apply payer (the whole-turn
+        // prepay, the per-cast walk; the "otherwise unpayable" test of the EDF range projection) and the
+        // sequential walk, which puts each paid grower on its board, pays it.
+        std::vector<int> alt = order;
+        if (ScaledLandGrowerOrder(state, acts, alt)
+            && !TurnSolver::OrderPaysSequentially(state, acts, order)
+            && !TurnSolver::OrderPrepaysWholeTurn(state, acts, order)
+            && TurnSolver::OrderPaysSequentially(state, acts, alt))
+        { order.swap(alt); }
     }
 }
 
