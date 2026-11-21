@@ -252,6 +252,11 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   behind `MTG_BLOODSUN_USER_PRUNE`: no Revelation cast with X = 0; no package whose every card is a Diabolic
   Revelation (keep the mana). "Same-name copies" = WHICH of the four library Scorched Ruins a package takes:
   a pure identity (the copies are interchangeable), folded, nothing for the USER to decide.
+  USER refinement (verbatim): *"I guess technically fetching multiple Revelations is a net-positive, but that is
+  also dominated by fetching Revelation and something else useful for our situation. (since the next chain can
+  get the second Revelation)"* -> additionally AT MOST ONE Diabolic Revelation per package (a second copy is
+  dominated by one copy plus a useful card; the next Revelation can fetch the next copy). With B8: X = 1
+  fetching only a Revelation stays pruned.
 - B9 depth-0 chain walk (U8) (USER 2026-11-21, verbatim): *"Okay, I'll leave this part up to you."* -> the
   agent's call: enable the walk, decouple the priced limit, measure both in step 8.
 - B10 Machinations transmute (USER 2026-11-21, verbatim): *"we only need one Blood Sun, so we already have one
