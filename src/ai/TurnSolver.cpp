@@ -33861,6 +33861,15 @@ static bool OwnHasteEquipmentOnBattlefield(const GameState& state, int ctrl)
     return false;
 }
 
+// MTG_S9_MANA_ABILITY_SKIP (DEFAULT ON; USER 2026-11-21): a sac outlet that ADDS MANA (Skirk Prospector) is a mana
+// ability, spent by the payment as the line needs it -- not a searched activation -- so its arrival (or a new victim
+// for it) does not open site 9. =0 restores the old keying.
+static bool S9ManaAbilitySkipOn()
+{
+    static const bool env = EnvOn("MTG_S9_MANA_ABILITY_SKIP", true);
+    return heurarm::Flag(heurarm::S9_MANA_ABILITY_SKIP, env);
+}
+
 bool TurnSolver::BpAbilityDeltaOn()
 {
     // Routed through heurarm so BOTH arms fit one pooled batch: a bare `static const bool` is read
@@ -34421,6 +34430,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     { out.push_back(ActKey(num, kActPod)); }
 
     if (pp.sac_creature_outlet
+        && !(pp.sac_outlet_add_mana_amount > 0 && S9ManaAbilitySkipOn())   // a mana ability (MTG_S9_MANA_ABILITY_SKIP)
         && (!pp.sac_creature_cost.has_value()
             || ActAffordable(state, ctrl, p.card, pp.sac_creature_cost, total_cache)))
     {

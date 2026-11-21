@@ -1064,6 +1064,7 @@ enum Slot : int
     DEV_SEQ_HEXIT_TAINT,      // MTG_DEV_SEQ_HEXIT_TAINT  MTG_BP_DEV_SEQ's first (one-deviation) pass marks a node DIRTY when it takes the FIRST-VERIFIED-WIN HORIZON EXIT past its own turn while the pass has met a latent occurrence before that win turn: the exit's "no earlier win" rests on the shallower ladder passes' ONE-DEVIATION refutations, so its answer (and the in-window cache / game-line cache entry made from it) is not a full-tree proof. Soundness fix (AA seed 12345681: the T2 no-win-by-T3 inwin proof the second pass read). Default ON; =0 -> the exit leaves the node clean (the hole)
     REQHEUR_OLD_DEFAULT,      // MTG_REQHEUR_OLD_DEFAULT  MEASUREMENT arm (2026-11-20, provider-heuristic-required.md): a registered decision with NO deck policy runs the pre-2026-11-20 engine default instead of the searched default (Acclaimed Contender: the dig axis capped at the 3 front matches in library order; Paragon and Genesis Wave have no searched default yet, so the lever does not touch them). Default OFF; never a play setting
     KN_ETBDIG_RANK,           // MTG_KN_ETBDIG_RANK  Knights policy for Acclaimed Contender's dig (2026-11-20): KnightsProvider::EtbDigCandidates ranks the matches (see the provider) and declares the policy. Default ON since 2026-11-20 (play-identical over 6000 A/B games, ~1.6-1.8% fewer units; the USER may overrule); =0 is the searched default + RED FLAG
+    S9_MANA_ABILITY_SKIP,     // MTG_S9_MANA_ABILITY_SKIP  site 9 (post-entry re-plan, and its after-deferred twin) is NOT opened by a creature sac outlet whose activation is a MANA ability (sac_outlet_add_mana_amount > 0: Skirk Prospector "Sacrifice a Goblin: Add {R}"). USER 2026-11-21: "the Skirk Prospector ability shouldn't be messing us up in terms of cost because it is a mana ability and should not be part of the search." The plan menus already credit the outlet as mana (MTG_SUBSET_SAC_OUTLETS / MTG_SAC_FODDER_MENU) and the payment sacrifices per the line. Default ON; =0 -> the outlet keys site 9 like any activation
     COUNT
 };
 
@@ -2072,6 +2073,7 @@ inline const char* Name(int slot)
         "MTG_DEV_SEQ_HEXIT_TAINT",
         "MTG_REQHEUR_OLD_DEFAULT",
         "MTG_KN_ETBDIG_RANK",
+        "MTG_S9_MANA_ABILITY_SKIP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
