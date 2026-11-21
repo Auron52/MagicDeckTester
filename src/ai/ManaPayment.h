@@ -414,6 +414,9 @@ bool SacFodderMenuOn();
 bool SacFodderNeededOnlyOn();   // MTG_SAC_FODDER_NEEDED_ONLY (default ON under the lever)
 bool SacFodderInertPruneOn();  // MTG_SAC_FODDER_INERT_PRUNE (default ON under the lever)
 bool SacFodderWaveOn();        // MTG_SAC_FODDER_WAVE (default ON under the lever)
+bool SacFodderStagePlayoutOn();   // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm, default OFF)
+bool SacFodderStageBpEnumOn();    // MTG_SAC_FODDER_STAGE_BPENUM (WIP staging arm, default OFF)
+bool SacFodderStageRootOn();      // MTG_SAC_FODDER_STAGE_ROOT (DIAGNOSTIC, default OFF)
 // Does this action put a permanent onto the battlefield (cast, Vial, Bronze put, retrace)?
 bool SacFodderPutKind(const Action& a);
 // The legal fodder bodies this action adds for an outlet with params `op`: its own body (a matching

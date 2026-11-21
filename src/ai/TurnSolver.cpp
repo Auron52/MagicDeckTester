@@ -85888,6 +85888,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // subset, or bodies the subset adds beside a live one). Inert (live = false) for every deck without an outlet.
     SacFodderMenuCtx sacfod;
     BuildSacFodderMenuCtx(state, cands, sacfod);
+    // MTG_SAC_FODDER_STAGE_ROOT (DIAGNOSTIC, lossy): no credit in searched play outside a two-pass FullSearchLine.
+    if (sacfod.live && g_rollout_nest == 0 && g_devseq_two_pass == 0 && g_devseq_suppress == 0 && SacFodderStageRootOn())
+    { sacfod = SacFodderMenuCtx{}; }
     // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
@@ -88823,7 +88826,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // own provenance). A budget-staged admission order (CLAUDE.md, "A BUDGET MAY RE-PRICE WORK"): a finite budget
         // spends on the lever-off plans first and reaches these with what is left; at an unlimited budget both passes
         // run and nothing is unfindable. Only where the two passes govern (the dev-seq latent site's own scope).
-        if (sacfod_credited && g_devseq_suppress > 0 && g_rollout_nest == 0 && g_bp_enum_depth == 0
+        if (sacfod_credited && g_devseq_suppress > 0 && g_rollout_nest == 0
+            && (g_bp_enum_depth == 0 || SacFodderStageBpEnumOn())   // MTG_SAC_FODDER_STAGE_BPENUM (WIP arm)
             && SacFodderWaveOn() && BpDevSeqOn())
         {
             g_devseq_latent_hit = true; ++g_devseq_latent_n;
