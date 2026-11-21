@@ -19003,5 +19003,68 @@
     ]
    }
   }
+,
+  {
+   "name": "Garruk's Packleader",
+   "mana_cost": "{4}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Whenever another creature you control with power 3 or greater enters, you may draw a card. [Draw-only own-lane creature-enter watcher (own_creature_enters_draw 1, the Enduring Innocence clause of FireCreatureEnterWatchers, the universal enter cascade): every entry route counts (cast, put, tokens -- Thragtusk's 3/3 Beast, Garruk's 3/3 Beast). 'Another' = the entrant is never its own watcher (the loop's entered_index skip; creature_enters_includes_self stays unset). 'You control' = own lane only. 'Power 3 or greater' = creature_enters_min_power 3 on the ENTRANT's LIVE power (counters + temp + lords via ComputeLordBonus), read once as the trigger fires (CR 603.6a): Krosan Warchief (2/2) triggers it only under Kaheera's +1/+1, a kicked Cragplate Baloth's as-enters counters are already on. No once-each-turn limit: every qualifying entry is its own trigger. PARTIAL, PROVISIONAL pending user sign-off: the 'may' is always taken (a goldfish draw has no drawback; an empty library skips the draw, the Kili convention) and is not surfaced to the human viewer (the Puresteel precedent). The drawn card is castable the same main phase (hand-entry breakpoint). A legendary duplicate (Questing Beast, Kaheera) entering under it is NOT the tie the duplicate-legend prune assumes -- it draws before the legend rule -- and DuplicateEntryOrDeathHasUpside sees that through own_creature_enters_draw.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_draw": 1,
+    "creature_enters_min_power": 3
+   }
+  },
+  {
+   "name": "Krosan Warchief",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Regenerate"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Beast spells you cast cost {1} less to cast.\n{1}{G}: Regenerate target Beast. [COST REDUCTION via reduces_spell_subtype 'Beast' (the Goblin Warchief reducer, reduces_spell_subtype_amount 1 by default). Applies to ANY Beast spell (reduces_spell_subtype_creature_only stays false); every Beast in this list is a creature, so the readings coincide. Reduces GENERIC only, floored at 0, stacking per copy and with Urza's Incubator naming Beast; a lone Warchief does not discount itself (it is not on the battlefield while being cast), one on the battlefield discounts the next. PARTIAL, PROVISIONAL pending user sign-off: '{1}{G}: Regenerate target Beast' is not modelled (Regenerate kept as an inert keyword tag; the engine has no regeneration shield). The only way our creature can be destroyed in this list is a Contested Cliffs fight against a passive spawn whose power >= our Beast's toughness; any regenerating line is dominated by the same line with neither the fight nor the regeneration (the spawn never blocks or attacks and its death buys nothing; the only valuable fight death is a WANTED one -- Thragtusk's leave token feeding Garruk's Packleader -- where regenerating is wrong), and the shield costs {1}{G}.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_spell_subtype": "Beast"
+   }
+  },
+  {
+   "name": "Questing Beast",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Deathtouch",
+    "Haste"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Vigilance, deathtouch, haste\nQuesting Beast can't be blocked by creatures with power 2 or less.\nCombat damage that would be dealt by creatures you control can't be prevented.\nWhenever Questing Beast deals combat damage to an opponent, it deals that much damage to target planeswalker that player controls. [HASTE + VIGILANCE: printed keywords, live (it attacks the turn it is cast and stays untapped). LEGENDARY: legend rule via EnforceLegendRule, which copy to keep searched (Action::legend_keep) / the viewer's legend_keep. A second copy is still offered when its CAST or ENTRY pays (Herald of Ilharg's +2 counters cast trigger, Garruk's Packleader's draw) -- DuplicateCastHasUpside / DuplicateEntryOrDeathHasUpside. DEATHTOUCH: honoured by the shared fight resolver (Contested Cliffs; CR 702.2b: any nonzero damage from a deathtouch source is lethal); combat deathtouch is inert (the opponent never blocks). PARTIAL, PROVISIONAL (user sign-off pending): D2 the power-2-or-less block restriction is not modelled -- the opponent never blocks. D3 'combat damage can't be prevented' is not modelled -- no combat-damage prevention exists in the engine and the goldfish opponent never prevents. D4 the planeswalker redirect is not modelled -- the opponent controls no planeswalkers, so the trigger has no legal target (CR 603.3d), in 2HG for either head as well.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  }
  ]
 }

@@ -397,6 +397,7 @@ add_executable(mtg-test
     test/unit/test_morph_pumps.cpp
     test/unit/test_morph.cpp
     test/unit/test_boars_cards.cpp
+    test/unit/test_beasts_cards.cpp
     test/unit/test_fetch_crack_first.cpp
     test/unit/test_boars_zhurtaa.cpp
     test/unit/test_boars_herald.cpp
