@@ -8,6 +8,13 @@
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-21T06:41:49Z",
    "note": ""
+  },
+  {
+   "branch": "ft-land-1121",
+   "host": "67d5329561c0",
+   "id": "67d5329561c0:ft-land-1121",
+   "joined": "2026-11-21T08:14:29Z",
+   "note": "RULE6 ON + Cyclone lounge-idle/amend + S9 mana skip r4 + deferral doc"
   }
  ]
 }
