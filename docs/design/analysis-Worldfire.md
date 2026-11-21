@@ -173,6 +173,9 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
 - FIXED (search hole, found by gi 8 + gi 11): the Irencrag Feat restrictor counted a SUSPEND as a cast, so
   "suspend Rift Bolt + Irencrag Feat + Worldfire" was never enumerated at ANY budget (`--validate-line` ->
   legal_not_enumerated; b0 also misses it). `RestrictorCastsOf` now counts a Suspend as 0.
+- Feat-fix tier result: only the 9 worldfire* keys move (dragonstorm, the other Feat + suspend deck, does not);
+  searched 55 faster / 1 slower. The slower one (worldfire_regression_d5_s3003 gi52, 5->6 at b20) RECOVERS at
+  b200 (new 5 = old 5): budget churn from the wider plan set. Landed in 42d819bc0 with the GT.
 - OPEN (search misplay candidate, gi 4 / seed 9300005): from the same mulligan bottom the search wins T6 at d5
   b200 / b2000 and d8 b200; Claude suspends Halberdier T1 and wins T5 (handed the post-suspend board the search
   finds T5). d8 b0 pending.
