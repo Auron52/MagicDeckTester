@@ -5803,7 +5803,26 @@ bool SacFodderMenuOn()
     // net +5 (0 / 5; gi 630182 and 630865 do not recover at d8 b0, 4 -> 5). It clears most ENUM-GAPs (Goblins
     // 705 -> 57, Fungus 129 -> 10) at units x1.07 / x1.03. =1 turns it on; docs/design/sac-fodder-menu-2026-11-18.md.
     static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
-    return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
+    if (!heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on)) { return false; }
+    // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm): beyond the horizon the lever is off -- no credited plan on a
+    // playout's menu and the apply's order decider exactly as with the lever off.
+    if (SacFodderStagePlayoutOn() && TurnSolver::InRolloutPlayout()) { return false; }
+    return true;
+}
+bool SacFodderStagePlayoutOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_PLAYOUT");
+    return heurarm::Flag(heurarm::SAC_FODDER_STAGE_PLAYOUT, env_on);
+}
+bool SacFodderStageBpEnumOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_BPENUM");
+    return heurarm::Flag(heurarm::SAC_FODDER_STAGE_BPENUM, env_on);
+}
+bool SacFodderStageRootOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_ROOT");
+    return heurarm::Flag(heurarm::SAC_FODDER_STAGE_ROOT, env_on);
 }
 bool SacFodderNeededOnlyOn()
 {
