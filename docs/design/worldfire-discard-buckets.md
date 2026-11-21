@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -71,7 +71,7 @@ T\* are the MANA quota; the rest of the mana is overflow.
 | **MANA: Bloom** | Lotus Bloom in hand | **only a Bloom that makes the go-off EARLIER**: project T0 without the Blooms in hand; keep one only when T0 is later than now+3 (or "far"), i.e. when its arrival on now+3 pulls the go-off forward; a 2nd only if T\* is still "far" with the first | **a Bloom near the combo turn is dropped** (USER 2026-11-21: *"Bloom should be dropped if we are anywhere near the combo turn."*): with T0 <= now+3 it is the first overflow card shed after DEAD |
 | **MANA: lands** | every land | the land drops through T\* (one per turn, net of a drop already made this turn) | keep order below |
 | **MANA: rituals** | Seething Song, Irencrag Feat | the rituals the projection uses | a second Irencrag Feat is DEAD (USER: no duplicate Irencrag); Song is kept over Feat (cheaper, and does not end the turn) |
-| **DIG** | Brainstorm, Ponder, Preordain, Overmaster (tutors are not dig: they fill COMBO / FINISHER first; a tutor beyond the missing pieces whose only target is an Irencrag Feat ranks with the rituals) | **While short: 1 + the number of missing pieces (COMBO and FINISHER count one each), at least 2 -- so 2 with one piece missing, 3 with both -- and dig beyond that quota is still kept above surplus mana (USER 2026-11-21: *"If we are missing combo pieces holding multiple dig is potentially worthwhile."*); 1 once both are filled; 0 once COMBO + FINISHER + MANA are all filled.** While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
+| **DIG** | Brainstorm, Ponder, Preordain, Overmaster (tutors are not dig: they fill COMBO / FINISHER first; a tutor beyond the missing pieces whose only target is an Irencrag Feat ranks with the rituals) | **While short: 1 + the number of missing pieces (COMBO and FINISHER count one each), at least 2 -- so 2 with one piece missing, 3 with both -- and dig beyond that quota is still kept above surplus mana (USER 2026-11-21: *"If we are missing combo pieces holding multiple dig is potentially worthwhile."*); 1 once both are filled; 0 once COMBO + FINISHER + MANA are all filled. A piece filled only by a TUTOR counts as missing here until it is in hand** (USER 2026-11-21: *"The other advantage of keeping draw is that it can help get the tutored cards."*): a cantrip cast after the tutor draws the tutored card the same turn, which is what the projection credits when it shortens the tutor's wait. While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
 | **BACKUP** | **the second finisher of the OTHER type** (a Rift Bolt beside a held or pending Halberdier, or a Halberdier beside a held or pending Rift Bolt); 1 extra land beyond the drops; 1 extra ritual; a 2nd Halberdier | 0 (kept only after every quota) | reverse of that order: the other-type finisher is the LAST overflow card shed (USER 2026-11-21: *"we should keep the second Finisher (of the second type) before any dead cards, just in case the arithmetic changes"*) |
 | **DEAD** | Memory Lapse (goldfish-inert); a 2nd Worldfire / Rift Bolt / Irencrag Feat; a tutor with nothing missing (`TutorNeedsCandidate`: it would not be cast) | 0 | always first |
 
@@ -103,9 +103,10 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
    always Rift Bolt first?
 2. **Dig quota 2-3 / 1 / 0.** Is 1 + missing pieces (2 or 3) right while short, and should Brainstorm count double (it also
    clears two junk cards)?
-3. **Tutor stand-in.** ANSWERED (USER: tutors fill in first for both pieces, at a draw's cost). Open detail: does a
-   tutor-filled piece still count as "short" for the DIG quota until the piece is actually drawn? Default: no (the
-   tutor plus the next draw delivers it).
+3. **Tutor stand-in.** ANSWERED (USER: tutors fill in first for both pieces, at a draw's cost; and *"The other
+   advantage of keeping draw is that it can help get the tutored cards."*). So a tutor-filled piece still counts as
+   SHORT for the DIG quota until the piece is in hand: the cantrip that draws the tutored card this turn is what
+   removes the tutor's wait.
 4. **Extra land and extra ritual in BACKUP (1 each).** Cyclone keeps 2 extra lands; this deck's mana is mostly
    one-shot (depletion lands, Bloom, rituals), so 1 seemed enough.
 5. **Tapped lands late.** Needle / Skerry / Bazaar ranked below untapped lands from T\*-1 on: right?
