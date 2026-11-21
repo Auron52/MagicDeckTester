@@ -1,0 +1,425 @@
+// Blood Sun step 6c: the USER's tutor-target and land-play RESTRICTIONS (ledger B3 / B4, USER 2026-11-20;
+// BloodSunProvider, lever MTG_BLOODSUN_USER_PRUNE = heurarm BLOODSUN_USER_PRUNE, DEFAULT ON). Every restriction is
+// checked with the lever ON and again with it OFF (=0), where the option returns -- except Revelation at exactly 5
+// mana, which fold F-R4 (X >= 1) already holds back in both arms.
+#include <doctest/doctest.h>
+
+#include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
+#include "ai/TurnSolver.h"
+#include "cards/CardDatabase.h"
+#include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
+#include "core/RevelationPackages.h"
+
+#include <algorithm>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+namespace
+{
+void EnsureCardsUp()
+{
+    static const bool loaded = []
+    {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+}
+const CardDefinition& DefUp(const std::string& name)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE_MESSAGE(d != nullptr, "card not in cards.json: ", name);
+    return *d;
+}
+Card CardUp(const std::string& name, int number)
+{
+    Card c = DefUp(name).card;
+    c.m_number = number;
+    return c;
+}
+void PutUp(GameState& s, const std::string& name, int number, bool tapped = false)
+{
+    Permanent p;
+    p.card = CardUp(name, number);
+    p.controller_index = 0;
+    p.owner_index = 0;
+    p.tapped = tapped;
+    s.battlefield.push_back(p);
+}
+const BloodSunProvider& ProvUp()
+{
+    static const BloodSunProvider bp;
+    return bp;
+}
+GameState BaseUp()
+{
+    EnsureCardsUp();
+    GameState s;
+    s.m_provider          = &ProvUp();
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.phase               = Phase::PreCombatMain;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.deck_has_landfall   = false;
+    s.deck_has_revolt     = false;
+    s.deck_has_land_ability_loss = true;
+    s.own_death_live      = true;
+    return s;
+}
+void Lib(GameState& s, const std::vector<std::string>& names)
+{
+    for (std::size_t k = 0; k < names.size(); ++k) { s.players[0].library.push_back(CardUp(names[k], 500 + static_cast<int>(k))); }
+}
+// Pins the lever (and the Exploration arm) for one scope; restores "use the env default" after.
+struct PruneArm
+{
+    PruneArm(bool on, int anylife = -1)
+    {
+        heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE]          = on ? 1 : 0;
+        heurarm::t_arm[heurarm::BLOODSUN_EXPLORATION_ANYLIFE] = static_cast<std::int8_t>(anylife);
+    }
+    ~PruneArm()
+    {
+        heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE]          = -1;
+        heurarm::t_arm[heurarm::BLOODSUN_EXPLORATION_ANYLIFE] = -1;
+    }
+};
+// Every autonomous Revelation cast the node's CollectActions offers (wave 0), as X -> count.
+std::map<int, int> RevelationXs(const GameState& s)
+{
+    std::map<int, int> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+    { if (a.card_name.str() == "Diabolic Revelation") { ++out[a.chosen_x]; } }
+    return out;
+}
+// Every DISTINCT Revelation package (names, wave tag stripped) of the exhaustive menu -- every wave.
+std::set<std::vector<std::string>> AllPackages(const GameState& s)
+{
+    std::set<std::vector<std::string>> out;
+    bool truncated = true;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlansExhaustive(s, true, nullptr, &truncated))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() != "Diabolic Revelation" || !revpkg::IsPackage(a.tutor_target.str())) { continue; }
+            std::vector<std::string> names = revpkg::DecodePackage(a.tutor_target.str());
+            std::sort(names.begin(), names.end());
+            out.insert(names);
+        }
+    }
+    CHECK_FALSE(truncated);
+    return out;
+}
+std::vector<std::string> GrimTargets(const GameState& s)
+{ return ProvUp().TutorCandidates(s, 0, DefUp("Grim Tutor").params); }
+// The transmute's offered targets (one Channel action per name).
+std::set<std::string> TransmuteTargets(const GameState& s)
+{
+    std::set<std::string> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+    {
+        if (a.kind == Action::Kind::Channel && a.card_name.str() == "Dimir Machinations")
+        { out.insert(a.tutor_target.str()); }
+    }
+    return out;
+}
+bool Has(const std::vector<std::string>& v, const std::string& x) { return std::find(v.begin(), v.end(), x) != v.end(); }
+// Does any plan of the main-phase menu play this land?
+bool MenuPlays(const GameState& s, const std::string& land)
+{
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true)) { if (p.land_to_play == land) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("bloodsun prune (a): Revelation never at X 0; at X 1 only with another Revelation in hand")
+{
+    const std::vector<std::string> lib = { "Time Warp", "Emrakul, the Aeons Torn", "Lotus Vale", "Scorched Ruins" };
+    // Exactly 5 mana: X = 0 only -> never cast, in both arms (fold F-R4 is not the lever's).
+    for (bool on : { true, false })
+    {
+        PruneArm arm(on);
+        GameState s = BaseUp();
+        for (int k = 0; k < 5; ++k) { PutUp(s, "Swamp", 10 + k); }
+        s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
+        Lib(s, lib);
+        CHECK(RevelationXs(s).empty());
+    }
+    // 6 mana, ONE Revelation: X = 1 is the only X -> not cast under the lever; offered without it.
+    GameState six = BaseUp();
+    for (int k = 0; k < 6; ++k) { PutUp(six, "Swamp", 10 + k); }
+    six.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
+    Lib(six, lib);
+    {
+        PruneArm arm(true);
+        CHECK(RevelationXs(six).empty());
+    }
+    {
+        PruneArm arm(false);
+        CHECK(RevelationXs(six)[1] > 0);
+    }
+    // 6 mana, TWO Revelations: X = 1 is cast (the spare is the "extra").
+    GameState two = six;
+    two.players[0].hand.push_back(CardUp("Diabolic Revelation", 2));
+    {
+        PruneArm arm(true);
+        CHECK(RevelationXs(two)[1] > 0);
+    }
+    // 7 mana, one Revelation: X = 2 is offered, X = 1 still not.
+    GameState seven = six;
+    PutUp(seven, "Swamp", 30);
+    {
+        PruneArm arm(true);
+        const std::map<int, int> xs = RevelationXs(seven);
+        CHECK(xs.count(1) == 0);
+        CHECK(xs.count(2) == 1);
+    }
+}
+
+TEST_CASE("bloodsun prune (b): a Revelation package never holds a non-target; the restricted space is complete")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 7; ++k) { PutUp(s, "Swamp", 10 + k); }   // 7 mana: X <= 2
+    s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
+    Lib(s, { "Burgeoning", "Ulamog, the Ceaseless Hunger", "Blooming Marsh", "Grim Tutor", "Dimir Machinations",
+             "Golgari Rot Farm", "Time Warp", "Time Warp", "Lotus Vale", "Emrakul, the Aeons Torn", "Fastbond",
+             "Fastbond", "Blood Sun", "Blood Sun" });
+    const std::set<std::string> banned = { "Burgeoning", "Ulamog, the Ceaseless Hunger", "Blooming Marsh", "Grim Tutor",
+                                           "Dimir Machinations", "Golgari Rot Farm" };
+    std::set<std::vector<std::string>> on, off;
+    {
+        PruneArm arm(true);
+        on = AllPackages(s);
+    }
+    {
+        PruneArm arm(false);
+        off = AllPackages(s);
+    }
+    bool banned_on = false, banned_off = false, two_fastbond = false, two_sun = false;
+    for (const auto& pk : on)
+    {
+        for (const std::string& n : pk) { banned_on = banned_on || banned.count(n) != 0; }
+        two_fastbond = two_fastbond || std::count(pk.begin(), pk.end(), "Fastbond") > 1;
+        two_sun      = two_sun || std::count(pk.begin(), pk.end(), "Blood Sun") > 1;
+    }
+    for (const auto& pk : off) { for (const std::string& n : pk) { banned_off = banned_off || banned.count(n) != 0; } }
+    CHECK_FALSE(banned_on);
+    CHECK_FALSE(two_fastbond);   // Fastbond: one, never a second
+    CHECK_FALSE(two_sun);        // Blood Sun: one while we have none
+    CHECK(banned_off);           // the unrestricted arm offers them
+    // THE COUNT. Admitted classes: Time Warp (cap 2), Lotus Vale (1), Emrakul (1), Fastbond (cap 1 of 2), Blood Sun
+    // (cap 1 of 2); X = 2 only (X = 1 needs a second Revelation): the multisets of size 2 within those caps.
+    CHECK(static_cast<long long>(on.size()) == revpkg::CountMultisets({ 2, 1, 1, 1, 1 }, 2));
+    for (const auto& pk : on) { CHECK(pk.size() == 2); }
+    // A Blood Sun in hand takes Blood Sun out of the space; one on the battlefield too.
+    GameState h = s;
+    h.players[0].hand.push_back(CardUp("Blood Sun", 3));
+    {
+        PruneArm arm(true);
+        const std::set<std::vector<std::string>> hp = AllPackages(h);
+        CHECK(static_cast<long long>(hp.size()) == revpkg::CountMultisets({ 2, 1, 1, 1 }, 2));
+        for (const auto& pk : hp) { CHECK(std::count(pk.begin(), pk.end(), "Blood Sun") == 0); }
+    }
+}
+
+TEST_CASE("bloodsun prune (b): under Blood Sun Lotus Field == Lotus Vale even with an Ulamog reachable")
+{
+    GameState s = BaseUp();
+    PutUp(s, "Blood Sun", 60);
+    s.players[0].library.push_back(CardUp("Lotus Vale", 1));
+    s.players[0].library.push_back(CardUp("Lotus Field", 2));
+    s.players[0].library.push_back(CardUp("Ulamog, the Ceaseless Hunger", 3));
+    auto lotus_classes = [](const GameState& g, bool forced) -> int
+    {
+        int n = 0;
+        for (const revpkg::Class& k : revpkg::BuildClasses(g, 0, forced))
+        { for (const auto& m : k.members) { if (m.first == "Lotus Vale" || m.first == "Lotus Field") { ++n; break; } } }
+        return n;
+    };
+    {
+        PruneArm arm(true);
+        CHECK(ProvUp().RevelationTwinFoldForced(s));
+        CHECK(lotus_classes(s, ProvUp().RevelationTwinFoldForced(s)) == 1);
+    }
+    {
+        PruneArm arm(false);
+        CHECK_FALSE(ProvUp().RevelationTwinFoldForced(s));
+        CHECK(lotus_classes(s, ProvUp().RevelationTwinFoldForced(s)) == 2);   // the step-6 conservative scan
+    }
+}
+
+TEST_CASE("bloodsun prune (b): Machinations' transmute -- Grim Tutor (and Blood Sun while we have none) only")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 3; ++k) { PutUp(s, "Swamp", 10 + k); }
+    s.players[0].hand.push_back(CardUp("Dimir Machinations", 1));
+    Lib(s, { "Blood Sun", "Grim Tutor", "Dimir Machinations", "Time Warp" });
+    {
+        PruneArm arm(true);
+        CHECK(TransmuteTargets(s) == std::set<std::string>{ "Blood Sun", "Grim Tutor" });
+        GameState h = s;
+        h.players[0].hand.push_back(CardUp("Blood Sun", 2));
+        CHECK(TransmuteTargets(h) == std::set<std::string>{ "Grim Tutor" });
+        GameState b = s;
+        PutUp(b, "Blood Sun", 61);
+        CHECK(TransmuteTargets(b) == std::set<std::string>{ "Grim Tutor" });
+    }
+    {
+        PruneArm arm(false);
+        CHECK(TransmuteTargets(s) == std::set<std::string>{ "Blood Sun", "Grim Tutor", "Dimir Machinations" });
+    }
+}
+
+TEST_CASE("bloodsun prune (b): Grim Tutor's targets, Exploration by life and Fastbond, the red-source exception")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 3; ++k) { PutUp(s, "Swamp", 10 + k); }
+    Lib(s, { "Exploration", "Fastbond", "Grim Tutor", "Burgeoning", "Time Warp", "Emrakul, the Aeons Torn",
+             "Diabolic Revelation", "Scorched Ruins", "Lotus Field", "City of Brass", "Rakdos Carnarium",
+             "Ulamog, the Ceaseless Hunger", "Blood Sun" });
+    {
+        PruneArm arm(true);
+        std::vector<std::string> t = GrimTargets(s);
+        CHECK_FALSE(Has(t, "Exploration"));   // life 20
+        CHECK(Has(t, "Fastbond"));
+        CHECK(Has(t, "Blood Sun"));
+        for (const char* n : { "Time Warp", "Emrakul, the Aeons Torn", "Diabolic Revelation", "Scorched Ruins",
+                               "Lotus Field" }) { CHECK(Has(t, n)); }
+        for (const char* n : { "Grim Tutor", "Burgeoning", "Ulamog, the Ceaseless Hunger", "City of Brass",
+                               "Rakdos Carnarium" }) { CHECK_FALSE(Has(t, n)); }
+        // ORDER: Fastbond first among the acceleration, Exploration after it; Time Warp before Emrakul.
+        GameState low = s;
+        low.players[0].life = 8;
+        t = GrimTargets(low);
+        REQUIRE(Has(t, "Exploration"));
+        CHECK(std::find(t.begin(), t.end(), "Fastbond") < std::find(t.begin(), t.end(), "Exploration"));
+        CHECK(std::find(t.begin(), t.end(), "Time Warp") < std::find(t.begin(), t.end(), "Emrakul, the Aeons Torn"));
+        // A Fastbond in HAND: no second Fastbond; Exploration still (no Fastbond on the battlefield).
+        GameState fh = low;
+        fh.players[0].hand.push_back(CardUp("Fastbond", 2));
+        t = GrimTargets(fh);
+        CHECK_FALSE(Has(t, "Fastbond"));
+        CHECK(Has(t, "Exploration"));
+        // A Fastbond on the BATTLEFIELD: never Exploration, at any life and in the any-life arm.
+        GameState fb = low;
+        PutUp(fb, "Fastbond", 62);
+        CHECK_FALSE(Has(GrimTargets(fb), "Exploration"));
+        CHECK_FALSE(Has(GrimTargets(fb), "Fastbond"));
+        // Red-source exception: Blood Sun in hand, none out, no red source anywhere of ours -> City and Carnarium.
+        GameState r = s;
+        r.players[0].hand.push_back(CardUp("Blood Sun", 3));
+        t = GrimTargets(r);
+        CHECK(Has(t, "City of Brass"));
+        CHECK(Has(t, "Rakdos Carnarium"));
+        CHECK_FALSE(Has(t, "Blood Sun"));
+        GameState rg = r;
+        rg.players[0].hand.push_back(CardUp("Copperline Gorge", 4));   // a red source in hand
+        CHECK_FALSE(Has(GrimTargets(rg), "City of Brass"));
+        GameState rb = r;
+        PutUp(rb, "Graven Cairns", 63);                                 // a red source on the battlefield
+        CHECK_FALSE(Has(GrimTargets(rb), "Rakdos Carnarium"));
+    }
+    {
+        PruneArm arm(true, /*anylife=*/1);
+        CHECK(Has(GrimTargets(s), "Exploration"));   // the A/B arm: any life
+        GameState fb = s;
+        PutUp(fb, "Fastbond", 62);
+        CHECK_FALSE(Has(GrimTargets(fb), "Exploration"));   // ...still never with a Fastbond out
+    }
+    {
+        PruneArm arm(false);
+        const std::vector<std::string> t = GrimTargets(s);
+        for (const char* n : { "Exploration", "Grim Tutor", "Burgeoning", "Ulamog, the Ceaseless Hunger", "City of Brass" })
+        { CHECK(Has(t, n)); }
+    }
+    // A Grim Tutor with no admitted target is not cast under the lever; it is without.
+    GameState none = BaseUp();
+    for (int k = 0; k < 3; ++k) { PutUp(none, "Swamp", 10 + k); }
+    none.players[0].hand.push_back(CardUp("Grim Tutor", 1));
+    Lib(none, { "Burgeoning", "Blooming Marsh" });
+    auto grim_cast = [](const GameState& g) -> bool
+    {
+        for (const Action& a : TurnSolver::CollectActionsForTest(g, true))
+        { if (a.card_name.str() == "Grim Tutor") { return true; } }
+        return false;
+    };
+    {
+        PruneArm arm(true);
+        CHECK_FALSE(grim_cast(none));
+    }
+    {
+        PruneArm arm(false);
+        CHECK(grim_cast(none));
+    }
+}
+
+TEST_CASE("bloodsun prune (c): pre-Blood Sun land plays -- Ruins never, a Lotus only to cast the Blood Sun in hand")
+{
+    // Two untapped Swamps, no red: Blood Sun in hand cannot be cast without the Vale.
+    GameState s = BaseUp();
+    PutUp(s, "Swamp", 10);
+    PutUp(s, "Swamp", 11);
+    s.players[0].hand.push_back(CardUp("Blood Sun", 1));
+    s.players[0].hand.push_back(CardUp("Scorched Ruins", 2));
+    s.players[0].hand.push_back(CardUp("Lotus Vale", 3));
+    Lib(s, { "Swamp", "Swamp", "Swamp" });
+    {
+        PruneArm arm(true);
+        CHECK_FALSE(MenuPlays(s, "Scorched Ruins"));          // Ruins held pre-Blood Sun
+        CHECK(MenuPlays(s, "Lotus Vale"));                    // the Vale, to cast Blood Sun
+        bool vale_sun = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (p.land_to_play != "Lotus Vale") { continue; }
+            for (const Action& a : p.actions) { vale_sun = vale_sun || a.card_name.str() == "Blood Sun"; }
+        }
+        CHECK(vale_sun);
+        // Blood Sun on the battlefield: every land is free -> Ruins offered.
+        GameState u = s;
+        PutUp(u, "Blood Sun", 64);
+        CHECK(MenuPlays(u, "Scorched Ruins"));
+        // Other mana CAN cast Blood Sun (a Mountain): the Vale waits.
+        GameState m = s;
+        PutUp(m, "Mountain", 12);
+        CHECK_FALSE(MenuPlays(m, "Lotus Vale"));
+        // No Blood Sun in hand: no Lotus.
+        GameState n = s;
+        n.players[0].hand.erase(n.players[0].hand.begin());
+        CHECK_FALSE(MenuPlays(n, "Lotus Vale"));
+        // One other land only: never a Lotus.
+        GameState one = s;
+        one.battlefield.pop_back();
+        CHECK_FALSE(MenuPlays(one, "Lotus Vale"));
+        // Field: not with a Vale in hand; with none it is offered (same condition); never with 1 other land.
+        GameState f = s;
+        f.players[0].hand.push_back(CardUp("Lotus Field", 4));
+        CHECK_FALSE(MenuPlays(f, "Lotus Field"));
+        GameState fo = f;
+        fo.players[0].hand.erase(std::find_if(fo.players[0].hand.begin(), fo.players[0].hand.end(),
+                                              [](const Card& c) { return c.m_name.str() == "Lotus Vale"; }));
+        CHECK(MenuPlays(fo, "Lotus Field"));
+        GameState f1 = fo;
+        f1.battlefield.pop_back();
+        CHECK_FALSE(MenuPlays(f1, "Lotus Field"));
+        // The hook directly: on the opponent's turn (a Burgeoning put) the Vale can never cast Blood Sun this turn.
+        GameState opp = s;
+        opp.active_player_index = 1;
+        CHECK_FALSE(ProvUp().LandPlayOffered(opp, 0, DefUp("Lotus Vale")));
+        CHECK_FALSE(ProvUp().LandPlayOffered(opp, 0, DefUp("Scorched Ruins")));
+    }
+    {
+        PruneArm arm(false);
+        CHECK(MenuPlays(s, "Scorched Ruins"));
+        GameState m = s;
+        PutUp(m, "Mountain", 12);
+        CHECK(MenuPlays(m, "Lotus Vale"));
+        GameState f = s;
+        f.players[0].hand.push_back(CardUp("Lotus Field", 4));
+        CHECK(MenuPlays(f, "Lotus Field"));
+    }
+}

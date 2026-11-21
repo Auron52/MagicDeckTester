@@ -1,0 +1,39 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Scorched Ruins",
+  "Swamp"
+ ],
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0"
+ },
+ "expect_menu": [
+  {
+   "summary_contains": "Scorched Ruins",
+   "count": 1
+  }
+ ],
+ "comment": "Blood Sun step 6c, MTG_BLOODSUN_USER_PRUNE OFF (the unrestricted twin): pre-Blood Sun Scorched Ruins is never played (USER B4: \"Scorched Ruins I don't ever play without Blood Sun.\"). The autonomous main-phase menu on the board as authored, counted by summary substring \"Scorched Ruins\"."
+}

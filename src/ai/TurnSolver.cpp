@@ -44227,22 +44227,50 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const int xmax = std::min(rmax, static_cast<int>(ap.library.size()));
                 if (xmax < 1) { continue; }   // F-R4
-                const std::vector<revpkg::Class> classes = revpkg::BuildClasses(state, state.active_player_index);
+                const DecisionProvider& rprov = ResolveProvider(state);
+                const std::vector<revpkg::Class> classes =
+                    revpkg::BuildClasses(state, state.active_player_index, rprov.RevelationTwinFoldForced(state));
                 std::vector<const CardDefinition*> cdefs;
                 for (const revpkg::Class& k : classes) { cdefs.push_back(k.def); }
                 std::vector<int> ranked(classes.size());
                 for (std::size_t k = 0; k < ranked.size(); ++k) { ranked[k] = static_cast<int>(k); }
-                ResolveProvider(state).RevelationClassOrder(state, cdefs, ranked);
-                std::vector<int> caps, cls_eval;
+                rprov.RevelationClassOrder(state, cdefs, ranked);
+                // The provider's RESTRICTION (RevelationPackageRestrict; Blood Sun step 6c, the USER's B3): caps may only
+                // fall, x_min only rise. A class left at cap 0 contributes nothing to any multiset, so it is dropped
+                // from the ranking (an identity: the rank-lex enumeration over the rest is the same set, in the same
+                // order). Default: no class restricted, x_min 1 -> byte-identical.
+                std::vector<int> caps;
+                std::vector<const CardDefinition*> rdefs;
+                for (int r : ranked)
+                {
+                    caps.push_back(classes[static_cast<std::size_t>(r)].cap);
+                    rdefs.push_back(classes[static_cast<std::size_t>(r)].def);
+                }
+                int x_min = 1;
+                rprov.RevelationPackageRestrict(state, i, rdefs, caps, x_min);
+                {
+                    std::size_t w = 0;
+                    for (std::size_t k = 0; k < ranked.size(); ++k)
+                    {
+                        const int cap = std::min(caps[k], classes[static_cast<std::size_t>(ranked[k])].cap);
+                        if (cap <= 0) { continue; }
+                        ranked[w] = ranked[k];
+                        caps[w]   = cap;
+                        ++w;
+                    }
+                    ranked.resize(w);
+                    caps.resize(w);
+                }
+                x_min = std::max(1, x_min);
+                std::vector<int> cls_eval;
                 for (int r : ranked)
                 {
                     const revpkg::Class& k = classes[static_cast<std::size_t>(r)];
-                    caps.push_back(k.cap);
                     cls_eval.push_back(k.def != nullptr ? EvalCard(*k.def, state) : 0);
                 }
                 const long long end = revpkg::WaveEnd(revwave::g_state.wave);
                 std::vector<int> c;
-                for (int xv = xmax; xv >= 1; --xv)
+                for (int xv = xmax; xv >= x_min; --xv)
                 {
                     if (!revpkg::FirstFill(c, caps, xv)) { continue; }
                     long long o = 0;

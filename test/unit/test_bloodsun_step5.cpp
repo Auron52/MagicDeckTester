@@ -6,6 +6,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
@@ -77,6 +78,13 @@ GameState Base5(int life = 20)
     return s;
 }
 
+// The Grim Tutor tests pin the card's mechanics on libraries of non-deck cards (Lightning Bolt, basics), so they run
+// with the step-6c USER target restriction OFF (MTG_BLOODSUN_USER_PRUNE; test_bloodsun_userprune.cpp tests it ON).
+struct Unrestricted5
+{
+    Unrestricted5()  { heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE] = 0; }
+    ~Unrestricted5() { heurarm::t_arm[heurarm::BLOODSUN_USER_PRUNE] = -1; }
+};
 int CountName(const std::vector<Card>& zone, const std::string& name)
 {
     int n = 0;
@@ -155,6 +163,7 @@ TEST_CASE("bloodsun step 5: card params as the design states them; own death and
 
 TEST_CASE("grim tutor: lose 3 life on resolution; at 3 life it is never offered autonomously (own death live)")
 {
+    const Unrestricted5 unrestricted;
     GameState s = Base5(/*life=*/4);
     for (int k = 0; k < 3; ++k) { Put5(s, "Swamp", 700 + k); }
     s.players[0].hand.push_back(Card5("Grim Tutor", 800));
@@ -185,6 +194,7 @@ TEST_CASE("grim tutor: lose 3 life on resolution; at 3 life it is never offered 
 
 TEST_CASE("grim tutor: the executor resolution fetches the pinned card, shuffles, and costs 3 life")
 {
+    const Unrestricted5 unrestricted;
     GameState s = Base5(/*life=*/20);
     for (int k = 0; k < 6; ++k) { s.players[0].library.push_back(Card5("Swamp", 900 + k)); }
     s.players[0].library.push_back(Card5("Lightning Bolt", 950));
@@ -201,6 +211,7 @@ TEST_CASE("grim tutor: the executor resolution fetches the pinned card, shuffles
 
 TEST_CASE("grim tutor: the per-cast named axis -- every pick of every copy is a plan (multiset over two copies)")
 {
+    const Unrestricted5 unrestricted;
     GameState s = Base5(/*life=*/20);
     for (int k = 0; k < 6; ++k) { Put5(s, "Swamp", 700 + k); }
     s.players[0].lands_played_this_turn = 1;   // no land drop: the menu is the casts alone

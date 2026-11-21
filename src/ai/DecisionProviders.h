@@ -4370,7 +4370,28 @@ public:
     // (when none is out), Emrakul, the other tutors, Ulamog, Worldfire last.
     void RevelationClassOrder(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                               std::vector<int>& order) const override;
+    // ---- STEP 6c: the USER's RESTRICTIONS (ledger B3 / B4, USER 2026-11-20), one lever MTG_BLOODSUN_USER_PRUNE
+    // (heurarm BLOODSUN_USER_PRUNE, DEFAULT ON; =0 -> the unrestricted step-6b search). Restrict / order only; every
+    // hook answers the default in human play and under the unpruned gate.
+    //  (a) Revelation: X >= 1 always (F-R4), X = 1 only with another Revelation in hand (RevelationPackageRestrict).
+    //  (b) tutor targets: BloodSunTutorTargetCap (Revelation classes, Grim Tutor's and the transmute's names); the
+    //      Lotus twins are one class under any Blood Sun (RevelationTwinFoldForced).
+    //  (c) pre-Blood Sun land plays / Burgeoning puts (LandPlayOffered).
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    bool TutorNeedsCandidate(const GameState& s, int controller, const CardParams& pp) const override;
+    bool LandPlayOffered(const GameState& s, int controller, const CardDefinition& def) const override;
+    void RevelationPackageRestrict(const GameState& s, int hand_index,
+                                   const std::vector<const CardDefinition*>& class_defs,
+                                   std::vector<int>& caps, int& x_min) const override;
+    bool RevelationTwinFoldForced(const GameState& s) const override;
 };
+// MTG_BLOODSUN_USER_PRUNE's ONE reader (env DEFAULT ON + the heurarm slot) and its Exploration A/B arm
+// MTG_BLOODSUN_EXPLORATION_ANYLIFE (DEFAULT OFF; inert while the prune is off).
+bool BloodSunUserPruneOn();
+bool BloodSunExplorationAnyLifeOn();
+// The USER's tutor-target rule (B3) for one card: the most copies of it a tutor may fetch now (0 = not a target;
+// a large number = unlimited). `transmute` = Dimir Machinations' transmute search (Grim Tutor is a target there only).
+int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute);
 
 // MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1
 // restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one half
