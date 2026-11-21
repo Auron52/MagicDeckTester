@@ -118,3 +118,60 @@ first build). Pooled with the first 1,000: 20 faster, 7 slower, net -13 over 3,0
 Root cause of the Niv slower games: they diverge at T1 (Ponder vs Preordain) or T3 (dig order), never on a payment of
 the turn played -- the rung changes payments inside lookahead lines that cast Izzet Signet / Sol Ring, which re-ranks a
 budgeted root. Budgeted-search ranking noise from a more faithful payment; it recovers unbudgeted.
+
+## Niv-Mizzet Combo CPU (the one deck whose rung cost shows; agent 3 + agent 4, 2026-11-20/21)
+
+Where it goes (200-game probe, seeds 680000, lever on, `MTG_LINE_REDUCER_KEEP_STATS=1`): the rung is ~8% of the on
+arm's CPU, and that is the whole on/off gap (ab3: units 0.9942, CPU 1.0650 -- the extra CPU is per-unit cost). Inside it,
+the oracle table (`manaoracle::MinimalPayments`, mostly `PayEnum::Verify`) is ~41-55%, the greedy trial / hold-out
+payments ~32%, GameState copies ~8%. About 1/3 of the tables fire; the rest are no-fire strands, which need the whole
+table to prove that no option works.
+
+Exact cuts taken (play byte-identical; every one checked by `.wins` identity):
+
+1. **In-place rest judge** (`LineBillPayableOn`): the rest is judged ON the scratch board the caller discards, which
+   saves one GameState copy per held-out set paid and per table option made. Rung 16.6 -> 15.8 s / 200 games.
+2. **Two-step (prefix) table ask** (`MTG_LKR_TABLE_PREFIX`): MinimalPayments' lazy stop returns a PREFIX of the same
+   table, so a small ask is made first and the full one only when none of its options keeps the rest. Paired 1-thread
+   probes (same 200 games, run side by side so contention is shared; rung ms): prefix 0 (one full ask) 18.4 s,
+   1 -> 19.4 s, **2 -> 14.7 s**, 4 -> 15.0 s. Most repairs fire at the table's SECOND option (fire index 0/1/2/3+ =
+   6157 / 30821 / 1280 / 11586), so a prefix of 1 pays two asks for them; the default is 2 (-20% of the rung, ~-1.3% of
+   the on arm's CPU). Every prefix value gives byte-identical games (0/1/2/4 on the 200 games; prefix 1 on the 4,800-game
+   exactness slice below).
+3. **Signet-pair tight test** (`MTG_LKR_SIGNET_PAIR`, default ON, commit da3d3cb61): an untapped board converter of the
+   ramp-filter rock's own shape ("{1},{T}: Add {a}{b}", the same two colours -- a second Izzet Signet, Ferrous Lake) no
+   longer turns the rock's tight joint test off. The proof is in the code comment (drop the rock from a repair: f, its
+   feed, re-feeds the first converter a rock output fed, an {a}/{b} unit from that converter's outputs re-feeds the
+   second, so the board alone pays all but one unit, whose colour is chosen to fit rest - m_a - m_b + {1}). Verified by
+   chain7: units, `MTG_LKR_TIGHT_CHECK=1` (any repair the tight test refuses is printed; must be 0), and the slice below.
+   On the sampled Niv no-fire strands ~20-25% had only this guard (the rest also have an untapped Cascade Bluffs or a
+   Generator Servant, which stay guards).
+
+Exactness slice for cuts 1+2 (`manifest_exact2.json`: Niv 1,000 pairs both arms + 14 rock decks x 200 on-arm, all ab3 jobs):
+**192 of 192 `.wins` byte-identical to ab3**, units 3,720 of 3,720 tests passed. Niv on/off CPU on that slice 1.0659
+(ab3 1.0650; nivx after cut 1 1.0695) -- a contended box (load 35-39 on 32 cores), so that ratio is noise-level; the
+paired probes above are the clean measurement.
+
+**gi152 (seed 680152), the probe game that went T8 -> unwon with the lever on:** at `--depth 8 --budget-ms 0` BOTH arms
+are unwon (off digest d70174a17fc9a5bf, on dc791ba85a50ac1f; ~30 min each). The off arm's budgeted T8 win is not
+reachable by the unbudgeted search either, so the lever is not worse there at unlimited budget; the two d8 lines differ
+(the rung changes payments), so it is "both arms equal outcome", not "identical game".
+
+Not taken: the **Bluffs** guard cannot be lifted. Counterexample: rest {U}{U}{U}, the board after the bill an Island and
+an untapped Cascade Bluffs, the rock an Izzet Signet. The repair feeds the Signet with the Island ({U}{R}) and the Signet's
+{R} into the Bluffs ({U}{U}): three {U}. The board alone makes two (Island into the Bluffs), but the tight bound asks it
+for {U}{U}{1}. A hybrid filter that makes two of ONE colour lets the rock's off-colour output become an on-colour pair, so
+the "one pip per rock colour" bound is not necessary there. A {C}-only rock (Sol Ring) with an untapped board Signet is
+likewise unsound ({U}{U} off Island + Signet + Sol Ring: Sol's {C} feeds the Signet and frees the Island), and the
+Generator Servant guard is a backtracker coverage gap (the joint backtracker does not crack the Servant, which the
+repair's option table does), so those three guards stay.
+
+## USER ruling (2026-11-21, verbatim, relayed by the parent)
+
+"Sounds good. Let's turn it on if the unwon looks okay. We should indeed support this." -- `MTG_LINE_KEEP_ROCK` default
+ON is approved on one condition: the Niv probe game that went from a T8 win to unwon with the lever on (gi152, seed
+680152) must recover at `--depth 8 --budget-ms 0`; the T6 -> T5 one (gi56) is just a note. Niv's max_turns is 8 (an
+unwon game counts 9 in `avg`), so the off arm's budgeted win was on the LAST turn. At d8 b0 BOTH arms are unwon (no
+win by T8; digests differ). The lever is therefore not worse than off at unlimited budget, but the game does not
+"recover" to the off arm's budgeted T8 -- the unbudgeted search does not find that win on either arm. Whether that
+counts as "looks okay" is reported to the USER; GT is not accepted until it is settled.
