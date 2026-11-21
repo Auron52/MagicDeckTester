@@ -73797,6 +73797,16 @@ bool BloodSunProvider::LazyCastTriggerTargetFan() const
     return on;
 }
 
+// Blood Sun perf part 4: the plan-list price (DecisionProvider::PlanListPricePer). DEFAULT OFF: a re-pricing that is inert
+// at an unlimited budget but moves budgeted play, so it earns adoption by measurement. MTG_BLOODSUN_PLAN_PRICE_PER = plans
+// per unit (default 256).
+int BloodSunProvider::PlanListPricePer() const
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_PLAN_PRICE");   // DEFAULT OFF; =1 bills the plan list
+    static const int per = std::max(1, EnvInt("MTG_BLOODSUN_PLAN_PRICE_PER", 256));
+    return on ? per : 0;
+}
+
 bool BloodSunProvider::NeverCast(const CardDefinition& def) const
 {
     return BloodSunPruneLive() && BloodSunMachinationsCastPruneOn() && def.params.look_top_target_player_exile_reorder > 0;

@@ -2074,3 +2074,33 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
 - **Next lever (proposal):** remove the materialisation, not the scoring: the step-8 chain walk (U8) as a pre-list
   same-round witness, or a staged nested list (go-off front built and scored first, the rest only without a round-R
   win). Pricing the materialisation only restores the ceiling's rollback.
+
+### Implementation notes (perf parts 3-4, 2026-11-21): the cast-trigger target fan held lazily
+- **What:** Ulamog's searched cast-trigger target axis (`Plan::cast_trigger_target_choice`) joins the lazy clone layout
+  (`MTG_PB_LAZY_CANDS`, fan kind `kFanCastTrigger`): one prototype per base plan instead of W-1 materialised clones
+  (W ~55 pairs of our own permanent classes on a goldfish board). Opt-in per provider
+  (`DecisionProvider::LazyCastTriggerTargetFan`, Blood Sun only, `MTG_BLOODSUN_LAZY_CTT` DEFAULT ON, =0 the eager
+  list). Why: part 3's profile put 61% of fm15 in `AppendSubdecisionAxes`, nearly all of it building these clones
+  (4,848 -> 262,248 plans in one list), and the nested round-win stop scores ~6 of them.
+- **Exact (the adoption condition):** `MTG_PB_LAZY_CANDS_VERIFY=1` compares every lazy list with the eager one index
+  for index: fm1 28,527 lists / 17.1M entries, fm15 4,014 / 5.7M, **MISMATCH=0**; `materialised_on_demand=0` (no
+  real-play consumer gives the list back). Clean runs: game logs byte-identical to the part-3 baselines (only
+  `runId` differs), same units (fm1 66,266, fm15 58,574), wt 7.
+- **The failing unit assertion was the fixture, not play:** `GameState::deck_has_dredge` defaults to TRUE (the runner
+  clears it per deck), so the test board ran the dredge axis, which materialises every lazy layout. The fixture now
+  clears it. Unit 3,859 / 3,859, scenarios 655 / 655.
+- **Repro (user CPU s / peak RSS; lazy off -> on):** B12 Grim levers off: fm1 73.5 / 3.5 GB -> 16.4 / 0.59 GB, fm15
+  22.9 / 2.1 GB -> 5.0 / 0.19 GB (about -78%). Grim levers on (`MTG_BLOODSUN_GRIM_PRUNE=1 _GRIM_REV_GATE=1`): fm1
+  4.3 -> 4.2, fm15 4.4 -> 3.5 (the levers already remove most of the fan). Every arm wt 7.
+- **Residual (perf, fm1 lazy):** flat. `PlanOpensBreakpoint` 3.9% self (it includes the BpWaveWalker's walk over every
+  lazy entry, the open risk from part 3; it costs a few percent, not the gain), `AppendSubdecisionAxes` 3.1%,
+  `CollectActions` 2.7%. Not changed: reading through `CandSeq::Shared` needs every fan kind's fields audited.
+- **Plan-list price (`DecisionProvider::PlanListPricePer`, `MTG_BLOODSUN_PLAN_PRICE`, DEFAULT OFF, unit site
+  `plan_price`):** one unit per N materialised plans of each m1 enumeration, inside the memo's cachecharge scope, inert at
+  `budget == nullptr`. Measured on the lazy binary: decisions and game logs IDENTICAL to price-off, units +30% / +10%
+  (N=256, fm1 / fm15), user CPU fm1 16.0 -> 14.0 s but fm15 5.2 -> 10.2 s (N=64: 14.1 / 6.5 s). It bills work without
+  changing a decision and adds wall on fm15, so it is NOT shipped (stays OFF). Lever kept until the USER rules on
+  deleting it.
+- Diagnostic `MTG_PB_LAZY_MAT_TRACE=1` prints the caller line of every lazy-list materialisation.
+- **Smoke** (THREADS=13 outside the heavy lock, the Stage 4 analyzer held 10 threads): 235 / 235 jobs, **0 moved** by
+  digest vs `impl7/smoke-step7-batch.log`; the 8 GT FAILs against origin GT are the step-7 tree's (same digests).
