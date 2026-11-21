@@ -7550,6 +7550,63 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
 }
 
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+
+// CREATURES ABOUT TO ENTER, for a scaled land's same-turn growth (MTG_SCALED_GROWTH_BOUND). A cast trigger's payment
+// (Emperor Mihail II's "you may pay {1}") is made while the cast creature is still on the stack and before the token it
+// buys exists; both are on the battlefield before the applying line's next payment. Three Tree City counts them, so
+// the payer's scaled-land route (ScaledLandRouteHold, ManaPayment.cpp) credits them to its REST-of-line check, and only
+// there: the credit is read by ScaledManaCreatureCount while ScaledEntrantCreditArmed() is set, which the route sets
+// around that one solve. Merfolk Turns gate s30000034 T5 / s30000075 T5: Mihail's {1} off City's plain {C} dropped
+// Wanderwine Prophets / Seahunter, where an Island pays it and City, grown by the cast Merfolk and the token, pays the
+// rest. Empty (k = 0) everywhere else.
+struct ScaledEntrant
+{
+    const SubtypeSet*               set  = nullptr;   // a card's subtypes (the cast creature), or
+    const std::vector<std::string>* subs = nullptr;   // a token's
+    int                             n    = 0;
+};
+struct ScaledEntrants
+{
+    ScaledEntrant e[2];
+    int           k = 0;
+};
+inline ScaledEntrants& PendingScaledEntrants()
+{
+    static thread_local ScaledEntrants v;
+    return v;
+}
+inline bool& ScaledEntrantCreditArmed()
+{
+    static thread_local bool v = false;
+    return v;
+}
+struct PendingScaledEntrantsScope
+{
+    ScaledEntrants prev;
+    explicit PendingScaledEntrantsScope(const ScaledEntrants& now) : prev(PendingScaledEntrants())
+    { PendingScaledEntrants() = now; }
+    ~PendingScaledEntrantsScope() { PendingScaledEntrants() = prev; }
+};
+// The armed credit for a scaled land of chosen type `chosen` (0 unless the route armed it).
+inline int ScaledEntrantCredit(uint16_t chosen)
+{
+    if (!ScaledEntrantCreditArmed()) { return 0; }
+    const ScaledEntrants& es = PendingScaledEntrants();
+    int n = 0;
+    for (int i = 0; i < es.k; ++i)
+    {
+        const ScaledEntrant& e = es.e[i];
+        bool match = e.set != nullptr && e.set->HasId(chosen);
+        if (!match && e.subs != nullptr)
+        {
+            for (const std::string& s : *e.subs)
+            { if (SubtypeRegistry::Instance().Id(s) == chosen) { match = true; break; } }
+        }
+        if (match) { n += e.n; }
+    }
+    return n;
+}
+
 // The mana actually spent on the LAST FireOnCastTriggers call on this thread (-1 = none yet). A TEST PROBE only:
 // nothing in the engine reads it (Raggadragga's "if at least seven mana was spent to cast it" will read the
 // argument itself), so it can never move play. See the `mana_spent` contract below.
@@ -7813,6 +7870,13 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                     const ManaCost& cost = *def->params.cast_subtype_pay_token_cost;
                     const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
                     bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
+                    // The cast creature and the tokens this {1} buys enter before the line's next payment
+                    // (PendingScaledEntrants: read only by the scaled-land route's rest-of-line check).
+                    ScaledEntrants entrants;
+                    if (cast_def.card.IsCreature()) { entrants.e[entrants.k++] = {&cast_def.card.m_subtypes, nullptr, 1}; }
+                    entrants.e[entrants.k++] = {nullptr, &def->params.cast_token_subtypes,
+                                                def->params.cast_trigger_creates_tokens};
+                    const PendingScaledEntrantsScope _entrants(entrants);
                     if (g_play_dig_chooser != nullptr && !g_tap_speculating)
                     {
                         GameState probe = state;
@@ -34111,6 +34175,9 @@ inline int ScaledManaCreatureCount(const GameState& state, const Permanent* sour
             && chosen != SubtypeRegistry::kNone
             && (p.AnimatedAllTypes() || p.card.m_subtypes.HasId(chosen))) { ++n; }
     }
+    // The creatures a cast trigger's payment is made ahead of (PendingScaledEntrants; 0 unless the scaled-land route
+    // armed the credit for its rest-of-line solve).
+    if (chosen != SubtypeRegistry::kNone) { n += ScaledEntrantCredit(chosen); }
     return n;
 }
 
