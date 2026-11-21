@@ -267,6 +267,17 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
 - B11 USER-owned heuristics (USER 2026-11-21, verbatim): *"Yes, I'll help you work through cast order and
   discard heuristic, but you should give them a shot first."* -> the agent drafts cast order, discard buckets
   (and the mulligan policy) with measurements, and presents them; nothing is adopted until the USER answers.
+- B12 Grim Tutor targets (USER 2026-11-21, verbatim): *"Grim Tutor should also be handily pruned if it hasn't
+  been. There are few targets worth getting with it except Blood Sun and Diabolic Revelation when those are
+  missing."* -> provider RESTRICTION (USER-authored, ON by default in the `MTG_BLOODSUN_USER_PRUNE` family with
+  its own sub-lever so it can be A/B'd at Stage 5): Grim Tutor's targets narrow from the B3 list to
+  {Blood Sun while none is on the battlefield or in hand} ∪ {Diabolic Revelation while none is in hand}; the
+  red-source exception (B3 amended, "for the most part Grim Tutor", at most one) is KEPT as part of the Blood
+  Sun route (a red source is how the missing Blood Sun gets cast). When neither is missing (and no red-source
+  case), Grim Tutor has no target worth its mana + 3 life and is NOT cast. Machinations' transmute -> Grim
+  (B10) is unchanged; the chain then fetches whichever of the two is missing. Parent's readings surfaced to
+  the USER: (i) "Revelation missing" = none in HAND (a Revelation in the library does not count); (ii) the
+  red-source exception kept. Human play stays unpruned. Implemented by the perf agent (bloodsun-perf).
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
