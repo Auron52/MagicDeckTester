@@ -44,12 +44,25 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
 * **Open gap (batch C, surfaced):** a card drawn by Gargaroth's draw mode (or Packleader off its token) arrives in
   combat; the deck has no searched second main (NOT added to DeckUsesSecondMain, USER unsettled), so it waits a
   turn. Covered by the per-turn second-main gate planned for the provider batch (J).
-* **Batch C integrated:** `2f1375982` (Elder Gargaroth; 3843/3843 unit tests; smoke for C still owed).
-* **Batch D (Garruk's Harbinger): WIP commit `03f46b130`, UNBUILT** -- cut off by a 9p mount loss at
-  ~17:05 UTC 2026-11-21 (USER restarted WSL ~21:35). Remaining steps in
-  `logs/beasts/integrator-D-handoff.md` (cards.json entry, build + size asserts, viewer mapping, 7 tests,
-  audits, then smoke covering C+D). Backup pushed: `origin/backup/2026-11-21/beasts-analysis`.
-* **Running:** integrator D2 (fresh agent, from `logs/beasts/integrator-D-handoff.md`; WIP commit 7227280c1). NEXT after it = batch E (Migloz).
+* **Batch C integrated:** `2f1375982` (Elder Gargaroth; 3843/3843 unit tests; smoke for C ran with D below: 235/235 byte-identical).
+* **Batch D integrated (Garruk's Harbinger, integrator D2 2026-11-21): `afa007b00`** (replaces the WIP commit
+  7227280c1, which a 9p mount loss cut off). NEW `combat_damage_dig_per_damage` / `combat_damage_dig_types`; shared
+  `FireCombatDamageDig` in BOTH damage-step shapes of the combat core (count = damage actually dealt, Creature/Garruk
+  filter, rest to the bottom via `BottomInRandomOrder`, no dig once the opponent is dead). Searched RANK pin
+  `Plan::combat_dig_choice` -> `GameState::scripted_combat_dig` (4 bits/ordinal, 3 ordinals, cap 27; a rank, not a
+  card number -- DESIGN DEPARTURE from the draft, because the window is the top N after this turn's draws). Axis
+  `harbingeraxis` width = min(15, matching library cards, power + 2); no decline variant (dominated; the viewer offers
+  it). NOT in DeckUsesSecondMain. Sizes unchanged (1720 / 792, padding). Viewer: `dig` reuse, DECISIONS.md row,
+  audit mapping. Keyword divergence (Scryfall Hexproof / 'Hexproof from') allowlisted. 7 new unit tests; full unit
+  suite 3850/3850; audit_card_costs rc 0, audit_card_fields offline rc 0 (`--update` hit 5 HTTP 429s, old snapshot
+  entries kept), audit_viewer_decisions `--no-sweep` clean.
+* **Smoke byte-identity (batches C + D, at afa007b00 + ledger, no accept):** 235/235 PASS, per-game audit 0 configs
+  changed, play-changed 0 (searched and d0). Log `build/scratch/beasts_smokeD.log` (build volume).
+* **Owed to batch J (BeastsProvider), from D:** (1) the dig does NOT record into `combat_hand`; the per-turn
+  second-main gate must add that record and its state fold together; (2) the root `EtbDigCandidates` does not merge
+  same-name copies, so duplicate names give wasted (identical-state) variants -- add a same-name fold in the provider;
+  (3) Adaptive Omnitool's combat dig can now reuse this pin (`docs/design/omnitool-combat-dig-greedy.md`).
+* **Running:** none. NEXT = batch E (Migloz).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -108,7 +121,7 @@ Bracket notes to re-check for THIS deck:
 | Krosan Warchief | 1 | integrated 375a50399 | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
 | Questing Beast | 1 | integrated 375a50399 | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
 | Elder Gargaroth | 3 | integrated (batch C, see Checkpoint) | NEW attack_choose_one 3-mode trigger, searched per-ordinal axis (Tectonic-style, cap 27), shared executor+rollout helper; life mode = root provider fold on deck_life_inert (USER approved); viewer attack_mode widened to 3; 'or blocks' PROVISIONAL deferral; NOT in DeckUsesSecondMain (combat draw waits a turn until the per-turn gate) |
-| Garruk's Harbinger | 3 | drafted | new combat-damage dig (PerformLookTakeDig, random bottom), searched card-number pin (Lackey shape); hexproof-from-black + PW PROVISIONAL |
+| Garruk's Harbinger | 3 | integrated afa007b00 (batch D, see Checkpoint) | NEW combat_damage_dig_per_damage + FireCombatDamageDig (both damage-step shapes, shared executor+rollout; count = damage dealt), shared PerformLookTakeDig (Creature/Garruk, random bottom); searched RANK pin per ordinal (cap 27, width min(15, library matches, power+2)); no decline variant (dominated, viewer offers it); NOT in DeckUsesSecondMain (dug card waits a turn until the per-turn gate); hexproof-from-black + PW PROVISIONAL |
 | Kaheera | 2 | lord+vigilance integrated 53e68dcd3; companion pending (batch I) | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
 | Migloz | 3 | drafted | oil_counters int; searched pump (ActivatePump mode 4); Steelbane destroy w/ oil + own-target provider prune; vig/menace PROVISIONAL |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
