@@ -1907,3 +1907,7 @@ occurrence.
    because the deviating choice fetched a tutor / Revelation, so the one-deviation walk can never vary it -- latent
    in spirit). Waves = deviation count, so a finite budget first spends exactly what it spends today.
 3. Keep step 8's go-off front as the budget ORDER on top; it does not substitute for 1-2.
+- **Measurements (step 6e tree, 3db695809):** `mtg-test` 3843/3843; `test/scenarios.sh` 647/647 (5 new). Smoke
+  (`MTG_PGO=0`): 227/235 PASS vs GT, the same 8 jobs step 6d moved (GT not accepted); vs
+  `impl6d/smoke-step6d-batch.log` **0 of 235 jobs moved digest** (B5 / B8 are Blood Sun-only, the `_ALL` fix is inert
+  with the lever off). Saved as `build/scratch/bloodsun/impl6e/smoke-step6e-batch.log`.
