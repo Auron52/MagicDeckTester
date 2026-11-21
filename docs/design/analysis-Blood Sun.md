@@ -220,6 +220,8 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   requires that NO non-sacrificing land in hand would, played/put instead, make Blood Sun castable (this turn
   for our play; our next turn for a Burgeoning put). Red-source exception stays on every tutor (USER: "for
   the most part" Grim Tutor), capped at one.
+  USER rationale (verbatim): *"Because we would rather save Lotus for an active Blood Sun where it is insanely
+  powerful."*
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
