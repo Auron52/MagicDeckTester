@@ -11285,12 +11285,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 inline std::uint64_t FsOrderSig(const GameState& state);        // fwd (defined much later)
 namespace paycensus
 {
-enum Fn : int { SPWF = 0, SPS, OPS, OPWT, ASEXEC, kN };
+enum Fn : int { SPWF = 0, SPS, OPS, OPWT, ASEXEC, SPSU, kN };
 inline const char* FnName(int f)
 {
     static const char* n[kN] = { "SubsetPayableWithFilters", "SubsetPayableSequential",
                                  "OrderPaysSequentially", "OrderPrepaysWholeTurn",
-                                 "SubsetPayableAsExecuted" };
+                                 "SubsetPayableAsExecuted", "SubsetPayableSequential+equips" };
     return n[f];
 }
 inline bool On() { static const bool v = EnvOn("MTG_PAY_CENSUS"); return v; }
@@ -14245,6 +14245,34 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
         std::vector<int> work = key;   // `order` is thread_local and the tail rewrites its argument
         return paymemo::Probe(paycensus::SPS, state, cands, key,
                               [&] { work = key; return SubsetPayableSequentialTail(state, cands, sel, work); });
+    }
+    // MTG_SPS_EQUIP_MEMO (DEFAULT ON; =0 -> the tail runs directly, as before): the same memo for the subsets the
+    // key above leaves out because they hold an equip the walk fires (SeqWalkUnlockEquip, the mana-unlock equip) or
+    // pays at its end (SeqWalkTrailingEquip) -- exactly the subsets the unlock-order search (MTG_PO_UNLOCK_ORDER)
+    // walks, and measured to repeat inside one enumeration: Jumbo Cactuar 400 games, 360,709 SubsetPayableSequential
+    // calls, 188,727 of them exact repeats (132,652 on the same board object), of which the cast-only memo above
+    // serves 13,008. EXACT, keyed by RAW ids (no copy fold: an equip names its own target, so two copies of a cast
+    // are not interchangeable here): the rank-ordered casts, then every other member of `sel` in `sel`'s order, so
+    // the key holds every input the tail reads from `sel`; the board, the candidates and the payment context are
+    // the enumerator's scope's (paymemo::Probe). Not consulted while the unlock-order PRICE is on
+    // (MTG_UO_BUDGET_PRICE): the price's charges and cut read the decision budget, so its verdict is not a pure
+    // function of the key. MTG_PAY_PROBE_MEMO_VERIFY=1 re-runs the tail on every hit (fn
+    // "SubsetPayableSequential+equips", must be 0 mismatches).
+    static const bool s_sps_equip_memo = EnvOn("MTG_SPS_EQUIP_MEMO", true);
+    if (s_sps_equip_memo && paymemo::On() && !HumanPlayActive() && !uoprice::PriceOn()
+        && std::none_of(sel.begin(), sel.end(), [&](int j)
+                        { const Action& a = cands[static_cast<std::size_t>(j)];
+                          return a.kind == Action::Kind::ActivateVial || IsRevealCostCast(a); }))
+    {
+        std::vector<int> key(order.begin(), order.end());
+        for (int j : sel)
+        {
+            if (std::find(order.begin(), order.end(), j) == order.end()) { key.push_back(j); }
+        }
+        const std::vector<int> casts(order.begin(), order.end());
+        std::vector<int> work = casts;
+        return paymemo::Probe(paycensus::SPSU, state, cands, key,
+                              [&] { work = casts; return SubsetPayableSequentialTail(state, cands, sel, work); });
     }
     return SubsetPayableSequentialTail(state, cands, sel, order);
 }
