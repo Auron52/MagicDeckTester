@@ -334,6 +334,9 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   (sacrifice regular lands first), even over a regular land that would meet a colour need; (2) then the colour
   rule (1 red, 1 green, 2 black among the kept lands), counting a Lotus Vale / Lotus Field as ONE any-colour
   source (Scorched Ruins makes only colourless and fills nothing); (3) then F-L1.
+  USER (verbatim): *"Right, which is another reason why Scorched Ruins is pruned from play prior to Blood Sun."*
+  -> consistent with B4 (Ruins never played / put without Blood Sun), so in practice the B13 order only
+  applies to a Lotus Vale / Lotus Field played under B4's Blood-Sun-enabling exception.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
