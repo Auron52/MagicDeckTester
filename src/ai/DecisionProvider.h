@@ -1602,6 +1602,15 @@ public:
     // site in CollectActions consults this first, so a deck without it never scans. Generic = false.
     virtual bool ComboRouteEnabled() const { return false; }
 
+    // NestedRoundWinStop -- a SOUND identity fold for the NESTED candidate loops (SolveWithLookahead with enforce_budget
+    // off, i.e. inside a rollout): once a candidate of the pass has won THIS ROUND (pass_best_win <= state.turn_number),
+    // no later candidate can return an earlier win turn -- no line from a state at round R wins before R -- and a nested
+    // solve's only reader is that win turn (the rollout's result), so the rest of the list is neither charged nor
+    // applied. The existing tie prune already skips their ROLLOUTS on the same condition, after the unit and the apply;
+    // this moves the test before both. Opt-in per provider so every other deck stays byte-identical (Blood Sun perf
+    // step: 47% / 78% of the ceiling decisions' candidates were applied after the round was already won). Default false.
+    virtual bool NestedRoundWinStop() const { return false; }
+
     // Extra Turns may try a depth-zero continuation through consecutive own turns.
     // The solver accepts it only after simulation reaches a real same-round win.
     virtual bool ExtraTurnChainWalkEnabled() const { return false; }
@@ -5153,6 +5162,11 @@ public:
     // Battlefield indices of `land_indices`, best victim first. Base: the lowest per-tap yield first (a basic before
     // a Karoo before a Lotus -- otherwise the tapped-first ranking below put the just-entered, tapped Lotus Field
     // itself at the front), then SacrificeLandCandidates' order (tapped first, spawn lands last).
+    // LotusSacrificeRestrict -- a provider RESTRICTION of the Lotus sacrifice menu (LotusSacrificePicksImpl's multisets
+    // of battlefield indices; -1 = the entering Lotus Field counted before it is on the battlefield): it may only drop
+    // entries, never add or reorder one. Autonomous play only (the caller skips it under human play). Default: keep all.
+    virtual void LotusSacrificeRestrict(const GameState& s, int controller, std::vector<std::vector<int>>& picks) const
+    { (void)s; (void)controller; (void)picks; }
     virtual std::vector<int> LotusSacrificeRanking(const GameState& s, int controller,
                                                    const std::vector<int>& land_indices) const
     {

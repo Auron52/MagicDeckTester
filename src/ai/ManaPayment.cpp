@@ -14855,3 +14855,17 @@ std::uint64_t PayContextDigest()
     if (i < arm.size()) { std::uint64_t w = 0; std::memcpy(&w, arm.data() + i, arm.size() - i); mix(w); }
     return h;
 }
+
+// Blood Sun perf diagnosis (2026-11-21): the pay refine's process-wide counters for the per-decision census
+// (TurnSolver.cpp MTG_TURN_CENSUS_FIELDS). 0 seen, 1 triggered, 2 refined; the clock (3, microseconds) runs only
+// under MTG_PAY_REFINE_STATS. Read-only: nothing in play consults them.
+long long PayRefineDiagCount(int k)
+{
+    switch (k)
+    {
+        case 0:  return g_refine_seen.load(std::memory_order_relaxed);
+        case 1:  return g_refine_trig.load(std::memory_order_relaxed);
+        case 2:  return g_refine_found.load(std::memory_order_relaxed);
+        default: return g_refine_us.load(std::memory_order_relaxed);
+    }
+}

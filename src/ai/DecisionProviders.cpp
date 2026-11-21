@@ -72220,8 +72220,39 @@ bool BloodSunMachinationsCastPruneOn()
     return heurarm::Flag(heurarm::BLOODSUN_PRUNE_MACHINATIONS_CAST, on);
 }
 
+// MTG_BLOODSUN_GRIM_PRUNE: the SUB-LEVER of the prune that narrows Grim Tutor's OWN targets (ledger B12, USER 2026-11-21,
+// verbatim): "Grim Tutor should also be handily pruned if it hasn't been. There are few targets worth getting with it
+// except Blood Sun and Diabolic Revelation when those are missing." -- amended: "I'm not entirely sure how confident I
+// should be in that ruling, though. Maybe there is an argument to allow the others in your list. We'll have to test it
+// out if it is a notable cost. I would probably not bother with fetching the lands except for the red source or if you
+// don't have enough land to get to 7 mana in this case. The rest can be fetched when you get multiple cards with
+// Diabolic Revelation." DEFAULT ON (USER-authored); =0 keeps the B3 list (the A/B arm); inert while the prune is off.
+// The transmute's own list (B10: Grim Tutor, Blood Sun while missing) and Diabolic Revelation's packages are untouched.
+bool BloodSunGrimPruneOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_PRUNE");   // DEFAULT OFF until measured (USER e3d2622e8: measure first)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_PRUNE, on);
+}
+
+// MTG_BLOODSUN_GRIM_REV_GATE: the SECOND Grim Tutor sub-lever (ledger B12, USER 2026-11-21, verbatim): "Essentially, you
+// would prefer to use mana on a Diabolic Revelation since it starts to become very mana efficient after you hit 7 or 8
+// mana. Wasting some of your mana on Grim Tutor at that point is usually not worth it. That may not be totally correct
+// if you had 2 grim tutors and only 1 Diabolic Revelation, (in that case you could use the mana to replace the Grim
+// tutors with 2 cards that are useful) so we'll have to play with it. Once you have 8 mana it becomes obvious that the
+// Diabolic Revelation is a better use." -> Grim Tutor is not cast while a Diabolic Revelation is in hand and this
+// turn's mana (untapped lands + floating + the best land still playable this turn) is >= MTG_BLOODSUN_GRIM_REV_MANA
+// (default 8; the 7 arm). MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI=1 (default OFF, an A/B arm) exempts the USER's named case:
+// two or more Grim Tutors with exactly one Revelation in hand. DEFAULT ON; inert while the prune is off.
+bool BloodSunGrimRevGateOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_REV_GATE");   // DEFAULT OFF until measured (USER e3d2622e8)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_REV_GATE, on);
+}
+
 namespace
 {
+// B12's land threshold (USER, verbatim: "if you don't have enough land to get to 7 mana").
+constexpr int kBloodSunGrimLandMana = 7;
 // The USER's "life is looking dicey" threshold for Exploration (B3; a PARENT-chosen number surfaced to the USER, who
 // confirmed his worst case -- life 7 -- sits inside it).
 constexpr int kBloodSunExplorationLife = 10;
@@ -72364,6 +72395,133 @@ int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinit
     return 0;   // Grim Tutor (transmute only), Machinations, Burgeoning, Ulamog, the Karoos, fastlands, Cairns, Tomb, ...
 }
 
+// B12 (see BloodSunGrimPruneOn for the USER's words): of the B3 targets BloodSunTutorTargetCap already admits, Grim
+// Tutor keeps only Blood Sun (the cap admits it only while none is out or in hand), Diabolic Revelation while none is in
+// hand, the B3 red-source exception (Rakdos Carnarium / City of Brass, capped there), and the big lands (Lotus Vale /
+// Field, Scorched Ruins) only while our lands cannot reach 7 mana: the mana our battlefield lands make plus the best
+// land in hand (a drop is always available by next turn) is below kBloodSunGrimLandMana. Time Warp, Emrakul, Fastbond,
+// Exploration drop out ("The rest can be fetched when you get multiple cards with Diabolic Revelation"). A RESTRICTION
+// of the searched targets: every admitted target is still searched; an empty list means Grim Tutor is not cast
+// (TutorNeedsCandidate).
+// The mana this turn can still make for B12's gates: our untapped lands (their EFFECTIVE amount -- under Blood Sun a
+// Lotus makes 3, Scorched Ruins 4) plus the floating pool plus, when a land drop is left this turn, the best land in
+// hand (net of the lands it costs). A provider ESTIMATE that only restricts Grim Tutor's casts / targets.
+int BloodSunTurnManaEstimate(const GameState& s, int controller)
+{
+    int mana = s.floating_mana.Total();
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller || pm.def_absent || pm.tapped || !pm.card.IsLand()) { continue; }
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(pm.card);
+        if (ld != nullptr) { mana += std::max(1, EffectiveLandDef(s, *ld).params.produces_amount); }
+    }
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    if (me.lands_played_this_turn < me.LandDropsAvailable())
+    {
+        int best = 0;
+        for (const Card& c : me.hand)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+            if (ld == nullptr || !ld->card.IsLand()) { continue; }
+            const CardParams& e = EffectiveLandDef(s, *ld).params;
+            int n = std::max(1, e.produces_amount) - std::max(e.etb_replace_sacrifice_untapped_lands, e.etb_sacrifice_lands);
+            if (e.etb_bounce_land) { n -= 1; }
+            if (e.enters_tapped) { n = 0; }
+            best = std::max(best, n);
+        }
+        mana += best;
+    }
+    return mana;
+}
+
+// B12's second gate (see BloodSunGrimRevGateOn): true = Grim Tutor is not cast now.
+bool BloodSunGrimRevGateHolds(const GameState& s, int controller)
+{
+    if (!BloodSunGrimRevGateOn()) { return false; }
+    static const int s_mana = EnvInt("MTG_BLOODSUN_GRIM_REV_MANA", 8);
+    static const bool s_exempt = EnvOn("MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI");   // DEFAULT OFF (an A/B arm)
+    int revs = 0, grims = 0;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.tutor_up_to_x) { ++revs; }
+        else if (d->params.tutor_to_hand && !d->params.wish_from_sideboard && !d->params.tutor_from_graveyard
+                 && d->params.tutor_exact_mv < 0) { ++grims; }
+    }
+    if (revs == 0) { return false; }
+    const int mana = BloodSunTurnManaEstimate(s, controller);
+    // USER (verbatim, B12 clarification): "at 8 mana+ multiple grim tutors lose out to one Diabolic Revelation even when
+    // you consider that the Revelation needs to replace itself" -> the 2+ Grim exemption applies only BELOW 8 (an arm of
+    // the threshold-7 variant), never at 8 or more.
+    if (s_exempt && grims >= 2 && revs == 1 && mana < 8) { return false; }
+    return mana >= s_mana;
+}
+
+// B12 clarification (USER, verbatim): "At 8 mana the only arguable play that might be better with Grim Tutor we may want
+// to leave on the table is tutoring and playing Time Warp. We probably should not prune that." -> Grim Tutor -> Time Warp
+// stays a target, at every mana level and under the gate, when Grim Tutor and then Time Warp are BOTH castable this turn
+// from our mana, colours included (one exact payability test of the two costs together on the board as it stands).
+bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const CardDefinition& tw)
+{
+    if (tw.params.extra_turns_on_resolve <= 0 || controller != s.active_player_index) { return false; }
+    const CardDefinition* grim = nullptr;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.tutor_to_hand && !d->params.tutor_up_to_x && !d->params.wish_from_sideboard
+            && !d->params.tutor_from_graveyard && d->params.tutor_exact_mv < 0) { grim = d; break; }
+    }
+    if (grim == nullptr) { return false; }
+    const ManaCost& a = grim->card.m_mana_cost;
+    const ManaCost& b = tw.card.m_mana_cost;
+    ManaCost both = a;
+    both.generic += b.generic; both.white += b.white; both.blue += b.blue; both.black += b.black;
+    both.red += b.red; both.green += b.green; both.colorless += b.colorless;
+    return TurnSolver::CostPayableExact(s, both, false);
+}
+
+bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (p.lands_lose_nonmana_abilities) { return true; }   // the cap already requires none out / in hand
+    if (p.tutor_up_to_x)
+    {
+        bool rv_bf = false, rv_hand = false;
+        BsHave(s, controller, [](const CardDefinition& c) { return c.params.tutor_up_to_x; }, rv_bf, rv_hand);
+        return !rv_hand;
+    }
+    const std::string& nm = d.card.m_name.str();
+    if (nm == "Rakdos Carnarium" || nm == "City of Brass") { return true; }   // the cap holds the exception's terms
+    if (BsIsBigLand(d))
+    {
+        // A land's mana once out, net of the lands it costs (BloodSunRole's reading, through the EFFECTIVE definition).
+        auto net = [&](const CardDefinition& ld)
+        {
+            const CardParams& e = EffectiveLandDef(s, ld).params;
+            int n = std::max(1, e.produces_amount);
+            n -= std::max(e.etb_replace_sacrifice_untapped_lands, e.etb_sacrifice_lands);
+            if (e.etb_bounce_land) { n -= 1; }
+            return n;
+        };
+        int mana = 0;
+        for (const Permanent& pm : s.battlefield)
+        {
+            if (pm.controller_index != controller || pm.def_absent || !pm.card.IsLand()) { continue; }
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(pm.card);
+            if (ld != nullptr) { mana += std::max(1, EffectiveLandDef(s, *ld).params.produces_amount); }
+        }
+        int best = 0;
+        for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+            if (ld != nullptr && ld->card.IsLand()) { best = std::max(best, net(*ld)); }
+        }
+        return mana + best < kBloodSunGrimLandMana;
+    }
+    return false;   // Time Warp, Emrakul, Fastbond, Exploration: B3 targets Grim Tutor no longer fetches
+}
+
 // Grim Tutor (and the transmute's synthesized exact-MV search): the generic list restricted to the USER's targets,
 // ordered by BloodSunRole (the per-cast named axis searches every name; the order is its in-place first combination and
 // the beyond-horizon front). Diabolic Revelation's packages ride RevelationPackageRestrict instead.
@@ -72374,11 +72532,21 @@ std::vector<std::string> BloodSunProvider::TutorCandidates(const GameState& s, i
         || pp.tutor_from_graveyard) { return all; }
     const bool transmute = pp.tutor_exact_mv >= 0;
     const bool sun_out = LandNonManaAbilitiesSuppressed(s);
+    const bool grim = !transmute && BloodSunGrimPruneOn();   // B12: Grim Tutor's own (narrower) list
+    // B12's second gate: with a Revelation in hand at 8+ mana, Grim Tutor is cast only for a same-turn Time Warp (else
+    // an empty list: not cast, TutorNeedsCandidate).
+    const bool rev_gate = !transmute && BloodSunGrimRevGateHolds(s, controller);
     std::vector<std::pair<int, std::string>> keep;
     for (std::string& nm : all)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         if (d == nullptr || BloodSunTutorTargetCap(s, controller, *d, transmute) <= 0) { continue; }
+        if (grim || rev_gate)
+        {
+            const bool tw = BloodSunGrimTimeWarpCastable(s, controller, *d);
+            if (rev_gate && !tw) { continue; }
+            if (grim && !tw && !BloodSunGrimTargetAdmitted(s, controller, *d)) { continue; }
+        }
         keep.emplace_back(BloodSunRole(s, d, sun_out, true), std::move(nm));
     }
     std::stable_sort(keep.begin(), keep.end(),
@@ -72463,6 +72631,139 @@ bool BloodSunProvider::OffersOpponentLookTarget(const GameState& /*s*/, const Ca
 // provisional) the self-target CAST is not offered either. NeverCast is the hand-cast choke point only: the transmute
 // (a from-hand Channel action, its own emitter) is untouched. The line it removes: {2}{B} without {1}{B}{B}, or a top-3
 // look worth more than any mana-value-3 card -- the Stage 5 A/B measures it.
+// MTG_BLOODSUN_GOOFF: the go-off front (design §5 "Combo Off", step 8 first cut). USER (verbatim, 2026-11-21): "The goal
+// is to have the Combo Off heuristic cover most situations and other prunes deal with the rest." ORDER only (a move
+// tier): DEFAULT ON; =0 the value order alone.
+bool BloodSunGoOffOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GOOFF", true);   // DEFAULT ON (order only); =0 no go-off tier
+    return on;
+}
+
+// The go-off test (BloodSunGoOffRank). A deliberately small resource model -- it only ORDERS, the engine plays and
+// verifies every line -- of how much damage the plan's extra turns put through THIS ROUND:
+//   * this turn's combat: our creatures already able to attack (on the battlefield since the turn began);
+//   * every extra turn the plan grants (an Emrakul cast trigger, each Time Warp) is one more combat in which every
+//     creature we control after the plan attacks (an extra turn untaps everything; Emrakul cast now has been under our
+//     control since that extra turn began, CR 302.6);
+//   * the goldfish opponent never blocks, so power is damage.
+// Rank 2 when that reaches the opponent's life. Rank 1 (stage 1 of §5.3): a Revelation package holding an Emrakul while
+// the plan leaves 15 mana (the turn estimate minus the plan's casts) to hard-cast it -- the continuation's go-off.
+int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const int me = s.active_player_index;
+    const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+    int now_power = 0, bf_power = 0;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != me || pm.def_absent || !pm.card.IsCreature()) { continue; }
+        const int pw = std::max(0, pm.card.m_power.value_or(0) + pm.power_modifier);
+        bf_power += pw;
+        if (!pm.entered_this_turn && !pm.tapped) { now_power += pw; }
+    }
+    int extra = 0, cast_power = 0, spent = 0;
+    bool fetch_emrakul = false;
+    for (int j : sel)
+    {
+        if (j < 0 || j >= static_cast<int>(cands.size())) { continue; }
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        spent += a.cost.ManaValue();
+        extra += std::max(0, d->params.cast_trigger_extra_turns) + std::max(0, d->params.extra_turns_on_resolve);
+        if (d->card.IsCreature()) { cast_power += std::max(0, d->card.m_power.value_or(0)); }
+        if (d->params.tutor_up_to_x && revpkg::IsPackage(a.tutor_target.str()))
+        {
+            for (const std::string& nm : revpkg::DecodePackage(a.tutor_target.str()))
+            {
+                const CardDefinition* fd = CardDatabase::Instance().Lookup(nm);
+                if (fd != nullptr && fd->params.cast_trigger_extra_turns > 0) { fetch_emrakul = true; }
+            }
+        }
+    }
+    if (now_power + extra * (bf_power + cast_power) >= opp_life) { return 2; }
+    if (fetch_emrakul && BloodSunTurnManaEstimate(s, me) - spent >= 15) { return 1; }
+    return 0;
+}
+
+bool BloodSunProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                                          const std::vector<int>& sel, bool /*projected_lethal*/) const
+{
+    if (!BloodSunGoOffOn() || HumanPlayActive()) { return false; }
+    return BloodSunGoOffRank(s, cands, sel) > 0;
+}
+
+// B13 (ledger 7106b6bfd, USER 2026-11-21, verbatim): "We should prune the sacrifices for sure. Usually the choices are
+// obvious, but we should have an order that we follow that attempts to keep a red, a green and 2 black. Naturally, we
+// should also prioritize bouncelands over regular lands." -> the Lotus sacrifice menu (it exists only without Blood Sun)
+// keeps ONE pair, the first by: (1) the lands left make at least 1 {R}, 1 {G} and 2 {B} sources where possible (a dual
+// or any-colour land counts for every colour it can make; with no pair meeting it, the smallest shortfall); (2) then the
+// fewest Karoos among the victims -- the parent's reading of "prioritize bouncelands": KEEP the bouncelands, which make
+// two mana, and sacrifice regular one-mana lands first; (3) then the most TAPPED victims (F-L1: a tapped copy before an
+// untapped one of the same class); then the menu's own order. A RESTRICTION (USER-authored, DEFAULT ON); human play is
+// offered every land (the caller); MTG_BLOODSUN_LOTUS_SAC_PRUNE=0 keeps the whole menu.
+bool BloodSunLotusSacPruneOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_LOTUS_SAC_PRUNE", true);   // DEFAULT ON (USER-decided); =0 the full menu
+    return heurarm::Flag(heurarm::BLOODSUN_LOTUS_SAC_PRUNE, on);
+}
+
+void BloodSunProvider::LotusSacrificeRestrict(const GameState& s, int controller,
+                                              std::vector<std::vector<int>>& picks) const
+{
+    if (picks.size() <= 1 || !BloodSunPruneLive() || !BloodSunLotusSacPruneOn()) { return; }
+    // A land's colour reach, through its EFFECTIVE definition (an any-colour land lists every colour).
+    auto reach = [&](const CardDefinition& d, bool& r, bool& g, bool& b)
+    {
+        const CardParams& e = EffectiveLandDef(s, d).params;
+        for (Color c : e.produces)
+        {
+            if (c == Color::Red) { r = true; }
+            if (c == Color::Green) { g = true; }
+            if (c == Color::Black) { b = true; }
+        }
+    };
+    std::size_t best = 0;
+    int best_key[3] = { 1 << 20, 1 << 20, 1 << 20 };
+    for (std::size_t k = 0; k < picks.size(); ++k)
+    {
+        const std::vector<int>& v = picks[k];
+        int nr = 0, ng = 0, nb = 0, karoos = 0, untapped = 0;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        {
+            const Permanent& pm = s.battlefield[static_cast<std::size_t>(i)];
+            if (pm.controller_index != controller || !pm.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+            if (d == nullptr) { continue; }
+            if (std::find(v.begin(), v.end(), i) != v.end())
+            {
+                if (EffectiveLandDef(s, *d).params.etb_bounce_land) { ++karoos; }
+                if (!pm.tapped) { ++untapped; }
+                continue;
+            }
+            bool r = false, g = false, b = false;
+            reach(*d, r, g, b);
+            nr += r ? 1 : 0; ng += g ? 1 : 0; nb += b ? 1 : 0;
+        }
+        const int key[3] = { std::max(0, 1 - nr) + std::max(0, 1 - ng) + std::max(0, 2 - nb), karoos, untapped };
+        if (std::lexicographical_compare(key, key + 3, best_key, best_key + 3))
+        { best = k; std::copy(key, key + 3, best_key); }
+    }
+    std::vector<int> keep = std::move(picks[best]);
+    picks.clear();
+    picks.push_back(std::move(keep));
+}
+
+// Blood Sun perf step: the nested round-win stop (DecisionProvider::NestedRoundWinStop's proof). Not a USER prune: an
+// identity fold, so it is NOT gated on MTG_BLOODSUN_USER_PRUNE; MTG_BLOODSUN_ROUND_WIN_STOP=0 restores the old order of
+// work (the A/B arm that shows the fold changes no win turn).
+bool BloodSunProvider::NestedRoundWinStop() const
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_ROUND_WIN_STOP", true);   // DEFAULT ON (sound); =0 the old order of work
+    return on;
+}
+
 bool BloodSunProvider::NeverCast(const CardDefinition& def) const
 {
     return BloodSunPruneLive() && BloodSunMachinationsCastPruneOn() && def.params.look_top_target_player_exile_reorder > 0;

@@ -2027,3 +2027,32 @@ does, but doesn't hardcast. Cyclone should be deploying multiples at times."*
   (`land_entry`, opponent's turn) now defaults to 0 (tapped) with both answers still offered.
 - **Viewer default to flag:** `land_entry` ships "let AI decide" by default in the viewer's options menu (DECISIONS.md
   "Surfacing options"). In this deck life is a resource (B1), so the USER may want Overgrown Tomb's prompt surfaced.
+
+### Performance diagnosis (perf step A, 2026-11-21)
+Full write-up and raw numbers: `build/scratch/bloodsun/perf/diagnosis.md` (snapshot `mtg.d32dfb564`, d5 b20,
+max_turns 8, empty profile = the analyzer's card-score phase). The analyzer ran unseeded (`mtg-analyze` without
+`--seed`), so its gi 902 / 746 / ... cannot be replayed until `stage4.json` prints the seed; repro used instead:
+**seed 7001 gi 1** (1,525 s: 18 bottoming trial games, 99.7% of the wall; real game 2 s), plus trials 1 and 15
+replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49` (114 s).
+- **Where:** a handful of decisions per game at a ceiling -- the 25x unit pass ceiling (450,021 units, 108 s, on a
+  T4 whose only root option is "pass") or the priced ceiling (84k units, 110 s). 98-99% of their wall is nodes at
+  rollout nest >= 2: the HORIZON round (T8 = max_turns, or T6) walked through an extra-turn chain inside the rollouts
+  (Time Warp / Emrakul; an extra turn does not advance the round), each extra turn's list wider than the last
+  (159 -> 12,174 -> 44,679 -> ~96k; largest single list **498,576** candidates).
+- **Are we hit by Revelation X combinations? Yes, as a plan cross product.** 93.7% / 94.2% of all candidates carry a
+  Revelation package and 99.1% of the candidate mass sits in lists of 513+; but one copy's package space is small
+  (6 packages, X 1-3, in the 498k list): the width is two Revelation copies x their packages x Grim Tutor's per-copy
+  targets x cast-or-not of Ulamog / Emrakul / Time Warp, at 33-47 mana. Those lists DO hold a this-round win: 415,591
+  of the trial-1 replay's 893k charged candidates were applied (with their payment refine) only to be tie-skipped
+  after the win was found -- unpriced post-win work.
+- **Per-candidate cost:** 240 us - 1.3 ms (vs the priced ceiling's 25 us reference); the pay refine
+  (`MTG_PAY_REFINE`) is 19% / 76% of the wall (1.5% / 0.2% of its triggers find anything).
+- **B3 prune ON vs OFF:** OFF is 10x faster and loses turns (T7 -> no win by T8; T6 -> T8): the prune makes the deck
+  reach the go-off boards; the go-off searched as a cross product is the cost.
+- **Grim Tutor (B12) share:** a co-multiplier (0.4-1.0 Grim actions per candidate), not the driver: the B12 arms are
+  built DEFAULT OFF, not adopted (USER: measure first). Machinations: 6-11% of candidates, co-carried (B5 applied).
+  Fastbond land batches and Lotus sacrifices: not drivers in these games (giant lists are under Blood Sun, one land in
+  hand). Bottoming trials (no keep table) are the game-level multiplier.
+- **Phase B order:** (1) the nested round-win stop (sound identity, `DecisionProvider::NestedRoundWinStop`, Blood Sun
+  opt-in so other decks stay byte-identical); (2) the go-off front (`PlanMoveOrderFront`, ORDER only) so the kill is
+  the first candidate and (1) ends the list; (3) only then prunes, re-measured.

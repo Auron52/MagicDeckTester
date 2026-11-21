@@ -1084,6 +1084,9 @@ enum Slot : int
     BLOODSUN_USER_PRUNE,      // MTG_BLOODSUN_USER_PRUNE  Blood Sun step 6c: the USER's tutor-target and land-play RESTRICTIONS (ledger B3 / B4, USER 2026-11-20; BloodSunProvider): Revelation never at X 0, at X 1 only with another Revelation in hand; tutor targets (Revelation packages, Grim Tutor, Machinations' transmute) limited to Blood Sun while we have none, Fastbond until one is out or in hand, Exploration at life <= 10 with no Fastbond out, the Lotuses / Scorched Ruins, Time Warp, Revelation, Emrakul (+ Carnarium / City of Brass when Blood Sun is in hand with no red source; Grim Tutor by transmute only); Lotus Field == Lotus Vale under Blood Sun always; pre-Blood Sun no Scorched Ruins and a Lotus only to cast a Blood Sun in hand. Default ON (USER-authored); =0 -> the unrestricted step-6b search (the A/B arm)
     BLOODSUN_EXPLORATION_ANYLIFE,// MTG_BLOODSUN_EXPLORATION_ANYLIFE  A/B ARM of MTG_BLOODSUN_USER_PRUNE: Exploration is a tutor target at ANY life (still never with a Fastbond on our battlefield). Default OFF (the USER's low-life reading, life <= 10); inert while the prune is off
     BLOODSUN_PRUNE_MACHINATIONS_CAST,// MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST  SUB-LEVER of MTG_BLOODSUN_USER_PRUNE (Blood Sun step 6e, ledger B5): Dimir Machinations' CAST mode (the top-3 look) is not offered at all, the transmute only. The opponent-target cast is pruned by MTG_BLOODSUN_USER_PRUNE itself (B5, decided); this sub-lever removes the SELF-target cast too (the USER's "tempted" lean, measured at Stage 5). Default ON (provisional); inert while the prune is off
+    BLOODSUN_GRIM_PRUNE,      // MTG_BLOODSUN_GRIM_PRUNE  SUB-LEVER of MTG_BLOODSUN_USER_PRUNE (Blood Sun perf step, ledger B12, USER 2026-11-21): Grim Tutor's own targets are Blood Sun (none out or in hand), Diabolic Revelation (none in hand), the one red source (B3 exception), and the big lands only while our lands cannot reach 7 mana; nothing else (no target -> not cast). Default ON (USER-authored, low confidence: A/B); =0 the B3 list. The transmute (B10) is untouched; inert while the prune is off
+    BLOODSUN_GRIM_REV_GATE,   // MTG_BLOODSUN_GRIM_REV_GATE  SECOND Grim sub-lever of MTG_BLOODSUN_USER_PRUNE (ledger B12, USER 2026-11-21): Grim Tutor is not cast while a Diabolic Revelation is in hand and this turn's mana is >= MTG_BLOODSUN_GRIM_REV_MANA (default 8); MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI=1 exempts 2+ Grim with 1 Revelation. Default ON; inert while the prune is off
+    BLOODSUN_LOTUS_SAC_PRUNE, // MTG_BLOODSUN_LOTUS_SAC_PRUNE  SUB-LEVER of MTG_BLOODSUN_USER_PRUNE (ledger B13, USER 2026-11-21, decided): the Lotus Vale / Scorched Ruins / Lotus Field sacrifice (no Blood Sun) collapses to ONE pair -- keep 1 R, 1 G, 2 B sources where possible, then regular lands before Karoos, then tapped before untapped (F-L1). Default ON; inert while the prune is off
     COUNT
 };
 
@@ -2112,6 +2115,9 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_USER_PRUNE",
         "MTG_BLOODSUN_EXPLORATION_ANYLIFE",
         "MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST",
+        "MTG_BLOODSUN_GRIM_PRUNE",
+        "MTG_BLOODSUN_GRIM_REV_GATE",
+        "MTG_BLOODSUN_LOTUS_SAC_PRUNE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

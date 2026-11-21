@@ -4463,6 +4463,15 @@ public:
                                   const std::vector<int>& counts) const override;
     bool OffersOpponentLookTarget(const GameState& s, const CardDefinition& def) const override;
     bool NeverCast(const CardDefinition& def) const override;
+    // MTG_BLOODSUN_ROUND_WIN_STOP (DEFAULT ON, a sound identity fold): see DecisionProvider::NestedRoundWinStop.
+    bool NestedRoundWinStop() const override;
+    // THE GO-OFF FRONT ("Combo Off", design §5, step 8; MTG_BLOODSUN_GOOFF, DEFAULT ON): ORDER only -- a plan whose
+    // extra-turn chain this round is projected to deal the opponent's life (or that fetches the Emrakul it can still
+    // hard-cast this turn) is tried first; nothing is removed, the nested round-win stop then ends the list.
+    bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
+                            bool projected_lethal) const override;
+    // B13 (MTG_BLOODSUN_LOTUS_SAC_PRUNE, DEFAULT ON, USER-decided): the Lotus sacrifice menu collapses to ONE pair.
+    void LotusSacrificeRestrict(const GameState& s, int controller, std::vector<std::vector<int>>& picks) const override;
 };
 // MTG_BLOODSUN_USER_PRUNE's ONE reader (env DEFAULT ON + the heurarm slot) and its Exploration A/B arm
 // MTG_BLOODSUN_EXPLORATION_ANYLIFE (DEFAULT OFF; inert while the prune is off).
@@ -4473,6 +4482,24 @@ bool BloodSunMachinationsCastPruneOn();
 // The USER's tutor-target rule (B3) for one card: the most copies of it a tutor may fetch now (0 = not a target;
 // a large number = unlimited). `transmute` = Dimir Machinations' transmute search (Grim Tutor is a target there only).
 int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute);
+// MTG_BLOODSUN_GRIM_PRUNE (heurarm BLOODSUN_GRIM_PRUNE; ledger B12; DEFAULT ON; inert while the prune is off) and its
+// rule for one B3-admitted card: is it one of Grim Tutor's own targets now (Blood Sun / Revelation when missing, the red
+// source, the big lands below 7 land mana)?
+bool BloodSunGrimPruneOn();
+bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& def);
+// MTG_BLOODSUN_GRIM_REV_GATE (heurarm BLOODSUN_GRIM_REV_GATE; B12's second gate; DEFAULT ON): Grim Tutor is not cast
+// while a Revelation is in hand and BloodSunTurnManaEstimate >= MTG_BLOODSUN_GRIM_REV_MANA (default 8).
+bool BloodSunGrimRevGateOn();
+int  BloodSunTurnManaEstimate(const GameState& s, int controller);
+bool BloodSunGrimRevGateHolds(const GameState& s, int controller);
+// B12 clarification: Grim Tutor then Time Warp both castable this turn (colours included) -> Time Warp stays a Grim target.
+bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const CardDefinition& time_warp);
+// The go-off front's test for one plan (BloodSunProvider::PlanMoveOrderFront; exposed for unit tests): 0 = not a go-off,
+// 1 = a stage-1 fetch (a Revelation package holding Emrakul with 15 left to cast it), 2 = a projected kill this round.
+int  BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel);
+bool BloodSunGoOffOn();
+// MTG_BLOODSUN_LOTUS_SAC_PRUNE (heurarm BLOODSUN_LOTUS_SAC_PRUNE; ledger B13; DEFAULT ON; inert while the prune is off).
+bool BloodSunLotusSacPruneOn();
 
 // MTG_STUFFY_MAIN_SPLIT's ONE reader (env DEFAULT ON + the heurarm slot), shared by StuffyDollProvider's main-1
 // restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one half
