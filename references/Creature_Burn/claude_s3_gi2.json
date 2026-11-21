@@ -1,0 +1,334 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [37] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 53, "name": "Searing Blaze" }, { "num": 20, "name": "Keldon Champion" }, { "num": 1, "name": "Ball Lightning" }, { "num": 31, "name": "Mountain" }, { "num": 10, "name": "Fireblast" }, { "num": 11, "name": "Fireblast" }, { "num": 27, "name": "Magma Jet" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 37, "name": "Mountain" }, { "num": 49, "name": "Price of Progress" }, { "num": 22, "name": "Keldon Marauders" }, { "num": 58, "name": "Teetering Peaks" }, { "num": 32, "name": "Mountain" }, { "num": 14, "name": "Goblin Fireslinger" }, { "num": 33, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 37, "name": "Mountain", "win_optimal": true }, { "num": 49, "name": "Price of Progress", "win_optimal": true }, { "num": 22, "name": "Keldon Marauders", "win_optimal": true }, { "num": 58, "name": "Teetering Peaks", "win_optimal": true }, { "num": 32, "name": "Mountain", "win_optimal": true }, { "num": 14, "name": "Goblin Fireslinger", "win_optimal": true }, { "num": 33, "name": "Mountain", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 37, "name": "Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Goblin Fireslinger"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Goblin Fireslinger" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 14, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 1, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 3, "num": 14, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 3, "num": 14, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Keldon Marauders"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Magma Jet" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Brushland" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 32, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Keldon Marauders", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Keldon Marauders"], "actions": [{ "card": "Keldon Marauders" }] },
+    { "index": 1, "summary": "land=Teetering Peaks; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 3, "summary": "land=none; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": null, "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Price of Progress", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 6, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "etb", "text": "Keldon Marauders enters with 2 time counters (vanishing)" }, { "turn": 2, "kind": "damage", "text": "🔥 Keldon Marauders: 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 2 }] }, { "name": "Mountain", "idx": 3, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 2 }] }, { "name": "Mountain", "idx": 3, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 33, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Goblin Fireslinger", "cast=Spark Elemental", "land=Teetering Peaks"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Spark Elemental" }],
+  "events": [{ "turn": 3, "kind": "trigger", "text": "⌛ Keldon Marauders: vanishing -- a time counter removed (1 left)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 7, "num": 33, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Teetering Peaks; cast: Goblin Fireslinger, Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Goblin Fireslinger", "Spark Elemental"], "cast_order_canonical": ["Goblin Fireslinger", "Spark Elemental"], "actions": [{ "card": "Goblin Fireslinger" }, { "card": "Spark Elemental" }] },
+    { "index": 1, "summary": "land=Teetering Peaks; cast: Spark Elemental, Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Spark Elemental", "Goblin Fireslinger"], "cast_order_canonical": ["Spark Elemental", "Goblin Fireslinger"], "actions": [{ "card": "Spark Elemental" }, { "card": "Goblin Fireslinger" }] },
+    { "index": 2, "summary": "land=Teetering Peaks (after Spark Elemental); cast: Goblin Fireslinger, Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "land_slot": 1, "casts": ["Goblin Fireslinger", "Spark Elemental"], "cast_order_canonical": ["Goblin Fireslinger", "Spark Elemental"], "actions": [{ "card": "Goblin Fireslinger" }, { "card": "Spark Elemental" }] },
+    { "index": 3, "summary": "land=Teetering Peaks (after Spark Elemental); cast: Spark Elemental, Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "land_slot": 1, "casts": ["Spark Elemental", "Goblin Fireslinger"], "cast_order_canonical": ["Spark Elemental", "Goblin Fireslinger"], "actions": [{ "card": "Spark Elemental" }, { "card": "Goblin Fireslinger" }] },
+    { "index": 4, "summary": "land=none; cast: Goblin Fireslinger, Spark Elemental", "declared_order_payability": "not_verified", "land": null, "casts": ["Goblin Fireslinger", "Spark Elemental"], "cast_order_canonical": ["Goblin Fireslinger", "Spark Elemental"], "actions": [{ "card": "Goblin Fireslinger" }, { "card": "Spark Elemental" }] },
+    { "index": 5, "summary": "land=none; cast: Spark Elemental, Goblin Fireslinger", "declared_order_payability": "not_verified", "land": null, "casts": ["Spark Elemental", "Goblin Fireslinger"], "cast_order_canonical": ["Spark Elemental", "Goblin Fireslinger"], "actions": [{ "card": "Spark Elemental" }, { "card": "Goblin Fireslinger" }] },
+    { "index": 6, "summary": "land=Teetering Peaks; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 7, "summary": "land=Teetering Peaks (after Spark Elemental); cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "land_slot": 1, "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 8, "summary": "land=none; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": null, "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 9, "summary": "land=Teetering Peaks; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 10, "summary": "land=none; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": null, "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 11, "summary": "land=Teetering Peaks; cast: Price of Progress", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 12, "summary": "land=Teetering Peaks; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 13, "summary": "land=none; cast: Price of Progress", "declared_order_payability": "not_verified", "land": null, "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 14, "summary": "land=none; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 15, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Teetering Peaks (enters)",
+  "turn": 3,
+  "loyalty": "gets +2/+0 until end of turn",
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 33, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 12, "num": 56, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 13, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "legal_targets": [{ "kind": "permanent", "index": 0, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 1, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 4, "label": "Goblin Fireslinger (1/1) (yours)" }, { "kind": "permanent", "index": 5, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 6, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 8, "label": "Keldon Marauders (3/3) (yours)" }, { "kind": "permanent", "index": 9, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 10, "label": "1/1 Creature (1/1) (opponent)" }, { "kind": "permanent", "index": 11, "label": "Goblin Fireslinger (1/1) (yours)" }, { "kind": "permanent", "index": 12, "label": "Spark Elemental (3/1) (yours)" }],
+  "heuristic_default": 5,
+  "options": [{ "index": 0, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 0 }] }, { "index": 1, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 2, "label": "Goblin Fireslinger (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 5, "label": "Keldon Marauders (3/3) (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 6, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 7, "label": "1/1 Creature (1/1) (opponent)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 8, "label": "Goblin Fireslinger (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 9, "label": "Spark Elemental (3/1) (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index) -- the permanent this ability (Teetering Peaks (enters)) targets. It is gets +2/+0 until end of turn. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "trigger", "text": "⛰ Teetering Peaks (enters): Keldon Marauders gets +2/+0 until end of turn" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "is_land": false, "power": 5, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 33, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 12, "num": 56, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 13, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1), Keldon Marauders (5), Spark Elemental (3) — 9 to opponent (18→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 14, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 8, "num": 22, "tapped": true, "is_land": false, "power": 5, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 33, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 12, "num": 56, "tapped": true, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 13, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 5, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Mountain", "cast=Price of Progress", "cast=Magma Jet"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "events": [{ "turn": 3, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (its own trigger)" }, { "turn": 3, "kind": "land", "text": "opponent plays Razorverge Thicket" }, { "turn": 4, "kind": "trigger", "text": "⌛ Keldon Marauders: vanishing -- a time counter removed (0 left) -- the last one: sacrificed" }, { "turn": 4, "kind": "damage", "text": "🔥 Keldon Marauders left the battlefield: 1 to opponent (9→8)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 5, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 4, "num": 32, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 8, "num": 33, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 12, "num": 58, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 40, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Keldon Marauders", "Spark Elemental"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Magma Jet → opponent, Price of Progress", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Magma Jet", "Price of Progress"], "cast_order_canonical": ["Magma Jet", "Price of Progress"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }, { "card": "Price of Progress" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Price of Progress", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 2, "summary": "land=none; cast: Price of Progress", "declared_order_payability": "not_verified", "land": null, "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=none; cast: Magma Jet → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Magma Jet"], "actions": [{ "card": "Magma Jet", "burn_target": "opponent" }] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "target",
+  "source": "Magma Jet",
+  "turn": 4,
+  "per_target_damage": 2, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 5, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 4, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 13, "num": 40, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 12, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Magma Jet", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Keldon Marauders", "Price of Progress", "Spark Elemental"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 2} },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 0, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 1, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 5, "label": "Goblin Fireslinger (yours)" }, { "kind": "permanent", "index": 6, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 7, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 9, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 10, "label": "1/1 Creature (opponent)" }, { "kind": "permanent", "index": 11, "label": "Goblin Fireslinger (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 0 }] }, { "index": 3, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 1 }] }, { "index": 4, "label": "Goblin Fireslinger (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 5, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 6, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 7, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 8, "label": "1/1 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 9, "label": "Goblin Fireslinger (yours)", "targets": [{ "kind": "permanent", "index": 11 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index). Each chosen target takes 2 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 15,
+  "type": "scry",
+  "source": "Magma Jet",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 5, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 4, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 13, "num": 40, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 12, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Keldon Marauders", "Price of Progress", "Spark Elemental"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "looked": [{ "name": "Goblin Fireslinger", "is_land": false }, { "name": "Mountain", "is_land": true }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Goblin Fireslinger", "Mountain"] }, { "index": 1, "label": "Top: Goblin Fireslinger  (rest to bottom)", "shuffle": false, "top": ["Goblin Fireslinger"], "away": ["Mountain"] }, { "index": 2, "label": "Top: Mountain  (rest to bottom)", "shuffle": false, "top": ["Mountain"], "away": ["Goblin Fireslinger"] }, { "index": 3, "label": "Top: Goblin Fireslinger, Mountain", "shuffle": false, "top": ["Goblin Fireslinger", "Mountain"], "away": [] }, { "index": 4, "label": "Top: Mountain, Goblin Fireslinger", "shuffle": false, "top": ["Mountain", "Goblin Fireslinger"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 4, "source": "Magma Jet", "cards": [{ "name": "Goblin Fireslinger", "disposition": "kept" }, { "name": "Mountain", "disposition": "to the bottom" }] }],
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Magma Jet: 2 to opponent (4→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 5, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Goblin Fireslinger", "idx": 11, "num": 15, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 4, "num": 32, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 33, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 13, "num": 40, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 12, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Keldon Marauders", "Magma Jet", "Price of Progress", "Spark Elemental"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Brushland", "idx": 2, "num": 100052, "is_land": true }, { "name": "Razorverge Thicket", "idx": 3, "num": 100050, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": ["Ethereal Armor"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1), Goblin Fireslinger (1) — 2 to opponent (2→0)" }
+  ]
+}
