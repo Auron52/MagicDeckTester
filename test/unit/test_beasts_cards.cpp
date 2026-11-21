@@ -852,3 +852,280 @@ TEST_CASE("Elder Gargaroth: the mode axis -- two attackers make 4 joint variants
     BeAdd(u, kGarg, 50, 0, /*sick=*/true);
     CHECK(BeGargCodes(u).empty());
 }
+
+// ---- Garruk's Harbinger (batch D) --------------------------------------------------------------
+// "Whenever this creature deals combat damage to a player or planeswalker, look at that many cards from the top of
+// your library. You may reveal a creature card or Garruk planeswalker card from among them and put it into your
+// hand. Put the rest on the bottom of your library in a random order." The shared FireCombatDamageDig (both combat
+// worlds), the searched rank pin packed 4 bits per ordinal, and the main-phase dig axis.
+namespace
+{
+constexpr const char* kHarb = "Garruk's Harbinger";
+// A Harbinger board whose library is exactly `names` (top first), numbered 300 + position.
+GameState BeHarbBoard(std::initializer_list<const char*> names)
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    s.deck_has_combat_damage_dig = true;
+    s.players[0].library = Library();
+    int n = 0;
+    for (const char* nm : names) { s.players[0].library.push_back(BeZone(nm, 300 + n++)); }
+    return s;
+}
+std::vector<int> BeLibNums(const GameState& s)
+{
+    std::vector<int> v;
+    for (const Card& c : s.players[0].library) { v.push_back(c.m_number); }
+    return v;
+}
+std::vector<int> BeHandNums(const GameState& s)
+{
+    std::vector<int> v;
+    for (const Card& c : s.players[0].hand) { v.push_back(c.m_number); }
+    return v;
+}
+int BeDigPin(std::initializer_list<int> ranks)
+{
+    int r[kCombatDigMaxOrdinals];
+    int n = 0;
+    for (int x : ranks) { r[n++] = x; }
+    return CombatDigPackRanks(r, n);
+}
+// Fire the shared trigger directly: every Harbinger on the board connected for `dmg`.
+void BeFireHarb(GameState& s, int pin, int dmg)
+{
+    s.scripted_combat_dig = static_cast<std::int16_t>(pin);
+    std::vector<int> idx, pw;
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { if (s.battlefield[i].card.m_name == kHarb) { idx.push_back(static_cast<int>(i)); pw.push_back(dmg); } }
+    FireCombatDamageDig(s, 0, idx, pw);
+}
+std::set<int> BeHarbCodes(const GameState& s)
+{
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    std::set<int> out;
+    for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { base }))
+    { if (p.combat_dig_choice >= 0) { out.insert(p.combat_dig_choice); } }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Garruk's Harbinger: card data, and the dig looks at exactly the damage dealt (Kaheera's anthem included)")
+{
+    const CardDefinition& d = BeDef(kHarb);
+    CHECK(d.card.m_power.value_or(0) == 4);
+    CHECK(d.card.m_toughness.value_or(0) == 3);
+    CHECK(d.params.combat_damage_dig_per_damage == 1);
+    CHECK(d.params.combat_damage_dig_types == std::vector<std::string>{ "Creature", "Garruk" });
+    // The only creature is 5th from the top: a 4-power hit misses it, a 5-power hit (Kaheera's +1/+1) finds it.
+    for (int with_kaheera = 0; with_kaheera < 2; ++with_kaheera)
+    {
+        GameState s = BeHarbBoard({ "Forest", "Forest", "Forest", "Forest", "Thragtusk", "Forest", "Forest" });
+        s.phase = Phase::Combat;
+        BeAdd(s, kHarb, 50);
+        if (with_kaheera != 0) { BeAdd(s, "Kaheera, the Orphanguard", 70); }
+        RolloutSimulateCombat(s);
+        CAPTURE(with_kaheera);
+        if (with_kaheera == 0)
+        {
+            CHECK(s.players[1].life == 16);
+            CHECK(s.players[0].hand.empty());
+            CHECK(s.players[0].library.size() == 7);
+            // The four looked-at Forests went under the two unseen cards: Thragtusk is now on top.
+            CHECK(s.players[0].library.front().m_number == 304);
+        }
+        else
+        {
+            CHECK(s.players[1].life == 20 - 5 - 3);                    // Harbinger 5 (anthem) + Kaheera 3
+            CHECK(BeHandNums(s) == std::vector<int>{ 304 });          // Thragtusk dug
+            CHECK(s.players[0].library.size() == 6);
+            CHECK(s.players[0].library.front().m_number == 305);      // the unseen rest stays on top
+        }
+    }
+}
+
+TEST_CASE("Garruk's Harbinger: the filter takes a creature or a Garruk planeswalker, never another nonland")
+{
+    GameState s = BeHarbBoard({ "Utopia Sprawl", "Forest", "Garruk, Primal Hunter", "Forest", "Thragtusk" });
+    BeAdd(s, kHarb, 50);
+    BeFireHarb(s, -1, 4);
+    CHECK(BeHandNums(s) == std::vector<int>{ 302 });                  // Garruk; Sprawl is not legal
+    CHECK(s.players[0].library.size() == 4);
+    CHECK(s.players[0].library.front().m_number == 304);              // Thragtusk was not looked at
+    // A window holding only an Aura and lands takes nothing; all of it goes to the bottom.
+    GameState t = BeHarbBoard({ "Utopia Sprawl", "Forest", "Wild Growth", "Forest", "Thragtusk" });
+    BeAdd(t, kHarb, 50);
+    BeFireHarb(t, -1, 4);
+    CHECK(t.players[0].hand.empty());
+    CHECK(t.players[0].library.size() == 5);
+    CHECK(t.players[0].library.front().m_number == 304);
+}
+
+TEST_CASE("Garruk's Harbinger: the rest go to the bottom in the shared keyed random order")
+{
+    const auto make = [] {
+        GameState s = BeHarbBoard({ "Forest", "Mountain", "Thragtusk", "Forest", "Mountain", "Forest", "Questing Beast" });
+        s.game_seed = 12345;
+        BeAdd(s, kHarb, 50);
+        return s;
+    };
+    GameState s = make();
+    const int sc = s.search_count;
+    BeFireHarb(s, -1, 6);
+    CHECK(BeHandNums(s) == std::vector<int>{ 302 });                  // the provider's front (first match)
+    CHECK(s.search_count == sc + 1);                                   // the keyed order consumed one ordinal
+    const std::vector<int> lib = BeLibNums(s);
+    REQUIRE(lib.size() == 6);
+    CHECK(lib[0] == 306);                                              // the unseen card stays on top
+    std::vector<int> bottom(lib.begin() + 1, lib.end());
+    std::vector<int> sorted_bottom = bottom;
+    std::sort(sorted_bottom.begin(), sorted_bottom.end());
+    CHECK(sorted_bottom == std::vector<int>{ 300, 301, 303, 304, 305 });
+    // ...and it IS BottomInRandomOrder's order, the one every world shares (not look order).
+    GameState ref = make();
+    std::vector<Card> rest;
+    for (int i = 0; i < 6; ++i)
+    {
+        Card c = ref.players[0].library.front();
+        ref.players[0].library.DrawTop();
+        if (i != 2) { rest.push_back(c); }
+    }
+    BottomInRandomOrder(ref, 0, std::move(rest));
+    CHECK(BeLibNums(ref) == lib);
+    // Determinism: the same state, the same order.
+    GameState again = make();
+    BeFireHarb(again, -1, 6);
+    CHECK(BeLibNums(again) == lib);
+}
+
+TEST_CASE("Garruk's Harbinger: executor and rollout combat resolve the same pinned dig identically")
+{
+    for (int rank = 0; rank < 3; ++rank)
+    {
+        const auto make = [&] {
+            GameState s = BeHarbBoard({ "Thragtusk", "Forest", "Questing Beast", "Elder Gargaroth", "Forest", "Forest" });
+            s.game_seed = 777;
+            BeAdd(s, kHarb, 50);
+            s.scripted_combat_dig = static_cast<std::int16_t>(BeDigPin({ rank }));
+            s.phase = Phase::Combat;
+            return s;
+        };
+        GameState ro = make();
+        RolloutSimulateCombat(ro);
+        GameState ex = make();
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine ge(eng);
+        ge.PlayOutFrom(ex, ex.turn_number, GameEngine::ResumeAt::Combat);
+        CAPTURE(rank);
+        const int want = rank == 0 ? 300 : rank == 1 ? 302 : 303;     // the legal matches in look order
+        CHECK(BeHandNums(ro) == std::vector<int>{ want });
+        CHECK(BeHandNums(ex) == std::vector<int>{ want });
+        CHECK(BeLibNums(ro) == BeLibNums(ex));
+        CHECK(ro.players[1].life == 16);
+        CHECK(ex.players[1].life == 16);
+        CHECK(ro.scripted_combat_dig == -1);
+        CHECK(ex.scripted_combat_dig == -1);
+    }
+}
+
+TEST_CASE("Garruk's Harbinger: the dig axis branches every reachable rank -- no greedy top pick")
+{
+    // Three matches in the library, a 4-power Harbinger: width = min(15, 3 matches, 4 + 2) = 3. The base plan is the
+    // front (rank 0); the axis adds ranks 1 and 2 -- every legal pick is a plan.
+    GameState s = BeHarbBoard({ "Forest", "Thragtusk", "Forest", "Questing Beast", "Elder Gargaroth", "Forest" });
+    BeAdd(s, kHarb, 50);
+    CHECK(BeHarbCodes(s) == std::set<int>{ BeDigPin({ 1 }), BeDigPin({ 2 }) });
+    // Each rank takes a DIFFERENT card, so each variant really is a distinct line (a 6-damage hit -- the width's
+    // +2 slack -- sees all three; a 4-damage one sees two, and rank 2 clamps onto rank 1's pick).
+    std::set<int> taken;
+    for (int r = 0; r < 3; ++r)
+    {
+        GameState t = s;
+        BeFireHarb(t, BeDigPin({ r }), 6);
+        REQUIRE(t.players[0].hand.size() == 1);
+        taken.insert(t.players[0].hand[0].m_number);
+    }
+    CHECK(taken == std::set<int>{ 301, 303, 304 });
+    GameState clamp = s;
+    BeFireHarb(clamp, BeDigPin({ 2 }), 4);
+    CHECK(BeHandNums(clamp) == std::vector<int>{ 303 });
+    // Two Harbingers: the joint product (3 x 3) minus the base's all-front code.
+    GameState two = s;
+    BeAdd(two, kHarb, 51);
+    const std::set<int> codes = BeHarbCodes(two);
+    CHECK(codes.size() == 8);
+    CHECK(codes.count(BeDigPin({ 2, 1 })) == 1);
+    CHECK(codes.count(BeDigPin({ 0, 0 })) == 0);
+    // A summoning-sick Harbinger cannot attack: no ordinal, no variants. One match: nothing to choose.
+    GameState sick = BeHarbBoard({ "Thragtusk", "Questing Beast", "Forest" });
+    BeAdd(sick, kHarb, 50, 0, /*sick=*/true);
+    CHECK(BeHarbCodes(sick).empty());
+    GameState one = BeHarbBoard({ "Thragtusk", "Forest", "Forest", "Forest" });
+    BeAdd(one, kHarb, 50);
+    CHECK(BeHarbCodes(one).empty());
+    // A deck without the card never builds the axis.
+    GameState off = s;
+    off.deck_has_combat_damage_dig = false;
+    CHECK(BeHarbCodes(off).empty());
+}
+
+TEST_CASE("Garruk's Harbinger: the pin is read per ordinal, spent after combat, and never leaks")
+{
+    // Two Harbingers: ordinal 0 takes rank 2, ordinal 1 rank 0 of what is left on top of its own window.
+    GameState s = BeHarbBoard({ "Thragtusk", "Questing Beast", "Elder Gargaroth", "Forest",
+                                "Thragtusk", "Questing Beast", "Forest", "Forest" });
+    BeAdd(s, kHarb, 50);
+    BeAdd(s, kHarb, 51);
+    BeFireHarb(s, BeDigPin({ 2, 0 }), 4);
+    CHECK(BeHandNums(s) == std::vector<int>{ 302, 304 });
+    CHECK(s.scripted_combat_dig == -1);
+    // An inherited main-phase ETB-dig pin is not eaten by the combat dig.
+    {
+        GameState t = BeHarbBoard({ "Thragtusk", "Questing Beast", "Forest", "Forest" });
+        BeAdd(t, kHarb, 50);
+        ScriptedEtbDig outer(1);
+        BeFireHarb(t, -1, 4);
+        CHECK(BeHandNums(t) == std::vector<int>{ 300 });
+        CHECK(g_scripted_etbdig_choice == 1);
+    }
+    // A pin whose Harbinger never connects (summoning sick) is spent at the end of combat damage anyway.
+    GameState u = BeHarbBoard({ "Thragtusk", "Questing Beast", "Forest", "Forest" });
+    u.phase = Phase::Combat;
+    BeAdd(u, kHarb, 50, 0, /*sick=*/true);
+    u.scripted_combat_dig = static_cast<std::int16_t>(BeDigPin({ 1 }));
+    RolloutSimulateCombat(u);
+    CHECK(u.scripted_combat_dig == -1);
+    CHECK(u.players[0].hand.empty());
+    // Packing round trip and the shift.
+    const int packed = BeDigPin({ 3, -1, 0 });
+    CHECK(CombatDigRankAt(packed, 0) == 3);
+    CHECK(CombatDigRankAt(packed, 1) == -1);
+    CHECK(CombatDigRankAt(packed, 2) == 0);
+    CHECK(CombatDigRankAt(CombatDigPinShift(packed), 0) == -1);
+    CHECK(CombatDigRankAt(CombatDigPinShift(packed), 1) == 0);
+    CHECK(CombatDigPinShift(BeDigPin({ 3 })) == -1);
+    CHECK(BeDigPin({ -1, -1 }) == -1);
+}
+
+TEST_CASE("Garruk's Harbinger: no dig once the opponent is dead (a lethal combat ends at the SBA check)")
+{
+    GameState s = BeHarbBoard({ "Thragtusk", "Forest", "Forest", "Forest" });
+    s.phase = Phase::Combat;
+    s.players[1].life = 4;
+    BeAdd(s, kHarb, 50);
+    const std::vector<int> lib = BeLibNums(s);
+    RolloutSimulateCombat(s);
+    CHECK(s.players[1].life <= 0);
+    CHECK(s.players[0].hand.empty());
+    CHECK(BeLibNums(s) == lib);
+    // ...and the direct trigger agrees.
+    GameState t = BeHarbBoard({ "Thragtusk", "Forest", "Forest", "Forest" });
+    t.players[1].life = 0;
+    BeAdd(t, kHarb, 50);
+    BeFireHarb(t, -1, 4);
+    CHECK(t.players[0].hand.empty());
+    CHECK(BeLibNums(t) == lib);
+}

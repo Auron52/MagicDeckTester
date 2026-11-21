@@ -1749,6 +1749,15 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Garruk's Harbinger (Beasts D): the combat-damage dig's presence gate (MAINBOARD, the same reasoning as above).
+    state.deck_has_combat_damage_dig = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.combat_damage_dig_per_damage > 0) { return true; }
+        }
+        return false;
+    }();
     state.deck_life_inert = [&deck, &state]{
         if (state.deck_reads_life_total || state.deck_reads_lifegain_in_play
             || state.deck_endstep_lifegain_max_threshold > 0) { return false; }

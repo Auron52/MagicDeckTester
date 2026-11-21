@@ -1360,7 +1360,7 @@ bool PerformEtbDig(GameState& state, int controller_index,
 
 bool PerformLookTakeDig(GameState& state, int controller_index, int count,
                         const std::vector<std::string>& types, int max_mv,
-                        const std::string& src_name, int* took_number)
+                        const std::string& src_name, int* took_number, bool bottom_random)
 {
     if (count <= 0) { return false; }
     Player& ap = state.players[controller_index];
@@ -1466,6 +1466,17 @@ bool PerformLookTakeDig(GameState& state, int controller_index, int count,
     if (take >= 0) { if (took_number != nullptr) { *took_number = examined[take].m_number; }
                      EnterHand(state, controller_index, examined[take], HandEntryReason::Dig);
                      took = true; }
+    if (bottom_random)
+    {
+        // "Put the rest on the bottom of your library in a random order" (Garruk's Harbinger): the shared keyed
+        // order, in every world at the same point (BottomInRandomOrder's lockstep contract).
+        std::vector<Card> rest;
+        rest.reserve(examined.size());
+        for (int i = 0; i < static_cast<int>(examined.size()); ++i)
+        { if (i != take) { rest.push_back(std::move(examined[i])); } }
+        BottomInRandomOrder(state, controller_index, std::move(rest));
+        return took;
+    }
     for (int i = 0; i < static_cast<int>(examined.size()); ++i)
     {
         if (i == take) { continue; }
@@ -2755,6 +2766,48 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
             for (std::uint8_t& slot : state.combat_hand)
             { if (slot == 0) { slot = static_cast<std::uint8_t>(took); break; } }
         }
+    }
+}
+
+// Garruk's Harbinger's combat-damage dig (see the SpellEffects.h declaration note). The connectors are snapshotted
+// (card number, count, filter, name) before any dig resolves: a dig mutates the library and the hand, and a card
+// entering hand may fire watchers, so nothing is read lazily underneath a resolution. ONE trigger per connecting
+// source per damage event (CR 603.2; a double striker's two steps reach here once each, from the two-step path).
+// The pin is read per trigger and shifted (ordinal k = the k-th dig of the combat); the explicit ScriptedEtbDig scope
+// both supplies this trigger's rank and keeps an INHERITED main-phase etb-dig pin from being consumed here.
+//
+// NOT recorded in GameState::combat_hand (the Omnitool's restricted-second-main record): no second main is open
+// for this deck (USER 2026-11-21, unsettled), and the record is folded only behind deck_has_attack_dig_hand. The
+// per-turn second-main gate planned for the Beasts provider (batch J) must add the record and its fold together.
+void FireCombatDamageDig(GameState& state, int controller, const std::vector<int>& damaging_idx,
+                         const std::vector<int>& damaging_pw)
+{
+    if (!state.deck_has_combat_damage_dig || damaging_idx.empty()) { return; }
+    struct Trig { int count; const CardDefinition* def; std::string name; };
+    std::vector<Trig> trigs;
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    const std::size_t n = std::min(damaging_idx.size(), damaging_pw.size());
+    for (std::size_t k = 0; k < n; ++k)
+    {
+        const int idx = damaging_idx[k];
+        if (idx < 0 || idx >= bf_size || damaging_pw[k] <= 0) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller || src.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+        if (d == nullptr || d->params.combat_damage_dig_per_damage <= 0) { continue; }
+        trigs.push_back({ damaging_pw[k] * d->params.combat_damage_dig_per_damage, d, src.card.m_name.str() });
+    }
+    if (trigs.empty()) { return; }
+    for (const Trig& t : trigs)
+    {
+        // A lethal combat ends at the state-based-action check before its damage triggers resolve (the Prophets
+        // gate): no dig, and in human play no dig dialog for a decision that cannot affect the game.
+        if (OpponentHasLost(state) || state.players[static_cast<std::size_t>(controller)].life <= 0) { return; }
+        const int rank = CombatDigRankAt(state.scripted_combat_dig, 0);
+        state.scripted_combat_dig = static_cast<std::int16_t>(CombatDigPinShift(state.scripted_combat_dig));
+        ScriptedEtbDig this_trigger_pin(rank);   // -1 = the provider's front (no searching apply pinned it)
+        PerformLookTakeDig(state, controller, t.count, t.def->params.combat_damage_dig_types, /*max_mv=*/-1,
+                           t.name + " (combat damage dig)", /*took_number=*/nullptr, /*bottom_random=*/true);
     }
 }
 

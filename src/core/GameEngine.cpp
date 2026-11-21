@@ -466,6 +466,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_attack_reanimate = -1;  // searched Thunderkin Awakener return (same lockstep)
     state.scripted_attack_choose_mode = -1;  // searched Elder Gargaroth mode (same lockstep)
+    state.scripted_combat_dig = -1;     // searched Garruk's Harbinger dig rank (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();

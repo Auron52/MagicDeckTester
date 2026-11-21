@@ -459,6 +459,8 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         FireCombatDamageCheatIntoPlay(state, active, step_idx);
         if (stable) { RefindCombatSources(state, active, step_idx, step_id); }   // the put's cascade can remove
         FireCombatDamageTokens(state, active, step_idx, step_pw);
+        // Garruk's Harbinger's dig (deck-gated inert): this step's own connectors and the damage each dealt.
+        FireCombatDamageDig(state, active, step_idx, step_pw);
         FireNehebCombatDamageDiscards(state, active, step_idx);
         if (stable) { RefindCombatSources(state, active, step_idx, step_id); }   // a madness cast can remove
         // A double striker connects in BOTH steps, so it draws once per step -- the two events the
@@ -502,6 +504,14 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         GameState& s;
         ~SpendLackeyPin() { if (LackeyPinFoldOn()) { s.scripted_cheat_choice = -1; } }
     } spend_lackey_pin{ state };
+    // The searched combat-time dig pin (Garruk's Harbinger, GameState::scripted_combat_dig) is THIS combat's too:
+    // spent once combat damage is over on every return path, whether or not a dig fired, so a pinned variant whose
+    // Harbinger never connected leaves combat in its base plan's state (the MTG_COMBAT_PIN_FOLD comparison).
+    struct SpendCombatDigPin
+    {
+        GameState& s;
+        ~SpendCombatDigPin() { s.scripted_combat_dig = -1; }
+    } spend_combat_dig_pin{ state };
     CombatDamageResult out;
     const int active  = state.active_player_index;
     const int opp_idx = 1 - active;
@@ -715,6 +725,12 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // INDEX (bounds-checked) rather than holding references across CreateToken. The Lackey put
     // can remove a permanent (re-found just above); token creation only appends.
     FireCombatDamageTokens(state, active, damaging_idx, damaging_pw);
+
+    // Garruk's Harbinger: "Whenever this creature deals combat damage to a player ..., look at that many cards" --
+    // the same aligned (connector, damage dealt) lists Shroofus reads, so the count is the post-lord / post-anthem /
+    // post-counter damage that actually left the opponent's life. Deck-gated inert; touches only library + hand, so
+    // no re-find is needed after it. Shared core: executor and rollout fire it at the same point.
+    FireCombatDamageDig(state, active, damaging_idx, damaging_pw);
 
     // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
     // card." Fired here, after damage, off the same damaging_idx list Goblin Lackey uses -- so it

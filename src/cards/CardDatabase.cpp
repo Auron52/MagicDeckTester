@@ -2109,6 +2109,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.megamorph_cost = ManaCostFromString(params["megamorph_cost"].get<std::string>());
     p.endstep_sacrifice_self      = params.value("endstep_sacrifice_self", false);
     p.combat_damage_self_may_draw = params.value("combat_damage_self_may_draw", 0);
+    // Garruk's Harbinger (Beasts D) -- see CardParams::combat_damage_dig_per_damage.
+    p.combat_damage_dig_per_damage = params.value("combat_damage_dig_per_damage", 0);
+    if (params.contains("combat_damage_dig_types"))
+        p.combat_damage_dig_types = params["combat_damage_dig_types"].get<std::vector<std::string>>();
     p.turned_face_up_return_gy_to_hand = params.value("turned_face_up_return_gy_to_hand", false);
     p.kicked_etb_target_land_island = params.value("kicked_etb_target_land_island", false);
     p.kicked_creates_tokens     = params.value("kicked_creates_tokens", 0);

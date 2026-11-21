@@ -7537,7 +7537,8 @@ bool WolfRunNoCombatDamageWatcher(const GameState& s, int me)
         if (p.combat_damage_free_cast || p.combat_damage_counters_each_attacker > 0
             || p.combat_damage_tokens_per_damage > 0 || !p.combat_damage_puts_subtype_from_hand.empty()
             || p.combat_damage_each_discards > 0
-            || p.combat_damage_tokens_per_trigger > 0)   // Millicent: a 0-power attacker pumped to 1 connects
+            || p.combat_damage_tokens_per_trigger > 0    // Millicent: a 0-power attacker pumped to 1 connects
+            || p.combat_damage_dig_per_damage > 0)       // Garruk's Harbinger: the dig depth IS the damage dealt
         { return false; }
     }
     return true;
@@ -47952,6 +47953,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_echo);
     v.push_back(s.scripted_doth_put);
     if (s.scripted_attack_choose_mode != -1) { v.push_back(0x6A26C000LL + s.scripted_attack_choose_mode); }   // Gargaroth, value-gated
+    if (s.scripted_combat_dig != -1) { v.push_back(0xC0D16A00LL + s.scripted_combat_dig); }   // Harbinger dig rank, value-gated
     if (const long long dk = s.DoublerDeferKey(); dk != -1) { v.push_back(dk); }   // doubler-after-exalted run
     v.push_back(s.scripted_demon_trigger); v.push_back(s.creature_died_this_turn);
     v.push_back(s.combat_damage_prevented_this_turn);

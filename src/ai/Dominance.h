@@ -673,7 +673,10 @@ static_assert(sizeof(Player) == 216,
 // the turn -- the packed per-ordinal attack-trigger modes; FOLDED in Build() value-gated beside the Thunderkin pin)
 // and two DECK CONSTANTS `deck_has_attack_choose_one` / `deck_life_inert` (stamped once in StampDeckTraits --
 // nothing to fold). No hole fit after the Thunderkin / Soulstoke bools, so the three add a padded 8 bytes.
-static_assert(sizeof(GameState) == 1728,   // combined upstream free turns and Beasts Gargaroth fields; verify at build
+// +0 bytes (2026-11-21, Beasts D): Garruk's Harbinger's `scripted_combat_dig` (int16, FUTURE-DETERMINING within the
+// turn -- the packed per-ordinal dig ranks; FOLDED in Build() value-gated beside the Gargaroth pin) and the DECK
+// CONSTANT `deck_has_combat_damage_dig` both fit the padding Beasts C left, so the size is unchanged.
+static_assert(sizeof(GameState) == 1728,   // combined upstream free turns and Beasts fields; verify at build
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1056,6 +1059,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Elder Gargaroth's packed attack-trigger modes: the same FUTURE-DETERMINING class, value-gated.
     if (s.scripted_attack_choose_mode >= 0)
     { fold(0x6A26C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(s.scripted_attack_choose_mode))); }
+    // Garruk's Harbinger's packed combat-dig ranks: the same FUTURE-DETERMINING class, value-gated.
+    if (s.scripted_combat_dig >= 0)
+    { fold(0xC0D16A0000000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(s.scripted_combat_dig))); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
