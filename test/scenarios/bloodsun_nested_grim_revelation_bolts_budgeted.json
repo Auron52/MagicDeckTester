@@ -1,0 +1,88 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 20,
+ "opponent_life": 6,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 6,
+ "expect_win_turn": 4,
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0"
+ },
+ "hand": [
+  "Grim Tutor"
+ ],
+ "library": [
+  "Diabolic Revelation",
+  "Lightning Bolt",
+  "Lightning Bolt"
+ ],
+ "comment": "Blood Sun step 6d (design \u00a714): a NESTED acquisition. 10 Swamps + 2 Mountains, opponent at 6: Grim Tutor for Diabolic Revelation; the Revelation is cast IN Grim's breakpoint continuation at X = 2 for both Lightning Bolts (its resolution is a second, nested breakpoint), then both Bolts off the two Mountains -- the only this-turn kill. Before 6d the deferred re-solve loop discarded the continuation's re-arm, so the Bolts were never re-decided this phase: win turn 5 at any budget. MTG_BLOODSUN_USER_PRUNE=0 (Bolt is not a USER target). d3 b100."
+}

@@ -74891,6 +74891,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and its twin for the EXTRA-DROP re-arm after a continuation (Exploration; see the end of the deferred
     // loop): a continuation that played a land with another drop open opens one more pass.
     bool deferred_drop_rearm = false;
+    // ...and its twin for a NESTED ACQUISITION (Blood Sun step 6d, docs/design/blood-sun-pipeline.md §14): a
+    // continuation of THIS loop whose own cast puts a searched card in hand (a tutor-to-hand -- Grim Tutor fetching
+    // Diabolic Revelation, then the Revelation's package; a creature tutor, a Garth acquisition, Soulfire's dig)
+    // arms the deferred re-solve again, and that re-arm used to be DISCARDED: the loop ran one pass, so the second
+    // acquisition's card was never re-decided this phase and the kill it enabled was unfindable at any budget. The
+    // re-arm now opens one more pass, so the nested breakpoint is a class-on occurrence of its own (searched by the
+    // wave walker like any other). Both worlds arm it alike: `cont_apply_depth` counts the continuation-apply
+    // lambdas active, so "the TOP of this loop's continuation" (deferred_cont_top) is the same test with or without
+    // a sink; an INLINE continuation nested inside it (depth + 2) keeps its old rule. Plain cantrips are NOT in
+    // this class: their recorded-world nested resolution is the inline site-0 one (cantrip_breakpoint).
+    bool deferred_nest_rearm = false;
+    bool in_deferred_cont    = false;   // this loop's continuation is being applied
+    int  deferred_cont_base  = 0;       // cont_apply_depth when it started
+    int  cont_apply_depth    = 0;       // apply_continuation_{precasts,plan,activations} active
+    struct ContApplyDepth
+    {
+        int& d;
+        explicit ContApplyDepth(int& x) : d(x) { ++d; }
+        ~ContApplyDepth() { --d; }
+        ContApplyDepth(const ContApplyDepth&) = delete;
+        ContApplyDepth& operator=(const ContApplyDepth&) = delete;
+    };
+    auto deferred_cont_top = [&]() -> bool { return in_deferred_cont && cont_apply_depth == deferred_cont_base + 1; };
+    // May an acquisition-class cast arm the deferred re-solve here? The main level (no sink: the historical rule),
+    // or the top of the deferred loop's continuation, where the recorded world has pushed exactly out_breakpoint.
+    auto acq_arm_ok = [&]() -> bool { return sink_stack.empty() || deferred_cont_top(); };
     // The cast that armed the deferred re-solve (registry-stable pointer; nullptr when unarmed).
     // Carried so the continuation can bind the MTG_CANTRIP_ORDER watermark to its site; with
     // several arming casts in one plan the LAST one wins, which matches whose continuation the
@@ -74989,6 +75015,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // precedence order below, which is the whole point: it arms only where no param-keyed class did,
     // so turning the rule on cannot renumber a class that already worked.
     bool deferred_put_armed = false;
+    // Blood Sun step 6d (see deferred_nest_rearm): having armed, a re-arm from the top of the loop's continuation
+    // opens the next pass, numbered at the acquisition's own site (3).
+    auto note_acq_nest_rearm = [&]()
+    {
+        if (!deferred_cont_top()) { return; }
+        deferred_nest_rearm  = true;
+        deferred_trick_armed = false;
+        deferred_equip_armed = false;
+        deferred_put_armed   = false;
+    };
     // The one place the precedence lives, so the dispatch below and the prefix-resume capture that
     // has to agree with it cannot drift apart.
     auto deferred_site_index = [&]() -> int
@@ -75537,6 +75573,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     bool                main_trailing_done = false;
     auto apply_continuation_activations = [&](const TurnSolver::Plan& sp, bool recorded)
     {
+        const ContApplyDepth _cad(cont_apply_depth);   // Blood Sun step 6d: deferred_cont_top
         if (sp.cont_canon) { return; }   // an unbranched canon default applies its casts only (Plan::cont_canon)
         bool any = false;
         for (const Action& a : sp.actions)
@@ -75620,6 +75657,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::function<void(const Action&)> cycle_chain_step;
     auto apply_continuation_plan = [&](const TurnSolver::Plan& cp)
     {
+        const ContApplyDepth _cad(cont_apply_depth);   // Blood Sun step 6d: deferred_cont_top
         // MANA ORACLE (audit only): the continuation's pending actions are part of a payment frontier's
         // identity (Hook::cont_sig). No-op unless `state` is the oracle's own copy.
         manaoracle::NoteContinuation(state, cp);
@@ -76386,6 +76424,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // in lockstep. Empty for every plan without a SacForMana/Suspend action.
     auto apply_continuation_precasts = [&](const TurnSolver::Plan& sp)
     {
+        const ContApplyDepth _cad(cont_apply_depth);   // Blood Sun step 6d: deferred_cont_top
         // ORDERING NOTE (MTG_SAC_FODDER_SAME_LINE). A same-line sacrifice manufactures its own
         // fodder inside ApplySacForMana, and this pre-pass runs BEFORE the trailing activation pass
         // -- so when a plan carries BOTH a same-line sac and its own spore/fade pop, the sac pops
@@ -77947,9 +77986,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // i.e. the phase boundary a Main2-classified deck no longer has (hinata gi=6: the
                 // T4 kill plays Crackle out of this exile). Arm the deferred acquisition re-solve
                 // (AcqResolveEnabled / MTG_ACQ_RESOLVE, same family as the tutor fetch above).
-                if (AcqResolveEnabled() && !s_human_play && sink_stack.empty())
+                if (AcqResolveEnabled() && !s_human_play && acq_arm_ok())
                 { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-                  deferred_hand_before = deferred_snapshot(hand_at_cast); }
+                  deferred_hand_before = deferred_snapshot(hand_at_cast); note_acq_nest_rearm(); }
             }
 
             if (fixed_burn_targeted)
@@ -78377,9 +78416,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // USER 2026-09-08: "Tutoring to hand should open a breakpoint if the engine is
             // implemented correctly."
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
-                && sink_stack.empty())
+                && acq_arm_ok())
             { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-              deferred_hand_before = deferred_snapshot(hand_at_cast); }
+              deferred_hand_before = deferred_snapshot(hand_at_cast); note_acq_nest_rearm(); }
 
             // Breaching Dragonstorm enter trigger (recorded just above when this creature IS a
             // copy of it): resolve now, lockstep with the executor's post-resolution drain.
@@ -79084,9 +79123,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // re-solve as a plain cantrip; executor lockstep comes via the plan's recorded
             // breakpoint script. DEFAULT OFF until measured.
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
-                && sink_stack.empty())
+                && acq_arm_ok())
             { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-              deferred_hand_before = deferred_snapshot(hand_at_cast); }
+              deferred_hand_before = deferred_snapshot(hand_at_cast); note_acq_nest_rearm(); }
             // Tutor-to-TOP reset (TopResolveEnabled / MTG_TOP_RESOLVE, EngineFlags.h -- the
             // USER's combo, 2026-08-21): the tutor is a LIBRARY WRITE that re-arms every
             // top-of-library consumer, so arm the same deferred re-solve -- the continuation
@@ -79174,11 +79213,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // leaves two Chariots on Satyr and waits until turn seven.
             if (AcqResolveEnabled()
                 && ResolveProvider(state).PostCreatureTutorBreakpoint(state, def)
-                && !s_human_play && sink_stack.empty())
+                && !s_human_play && acq_arm_ok())
             {
                 deferred_cantrip_resolve = true;
                 deferred_cantrip_site = &def;
                 deferred_hand_before = deferred_snapshot(hand_at_cast);
+                note_acq_nest_rearm();
             }
         }
         else if (def.params.tutor_to_battlefield)
@@ -80865,11 +80905,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // note_draw_engine second pass at its Garth sites; depth > 0 replays the
                     // recorded breakpoint script this re-solve commits.
                     if (TurnSolver::IsGarthAcquisition(a)   // Braingeyser at US, or Regrowth
-                        && !s_human_play && sink_stack.empty())
+                        && !s_human_play && acq_arm_ok())
                     {
                         deferred_cantrip_resolve = true;
                         deferred_cantrip_site    = CardDatabase::Instance().Lookup(a.tutor_target);
                         deferred_hand_before     = deferred_snapshot(hand_before);
+                        note_acq_nest_rearm();
                     }
                 }
             };
@@ -83044,12 +83085,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // refusing to re-resolve it are contradictory; the partition has to carry both halves.
     const bool partition_loop = BpPartitionCantripEnabled();
     // The pass cap does not bind an extra-drop re-arm under a Fastbond (DropRearmUnbounded: the lands bound it).
-    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm || deferred_drop_rearm || partition_loop)
+    while (deferred_cantrip_resolve
+           && (top_first_pass || deferred_top_rearm || deferred_drop_rearm || deferred_nest_rearm || partition_loop)
            && (top_reset_passes++ <= 4 || (deferred_drop_rearm && TurnSolver::DropRearmUnbounded(state))))
     {
         top_first_pass    = false;
         deferred_top_rearm = false;
         deferred_drop_rearm = false;
+        deferred_nest_rearm = false;
         // PREFIX-RESUME capture: this apply's varied breakpoint is the deferred one (the running
         // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank
@@ -83249,9 +83292,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Rush Treasures the deferral banks are exactly the SacForMana candidates the continuation
         // enumerates, and dropping the crack made every crack-carrying rank a no-op duplicate of
         // its crack-less sibling (gi69 probe, 2026-08-13).
-        apply_continuation_precasts(extra);
-        apply_continuation_plan(extra);
-        apply_continuation_activations(extra, out_breakpoint != nullptr);
+        {
+            // Blood Sun step 6d: the TOP of this loop's continuation (deferred_cont_top) -- an acquisition cast here
+            // opens the next pass (deferred_nest_rearm).
+            const bool sv_idc  = in_deferred_cont;
+            const int  sv_base = deferred_cont_base;
+            in_deferred_cont   = true;
+            deferred_cont_base = cont_apply_depth;
+            apply_continuation_precasts(extra);
+            apply_continuation_plan(extra);
+            apply_continuation_activations(extra, out_breakpoint != nullptr);
+            in_deferred_cont   = sv_idc;
+            deferred_cont_base = sv_base;
+        }
         // BREAKPOINT SITE 9 AFTER A DEFERRED CONTINUATION (MTG_SITE9_AFTER_DEFERRED, DEFAULT ON; AccomplishedAlchemist
         // 2026-11-20, seed 12345681 T3). The main section's site 9 (above) runs BEFORE this loop, so a deferred
         // continuation that casts a permanent with an activation -- Living Wish puts Brindle Boar in hand (site 10),

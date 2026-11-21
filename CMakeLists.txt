@@ -323,6 +323,7 @@ add_executable(mtg-test
     test/unit/test_bloodsun_lotus.cpp
     test/unit/test_bloodsun_suppression.cpp
     test/unit/test_bloodsun_userprune.cpp
+    test/unit/test_bloodsun_nestedbp.cpp
     test/unit/test_counter_list.cpp
     test/unit/test_batch_partial.cpp
     test/unit/test_dup_action_fold.cpp
