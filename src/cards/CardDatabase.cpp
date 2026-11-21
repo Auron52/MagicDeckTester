@@ -1208,6 +1208,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_trigger_impulse_playable = params.value("attack_trigger_impulse_playable", 0);
     p.attack_trigger_impulse_expiry_next_turn =
         params.value("attack_trigger_impulse_expiry_next_turn", false);
+    // Elder Gargaroth (Beasts C) -- see CardParams::attack_choose_one.
+    p.attack_choose_one             = params.value("attack_choose_one", false);
+    p.attack_choose_token_power     = params.value("attack_choose_token_power", 0);
+    p.attack_choose_token_toughness = params.value("attack_choose_token_toughness", 0);
+    if (params.contains("attack_choose_token_subtypes"))
+        p.attack_choose_token_subtypes = params["attack_choose_token_subtypes"].get<std::vector<std::string>>();
+    p.attack_choose_token_color     = params.value("attack_choose_token_color", std::string());
+    p.attack_choose_lifegain        = params.value("attack_choose_lifegain", 0);
+    p.attack_choose_draw            = params.value("attack_choose_draw", 0);
     p.attack_sac_fling = params.value("attack_sac_fling", false);
     p.attack_sac_fling_double_subtype =
         params.value("attack_sac_fling_double_subtype", std::string());

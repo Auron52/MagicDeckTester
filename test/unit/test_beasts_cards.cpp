@@ -1,21 +1,26 @@
 // Beasts Stage 2 (2026-11-21). Batch A: Garruk's Packleader (power-3 enter draw), Krosan Warchief (Beast
 // reducer, stacking with Urza's Incubator), Questing Beast's duplicate-legend offer, Thragtusk (LTB token),
 // Cragplate Baloth (kicked counters), Kaheera (lord + vigilance). Batch B: Contested Cliffs (TapFight: the
-// searched two-target fight, deathtouch, the SBA death pass). Each test drives the SHARED helpers both worlds
+// searched two-target fight, deathtouch, the SBA death pass). Batch C: Elder Gargaroth (the searched
+// three-mode attack trigger, the provider's life fold). Each test drives the SHARED helpers both worlds
 // call (FireEtbWatchers / FireOwnEtbTriggers, EffectiveSpellCost, OfferDuplicateLegendCast, ApplyPermAbility,
 // EnumerateMainPlans + ApplyPlan).
 #include <doctest/doctest.h>
 
+#include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
+#include "core/GameEngine.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
 #include <algorithm>
+#include <initializer_list>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -572,4 +577,278 @@ TEST_CASE("Contested Cliffs: both targets are searched -- one variant per (own c
     }
     CHECK(applied);
     CHECK(g_tap_fight_unpinned.load() == 0);
+}
+
+// ---- Elder Gargaroth (batch C) -----------------------------------------------------------------
+// "Whenever this creature attacks or blocks, choose one -- * Create a 3/3 green Beast creature token. * You gain
+// 3 life. * Draw a card." The shared ApplyAttackChooseOneTriggers (both worlds), the searched pin packed 2 bits per
+// ordinal, the Tectonic-shaped mode axis and the provider's life-mode fold.
+namespace
+{
+constexpr const char* kGarg = "Elder Gargaroth";
+GameState BeGargBoard()
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    s.deck_has_attack_choose_one = true;
+    return s;
+}
+int BePinOf(std::initializer_list<int> modes)
+{
+    int m[kAttackChooseMaxOrdinals];
+    int n = 0;
+    for (int x : modes) { m[n++] = x; }
+    return AttackChoosePackModes(m, n);
+}
+// Fire the shared trigger over the Gargaroths on the board (declared attackers = every Gargaroth).
+void BeFireGarg(GameState& s, int pin)
+{
+    s.scripted_attack_choose_mode = static_cast<std::int16_t>(pin);
+    std::vector<int> atk;
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    { if (s.battlefield[i].card.m_name == kGarg) { atk.push_back(static_cast<int>(i)); } }
+    ApplyAttackChooseOneTriggers(s, 0, atk);
+}
+std::set<int> BeGargCodes(const GameState& s)
+{
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    std::set<int> out;
+    for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { base }))
+    { if (p.attack_choose_mode_choice >= 0) { out.insert(p.attack_choose_mode_choice); } }
+    return out;
+}
+bool BeCodeUsesMode(int packed, int mode)
+{
+    for (int k = 0; k < kAttackChooseMaxOrdinals; ++k) { if (AttackChooseModePinAt(packed, k) == mode) { return true; } }
+    return false;
+}
+}   // namespace
+
+TEST_CASE("Elder Gargaroth: card data -- 6/6 vigilance reach trample, its OWN modal attack trigger (not Tectonic's)")
+{
+    const CardDefinition& d = BeDef(kGarg);
+    CHECK(d.card.m_power.value_or(0) == 6);
+    CHECK(d.card.m_toughness.value_or(0) == 6);
+    CHECK(d.card.HasKeyword(Keyword::Vigilance));
+    CHECK(d.card.HasKeyword(Keyword::Trample));
+    CHECK(d.params.attack_choose_one);
+    CHECK_FALSE(d.params.attack_trigger_modal);   // the Giants signature stays off
+    CHECK(d.params.attack_choose_token_power == 3);
+    CHECK(d.params.attack_choose_token_toughness == 3);
+    CHECK(d.params.attack_choose_lifegain == 3);
+    CHECK(d.params.attack_choose_draw == 1);
+    std::vector<int> legal;
+    AttackChooseOneLegalModes(d.params, legal);
+    CHECK(legal == std::vector<int>{ 0, 1, 2 });
+}
+
+TEST_CASE("Elder Gargaroth: each mode resolves through the shared trigger (token / 3 life / a real draw)")
+{
+    {   // token: a 3/3 green Beast, NOT attacking
+        GameState s = BeGargBoard();
+        BeAdd(s, kGarg, 50);
+        BeFireGarg(s, BePinOf({ 0 }));
+        CHECK(BeCountTokens(s, "Beast") == 1);
+        for (const Permanent& p : s.battlefield)
+        {
+            if (!p.is_token) { continue; }
+            CHECK(p.card.m_power.value_or(0) == 3);
+            CHECK(p.card.m_toughness.value_or(0) == 3);
+        }
+        CHECK(s.players[0].life == 20);
+        CHECK(s.players[0].hand.empty());
+        CHECK(s.scripted_attack_choose_mode == -1);
+    }
+    {   // life
+        GameState s = BeGargBoard();
+        BeAdd(s, kGarg, 50);
+        BeFireGarg(s, BePinOf({ 1 }));
+        CHECK(s.players[0].life == 23);
+        CHECK(BeCountTokens(s, "Beast") == 0);
+        CHECK(s.players[0].hand.empty());
+    }
+    {   // draw
+        GameState s = BeGargBoard();
+        BeAdd(s, kGarg, 50);
+        const std::size_t lib = s.players[0].library.size();
+        BeFireGarg(s, BePinOf({ 2 }));
+        CHECK(s.players[0].hand.size() == 1);
+        CHECK(s.players[0].library.size() == lib - 1);
+        CHECK(s.players[0].cards_drawn_this_turn == 1);
+        CHECK(BeCountTokens(s, "Beast") == 0);
+        CHECK(s.players[0].life == 20);
+    }
+    {   // draw off an empty library loses (a real draw)
+        GameState s = BeGargBoard();
+        while (!s.players[0].library.empty()) { s.players[0].library.DrawTop(); }
+        BeAdd(s, kGarg, 50);
+        BeFireGarg(s, BePinOf({ 2 }));
+        CHECK(s.player_lost_on_draw);
+    }
+    {   // unpinned: the provider's front -- the token
+        GameState s = BeGargBoard();
+        BeAdd(s, kGarg, 50);
+        BeFireGarg(s, -1);
+        CHECK(BeCountTokens(s, "Beast") == 1);
+    }
+}
+
+TEST_CASE("Elder Gargaroth: rollout combat -- the pinned mode resolves at declare-attackers, the 6/6 connects")
+{
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        GameState s = BeGargBoard();
+        s.phase = Phase::Combat;
+        BeAdd(s, kGarg, 50);
+        s.scripted_attack_choose_mode = static_cast<std::int16_t>(BePinOf({ mode }));
+        const std::size_t lib = s.players[0].library.size();
+        RolloutSimulateCombat(s);
+        CAPTURE(mode);
+        CHECK(s.players[1].life == 14);                                   // the 6/6 (the token does not attack)
+        CHECK(BeCountTokens(s, "Beast") == (mode == 0 ? 1 : 0));
+        CHECK(s.players[0].life == (mode == 1 ? 23 : 20));
+        CHECK(s.players[0].library.size() == lib - (mode == 2 ? 1u : 0u));
+        CHECK(s.scripted_attack_choose_mode == -1);                       // spent
+        CHECK_FALSE(s.battlefield[static_cast<std::size_t>(BeIndexOf(s, 50))].tapped);   // vigilance
+    }
+}
+
+TEST_CASE("Elder Gargaroth: executor combat -- the same modes through GameEngine::CombatPhase")
+{
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        GameState ex = BeGargBoard();
+        BeAdd(ex, kGarg, 50);
+        ex.scripted_attack_choose_mode = static_cast<std::int16_t>(BePinOf({ mode }));
+        ex.phase = Phase::Combat;
+        const std::size_t lib = ex.players[0].library.size();
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine ge(eng);
+        ge.PlayOutFrom(ex, ex.turn_number, GameEngine::ResumeAt::Combat);
+        CAPTURE(mode);
+        CHECK(ex.players[1].life == 14);
+        CHECK(BeCountTokens(ex, "Beast") == (mode == 0 ? 1 : 0));
+        CHECK(ex.players[0].life == (mode == 1 ? 23 : 20));
+        CHECK(ex.players[0].library.size() == lib - (mode == 2 ? 1u : 0u));
+        CHECK(ex.scripted_attack_choose_mode == -1);
+    }
+}
+
+TEST_CASE("Elder Gargaroth: the token mode's 3/3 Beast enters through the cascade -- Garruk's Packleader draws")
+{
+    GameState s = BeGargBoard();
+    BeAdd(s, kGarg, 50);
+    BeAdd(s, "Garruk's Packleader", 60);
+    BeFireGarg(s, BePinOf({ 0 }));
+    CHECK(BeCountTokens(s, "Beast") == 1);
+    CHECK(s.players[0].hand.size() == 1);   // the power-3 token's Packleader draw
+    // ...and the life mode makes no body, so no draw.
+    GameState t = BeGargBoard();
+    BeAdd(t, kGarg, 50);
+    BeAdd(t, "Garruk's Packleader", 60);
+    BeFireGarg(t, BePinOf({ 1 }));
+    CHECK(t.players[0].hand.empty());
+}
+
+TEST_CASE("Elder Gargaroth: the pin is read per ordinal, spent after the loop, and never leaks to a later trigger")
+{
+    GameState s = BeGargBoard();
+    BeAdd(s, kGarg, 50);
+    BeAdd(s, kGarg, 51);
+    // ordinal 0 draws, ordinal 1 makes the token.
+    BeFireGarg(s, BePinOf({ 2, 0 }));
+    CHECK(s.players[0].hand.size() == 1);
+    CHECK(BeCountTokens(s, "Beast") == 1);
+    CHECK(s.scripted_attack_choose_mode == -1);
+    // Only ordinal 1 pinned (life): ordinal 0 takes the default (token).
+    GameState t = BeGargBoard();
+    BeAdd(t, kGarg, 50);
+    BeAdd(t, kGarg, 51);
+    BeFireGarg(t, BePinOf({ -1, 1 }));
+    CHECK(BeCountTokens(t, "Beast") == 1);
+    CHECK(t.players[0].life == 23);
+    CHECK(t.players[0].hand.empty());
+    // A second combat's triggers with nothing re-pinned take the default -- the spent pin does not leak.
+    std::vector<int> atk = { BeIndexOf(t, 50), BeIndexOf(t, 51) };
+    ApplyAttackChooseOneTriggers(t, 0, atk);
+    CHECK(BeCountTokens(t, "Beast") == 3);
+    CHECK(t.players[0].life == 23);
+    // An unfired pin (no Gargaroth attacked) is spent too.
+    GameState u = BeGargBoard();
+    BeAdd(u, kGarg, 50);
+    u.scripted_attack_choose_mode = static_cast<std::int16_t>(BePinOf({ 2 }));
+    ApplyAttackChooseOneTriggers(u, 0, {});
+    CHECK(u.scripted_attack_choose_mode == -1);
+    CHECK(u.players[0].hand.empty());
+    // Packing round trip.
+    const int packed = BePinOf({ 0, 2, -1, 1 });
+    CHECK(AttackChooseModePinAt(packed, 0) == 0);
+    CHECK(AttackChooseModePinAt(packed, 1) == 2);
+    CHECK(AttackChooseModePinAt(packed, 2) == -1);
+    CHECK(AttackChooseModePinAt(packed, 3) == 1);
+    CHECK(BePinOf({ -1, -1 }) == -1);
+}
+
+TEST_CASE("Elder Gargaroth: the provider fold drops ONLY the life mode, and only when our life is unobservable")
+{
+    GameState s = BeGargBoard();
+    auto run = [&](const GameState& g, bool unpruned) {
+        std::vector<int> m = { 0, 1, 2 };
+        RestrictAttackChooseOneModesFor(g, m, unpruned);
+        return m;
+    };
+    s.deck_life_inert = true;
+    s.own_death_live = false;
+    CHECK(run(s, false) == std::vector<int>{ 0, 2 });          // token front, draw; life folded
+    CHECK(run(s, true)  == std::vector<int>{ 0, 2, 1 });       // MTG_UNPRUNE=attackchooselife
+    GameState t = s; t.deck_life_inert = false;
+    CHECK(run(t, false) == std::vector<int>{ 0, 2, 1 });       // a life reader in the deck keeps it
+    GameState u = s; u.own_death_live = true;
+    CHECK(run(u, false) == std::vector<int>{ 0, 2, 1 });       // our life can lose the game: keep it
+    {   // no token mode on the menu: nothing dominates life, keep it
+        std::vector<int> m = { 1, 2 };
+        RestrictAttackChooseOneModesFor(s, m, false);
+        CHECK(m == std::vector<int>{ 2, 1 });
+    }
+    // Through the virtual (the deck's current route inherits the root).
+    BoarsProvider provider;
+    s.m_provider = &provider;
+    std::vector<int> modes;
+    AttackChooseOneSearchModes(s, 0, BeDef(kGarg), modes);
+    CHECK(modes == std::vector<int>{ 0, 2 });
+}
+
+TEST_CASE("Elder Gargaroth: the mode axis -- two attackers make 4 joint variants after the fold, 9 without it")
+{
+    BoarsProvider provider;
+    GameState s = BeGargBoard();
+    s.m_provider = &provider;
+    s.deck_life_inert = true;
+    BeAdd(s, kGarg, 50);
+    BeAdd(s, kGarg, 51);
+    const std::set<int> codes = BeGargCodes(s);
+    CHECK(codes.size() == 4);
+    for (int c : codes)
+    {
+        CHECK_FALSE(BeCodeUsesMode(c, 1));                      // no life mode in the search
+        CHECK(AttackChooseModePinAt(c, 0) >= 0);
+        CHECK(AttackChooseModePinAt(c, 1) >= 0);
+        CHECK(AttackChooseModePinAt(c, 2) == -1);
+    }
+    CHECK(codes.count(BePinOf({ 0, 0 })) == 1);
+    CHECK(codes.count(BePinOf({ 2, 2 })) == 1);
+    CHECK(codes.count(BePinOf({ 0, 2 })) == 1);
+    CHECK(codes.count(BePinOf({ 2, 0 })) == 1);
+    GameState t = s;
+    t.deck_life_inert = false;                                   // a deck that reads life: all three modes
+    CHECK(BeGargCodes(t).size() == 9);
+    // A summoning-sick copy cannot attack: no ordinal, no variants.
+    GameState u = BeGargBoard();
+    u.m_provider = &provider;
+    u.deck_life_inert = true;
+    BeAdd(u, kGarg, 50, 0, /*sick=*/true);
+    CHECK(BeGargCodes(u).empty());
 }

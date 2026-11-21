@@ -2081,6 +2081,24 @@ struct GameState
     // is sorcery-timed in the engine), so the opponent-end-step window (EotFaceUpMenu's put half) walks the board
     // for an untapped source. DEFAULT FALSE -- exact for an unstamped state too unless a test sets it by hand.
     bool                     deck_has_eot_tap_put         = false;
+    // ELDER GARGAROTH (Beasts C, 2026-11-21). DECK CONSTANTS (StampDeckTraits), never folded:
+    //   deck_has_attack_choose_one -- the MAINBOARD holds an attack_choose_one card, so the shared combat
+    //     trigger (ApplyAttackChooseOneTriggers) and the main-phase mode axis walk the board for one.
+    //     DEFAULT TRUE, the safe direction (it only skips a walk that would find nothing).
+    //   deck_life_inert -- NOTHING this deck can play reads OUR life total or a life-gain event (no life-total
+    //     reader, no battlefield / end-step life-gain reader, no "whenever you gain life" payoff; see
+    //     StampDeckTraits for the exact list). With own death not live (own_death_live) a gain of life is then
+    //     unobservable, which makes a "gain N life" mode a SOUND dominance fold for the provider
+    //     (DecisionProvider::AttackChooseOneModes). DEFAULT FALSE, the safe direction (keeps the mode).
+    bool                     deck_has_attack_choose_one   = true;
+    bool                     deck_life_inert              = false;
+    // THE SEARCHED ELDER GARGAROTH MODE (Plan::attack_choose_mode_choice): PACKED 2 bits per attack-trigger
+    // ordinal (ordinal 0 lowest; a field of 0 = that ordinal unpinned, m + 1 = mode m: 0 token / 1 life /
+    // 2 draw); -1 = nothing pinned (every trigger takes DecisionProvider::AttackChooseOneModes' front).
+    // Decided in a main phase, consumed + cleared at THIS turn's declare-attackers by the shared
+    // ApplyAttackChooseOneTriggers (both worlds), cleared at both turn starts. FUTURE-DETERMINING: folded
+    // value-gated in dominance::Build(), BuildDedupKey's combat pins and the plan-cache scalar key.
+    std::int16_t             scripted_attack_choose_mode  = -1;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

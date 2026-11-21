@@ -166,6 +166,13 @@ MANIFEST = {
     # `target` board click (g_play_loyalty_chooser). Autonomous play searches both (one cast variant per
     # admitted target, pinned on tutor_target); HydrasProvider admits none (proof at EtbFightTargets).
     "etb_modal_double_self_counters": ("attack_mode", truthy),
+    # ---- Beasts C (2026-11-21) ----
+    # Elder Gargaroth's "whenever this creature attacks or blocks, choose one -- 3/3 Beast token / gain 3 life /
+    # draw a card" REUSES attack_mode, widened to THREE options (WriteAttackModeDecisionJson's Gargaroth branch;
+    # the chooser accepts 0..2 for an attack_choose_one source). Asked from ApplyAttackChooseOneTriggers (shared
+    # executor + rollout combat) over the FULL legal menu; autonomous play searches the mode per trigger ordinal
+    # (Plan::attack_choose_mode_choice), the provider folding the life mode away when nothing reads our life.
+    "attack_choose_one":     ("attack_mode",          truthy),
     "etb_modal_fight_opp_creature":   ("target",      truthy),
     # ---- SelesnyaLifegain (2026-09-30) ----
     # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
@@ -1093,6 +1100,12 @@ INERT_PARAMS = {
     "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
     # Maze's End (I4, 2026-11-17).
     "mana_per_other_controlled_subtype": "Baldur's Gate -- the scaled mana ability's X (the other Gates you control); colour and amount are the mana-payment exemption (the Three Tree City shape), no choice",
+    "attack_choose_token_power": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "attack_choose_token_toughness": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "attack_choose_token_subtypes": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "attack_choose_token_color": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "attack_choose_lifegain": "Elder Gargaroth's life-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "attack_choose_draw": "Elder Gargaroth's draw-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "tap_fight_requires_subtype": "Contested Cliffs -- the own target's legality filter (a Beast); the TARGETS ride tap_fight_cost (both chosen on the live battlefield)",
     "tap_target_pump_per_subtype_both": "Basilisk Gate -- the pump's X (the Gates you control at resolution), a computed magnitude; the TARGET rides tap_target_pump_cost (chosen on the live battlefield)",
     # Mill: printed magnitudes and legality thresholds. Their action/target choices
@@ -2550,6 +2563,9 @@ def modeled_tokens(card):
     if p.get("grants_ripple") or p.get("ripple"):
         t.update({"reveal", "cast"})
     if p.get("tooth_and_nail"):
+        t.add("modal")
+    # Elder Gargaroth's "choose one" attack trigger IS the 3-option `attack_mode` pick (Beasts C).
+    if p.get("attack_choose_one"):
         t.add("modal")
     if p.get("boros_charm_modal"):
         t.update({"modal", "target"})

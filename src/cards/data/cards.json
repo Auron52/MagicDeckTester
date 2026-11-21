@@ -18903,6 +18903,36 @@
     "tap_fight_cost": "{R}{G}",
     "tap_fight_requires_subtype": "Beast"
    }
+  },
+  {
+   "name": "Elder Gargaroth",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Reach",
+    "Vigilance",
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Reach, vigilance, trample\nWhenever this creature attacks or blocks, choose one \u2014\n\u2022 Create a 3/3 green Beast creature token.\n\u2022 You gain 3 life.\n\u2022 Draw a card. [MODAL ATTACK TRIGGER (attack_choose_one -- deliberately NOT attack_trigger_modal, which is Tectonic Giant's Giants-provider signature): fires once per DECLARED attacking copy at declare-attackers (CR 508.4; the shared ApplyAttackChooseOneTriggers runs in BOTH worlds right after Tectonic Giant's trigger, before combat damage). The MODE is SEARCHED per trigger ordinal (Plan::attack_choose_mode_choice, packed 2 bits per ordinal, product capped at 27 variants per base plan -- 4 copies x 2 modes fits; past the cap a later ordinal takes the provider's front, token). Token: a 3/3 green Beast through the shared CreateToken (doublers, the enter cascade -- Garruk's Packleader draws off it, Kaheera pumps it); it enters NOT attacking. Life: GainLife 3 (the shared life-gain path). Draw: a real draw (deck-out loses; per-turn draw count). SEARCH FOLD (USER 2026-11-21, approved): the provider drops the gain-3-life mode from the searched list when nothing in the deck reads our life total or a life-gain event and our own death is not live (GameState::deck_life_inert) -- the token dominates it; the engine still resolves all three and the viewer offers all three to a human (MTG_UNPRUNE=attackchooselife restores it in search). A card drawn in combat is castable from the next main phase the deck plays: the Beasts list has no searched second main yet (USER: unsettled), so a combat-time draw waits until next turn -- a disclosed gap a per-turn second-main gate is planned to close. VIGILANCE live (does not tap to attack). REACH and TRAMPLE recorded, inert (the goldfish opponent never attacks and never blocks). PARTIAL, PROVISIONAL (user sign-off pending): 'or blocks' is not wired -- the goldfish opponent never attacks, so this creature never blocks.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_choose_one": true,
+    "attack_choose_token_power": 3,
+    "attack_choose_token_toughness": 3,
+    "attack_choose_token_subtypes": [
+     "Beast"
+    ],
+    "attack_choose_token_color": "G",
+    "attack_choose_lifegain": 3,
+    "attack_choose_draw": 1
+   }
   }
  ]
 }
