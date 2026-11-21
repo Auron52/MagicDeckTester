@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection; dig kept to draw tutored cards, below the go-off mana; Ponder shuffle searched; Preordain aggressive while a piece is missing); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -15,9 +15,9 @@ from buckets netted against the board and the suspended cards. Everything below 
 | consumer | rule |
 |---|---|
 | cleanup discard | shed the lowest-ranked card (one index; re-ranked after each shed) |
-| Brainstorm put-back | put back the two lowest-ranked cards of the post-draw hand; the higher-ranked of the two on top (it is drawn first) |
-| Ponder | rank the three looked-at cards together with the hand. **Keep** (best first) if at least one fills a quota the hand has not filled; **shuffle** if none does (all three would be overflow or dead) |
-| Preordain | scry 2: keep a card on top iff it fills a still-unfilled quota (counting cards kept above it), best first; bottom the rest |
+| Brainstorm put-back | the ranking says what goes on top: the two lowest-ranked cards of the post-draw hand (USER: *"for Brainstorm this tells us what we want to put on top, (the lowest priority cards using this rule)"*); the higher-ranked of the two on top (it is drawn first) |
+| Ponder | the ranking fixes the ORDER of the top three (best first, ranked together with the hand); **keep-in-that-order vs shuffle stays SEARCHED** (USER 2026-11-21: *"for Ponder it tells us how to order the top 3 ... (though we may leave shuffle searched)"*) -- the `ReorderKeepShuffleOnly` shape: two options, not six orders plus shuffle |
+| Preordain | scry 2: the ranking decides what goes to the bottom and the order of what stays. Normally keep a card on top iff it fills a still-unfilled quota (counting cards kept above it), best first; bottom the rest. **When a piece is genuinely missing** (no card and no tutor for it -- above all Worldfire), **bottom AGGRESSIVELY**: keep only the missing piece or a tutor that finds it, and bottom everything else, mana and dig included (USER: *"if you are really missing a piece like worldfire you need to be aggressive about bottoming other cards with Preordain"*) |
 
 The search still branches over whatever the provider admits; these are provider restrictions (one-option prunes
 for the put-back and the scry/Ponder disposition), the same shape as Cyclone's `PutBackSingleCandidate` /
@@ -111,8 +111,10 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
    one-shot (depletion lands, Bloom, rituals), so 1 seemed enough.
 5. **Tapped lands late.** Needle / Skerry / Bazaar ranked below untapped lands from T\*-1 on: right?
 6. **Projection horizon now+4** before calling T\* "far".
-7. **Ponder shuffle threshold.** Shuffle only when NONE of the three fills a quota (default), or when the top card
-   does not?
+7. **Ponder shuffle:** ANSWERED -- keep-vs-shuffle stays searched; only the order is fixed by the ranking.
+8. **Preordain aggression:** while a piece is genuinely missing, should a dig spell on top (Brainstorm / Ponder)
+   also be kept, or bottomed with everything else (default: bottomed)? And does a missing FINISHER trigger the
+   aggressive mode, or only a missing Worldfire (default: either piece)?
 
 ## Build and measurement plan
 
