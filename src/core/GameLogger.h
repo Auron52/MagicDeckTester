@@ -1703,6 +1703,13 @@ inline bool CombatDamageStepsOn() { return !g_play_legacy_single_damage_step; }
 inline bool g_play_legacy_opponent_land_entry = false;
 inline bool OpponentLandEntryRulesOn() { return !g_play_legacy_opponent_land_entry; }
 
+// THE FREE-TURN RULE AT RECORDING TIME (MTG_FREE_TURNS, core/FreeTurns.h). A game recorded with the rule on
+// carries `free_turns: 1` (its opponent was dealt the opening-hand hurdles, and its rounds were credited). A
+// reference WITHOUT the key was played with the rule off, so its replayer passes `--legacy-no-free-turns`,
+// which turns the rule off for that one process (FreeTurnsOn, EngineFlags.h) whatever the environment says:
+// the opponent is dealt the hand the game was played against. REPLAY ONLY; process-global.
+inline bool g_play_legacy_no_free_turns = false;
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit
