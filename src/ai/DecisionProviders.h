@@ -4483,13 +4483,13 @@ bool BloodSunMachinationsCastPruneOn();
 // The USER's tutor-target rule (B3) for one card: the most copies of it a tutor may fetch now (0 = not a target;
 // a large number = unlimited). `transmute` = Dimir Machinations' transmute search (Grim Tutor is a target there only).
 int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute);
-// MTG_BLOODSUN_GRIM_PRUNE (heurarm BLOODSUN_GRIM_PRUNE; ledger B12; DEFAULT ON; inert while the prune is off) and its
+// MTG_BLOODSUN_GRIM_PRUNE (heurarm BLOODSUN_GRIM_PRUNE; ledger B12; DEFAULT OFF until measured; inert while the prune is off) and its
 // rule for one B3-admitted card: is it one of Grim Tutor's own targets now (Blood Sun / Revelation when missing, the red
 // source, the big lands below 7 land mana)?
 bool BloodSunGrimPruneOn();
 bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& def);
-// MTG_BLOODSUN_GRIM_REV_GATE (heurarm BLOODSUN_GRIM_REV_GATE; B12's second gate; DEFAULT ON): Grim Tutor is not cast
-// while a Revelation is in hand and BloodSunTurnManaEstimate >= MTG_BLOODSUN_GRIM_REV_MANA (default 8).
+// MTG_BLOODSUN_GRIM_REV_GATE (heurarm BLOODSUN_GRIM_REV_GATE; B12's second gate; DEFAULT OFF until measured): Grim Tutor is not cast
+// while a Revelation is in hand and BloodSunTurnManaEstimate >= MTG_BLOODSUN_GRIM_REV_MANA (default 8). DEFAULT OFF.
 bool BloodSunGrimRevGateOn();
 int  BloodSunTurnManaEstimate(const GameState& s, int controller);
 bool BloodSunGrimRevGateHolds(const GameState& s, int controller);

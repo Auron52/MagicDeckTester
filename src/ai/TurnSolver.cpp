@@ -130478,6 +130478,19 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                  && !trace_this && !DomActive();
         // THE NESTED ROUND-WIN STOP (DecisionProvider::NestedRoundWinStop; opt-in, Blood Sun): inside a rollout only
         // (g_rollout_nest > 0 -- never a decision root, budgeted or not), where the solve's reader is its win turn.
+        // WHY IT IS EXACT FOR EVERY DECK (for the planned shared commit): the pass's best already wins at
+        // state.turn_number, and no line from a state in round R wins before R, so no later candidate can change the
+        // pass's WIN TURN -- the primary key of `better` below; a rollout that executes the returned plan reaches
+        // the same round-R win. What it CAN change is which of several same-round wins the pass returns: the
+        // tie-break below (InfWinTie's inf stamp -- guarded by the same condition the tie prune uses -- then the
+        // leaf tb / plan.value). The existing tie prune already drops every later candidate whose plan.value does
+        // not exceed the best's (it ignores leaf tb on a tie); this stop also drops the ones whose plan.value DOES
+        // exceed it. So the condition under which it is not byte-identical: a reader above the nested solve that
+        // consumes more than the win turn -- the returned plan's value, the leaf tb / life it published, or the
+        // executed tail of the round (its game log) -- for an EQUAL win turn. The parent's own pick reads its own
+        // candidates' plan.value (not the nested plan's) and a winning rollout publishes no measured leaf tb in
+        // the common case, so a smoke move under the shared version is that equal-win-turn tie-break, and is to
+        // be explained as such.
         const bool round_stop_here = tie_prune_here && g_rollout_nest > 0
                                   && ResolveProvider(state).NestedRoundWinStop();
         if (trace_this)
