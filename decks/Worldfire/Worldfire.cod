@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Tue Nov 17 05:36:55 2026</lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="4" name="Worldfire"/>
+        <card number="1" name="Mountain"/>
+        <card number="1" name="Island"/>
+        <card number="3" name="Steam Vents"/>
+        <card number="4" name="Lotus Bloom"/>
+        <card number="4" name="Rift Bolt"/>
+        <card number="2" name="Memory Lapse"/>
+        <card number="4" name="Seething Song"/>
+        <card number="3" name="Mercadian Bazaar"/>
+        <card number="1" name="Mystical Tutor"/>
+        <card number="4" name="Ponder"/>
+        <card number="4" name="Scalding Tarn"/>
+        <card number="4" name="Keldon Halberdier"/>
+        <card number="4" name="Brainstorm"/>
+        <card number="2" name="Flooded Strand"/>
+        <card number="4" name="Sandstone Needle"/>
+        <card number="4" name="Saprazzan Skerry"/>
+        <card number="2" name="Personal Tutor"/>
+        <card number="1" name="Overmaster"/>
+        <card number="2" name="Irencrag Feat"/>
+        <card number="1" name="Mistrise Village"/>
+        <card number="1" name="Preordain"/>
+    </zone>
+</cockatrice_deck>
