@@ -223,5 +223,28 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   USER rationale (verbatim): *"Because we would rather save Lotus for an active Blood Sun where it is insanely
   powerful."*
 
+- B5 Dimir Machinations (U3) (USER 2026-11-21, verbatim): *"I would prune this as it only matters under
+  clairvoyance. Honestly I'm tempted to fully prune the cast option, since the effect is extremely weak compared
+  to the transmute."* -> DECIDED: the opponent-target cast is pruned (provider restriction behind
+  `MTG_BLOODSUN_USER_PRUNE`). NOT decided (USER "tempted"): pruning the self-target CAST entirely (transmute
+  only). Implemented as its own sub-lever, default ON on the USER's lean, measured in the Stage 5 A/B and
+  presented; the residual line it removes is a hand with {2}{B} but not {1}{B}{B}, or a top-3 look worth more
+  than any mana-value-3 card.
+- B6 go-off bridge (U5) (USER 2026-11-21, verbatim): *"If they are handled smartly there should be no way to
+  get stuck on this assuming you have Blood Sun out. We'll have to discuss more if you think you have found a
+  counterexample. In my experience on the turn when you can Revelation -> Time Warp (needing something like
+  9-11 mana) you quickly ramp up the mana by playing a couple of lotuses. This means that the next turn you can
+  reach Emrakul by searching 4 Scorched ruins, Fastbond (or multiple exploration), Emrakul and Revelation."*
+  -> the design's "stall" case was the unsmart minimal bridge (X = 2, no lands), not a counterexample. Default
+  stands (bridge packages that carry Lotus lands and reach the Emrakul stage next turn are ordered first);
+  the canonical line above becomes a step-8 test. Any real counterexample found is brought to the USER.
+- B7 second Emrakul (U6) (USER 2026-11-21, verbatim): *"Wasn't this always considered? It should be because of
+  the extra turn. Extra Turns doesn't have multiple, though. Cyclone does, but doesn't hardcast. Cyclone should
+  be deploying multiples at times."* -> it was NOT considered for a HARD cast: the generic duplicate-legend
+  prune (`OfferDuplicateLegendCast`, TurnSolver hand-cast enumeration) drops a second legendary copy unless a
+  resident watcher makes tokens off the cast; it never read `cast_trigger_extra_turns`. Step 7 fixes it.
+  Cyclone's free casts do not pass through that prune, so its multiples were already offered; Extra Turns
+  (1 Emrakul) cannot move; Cyclone moves only where it would hard-cast a second copy.
+
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
