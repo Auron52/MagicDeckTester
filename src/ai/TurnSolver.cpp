@@ -78286,6 +78286,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               put_cred ? &cast_put_credit : nullptr);
         }
 
+        // Worldfire: exile every permanent / hand / graveyard, then each life total becomes 1 -- the LAST
+        // effect before the spell moves to the (emptied) graveyard below. Shared resolver; executor twin
+        // in EffectHandler::ResolveImpl just before MoveToGraveyard (lockstep). Two param tests else.
+        if (!remand_countered
+            && (def.params.exile_all_permanents_hands_graveyards || def.params.each_player_life_becomes >= 0))
+        { ResolveExileAllAndSetLife(state, def.params); }
+
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
         // graveyard faithful; nothing reads the graveyard for decks without retrace.

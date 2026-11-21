@@ -5027,6 +5027,27 @@ public:
                                      const CardDefinition& entering) const override;
 };
 
+// WORLDFIRE (onboarding 2026-11-21, docs/design/analysis-Worldfire.md). DERIVES FROM DeckProvider (the
+// archetype-neutral default) with NO hooks of its own: an empty derivation, play-neutral by construction.
+// Without its own signature the deck rode AntiLifegainProvider (Scalding Tarn / Flooded Strand's
+// fetch_land_types and the two tutors' tutor_to_top trip `anti`) -- the archetype-neutral misroute class.
+// Routed at the TOP of DetectDecisionProvider by its own signature (`worldfire`: Worldfire's exile-all and
+// life-becomes params, or a CREATURE with suspend -- Keldon Halberdier), carried by no other deck.
+//
+// One hook, a COVERAGE fix rather than a heuristic (the Cyclone / Maze's End precedent): TutorSearchWidth 32.
+// Mystical Tutor reaches every instant and sorcery NAME in the list (about ten), Personal Tutor every sorcery;
+// the base width 6 over the library-order candidate list left the rest -- Worldfire itself, in some shuffles --
+// unreachable by any budget, chosen by the shuffle. Nothing is ranked or dropped. MTG_WORLDFIRE_TUTOR_WIDTH=0
+// -> the base 6.
+class WorldfireProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Check the Worldfire reach (nine mana from rituals, Lotus Bloom, storage and depletion lands) and next-upkeep suspend arrivals (Rift Bolt, Halberdier) before proving a winless turn." }; }
+    const char* Name() const override { return "Worldfire"; }
+    int TutorSearchWidth() const override;
+};
+
 // MAZE'S END (onboarding 2026-11-17, docs/design/analysis-Maze's End.md). DERIVES FROM DeckProvider (the
 // archetype-neutral default). Routed at the TOP of the chain by its own signature (DetectDecisionProvider's
 // `mazes_end`: Maze's End's distinct-names alternate win, Guild Summit's tap-Gates draw, Gates Ablaze's

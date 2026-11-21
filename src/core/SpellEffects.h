@@ -5730,6 +5730,108 @@ inline void DestroyAllEnchantments(GameState& state)
     }
 }
 
+// WORLDFIRE: "Exile all permanents. Exile all cards from all hands and graveyards. Each player's life
+// total becomes 1." (CardParams::exile_all_permanents_hands_graveyards / each_player_life_becomes.)
+// THE ONE resolver, called at the instant/sorcery resolution site of both worlds -- EffectHandler::
+// ResolveImpl (executor) and TurnSolver's apply_one (rollout) -- just before the spell itself moves to
+// the graveyard (CR 608.2n: the spell is on the stack while it resolves, so Worldfire is NOT exiled by
+// its own resolution and lands in the emptied graveyard afterwards). Inert unless one of the two params
+// is set -> byte-identical for every other card.
+//
+// ZONES, clause by clause:
+//   * Battlefield -- EVERY permanent, both sides (our lands with storage / depletion counters, a Lotus
+//     Bloom in play, creatures; the opponent's lands and scheduled spawns). A card goes to the shared
+//     exile zone as its printed self (CR 400.7: a new object -- a Halberdier's suspend haste, counters
+//     and temp bonuses do not follow it). A TOKEN ceases to exist (CR 111.7 / 704.5d): it is dropped,
+//     never filed in exile (tokens carry is_token, or a number in the token / opponent-spawn bands).
+//     Nothing holds a battlefield INDEX across a resolution (attachments, linked exiles and the payment
+//     ledger name card numbers), so an emptied battlefield leaves nothing dangling. Leaves-the-
+//     battlefield TRIGGERS of the exiled permanents are not fired (no such card in the Worldfire pool;
+//     exile is not "dies", so no dies-watcher should fire anyway); a linked "until ~ leaves" exile
+//     whose source just left returns, through the shared ReturnOrphanedLinkedExiles.
+//   * Hands -- ours, the opponent's (players[1].hand), and 2HG's second head (opponent2_hand). A card
+//     the ROLLOUT merged into hand from impulse exile (m_is_staged) is already IN EXILE in reality
+//     (the executor keeps it in Player::staged_cards, which this never touches), so it stays: still
+//     castable this turn, in both worlds alike.
+//   * Graveyards -- both players' (2HG's second head has none: nothing reads one). Token numbers that
+//     reached a graveyard vector are dropped, as on the battlefield.
+//   * Exile -- untouched: suspended_cards keep their time counters (a Rift Bolt suspended this turn hits
+//     at our next upkeep), staged cards stay staged, the shared exile only grows.
+//   * Libraries and floating mana -- untouched.
+// LIFE: each player's life total becomes N (CR 119.5: the difference is gained or lost). players[1] is
+// the opposing TEAM in 2HG (one shared pool), so it becomes N once. A loss on the opponent sets
+// opponent_lost_life_this_turn (spectacle); a player below N has already lost at a state-based check
+// before this could resolve, so the "gain" branch is a plain assignment.
+inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
+{
+    if (pp.exile_all_permanents_hands_graveyards)
+    {
+        auto token_number = [](int n)
+        {
+            return (n >= GameState::kFirstTokenNumber && n < opponentdeck::kNumberBase)
+                || n >= GameState::kFirstOppSpawnNumber;
+        };
+        auto printed = [](const Card& c)
+        {
+            Card out = RevealedCard(c);
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(out);
+            if (d != nullptr && d->card.m_name == out.m_name)
+            {
+                const int n = out.m_number;
+                out = d->card;
+                out.m_number = n;
+            }
+            return out;
+        };
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.is_token || token_number(p.card.m_number)) { continue; }
+            state.exile.push_back(printed(p.card));
+        }
+        state.battlefield.clear();
+        auto exile_zone = [&](std::vector<Card>& zone, bool keep_staged)
+        {
+            std::vector<Card> kept;
+            for (Card& c : zone)
+            {
+                if (keep_staged && c.m_is_staged) { kept.push_back(std::move(c)); continue; }
+                if (token_number(c.m_number)) { continue; }
+                state.exile.push_back(printed(c));
+            }
+            zone = std::move(kept);
+        };
+        for (Player& pl : state.players)
+        {
+            exile_zone(pl.hand, /*keep_staged=*/true);
+            exile_zone(pl.graveyard, /*keep_staged=*/false);
+            // DESCEND's turn-start snapshot indexes the graveyard; it cannot point past the emptied zone.
+            pl.gy_size_at_turn_start = std::min(pl.gy_size_at_turn_start, static_cast<int>(pl.graveyard.size()));
+        }
+        exile_zone(state.opponent2_hand, /*keep_staged=*/false);
+        ReturnOrphanedLinkedExiles(state);
+        if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "Exile all permanents, and all cards from all hands and graveyards");
+        }
+    }
+    if (pp.each_player_life_becomes >= 0)
+    {
+        const int n = pp.each_player_life_becomes;
+        for (int i = 0; i < static_cast<int>(state.players.size()); ++i)
+        {
+            Player& pl = state.players[static_cast<std::size_t>(i)];
+            if (pl.life > n && i != state.active_player_index) { state.opponent_lost_life_this_turn = true; }
+            pl.life = n;
+        }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "Each player's life total becomes " + std::to_string(n));
+        }
+    }
+}
+
 // ==================== Auras (attach-to-creature enchantments) =========================
 // A single, battlefield-aware home for the Bogles/hexproof-auras mechanic. Auras attach to a
 // creature by STABLE m_number (Permanent::aura_attached_to) -- copy/realloc-safe, unlike the
@@ -27277,6 +27379,14 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
     perm.controller_index  = controller;
     perm.owner_index       = controller;
     perm.entered_this_turn = true;
+    // SUSPEND HASTE (CR 702.62a, Keldon Halberdier 2026-11-21): "If you cast a creature spell this way, it
+    // gains haste until you lose control of the spell or the permanent it becomes." The control never
+    // changes in a goldfish, so it is the permanent's own keyword (the Awaken precedent): every
+    // CanAttack / CanTapNow reader sees it in both worlds (this is the single arrival path), it rides the
+    // sim key with the keyword mask. (A zone move that copies the permanent's Card keeps the bit, which no
+    // off-battlefield reader consults; Worldfire's exile files the printed card.)
+    // No creature had suspend before Halberdier (Lotus Bloom is an artifact) -> byte-identical elsewhere.
+    if (perm.card.IsCreature()) { perm.card.AddKeyword(Keyword::Haste); }
     state.battlefield.push_back(perm);
     if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
     {

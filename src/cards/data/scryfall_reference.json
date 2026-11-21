@@ -568,6 +568,18 @@
     "toughness": null,
     "type_line": "Legendary Land — Gate"
   },
+  "Ball Lightning": {
+    "cmc": 3.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}{R}{R}",
+    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "6",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
   "Basilisk Gate": {
     "cmc": 0.0,
     "keywords": [],
@@ -1019,6 +1031,17 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Boar"
+  },
+  "Brinelin, the Moon Kraken": {
+    "cmc": 8.0,
+    "keywords": [
+      "Partner"
+    ],
+    "mana_cost": "{6}{U}{U}",
+    "oracle_text": "When Brinelin enters and whenever you cast a spell with mana value 6 or greater, you may return target nonland permanent to its owner's hand.\nPartner (You can have two commanders if both have partner.)",
+    "power": "6",
+    "toughness": "8",
+    "type_line": "Legendary Creature — Kraken"
   },
   "Bruna, Light of Alabaster": {
     "cmc": 6.0,
@@ -2529,6 +2552,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Flamekin Bladewhirl": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Warrior"
+  },
   "Flamekin Harbinger": {
     "cmc": 1.0,
     "keywords": [],
@@ -2546,6 +2578,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Boar"
+  },
+  "Flooded Grove": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Flooded Strand": {
     "cmc": 0.0,
@@ -3253,6 +3294,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Guild Summit": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "When this enchantment enters, you may tap any number of untapped Gates you control. Draw a card for each Gate tapped this way.\nWhenever a Gate you control enters, draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Guilty Conscience": {
     "cmc": 1.0,
     "keywords": [
@@ -3263,15 +3313,6 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
-  },
-  "Guild Summit": {
-    "cmc": 3.0,
-    "keywords": [],
-    "mana_cost": "{2}{U}",
-    "oracle_text": "When this enchantment enters, you may tap any number of untapped Gates you control. Draw a card for each Gate tapped this way.\nWhenever a Gate you control enters, draw a card.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Enchantment"
   },
   "Hallowed Fountain": {
     "cmc": 0.0,
@@ -3362,6 +3403,17 @@
     "toughness": null,
     "type_line": "Land — Gate"
   },
+  "Hedge Maze": {
+    "cmc": 0.0,
+    "keywords": [
+      "Surveil"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.\nWhen this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Forest Island"
+  },
   "Hedron Crab": {
     "cmc": 1.0,
     "keywords": [
@@ -3384,6 +3436,19 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Hellspark Elemental": {
+    "cmc": 2.0,
+    "keywords": [
+      "Haste",
+      "Trample",
+      "Unearth"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
   },
   "Herald of Ilharg": {
     "cmc": 4.0,
@@ -3513,6 +3578,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Hullbreaker Horror": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flash"
+    ],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "Flash\nThis spell can't be countered.\nWhenever you cast a spell, choose up to one —\n• Return target spell you don't control to its owner's hand.\n• Return target nonland permanent to its owner's hand.",
+    "power": "7",
+    "toughness": "8",
+    "type_line": "Creature — Kraken Horror"
   },
   "Hunted Phantasm": {
     "cmc": 3.0,
@@ -3877,6 +3953,18 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Keldon Halberdier": {
+    "cmc": 5.0,
+    "keywords": [
+      "First strike",
+      "Suspend"
+    ],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "First strike\nSuspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)",
+    "power": "4",
+    "toughness": "1",
+    "type_line": "Creature — Human Warrior"
+  },
   "Kemba, Kha Regent": {
     "cmc": 3.0,
     "keywords": [],
@@ -3943,6 +4031,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Kithkin Knight"
+  },
+  "Kiora Bests the Sea God": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Create an 8/8 blue Kraken creature token with hexproof.\nII — Tap all nonland permanents target opponent controls. They don't untap during their controller's next untap step.\nIII — Gain control of target permanent an opponent controls. Untap it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Saga"
   },
   "Kitchen": {
     "cmc": 0.0,
@@ -4022,6 +4119,18 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Kithkin Knight"
+  },
+  "Koma, World-Eater": {
+    "cmc": 7.0,
+    "keywords": [
+      "Trample",
+      "Ward"
+    ],
+    "mana_cost": "{3}{G}{G}{U}{U}",
+    "oracle_text": "This spell can't be countered.\nTrample, ward {4}\nWhenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil.",
+    "power": "8",
+    "toughness": "12",
+    "type_line": "Legendary Creature — Serpent"
   },
   "Kor Duelist": {
     "cmc": 1.0,
@@ -4333,6 +4442,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Loran's Escape": {
+    "cmc": 1.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Target artifact or creature gains hexproof and indestructible until end of turn. Scry 1.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Lord of Atlantis": {
     "cmc": 2.0,
     "keywords": [],
@@ -4353,6 +4473,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Vampire"
+  },
+  "Lorthos, the Tidemaker": {
+    "cmc": 8.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}{U}{U}",
+    "oracle_text": "Whenever Lorthos attacks, you may pay {8}. If you do, tap up to eight target permanents. Those permanents don't untap during their controllers' next untap steps.",
+    "power": "8",
+    "toughness": "8",
+    "type_line": "Legendary Creature — Octopus"
   },
   "Lotus Bloom": {
     "cmc": 0.0,
@@ -4948,6 +5077,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Mystical Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Search your library for an instant or sorcery card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Mythic Proportions": {
     "cmc": 7.0,
     "keywords": [
@@ -4976,6 +5114,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Needle Drop": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Needle Drop deals 1 damage to any target that was dealt damage this turn.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Neheb, the Worthy": {
     "cmc": 3.0,
@@ -5057,6 +5204,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Dragon Wizard"
+  },
+  "Nomads en-Kor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Kor Nomad Soldier"
   },
   "Nourish": {
     "cmc": 2.0,
@@ -5300,6 +5456,15 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Drake"
+  },
+  "Personal Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Search your library for a sorcery card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Phantasmal Image": {
     "cmc": 2.0,
@@ -6341,6 +6506,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Serpent of Yawning Depths": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Krakens, Leviathans, Octopuses, and Serpents you control can't be blocked except by Krakens, Leviathans, Octopuses, and Serpents.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Enchantment Creature — Serpent"
+  },
   "Serra Ascendant": {
     "cmc": 1.0,
     "keywords": [
@@ -6411,6 +6585,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Artifact — Equipment"
+  },
+  "Shaman en-Kor": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead.\n{1}{W}: The next time a source of your choice would deal damage to target creature this turn, that damage is dealt to this creature instead.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Kor Cleric Shaman"
   },
   "Shard Volley": {
     "cmc": 1.0,
@@ -6548,6 +6731,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Gate"
+  },
+  "Sin, Unending Cataclysm": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying",
+      "Trample"
+    ],
+    "mana_cost": "{5}{G}{U}",
+    "oracle_text": "Flying, trample\nAs Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters with X +1/+1 counters on it, where X is twice the number of counters removed this way.\nWhen Sin dies, put its counters on target creature you control, then shuffle this card into its owner's library.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Leviathan Avatar"
   },
   "Sinew Sliver": {
     "cmc": 2.0,
@@ -6802,6 +6997,27 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Spark Elemental": {
+    "cmc": 1.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
+  "Spawning Kraken": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}",
+    "oracle_text": "Whenever a Kraken, Leviathan, Octopus, or Serpent you control deals combat damage to a player, create a 9/9 blue Kraken creature token.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Kraken"
+  },
   "Speaker of the Heavens": {
     "cmc": 1.0,
     "keywords": [
@@ -6894,6 +7110,15 @@
     "power": "3",
     "toughness": "1",
     "type_line": "Enchantment Creature — Spirit"
+  },
+  "Spiteful Sliver": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Sliver creatures you control have \"Whenever this creature is dealt damage, it deals that much damage to target player or planeswalker.\"",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Sliver"
   },
   "Spore Swarm": {
     "cmc": 4.0,
@@ -7143,6 +7368,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Summon: Leviathan": {
+    "cmc": 6.0,
+    "keywords": [
+      "Ward"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Return each creature that isn't a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner's hand.\nII, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card.\nWard {2}",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Enchantment Creature — Saga Leviathan"
+  },
   "Sunbaked Canyon": {
     "cmc": 0.0,
     "keywords": [],
@@ -7160,6 +7396,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Giant Warrior"
+  },
+  "Sunspine Lynx": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls.",
+    "power": "5",
+    "toughness": "4",
+    "type_line": "Creature — Elemental Cat"
   },
   "Supreme Phantom": {
     "cmc": 2.0,
@@ -7778,6 +8023,17 @@
     "toughness": null,
     "type_line": "Artifact Land"
   },
+  "Trench Gorger": {
+    "cmc": 8.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{6}{U}{U}",
+    "oracle_text": "Trample\nWhen this creature enters, you may search your library for any number of land cards, exile them, then shuffle. If you do, this creature has base power and base toughness each equal to the number of cards exiled this way.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Leviathan"
+  },
   "Troyan, Gutsy Explorer": {
     "cmc": 3.0,
     "keywords": [],
@@ -8096,6 +8352,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Vexing Devil": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "When this creature enters, any opponent may have it deal 4 damage to them. If a player does, sacrifice this creature.",
+    "power": "4",
+    "toughness": "3",
+    "type_line": "Creature — Devil"
+  },
   "Vexing Shusher": {
     "cmc": 2.0,
     "keywords": [],
@@ -8290,6 +8555,15 @@
     "toughness": "1",
     "type_line": "Creature — Elf"
   },
+  "Whelming Wave": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and Serpents.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "White Orchid Phantom": {
     "cmc": 2.0,
     "keywords": [
@@ -8369,6 +8643,15 @@
     "toughness": null,
     "type_line": "Enchantment — Saga"
   },
+  "Worldfire": {
+    "cmc": 9.0,
+    "keywords": [],
+    "mana_cost": "{6}{R}{R}{R}",
+    "oracle_text": "Exile all permanents. Exile all cards from all hands and graveyards. Each player's life total becomes 1.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Worldly Tutor": {
     "cmc": 1.0,
     "keywords": [],
@@ -8388,6 +8671,15 @@
     "power": "15",
     "toughness": "15",
     "type_line": "Creature — Wurm"
+  },
+  "Worn Powerstone": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "This artifact enters tapped.\n{T}: Add {C}{C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Worthy Knight": {
     "cmc": 2.0,
@@ -8497,258 +8789,5 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Druid"
-  },
-  "Ball Lightning": {
-    "cmc": 3.0,
-    "keywords": [
-      "Haste",
-      "Trample"
-    ],
-    "mana_cost": "{R}{R}{R}",
-    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
-    "power": "6",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Flamekin Bladewhirl": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}.",
-    "power": "2",
-    "toughness": "1",
-    "type_line": "Creature — Elemental Warrior"
-  },
-  "Hellspark Elemental": {
-    "cmc": 2.0,
-    "keywords": [
-      "Haste",
-      "Trample",
-      "Unearth"
-    ],
-    "mana_cost": "{1}{R}",
-    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)",
-    "power": "3",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Spark Elemental": {
-    "cmc": 1.0,
-    "keywords": [
-      "Haste",
-      "Trample"
-    ],
-    "mana_cost": "{R}",
-    "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
-    "power": "3",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Sunspine Lynx": {
-    "cmc": 4.0,
-    "keywords": [],
-    "mana_cost": "{2}{R}{R}",
-    "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls.",
-    "power": "5",
-    "toughness": "4",
-    "type_line": "Creature — Elemental Cat"
-  },
-  "Worn Powerstone": {
-    "cmc": 3.0,
-    "keywords": [],
-    "mana_cost": "{3}",
-    "oracle_text": "This artifact enters tapped.\n{T}: Add {C}{C}.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Artifact"
-  },
-  "Flooded Grove": {
-    "cmc": 0.0,
-    "keywords": [],
-    "mana_cost": "",
-    "oracle_text": "{T}: Add {C}.\n{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Hedge Maze": {
-    "cmc": 0.0,
-    "keywords": [
-      "Surveil"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.\nWhen this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Forest Island"
-  },
-  "Spawning Kraken": {
-    "cmc": 6.0,
-    "keywords": [],
-    "mana_cost": "{5}{U}",
-    "oracle_text": "Whenever a Kraken, Leviathan, Octopus, or Serpent you control deals combat damage to a player, create a 9/9 blue Kraken creature token.",
-    "power": "6",
-    "toughness": "6",
-    "type_line": "Creature — Kraken"
-  },
-  "Koma, World-Eater": {
-    "cmc": 7.0,
-    "keywords": [
-      "Trample",
-      "Ward"
-    ],
-    "mana_cost": "{3}{G}{G}{U}{U}",
-    "oracle_text": "This spell can't be countered.\nTrample, ward {4}\nWhenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil.",
-    "power": "8",
-    "toughness": "12",
-    "type_line": "Legendary Creature — Serpent"
-  },
-  "Serpent of Yawning Depths": {
-    "cmc": 6.0,
-    "keywords": [],
-    "mana_cost": "{4}{U}{U}",
-    "oracle_text": "Krakens, Leviathans, Octopuses, and Serpents you control can't be blocked except by Krakens, Leviathans, Octopuses, and Serpents.",
-    "power": "6",
-    "toughness": "6",
-    "type_line": "Enchantment Creature — Serpent"
-  },
-  "Lorthos, the Tidemaker": {
-    "cmc": 8.0,
-    "keywords": [],
-    "mana_cost": "{5}{U}{U}{U}",
-    "oracle_text": "Whenever Lorthos attacks, you may pay {8}. If you do, tap up to eight target permanents. Those permanents don't untap during their controllers' next untap steps.",
-    "power": "8",
-    "toughness": "8",
-    "type_line": "Legendary Creature — Octopus"
-  },
-  "Whelming Wave": {
-    "cmc": 4.0,
-    "keywords": [],
-    "mana_cost": "{2}{U}{U}",
-    "oracle_text": "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and Serpents.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Sorcery"
-  },
-  "Kiora Bests the Sea God": {
-    "cmc": 7.0,
-    "keywords": [],
-    "mana_cost": "{5}{U}{U}",
-    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Create an 8/8 blue Kraken creature token with hexproof.\nII — Tap all nonland permanents target opponent controls. They don't untap during their controller's next untap step.\nIII — Gain control of target permanent an opponent controls. Untap it.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Enchantment — Saga"
-  },
-  "Summon: Leviathan": {
-    "cmc": 6.0,
-    "keywords": [
-      "Ward"
-    ],
-    "mana_cost": "{4}{U}{U}",
-    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Return each creature that isn't a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner's hand.\nII, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card.\nWard {2}",
-    "power": "6",
-    "toughness": "6",
-    "type_line": "Enchantment Creature — Saga Leviathan"
-  },
-  "Hullbreaker Horror": {
-    "cmc": 7.0,
-    "keywords": [
-      "Flash"
-    ],
-    "mana_cost": "{5}{U}{U}",
-    "oracle_text": "Flash\nThis spell can't be countered.\nWhenever you cast a spell, choose up to one —\n• Return target spell you don't control to its owner's hand.\n• Return target nonland permanent to its owner's hand.",
-    "power": "7",
-    "toughness": "8",
-    "type_line": "Creature — Kraken Horror"
-  },
-  "Brinelin, the Moon Kraken": {
-    "cmc": 8.0,
-    "keywords": [
-      "Partner"
-    ],
-    "mana_cost": "{6}{U}{U}",
-    "oracle_text": "When Brinelin enters and whenever you cast a spell with mana value 6 or greater, you may return target nonland permanent to its owner's hand.\nPartner (You can have two commanders if both have partner.)",
-    "power": "6",
-    "toughness": "8",
-    "type_line": "Legendary Creature — Kraken"
-  },
-  "Sin, Unending Cataclysm": {
-    "cmc": 7.0,
-    "keywords": [
-      "Flying",
-      "Trample"
-    ],
-    "mana_cost": "{5}{G}{U}",
-    "oracle_text": "Flying, trample\nAs Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters with X +1/+1 counters on it, where X is twice the number of counters removed this way.\nWhen Sin dies, put its counters on target creature you control, then shuffle this card into its owner's library.",
-    "power": "5",
-    "toughness": "5",
-    "type_line": "Legendary Creature — Leviathan Avatar"
-  },
-  "Trench Gorger": {
-    "cmc": 8.0,
-    "keywords": [
-      "Trample"
-    ],
-    "mana_cost": "{6}{U}{U}",
-    "oracle_text": "Trample\nWhen this creature enters, you may search your library for any number of land cards, exile them, then shuffle. If you do, this creature has base power and base toughness each equal to the number of cards exiled this way.",
-    "power": "6",
-    "toughness": "6",
-    "type_line": "Creature — Leviathan"
-  },
-  "Needle Drop": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "Needle Drop deals 1 damage to any target that was dealt damage this turn.\nDraw a card.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Instant"
-  },
-  "Vexing Devil": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "When this creature enters, any opponent may have it deal 4 damage to them. If a player does, sacrifice this creature.",
-    "power": "4",
-    "toughness": "3",
-    "type_line": "Creature — Devil"
-  },
-  "Spiteful Sliver": {
-    "cmc": 3.0,
-    "keywords": [],
-    "mana_cost": "{2}{R}",
-    "oracle_text": "Sliver creatures you control have \"Whenever this creature is dealt damage, it deals that much damage to target player or planeswalker.\"",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Sliver"
-  },
-  "Nomads en-Kor": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{W}",
-    "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead.",
-    "power": "1",
-    "toughness": "1",
-    "type_line": "Creature — Kor Nomad Soldier"
-  },
-  "Shaman en-Kor": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{1}{W}",
-    "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead.\n{1}{W}: The next time a source of your choice would deal damage to target creature this turn, that damage is dealt to this creature instead.",
-    "power": "1",
-    "toughness": "2",
-    "type_line": "Creature — Kor Cleric Shaman"
-  },
-  "Loran's Escape": {
-    "cmc": 1.0,
-    "keywords": [
-      "Scry"
-    ],
-    "mana_cost": "{W}",
-    "oracle_text": "Target artifact or creature gains hexproof and indestructible until end of turn. Scry 1.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Instant"
   }
 }

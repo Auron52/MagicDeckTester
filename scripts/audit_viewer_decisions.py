@@ -1416,6 +1416,8 @@ INERT_PARAMS = {
     "controller_lifegain_equals_power": "automatic lifegain",
     "death_trigger_damage": "automatic death trigger, no target in goldfish",
     "destroy_all_enchantments": "destroy-all, no target choice",
+    "exile_all_permanents_hands_graveyards": "Worldfire: exile ALL permanents/hands/graveyards, no target or choice",
+    "each_player_life_becomes": "Worldfire: each life total becomes N, no choice",
     "etb_opponent_lifegain": "automatic ETB", "opponent_lifegain": "automatic",
     "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
     "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",

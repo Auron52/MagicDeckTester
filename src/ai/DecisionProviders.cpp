@@ -27301,6 +27301,7 @@ namespace
     const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
     const MazesEndProvider       g_mazes_end;
+    const WorldfireProvider      g_worldfire;
 }
 
 // Our own damage is useful whenever a gain engine is on the board (see the class comment). Rules
@@ -30143,6 +30144,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // distinct-names alternate win, Guild Summit's tap-Gates draw, Gates Ablaze's per-Gate X -- so a list
     // that cuts one card still routes. Returns FIRST (a land-tutor list would otherwise risk `anti`).
     bool mazes_end = false;
+    // WORLDFIRE (onboarding 2026-11-21): OR of Worldfire's two params (exile all permanents / hands /
+    // graveyards; each life total becomes N) and a CREATURE with suspend (Keldon Halberdier -- no other
+    // creature has suspend). EXCLUDED, with reasons: Rift Bolt (burn), Lotus Bloom (Dragonstorm), the
+    // fetchlands, Seething Song / Irencrag Feat (red storm), the tutors and cantrips (blue staples).
+    // Returns FIRST: the fetchlands and tutors set `anti` alone.
+    bool worldfire = false;
     // SPIRITS (W/U(/b) Spirit tribal on Aether Vial; onboarding 2026-11-13). MUST return ABOVE `anti`
     // (Flooded Strand's fetch_land_types), `goblin` (a Spirit dies-watcher such as Millicent's) and
     // `vial && slivers` (Millicent's affinity_for_subtype) -- the archetype-neutral misroute class
@@ -30182,6 +30189,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardParams& p = def->params;
         if (p.alt_win_distinct_named_count > 0 || !p.etb_tap_subtype_draw.empty()
             || !p.damage_all_creatures_x_per_subtype.empty()) { mazes_end = true; }
+        if (p.exile_all_permanents_hands_graveyards || p.each_player_life_becomes >= 0
+            || (def->card.IsCreature() && p.suspend_time_counters > 0)) { worldfire = true; }
         if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
             || p.landfall_mill_target_player || p.cycling_mill_opponent > 0
             || p.spell_mill_opponent > 0)
@@ -30803,6 +30812,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Red Elementals: above `morph`, whose signature its end-step-sacrifice bodies / Firecat / Legion Leadership
     // set alone (see the flag). Its signature is carried by no other deck, so the position is free.
     // Maze's End: FIRST -- its signature is carried by no other deck, so the position is free.
+    // Worldfire: FIRST -- its signature is carried by no other deck, so the position is free.
+    if (worldfire)   { return g_worldfire; }
     if (mazes_end)   { return g_mazes_end; }
     // Stuffy Doll: above everything (see the flag); its signature is carried by no other deck.
     if (stuffy)      { return g_stuffy_doll; }
@@ -38175,6 +38186,15 @@ int LandfallElementalsProvider::TutorSearchWidth() const
 {
     static const bool on = EnvOn("MTG_LFE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
     return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
+}
+
+// ---- WorldfireProvider::TutorSearchWidth -------------------------------------
+// Mystical / Personal Tutor must reach every distinct instant / sorcery NAME; the base 6 over the
+// library-order list left the rest unreachable, chosen by the shuffle. A coverage fix (header note).
+int WorldfireProvider::TutorSearchWidth() const
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
+    return on ? 32 : DeckProvider::TutorSearchWidth();
 }
 
 // ---- CycloneProvider::TutorSearchWidth --------------------------------------

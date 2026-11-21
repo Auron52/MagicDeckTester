@@ -18740,6 +18740,113 @@
    "parameters": {
     "etb_opp_may_take_damage_to_sac": 4
    }
+  },
+  {
+   "name": "Worldfire",
+   "mana_cost": "{6}{R}{R}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Exile all permanents. Exile all cards from all hands and graveyards. Each player's life total becomes 1. [Two clauses, two params, ONE shared resolver (ResolveExileAllAndSetLife, SpellEffects.h) at the instant/sorcery resolution site of both worlds (EffectHandler::ResolveImpl / TurnSolver apply_one), last before the spell moves to the graveyard -- so Worldfire, on the stack while it resolves, is not exiled by itself and lands in the emptied graveyard (CR 608.2n). EXILE (exile_all_permanents_hands_graveyards): every permanent on both sides (our lands with storage/depletion counters, a Lotus Bloom in play, creatures; the opponent's lands and scheduled spawns) goes to the shared exile as its printed card; tokens cease to exist; every card in every hand (ours, the opponent's, 2HG's second head) and both graveyards is exiled. Cards ALREADY in exile are untouched: suspended cards keep their time counters (a Rift Bolt suspended this turn deals 3 at our next upkeep), impulse-staged cards stay castable. Floating mana survives (the pool empties only at the end of a step). Leaves-the-battlefield triggers are not fired (no permanent in this pool has one). LIFE (each_player_life_becomes 1): each player's life total becomes 1 (CR 119.5; the opposing 2HG team's one shared pool becomes 1); the opponent's loss marks it as having lost life this turn. Our own death is armed for the deck (own_death_live): at 1 life a fetchland's 1-life payment kills us, in the search exactly as in the executor.]",
+   "template": "custom",
+   "parameters": {
+    "exile_all_permanents_hands_graveyards": true,
+    "each_player_life_becomes": 1
+   }
+  },
+  {
+   "name": "Keldon Halberdier",
+   "mana_cost": "{4}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Warrior"
+   ],
+   "keywords": [
+    "Suspend",
+    "First strike"
+   ],
+   "power": 4,
+   "toughness": 1,
+   "oracle_text": "First strike\nSuspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.) [Hard cast {4}{R}: a 4/1 first-striker. SUSPEND (suspend_time_counters 4, suspend_cost {R}): a main-phase Action::Kind::Suspend paying {R} through the shared ApplySuspend (NOT a cast, so it stays legal after Irencrag Feat's 'only one more spell'); suspended on turn T it is cast off suspend at the T+4 upkeep through the shared CastOffSuspend (a CAST: storm +1, and Irencrag's restriction can strand it), entering with HASTE (CR 702.62a -- the first creature with suspend; the keyword is set on the permanent at the single arrival path, so it attacks the turn it arrives in both worlds). Suspended cards survive Worldfire. 'You MAY cast it' is collapsed to CAST [PROVISIONAL]: declining leaves it exiled with no counters for nothing, while a hasty 4/1 attacks at once. First strike is inert in a goldfish (the passive opponent never blocks).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "suspend_time_counters": 4,
+    "suspend_cost": "{R}"
+   }
+  },
+  {
+   "name": "Mystical Tutor",
+   "mana_cost": "{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for an instant or sorcery card, reveal it, then shuffle and put that card on top. [tutor_to_top + tutor_types (Instant, Sorcery): PerformTutor shuffles, then puts the card on top. Searched target (the deck provider's TutorCandidates; every legal name in human play). As an INSTANT tutor-to-top the search also considers a paid UPKEEP cast before the draw (GameEngine::UpkeepTutorOptions, the Worldly Tutor route), so the fetched card is drawn that turn; human play offers the same upkeep window. 'Reveal' is inert (nothing reads reveals).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Instant",
+     "Sorcery"
+    ]
+   }
+  },
+  {
+   "name": "Personal Tutor",
+   "mana_cost": "{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a sorcery card, reveal it, then shuffle and put that card on top. [tutor_to_top + tutor_types (Sorcery): PerformTutor shuffles, then puts the card on top. Searched target (the deck provider's TutorCandidates; every legal name in human play). A SORCERY, so main phase only (no upkeep window). 'Reveal' is inert (nothing reads reveals).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Sorcery"
+    ]
+   }
+  },
+  {
+   "name": "Overmaster",
+   "mana_cost": "{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "The next instant or sorcery spell you cast this turn can't be countered.\nDraw a card. [draw_spell draw 1. The can't-be-countered rider is goldfish-INERT [PROVISIONAL deferral]: the passive opponent casts no spells, so nothing ever counters ours (our own Memory Lapse is goldfish_inert -- never cast), and no card in the pool reads 'can't be countered' as a condition.]",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 1
+   }
+  },
+  {
+   "name": "Mistrise Village",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {U}.\n{U}, {T}: The next spell you cast this turn can't be countered. [Check land: enters untapped iff a controlled land has subtype Mountain or Forest (checkland_subtypes, the shared LandWouldEnterTapped predicate -- Steam Vents is a Mountain). Taps for {U}. The {U},{T} can't-be-countered activation is goldfish-INERT [PROVISIONAL deferral]: the passive opponent casts no spells, so nothing ever counters ours, and activating it only spends mana and the land's tap.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U"
+    ],
+    "checkland_subtypes": [
+     "Mountain",
+     "Forest"
+    ]
+   }
   }
  ]
 }

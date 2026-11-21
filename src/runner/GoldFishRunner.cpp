@@ -2056,7 +2056,11 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()
                           || d->params.tap_is_life_payment || d->params.damage_per_nonbasic_land > 0
-                          || d->params.etb_damage_each_player_per_nonbasic_land > 0))
+                          || d->params.etb_damage_each_player_per_nonbasic_land > 0
+                          // WORLDFIRE (2026-11-21): "each player's life total becomes 1" leaves us at 1,
+                          // where a fetchland's 1 life is lethal; the executor already loses at the turn's
+                          // end, so the rollout must see the same death.
+                          || d->params.each_player_life_becomes >= 0))
                 { return true; }
             }
             return false;
