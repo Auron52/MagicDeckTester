@@ -107,6 +107,14 @@ visible only as a card leaving the hand.
   Worldfire +0.05 then -0.66 for a 2nd copy, Rift Bolt -0.22/-0.28, Memory Lapse -0.44.
 - Card-score games took 85-130 s each: watch the 3x-Hinata suite cost gate.
 
+## Stage 4 -- re-run WITH the prunes (2026-11-21, the committed profile)
+
+- rc 0. Cost diagnostic COST_NEUTRAL; discard STATUS_QUO_OK (ranking at or near the searched optimum);
+  provider_policy PASS.
+- Card scores (pre-prune -> now, first copy): Mystical Tutor +0.08 -> +0.28, Personal Tutor -0.02 -> +0.07,
+  Worldfire +0.05 -> +0.12 (2nd copy -0.66 -> -0.18), Keldon Halberdier +0.44 -> +0.13, Lotus Bloom +0.35 ->
+  +0.44, Seething Song +0.18 -> +0.19, Rift Bolt -0.22 -> -0.09.
+
 ## Tutor prune + Rift Bolt hold -- A/B (2026-11-21, d5 b20, profile attached, Release)
 
 Prunes ON (USER rulings) vs OFF (`MTG_WORLDFIRE_TUTOR_PIECES=0 MTG_WORLDFIRE_HOLD_BOLT=0`), paired per game:
