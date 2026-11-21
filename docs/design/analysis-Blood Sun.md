@@ -316,6 +316,18 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   plays: Time Warp; Fastbond with >= 2 lands in hand to play), all measured and presented; no default chosen
   by an agent. The same caution applies to the B3 "no Fastbond target once Fastbond is held" and any other
   tutor-list prune.
+- B13 Lotus sacrifices (USER 2026-11-21, verbatim): *"Machinations is the one case that is dead simple at
+  least. I doubt it will be a notable cost unless we haven't applied the prune yet. We should prune the
+  sacrifices for sure. Usually the choices are obvious, but we should have an order that we follow that
+  attempts to keep a red, a green and 2 black. Naturally, we should also prioritize bouncelands over regular
+  lands."* -> DECIDED provider RESTRICTION (USER-authored, ON by default, own `MTG_BLOODSUN_*` sub-lever, unit
+  tests on/off; human play unpruned): the Lotus Vale / Scorched Ruins / Lotus Field sacrifice choice (only
+  exists without Blood Sun) collapses to ONE pair chosen by an order: (1) the remaining lands keep at least one
+  red, one green and two black sources where possible (dual / any-colour lands counted by what they can make);
+  (2) then sacrifice regular lands before bouncelands (Parent's reading of "prioritize bouncelands over regular
+  lands": KEEP the bouncelands, which make two mana, and sacrifice the one-mana lands first -- surfaced to the
+  USER); (3) then F-L1 (a tapped victim before an untapped one of the same class, Lotus Field). Machinations:
+  no new work (B5 prune applied; the perf census confirms its share).
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
