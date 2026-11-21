@@ -321,3 +321,13 @@ Unit test: `test/unit/test_cast_scry_search.cpp`.
 alternative (the first other disposition in `EnumerateTopDispositions` order) out of five. Both references happen to
 need exactly that alternative. Width 5 would make every disposition findable (the completeness invariant) at 5x the
 Jet variants; a Creature Burn `ScryVerdict` prune is the sanctioned way to buy that width back.
+
+Measured 2026-11-21 (worktree `wip/cb-refshort`, Release, shipped d5 b20):
+- ref bench: creature_burn 2/10 short -> 0/10 (s6 5->4, s8 6->5; no other reference moves); midrange_burn 10/10
+  identical. Same at `MTG_SCRY_WIDTH=5`. Both references also win at d8 b0 on the new binary (T4 / T5).
+- held-out A/B, one pooled batch with the per-job lever, seed 77000, 400 games per deck per arm:
+  Creature Burn 4.8075 -> 4.7475 (-0.060t, 23 faster / 0 slower), Midrange Burn 4.3075 -> 4.2925 (-0.015t,
+  7 faster / 1 slower). The slower game (Midrange Burn gi 0, T7 -> T8) recovers at d8 b0 (T7, = base). CPU +4.6% /
+  +3.9%.
+- scoped smoke (creatureburn, creatureburn2hg, midrangeburn, midrangeburn2hg): searched slower 0 / faster 22,
+  d0 unchanged, midrangeburn2hg byte-identical. Unit 3863/3863, scenarios 603/603.
