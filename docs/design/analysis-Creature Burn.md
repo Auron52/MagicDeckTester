@@ -169,35 +169,33 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~16:45 UTC) — resume here after compaction
-DONE: Stages 1-5 + verify_deck GATE PASS; 5c2 tie-break KEEP ON; Browbeat fold DEFAULT OFF (measured); USER's 10
-Creature Burn references committed (s1..s10). LANDED 5a07c3df3 at 16:01 UTC (validation round 2: build/unit/scen
-PASS, smoke 239/239 play-changed 0, gt_logs consistent). Slow box: next `join` no earlier than ~20:01 UTC.
-CI watch running (run 44922225716).
-
-REFERENCE BENCH (USER 2026-11-21: "We should also make sure all of the references are matched if you haven't.
-Beyond seed 9, which I expect to become invalid after the bounceland issue is fixed."), ref_bench on 5a07c3df3:
-human 4.600 / search 4.700; SHORTFALL s6 (4 vs 5), s8 (5 vs 6); s10 search faster (6 vs 5); others equal (s9 4/4).
-Root-cause agent launched (brief logs/creature-burn/refshort-brief.md, worktree cb-refshort if it fixes anything).
-
-AGENTS: MANUAL TAP-PING (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot be manually
-tapped. Let's leave the auto-tap, but add the option to manually tap.") HANDED OFF at ~210K: impl e9c534b1e on
-wip/cb-manualtap (server.js unchanged); validation chain lane PID 70021, outputs build/scratch/cb-manualtap/val/
-(DONE marker); handoff logs/creature-burn/manualtap-handoff.md -> launch a FRESH agent when the chain is DONE.
-OPPONENT KAROO BOUNCE (USER: "One weird thing is that the oppoennt plays bouncelands without bouncing anything. I
-wonder if we should allow that?" / "It seems suspect to say the least." / POLICY: "They should prioritize
-non-bouncelands if they have no lands out of course, but otherwise you can just choose the leftmost." + "(to play and
-to bounce, we shouldn't bounce bouncelands either if possible)" / "Okay, I finished 10 references, except I think that
-9 will need to be adjusted to turn 5 after fixing the bounceland issue."): WIP c28b21f91 on wip/opp-karoo
-(implements the USER policy), lane build running.
-
-NEXT: (1) integrate manual-tap + Karoo + any refshort fix; re-run ref_bench (s9 expected to move to T5); one landing
->= 20:01 UTC. (2) Stage 6 report + 6a disclosure (USER items: fold OFF verdict; main-1 attack-then-Browbeat
-completeness gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo census NO GAP; Pyromancer
-response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks; heavy unbudgeted tail;
-cert NotAssessed; PROVISIONAL Hellspark unearth; Browbeat SECOND-MAIN RELEVANT; ref bench shortfalls). (3) USER asked
-next: the MULLIGAN PROFILE (mullgen.sh run, alone on the box, frozen commit) after outstanding work + performance.
-(4) Commit new references as they appear. (5) CronDelete bf22d918 at the end; check_references_safe at close.
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~22:10 UTC) — resume here after compaction
+DONE: Stages 1-5 + verify_deck GATE PASS; Browbeat fold DEFAULT OFF (measured); USER's 10 references committed;
+LANDED 5a07c3df3 16:01 UTC (CI green). Since then, local (rebased onto origin 42d819bc0, unpushed):
+* 2352c2241 manual tap-ping in human play (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot
+  be manually tapped. Let's leave the auto-tap, but add the option to manually tap."). Validated byte-identical
+  (smoke creatureburn/2hg/boars/2hg play-changed 0; refs replay identical; menus grown 0). Primary binary rebuilt
+  19:34 so the viewer offers it.
+* 1d53617bd + 532aab341 Magma Jet cast_scry searched (MTG_CAST_SCRY_SEARCH, default ON) -- root cause of BOTH
+  reference shortfalls (USER: "We should also make sure all of the references are matched if you haven't. Beyond seed
+  9, which I expect to become invalid after the bounceland issue is fixed."): ref_bench 2/10 short -> 0/10;
+  held-out A/B CB -0.060t (23 faster/0 slower), Midrange Burn -0.015t (7/1, the 1 recovers at d8 b0).
+* OPPONENT KAROO: origin's ce5866171 (another session, same USER report) implements it: Karoo returns the oldest other
+  non-Karoo land, else another Karoo, else itself; a Karoo with nothing to return is played after a real land.
+  = the USER policy here ("leftmost" = oldest). Our wip/opp-karoo (c28b21f91) is SUPERSEDED, agent stopped.
+RUNNING: validation round 3 build/scratch/cb-orch/landing3/chain.sh (build, serial unit, scenarios, FULL smoke,
+check_gt_logs, ref_bench creature_burn+midrange_burn; status landing3/status, marker landing3/DONE), NOT under the
+lease. Expect smoke to move ONLY creatureburn/creatureburn2hg/midrangeburn(/2hg) (Magma Jet) -> attribute, accept;
+then scoped regression on those + accept; then `join` + `land` (no re-validation if origin did not move), CI watch.
+USER QUESTIONS (surface): MTG_SCRY_WIDTH=2 (engine-wide, pre-existing) leaves 3 of 5 two-card-scry dispositions
+unfindable at any budget -- width 5 + a Burn ScryVerdict prune would satisfy completeness; Burn scry heuristic ignores
+lands in hand (provider change, USER's call); Midrange Burn keep table regen after the play change (USER's call).
+NEXT after landing: s9 check (USER expects T5 with the opponent Karoo fix); Stage 6 report + 6a disclosure (items: fold
+OFF verdict; main-1 attack-then-Browbeat gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
+census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
+heavy unbudgeted tail; cert NotAssessed; PROVISIONAL Hellspark unearth; Browbeat SECOND-MAIN RELEVANT; scry width);
+then the MULLIGAN PROFILE (USER: "After that we can try building the mulligan profile."; mullgen.sh run, alone on the
+box, frozen commit). Timer 7229aaa7 (2-hourly :17); CronDelete at the end; check_references_safe at close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
