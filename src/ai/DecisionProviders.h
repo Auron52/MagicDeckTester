@@ -4446,6 +4446,9 @@ public:
     void RevelationPackageRestrict(const GameState& s, int hand_index,
                                    const std::vector<const CardDefinition*>& class_defs,
                                    std::vector<int>& caps, int& x_min) const override;
+    // Step 6d item 3: the red-source exception's two names form ONE group of cap 1 per package.
+    void RevelationPackageGroups(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
+                                 std::vector<int>& group, std::vector<int>& group_cap) const override;
     bool RevelationTwinFoldForced(const GameState& s) const override;
 };
 // MTG_BLOODSUN_USER_PRUNE's ONE reader (env DEFAULT ON + the heurarm slot) and its Exploration A/B arm

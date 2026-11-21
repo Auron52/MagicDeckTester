@@ -1763,3 +1763,69 @@ human play and under `DecisionUnpruned(UnprunedGate::Tutor)`. Adoption stays the
   redundant on that board, pinned).
 - **Measurements (step 6c tree):** `mtg-test` 3835 cases, all pass. `test/scenarios.sh` 638/638. Smoke 235/235 PASS,
   **0 moved digests** vs `impl6b/smoke-step6b-batch.log`; saved as `build/scratch/bloodsun/impl6c/smoke-step6c-batch.log`.
+
+### Implementation notes (step 6d)
+**Commits:** `git log --grep "Blood Sun step 6d"`.
+- **Root cause (item 1).** `ApplyPlanDirect`'s deferred re-solve loop (TurnSolver.cpp, the `while (deferred_cantrip_resolve
+  && (top_first_pass || deferred_top_rearm || deferred_drop_rearm || partition_loop) ...)` loop) runs ONE pass unless a
+  tutor-to-TOP or an extra-drop re-arm opens another. A continuation's own tutor-to-hand cast (Grim Tutor's continuation
+  casting Diabolic Revelation) re-armed `deferred_cantrip_resolve` in the SCORING world (no sink is ever pushed there) and
+  that re-arm was simply discarded when the loop exited; in the RECORDED world the arming site's `sink_stack.empty()`
+  test failed (the loop pushes `out_breakpoint`), so nothing armed at all. Either way the Revelation's package was never
+  re-decided this phase: no host, flag, depth or budget could reach "then cast the Bolts" -- the step-6b finding. Not
+  the walker, not DEV_SEQ, not `rv_cont_*`, not a memo key: the occurrence never EXISTED (bp_searched_plan was never
+  called for it), so the walker had no slot to open.
+- **Scope of the gap.** Every cast-armed class re-arming inside the loop's continuation was discarded in scoring. The
+  fix closes it for the ACQUISITION family (the classes whose arming carried `sink_stack.empty()` and that have no
+  recorded-world nested resolution): `tutor_to_hand` (spell and ETB), the creature-tutor hook, Garth's acquisition,
+  Soulfire's dig. Plain cantrips / `cast_draw` keep their rule: their recorded world resolves a nested draw INLINE
+  (`cantrip_breakpoint`, site 0), a pre-existing scoring/recording asymmetry this step does not touch (surfaced).
+- **The fix** (TurnSolver.cpp, `ApplyPlanDirect`, the state beside `deferred_drop_rearm`): `cont_apply_depth` counts the
+  active `apply_continuation_{precasts,plan,activations}` lambdas, the loop marks its own continuation
+  (`in_deferred_cont`, `deferred_cont_base`), and `deferred_cont_top()` is "the top of the loop's continuation" -- the
+  same test in both worlds, since it reads no sink. The acquisition arming sites test `acq_arm_ok()` (`sink_stack.empty()
+  || deferred_cont_top()`) and call `note_acq_nest_rearm()`, which sets `deferred_nest_rearm` (one more pass; the loop
+  condition gains it) and numbers the pass at site 3. An INLINE continuation nested inside it (depth + 2) keeps the old
+  rule, so the two worlds stay as symmetric as they were. The new pass is an ordinary class-on occurrence: the
+  wave walker numbers it (bp_seen), opens a slot for it, and an untargeted visit takes its canon front (rank 0). The
+  committed-line executor replays it as one more recorded segment (the end-of-main catch-all already loops over
+  every `rec_bp_ord`); the uncommitted executor re-solves at the first breakpoint with its own search.
+- **Second probe (not a Revelation):** Dimir Machinations' transmute (MV 3) can find only Grim Tutor; Grim, cast in the
+  transmute's continuation, fetches the Bolt (opponent at 3). Step-6c binary: T5; now T4. So the gap was not
+  tutor-to-hand-after-tutor specific: any acquisition cast in the loop's continuation, after any deferred breakpoint.
+- **Not reached (surfaced):** the THREE-level chain Machinations -> Grim -> Revelation X = 2 -> Bolts (15 lands) still
+  wins T5, also with `MTG_BP_DEV_SEQ_ALL=1`: it needs TWO simultaneous deviations (Grim's target at occurrence 0 is
+  rank 2 of [Swamp, Bolt, Revelation]; the X = 2 {Bolt, Bolt} package at occurrence 1 is rank 3). That is the wave
+  walker's single-deviation shape (`Plan::bp_at`, L*W not W^L), not the nesting: each occurrence now exists and is
+  searched. Step 8's go-off front (a kill package ranked first) makes the occurrence-1 canon the kill, which closes
+  this chain without a cross product.
+- **Lever:** `MTG_BP_NEST_REARM` (DEFAULT ON; `=0` restores the step-6c one-pass loop byte-identically -- both the
+  re-arm and the recorded-world arming are gated) and the diagnostic `MTG_BP_NEST_TRACE` (one stderr line per nested
+  re-arm: turn, armer, recorded world, rollout nest).
+- **Item 2 (the playout's land choice):** `DecisionProvider::GreedyLandHonoursOffer()` (default false;
+  `BloodSunProvider` true). `GreedyLandRefused(state, def)` (LandPlay.cpp; never in human play or under the unpruned
+  gate) is consulted by `GreedyLandRank` (GreedyLandChoice / GreedyLandChoiceIndex: the d0 runner's TryPlayLand and the
+  executor's greedy drop), `ActivationColorLandIndex`, and the rollout's `SimulateLandPlayOne` (hand walk and the
+  Courser top). So a Blood Sun playout no longer drops a Scorched Ruins (or an unadmitted Lotus) pre-Blood Sun; with the
+  lever off `LandPlayOffered` answers true and nothing changes. Maze's End (whose Plaza rule rides the same hook) does
+  not opt in: its playout is unchanged.
+- **Item 3 (USER rulings 80f27768b / 1dd8e3a06, verbatim in the ledger), under `MTG_BLOODSUN_USER_PRUNE`:**
+  (a) a Burgeoning put (the opponent's turn) judges Lotus Vale and Lotus Field by ONE rule for our next turn: Blood Sun
+  in hand, >= 2 other lands of ours, our other mana (every permanent untapped) cannot cast it; the Field's
+  not-with-a-Vale prune applies to our land PLAY only. (b) the red-source exception's two names cap at 1 copy each and
+  share a joint cap of 1 per package (new hook `DecisionProvider::RevelationPackageGroups`; the emitter skips a multiset
+  over a group's cap without spending a wave ordinal, so the restricted space is still enumerated once; Grim Tutor
+  takes one card anyway). (c) either Lotus (play or put) additionally requires that NO non-sacrificing land in hand,
+  played / put instead, would make Blood Sun castable (this turn / our next turn): `BsSunCastableWith` /
+  `BsNonSacLandCastsSun`, probes on a copy through `PlayLandFromHand` + `TapForCostDirect` (the MazePlazaPayable shape).
+  "One class there" is implemented as one RULE (both offered when both qualify), not as a fold of the two into one put
+  option -- the put's mechanics differ (Vale needs two UNTAPPED lands at the put).
+- **Tests (items 1-2):** `mtg-test` 3838/3838 at item 1 (3 new, `test_bloodsun_nestedbp.cpp`), item 2's prune cases
+  7/7 (1 new); `test/scenarios.sh` 642/642 (4 new `bloodsun_nested_*`, all T5 on the step-6c binary, T4 now).
+- **Smoke (items 1+2 tree, 2a45f6892):** 227/235 PASS vs GT; vs `impl6c/smoke-step6c-batch.log` **8 jobs moved digest,
+  every one with identical played / avg, and 0 per-game win-turn changes** (17 games): edf_d5 gi 57, 71; hinata2hg_d5
+  gi 5; hinata_d3 gi 5, 13; hinata_d5 gi 19, 34, 42, 56, 57, 58, 75, 79; mazesend_d5 gi 16; shadowborn2hg_d3 /
+  shadowborn_d3 / shadowborn_d5 gi 14. Each deck holds a tutor-to-hand cast that can follow a breakpoint (Hinata's
+  Gamble, Maze's End's Archdruid's Charm, ...): the expected shape of this fix, NOT yet confirmed game by game (see the
+  handoff, `logs/bloodsun/impl-step6d-handoff.md`). Saved as `build/scratch/bloodsun/impl6d/smoke-step6d-batch.log`.
+- **Item 3: WIP** (see the handoff).
