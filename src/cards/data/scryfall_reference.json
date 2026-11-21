@@ -4881,6 +4881,15 @@
     "toughness": "5",
     "type_line": "Creature — Dragon"
   },
+  "Mistrise Village": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {U}.\n{U}, {T}: The next spell you cast this turn can't be countered.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Misty Rainforest": {
     "cmc": 0.0,
     "keywords": [],
@@ -5376,6 +5385,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Overmaster": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "The next instant or sorcery spell you cast this turn can't be countered.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Paradise Mantle": {
     "cmc": 0.0,

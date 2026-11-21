@@ -5028,7 +5028,7 @@ public:
 };
 
 // WORLDFIRE (onboarding 2026-11-21, docs/design/analysis-Worldfire.md). DERIVES FROM DeckProvider (the
-// archetype-neutral default) with NO hooks of its own: an empty derivation, play-neutral by construction.
+// archetype-neutral default). It ranks and drops nothing: its one hook (below) widens coverage only.
 // Without its own signature the deck rode AntiLifegainProvider (Scalding Tarn / Flooded Strand's
 // fetch_land_types and the two tutors' tutor_to_top trip `anti`) -- the archetype-neutral misroute class.
 // Routed at the TOP of DetectDecisionProvider by its own signature (`worldfire`: Worldfire's exile-all and
