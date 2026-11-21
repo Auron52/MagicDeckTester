@@ -10343,6 +10343,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "energy_counters": 1,          // stage {E} (Aether Hub's any-colour tap is gated on it)
 //     "life_gained_this_turn": 6,    // with "resume_at": life gained earlier THIS turn (Accomplished
 //                                    // Alchemist's X)
+//     "opponent_list": "Angels",     // the opponent's pool list by name (default "White Knights",
+//                                    // which has no ETB-lifegain land); "opponent_list2" = 2HG head 2
 //     "opponent_library_size": 2,    // stage the OPPONENT'S library (forces opponent_library_dealt
 //                                    // on); they draw one at the end of each of OUR turns, and
 //                                    // drawing from empty is a deck-out win on THAT turn
@@ -10576,8 +10578,28 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         const bool legacy = j.value("legacy_passive_opponent_lands", false);
         const bool touches = GoldFishRunner::DeckTouchesOpponentZones(deck);
         const bool diverse = GoldFishRunner::DeckUsesDiverseOpponentPool(deck);
+        // THE FIXTURE'S OPPONENT LIST IS NAMED, NOT SEED-PICKED ("opponent_list", 2HG's second head
+        // "opponent_list2"; DeckSpec names from core/OpponentDeckPool.h). A seed-picked list made the
+        // fixture's `seed` silently choose its opponent: 594 of 596 fixtures use seed 1, i.e. Angels,
+        // and once the opponent's land entry rules went in (Seraph Sanctuary's ETB gain 1) 92 fixtures
+        // built on "the opponent's life only moves when we move it" were off by one life per Sanctuary.
+        // The default is White Knights: the same 23-land shape as Angels (Plains + 4 Remote Farm) with
+        // no ETB-lifegain land. A fixture that WANTS the opponent's lifegain names a list holding one
+        // (Angels: Seraph Sanctuary; Landfall: Radiant Fountain). The seed still drives the shuffles.
+        static const char* kScenarioOpponentList = "White Knights";
+        const std::string list1 = j.value("opponent_list", std::string(kScenarioOpponentList));
+        const std::string list2 = j.value("opponent_list2", std::string(""));
+        const int slot1 = opponentdeck::SlotOfList(list1);
+        const int slot2 = list2.empty() ? -1 : opponentdeck::SlotOfList(list2);
+        if (slot1 < 0 || (!list2.empty() && slot2 < 0))
+        {
+            std::cerr << "scenario: unknown opponent_list \"" << (slot1 < 0 ? list1 : list2)
+                      << "\" (names: core/OpponentDeckPool.h)\n";
+            return 2;
+        }
         opponentdeck::Deal(state, legacy ? touches : true, state.game_seed,
-                           legacy ? diverse : true, legacy ? 1 : gamesetup::OpponentHeads());
+                           legacy ? diverse : true, legacy ? 1 : gamesetup::OpponentHeads(),
+                           slot1, slot2);
         if (legacy) { state.opponent_plays_lands = false; }
     }
     state.opponent_library_read = GoldFishRunner::DeckTouchesOpponentZones(deck)

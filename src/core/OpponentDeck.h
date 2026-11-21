@@ -27,6 +27,13 @@
 namespace opponentdeck {
 
 inline const DeckSpec& Selected(uint64_t seed) { return Pool()[seed % Pool().size()]; }
+// The pool slot of the list named `name` (DeckSpec::name, e.g. "White Knights"), or -1.
+inline int SlotOfList(const std::string& name)
+{
+    for (std::size_t i = 0; i < Pool().size(); ++i)
+    { if (name == Pool()[i].name) { return static_cast<int>(i); } }
+    return -1;
+}
 // The list actually dealt to players[1] (2HG may pick the second slot; see Deal).
 inline const DeckSpec& Selected(const GameState& state) { return Pool()[state.opponent_slot % Pool().size()]; }
 
@@ -101,16 +108,26 @@ inline constexpr int kNumberBase2 = 110000;
 // (GameState::opponent2_*), and players[1] -- the head every library/hand effect addresses -- holds
 // whichever of the two has the lower total mana value (ListTotalManaValue). heads == 1 is exactly
 // the single-opponent deal.
+//
+// slot_override / slot2_override (>= 0, pool decks only) pin the dealt list(s) instead of deriving them
+// from the seed; the seed still drives the shuffles, and the 2HG lower-total-MV rule still decides which
+// pinned list is the targeted head. Only the scenario harness pins (a fixture's `opponent_list`): a real
+// game always takes its lists from the seed.
 inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_pool = false,
-                 int heads = 1)
+                 int heads = 1, int slot_override = -1, int slot2_override = -1)
 {
     if (!needed) { return; }
 
     Player& opp = state.players[1];
     int number  = kNumberBase;
-    std::size_t slot = seed % Pool().size();
+    const std::size_t n_pool = Pool().size();
+    std::size_t slot = (use_diverse_pool && slot_override >= 0)
+        ? static_cast<std::size_t>(slot_override) % n_pool : seed % n_pool;
     const bool two_heads = use_diverse_pool && heads >= 2;
-    std::size_t slot2 = two_heads ? SecondSlot(seed) : slot;
+    std::size_t slot2 = !two_heads ? slot
+        : slot2_override >= 0 ? static_cast<std::size_t>(slot2_override) % n_pool
+        : slot_override >= 0 ? (slot + 1 + SaltSeed(seed, 0x2EADull) % (n_pool - 1)) % n_pool
+        : SecondSlot(seed);
     if (two_heads && ListTotalManaValue(slot2) < ListTotalManaValue(slot)) { std::swap(slot, slot2); }
     state.opponent_slot = static_cast<std::uint8_t>(slot);
     const std::vector<std::pair<const char*, int>>& list

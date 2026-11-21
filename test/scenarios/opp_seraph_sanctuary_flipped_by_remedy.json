@@ -1,0 +1,15 @@
+{
+  "_comment": "The opponent's OWN land entry trigger, on purpose: opponent_list Angels (Seraph Sanctuary x4; the scenario default White Knights has no ETB-lifegain land). Same board as invigorate_not_lethal_no_fire (opp at 4, Tainted Remedy, no ready attacker). Invigorate's free alt cost alone leaves the opponent at 1, but the opponent's Seraph Sanctuary ETB 'gain 1 life' is flipped by our Tainted Remedy into a loss, so the opponent's own land drop finishes it on turn 4. Guards that the passive opponent's ETB life gain happens at all (2026-11-21 land-entry fix) and goes through the shared life-gain path.",
+  "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+  "opponent_list": "Angels",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 4,
+  "battlefield": [
+    { "name": "Forest", "controller": 0 },
+    { "name": "Tainted Remedy", "controller": 0 },
+    { "name": "Skyshroud Cutter", "controller": 1 }
+  ],
+  "hand": [ "Invigorate" ],
+  "library_filler": "Forest", "library_size": 40,
+  "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "expect_win_turn": 4
+}
