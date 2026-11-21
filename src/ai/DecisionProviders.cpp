@@ -72694,59 +72694,74 @@ bool BloodSunProvider::PlanMoveOrderFront(const GameState& s, const std::vector<
     return BloodSunGoOffRank(s, cands, sel) > 0;
 }
 
-// B13 (ledger 7106b6bfd, USER 2026-11-21, verbatim): "We should prune the sacrifices for sure. Usually the choices are
-// obvious, but we should have an order that we follow that attempts to keep a red, a green and 2 black. Naturally, we
-// should also prioritize bouncelands over regular lands." -> the Lotus sacrifice menu (it exists only without Blood Sun)
-// keeps ONE pair, the first by: (1) the lands left make at least 1 {R}, 1 {G} and 2 {B} sources where possible (a dual
-// or any-colour land counts for every colour it can make; with no pair meeting it, the smallest shortfall); (2) then the
-// fewest Karoos among the victims -- the parent's reading of "prioritize bouncelands": KEEP the bouncelands, which make
-// two mana, and sacrifice regular one-mana lands first; (3) then the most TAPPED victims (F-L1: a tapped copy before an
-// untapped one of the same class); then the menu's own order. A RESTRICTION (USER-authored, DEFAULT ON); human play is
-// offered every land (the caller); MTG_BLOODSUN_LOTUS_SAC_PRUNE=0 keeps the whole menu.
+// B13 (ledger 7106b6bfd, revised 2d6e0526a; USER 2026-11-21, verbatim): "We should prune the sacrifices for sure.
+// Usually the choices are obvious, but we should have an order that we follow that attempts to keep a red, a green and
+// 2 black. Naturally, we should also prioritize bouncelands over regular lands." and "Yes, we keep bouncelands if
+// possible. The only tricky decision is the keep of a bounceland that doesn't meet our colour needs vs a normal land
+// that does. Given that the lotus can kind of fill the gap for one of them I suppose we keep the bounceland in that
+// case." -> the Lotus sacrifice menu (it exists only without Blood Sun) keeps ONE pair, the first by:
+//   (1) the fewest Karoos (bouncelands) among the victims -- regular lands go first, even one that meets a colour need;
+//   (2) then the smallest colour shortfall of the lands kept against 1 {R}, 1 {G}, 2 {B}: a non-Lotus land counts for
+//       every colour it can make; each Lotus Vale / Lotus Field kept (the entering one included) is ONE any-colour
+//       source that fills one remaining gap; Scorched Ruins makes only {C} and fills nothing;
+//   (3) then the most TAPPED victims (F-L1: a tapped copy before an untapped one of the same class);
+// then the menu's own order. A RESTRICTION (USER-authored, DEFAULT ON); human play is offered every land (the caller);
+// MTG_BLOODSUN_LOTUS_SAC_PRUNE=0 keeps the whole menu.
 bool BloodSunLotusSacPruneOn()
 {
     static const bool on = EnvOn("MTG_BLOODSUN_LOTUS_SAC_PRUNE", true);   // DEFAULT ON (USER-decided); =0 the full menu
     return heurarm::Flag(heurarm::BLOODSUN_LOTUS_SAC_PRUNE, on);
 }
 
-void BloodSunProvider::LotusSacrificeRestrict(const GameState& s, int controller,
+void BloodSunProvider::LotusSacrificeRestrict(const GameState& s, int controller, const CardDefinition& def,
                                               std::vector<std::vector<int>>& picks) const
 {
     if (picks.size() <= 1 || !BloodSunPruneLive() || !BloodSunLotusSacPruneOn()) { return; }
-    // A land's colour reach, through its EFFECTIVE definition (an any-colour land lists every colour).
-    auto reach = [&](const CardDefinition& d, bool& r, bool& g, bool& b)
-    {
-        const CardParams& e = EffectiveLandDef(s, d).params;
-        for (Color c : e.produces)
-        {
-            if (c == Color::Red) { r = true; }
-            if (c == Color::Green) { g = true; }
-            if (c == Color::Black) { b = true; }
-        }
-    };
+    auto is_lotus = [](const CardDefinition& d)   // Lotus Vale / Lotus Field: three mana of any one colour
+    { return BsIsBigLand(d) && d.params.produces_one_color; };
+    // The entering Vale is not on the battlefield yet but is kept: one any-colour source (a Field is on it already).
+    const bool entering_off_bf = def.params.etb_replace_sacrifice_untapped_lands > 0;
     std::size_t best = 0;
     int best_key[3] = { 1 << 20, 1 << 20, 1 << 20 };
     for (std::size_t k = 0; k < picks.size(); ++k)
     {
         const std::vector<int>& v = picks[k];
-        int nr = 0, ng = 0, nb = 0, karoos = 0, untapped = 0;
+        int nr = 0, ng = 0, nb = 0, lotus = (entering_off_bf && is_lotus(def)) ? 1 : 0, karoos = 0, untapped = 0;
+        bool self_victim = false;
+        for (int i : v) { if (i < 0) { self_victim = true; } }   // the virtual (not yet entered) Field
+        if (!entering_off_bf && !self_victim && std::find(v.begin(), v.end(), -1) == v.end()
+            && is_lotus(def))
+        {
+            bool field_on_bf = false;
+            for (const Permanent& pm : s.battlefield)
+            { if (pm.controller_index == controller && pm.card.m_name == def.card.m_name) { field_on_bf = true; break; } }
+            if (!field_on_bf) { ++lotus; }   // count-only menu: the Field that has not entered, kept
+        }
         for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
         {
             const Permanent& pm = s.battlefield[static_cast<std::size_t>(i)];
             if (pm.controller_index != controller || !pm.card.IsLand()) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
             if (d == nullptr) { continue; }
+            const CardDefinition& e = EffectiveLandDef(s, *d);
             if (std::find(v.begin(), v.end(), i) != v.end())
             {
-                if (EffectiveLandDef(s, *d).params.etb_bounce_land) { ++karoos; }
+                if (e.params.etb_bounce_land) { ++karoos; }
                 if (!pm.tapped) { ++untapped; }
                 continue;
             }
+            if (is_lotus(*d)) { ++lotus; continue; }
             bool r = false, g = false, b = false;
-            reach(*d, r, g, b);
+            for (Color c : e.params.produces)
+            {
+                if (c == Color::Red) { r = true; }
+                if (c == Color::Green) { g = true; }
+                if (c == Color::Black) { b = true; }
+            }
             nr += r ? 1 : 0; ng += g ? 1 : 0; nb += b ? 1 : 0;
         }
-        const int key[3] = { std::max(0, 1 - nr) + std::max(0, 1 - ng) + std::max(0, 2 - nb), karoos, untapped };
+        const int gap = std::max(0, 1 - nr) + std::max(0, 1 - ng) + std::max(0, 2 - nb);
+        const int key[3] = { karoos, std::max(0, gap - lotus), untapped };
         if (std::lexicographical_compare(key, key + 3, best_key, best_key + 3))
         { best = k; std::copy(key, key + 3, best_key); }
     }

@@ -4471,7 +4471,8 @@ public:
     bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
                             bool projected_lethal) const override;
     // B13 (MTG_BLOODSUN_LOTUS_SAC_PRUNE, DEFAULT ON, USER-decided): the Lotus sacrifice menu collapses to ONE pair.
-    void LotusSacrificeRestrict(const GameState& s, int controller, std::vector<std::vector<int>>& picks) const override;
+    void LotusSacrificeRestrict(const GameState& s, int controller, const CardDefinition& def,
+                                std::vector<std::vector<int>>& picks) const override;
 };
 // MTG_BLOODSUN_USER_PRUNE's ONE reader (env DEFAULT ON + the heurarm slot) and its Exploration A/B arm
 // MTG_BLOODSUN_EXPLORATION_ANYLIFE (DEFAULT OFF; inert while the prune is off).

@@ -5165,8 +5165,10 @@ public:
     // LotusSacrificeRestrict -- a provider RESTRICTION of the Lotus sacrifice menu (LotusSacrificePicksImpl's multisets
     // of battlefield indices; -1 = the entering Lotus Field counted before it is on the battlefield): it may only drop
     // entries, never add or reorder one. Autonomous play only (the caller skips it under human play). Default: keep all.
-    virtual void LotusSacrificeRestrict(const GameState& s, int controller, std::vector<std::vector<int>>& picks) const
-    { (void)s; (void)controller; (void)picks; }
+    // `def` = the entering Lotus land (a Vale / Ruins is not on the battlefield yet; a Field is).
+    virtual void LotusSacrificeRestrict(const GameState& s, int controller, const CardDefinition& def,
+                                        std::vector<std::vector<int>>& picks) const
+    { (void)s; (void)controller; (void)def; (void)picks; }
     virtual std::vector<int> LotusSacrificeRanking(const GameState& s, int controller,
                                                    const std::vector<int>& land_indices) const
     {
