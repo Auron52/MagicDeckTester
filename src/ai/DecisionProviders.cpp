@@ -47883,6 +47883,8 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     }
     // Extra turns (Emrakul): written by a resolving cast trigger / the turn transition. Exact compare only.
     v.push_back(s.pending_extra_turns); v.push_back(s.extra_turns_taken); v.push_back(s.in_extra_turn);
+    // Free turns (MTG_FREE_TURNS): value-gated so every game with the flag off keeps its exact vector.
+    if (s.free_turns_taken != 0 || s.in_free_turn) { v.push_back(1000 + s.free_turns_taken); v.push_back(s.in_free_turn); }
     v.push_back(s.opponent_lost_life_this_turn); v.push_back(s.opponent_library_dealt); v.push_back(s.opponent_decked);
     v.push_back(s.inf_life_turn); v.push_back(s.inf_life_possible); v.push_back(s.top_stacked_turn);
     v.push_back(s.top_stacked_card_number);

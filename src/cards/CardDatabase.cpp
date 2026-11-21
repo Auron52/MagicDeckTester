@@ -633,6 +633,26 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         def.params = BuildParamsFromJson(marker["parameters"]);
         m_cards[def.card.m_name] = std::move(def);
     }
+    // The flood hurdle's placeholder (core/FreeTurns.h, MTG_FREE_TURNS): a NONLAND card for the passive
+    // opponent's opening hand that nobody can cast (no mana value a goldfish game can reach) and that no
+    // effect reads by name. Dealt only under MTG_FREE_TURNS; registering it is inert for every other game.
+    {
+        const json ph = {
+            {"name", "Opponent Placeholder Spell"}, {"mana_cost", "{20}"},
+            {"types", json::array({"Sorcery"})},
+            {"supertypes", json::array()},
+            {"subtypes", json::array()}, {"keywords", json::array()},
+            {"oracle_text", "(Free-turn flood hurdle placeholder: an uncastable nonland card.)"},
+            {"template", "custom"},
+            {"parameters", json::object()}
+        };
+        CardDefinition def;
+        def.card = BuildCardFromJson(ph);
+        def.tier = CardTier::Custom;
+        def.tmpl = CardTemplate::None;
+        def.params = BuildParamsFromJson(ph["parameters"]);
+        m_cards[def.card.m_name] = std::move(def);
+    }
     RebuildInternedIndex();
 }
 

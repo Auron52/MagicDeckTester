@@ -2,6 +2,7 @@
 #include "OpponentDeck.h"
 #include "EffectHandler.h"
 #include "SpellEffects.h"
+#include "FreeTurns.h"         // MTG_FREE_TURNS: the end-of-opponent-turn lock check (lockstep twin in TurnSolver)
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
 #include "../ai/EngineFlags.h"   // M2FixpointEnabled (the second-main fixpoint re-entry loop)
@@ -178,8 +179,10 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
     // An extra turn owed at the end of round max_turns is still played (it is part of that round:
     // USER 2026-10-26, extra turns do not count toward the turn count). `pending_extra_turns` is 0 for
     // every deck without an extra-turn card, so the guard is the old one there.
+    // A FREE turn owed at the end of round max_turns is part of that round too (pending_free_turn; false
+    // while MTG_FREE_TURNS is off).
     while (state.turn_number < max_turns || state.pending_extra_turns > 0
-           || state.pending_opponent_extra_turns > 0)
+           || state.pending_opponent_extra_turns > 0 || state.pending_free_turn)
     {
         if (state.player_lost_on_draw) { return -1; }
         // Extra-turn chain backstop (GameState::TurnSeqCapped; inert unless an extra turn was taken).
@@ -194,7 +197,8 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
             && (state.turn_number > m_stop_after_turn
                 || (state.turn_number == m_stop_after_turn
                     && state.pending_extra_turns == 0
-                    && state.pending_opponent_extra_turns == 0)))
+                    && state.pending_opponent_extra_turns == 0
+                    && !state.pending_free_turn)))
         { return tnote(-1); }
         // Stop playing a game that has already been voided. The search bails out of its recursion as
         // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
@@ -262,7 +266,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
         // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
         state.AdvanceTurnCounter();
-        g_play_extra_turns_taken = state.extra_turns_taken;   // play-event turn_seq stamp (GameLogger.h)
+        // play-event turn_seq stamp (GameLogger.h): turns taken beyond the round, extra AND free turns.
+        g_play_extra_turns_taken = state.extra_turns_taken + state.free_turns_taken;
+        freeturn::EmitFreeTurnEvent(state);   // a no-op unless this turn is a free turn (MTG_FREE_TURNS)
         if (state.in_extra_turn)
         {
             EmitPlayEvent(state.turn_number, "extra_turn",
@@ -377,7 +383,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         state.ConsumeOpponentExtraTurn();
         opponent_turn();
     }
-    if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
+    // FREE TURNS (MTG_FREE_TURNS; core/FreeTurns.h): the opponent's regular turn ended -- if it ended LOCKED,
+    // our next turn keeps the round (pending_free_turn, consumed by AdvanceTurnCounter). Lockstep twin:
+    // SimulateEndAndStartNextTurn. A no-op with the flag off.
+    if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); freeturn::NoteOpponentTurnEnd(state); }
     // Heap Gate's last-chance Treasure (Maze's End P5, MTG_MAZE_HEAP_STRICT; a no-op unless the lever is on): the
     // last point before our untap step, after every off-main activation. Rollout twin, same position.
     PerformLastChanceTreasure(state);
@@ -532,10 +541,12 @@ void GameEngine::UntapStep(GameState& state)
     // Spawns are keyed on the ROUND and arrive at the regular turn's untap only: an extra turn is not
     // a new round (the schedule would otherwise fire twice). Lockstep twin: the rollout's spawn site.
     int opp_index = 1 - state.active_player_index;
+    // The schedule keys on the RAW round (GameState::RawRound; == turn_number unless a FREE turn was taken):
+    // the opponent took its turns, locked or not, so a free turn is a new raw round and its spawns arrive.
     if (state.opponent_spawns && !state.in_extra_turn)
     for (const OpponentSpawn& spawn : *state.opponent_spawns)
     {
-        if (spawn.turn != state.turn_number) { continue; }
+        if (spawn.turn != state.RawRound()) { continue; }
 
         Card token;
         token.m_name      = std::to_string(spawn.power) + "/"

@@ -16,6 +16,26 @@
 #include <utility>
 #include <vector>
 
+// MTG_FREE_TURNS (DEFAULT OFF; the USER adopts) -- the opponent-lockdown FREE TURN rule
+// (docs/design/opponent-lockdown-free-turns.md, core/FreeTurns.h): a passive-opponent turn that ends
+// LOCKED (every head: no land OR no nonland in hand; and no opposing creature) does not advance the
+// round. Read by BOTH worlds' lock check (GameEngine::RunTurnFrom, TurnSolver's
+// SimulateEndAndStartNextTurn), by the deal's opening-hand hurdles and by the deck trait, so one reader.
+// Unit-test override (-1 = the environment; 0 / 1 force). Never set outside test/unit.
+namespace freeturn { inline thread_local int t_force = -1; inline thread_local int t_force_hurdles = -1; }
+inline bool FreeTurnsOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURNS");   // DEFAULT OFF; =1 enables credit + hurdles
+    return freeturn::t_force >= 0 ? freeturn::t_force != 0 : on;
+}
+// MTG_FREE_TURN_HURDLES (DEFAULT ON *under* MTG_FREE_TURNS; inert without it): the opening-hand screw /
+// flood / bounceland hurdles that keep mana screw from tripping the lock. =0 measures the credit alone.
+inline bool FreeTurnHurdlesOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURN_HURDLES", true);   // follows MTG_FREE_TURNS; =0 isolates the credit
+    return FreeTurnsOn() && (freeturn::t_force_hurdles >= 0 ? freeturn::t_force_hurdles != 0 : on);
+}
+
 // Merfolk Turns' autonomous Prophets victim policy is shared by the real
 // combat resolver and the searched plan fan. =0 restores the full victim fan.
 inline bool MerfolkProphetsSacPruneOn()

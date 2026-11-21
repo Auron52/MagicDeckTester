@@ -3,6 +3,7 @@
 #include "GoldFishRunner.h"
 #include "../core/OpponentDeck.h"
 #include "../core/SpellEffects.h"   // g_pending_self_bounces (cleared per game in StampDeckTraits)
+#include "../core/FreeTurns.h"     // MTG_FREE_TURNS: the opening-hand hurdles after the deal
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
 #include "../core/MemBudget.h"
@@ -669,6 +670,33 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
         return false;
     };
     return scan(deck.mainboard) || scan(deck.sideboard);
+}
+
+// FREE TURNS (MTG_FREE_TURNS): can this deck LOCK the passive opponent (core/FreeTurns.h)? With the opening
+// hurdles the opponent always holds a land on the battlefield and two nonlands in hand unless one of OUR effects
+// removes them, so only a card that strips the opponent's lands or hand can earn a free turn: Worldfire's mass
+// exile, Sire of Insanity's end-step discard, a combat-damage discard, and the land-destruction / land-steal
+// effects. MAIN + SIDEBOARD (a wish can fetch one). A deck this misses still receives the credit in play (the lock
+// check is general, USER 2026-11-21); only the search's turn-edge prunes stay armed for it, and the measurement
+// reports any free turn such a deck receives as a hole in this list.
+bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
+{
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (def == nullptr) { continue; }
+            const CardParams& p = def->params;
+            if (p.exile_all_permanents_hands_graveyards || p.endstep_each_player_discards_hand
+                || p.combat_damage_each_discards > 0 || p.etb_destroy_artifact_enchantment_land
+                || p.etb_destroy_nonbasic_land_optional || p.sac_outlet_destroy_nonbasic_land
+                || p.cast_trigger_destroy_target_permanents > 0 || p.saga_ch3_gain_control_opp_permanent
+                || p.steal_tap_count > 0)
+            { return true; }
+        }
+    }
+    return false;
 }
 
 bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)
@@ -1358,6 +1386,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // FREE TURNS (MTG_FREE_TURNS): a deck that can strip the opponent's lands or hand may earn a free turn, so
+    // its next turn may share this round -- the turn-edge prunes stand down for it (NextTurnMayShareRound),
+    // exactly as for an extra-turn deck. FALSE for every deck while the flag is off (byte-identical).
+    state.deck_has_free_turn = FreeTurnsOn() && DeckMayLockOpponent(deck);
     state.deck_has_prophets = [&deck]{
         for (const Card& c : deck.mainboard)
         {
@@ -2300,6 +2332,9 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
                        play_opponent_lands ? gamesetup::OpponentHeads() : 1);
     state.opponent_library_read = DeckTouchesOpponentZones(deck) || DeckUsesDiverseOpponentPool(deck);
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
+    // FREE TURNS (MTG_FREE_TURNS only): the screw / flood / bounceland hurdles on the opponent's opening hand(s),
+    // so mana screw alone cannot lock the opponent (core/FreeTurns.h). A no-op with the flag off.
+    freeturn::ApplyOpeningHurdles(state);
 
     DealWishPool(state, deck);
 
