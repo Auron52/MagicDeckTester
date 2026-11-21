@@ -666,7 +666,10 @@ static_assert(sizeof(Player) == 216,
 // +56 bytes (2026-11-17, every deck's opponent plays lands; integrated onto 1648 after Maze's End + Stuffy Doll): 2HG's second head
 // `opponent2_hand` + `opponent2_library` (folded in Build() when opponent2_slot is set: sizes, ordinal,
 // hand). The one-byte opponent slots / ordinals and `opponent_library_read` (a deck constant) fit padding.
-static_assert(sizeof(GameState) == 1712,   // Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; +56 2HG second head (+8 padding: Maze's End took its holes)
+// +8 bytes (2026-11-21, opponent-lockdown FREE TURNS, MTG_FREE_TURNS; 1712 -> 1720): pending_free_turn (never live
+// at a search node: raised and consumed inside one turn transition -- not folded), in_free_turn + free_turns_taken
+// (FOLDED in Build() value-gated, and in BuildSimKey), deck_has_free_turn (a DECK CONSTANT, never folded).
+static_assert(sizeof(GameState) == 1720,   // +8 free turns; Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; +56 2HG second head (+8 padding: Maze's End took its holes)
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -931,6 +934,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(s.pending_opponent_extra_turns);
         for (std::uint8_t target : s.extra_turn_order) { fold(target + 1u); }
     }
+    // FREE TURNS (MTG_FREE_TURNS): exact-match, value-gated (0 / false for every game with the flag off).
+    if (s.free_turns_taken != 0 || s.in_free_turn)
+    { fold(0xF8EE000ull + static_cast<std::uint64_t>(s.free_turns_taken) * 2ull + (s.in_free_turn ? 1u : 0u)); }
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
     fold(static_cast<std::uint64_t>(s.phase));

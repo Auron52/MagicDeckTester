@@ -29,6 +29,7 @@
 #include "../core/MemBudget.h"
 #include "AIEngine.h"
 #include "../core/SpellEffects.h"
+#include "../core/FreeTurns.h"   // MTG_FREE_TURNS: the end-of-opponent-turn lock check (executor twin: RunTurnFrom)
 #include "../core/Trace.h"
 #include <algorithm>
 #include <array>
@@ -83095,7 +83096,7 @@ static bool FsNextLeafConstant(const GameState& s);
 static bool EchoEdgeFoldHere(const GameState& s)
 {
     // A following extra turn remains inside this round, so its upkeep is still searched.
-    return !s.deck_has_extra_turn && g_fsline_nest > 0 && g_cs_solver_nest == 0
+    return !s.NextTurnMayShareRound() && g_fsline_nest > 0 && g_cs_solver_nest == 0
         && g_rollout_nest == 0 && greedywindow::t_depth == 1 && FsNextLeafConstant(s);
 }
 // The echo cover census's search-side split (MTG_ECHO_AXIS_STATS; SpellEffects.h NoteEchoCover counts the
@@ -83406,8 +83407,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         state.ConsumeOpponentExtraTurn();
         if (!opponent_turn()) { return false; }
     }
+    // FREE TURNS (MTG_FREE_TURNS; core/FreeTurns.h): lockstep twin of RunTurnFrom's lock check, at the same
+    // instant (after the opponent's regular turn). Consumed by the AdvanceTurnCounter below.
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
-    { if (!opponent_turn()) { return false; } }
+    { if (!opponent_turn()) { return false; } freeturn::NoteOpponentTurnEnd(state); }
     PerformLastChanceTreasure(state);   // Heap Gate's last-chance Treasure (Maze's End P5; executor twin, same position)
     state.scripted_eot_face_up = -1;   // twin of RunTurnFrom's expiry
     state.scripted_crossing_lands = -1;   // Manabond / Burgeoning pin (I3): consumed by this crossing, expires here
@@ -83575,12 +83578,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     static const bool s_fd_opp_spawns = !EnvOn("MTG_LEGACY_SEARCH");
     // Not in an EXTRA turn: spawns are keyed on the round and arrive at its regular turn only
     // (lockstep with GameEngine::UntapStep's gate). in_extra_turn is false for every other deck.
+    // Keyed on the RAW round (a free turn is a new raw round; lockstep with GameEngine::UntapStep).
     if (s_fd_opp_spawns && state.opponent_spawns && !state.in_extra_turn)
     {
         int opp_index = 1 - state.active_player_index;
         for (const OpponentSpawn& spawn : *state.opponent_spawns)
         {
-            if (spawn.turn != state.turn_number) { continue; }
+            if (spawn.turn != state.RawRound()) { continue; }
             Card token;
             token.m_name      = std::to_string(spawn.power) + "/"
                               + std::to_string(spawn.toughness) + " Creature";
@@ -109413,6 +109417,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         Fold(k, state.pending_opponent_extra_turns);
         for (std::uint8_t target : state.extra_turn_order) { Fold(k, target + 1u); }
     }
+    // FREE TURNS (MTG_FREE_TURNS): the free turns taken decide every TurnSeq stamp, and in_free_turn the depth
+    // give-back. Value-gated: 0 / false for every game while the flag is off -> the exact prior key.
+    if (state.free_turns_taken != 0 || state.in_free_turn)
+    { Fold(k, 0xF8EE000ull + static_cast<uint64_t>(state.free_turns_taken) * 2ull + (state.in_free_turn ? 1u : 0u)); }
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
     // Floating mana: future-determining (a mid-turn re-solve state with {R}{R} floated solves
@@ -110523,7 +110531,7 @@ static bool FslEdgeNoReachHere(const GameState& state, int cutoff, int max_turns
     if (!(cutoff <= max_turns && state.turn_number >= cutoff)) { return false; }
     // EXTRA-TURN DECKS (ledger Q13 default): a main-2 Emrakul grants an extra turn of THIS round, where
     // a kill ties the cutoff -- "turn + 1 is past the cutoff" no longer holds. Off for those decks only.
-    if (state.deck_has_extra_turn) { return false; }
+    if (state.NextTurnMayShareRound()) { return false; }   // ...and a FREE turn of this round (MTG_FREE_TURNS)
     if (!FslEdgeNoReachOn() || HumanPlayActive() || M2FixModeFor(state) != 0) { return false; }
     if (!ResolveProvider(state).PostCombatCannotKillOptIn()) { return false; }
     ++t_fsl_edge_noreach_n;
@@ -110951,7 +110959,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     static const int s_roll_horizon = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
                                           return (e && *e) ? std::atoi(e) : -1; }();
     const int roll_start = state.turn_number;
-    const bool roll_entry_extra = state.in_extra_turn;   // entered at an extra turn's start (see turn_depth)
+    const bool roll_entry_extra = state.InSameRoundTurn();   // entered at an extra (or free) turn's start (see turn_depth)
     // First-turn depth override applies to the OUTERMOST rollout only (see the thread_local).
     // Read BEFORE the nest guard increments. Also gated on the env hatch: an explicitly-set
     // MTG_FD_LEAF_DEPTH is the A/B baseline and must not carry the per-deck first-turn ply.
@@ -111103,6 +111111,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // where a kill still scores cutoff_turn -- "only a this-turn kill matters" is false there.
         const bool ko_turn = LeafKillOnlyOn() && !t_ko_suppress && depth > 0
                           && (!state.deck_has_extra_turn || LeafKillOnlyExtraOn())
+                          && !state.deck_has_free_turn   // a FREE turn of this round may follow (MTG_FREE_TURNS)
                           && state.turn_number == cutoff_turn && cutoff_turn < max_turns
                           && (second_main || KillOnlyNoM2Parity(state, second_main)) && !g_honest_teacher
                           && M2FixModeFor(state) == 0 && !HumanPlayActive();
@@ -113673,7 +113682,8 @@ static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
 {
     if (s.turn_number < cutoff) { return false; }   // later turns are still inside the horizon
     // EXTRA-TURN DECKS (Q13): an extra turn of this round is still inside the horizon at turn == cutoff.
-    if (s.deck_has_extra_turn) { return false; }
+    // Same for a FREE turn (MTG_FREE_TURNS, deck_has_free_turn).
+    if (s.NextTurnMayShareRound()) { return false; }
     if (!LabelSearchScopeActive()) { return false; }
     if (!winlesscert::Enabled()) { return false; }
     const int si = static_cast<int>(site);
@@ -117759,7 +117769,8 @@ bool TurnSolver::DevSeqTailSkipForTest(const GameState& tail_state, int rec_cut,
 // after the caller decremented. in_extra_turn is false for every other deck: identity.
 static inline int DepthAcrossTurn(const GameState& after_transition, int depth_after)
 {
-    return after_transition.in_extra_turn ? depth_after + 1 : depth_after;
+    // A FREE turn (MTG_FREE_TURNS) is not a new round either: same give-back (USER-accepted default 2026-11-21).
+    return after_transition.InSameRoundTurn() ? depth_after + 1 : depth_after;
 }
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
@@ -119520,7 +119531,7 @@ static bool LastPlyProbeMeasureOn()
 static bool LastPlyFoldHere(const GameState& s)
 {
     static const bool s_on = EnvOn("MTG_LASTPLY_NOWIN_FOLD", true);
-    return !lastply::t_inner && !s.deck_has_extra_turn && g_fsline_nest > 0 && g_cs_solver_nest == 0
+    return !lastply::t_inner && !s.NextTurnMayShareRound() && g_fsline_nest > 0 && g_cs_solver_nest == 0
         && g_rollout_nest == 0 && heurarm::Flag(heurarm::LASTPLY_NOWIN_FOLD, s_on) && winlesscert::Enabled()
         && !(g_probe_recording && LastPlyProbeMeasureOn())
         && FsNextLeafConstant(s) && !OpponentHasLost(s);
@@ -120397,7 +120408,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // families executed the deck's own kill without finding one. Take the no-win instead of
         // paying the enumeration. See winlesscert::GoffDomOn for the approximation's exact shape;
         // the label-only scope is what keeps play and GT byte-identical.
-        if (at_edge && goff_decline && g_unbounded_label_search > 0 && !state.deck_has_extra_turn)   // Q13
+        if (at_edge && goff_decline && g_unbounded_label_search > 0 && !state.NextTurnMayShareRound())   // Q13
         {
             residual_node = true;
             if (winlesscert::StatsOn())
@@ -120997,7 +121008,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                    || DigSecondMainLive(state) || ProviderSecondMainLive(state))
                                  && g_unbounded_label_search > 0
                                  && state.turn_number >= cutoff
-                                 && !state.deck_has_extra_turn   // Q13: the tail may be an extra turn of this round
+                                 && !state.NextTurnMayShareRound()   // Q13: the tail may be an extra (or free) turn of this round
                                  && winlesscert::EdgeTailElideOn();
     // GO-OFF DOMINANCE WIDTH (see winlesscert::GoffDomOn). A residual node scores its first W
     // MoveOrder'd candidates and then concedes the no-win. <= 0 means it never got here (the

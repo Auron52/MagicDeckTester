@@ -666,11 +666,45 @@ struct GameState
     bool                     in_extra_turn                = false;
     std::uint8_t             pending_extra_turns          = 0;
     std::uint8_t             extra_turns_taken            = 0;
+    // FREE TURNS (see the block after pending_opponent_extra_turns). sizeof(GameState) +8 (Dominance.h).
+    bool                     pending_free_turn            = false;
+    bool                     in_free_turn                 = false;
+    bool                     deck_has_free_turn           = false;
+    std::uint8_t             free_turns_taken             = 0;
     // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
     // one names the passive opponent. Keep the old own-turn count for the existing search
     // gates and for scenario states that install pending_extra_turns directly.
     std::vector<std::uint8_t> extra_turn_order;
     std::uint8_t             pending_opponent_extra_turns = 0;
+    // FREE TURNS (opponent lockdown; USER proposal 2026-11-21, docs/design/opponent-lockdown-free-turns.md;
+    // MTG_FREE_TURNS, DEFAULT OFF). At the END of each passive-opponent turn the opponent is LOCKED when,
+    // for every opposing head, (it controls no land OR its hand holds no nonland card) AND no creature is
+    // on the opposing side (core/FreeTurns.h, freeturn::LockHolds). A locked opponent turn is a FREE TURN
+    // for us: the ROUND (`turn_number`) does not advance into our next turn, exactly like an extra turn
+    // (USER 2026-10-26), but the opponent DID take its turn (draw, land, spawns).
+    //   pending_free_turn -- set by the lock check at the end of the opponent's regular turn (both worlds:
+    //     GameEngine::RunTurnFrom / TurnSolver's SimulateEndAndStartNextTurn), consumed by the very next
+    //     AdvanceTurnCounter. Never true at a search node (the rollout sets and consumes it in one call; the
+    //     executor between two RunTurns), so it is never folded.
+    //   free_turns_taken -- free turns begun so far. TurnSeq() counts them (turns TAKEN), RawRound() =
+    //     turn_number + free_turns_taken is the uncredited round (what the turn would be without the rule).
+    //   in_free_turn -- the CURRENT turn is a free turn. Depth counts ROUNDS (DepthAcrossTurn), as for an
+    //     extra turn: a free turn costs no ply.
+    //   deck_has_free_turn -- DECK CONSTANT (StampDeckTraits): MTG_FREE_TURNS is on AND the deck holds a
+    //     card that can strip the opponent's lands or hand (GoldFishRunner::DeckMayLockOpponent). Switches OFF
+    //     the turn-edge prunes that assume "the next turn is round+1", exactly as deck_has_extra_turn does
+    //     (NextTurnMayShareRound). FALSE for every deck while the flag is off.
+    // All zero / false for every game while MTG_FREE_TURNS is off: TurnSeq(), RawRound() and every key are
+    // byte-identical by construction.
+    // (The four fields themselves sit after extra_turns_taken above.)
+    // A following turn may share this turn's ROUND (an extra turn, or a free turn): the turn-edge prunes'
+    // gate. Identical to deck_has_extra_turn while MTG_FREE_TURNS is off.
+    bool NextTurnMayShareRound() const { return deck_has_extra_turn || deck_has_free_turn; }
+    // The current turn is not a new ROUND (an extra turn or a free turn): the depth give-back's gate.
+    bool InSameRoundTurn() const { return in_extra_turn || in_free_turn; }
+    // The round WITHOUT the free-turn credit (== turn_number while MTG_FREE_TURNS is off). The opponent's
+    // spawn schedule keys on it: the opponent's turns keep coming whether or not they were locked.
+    int RawRound() const { return turn_number + static_cast<int>(free_turns_taken); }
     // GRAVEYARD-SHUFFLE TRIGGER (CardParams::put_into_graveyard_shuffles_graveyard: Emrakul, Ulamog the
     // Infinite Gyre). DECK CONSTANT (StampDeckTraits, main + sideboard): FireGraveyardEntryTriggers'
     // scan runs only while set, so every other deck pays one bool test per graveyard entry. DEFAULT
@@ -758,7 +792,8 @@ struct GameState
     // m1_hand_turn, m2_stage_turn, combat_hand_turn, staged expiries, suspend arrivals, pay ledger,
     // search pins, shuffle salts, the T1 draw skip) use this, never turn_number, so a stamp written in
     // the regular turn of a round is stale inside that round's extra turn.
-    int TurnSeq() const { return turn_number + static_cast<int>(extra_turns_taken); }
+    int TurnSeq() const
+    { return turn_number + static_cast<int>(extra_turns_taken) + static_cast<int>(free_turns_taken); }
     // TERMINATION BACKSTOP for extra-turn chains (both worlds): a game / rollout / search node whose
     // turns taken exceed 4x the round horizon is ended as a no-win. A deck can
     // repeatedly cast turn spells, so depth counted in ROUNDS alone would not
@@ -766,7 +801,7 @@ struct GameState
     // Value-gated on extra_turns_taken:
     // false for every deck that never takes an extra turn.
     bool TurnSeqCapped(int max_turns) const
-    { return (extra_turns_taken != 0 || pending_opponent_extra_turns != 0)
+    { return (extra_turns_taken != 0 || pending_opponent_extra_turns != 0 || free_turns_taken != 0)
              && TurnSeq() + pending_opponent_extra_turns > 4 * max_turns; }
     void QueueExtraTurn(int player_index)
     {
@@ -804,12 +839,23 @@ struct GameState
             --pending_extra_turns;
             if (extra_turns_taken < 255) { ++extra_turns_taken; }
             in_extra_turn = true;
+            in_free_turn = false;
+        }
+        else if (pending_free_turn)
+        {
+            // FREE TURN (MTG_FREE_TURNS): the opponent took its turn and ended it locked, so our next turn
+            // stays in this round. pending_free_turn is only ever raised by the lock check.
+            if (free_turns_taken < 255) { ++free_turns_taken; }
+            in_extra_turn = false;
+            in_free_turn = true;
         }
         else
         {
             ++turn_number;
             in_extra_turn = false;
+            in_free_turn = false;
         }
+        pending_free_turn = false;
     }
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models

@@ -2603,6 +2603,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const long long pbp0 = TurnSolver::PutBackPriceCharged();
                 int wt = engine->RunGame(state, job.max_turns);
                 escstats::t_job = nullptr; escstats::t_gi = -1;
+                // FREE TURNS (MTG_FREE_TURNS): one line per game that took any, so a measurement can report the
+                // credited win turn (wt) beside the RAW round (wt + free). Never printed with the flag off.
+                if (state.free_turns_taken != 0)
+                {
+                    std::fprintf(stderr, "[free-turn] job=%s gi=%d wt=%d free=%d raw=%d opp_slot=%d trait=%d\n",
+                                 job.name.c_str(), global_gi, wt, static_cast<int>(state.free_turns_taken),
+                                 wt > 0 ? wt + static_cast<int>(state.free_turns_taken) : wt,
+                                 static_cast<int>(state.opponent_slot), state.deck_has_free_turn ? 1 : 0);
+                }
                 const long long g_units = gamework::Used();
                 // MTG_PUTBACK_PRICE_LOG (diagnostic, default off): the units this game's put-back price
                 // charged, so a price A/B can report units NET of the price (the work actually done).

@@ -30,6 +30,7 @@
 #include "core/OpponentDeck.h"
 #include "core/GameLogger.h"
 #include "core/SpellEffects.h"   // LookKind / TopDisposition / EnumerateTopDispositions for look-top decisions
+#include "core/FreeTurns.h"      // MTG_FREE_TURNS: the scenario loader applies the opening hurdles
 #include "core/HardwareConcurrency.h"
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
@@ -2007,6 +2008,15 @@ public:
         if (s.extra_turns_taken != 0)
         {
             m_os << "  \"extra_turn\": " << (s.in_extra_turn ? static_cast<int>(s.extra_turns_taken) : 0) << ",\n";
+        }
+        // FREE TURNS (MTG_FREE_TURNS): `free_turn` = k when THIS turn is the k-th free turn taken, else 0. Written
+        // only once one was taken, so every other game's JSON is byte-identical.
+        if (s.free_turns_taken != 0)
+        {
+            m_os << "  \"free_turn\": " << (s.in_free_turn ? static_cast<int>(s.free_turns_taken) : 0) << ",\n";
+        }
+        if (s.extra_turns_taken != 0 || s.free_turns_taken != 0)
+        {
             m_os << "  \"turn_seq\": " << s.TurnSeq() << ",\n";
         }
         return *this;
@@ -10565,6 +10575,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     state.pending_extra_turns   = static_cast<std::uint8_t>(j.value("pending_extra_turns", 0));
     state.extra_turns_taken     = static_cast<std::uint8_t>(j.value("extra_turns_taken", 0));
     state.in_extra_turn         = j.value("in_extra_turn", false);
+    // FREE TURNS (MTG_FREE_TURNS): a fixture can start inside a free turn. Absent -> 0 / false.
+    state.free_turns_taken      = static_cast<std::uint8_t>(j.value("free_turns_taken", 0));
+    state.in_free_turn          = j.value("in_free_turn", false);
 
     // The opponent's real library + opening hand, exactly as SetupGame deals them, so a fixture on
     // a milling deck models the same opponent a real game does. Must come AFTER game_seed is set --
@@ -10604,6 +10617,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                            legacy ? diverse : true, legacy ? 1 : gamesetup::OpponentHeads(),
                            slot1, slot2);
         if (legacy) { state.opponent_plays_lands = false; }
+        freeturn::ApplyOpeningHurdles(state);   // MTG_FREE_TURNS only (SetupGame's twin)
     }
     state.opponent_library_read = GoldFishRunner::DeckTouchesOpponentZones(deck)
         || GoldFishRunner::DeckUsesDiverseOpponentPool(deck);
