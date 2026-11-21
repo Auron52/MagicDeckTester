@@ -1,0 +1,152 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 45,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Diabolic Revelation"
+ ],
+ "library": [
+  "Emrakul, the Aeons Torn",
+  "Diabolic Revelation"
+ ],
+ "library_filler": "Swamp",
+ "library_size": 12,
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 6,
+ "expect_win_turn": 5,
+ "expect_log_sequence": [
+  "CAST_SPELL Diabolic Revelation",
+  "CAST_SPELL Emrakul, the Aeons Torn",
+  "CAST_SPELL Diabolic Revelation",
+  "CAST_SPELL Emrakul, the Aeons Torn"
+ ],
+ "comment": "Blood Sun step 7, design \u00a75.3 Claim L / \u00a78 (USER G1: \"22 mana and Diabolic Revelation\"): Blood Sun out, an un-sick Emrakul #1, 22 Swamps (drop used), ONE Revelation in hand, the library holding Emrakul #2 and one Revelation; opponent at 45 = three 15-point attacks. Round 5: Emrakul #1 attacks (30 left); Revelation X = 2 {Emrakul, Revelation} (7) + Emrakul #2 (15) = 22 -> its cast trigger's extra turn E1; the legend rule keeps the OLD copy (fold F-E1: the only keep offered) and Emrakul #2's death shuffles the graveyard (the spent Revelation and Emrakul #2) back into the library. E1: untap 22, Emrakul #1 attacks (15 left), the fetched Revelation finds Emrakul #2 and the shuffled-back Revelation again -> E2 -> the third attack. Win at round 5 (extra turns do not count). Needs the step-7 dup-legend upside (the second Emrakul was pruned before)."
+}

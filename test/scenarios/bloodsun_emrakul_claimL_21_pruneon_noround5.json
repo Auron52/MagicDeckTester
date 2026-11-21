@@ -1,0 +1,141 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 30,
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Diabolic Revelation"
+ ],
+ "library": [
+  "Emrakul, the Aeons Torn",
+  "Diabolic Revelation"
+ ],
+ "library_filler": "Swamp",
+ "library_size": 12,
+ "depth": 3,
+ "budget_ms": 0,
+ "max_turns": 5,
+ "expect_no_win": true,
+ "comment": "Blood Sun step 7: the _pruneoff Claim-L board with the USER prune at its default (ON). B3 (a) as implemented refuses Revelation X = 1 without a second Revelation in hand, so the only round-5 kill (X = 1 {Emrakul} + Emrakul, 21 mana) is unreachable at any budget: no win by round 5. PINS A SURFACED CONFLICT, not a target: the USER's words were 'My guidance on duplicates is for when you have 6 mana' -- if the USER narrows (a) to the 6-mana case, flip this to expect_win_turn 5."
+}

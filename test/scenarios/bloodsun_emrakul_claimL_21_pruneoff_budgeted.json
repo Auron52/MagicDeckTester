@@ -1,0 +1,148 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "active_life": 20,
+ "opponent_life": 30,
+ "lands_played_this_turn": 1,
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0"
+ },
+ "battlefield": [
+  {
+   "name": "Blood Sun",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Emrakul, the Aeons Torn",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Diabolic Revelation"
+ ],
+ "library": [
+  "Emrakul, the Aeons Torn",
+  "Diabolic Revelation"
+ ],
+ "library_filler": "Swamp",
+ "library_size": 12,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 6,
+ "expect_win_turn": 5,
+ "expect_log_sequence": [
+  "CAST_SPELL Diabolic Revelation",
+  "CAST_SPELL Emrakul, the Aeons Torn"
+ ],
+ "comment": "Blood Sun step 7, design \u00a75.3 Claim L with M = 21: Blood Sun out, un-sick Emrakul #1, 21 Swamps (drop used), one Revelation in hand, Emrakul #2 and ONE Revelation in the library, opponent at 30. Round 5: Emrakul #1 attacks (15 left); Revelation X = 1 {Emrakul} (6) + Emrakul #2 (15) = 21 -> E1, the legend rule keeps the old copy, the death shuffles the graveyard back; E1's attack kills. X = 2 {Emrakul, Revelation} would cost 22. Run with MTG_BLOODSUN_USER_PRUNE=0: B3 (a) as implemented (X = 1 only with another Revelation in hand) refuses this X = 1 at any mana -- the companion _pruneon scenario pins that round-6 result; the conflict is surfaced to the USER (design \u00a714 step 7)."
+}

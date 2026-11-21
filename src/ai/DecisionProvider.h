@@ -5385,6 +5385,13 @@ public:
     // inert); false RESTRICTS it to the self target (Blood Sun step 6e, USER B5). Default true -> byte-identical. Never
     // consulted in human play (the target is the person's board click).
     virtual bool OffersOpponentLookTarget(const GameState&, const CardDefinition&) const { return true; }
+    // SearchesShockLandPay -- does the autonomous land DROP search a shock land's "As this land enters, you may pay N
+    // life. If you don't, it enters tapped." (etb_pay_life_to_untap) as two land options, pay / tapped (the land-entry
+    // pin, LandShockPayPinned in SpellEffects.h), instead of the engine rule "pay whenever life stays above 0"?
+    // Meaningful only where our life can lose the game (GameState::own_death_live): with life as bookkeeping, paying is
+    // never worse than a tapped land. OPT-IN, default false: every other provider's drop is unchanged (Blood Sun step 7:
+    // Overgrown Tomb in a deck whose Fastbond / City of Brass / Grim Tutor life matters, B1).
+    virtual bool SearchesShockLandPay() const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------

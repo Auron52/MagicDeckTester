@@ -55574,6 +55574,26 @@ inline bool LandHasEntryPinChoice(const CardDefinition& def)
     return (p.etb_choose_color && !EtbColorChoiceIsNonSource(p)) || p.etb_sacrifice_unless_pay.has_value()
         || LandLotusSacrificeCount(p) > 0;
 }
+// THE SHOCK LAND'S SEARCHED PAY (Blood Sun step 7). "As this land enters, you may pay N life. If you don't, it enters
+// tapped." The engine rule (LandWouldEnterTapped) pays whenever the life stays above 0, which is never worse while life
+// is bookkeeping; where our life can LOSE the game (own_death_live) the 2 life is a real resource (Fastbond pings, City
+// of Brass, Grim Tutor), so an opted-in provider (SearchesShockLandPay) has the land DROP enumerate both answers as two
+// land options carried on the land-entry pin (LandPlayOptions::rad_mode): 1 = pay, enter untapped; 0 = enter tapped.
+// No shock carries another pin choice, so the int is free. A real choice only while the life covers the payment (at
+// life <= N paying would put us to 0 or below and lose the game -- B1 -- so the land is forced tapped, as before) and
+// while the "as enters" ability exists (Blood Sun removes it: untapped, nothing paid -- G1; a Gond Gate untaps a Gate
+// whatever is paid). Read IDENTICALLY by the enumeration (which fans the pins) and the drop (PlayLandCore, which reads
+// the pin only when this is true), so a pinned option whose answer stopped being a choice by the time it is played
+// takes the engine rule. Never in human play (the viewer asks at the entry) and only for the active player's drop.
+inline bool LandShockPayPinned(const GameState& state, const CardDefinition& def)
+{
+    if (def.params.etb_pay_life_to_untap <= 0 || !def.card.IsLand()) { return false; }
+    if (!state.own_death_live || !ResolveProvider(state).SearchesShockLandPay()) { return false; }
+    if (LandNonManaAbilitiesSuppressed(state)) { return false; }
+    const int ctrl = state.active_player_index;
+    if (GateEntersUntappedByGond(state, def, ctrl)) { return false; }
+    return state.players[static_cast<std::size_t>(ctrl)].life > def.params.etb_pay_life_to_untap;
+}
 inline int TakeLandEntryPin(const CardDefinition& def)
 {
     if (!LandHasEntryPinChoice(def)) { return -1; }
