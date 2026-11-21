@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -55,7 +55,7 @@ T\* are the MANA quota; the rest of the mana is overflow.
 | **MANA: Bloom** | Lotus Bloom in hand | **only a Bloom that makes the go-off EARLIER**: project T0 without the Blooms in hand; keep one only when T0 is later than now+3 (or "far"), i.e. when its arrival on now+3 pulls the go-off forward; a 2nd only if T\* is still "far" with the first | **a Bloom near the combo turn is dropped** (USER 2026-11-21: *"Bloom should be dropped if we are anywhere near the combo turn."*): with T0 <= now+3 it is the first overflow card shed after DEAD |
 | **MANA: lands** | every land | the land drops through T\* (one per turn, net of a drop already made this turn) | keep order below |
 | **MANA: rituals** | Seething Song, Irencrag Feat | the rituals the projection uses | a second Irencrag Feat is DEAD (USER: no duplicate Irencrag); Song is kept over Feat (cheaper, and does not end the turn) |
-| **DIG** | Brainstorm, Ponder, Preordain, Overmaster; a tutor with a missing target that is not already standing in | **2 while COMBO or FINISHER is unfilled, 1 once both are filled, 0 once COMBO + FINISHER + MANA are all filled.** While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Mystical Tutor > Personal Tutor > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
+| **DIG** | Brainstorm, Ponder, Preordain, Overmaster; a tutor with a missing target that is not already standing in | **While short: 1 + the number of missing pieces (COMBO and FINISHER count one each), at least 2 -- so 2 with one piece missing, 3 with both -- and dig beyond that quota is still kept above surplus mana (USER 2026-11-21: *"If we are missing combo pieces holding multiple dig is potentially worthwhile."*); 1 once both are filled; 0 once COMBO + FINISHER + MANA are all filled.** While a combo piece is missing the dig is PRIORITISED (USER 2026-11-21: *"We should also prioritize keeping some dig if we are short combo pieces."*): dig slot 1 ranks directly below COMBO / FINISHER and ABOVE every MANA card; slot 2 ranks above every mana card except the next land drop | fill order: Brainstorm > Ponder > Mystical Tutor > Personal Tutor > Preordain > Overmaster (Brainstorm also gets two cards out of the hand) |
 | **BACKUP** | **the second finisher of the OTHER type** (a Rift Bolt beside a held or pending Halberdier, or a Halberdier beside a held or pending Rift Bolt); 1 extra land beyond the drops; 1 extra ritual; a 2nd Halberdier | 0 (kept only after every quota) | reverse of that order: the other-type finisher is the LAST overflow card shed (USER 2026-11-21: *"we should keep the second Finisher (of the second type) before any dead cards, just in case the arithmetic changes"*) |
 | **DEAD** | Memory Lapse (goldfish-inert); a 2nd Worldfire / Rift Bolt / Irencrag Feat; a tutor with nothing missing (`TutorNeedsCandidate`: it would not be cast) | 0 | always first |
 
@@ -85,7 +85,7 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
 1. **Halberdier vs Rift Bolt as the finisher in hand.** Default: Halberdier first when the projected go-off is
    3+ turns away (it costs nothing on the go-off turn, so the need stays 9), Rift Bolt first when it is sooner. Or
    always Rift Bolt first?
-2. **Dig quota 2 / 1 / 0.** Is 2 while a piece is missing right, and should Brainstorm count double (it also
+2. **Dig quota 2-3 / 1 / 0.** Is 1 + missing pieces (2 or 3) right while short, and should Brainstorm count double (it also
    clears two junk cards)?
 3. **Tutor stand-in.** Should a tutor with a missing target sit in COMBO (just below a real Worldfire) or only in
    DIG?
