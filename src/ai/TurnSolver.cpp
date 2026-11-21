@@ -12400,6 +12400,21 @@ void NoteGraveyardDamageDrop(const GameState& state, const Action& a)
     }
     NoteActDrop(why, a.card_name.str().c_str(), state.turn_number, 1);
 }
+// MTG_FIREBLAST_COPY_PINS (heurarm FIREBLAST_COPY_PINS; DEFAULT ON, =0 -> off): see the slot note in HeuristicArm.h.
+static bool FireblastCopyPinsOn()
+{
+    static const bool env_on = EnvOn("MTG_FIREBLAST_COPY_PINS", true);
+    return heurarm::Flag(heurarm::FIREBLAST_COPY_PINS, env_on);
+}
+// A Fireblast alternative-cost cast's pinned Mountains ("fireblast:<n1>,<n2>", stable card numbers); false if `a`
+// is not one.
+static bool FireblastPinOf(const Action& a, int& m1, int& m2)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.hand_index < 0) { return false; }
+    const std::string& t = a.tutor_target.str();
+    if (t.compare(0, 10, "fireblast:") != 0) { return false; }
+    return std::sscanf(t.c_str() + 10, "%d,%d", &m1, &m2) == 2;
+}
 static bool PoDamageOrderOn()
 {
     static const bool env_on = EnvOn("MTG_PO_DAMAGE_ORDER", false);
@@ -22101,6 +22116,7 @@ enum : unsigned
     kDupPitch    = 1ull << 9,   // a pitch evoke paired with a cast / another pitch of its pitched copy
                               // (bit 8 is kDupPodEntry, the compact summary's Pod entry bit)
     kDupCopies   = 1ull << 10,  // more copies of one hand card used (cast / Vial / pitch / put) than held
+    kDupFireblast = 1ull << 11, // two Fireblast alternative casts whose pinned Mountains overlap (MTG_FIREBLAST_COPY_PINS)
     kDupAll      = ~0u
 };
 // SubsetFilterPre::dup_m's entry bits beyond the clause mask: the Birthing Pod clause (not gated on
@@ -22123,10 +22139,10 @@ struct DupCompact { const std::uint16_t* m; const int* src; const int* hidx; };
 namespace dupclause
 {
     enum : int { kSacForMana = 0, kFreeSlot, kPaidFreePair, kLoyalty, kGarth, kBlink,
-                 kPermAbility, kFoldPrefix, kPod, kRemand, kPitch, kCopies, kCount };
+                 kPermAbility, kFoldPrefix, kPod, kRemand, kPitch, kCopies, kFireblastPin, kCount };
     inline constexpr const char* kNames[kCount] = {
         "sac_for_mana", "free_slot", "paid_free_pair", "loyalty", "garth", "blink",
-        "perm_ability_tap", "fold_prefix", "pod", "remand", "pitch", "copies" };
+        "perm_ability_tap", "fold_prefix", "pod", "remand", "pitch", "copies", "fireblast_pin" };
     inline std::atomic<std::uint64_t> g_hits[kCount];
     // Gated on the same flag as the rest of the walk funnel (set by MTG_BRANCH_SHAPE or the census),
     // declared here because this predicate sits far above namespace shapestats.
@@ -22342,6 +22358,25 @@ static bool DupPitchReject(const std::vector<Action>& cands, const std::vector<i
     return false;
 }
 
+// The FIREBLAST PIN clause (kDupFireblast), shared by the full filter and DupCompactReject: the Fireblast
+// alternative cast at `a` paired with another copy's alternative cast whose pinned Mountains overlap. The
+// apply sacrifices the pinned Mountains by card number, so the second cast finds a pinned Mountain gone and
+// silently does nothing in every order -- a physically impossible selection (Fireblast double-naming,
+// burn-damage-order 2026-11-21: 573 mana-clean gate flags), not a pick.
+static bool DupFireblastReject(const std::vector<Action>& cands, const std::vector<int>& sel, std::size_t a)
+{
+    int a1 = 0, a2 = 0;
+    if (!FireblastPinOf(cands[sel[a]], a1, a2)) { return false; }
+    for (size_t b = a + 1; b < sel.size(); ++b)
+    {
+        int b1 = 0, b2 = 0;
+        if (!FireblastPinOf(cands[sel[b]], b1, b2)) { continue; }
+        if (a1 == b1 || a1 == b2 || a2 == b1 || a2 == b2)
+        { dupclause::Hit(dupclause::kFireblastPin); return true; }
+    }
+    return false;
+}
+
 // SubsetHasDuplicateSacSource on the per-candidate COMPACT summary (SubsetFilterPre::DupM): the same
 // clauses in the same order with the same Hit attribution, every Action field test answered from the
 // summary (entry bits by kind / free_cast / hand slot, the source id, the hand index); the
@@ -22357,7 +22392,7 @@ static bool DupCompactReject(const std::vector<Action>& cands, const std::vector
     {
         const std::size_t ja = static_cast<std::size_t>(sel[a]);
         const unsigned ma = m[ja];
-        if ((ma & ((dup_clause & (0xFFu | kDupPitch)) | kDupPodEntry)) == 0
+        if ((ma & ((dup_clause & (0xFFu | kDupPitch | kDupFireblast)) | kDupPodEntry)) == 0
             && !(from_odometer && (ma & kDupEquivEntry) != 0))
         { continue; }
         auto pair_with = [&](unsigned bit) -> bool
@@ -22397,6 +22432,8 @@ static bool DupCompactReject(const std::vector<Action>& cands, const std::vector
         if ((dup_clause & kDupRemand) != 0 && (ma & kDupRemand) != 0 && DupRemandReject(cands, sel, a))
         { return true; }
         if ((dup_clause & kDupPitch) != 0 && (ma & kDupPitch) != 0 && DupPitchReject(cands, sel, a))
+        { return true; }
+        if ((dup_clause & kDupFireblast) != 0 && (ma & kDupFireblast) != 0 && DupFireblastReject(cands, sel, a))
         { return true; }
         if ((ma & kDupPodEntry) != 0 && pair_with(kDupPodEntry))
         { dupclause::Hit(dupclause::kPod); return true; }
@@ -22575,6 +22612,9 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // with one copy.) Inert unless a pitch variant exists.
         if ((dup_clause & kDupPitch) != 0 && cands[sel[a]].pitch_slot >= 0
             && DupPitchReject(cands, sel, a))
+        { return true; }
+        // FIREBLAST PINS (kDupFireblast): two copies' alternative casts sacrificing an overlapping Mountain pair.
+        if ((dup_clause & kDupFireblast) != 0 && FireblastCopyPinsOn() && DupFireblastReject(cands, sel, a))
         { return true; }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
         if (cands[sel[a]].kind == Action::Kind::ActivatePod)
@@ -26094,6 +26134,7 @@ const DupCompact* SubsetFilterPre::DupMBuild(const std::vector<Action>& cands) c
         if (a.kind == Action::Kind::ActivatePermAbility)               { m |= kDupPermAbil; }
         if (!a.remand_by.empty())                                      { m |= kDupRemand; }
         if (a.pitch_slot >= 0)                                         { m |= kDupPitch; }
+        { int f1 = 0, f2 = 0; if (FireblastPinOf(a, f1, f2))         { m |= kDupFireblast; } }
         if (a.kind == Action::Kind::ActivatePod)                       { m |= kDupPodEntry; }
         if (a.equiv_tag != 0)                                          { m |= kDupEquivEntry; }
         dup_m[j]    = static_cast<std::uint16_t>(m);
@@ -26294,6 +26335,21 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     // kDupCopies' contested names (empty for every deck without a by-name hand use that can collide).
     BuildCopyCap(state, cands, p.copy_cap);
     if (!p.copy_cap.empty()) { p.dup_source = true; }
+    // kDupFireblast: two Fireblast alternative casts from DIFFERENT hand slots (one slot's variants are already
+    // exclusive by the odometer's grouping). Only such a hand can raise the clause.
+    bool fireblast_pin_pair = false;
+    if (FireblastCopyPinsOn())
+    {
+        int first_slot = -1;
+        for (const Action& a : cands)
+        {
+            int f1 = 0, f2 = 0;
+            if (!FireblastPinOf(a, f1, f2)) { continue; }
+            if (first_slot < 0) { first_slot = a.hand_index; }
+            else if (a.hand_index != first_slot) { fireblast_pin_pair = true; break; }
+        }
+    }
+    if (fireblast_pin_pair) { p.dup_source = true; }
     // Per-clause populations for SubsetHasDuplicateSacSource. A clause needs TWO selected candidates
     // that match it, so fewer than two matches in `cands` makes its answer a foregone false. A
     // separate pass rather than counters threaded through the switch above: `cands` is a handful per
@@ -26338,6 +26394,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         // pitch variant + any second hand cast (every pitch variant is itself a hand cast).
         if (n_pitch >= 1 && n_handcast >= 2) { m |= kDupPitch; }
         if (!p.copy_cap.empty()) { m |= kDupCopies; }
+        if (fireblast_pin_pair) { m |= kDupFireblast; }
         p.dup_clause = m;
         // The equiv_tag canonical-prefix clause is NOT one of these seven and has no bit: it rejects
         // on a single selected action's ord, so no population count bounds it. `dup_source` still
@@ -42672,6 +42729,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // Magnetic Theft's (Equipment, creature) pairs: built once per call, shared by every copy in hand.
     const CardDefinition* attach_pairs_for = nullptr;
     std::vector<AttachSpellPair> attach_pairs;
+    // Fireblast: the battlefield indices of the Mountains an EARLIER copy's one-pair fold pinned (MTG_FIREBLAST_COPY_PINS).
+    std::vector<int> fireblast_claimed;
 
     // --- Hand casts ---
     for (int i = 0; i < n; ++i)
@@ -44060,7 +44119,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             for (std::size_t y = x + 1; y < mountains.size(); ++y)
             { pairs.emplace_back(mountains[x], mountains[y]); }
             if (!pairs.empty() && !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::FireblastPair))
-            { ResolveProvider(state).FireblastMountainPairCandidates(state, pairs); }
+            {
+                // MTG_FIREBLAST_COPY_PINS: a provider that folds the pairs to ONE gives every copy the SAME pin,
+                // so two Fireblasts on four Mountains could never both be cast (kDupFireblast rejects the
+                // shared pair). Offer a later copy only the pairs disjoint from the earlier copies' pins when
+                // any exist: the fold then picks the best of the remaining Mountains, i.e. the two copies
+                // together sacrifice the four best. A later copy cast ALONE on a worse pair is dominated by
+                // the earlier, identical copy on the best one, so nothing findable is lost.
+                if (FireblastCopyPinsOn() && !fireblast_claimed.empty())
+                {
+                    std::vector<std::pair<int, int>> free_pairs;
+                    for (const auto& pr : pairs)
+                    {
+                        if (std::find(fireblast_claimed.begin(), fireblast_claimed.end(), pr.first) == fireblast_claimed.end()
+                            && std::find(fireblast_claimed.begin(), fireblast_claimed.end(), pr.second) == fireblast_claimed.end())
+                        { free_pairs.push_back(pr); }
+                    }
+                    if (!free_pairs.empty()) { pairs.swap(free_pairs); }
+                }
+                ResolveProvider(state).FireblastMountainPairCandidates(state, pairs);
+                if (pairs.size() == 1)
+                { fireblast_claimed.push_back(pairs[0].first); fireblast_claimed.push_back(pairs[0].second); }
+            }
             for (const auto& [x, y] : pairs)
             {
                 Action a;
@@ -49510,6 +49590,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 std::vector<int> targets{0, kAbilitySelfTarget};
                 for (const Permanent& q : state.battlefield)
                 { if (q.card.IsCreature() || q.is_animated || q.card.HasType(CardType::Planeswalker)) { targets.push_back(q.card.m_number); } }
+                // The provider may RESTRICT the ping's targets (Midrange Burn / 1 Drop Burn: the opponent only,
+                // MTG_LAVAMANCER_TARGET_PRUNE); human play and the fixed-burn-target audit gate keep them all.
+                if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::FixedBurnTarget))
+                { ResolveProvider(state).GraveyardDamageTargetCandidates(state, targets); }
                 std::vector<std::string> pairs;
                 for (std::size_t i = 0; i < gy.size(); ++i)
                 { for (std::size_t j = i + 1; j < gy.size(); ++j)

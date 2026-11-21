@@ -1,11 +1,14 @@
 #include <doctest/doctest.h>
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 #include "mtg_test_seam.h"
+#include <algorithm>
+#include <cstdint>
 
 extern thread_local std::vector<std::string>* g_line_order_capture;
 
@@ -440,10 +443,137 @@ TEST_CASE("midrange burn: Grim Lavamancer fuel choice keeps every damage target"
     const bool full = HumanPlayActive() || DecisionUnpruned(UnprunedGate::LavamancerFuel)
         || !EnvOn("MTG_MIDRANGE_LAVAMANCER_FUEL", true);
     const int expected = full ? 3 : 1;
+    // MTG_LAVAMANCER_TARGET_PRUNE (USER 2026-11-21): our own face and our own Lavamancer are pruned in
+    // autonomous play; human play and the fixed-burn-target audit keep them.
+    const bool all_targets = HumanPlayActive() || DecisionUnpruned(UnprunedGate::FixedBurnTarget)
+        || !EnvOn("MTG_LAVAMANCER_TARGET_PRUNE", true);
     CHECK(fuel_face == expected);
-    CHECK(fuel_self == expected);
-    CHECK(fuel_creature == expected);
+    CHECK(fuel_self == (all_targets ? expected : 0));
+    CHECK(fuel_creature == (all_targets ? expected : 0));
     CHECK(chose_canonical);
+}
+
+namespace
+{
+struct LavaPruneArm
+{
+    explicit LavaPruneArm(int v) { heurarm::t_arm[heurarm::LAVAMANCER_TARGET_PRUNE] = static_cast<std::int8_t>(v); }
+    ~LavaPruneArm() { heurarm::t_arm[heurarm::LAVAMANCER_TARGET_PRUNE] = -1; }
+};
+struct FireblastPinsArm
+{
+    explicit FireblastPinsArm(int v) { heurarm::t_arm[heurarm::FIREBLAST_COPY_PINS] = static_cast<std::int8_t>(v); }
+    ~FireblastPinsArm() { heurarm::t_arm[heurarm::FIREBLAST_COPY_PINS] = -1; }
+};
+// Every Grim Lavamancer ping target the enumerator offers on `s`.
+std::vector<int> LavaPingTargets(const GameState& s)
+{
+    std::vector<int> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+    {
+        if (a.kind != Action::Kind::GraveyardExileAbility || a.gy_exile_mode != 3) { continue; }
+        if (std::find(out.begin(), out.end(), a.enchant_target) == out.end()) { out.push_back(a.enchant_target); }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+}
+
+TEST_CASE("burn: Grim Lavamancer's ping targets only the opponent and the opponent's creatures (USER 2026-11-21)")
+{
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::FixedBurnTarget)) { return; }   // the full axis by design
+    static const MidrangeBurnProvider midrange;
+    static const OneDropBurnProvider onedrop;
+    for (const DecisionProvider* prov : { static_cast<const DecisionProvider*>(&midrange),
+                                          static_cast<const DecisionProvider*>(&onedrop) })
+    {
+        GameState s; s.active_player_index = 0; s.turn_number = 4;
+        s.m_provider = prov;
+        MBPut(s, "Grim Lavamancer", 101); MBPut(s, "Mountain", 102);
+        MBPut(s, "Monastery Swiftspear", 103);        // ours
+        MBPut(s, "Monastery Swiftspear", 104, 1);     // the opponent's
+        s.players[0].graveyard = {MBCard("Lightning Bolt", 201), MBCard("Fireblast", 202)};
+        {
+            LavaPruneArm on(1);
+            CHECK(LavaPingTargets(s) == std::vector<int>{0, 104});
+        }
+        {
+            LavaPruneArm off(0);
+            CHECK(LavaPingTargets(s) == std::vector<int>{kAbilitySelfTarget, 0, 101, 103, 104});
+        }
+    }
+    // The generic provider keeps every legal target.
+    GameState g; g.active_player_index = 0; g.turn_number = 4;
+    MBPut(g, "Grim Lavamancer", 101); MBPut(g, "Mountain", 102);
+    g.players[0].graveyard = {MBCard("Lightning Bolt", 201), MBCard("Fireblast", 202)};
+    LavaPruneArm on(1);
+    CHECK(LavaPingTargets(g) == std::vector<int>{kAbilitySelfTarget, 0, 101});
+}
+
+namespace
+{
+// Fireblast alternative casts in `p`: their pins.
+std::vector<std::string> FireblastAltPins(const TurnSolver::Plan& p)
+{
+    std::vector<std::string> out;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.tutor_target.str().rfind("fireblast:", 0) == 0)
+        { out.push_back(a.tutor_target.str()); }
+    }
+    return out;
+}
+}
+
+TEST_CASE("burn: two Fireblasts never share a pinned Mountain; on four Mountains both stay castable")
+{
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::FireblastPair)) { return; }
+    static const OneDropBurnProvider provider;
+    // Two Mountains: one pair, so at most ONE alternative cast per plan (the double-naming phantom).
+    {
+        GameState s; s.active_player_index = 0; s.turn_number = 3;
+        s.m_provider = &provider;
+        MBPut(s, "Mountain", 101); MBPut(s, "Mountain", 102);
+        s.players[0].hand = {MBCard("Fireblast", 201), MBCard("Fireblast", 202)};
+        {
+            FireblastPinsArm on(1);
+            bool single = false;
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+            {
+                const auto pins = FireblastAltPins(p);
+                CHECK(pins.size() <= 1);
+                single |= pins.size() == 1;
+            }
+            CHECK(single);
+        }
+        {
+            FireblastPinsArm off(0);   // the pre-fix enumeration offers the impossible pair
+            bool both = false;
+            for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+            { both |= FireblastAltPins(p).size() == 2; }
+            CHECK(both);
+        }
+    }
+    // Four Mountains (two tapped): the copies get DISJOINT pins -- the tapped pair first -- and a plan casts both.
+    {
+        GameState s; s.active_player_index = 0; s.turn_number = 5;
+        s.m_provider = &provider;
+        MBPut(s, "Mountain", 101, 0, true); MBPut(s, "Mountain", 102, 0, true);
+        MBPut(s, "Mountain", 103); MBPut(s, "Mountain", 104);
+        s.players[0].hand = {MBCard("Fireblast", 201), MBCard("Fireblast", 202)};
+        FireblastPinsArm on(1);
+        std::vector<std::string> pins;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.tutor_target.str().rfind("fireblast:", 0) == 0)
+            { pins.push_back(std::to_string(a.hand_index) + "=" + a.tutor_target.str()); }
+        }
+        CHECK(pins == std::vector<std::string>{"0=fireblast:101,102", "1=fireblast:103,104"});
+        bool both = false;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        { both |= FireblastAltPins(p).size() == 2; }
+        CHECK(both);
+    }
 }
 
 TEST_CASE("midrange burn: Rift Bolt arrival deals damage, triggers Eidolon and prowess before draw")

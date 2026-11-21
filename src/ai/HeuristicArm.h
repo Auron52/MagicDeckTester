@@ -1079,6 +1079,8 @@ enum Slot : int
     PAY_REFINE_SCALED,        // MTG_PAY_REFINE_SCALED  the payment refine (MTG_PAY_REFINE) also runs after an exact payment of four or more taps that tapped a scaled land (Three Tree City, Baldur's Gate) whose fed mode makes >= {feeder} + 2: the plain-{C}-first backtracker can pay off more sources than the fed mode needs. Merfolk Turns gate claude-queue-20261119i s30001289 T5 (ORACLE-GAP: Prophets off four Islands + City's {C}, Mihail's {1} stranded). Default ON; =0 -> the refine's two triggers only
     SCALED_LAND_ROUTE,        // MTG_SCALED_LAND_ROUTE  a payment of an applying line that leaves an untapped scaled land (Three Tree City, Baldur's Gate) unable to fund the rest of the line is re-made with one of the greedy's sources held out when that keeps the rest payable (ScaledLandRouteHold, ManaPayment.cpp; the rock being cast is credited, the rest is net of the line's reducer credit). Merfolk Turns gate claude-queue-20261119i s30000073 T7: Sol Ring's {1} off City's {C} dropped Wanderwine Prophets. Default ON; =0 -> the greedy payment
     PO_DAMAGE_ORDER,          // MTG_PO_DAMAGE_ORDER  the DAMAGE-ORDER domain of the payable-order search (mana-clean gate claude-queue-20261120b, 1 Drop Burn / Midrange Burn APPLY-DROP-ORDER): a line holding a cast whose legality or cost needs same-turn damage (Needle Drop, a not-yet-live spectacle cast, Chandra's Incinerator) beside a face-burn cast is priced by the sequential walk with the damage modelled; the given order is kept when it pays, else the nearest order that pays. Default lives at the reader (TurnSolver.cpp PoDamageOrderOn)
+    LAVAMANCER_TARGET_PRUNE,  // MTG_LAVAMANCER_TARGET_PRUNE  Grim Lavamancer's ping (gy-exile mode 3) targets only the OPPONENT and opponent-controlled creatures / planeswalkers in autonomous play (Midrange Burn / 1 Drop Burn GraveyardDamageTargetCandidates; USER 2026-11-21: "This indeed should be pruned. In fact everything but the opponent should be pruned."). Human play and MTG_UNPRUNE=fixedburntarget keep every target. DEFAULT ON; =0 -> every legal target
+    FIREBLAST_COPY_PINS,      // MTG_FIREBLAST_COPY_PINS  two Fireblast alternative casts whose pinned Mountains overlap are one physically impossible selection (SubsetHasDuplicateSacSource kDupFireblast; the apply silently dropped the second), and under a provider's one-pair fold each further Fireblast copy is pinned to the best pair DISJOINT from the earlier copies' pins, so two Fireblasts on four Mountains stay findable. Sound (rejects only selections no order can pay). DEFAULT ON; =0 -> the pre-2026-11-21 shared pins
     COUNT
 };
 
@@ -2102,6 +2104,8 @@ inline const char* Name(int slot)
         "MTG_PAY_REFINE_SCALED",
         "MTG_SCALED_LAND_ROUTE",
         "MTG_PO_DAMAGE_ORDER",
+        "MTG_LAVAMANCER_TARGET_PRUNE",
+        "MTG_FIREBLAST_COPY_PINS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

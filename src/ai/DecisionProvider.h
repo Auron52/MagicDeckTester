@@ -296,6 +296,10 @@ public:
         const GameState&, std::vector<std::pair<int, int>>&) const {}
     virtual void GraveyardDamageFuelCandidates(
         const GameState&, std::vector<std::string>&) const {}
+    // Grim Lavamancer's ping TARGETS (opponent 0, kAbilitySelfTarget, creature / planeswalker card numbers).
+    // The generic provider keeps every legal target; a deck may RESTRICT them. The caller keeps every target
+    // for human play and under MTG_UNPRUNE=fixedburntarget (the fixed direct-damage target axis).
+    virtual void GraveyardDamageTargetCandidates(const GameState&, std::vector<int>&) const {}
     virtual bool OffersPaidFireblastCast(const GameState&) const { return true; }
 
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor

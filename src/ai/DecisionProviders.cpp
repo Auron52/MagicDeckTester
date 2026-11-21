@@ -67656,6 +67656,33 @@ void MidrangeBurnProvider::GraveyardDamageFuelCandidates(
     if (narrow) { FoldGraveyardFuelToOne(pairs); }   // Midrange Burn reads no specific graveyard card
 }
 
+// SHARED: Grim Lavamancer's ping is pointed at the OPPONENT only -- the opponent (target 0) and any
+// creature / planeswalker the opponent controls stay; our own face (kAbilitySelfTarget) and every
+// permanent we control are dropped. USER 2026-11-21: "This indeed should be pruned. In fact everything
+// but the opponent should be pruned." A provider RESTRICTION of the searched target axis (the search
+// still branches over what is left): neither list has a payoff for damaging itself or its own
+// creatures (an ability is not a spell, so no prowess; Needle Drop / spectacle read the OPPONENT's
+// damage, which the face ping gives strictly more of). Opponent creatures / walkers never occur in
+// goldfish, but stay legal. Human play and MTG_UNPRUNE=fixedburntarget keep every target (the caller).
+// MTG_LAVAMANCER_TARGET_PRUNE: DEFAULT ON; =0 -> every legal target.
+static void PruneGraveyardDamageTargetsToOpponent(const GameState& s, std::vector<int>& targets)
+{
+    static const bool on = EnvOn("MTG_LAVAMANCER_TARGET_PRUNE", true);
+    if (!heurarm::Flag(heurarm::LAVAMANCER_TARGET_PRUNE, on)) { return; }
+    const int me = s.active_player_index;
+    targets.erase(std::remove_if(targets.begin(), targets.end(), [&](int t)
+    {
+        if (t == 0) { return false; }   // the opponent
+        if (t < 0) { return true; }     // kAbilitySelfTarget: our own face
+        for (const Permanent& q : s.battlefield)
+        { if (q.card.m_number == t) { return q.controller_index == me; } }
+        return false;                   // not on the battlefield: leave it to the apply
+    }), targets.end());
+}
+
+void MidrangeBurnProvider::GraveyardDamageTargetCandidates(const GameState& s, std::vector<int>& targets) const
+{ PruneGraveyardDamageTargetsToOpponent(s, targets); }
+
 bool MidrangeBurnProvider::OffersPaidFireblastCast(const GameState& s) const
 {
     static const bool prune = EnvOn("MTG_MIDRANGE_FIREBLAST_PAID", true);
@@ -68121,6 +68148,9 @@ void OneDropBurnProvider::GraveyardDamageFuelCandidates(
     static const bool narrow = EnvOn("MTG_ONEDROPBURN_LAVAMANCER_FUEL", true);
     if (narrow) { FoldGraveyardFuelToOne(pairs); }
 }
+
+void OneDropBurnProvider::GraveyardDamageTargetCandidates(const GameState& s, std::vector<int>& targets) const
+{ PruneGraveyardDamageTargetsToOpponent(s, targets); }
 
 // The PAID Fireblast ({4}{R}{R}) is omitted when this turn provably cannot reach six mana. Sound upper
 // bound: the deck has no ritual, rock or mana creature, so the turn's mana is the available pool (float
