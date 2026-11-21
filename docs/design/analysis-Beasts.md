@@ -44,7 +44,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
 * **Open gap (batch C, surfaced):** a card drawn by Gargaroth's draw mode (or Packleader off its token) arrives in
   combat; the deck has no searched second main (NOT added to DeckUsesSecondMain, USER unsettled), so it waits a
   turn. Covered by the per-turn second-main gate planned for the provider batch (J).
-* **Running:** nothing (integrator C).
+* **Running:** integrator D (Garruk's Harbinger searched combat-damage dig) + smoke covering C and D.
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
