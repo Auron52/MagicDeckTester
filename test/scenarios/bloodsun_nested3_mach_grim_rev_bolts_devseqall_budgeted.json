@@ -1,0 +1,105 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "active_life": 20,
+ "opponent_life": 6,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 6,
+ "expect_win_turn": 4,
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "0",
+  "MTG_BP_DEV_SEQ_ALL": "1"
+ },
+ "hand": [
+  "Dimir Machinations"
+ ],
+ "library": [
+  "Grim Tutor",
+  "Diabolic Revelation",
+  "Lightning Bolt",
+  "Lightning Bolt"
+ ],
+ "comment": "Blood Sun step 6e (design \u00a714, \"Two-deviation gap\"): the THREE-level chain. Fifteen lands (13 Swamps, 2 Mountains), opponent at 6: Dimir Machinations transmutes into Grim Tutor, Grim Tutor (in the transmute's continuation) fetches Diabolic Revelation (occurrence 0, rank 2), Revelation X = 2 takes both Lightning Bolts (occurrence 1, rank 3), and the Bolts kill this turn. Two simultaneous non-canon continuation choices: reachable only through MTG_BP_DEV_SEQ_ALL's compound slots (the shipped scope opens them at latent occurrences only, and wins T5). Before step 6e even _ALL won T5: FullSearchLine's pass 2 ran only when pass 1 met a LATENT occurrence, and under _ALL the occurrence a compound slot is built from was never recorded. MTG_BLOODSUN_USER_PRUNE=0 (Bolt is not a USER target). d3, budget 100."
+}

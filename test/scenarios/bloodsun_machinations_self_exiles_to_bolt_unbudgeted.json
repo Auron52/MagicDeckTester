@@ -41,5 +41,8 @@
  "budget_ms": 0,
  "max_turns": 5,
  "expect_win_turn": 4,
- "comment": "Blood Sun step 5 (design \u00a79.2): Dimir Machinations on our own library, top Swamp, Swamp, Lightning Bolt, opponent at 3. Exiling both Swamps puts the Bolt on top: drawn on turn 4 and cast with the Mountain -- a turn-4 kill (untouched, the Bolt is drawn on turn 6). The disposition is SEARCHED (the reorder pin's 16-way fan), so the search finds it whatever the provider's default keeps. d3, budget 0."
+ "comment": "Blood Sun step 5 (design \u00a79.2): Dimir Machinations on our own library, top Swamp, Swamp, Lightning Bolt, opponent at 3. Exiling both Swamps puts the Bolt on top: drawn on turn 4 and cast with the Mountain -- a turn-4 kill (untouched, the Bolt is drawn on turn 6). The disposition is SEARCHED (the reorder pin's 16-way fan), so the search finds it whatever the provider's default keeps. d3, budget 0. Step 6e: run with the B5 sub-lever MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST=0 (the default ON drops the self-target cast; the opponent target stays pruned under MTG_BLOODSUN_USER_PRUNE) -- this fixture pins the self-target mechanics.",
+ "env": {
+  "MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST": "0"
+ }
 }

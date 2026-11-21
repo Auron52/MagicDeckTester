@@ -12,6 +12,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/RevelationPackages.h"
+#include "core/SpellEffects.h"
 
 #include <algorithm>
 #include <map>
@@ -491,7 +492,9 @@ TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source pe
     for (int k = 0; k < 7; ++k) { PutUp(s, "Swamp", 10 + k); }
     s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
     s.players[0].hand.push_back(CardUp("Blood Sun", 2));
-    Lib(s, { "Rakdos Carnarium", "Rakdos Carnarium", "City of Brass", "City of Brass", "Swamp" });
+    // 7 mana and ONE Revelation: X = 2 exactly (X = 1 needs a spare Revelation), so a package holds two cards. Time Warp
+    // is the admitted partner: without one a two-card package would need BOTH red sources, which the cap refuses.
+    Lib(s, { "Rakdos Carnarium", "Rakdos Carnarium", "City of Brass", "City of Brass", "Swamp", "Time Warp" });
     {
         PruneArm arm(true);
         const std::vector<std::string> g = GrimTargets(s);
@@ -504,7 +507,7 @@ TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source pe
             CHECK(red <= 1);
             if (red == 1) { ++with_red; }
         }
-        CHECK(with_red >= 2);   // {Carnarium} and {City of Brass} are both packages
+        CHECK(with_red == 2);   // {Carnarium, Time Warp} and {City of Brass, Time Warp}
     }
     {
         PruneArm arm(false);
@@ -516,4 +519,119 @@ TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source pe
         }
         CHECK(both);   // the unrestricted space holds them together
     }
+}
+
+// ---- Step 6e (ledger B5 / B8 / B10, USER 2026-11-21).
+
+TEST_CASE("bloodsun prune (B8): at most one Revelation per package, never a Revelation-only package")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 8; ++k) { PutUp(s, "Swamp", 10 + k); }   // 8 mana: X <= 3
+    s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
+    Lib(s, { "Diabolic Revelation", "Diabolic Revelation", "Diabolic Revelation", "Time Warp", "Emrakul, the Aeons Torn" });
+    auto revs = [](const std::vector<std::string>& pk) -> long
+    { return std::count(pk.begin(), pk.end(), "Diabolic Revelation"); };
+    {
+        PruneArm arm(true);
+        const std::set<std::vector<std::string>> on = AllPackages(s);
+        for (const auto& pk : on)
+        {
+            CHECK(revs(pk) <= 1);
+            CHECK(revs(pk) < static_cast<long>(pk.size()));
+        }
+        // Rev (cap 1), Time Warp (1), Emrakul (1); X in {2, 3} (one Revelation in hand): every multiset, none refused
+        // besides the Revelation-only ones (there are none of size >= 2 under the one-copy cap).
+        CHECK(static_cast<long long>(on.size())
+              == revpkg::CountMultisets({ 1, 1, 1 }, 2) + revpkg::CountMultisets({ 1, 1, 1 }, 3));
+        CHECK(on.count({ "Diabolic Revelation", "Time Warp" }) == 1);   // a replacement Revelation + a useful card
+        // A spare Revelation in hand opens X = 1: {Time Warp} and {Emrakul}, never {Revelation} (keep the mana).
+        GameState two = s;
+        two.players[0].hand.push_back(CardUp("Diabolic Revelation", 2));
+        const std::set<std::vector<std::string>> tp = AllPackages(two);
+        CHECK(tp.count({ "Time Warp" }) == 1);
+        CHECK(tp.count({ "Emrakul, the Aeons Torn" }) == 1);
+        CHECK(tp.count({ "Diabolic Revelation" }) == 0);
+        for (const auto& pk : tp) { CHECK(revs(pk) <= 1); }
+    }
+    {
+        PruneArm arm(false);
+        const std::set<std::vector<std::string>> off = AllPackages(s);
+        CHECK(off.count({ "Diabolic Revelation", "Diabolic Revelation" }) == 1);
+        CHECK(off.count({ "Diabolic Revelation" }) == 1);
+    }
+}
+
+namespace
+{
+// The autonomous Machinations hand casts of the menu's CollectActions: (self-target count, opponent-target count).
+std::pair<int, int> MachinationsCasts(const GameState& s)
+{
+    std::pair<int, int> n{ 0, 0 };
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Dimir Machinations") { continue; }
+        if (a.player_target != 0) { ++n.second; } else { ++n.first; }
+    }
+    return n;
+}
+struct MachCastArm
+{
+    explicit MachCastArm(bool on) { heurarm::t_arm[heurarm::BLOODSUN_PRUNE_MACHINATIONS_CAST] = on ? 1 : 0; }
+    ~MachCastArm() { heurarm::t_arm[heurarm::BLOODSUN_PRUNE_MACHINATIONS_CAST] = -1; }
+};
+}   // namespace
+
+TEST_CASE("bloodsun prune (B5): Machinations never cast at the opponent; the self cast behind its sub-lever; transmute kept")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 3; ++k) { PutUp(s, "Swamp", 10 + k); }
+    s.opponent_library_dealt = true;
+    for (int k = 0; k < 6; ++k) { s.players[1].library.push_back(CardUp("Swamp", 100010 + k)); }
+    s.players[0].hand.push_back(CardUp("Dimir Machinations", 1));
+    Lib(s, { "Grim Tutor", "Blood Sun", "Swamp", "Swamp", "Swamp" });
+    {
+        PruneArm arm(true);
+        MachCastArm sub(true);   // the default: no cast at all
+        const std::pair<int, int> n = MachinationsCasts(s);
+        CHECK(n.first == 0);
+        CHECK(n.second == 0);
+        CHECK(TransmuteTargets(s) == std::set<std::string>{ "Blood Sun", "Grim Tutor" });   // transmute unaffected
+    }
+    {
+        PruneArm arm(true);
+        MachCastArm sub(false);  // the sub-lever's =0 arm: the self cast returns, the opponent target stays pruned
+        const std::pair<int, int> n = MachinationsCasts(s);
+        CHECK(n.first > 0);
+        CHECK(n.second == 0);
+        CHECK(TransmuteTargets(s) == std::set<std::string>{ "Blood Sun", "Grim Tutor" });
+    }
+    {
+        PruneArm arm(false);
+        MachCastArm sub(true);   // inert while the prune is off: both targets offered
+        const std::pair<int, int> n = MachinationsCasts(s);
+        CHECK(n.first > 0);
+        CHECK(n.second > 0);
+    }
+}
+
+TEST_CASE("bloodsun prune (B10): a Blood Sun fetched earlier this turn leaves Grim Tutor the transmute's only target")
+{
+    GameState s = BaseUp();
+    for (int k = 0; k < 6; ++k) { PutUp(s, "Swamp", 10 + k); }
+    s.players[0].hand.push_back(CardUp("Dimir Machinations", 1));
+    Lib(s, { "Blood Sun", "Blood Sun", "Grim Tutor", "Time Warp", "Fastbond" });
+    PruneArm arm(true);
+    CHECK(TransmuteTargets(s) == std::set<std::string>{ "Blood Sun", "Grim Tutor" });
+    CHECK(Has(GrimTargets(s), "Blood Sun"));
+    // This turn's first tutor (a Grim Tutor's resolution) takes a Blood Sun: the state every later decision of the turn
+    // -- the breakpoint continuation's derived list, a second tutor's resolution -- is read from.
+    GameState after = s;
+    PerformTutor(after, 0, DefUp("Grim Tutor").params, "Blood Sun", "Grim Tutor");
+    REQUIRE(std::count_if(after.players[0].hand.begin(), after.players[0].hand.end(),
+                          [](const Card& c) { return c.m_name.str() == "Blood Sun"; }) == 1);
+    CHECK(TransmuteTargets(after) == std::set<std::string>{ "Grim Tutor" });
+    const std::vector<std::string> g = GrimTargets(after);
+    CHECK_FALSE(Has(g, "Blood Sun"));
+    CHECK(Has(g, "Time Warp"));
+    CHECK(Has(g, "Fastbond"));
 }
