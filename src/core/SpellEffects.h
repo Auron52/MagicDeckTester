@@ -57545,6 +57545,9 @@ inline std::vector<std::vector<int>> LotusSacrificePicksImpl(const GameState& st
         }
     };
     rec(rec, 0, need);
+    // The provider's restriction (DecisionProvider::LotusSacrificeRestrict; Blood Sun B13 collapses it to ONE pair),
+    // autonomous play only: a human is offered every land.
+    if (out.size() > 1 && !HumanPlayActive()) { ResolveProvider(state).LotusSacrificeRestrict(state, controller, out); }
     return out;
 }
 inline std::vector<std::vector<int>> LotusSacrificePicks(const GameState& state, int controller,

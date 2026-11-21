@@ -166,6 +166,9 @@ TurnSolver::SearchLeafDepthScope::~SearchLeafDepthScope()
 // printer that only ran under MTG_ROLLOUT_STATS, and the silent-zero table it produced. A census
 // flag must never depend on the operator also remembering its counter gate.
 static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS") || turncensus::On();
+// Blood Sun perf diagnosis (census tut_axis_*): the per-cast named tutor axis -- plans it ADDED, slots (tutor casts) it
+// fanned, and the summed width of those slots' name lists (counters only).
+static std::atomic<long long> g_diag_tut_axis_plans{0}, g_diag_tut_axis_slots{0}, g_diag_tut_axis_names{0};
 // Separate from s_rollout_stats: the why-not histogram re-evaluates several gate predicates per
 // consultation (BpTurnManaSettled, BpSlotIsAfterSite -> a provider CastOrderRank lookup), which is
 // far too expensive to carry on every stats run. Diagnostic only; counters, no behaviour.
@@ -2140,8 +2143,21 @@ inline bool On() { static const bool on = EnvOn("MTG_LA_HIST"); return on; }
 struct Rec { long long calls = 0, cands = 0; };
 inline std::mutex g_mu;
 inline std::map<std::tuple<int, int, int, int, int, int>, Rec> g_hist;
-inline void Note(int turn, bool pre, int depth, int fsn, int rn, int bpn, long long n)
+// Blood Sun perf diagnosis (census columns la_lists / la_big / la_max): every candidate list this host scores, the
+// lists of 256+ candidates, and the largest. Counted only under the census / MTG_ROLLOUT_STATS gate (CountOn).
+inline std::atomic<long long> g_lists{0}, g_big{0}, g_max{0}, g_cands{0}, g_deep_lists{0}, g_deep_cands{0};
+inline void Note(int turn, bool pre, int depth, int fsn, int rn, int bpn, long long n, bool count_on)
 {
+    if (count_on)
+    {
+        g_lists.fetch_add(1, std::memory_order_relaxed);
+        g_cands.fetch_add(n, std::memory_order_relaxed);
+        // "Deep" = rollout nest >= 3: on these boards, the lists along an extra-turn chain inside a rollout.
+        if (rn >= 3) { g_deep_lists.fetch_add(1, std::memory_order_relaxed); g_deep_cands.fetch_add(n, std::memory_order_relaxed); }
+        if (n >= 256) { g_big.fetch_add(1, std::memory_order_relaxed); }
+        long long m = g_max.load(std::memory_order_relaxed);
+        while (n > m && !g_max.compare_exchange_weak(m, n)) {}
+    }
     if (!On()) { return; }
     std::lock_guard<std::mutex> lk(g_mu);
     Rec& r = g_hist[std::make_tuple(turn, pre ? 1 : 0, depth, std::min(fsn, 9), std::min(rn, 9), std::min(bpn, 9))];
@@ -32714,11 +32730,14 @@ inline Report g_report;
 namespace nodekind
 {
 enum Kind { kOutside = 0, kPutBackVar, kPonderVar, kTutorVar, kSeedPin, kRemand, kCycleSeed, kPutBackBase,
-            kPonderBase, kFetch, kBpVar, kDiscardVar, kOther, kBpChild, kN };
+            kPonderBase, kFetch, kBpVar, kDiscardVar, kOther, kBpChild,
+            // Blood Sun perf diagnosis (2026-11-21): the package / extra-turn / extra-land kinds, carved out of kOther.
+            kRevPkg, kXTurn, kMultiLand, kTutorCast, kN };
 static const char* kNames[kN] = { "outside(executor/root/leaf)", "putback-variant(rank>=1)", "ponder-variant(order>=1)",
     "tutor-variant", "cycle-seed-pin(j>0|decline|remand)", "remand-rider", "cycle-seed(default pin)",
     "putback-cast(rank 0)", "ponder-cast(order 0)", "fetch/land-search", "bp-continuation-variant",
-    "cleanup-discard-variant", "other(base casts/lands/pass)", "bp-node-child" };
+    "cleanup-discard-variant", "other(base casts/lands/pass)", "bp-node-child",
+    "revelation-package-cast", "extra-turn-cast(no pkg)", "multi-land(>=2 drops, no pkg)", "tutor-cast(target, no pkg)" };
 inline bool On() { static const bool v = EnvOn("MTG_NODE_KIND_ATTRIB"); return v; }
 inline std::atomic<long long> g_units[kN][2], g_ns[kN][2], g_nodes[kN][2];
 // ...and the same three by WHERE the node was opened: g_rollout_nest at the node's open (0 = the search window's own
@@ -32771,7 +32790,51 @@ inline int KindOf(const TurnSolver::Plan& p)
     if (!p.fetch_target.empty()) { return kFetch; }
     if (p.bp_choice >= 1) { return kBpVar; }
     if (p.discard_choice >= 1) { return kDiscardVar; }
+    // Blood Sun perf diagnosis: the remaining "other" plans split by what they carry (first match wins).
+    bool xturn = false, tut = false;
+    int lands = p.land_to_play.empty() ? 0 : 1;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { ++lands; continue; }
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (revpkg::IsPackage(a.tutor_target.str())) { return kRevPkg; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.cast_trigger_extra_turns > 0 || d->params.extra_turns_on_resolve > 0) { xturn = true; }
+        if (!a.tutor_target.str().empty()) { tut = true; }
+    }
+    if (xturn) { return kXTurn; }
+    if (lands >= 2) { return kMultiLand; }
+    if (tut) { return kTutorCast; }
     return kOther;
+}
+// Blood Sun perf diagnosis: NON-exclusive plan flags over the same nodes (a plan can carry several), counted by node
+// and, for the node's own (innermost) units, not partitioned -- read them as "how many nodes carry X".
+enum Flag { fRev = 0, fRev2, fGrim, fXTurn, fUlamog, fEmrakul, fMach, fLand2, fNFlags };
+static const char* kFlagNames[fNFlags] = { "has-revelation-package", "has-2+-revelation-casts", "has-grim-tutor-cast",
+    "has-time-warp", "has-ulamog", "has-emrakul", "has-machinations", "has-2+-land-plays" };
+inline std::atomic<long long> g_flag_nodes[fNFlags][3];
+inline std::atomic<long long> g_flag_x_sum{0}, g_flag_x_n{0};   // summed max X over package-carrying nodes
+inline void NoteFlags(const TurnSolver::Plan& p, int where)
+{
+    int revs = 0, lands = p.land_to_play.empty() ? 0 : 1, xmax = 0;
+    bool f[fNFlags] = {};
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::PlayLand) { ++lands; continue; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (a.kind == Action::Kind::CastFromHand && revpkg::IsPackage(a.tutor_target.str()))
+        { ++revs; xmax = std::max(xmax, a.chosen_x); }
+        if (a.kind == Action::Kind::CastFromHand && d->params.tutor_to_hand && !d->params.tutor_up_to_x) { f[fGrim] = true; }
+        if (d->params.extra_turns_on_resolve > 0) { f[fXTurn] = true; }
+        if (d->params.cast_trigger_exile_target_permanents > 0) { f[fUlamog] = true; }
+        if (d->params.cast_trigger_extra_turns > 0) { f[fEmrakul] = true; }
+        if (d->params.look_top_target_player_exile_reorder > 0) { f[fMach] = true; }
+    }
+    f[fRev] = revs >= 1; f[fRev2] = revs >= 2; f[fLand2] = lands >= 2;
+    for (int i = 0; i < fNFlags; ++i) { if (f[i]) { g_flag_nodes[i][where].fetch_add(1, std::memory_order_relaxed); } }
+    if (revs > 0) { g_flag_x_sum.fetch_add(xmax, std::memory_order_relaxed); g_flag_x_n.fetch_add(1, std::memory_order_relaxed); }
 }
 struct Scope
 {
@@ -32787,7 +32850,7 @@ struct Scope
         g_nodes[kind][turncensus::t_probe > 0 ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
         g_wnodes[kind][t_where[t_top]].fetch_add(1, std::memory_order_relaxed);
     }
-    explicit Scope(const TurnSolver::Plan& p) : Scope(On() ? KindOf(p) : -1) {}
+    explicit Scope(const TurnSolver::Plan& p) : Scope(On() ? KindOf(p) : -1) { if (on) { NoteFlags(p, t_where[t_top]); } }
     ~Scope() { if (on) { Credit(); --t_top; } }
     Scope(const Scope&) = delete;
     Scope& operator=(const Scope&) = delete;
@@ -32818,6 +32881,13 @@ struct Report
             }
         }
         static const char* kWhere[3] = { "window(rollout nest 0)", "leaf(rollout nest 1)", "deeper(nest 2+)" };
+        for (int i = 0; i < fNFlags; ++i)
+        {
+            std::fprintf(stderr, "[node-flag] %-26s window=%lld leaf=%lld deeper=%lld\n", kFlagNames[i],
+                         g_flag_nodes[i][0].load(), g_flag_nodes[i][1].load(), g_flag_nodes[i][2].load());
+        }
+        std::fprintf(stderr, "[node-flag] package-carrying nodes=%lld mean max-X=%.2f\n", g_flag_x_n.load(),
+                     g_flag_x_n.load() ? static_cast<double>(g_flag_x_sum.load()) / g_flag_x_n.load() : 0.0);
         long long wu = 0; double ww = 0;
         for (int k = 0; k < kN; ++k) { for (int h = 0; h < 3; ++h) { wu += g_wunits[k][h].load(); ww += g_wns[k][h].load() / 1e9; } }
         for (int h = 0; h < 3; ++h)
@@ -43036,6 +43106,12 @@ namespace revwave
     // whose best line already wins this round enumerates no further package).
     inline std::atomic<long long> g_phase_packages{0};
     inline std::atomic<long long> g_phase_round_win_stops{0};
+    // Blood Sun perf diagnosis (MTG_ROLLOUT_STATS / MTG_TURN_CENSUS only; counters, nothing reads them): per
+    // autonomous emitter visit (one Revelation in hand reaching the package enumeration), the packages emitted, the
+    // multisets the rank-lex walk traversed (refused / over-group-cap included), the X values that emitted at least
+    // one package, the X range (xmax - x_min + 1), and the largest single emission.
+    inline std::atomic<long long> g_diag_enum{0}, g_diag_emit{0}, g_diag_trav{0}, g_diag_xd{0}, g_diag_xrange{0},
+                                  g_diag_emit_max{0};
     // Does the active player's hand hold a package tutor? Such a node's enumeration is never memoised (a memo hit
     // would skip CollectActions and so the `pending` flag the host's wave phase reads). One hand walk; false for
     // every deck without the card.
@@ -44396,23 +44472,37 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const long long end = revpkg::WaveEnd(revwave::g_state.wave);
                 std::vector<int> c;
+                long long dg_emit = 0, dg_trav = 0, dg_xd = 0;   // perf diagnosis (s_rollout_stats only)
                 for (int xv = xmax; xv >= x_min; --xv)
                 {
                     if (!revpkg::FirstFill(c, caps, xv)) { continue; }
                     long long o = 0;
                     do
                     {
+                        ++dg_trav;
                         if (over_group_cap(c)) { continue; }   // -> the NextLex condition below
                         // One refused multiset (RevelationPackageRefused; Blood Sun step 6e, the USER's B8): skipped
                         // like a group-cap overflow, no ordinal spent. Default false.
                         if (rprov.RevelationPackageRefused(state, gdefs, c)) { continue; }
                         if (o >= end) { revwave::g_state.pending = true; break; }
+                        if (o == 0) { ++dg_xd; }
+                        ++dg_emit;
                         int ev = 0;
                         for (std::size_t r = 0; r < c.size(); ++r) { ev += c[r] * cls_eval[r]; }
                         emit(xv, revpkg::EncodePackage(revpkg::WaveOf(o), revpkg::PackageNames(classes, ranked, c)), ev);
                         ++revwave::g_state.admitted;
                         ++o;
                     } while (revpkg::NextLex(c, caps));
+                }
+                if (s_rollout_stats)
+                {
+                    revwave::g_diag_enum.fetch_add(1, std::memory_order_relaxed);
+                    revwave::g_diag_emit.fetch_add(dg_emit, std::memory_order_relaxed);
+                    revwave::g_diag_trav.fetch_add(dg_trav, std::memory_order_relaxed);
+                    revwave::g_diag_xd.fetch_add(dg_xd, std::memory_order_relaxed);
+                    revwave::g_diag_xrange.fetch_add(std::max(0, xmax - x_min + 1), std::memory_order_relaxed);
+                    long long m = revwave::g_diag_emit_max.load(std::memory_order_relaxed);
+                    while (dg_emit > m && !revwave::g_diag_emit_max.compare_exchange_weak(m, dg_emit)) {}
                 }
                 continue;
             }
@@ -99348,6 +99438,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         const DecisionProvider& tprov = ResolveProvider(state);
         std::map<std::string, std::vector<std::string>> nm_cache;
+        const std::size_t diag_before = all.size();   // Blood Sun perf diagnosis (census tut_axis_*)
         std::vector<TurnSolver::Plan> extra;
         const std::size_t n_named = all.size();
         for (std::size_t pi = 0; pi < n_named; ++pi)
@@ -99379,6 +99470,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 slot_names.push_back(&it->second);
             }
             if (slots.empty()) { continue; }
+            if (s_rollout_stats)
+            {
+                g_diag_tut_axis_slots.fetch_add(static_cast<long long>(slots.size()), std::memory_order_relaxed);
+                for (const auto* v : slot_names)
+                { g_diag_tut_axis_names.fetch_add(static_cast<long long>(v->size()), std::memory_order_relaxed); }
+            }
             const std::size_t ns = slots.size();
             std::vector<std::size_t> idx(ns, 0);
             bool first = true;
@@ -99422,6 +99519,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
             plan_tr.clear();   // indices moved: recompute lazily
         }
+        if (s_rollout_stats)
+        { g_diag_tut_axis_plans.fetch_add(static_cast<long long>(all.size() - diag_before), std::memory_order_relaxed); }
     }
 
     // WISH SINGLETONS (AccomplishedAlchemist chunk E1, claude-play sweep seed 80012). Every sideboard
@@ -112395,6 +112494,8 @@ inline bool LaTieTightenOn()
 }
 // Counted only under MTG_ROLLOUT_STATS (a shared atomic per pruned candidate would contend in a pool).
 static std::atomic<long long> g_la_tie_pruned{0}, g_la_wave_pruned{0}, g_la_tie_tightened{0};
+// The nested round-win stop (DecisionProvider::NestedRoundWinStop): lists it ended, candidates it left unscored.
+static std::atomic<long long> g_round_stop_breaks{0}, g_round_stop_skipped{0};
 
 // MTG_LEAF_KILL_ONLY -- DEFAULT ON; =0 restores the full per-turn solve at a rollout's last turn.
 //
@@ -112656,6 +112757,11 @@ struct LaTiePruneDumper
         {
             std::fprintf(stderr, "[la-tie-prune] candidate_rollouts_skipped=%lld wave_rollouts_skipped=%lld"
                                  " candidate_cutoffs_tightened=%lld\n", a, b, c);
+        }
+        if (g_round_stop_breaks.load() > 0)
+        {
+            std::fprintf(stderr, "[round-win-stop] lists_stopped=%lld candidates_not_scored=%lld\n",
+                         g_round_stop_breaks.load(), g_round_stop_skipped.load());
         }
     }
 };
@@ -118442,7 +118548,23 @@ public:
     bool LandLive() const { return land_; }
     bool GraceLive() const { return grace_; }
     bool EmeriaLive() const { return emeria_; }
+    // Blood Sun perf diagnosis (census fan_* columns; counters only): fans opened / crossings walked, and the
+    // subset whose crossing-land (Burgeoning / Manabond) digit is live.
+    static inline std::atomic<long long> g_diag_open{0}, g_diag_open_cl{0}, g_diag_cross{0}, g_diag_cross_cl{0};
     bool Next()
+    {
+        const bool first = !started_;
+        const bool r = NextImpl();
+        if (r && s_rollout_stats)
+        {
+            if (first) { g_diag_open.fetch_add(1, std::memory_order_relaxed);
+                         if (cl_) { g_diag_open_cl.fetch_add(1, std::memory_order_relaxed); } }
+            g_diag_cross.fetch_add(1, std::memory_order_relaxed);
+            if (cl_) { g_diag_cross_cl.fetch_add(1, std::memory_order_relaxed); }
+        }
+        return r;
+    }
+    bool NextImpl()
     {
         if (!started_)
         {
@@ -131496,6 +131618,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // 2026-10-15: no unbudgeted-only changes); a budget only re-spends the units it frees.
         const bool tie_prune_here = LaTiePruneOn() && !enforce_budget
                                  && !trace_this && !DomActive();
+        // THE NESTED ROUND-WIN STOP (DecisionProvider::NestedRoundWinStop; opt-in, Blood Sun): inside a rollout only
+        // (g_rollout_nest > 0 -- never a decision root, budgeted or not), where the solve's reader is its win turn.
+        const bool round_stop_here = tie_prune_here && g_rollout_nest > 0
+                                  && ResolveProvider(state).NestedRoundWinStop();
         if (trace_this)
         {
             // depth and the phase are printed too: under an UNBOUNDED budget enforce_budget is
@@ -132132,13 +132258,26 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             ? std::min(cands.size(), static_cast<std::size_t>(s_et_chain_top_n))
             : cands.size();
         lahist::Note(state.turn_number, is_pre_combat, depth, g_fsline_nest, g_rollout_nest, g_bp_enum_depth,
-                     static_cast<long long>(n_cands));
+                     static_cast<long long>(n_cands), s_rollout_stats);
         for (std::size_t ci = 0; ci < n_cands; ++ci)
         {
             if (EtChainTrialBudgetExceeded())
             {
                 g_et_chain_trial_aborted = true;
                 pass_aborted = true;
+                break;
+            }
+            // THE NESTED ROUND-WIN STOP (see round_stop_here): the pass already holds a win THIS ROUND, so no later
+            // candidate can return an earlier one -- stop before charging or applying it (the tie prune's own skip
+            // condition, minus the value tie-break nothing above a nested solve reads).
+            if (round_stop_here && pass_has_best && pass_best_win <= state.turn_number
+                && (pass_best_inf >= 0 || !state.inf_life_possible || !leafeval::InfWinTie()))
+            {
+                if (s_rollout_stats)
+                {
+                    g_round_stop_breaks.fetch_add(1, std::memory_order_relaxed);
+                    g_round_stop_skipped.fetch_add(static_cast<long long>(n_cands - ci), std::memory_order_relaxed);
+                }
                 break;
             }
             // The pass ceiling tripped inside an earlier candidate's rollout: every rollout from here
@@ -143234,6 +143373,13 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     { t += static_cast<long long>((s.*m).load(std::memory_order_relaxed)); }
     return t;
 }
+long long PayRefineDiagCount(int k);   // ManaPayment.cpp (Blood Sun perf diagnosis)
+static long long MtgTurnCensusFlag(int f)   // nodekind's non-exclusive plan flags, summed over where (needs MTG_NODE_KIND_ATTRIB)
+{
+    long long t = 0;
+    for (int h = 0; h < 3; ++h) { t += nodekind::g_flag_nodes[f][h].load(std::memory_order_relaxed); }
+    return t;
+}
 #define MTG_TURN_CENSUS_FIELDS(X)                                                                 \
     /* ---- WHERE THE UNITS WENT. These 16 sum exactly to `units`, and turn_census.py ABORTS if    \
      * they ever don't -- add a bucket with every new Consume site. ---- */                       \
@@ -143442,7 +143588,42 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(w_apply,            workctr::t_n[workctr::kApply])                                          \
     X(w_pay,              workctr::t_n[workctr::kPay])                                            \
     X(w_simkey,           workctr::t_n[workctr::kSimKey])                                         \
-    X(w_plan_emit,        workctr::t_n[workctr::kPlanEmit])
+    X(w_plan_emit,        workctr::t_n[workctr::kPlanEmit])                                       \
+    /* Blood Sun perf diagnosis: Diabolic Revelation package emission (see revwave::g_diag_*). */ \
+    X(rv_enum,            MTG_TURN_CENSUS_CV(revwave::g_diag_enum))                               \
+    X(rv_emit,            MTG_TURN_CENSUS_CV(revwave::g_diag_emit))                               \
+    X(rv_trav,            MTG_TURN_CENSUS_CV(revwave::g_diag_trav))                               \
+    X(rv_xd,              MTG_TURN_CENSUS_CV(revwave::g_diag_xd))                                 \
+    X(rv_xrange,          MTG_TURN_CENSUS_CV(revwave::g_diag_xrange))                             \
+    X(rv_wave_pk,         MTG_TURN_CENSUS_CV(revwave::g_phase_packages))                          \
+    X(rv_wave_stops,      MTG_TURN_CENSUS_CV(revwave::g_phase_round_win_stops))                   \
+    /* ...and the pay refine (ManaPayment.cpp PayRefineAfter; us only under MTG_PAY_REFINE_STATS). */ \
+    X(fan_open,           MTG_TURN_CENSUS_CV(BoundaryFan::g_diag_open))                           \
+    X(fan_open_cl,        MTG_TURN_CENSUS_CV(BoundaryFan::g_diag_open_cl))                        \
+    X(fan_cross,          MTG_TURN_CENSUS_CV(BoundaryFan::g_diag_cross))                          \
+    X(fan_cross_cl,       MTG_TURN_CENSUS_CV(BoundaryFan::g_diag_cross_cl))                       \
+    X(la_lists,           MTG_TURN_CENSUS_CV(lahist::g_lists))                                    \
+    X(la_big,             MTG_TURN_CENSUS_CV(lahist::g_big))                                      \
+    X(la_cands,           MTG_TURN_CENSUS_CV(lahist::g_cands))                                    \
+    X(la_deep_lists,      MTG_TURN_CENSUS_CV(lahist::g_deep_lists))                               \
+    X(la_deep_cands,      MTG_TURN_CENSUS_CV(lahist::g_deep_cands))                               \
+    X(tut_axis_plans,     MTG_TURN_CENSUS_CV(g_diag_tut_axis_plans))                              \
+    X(tut_axis_slots,     MTG_TURN_CENSUS_CV(g_diag_tut_axis_slots))                              \
+    X(tut_axis_names,     MTG_TURN_CENSUS_CV(g_diag_tut_axis_names))                              \
+    X(rstop_lists,        MTG_TURN_CENSUS_CV(g_round_stop_breaks))                                \
+    X(rstop_skipped,      MTG_TURN_CENSUS_CV(g_round_stop_skipped))                               \
+    X(nk_rev,             MtgTurnCensusFlag(nodekind::fRev))                                      \
+    X(nk_rev2,            MtgTurnCensusFlag(nodekind::fRev2))                                     \
+    X(nk_grim,            MtgTurnCensusFlag(nodekind::fGrim))                                     \
+    X(nk_tw,              MtgTurnCensusFlag(nodekind::fXTurn))                                    \
+    X(nk_ulamog,          MtgTurnCensusFlag(nodekind::fUlamog))                                   \
+    X(nk_emrakul,         MtgTurnCensusFlag(nodekind::fEmrakul))                                  \
+    X(nk_mach,            MtgTurnCensusFlag(nodekind::fMach))                                     \
+    X(nk_land2,           MtgTurnCensusFlag(nodekind::fLand2))                                    \
+    X(prf_seen,           PayRefineDiagCount(0))                                                  \
+    X(prf_trig,           PayRefineDiagCount(1))                                                  \
+    X(prf_found,          PayRefineDiagCount(2))                                                  \
+    X(prf_us,             PayRefineDiagCount(3))
 
 const std::vector<const char*>& turncensus::FieldNames()
 {
