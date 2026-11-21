@@ -393,3 +393,128 @@ TEST_CASE("free turns: the deal applies the hurdles under the flag (every head),
     }
     CHECK(screwed_off > 0);   // the sample does exercise the screw hurdle
 }
+
+namespace {
+Decklist FtDeckWith(const std::vector<std::string>& main, const std::vector<std::string>& side = {})
+{
+    Decklist deck = FtForests();
+    for (const std::string& n : main)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        REQUIRE_MESSAGE(d != nullptr, "not in cards.json: ", n);
+        deck.mainboard.push_back(d->card);
+    }
+    for (const std::string& n : side)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        REQUIRE_MESSAGE(d != nullptr, "not in cards.json: ", n);
+        deck.sideboard.push_back(d->card);
+    }
+    return deck;
+}
+} // namespace
+
+TEST_CASE("free turns: the lock trait arms only on a card that can strip ALL lands or ALL nonland hand cards")
+{
+    FtLoadDb();
+    // IN: mass exile, the end-step hand discard, annihilator.
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Worldfire" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Sire of Insanity" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Emrakul, the Aeons Torn" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Ulamog, the Infinite Gyre" })));
+    // OUT: a creature steal (Captivating Vampire), an opponent discard the engine does not model (Neheb), a land
+    // the opponent replaces with a basic (White Orchid Phantom), one-land removals.
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Captivating Vampire" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Neheb, the Worthy" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "White Orchid Phantom" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Acidic Slime" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Fulminator Mage" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Kiora Bests the Sea God" })));
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({})));
+    // The SIDEBOARD counts only when a main-deck wish can reach it: Vampires' wishless sideboard Worldfire is out.
+    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Captivating Vampire" }, { "Worldfire" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Living Wish" }, { "Sire of Insanity" })));
+}
+
+TEST_CASE("free turns: under the rule the opponent's cleanup sheds LANDS first and keeps its spells")
+{
+    auto overfull = [] {
+        GameState s = FtFresh();
+        s.players[1].hand = { FtCard("Lightning Bolt", 100001), FtCard("Turntimber Symbiosis", 100002) };
+        for (int i = 0; i < 7; ++i) { s.players[1].hand.push_back(FtCard("Mountain", 100010 + i)); }
+        FtOppPerm(s, "Mountain", 100030);
+        return s;
+    };
+    {   // OFF: oldest first, as ever -- both spells go, the kept hand is all lands: "locked" with no lock card.
+        FtScope f(0);
+        GameState s = overfull();
+        opponentdeck::EndOfTurnCleanup(s);
+        CHECK(s.players[1].hand.size() == 7);
+        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Lightning Bolt", "Turntimber Symbiosis" });
+    }
+    {   // ON: the two oldest LANDS go; the spells (an MDFC is a nonland card in hand) stay, so no lock.
+        FtScope f(1);
+        GameState s = overfull();
+        opponentdeck::EndOfTurnCleanup(s);
+        CHECK(s.players[1].hand.size() == 7);
+        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Mountain", "Mountain" });
+        CHECK(s.players[1].hand[0].m_name == "Lightning Bolt");
+        CHECK(s.players[1].hand[1].m_name == "Turntimber Symbiosis");
+        CHECK_FALSE(freeturn::LockHolds(s));
+        // A hand with no land left sheds its oldest nonland.
+        s.players[1].hand.clear();
+        for (int i = 0; i < 8; ++i) { s.players[1].hand.push_back(FtCard("Lightning Bolt", 100040 + i)); }
+        opponentdeck::EndOfTurnCleanup(s);
+        CHECK(s.players[1].hand.size() == 7);
+        CHECK(s.players[1].hand.front().m_number == 100041);
+    }
+    {   // ON with the hurdles off (MTG_FREE_TURN_HURDLES=0, the credit alone): oldest first.
+        FtScope f(1, 0);
+        GameState s = overfull();
+        opponentdeck::EndOfTurnCleanup(s);
+        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Lightning Bolt", "Turntimber Symbiosis" });
+    }
+}
+
+TEST_CASE("free turns: 2HG -- the second head's cleanup sheds lands first too")
+{
+    FtScope f(1);
+    GameState s = FtFresh(2);
+    REQUIRE(opponentdeck::HasSecondHead(s));
+    s.opponent2_hand = { FtCard("Lightning Bolt", 110001) };
+    for (int i = 0; i < 7; ++i) { s.opponent2_hand.push_back(FtCard("Forest", 110010 + i)); }
+    opponentdeck::EndOfTurnCleanup(s);
+    REQUIRE(s.opponent2_hand.size() == 7);
+    CHECK(s.opponent2_hand.front().m_name == "Lightning Bolt");
+}
+
+TEST_CASE("reference replay: --legacy-opponent-land-entry restores the drop a reference was recorded against")
+{
+    // Creature_Burn/claude_s9_gi8: recorded before the opponent's land entry rules (ce5866171). The legacy drop is
+    // the leftmost FRONT-face land with no entry trigger: a Gruul Turf does not bounce, an MDFC is never played.
+    auto board = [] {
+        GameState s = FtFresh();
+        FtOppPerm(s, "Forest", 100001);
+        s.players[1].hand = { FtCard("Turntimber Symbiosis", 100002), FtCard("Gruul Turf", 100003) };
+        return s;
+    };
+    auto opp_lands = [](const GameState& s) {
+        std::vector<std::string> out;
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == 1) { out.push_back(p.card.m_name.str()); } }
+        return out;
+    };
+    {
+        GameState s = board();
+        opponentdeck::PlayLeftmostLand(s);
+        CHECK(opp_lands(s) == std::vector<std::string>{ "Gruul Turf" });   // bounced the Forest
+        CHECK(FtNames(s.players[1].hand) == std::vector<std::string>{ "Turntimber Symbiosis", "Forest" });
+    }
+    {
+        g_play_legacy_opponent_land_entry = true;
+        GameState s = board();
+        opponentdeck::PlayLeftmostLand(s);
+        g_play_legacy_opponent_land_entry = false;
+        CHECK(opp_lands(s) == std::vector<std::string>{ "Forest", "Gruul Turf" });   // no bounce
+        CHECK(FtNames(s.players[1].hand) == std::vector<std::string>{ "Turntimber Symbiosis" });
+    }
+}

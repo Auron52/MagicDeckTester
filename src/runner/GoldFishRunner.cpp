@@ -673,30 +673,44 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 }
 
 // FREE TURNS (MTG_FREE_TURNS): can this deck LOCK the passive opponent (core/FreeTurns.h)? With the opening
-// hurdles the opponent always holds a land on the battlefield and two nonlands in hand unless one of OUR effects
-// removes them, so only a card that strips the opponent's lands or hand can earn a free turn: Worldfire's mass
-// exile, Sire of Insanity's end-step discard, a combat-damage discard, and the land-destruction / land-steal
-// effects. MAIN + SIDEBOARD (a wish can fetch one). A deck this misses still receives the credit in play (the lock
-// check is general, USER 2026-11-21); only the search's turn-edge prunes stay armed for it, and the measurement
-// reports any free turn such a deck receives as a hole in this list.
+// hurdles the opponent holds two lands and two nonlands in its opening hand, and it plays a land each turn, so from
+// its third turn it has at least two lands on the battlefield (a Karoo that bounces the other land costs it one turn;
+// a Lake of the Dead with no other Swamp is the one list that can sit on a single land). It never casts, so its hand
+// only loses nonlands to one of OUR effects. Only a card that can strip ALL of the opponent's lands or ALL of its
+// nonland hand cards can earn a free turn. Audit per param (2026-11-21; docs/design/opponent-lockdown-free-turns.md):
+//   IN   exile_all_permanents_hands_graveyards (Worldfire): exiles every land and every hand card.
+//   IN   endstep_each_player_discards_hand (Sire of Insanity): the opponent discards its whole hand at its end step.
+//   IN   annihilator (Emrakul 6, Ulamog the Infinite Gyre 4): the opponent sacrifices N permanents per attack,
+//        oldest first (ApplyAnnihilator), lands included; one or two attacks empty its board.
+//   OUT  combat_damage_each_discards (Neheb): only OUR discard is modelled (Combat.cpp
+//        FireNehebCombatDamageDiscards); the passive opponent never discards.
+//   OUT  steal_tap_count (Captivating Vampire): steals a CREATURE; never a land or a hand card.
+//   OUT  etb_destroy_nonbasic_land_optional (White Orchid Phantom): the opponent searches out a basic for the
+//        land it loses (ResolveEtbDestroyNonbasicLandOptional), so its land count never falls.
+//   OUT  the single-target land removals -- etb_destroy_artifact_enchantment_land (Acidic Slime),
+//        sac_outlet_destroy_nonbasic_land (Fulminator Mage), saga_ch3_gain_control_opp_permanent (Kiora Bests the Sea
+//        God ch. III), cast_trigger_destroy_target_permanents (Ulamog's cast trigger): ONE land per copy (the shipping
+//        lists hold one copy, Kiora two, and a saga's ch. III lands two turns after a seven-mana cast) against a board
+//        of two or more lands. (Ulamog stays IN by its annihilator.)
+// MAIN, plus the SIDEBOARD only when a main-deck wish can fetch from it (DeckWishesFromSideboard): an unreachable
+// sideboard card never resolves (Vampires holds Worldfire in a wishless sideboard). A deck this misses still
+// receives the credit in play (the lock check is general, USER 2026-11-21); only the search's turn-edge prunes stay
+// armed for it, and the batch reports any free turn such a deck receives with trait=0, as a hole in this list.
 bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
 {
-    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
-    {
-        for (const Card& c : *zone)
+    auto locks = [](const std::vector<Card>& zone) {
+        for (const Card& c : zone)
         {
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
             if (def == nullptr) { continue; }
             const CardParams& p = def->params;
             if (p.exile_all_permanents_hands_graveyards || p.endstep_each_player_discards_hand
-                || p.combat_damage_each_discards > 0 || p.etb_destroy_artifact_enchantment_land
-                || p.etb_destroy_nonbasic_land_optional || p.sac_outlet_destroy_nonbasic_land
-                || p.cast_trigger_destroy_target_permanents > 0 || p.saga_ch3_gain_control_opp_permanent
-                || p.steal_tap_count > 0)
+                || p.annihilator > 0)
             { return true; }
         }
-    }
-    return false;
+        return false;
+    };
+    return locks(deck.mainboard) || (DeckWishesFromSideboard(deck) && locks(deck.sideboard));
 }
 
 bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)

@@ -26,7 +26,9 @@ namespace freeturn { inline thread_local int t_force = -1; inline thread_local i
 inline bool FreeTurnsOn()
 {
     static const bool on = EnvOn("MTG_FREE_TURNS");   // DEFAULT OFF; =1 enables credit + hurdles
-    return freeturn::t_force >= 0 ? freeturn::t_force != 0 : on;
+    if (freeturn::t_force >= 0) { return freeturn::t_force != 0; }
+    // A reference recorded with the rule off replays with it off (--legacy-no-free-turns, GameLogger.h).
+    return on && !g_play_legacy_no_free_turns;
 }
 // MTG_FREE_TURN_HURDLES (DEFAULT ON *under* MTG_FREE_TURNS; inert without it): the opening-hand screw /
 // flood / bounceland hurdles that keep mana screw from tripping the lock. =0 measures the credit alone.

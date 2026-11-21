@@ -544,7 +544,11 @@ def recording_rule_args(ref):
     ETB life, the legend rule per 2HG head). An `opponent_land_model` recording without the stamp was played
     against the old drop (leftmost front-face land, no entry triggers), so it replays with
     --legacy-opponent-land-entry. Creature_Burn/claude_s9_gi8 is the case: its opponent's Gruul Turf now
-    bounces a land, so the recorded Price of Progress line no longer wins T4."""
+    bounces a land, so the recorded Price of Progress line no longer wins T4.
+
+    `free_turns` (MTG_FREE_TURNS, docs/design/opponent-lockdown-free-turns.md): a game recorded with the
+    free-turn rule on (opening-hand hurdles dealt, rounds credited). A reference without it was played with
+    the rule off, so it replays with --legacy-no-free-turns whatever MTG_FREE_TURNS says in the environment."""
     args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
@@ -558,6 +562,8 @@ def recording_rule_args(ref):
         args.append("--legacy-shared-shuffle-ordinal")
     if ref.get("opponent_land_model") and not ref.get("opponent_land_entry"):
         args.append("--legacy-opponent-land-entry")
+    if not ref.get("free_turns"):
+        args.append("--legacy-no-free-turns")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):

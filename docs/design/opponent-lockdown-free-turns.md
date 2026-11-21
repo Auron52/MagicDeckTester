@@ -290,8 +290,8 @@ our cards overfill the opponent's hand, so it needs its own measurement.
   Captivating Vampire steals creatures only, which a passive opponent never has: it cannot lock, so the
   trait list over-reaches there (candidate fix: drop `steal_tap_count`).
 * Reference replays under the flag: 1 play-drift of 940, `references/Creature_Burn/claude_s9_gi8.json`
-  (replay no win vs ref T4; the hurdles change the opponent's opening hand). Owed before any adoption
-  (the reference is the engine's to fix, never the USER's to re-save).
+  (replay no win vs ref T4). **Corrected in the second pass (below): NOT the flag.** It drifts identically
+  with the flag OFF, on the shared branch since the opponent land-entry fix ce5866171; fixed there.
 * Scenarios: 605 / 605 pass under the flag.
 
 ### (d) Search work, ON vs OFF (units, regression tier)
