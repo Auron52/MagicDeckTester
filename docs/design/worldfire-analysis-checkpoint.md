@@ -35,13 +35,21 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   mana in mana_short.
 - Stage 4 baseline profile (pre-prune) in ledger 38f30b9e3; profile json still UNTRACKED -> re-run after the A/B.
 
-## Running (2026-11-21 ~13:35 UTC)
-- heavy_run chain: smoke byte-identity (build/scratch/worldfire/smoke2.log, SMOKE_EXIT=) then prune A/B
-  on/off d5 b20 seed 9100001 64 g each (build/scratch/worldfire/ab_prune/{on,off}.out, DONE.txt ALLDONE).
-- Land-play agent (wip/opp-landplay 53eb009bc, ~231K ctx): regression.sh aborted at scenario sanity (92
-  scenarios fail); it is A/B-ing scenarios vs b4a74b519 (logs/opp-landplay/SCEN.DONE, handoff.md there).
-- Free-turn agent (Opus): worktree .claude/worktrees/freeturn, branch wip/freeturn from wip/opp-landplay;
-  flags MTG_FREE_TURNS / MTG_FREE_TURN_HURDLES default OFF; handoff logs/freeturn/handoff.md.
+## Prune A/B DONE (ledger 384880ad7, 625a8f818)
+- ON beats OFF on both blocks (9100001: 5.734 vs 5.891; held-out 9200001: 5.760 vs 5.969, 19 better / 3 worse;
+  slow games 3 vs 11). Proposed Bolt race-release (MTG_WORLDFIRE_BOLT_RACE) measured net worse -> OFF.
+- Smoke byte-identical with the prunes (235, play-changed=0).
+
+## Running (2026-11-21 ~14:30 UTC)
+- Stage 4 re-run WITH prunes (heavy_run): logs/worldfire/stage4_profile2.log (rc= line). Pre-prune profile copy:
+  build/scratch/worldfire/Worldfire.profile.preprune.json.
+- Then backstop screen (heavy_run): build/scratch/worldfire/bstop/{manifest.json,out.txt,err.txt,DONE};
+  seeds 30001..30541 step 20, d3+d5, 3 games, b0, abandon 2M, MTG_SLOW_GAME_MS=5000.
+- UNCOMMITTED: test/regression_cases.sh worldfire rows (smoke/regression/overnight + worldfire2hg canary);
+  backstop rows to add from the screen; then suite_gate.py --cost decks/Worldfire/Worldfire.cod (heavy), then
+  run + --accept each tier with --deck=worldfire,worldfire2hg.
+- Land-play agent #2 (wip/opp-landplay): scenario setup fixed (life-gain lands), units + regression --both on
+  heavy_run. Free-turn agent (wip/freeturn, ~275K) handing off -> relaunch from logs/freeturn/handoff.md.
 
 ## Next, in order
 1. (done) integrator #2.
