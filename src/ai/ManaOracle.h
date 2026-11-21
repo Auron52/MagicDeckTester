@@ -310,6 +310,19 @@ namespace manaoracle
     // as the engine's payer can (BuildSources, OracleSacFodderOn) -- and, as the payer, only when the fodder-free table
     // is empty. The AUDIT's table only: the payer's own refine and
     // line keep, which call this in play, leave it false.
+    // While one is alive, BuildSources offers no DIRECT-ACTION sacrifice source (Generator Servant: the SacAction route,
+    // not on-demand) -- the ENUM-GAP pass's rule (NoSacActionScope, ManaOracle.cpp): such a source makes its mana only
+    // through a plan's own SacForMana action, which the search branches on. The line-keep rung's repair table
+    // (MTG_LKR_NO_SAC_ACTION, ManaPayment.cpp) holds one so a repair never sacrifices one the plan did not.
+    struct NoSacActionRouteScope
+    {
+        NoSacActionRouteScope();
+        ~NoSacActionRouteScope();
+        NoSacActionRouteScope(const NoSacActionRouteScope&)            = delete;
+        NoSacActionRouteScope& operator=(const NoSacActionRouteScope&) = delete;
+    private:
+        bool m_saved;
+    };
     std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,

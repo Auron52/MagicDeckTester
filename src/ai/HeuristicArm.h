@@ -1073,6 +1073,7 @@ enum Slot : int
     FIVECOLOUR_RULE6_SEES_STEPS, // MTG_FIVECOLOUR_RULE6_SEES_STEPS  Five Colour RULE 6's "is the untapped land's mana spendable this turn" test also sees, as an added use: Deathrite fuel from the cracked fetch, a colour-exact pool (multicolour lands and domain dorks no longer wild), domain growth from a coloured permanent cast first, a Greaves-hasted mana creature cast this turn, and a bigger spell replacing a cheaper one (best total mana value, not card count). Width 1 (one target). Only ever ADDS untapped preference. Default ON (USER 2026-11-21 "Rule6 looks good to me."); =0 -> the coarse RULE 6 test
     S9_MANA_ABILITY_SKIP,     // MTG_S9_MANA_ABILITY_SKIP  site 9 (post-entry re-plan, and its after-deferred twin) is NOT opened by a creature sac outlet whose activation is a MANA ability (sac_outlet_add_mana_amount > 0: Skirk Prospector "Sacrifice a Goblin: Add {R}"). USER 2026-11-21: "the Skirk Prospector ability shouldn't be messing us up in terms of cost because it is a mana ability and should not be part of the search." A pure mana ability (the enumerator's MTG_SAC_OUTLET_PAY suppression predicate: payer live, !SacOutletEatHasValue) is keyed as its own kind and a NEW one opens site 9 only where its mana can buy something the fodder-free pool cannot (S9SacManaDemand: hand's summed flat cost not payable, an X card, or a mana-priced activation live); where a death pays (Rundvelt's impulse, Pashalik) it keys site 9 as before. Sound fold: ON opens a strict subset of =0's sites. The r1 form (skip every mana outlet) lost Goblins 2HG gi242/79/200 at d8 b0. Default ON; =0 -> the outlet keys site 9 like any activation
     LINE_KEEP_ROCK,           // MTG_LINE_KEEP_ROCK  the line-keep rung (LineReducerKeepHold, ManaPayment.cpp) on every applying line of two or more held casts that CASTS A MANA ROCK (the lines the joint prepay declines with PP_PRODUCER, so the per-cast greedy pays them with no joint allocation), and the rung's rest judged with the rock being paid for on the board (it enters untapped; the later casts meet its mana). Stuffy Doll s30003847 T4 {Guilty Conscience + Mind Stone + Loran's Escape}: Mind Stone's {2} took Boros Garrison's {R}{W} and Loran's Escape's {W} met two Mind Stones. =0 -> byte-identical
+    LKR_NO_SAC_ACTION,        // MTG_LKR_NO_SAC_ACTION  the line-keep rung's repair table holds no DIRECT-ACTION sacrifice source (Generator Servant; manaoracle::NoSacActionRouteScope), so a repair never sacrifices one the plan did not (NivMizzetCombo d0 smoke gi82 / gi373), and such a source is then no guard on the rock's tight test. DEFAULT ON; =0 restores the 9379d1fd9 rung byte for byte
     COUNT
 };
 
@@ -2090,6 +2091,7 @@ inline const char* Name(int slot)
         "MTG_FIVECOLOUR_RULE6_SEES_STEPS",
         "MTG_S9_MANA_ABILITY_SKIP",
         "MTG_LINE_KEEP_ROCK",
+        "MTG_LKR_NO_SAC_ACTION",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

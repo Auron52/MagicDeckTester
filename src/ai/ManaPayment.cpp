@@ -11031,6 +11031,14 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // {C}-only rock (Sol Ring): its {C} into a board Signet frees a COLOURED feed ({U}{U} off Island + Signet + Sol
     // Ring), so the board's Signets stay guards there.
     static const bool s_signet_pair = EnvOn("MTG_LKR_SIGNET_PAIR", true);
+    // MTG_LKR_NO_SAC_ACTION (default ON): the rung's repair table holds no DIRECT-ACTION sacrifice source (Generator
+    // Servant). Such a source makes its mana only through a plan's own SacForMana action -- the search branches on that
+    // sacrifice; no payer of the engine cracks it mid-payment (manaoracle::NoSacActionRouteScope, the ENUM-GAP pass's
+    // rule). Without it the rung SACRIFICED the Servant to pay an Izzet Signet so that a later cast stayed payable, a
+    // decision no search had made, which also killed the Curiosity the line was to put on it (NivMizzetCombo d0 smoke
+    // gi82 / gi373: the Servant cracked for the Signet's {2}, the Curiosity host gone, T5 -> unwon and T6 -> unwon).
+    static const bool s_no_sac_env = EnvOn("MTG_LKR_NO_SAC_ACTION", true);
+    const bool s_no_sac_action = heurarm::Flag(heurarm::LKR_NO_SAC_ACTION, s_no_sac_env);   // per call (manifest arm)
     auto signet_pair = [&](const CardDefinition& d) -> bool
     {
         if (!s_signet_pair || rock.def == nullptr) { return false; }
@@ -11054,7 +11062,17 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             if (p.controller_index != state.active_player_index) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (pd == nullptr) { continue; }
-            if (pd->params.sac_for_mana_amount > 0 || pd->params.sac_outlet_add_mana_amount > 0) { return true; }
+            if (pd->params.sac_outlet_add_mana_amount > 0) { return true; }
+            // A DIRECT-ACTION sacrifice source (Generator Servant: the SacAction route, not on-demand) is no guard when
+            // the rung's table leaves it out (s_no_sac_action, below): nothing the rung pays with can crack it then --
+            // the greedy and the backtracker never do -- so the bound stays a necessary condition. Pay-sac (Treasure)
+            // and on-demand (Lotus Bloom, Lake of the Dead) sources ARE cracked by the payer and stay guards.
+            // (HumanPreTapOfferFor's route test, read off the card: not a land / dork / rock template, not a pay-sac
+            // source -- read structurally, since that function returns before naming the route for a sick source,
+            // which the table does not offer either.)
+            const bool sac_action = pd->tmpl != CardTemplate::BasicLand && pd->tmpl != CardTemplate::ManaDork
+                                 && !pd->params.mana_rock && !IsPaySacSource(*pd) && !IsOnDemandSacDef(*pd);
+            if (pd->params.sac_for_mana_amount > 0 && !(s_no_sac_action && sac_action)) { return true; }
             if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter
                               || pd->params.mana_per_creature_feeder_generic > 0) && !signet_pair(*pd)) { return true; }
             // A hybrid-fed filter land (Cascade Bluffs, is_filter) that one of a RAMP-FILTER rock's own colours can feed:
@@ -11277,9 +11295,13 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         const std::size_t want = ask == 0 && s_prefix > 0 ? s_prefix : kLineKeepTableOpts;
         std::chrono::steady_clock::time_point t_mp{};
         if (s_stats) { t_mp = std::chrono::steady_clock::now(); }
-        const std::vector<manaoracle::PayOption> opts =
-            manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(),
-                                        /*whole_float=*/false, nullptr, nullptr, 0, want, 0);
+        const std::vector<manaoracle::PayOption> opts = [&]
+        {
+            std::optional<manaoracle::NoSacActionRouteScope> no_sac;   // MTG_LKR_NO_SAC_ACTION (see above)
+            if (s_no_sac_action) { no_sac.emplace(); }
+            return manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(),
+                                               /*whole_float=*/false, nullptr, nullptr, 0, want, 0);
+        }();
         if (s_stats)
         {
             g_lk_tables.fetch_add(1, std::memory_order_relaxed);
