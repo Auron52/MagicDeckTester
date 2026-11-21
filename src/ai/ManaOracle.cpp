@@ -2549,6 +2549,9 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 
 } // namespace
 
+NoSacActionRouteScope::NoSacActionRouteScope() : m_saved(t_no_sac_action) { t_no_sac_action = true; }
+NoSacActionRouteScope::~NoSacActionRouteScope() { t_no_sac_action = m_saved; }
+
 void ScriptedBatchPrepay(GameState& state, const ManaCost& combined, bool for_creature)
 {
     Hook& h = *t_hook;

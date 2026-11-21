@@ -212,3 +212,28 @@ arms, identical digest). Niv d0 (the greedy runner, lighter bar) nets +14 over t
 CPU (Signet-pair cut, paired Niv 200, 1 thread): rung 15,034 ms -> 13,833 ms (-8%), table 6,901 -> 6,062 ms,
 process CPU 204.3 s -> 200.3 s (-2%), fired identical (126,399). Exact slice at 32 threads: Niv on/off CPU **1.0630**
 (units 0.9942). The lever's remaining Niv cost is about +6%, uncut.
+
+## Niv d0 (+20 smoke) root cause and fix: the rung sacrificed Generator Servant (agent 6, 2026-11-21)
+
+The Niv d0 rows moved +20 (smoke, 21 slower / 14 faster of 1000) and -6 (regression). Replays of the two worst smoke
+games at d0 (`build/scratch/claude_rock_plan/d0/`, binary da3d3cb61):
+
+* **gi82 (seed 1083) T5 -> unwon.** T3, board Cascade Bluffs + Island + Generator Servant, the line {Izzet Signet,
+  Ponder, ...}. Off: the Signet paid off the lands, the Servant attacks (opp 17), Niv-Mizzet T4, win T5. On: the rung's
+  oracle table pays the Signet's {2} by CRACKING the Servant ({T}, sacrifice: {C}{C}) so that the rest stays payable;
+  the Servant is gone, nothing attacks, and the game never recovers.
+* **gi373 (seed 1374) T6 -> unwon.** T4, Curiosity already on the Servant: the rung again cracks the Servant for the
+  Signet's {2}; Curiosity falls off with it.
+
+Mechanism: Generator Servant is a DIRECT-ACTION sacrifice source (the SacAction route). Its mana exists in the engine
+only through a plan's own SacForMana action, which the search branches on; no payer cracks it mid-payment (the
+mana-oracle ENUM-GAP pass already leaves the route out for exactly this reason, `NoSacActionScope`). The rung's repair
+table (`manaoracle::MinimalPayments`) did NOT leave it out, so a repair could sacrifice a creature that no search had
+decided to sacrifice -- a resource the line's own later casts (Curiosity's host) and combat needed.
+
+Fix (`MTG_LKR_NO_SAC_ACTION`, default ON): the rung's table is built under `manaoracle::NoSacActionRouteScope`, so a
+repair never cracks a direct-action sacrifice source. Consequence for the tight joint test: such a source is then no
+longer a guard (nothing the rung pays with can crack it), so the Generator Servant guard is lifted -- the bulk of
+Niv's no-fire strands (the stats sample) had only that guard. Pay-sac (Treasure) and on-demand (Lotus Bloom, Lake of
+the Dead) sources are cracked by the payer itself and stay guards. Only Niv-Mizzet Combo holds a direct-action
+sacrifice source among the suite's rock decks.
