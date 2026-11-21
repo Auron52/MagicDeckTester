@@ -38819,17 +38819,33 @@ static bool WorldfireBoltLethal(const GameState& s, int controller, const CardDe
     const int opp = controller == 0 ? 1 : 0;
     return s.players[static_cast<std::size_t>(opp)].life <= d.params.damage;
 }
+// PROPOSED AMENDMENT (agent, 2026-11-21; NOT a USER ruling -- default OFF until the USER answers): once we
+// control a creature (a hard-cast or arrived Halberdier) the deck is racing, and Rift Bolt is burn for that
+// race, so the hold is released. Found in the prune A/B (seed 9100001 gi 8): Worldfire never reached the hand,
+// the unpruned arm raced Halberdier + Bolts to a T6 win, the hold cost a turn (persists at b200).
+// MTG_WORLDFIRE_BOLT_RACE=1 enables it.
+static bool WorldfireBoltRaceRelease(const GameState& s, int controller)
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_BOLT_RACE");
+    if (!on) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        if (p.card.IsCreature()) { return true; }
+    }
+    return false;
+}
 
 bool WorldfireProvider::OffersCastNow(const GameState& s, int controller, const CardDefinition& def) const
 {
     if (!WorldfireIsHeldBolt(def) || !WorldfireHoldBoltOn()) { return true; }
-    return WorldfireBoltLethal(s, controller, def);
+    return WorldfireBoltLethal(s, controller, def) || WorldfireBoltRaceRelease(s, controller);
 }
 
 bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const CardDefinition& def) const
 {
     if (!WorldfireIsHeldBolt(def) || !WorldfireHoldBoltOn()) { return true; }
-    if (WorldfireBoltLethal(s, controller, def)) { return true; }
+    if (WorldfireBoltLethal(s, controller, def) || WorldfireBoltRaceRelease(s, controller)) { return true; }
     const Player& pl = s.players[static_cast<std::size_t>(controller)];
     bool have_finisher = false, have_land = false;
     int mana = LooseManaCeiling(s, controller);

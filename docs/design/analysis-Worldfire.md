@@ -107,6 +107,27 @@ visible only as a card leaving the hand.
   Worldfire +0.05 then -0.66 for a 2nd copy, Rift Bolt -0.22/-0.28, Memory Lapse -0.44.
 - Card-score games took 85-130 s each: watch the 3x-Hinata suite cost gate.
 
+## Tutor prune + Rift Bolt hold -- A/B (2026-11-21, d5 b20, profile attached, Release)
+
+Prunes ON (USER rulings) vs OFF (`MTG_WORLDFIRE_TUTOR_PIECES=0 MTG_WORLDFIRE_HOLD_BOLT=0`), paired per game:
+
+| block | games | ON avg | OFF avg | ON better | ON worse | slow games (>30 s) ON / OFF |
+|---|---|---|---|---|---|---|
+| seed 9100001 | 64 | 5.734 (64/64 won) | 5.891 (63/64) | 12 | 4 | 4 / 7 |
+| seed 9200001 (held out) | 96 | 5.760 | 5.969 | 19 | 3 | 3 (124 s) / 11 (480 s) |
+
+The 4 worse games of block 1, attributed by flipping one lever at a time and re-run at b200:
+- gi 57 (Bolt hold at b20): recovers at b200 (4 = 4) -- budget noise (a T1 land-order difference).
+- gi 27 (Bolt hold at b20): reverses at b200 (ON 6, OFF unwon).
+- gi 18 (tutor prune): persists (6 vs 5). Both arms cast Worldfire with nothing suspended; OFF's Mystical
+  Tutor fetched Personal Tutor (a non-piece, refused by the prune), and the different shuffle put a Rift
+  Bolt on top for a T5 hard cast. A tutor-for-a-tutor line that wins on the known shuffle result, not a
+  better plan.
+- gi 8 (Bolt hold): persists (7 vs 6). Worldfire never reached the hand; OFF hard-cast Halberdier T3 and
+  raced it with Rift Bolts as burn (T6). The hold allows a hard cast only when the Bolt alone is lethal.
+  PROPOSED AMENDMENT (agent; default OFF, `MTG_WORLDFIRE_BOLT_RACE=1`): release the hold once we control a
+  creature. Measurement below.
+
 ## USER rulings this analysis
 
 - 2026-11-21: free-turn search depth -- *"I guess its potentially okay to keep it that way. The main cost
