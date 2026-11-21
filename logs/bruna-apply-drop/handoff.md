@@ -120,3 +120,10 @@ Wish from {Wish, Sol Ring} 81/14; Wings from {Wings, Sol Ring} 64/6; Sage from {
 - Context rule: hand off past ~250K (end 250-350K, never >400K) with a handoff file like this one.
 - Adoption bar: every slower game recovers at d8 b0; every deck net <= 0 on a large held-out sample ("+1 is not
   neutral. 0 is neutral.").
+
+## Update 08:40 UTC
+- BUILD DONE: `bad_build1.log` ends `rc=0`. The worktree has build/Release/{mtg,mtg-test} of src 9cf45118.
+- Repros admitted 08:36 UTC (3 slots; note that repros1.sh runs `xargs -P 4`, one more process than the slots it
+  holds -- pass -P 3 next time). Baseline `plain` arm, APPLY-DROP counts (all reproduce): s30054921 T2 9 (+ORDER 10),
+  s30051257 T2 8, s30053757 T2 8, s30051968 T2 3, s30051119 T2 3, s30054069 T4 12, s30051713 T2 30,
+  s30051079 T3 16, s30051277 T3 8. The tap/lka arms were still running; marker `DONE` in repros_base.log.
