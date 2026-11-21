@@ -195,7 +195,8 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
   | d5 b200 | 5.344 | 17 better / **0 worse** |
 
   Monotone: no setting is worse than a cheaper one in aggregate, and b200 never loses a game to b20. The one
-  unwon game (gi53, seed 9400054) is unwon at every setting. d3 b10 vs d5 b20 is a tie (gi35 / gi60 slower at
+  unwon game (gi53, seed 9400054) is unwon at every setting above, but **wins T6 at d8 b0** (replay 2026-11-21,
+  `--seed 9400054 --game-index 53`, ~50 min on one core): a search-reach loss, not a deck limit. d3 b10 vs d5 b20 is a tie (gi35 / gi60 slower at
   d5 b20, two others faster), so depth 5 buys nothing at 20 ms.
 - **5c budget starvation: YES at the play setting.** d5 b200 is 0.19 turns/game faster with zero losers, so the
   20 ms play budget leaves wins unfound (the sweep's gi0 and the Feat-fix gi52 tell the same story). This is a
