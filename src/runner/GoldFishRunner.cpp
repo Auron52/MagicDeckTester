@@ -84,7 +84,15 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // opponent takes Browbeat's 5 or lets us draw three according to its life AT RESOLUTION, so the
         // post-combat cast ("attack, then Browbeat") meets a different choice than the pre-combat one -- a line
         // that is otherwise unfindable at any budget (the spectacle bucket, keyed on the opponent's life).
-        if (def->params.opp_may_take_damage_instead_of_draw > 0) { return true; }
+        // CREATURE BURN (MTG_CB_BROWBEAT_M2_RESTRICT, DEFAULT OFF, 2026-11-21): =1 stops that deck paying for the main 2
+        // on EVERY turn (1.6x units); CreatureBurnProvider::RestrictedSecondMainLive then opens it per turn, exactly while
+        // a castable Browbeat is in hand post-combat. Measured NOT an identity, so OFF (STATUS at the definition).
+        // Provider-scoped, so any other deck that adds a Browbeat keeps the full main 2. ONE reader for both halves
+        // (CbBrowbeatM2RestrictOn): =0 here without =0 there would delete the main-2 Browbeat instead of folding it.
+        if (def->params.opp_may_take_damage_instead_of_draw > 0
+            && !(CbBrowbeatM2RestrictOn()
+                 && dynamic_cast<const CreatureBurnProvider*>(&SelectDecisionProvider(deck)) != nullptr))
+        { return true; }
         // FALKENRATH PIT FIGHTER (Vampires A2, 2026-10-18): "Activate only if an opponent lost life this
         // turn" -- the spectacle bucket: combat damage is what unlocks the activation, so its whole line
         // ("attack, then discard + sacrifice a Vampire: draw two") lives in the post-combat main.

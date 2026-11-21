@@ -2482,6 +2482,106 @@ void CreatureBurnProvider::LandEtbPumpTargetOrder(const GameState& s, int contro
     class_reps.swap(out);
 }
 
+// ---- CreatureBurnProvider: the per-turn Browbeat second main (MTG_CB_BROWBEAT_M2_RESTRICT, 2026-11-21) -----------
+//
+// STATUS: DEFAULT OFF -- MEASURED NOT AN IDENTITY (2026-11-21). The argument below covers the SEARCH WINDOW only, and
+// the lever changes more than the closed turns' searched main 2: DeckUsesSecondMain false also (a) stands down the
+// main-phase classification filter (MainPhaseFilterActive gates on uses_second_main), so main 1's menu SHAPE changes,
+// and (b) closes the rollout's / d0 runner's GREEDY per-turn main 2 beyond the horizon, which dumps leftover mana (a
+// Rift Bolt suspend after a creature: d0 smoke 25 slower / 0 faster). Held-out A/B, seeds 4000001.., 2000 paired games
+// per cell, ON vs OFF: d3 b10 units 0.692x, loss-penalized avg 4.7965 vs 4.7920, 23 better / 32 worse, net +9 turns;
+// d5 b20 units 0.641x, avg 4.7925 vs 4.7815, 8 better / 30 worse, net +22 turns. d5 b0 spot checks (ON vs OFF): gi480 4 vs 5, gi189 6 vs 5,
+// gi702 5 vs 4, gi1024/61/720 equal -- different win turns at an unlimited budget, so not a re-pricing. =1 is the
+// A/B hatch; adopting it needs (a) and (b) addressed and the NO-GREEDY adoption bar (d8 b0 recovery, net <= 0).
+//
+// THE COST IT REMOVES. Browbeat (opp_may_take_damage_instead_of_draw) was this deck's only DeckUsesSecondMain trigger,
+// so a full searched post-combat main was solved on EVERY turn: 1.63x units at d5 b20 and 1.59x at d3 b10 for 0.000
+// turns over 300 paired games per cell ("Browbeat second-main cost", docs/design/analysis-Creature Burn.md). The one
+// line that main 2 exists for -- "attack, then Browbeat", where the opponent decides at a LOWER life (USER policy A,
+// BrowbeatOpponentTakesDamage) -- needs the phase only on a turn Browbeat can be cast after combat.
+//
+// THE PHASE OPENS (RestrictedSecondMainLive, a pure function of the post-combat state: the hand, the land drop, the
+// untapped mana -- lockstep between the executor and the rollout by construction, nothing to fold into a key) iff a
+// Browbeat is in our hand AND it can be cast in this main: the post-combat pool pays it, or the land drop is still open
+// with a land in hand, or a mana ritual is in hand (none in this list; the test keeps the predicate honest if one is
+// ever added). THE MENU is the FULL one (RestrictedSecondMainAdmits is the base "admit everything"), so on an open turn
+// the phase is exactly the main 2 every turn used to get.
+//
+// WHY EVERY CLOSED TURN LOSES NOTHING INSIDE THE SEARCH WINDOW (the identity-fold argument as designed; see STATUS). Combat
+// creates no resource in this list: nothing draws, makes mana, creates a body or a card in combat (no attack or
+// combat-damage trigger), the goldfish never blocks, and our mana is the same untapped pool before and after combat
+// (no pump is paid in combat). What combat DOES change is (a) the opponent's life and its lost-life / dealt-damage
+// flags, and (b) which of our creatures are tapped. (a) is read before the end step ONLY by Browbeat (no spectacle, no
+// Needle Drop, no Fireblast-style life gate; Price of Progress counts lands); (b) is read only by the attack itself,
+// Teetering Peaks' target (inert after combat) and the tap pingers. So, card by card, every main-2 action on a closed
+// turn has a main-1 twin that is at least as good:
+//   * haste creatures (Ball Lightning, Spark / Hellspark Elemental, Keldon Champion, Vulshok Sorcerer) and a Hellspark
+//     unearth -- cast before combat they ALSO attack; their ETBs (Champion's 3) land either way. Weakly better pre-combat.
+//   * Teetering Peaks -- its +2/+0 has a live attacker only before combat (after it, every target is inert) and its
+//     mana is the same tapped land either way; a land drop for Searing Blaze's landfall is the same in either main.
+//     Weakly better pre-combat.
+//   * burn (Lightning Bolt, Rift Bolt and its suspend, Magma Jet's scry, Flame Javelin, Fireblast's Mountains, Price of
+//     Progress, Searing Blaze) and the sick bodies (Fireslinger, Pyromancer, Figure of Destiny, Keldon Marauders' ETB)
+//     -- position-neutral: the same mana, the same damage, nothing between the mains reads the order. Figure's
+//     level-ups are weakly better before combat (a bigger attacker).
+//   * Cinder Pyromancer's untap -- after it attacked (a Peaks-pumped Pyromancer), "red spell, untap, ping" in main 2 is
+//     the end-step sweep's ping after an untap; in main 1 the same red spell fires the response ping (TapPingCastUntap)
+//     and untaps it before it attacks. Attack + one ping either way; with k red spells, k pings + the attack either way.
+//   * Fireslinger / Vulshok Sorcerer -- tap-ping vs attack is decided by the attack (a 1/1 attacks for exactly its
+//     ping) and the folds fire the ping at the end step (PingDorkEndSweep) or right after lethal combat
+//     (PingDorkFinish): nothing in main 2 is needed to express either.
+//   * cards a MAIN-1 Browbeat drew (the opponent declined) -- castable in main 1 through the draw breakpoint's searched
+//     continuation (post-breakpoint-search.md), which is where every other draw spell's cards are played.
+// And on a turn with no castable Browbeat, the USER's policy (which reads whether we are HOLDING cards) never resolves,
+// so casting X before or after nothing changes no choice. Hence a closed turn's main 2 is weakly dominated in every
+// line, at every budget: nothing becomes unfindable, the fold only stops pricing it.
+//
+// WHY THE OPEN TURN'S MENU IS NOT NARROWED. Every case above is position-neutral or pre-combat-better EXCEPT relative
+// to a Browbeat cast this turn: a haste creature cast after combat deals no combat damage but EMPTIES THE HAND, which
+// moves the opponent's threshold from 8 to 5 (USER: "hand empty = take the damage unless lethal"); a burn spell or a
+// pre-ping cast before vs after Browbeat moves the life the choice is read at (the "pre-ping" variant,
+// Action::browbeat_flip, is a main-2 option too); a Pyromancer response ping can be withheld. The outcome is binary and
+// either side can be the better one (5 damage vs three cards), so none of these is provably dominated: everything is
+// admitted.
+//
+// HUMAN PLAY is unaffected: AIEngine::TakeTurn opens main 2 on every turn while an external chooser is installed, and
+// the admit filter never runs in human play, so the viewer still offers a post-combat Browbeat on any turn.
+// GOLDFISH-ONLY, like DigSecondMainLive's fold: an opponent who blocks, removes or holds instants makes "hold X until
+// after combat" a real choice -- re-derive the closed-turn argument for phase 2.
+//
+// MTG_CB_BROWBEAT_M2_RESTRICT=0 (the default; heurarm CB_BROWBEAT_M2_RESTRICT) is the every-turn main 2: DeckUsesSecondMain's
+// Browbeat entry reads this reader too, so the deck plays a full main 2 again and ProviderSecondMainLive (false on
+// such a deck) never consults the predicate below.
+bool CbBrowbeatM2RestrictOn()
+{
+    static const bool e = EnvOn("MTG_CB_BROWBEAT_M2_RESTRICT", false);   // DEFAULT OFF (NOT an identity, see STATUS); =1 -> the per-turn gate
+    return heurarm::Flag(heurarm::CB_BROWBEAT_M2_RESTRICT, e);
+}
+
+bool CreatureBurnProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    if (!CbBrowbeatM2RestrictOn()) { return false; }
+    const Player& me = s.ActivePlayer();
+    bool land_in_hand = false, ritual = false;
+    std::vector<const CardDefinition*> browbeats;
+    for (const Card& c : me.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.opp_may_take_damage_instead_of_draw > 0) { browbeats.push_back(d); }
+        else if (d->card.IsLand()) { land_in_hand = true; }
+        else if (IsManaRitual(*d)) { ritual = true; }
+    }
+    if (browbeats.empty()) { return false; }
+    if (ritual || (land_in_hand && me.lands_played_this_turn < me.LandDropsAvailable())) { return true; }
+    const ManaPool pool = AvailableManaPool(s);
+    for (const CardDefinition* d : browbeats)
+    {
+        if (pool.CanPay(EffectiveSpellCost(*d, s))) { return true; }
+    }
+    return false;
+}
+
 // ---- RedElementalsProvider (Stage 4a, 2026-11-14; the class note in DecisionProviders.h) ----------------------
 //
 // THUNDERKIN AWAKENER's target ORDER (an ordering heuristic; nothing dropped -- every rank stays searched):

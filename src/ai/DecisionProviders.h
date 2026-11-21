@@ -2935,6 +2935,11 @@ public:
 bool MartyrMainSplitOn();
 // MTG_SEA_MAIN1_KRAKEN_ONLY (env + heurarm slot): read by GoldFishRunner::DeckUsesSecondMain for Sea Creatures.
 bool SeaMain1KrakenOnlyOn();
+// MTG_CB_BROWBEAT_M2_RESTRICT's ONE reader (env default OFF + the heurarm slot), shared by
+// CreatureBurnProvider::RestrictedSecondMainLive AND GoldFishRunner::DeckUsesSecondMain's Browbeat entry: a per-job
+// flag that reached only the whitelist would drop the every-turn main 2 with no per-turn phase to replace it --
+// DELETING the main-2 Browbeat ("attack, then Browbeat"), not folding it.
+bool CbBrowbeatM2RestrictOn();
 
 // The new Jumbo Cactuar and Surrak mechanics identify this deck without
 // inheriting another archetype's judgement hooks.
@@ -4308,10 +4313,18 @@ public:
 //     So one plain class stands for all of them (the first, battlefield order), and the pingers keep their own
 //     classes after it (a pumped 0/1 Pyromancer attacks for 2 but gives up its ping). Human play and
 //     MTG_UNPRUNE=peakstarget see every class (the human board-clicks the full legal set regardless).
+//   * RestrictedSecondMainLive -- the PER-TURN post-combat main (MTG_CB_BROWBEAT_M2_RESTRICT, heurarm, DEFAULT OFF;
+//     =1 replaces the every-turn full main 2 Browbeat opens through GoldFishRunner::DeckUsesSecondMain, which reads
+//     the SAME reader, CbBrowbeatM2RestrictOn). The phase opens only on a turn a Browbeat is in hand AFTER combat and
+//     castable there, with the FULL menu (RestrictedSecondMainAdmits is the base "admit everything"). Designed as an
+//     identity fold, MEASURED NOT ONE (2026-11-21: it also stands down the phase filter and the greedy playout's main 2;
+//     net +9 / +22 turns at d3 b10 / d5 b20, and d5 b0 win turns differ), so it ships OFF (STATUS at the definition).
 class CreatureBurnProvider : public RedElementalsProvider
 {
 public:
     void LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const override;
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Damage is combat (hasty bodies: Ball Lightning, Spark / Hellspark Elemental with unearth, "
