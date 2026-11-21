@@ -191,14 +191,16 @@ TEST_CASE("kicker: inert for every card without a kicker")
     // per target by the trick emitter, and a LineSpec `kicked=` still names only the mode -- the
     // target rides the trick's own target key) are the four cards using this structural cast-cost
     // machinery. Keep the census explicit so a new use prompts a review of LineSpec::kickeds
-    // comparisons.
+    // comparisons. Cragplate Baloth (Beasts A2, 2026-11-21) is the fifth: a kicked CREATURE whose kicked face
+    // differs only in kicked_enters_with_plus_counters -- no target, so a `kicked=` naming the mode is complete.
     int with_kicker = 0;
     for (const auto& name : CardDatabase::Instance().AllNames())
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d != nullptr && d->params.kicker_cost.has_value()) { ++with_kicker; }
     }
-    CHECK(with_kicker == 4);
+    CHECK(with_kicker == 5);
+    CHECK(Def("Cragplate Baloth").params.kicker_cost.has_value());
     CHECK(Def("Vines of Vastwood").params.kicker_cost.has_value());
     CHECK(Def("Saproling Migration").params.kicker_cost.has_value());
     CHECK(Def("Tide Shaper").params.kicker_cost.has_value());

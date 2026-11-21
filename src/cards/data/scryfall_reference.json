@@ -1464,6 +1464,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Contested Cliffs": {
+    "cmc": 0.0,
+    "keywords": [
+      "Fight"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{R}{G}, {T}: Target Beast creature you control fights target creature an opponent controls. (Each deals damage equal to its power to the other.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Coppercoat Vanguard": {
     "cmc": 2.0,
     "keywords": [],
@@ -1548,6 +1559,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Cragplate Baloth": {
+    "cmc": 7.0,
+    "keywords": [
+      "Haste",
+      "Hexproof",
+      "Kicker"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Kicker {2}{G}\nThis spell can't be countered.\nHexproof, haste\nIf this creature was kicked, it enters with four +1/+1 counters on it.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Beast"
   },
   "Craterhoof Behemoth": {
     "cmc": 8.0,
@@ -2868,6 +2892,15 @@
     "toughness": "7",
     "type_line": "Legendary Creature — Hydra"
   },
+  "Garruk's Packleader": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "Whenever another creature you control with power 3 or greater enters, you may draw a card.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Beast"
+  },
   "Garruk, Primal Hunter": {
     "cmc": 5.0,
     "keywords": [],
@@ -3918,6 +3951,18 @@
     "toughness": "7",
     "type_line": "Creature — Plant"
   },
+  "Kaheera, the Orphanguard": {
+    "cmc": 3.0,
+    "keywords": [
+      "Companion",
+      "Vigilance"
+    ],
+    "mana_cost": "{1}{G/W}{G/W}",
+    "oracle_text": "Companion — Each creature card in your starting deck is a Cat, Elemental, Nightmare, Dinosaur, or Beast card. (If this card is your chosen companion, you may put it into your hand from outside the game for {3} as a sorcery.)\nVigilance\nEach other creature you control that's a Cat, Elemental, Nightmare, Dinosaur, or Beast gets +1/+1 and has vigilance.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Cat Beast"
+  },
   "Kaldring, the Rimestaff": {
     "cmc": 3.0,
     "keywords": [],
@@ -4226,6 +4271,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Legendary Creature — Goblin Warrior"
+  },
+  "Krosan Warchief": {
+    "cmc": 3.0,
+    "keywords": [
+      "Regenerate"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Beast spells you cast cost {1} less to cast.\n{1}{G}: Regenerate target Beast.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Beast"
   },
   "Kruphix, God of Horizons": {
     "cmc": 5.0,
@@ -5835,6 +5891,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Questing Beast": {
+    "cmc": 4.0,
+    "keywords": [
+      "Deathtouch",
+      "Haste",
+      "Vigilance"
+    ],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "Vigilance, deathtouch, haste\nQuesting Beast can't be blocked by creatures with power 2 or less.\nCombat damage that would be dealt by creatures you control can't be prevented.\nWhenever Questing Beast deals combat damage to an opponent, it deals that much damage to target planeswalker that player controls.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Beast"
   },
   "Radiant Fountain": {
     "cmc": 0.0,
@@ -7920,6 +7989,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Human Soldier"
+  },
+  "Thragtusk": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "When this creature enters, you gain 5 life.\nWhen this creature leaves the battlefield, create a 3/3 green Beast creature token.",
+    "power": "5",
+    "toughness": "3",
+    "type_line": "Creature — Beast"
   },
   "Thran Portal": {
     "cmc": 0.0,
