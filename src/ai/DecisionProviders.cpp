@@ -38891,6 +38891,662 @@ bool WorldfireProvider::OffersSuspend(const GameState& s, int controller, const 
     return mana >= kWorldfireMana + suspend_cost;
 }
 
+// ---- WorldfireProvider: THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md) -----------------
+// USER 2026-11-21: "It seems pretty clear we are going to need prunes for Brainstorm, Ponder and Preordain.
+// Probably similar to those in Cyclone, but a bit simpler because we don't need to worry about our topdeck." --
+// "But essentially what we'll need to design is the discard heuristic to do this well. ... It should be bucketed
+// based on the combo and mana needs." Amendments (same day): "we should keep the second Finisher (of the second
+// type) before any dead cards, just in case the arithmetic changes" -- "We should also prioritize keeping some dig
+// if we are short combo pieces." -- "Bloom should be dropped if we are anywhere near the combo turn." -- "If we are
+// missing combo pieces holding multiple dig is potentially worthwhile."
+//
+// A DESIGN FOR USER REVIEW: every consumer is DEFAULT OFF until the USER approves the buckets (analyze-deck 5i).
+//
+// THE RULE IN PLAIN WORDS. Rank every card in hand (plus, for Ponder / Preordain, the cards looked at) by how much
+// the Worldfire plan needs it, quota first:
+//   1. PROJECT THE GO-OFF TURN T* = the first turn from now (offset 0..4) on which Worldfire, a finisher and the
+//      mana are all ready, counting every wait:
+//        * Worldfire: in hand now; or tutored -- Mystical Tutor brings it on our next draw, Personal Tutor next
+//          turn (this turn if a cantrip in hand can still draw it, paying both {U}s this turn);
+//        * the finisher: a Rift Bolt (in hand, or tutored like Worldfire) is suspended ON T*, for one more {R}; a
+//          Halberdier must land the turn AFTER T* (Worldfire would exile it), so a pending one pins T* to its
+//          arrival - 1 and one in hand (suspend 4) allows T* >= its suspend turn + 3; a pending Rift Bolt pins T*
+//          the same way. With several, the one giving the earliest T* (ties: Rift Bolt pending > Halberdier
+//          pending > Halberdier in hand > Rift Bolt in hand > a tutor);
+//        * the mana, 9 (+1): lands on the battlefield (depletion lands 2, Mercadian Bazaar its counters + one per
+//          turn it can still charge), one land drop per turn from the pool (a tapped land counts from the turn
+//          after), Lotus Blooms on the battlefield or arriving off suspend (a Bloom from the pool 3 turns after its
+//          suspend), the pool's rituals at their net (Seething Song +2 each, ONE Irencrag Feat +3).
+//      Nothing by now+4: "far". At cleanup this turn is over (offset 0 is skipped; the next drop is next turn's).
+//   2. COMBO (1): the first Worldfire; with none, the best live tutor in hand (Mystical > Personal) fills it,
+//      ranked just below a real Worldfire. A second Worldfire is DEAD.
+//   3. FINISHER (1): the option chosen above -- a pool Rift Bolt / Halberdier is the quota card; a pending one
+//      fills it from exile; with no finisher anywhere, a second tutor fills it (ranked just below a real one).
+//      The first finisher of the OTHER type is BACKUP (the last overflow card shed); a same-type second Rift Bolt
+//      is DEAD; a further Halberdier is BACKUP.
+//   4. MANA: a Lotus Bloom only when the go-off projected WITHOUT the pool's Blooms (T0) is later than the Bloom's
+//      arrival (or far) -- a second only if T* is still far with the first; any other Bloom is the first overflow
+//      card shed after DEAD. Lands: the land drops through T* (best first in the land keep order below), one extra
+//      land is BACKUP, the rest overflow. Rituals: the fewest (Song, then Feat, then a spare tutor -- its target is
+//      acceleration) that bring T*'s mana to the need; one extra is BACKUP; a second Feat is DEAD; a spare tutor
+//      with the mana already covered is DEAD. Far: every mana card is quota.
+//   5. DIG (Brainstorm > Ponder > Preordain > Overmaster): quota 1 + the missing pieces (at least 2) while a piece
+//      is missing -- a piece only a tutor fills counts as missing here (a cantrip draws the tutored card); 1 once
+//      both are in hand; 0 once the mana is also covered (T* not far). Dig beyond the quota is overflow above
+//      surplus mana.
+//   6. DEAD: Memory Lapse (goldfish-inert), a duplicate Worldfire / Feat / same-type Rift Bolt, every tutor when
+//      nothing is missing (TutorNeedsCandidate: it would not be cast).
+// KEEP ORDER (best first). A piece GENUINELY missing (no card, no tutor): COMBO > FINISHER > dig slot 1 > the next
+// land drop > dig slot 2 > Bloom > rituals > the other quota lands > further dig slots. Otherwise: COMBO > FINISHER
+// > Bloom > rituals > lands > dig (a dig kept only to draw a tutored card ranks below the go-off mana). Then the
+// overflow: BACKUP (other-type finisher > extra land > extra ritual > 2nd Halberdier) > dig beyond quota > rituals
+// beyond > lands beyond > a Bloom near the combo turn > DEAD (tutor > duplicate > Memory Lapse).
+// LAND KEEP ORDER: Sandstone Needle > Steam Vents > Scalding Tarn > Flooded Strand > Mountain > Mercadian Bazaar
+// (only while 2+ turns of charging remain before T*; else below Mistrise) > Saprazzan Skerry > Island > Mistrise
+// Village; a land that enters tapped drops below every untapped land when no drop remains before T*.
+// Classified from PARAMS, never names. A looked-at card only takes a slot the HAND has not filled (hand cards are
+// assigned first), so Ponder / Preordain keep a looked card only when it adds what the hand lacks.
+namespace
+{
+enum WfRole : int
+{
+    kWfOther = 0, kWfWorldfire, kWfBolt, kWfHalberdier, kWfBloom, kWfSong, kWfFeat, kWfLand,
+    kWfBrainstorm, kWfPonder, kWfPreordain, kWfDraw, kWfTutorInstant, kWfTutorSorcery, kWfInert
+};
+WfRole WfRoleOf(const CardDefinition* d)
+{
+    if (d == nullptr) { return kWfOther; }
+    const CardParams& p = d->params;
+    if (d->card.IsLand())                        { return kWfLand; }
+    if (p.goldfish_inert)                        { return kWfInert; }
+    if (p.exile_all_permanents_hands_graveyards) { return kWfWorldfire; }
+    if (p.sac_for_mana_amount > 0)               { return kWfBloom; }
+    if (p.suspend_time_counters > 0)             { return d->card.IsCreature() ? kWfHalberdier : kWfBolt; }
+    if (p.ritual_floating_mana > 0)              { return p.max_casts_after > 0 ? kWfFeat : kWfSong; }
+    if (p.put_back_from_hand > 0)                { return kWfBrainstorm; }
+    if (p.cast_reorder > 0)                      { return kWfPonder; }
+    if (p.cast_scry > 0)                         { return kWfPreordain; }
+    if (p.tutor_to_top)
+    {
+        const bool inst = std::find(p.tutor_types.begin(), p.tutor_types.end(), "Instant") != p.tutor_types.end();
+        return inst ? kWfTutorInstant : kWfTutorSorcery;
+    }
+    if (p.draw > 0)                              { return kWfDraw; }
+    return kWfOther;
+}
+int WfDigFill(WfRole r)   // the dig fill order, higher first (tutors are not dig: they fill COMBO / FINISHER)
+{
+    switch (r)
+    {
+        case kWfBrainstorm: return 4;
+        case kWfPonder:     return 3;
+        case kWfPreordain:  return 2;
+        case kWfDraw:       return 1;
+        default:            return 0;
+    }
+}
+bool WfIsDig(WfRole r) { return WfDigFill(r) > 0; }
+bool WfIsTutor(WfRole r) { return r == kWfTutorInstant || r == kWfTutorSorcery; }
+
+struct WfLand
+{
+    int  order   = 2;     // land keep order, higher first (before the T*-dependent adjustments)
+    bool tapped  = false; // enters tapped
+    bool storage = false; // Mercadian Bazaar
+    int  per_tap = 1;
+};
+bool WfControlsSubtype(const GameState& s, int me, const std::vector<std::string>& subs)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsLand()) { continue; }
+        for (const std::string& st : subs) { if (CardHasSubtype(p.card, st)) { return true; } }
+    }
+    return false;
+}
+WfLand WfLandOf(const GameState& s, int me, const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    WfLand l;
+    const bool red = std::find(p.produces.begin(), p.produces.end(), Color::Red) != p.produces.end();
+    l.per_tap = std::max(1, p.produces_amount);
+    if (p.storage_land)                          { l.order = 4; l.tapped = true; l.storage = true; }
+    else if (p.enters_tapped_with_depletion > 0) { l.order = red ? 9 : 3; l.tapped = true; }
+    else if (p.etb_pay_life_to_untap > 0)
+    {
+        l.order  = 8;
+        l.tapped = s.players[static_cast<std::size_t>(me)].life <= p.etb_pay_life_to_untap;
+    }
+    else if (!p.fetch_land_types.empty())
+    {
+        const bool mtn = std::find(p.fetch_land_types.begin(), p.fetch_land_types.end(), "Mountain")
+                       != p.fetch_land_types.end();
+        l.order = mtn ? 7 : 6;
+    }
+    else if (!p.checkland_subtypes.empty())
+    { l.order = 1; l.tapped = !WfControlsSubtype(s, me, p.checkland_subtypes); }
+    else
+    {
+        l.order  = red ? 5 : 2;
+        l.tapped = p.enters_tapped;
+    }
+    if (l.storage) { l.per_tap = 0; }
+    return l;
+}
+// A land played on drop turn j, tapped for mana on turn k (k >= j).
+int WfLandYield(const WfLand& l, int j, int k)
+{
+    if (j > k)               { return 0; }
+    if (j == k && l.tapped)  { return 0; }
+    if (l.storage)           { return std::max(0, k - j - 1); }
+    return l.per_tap;
+}
+// The pool's lands over the drops first_drop..k, assigned greedily (earliest drop first, the best yield; a tie to
+// a tapped land so the untapped ones are left for the later drops).
+int WfLandsYield(const std::vector<WfLand>& lands, int first_drop, int k)
+{
+    if (k < first_drop || lands.empty()) { return 0; }
+    std::vector<char> used(lands.size(), 0);
+    int total = 0;
+    for (int j = first_drop; j <= k; ++j)
+    {
+        int best = -1, bv = -1;
+        for (std::size_t i = 0; i < lands.size(); ++i)
+        {
+            if (used[i]) { continue; }
+            const int v = WfLandYield(lands[i], j, k);
+            if (v > bv || (v == bv && best >= 0 && lands[i].tapped && !lands[static_cast<std::size_t>(best)].tapped))
+            { bv = v; best = static_cast<int>(i); }
+        }
+        if (best < 0) { break; }
+        used[static_cast<std::size_t>(best)] = 1;
+        total += bv;
+    }
+    return total;
+}
+
+// Keys: HIGHER keeps. The shed order is ascending key.
+constexpr int kWfKeyCombo = 1000, kWfKeyComboTutor = 990, kWfKeyFinisher = 900, kWfKeyFinisherTutor = 890;
+constexpr int kWfKeyDig1Short = 850, kWfKeyNextLandShort = 820, kWfKeyDig2Short = 810;
+constexpr int kWfKeyBloom = 800, kWfKeyRitual = 700, kWfKeyLand = 600, kWfKeyDig = 500;
+constexpr int kWfKeyBackupOther = 440, kWfKeyBackupLand = 430, kWfKeyBackupRitual = 420, kWfKeyBackupHalb = 410;
+constexpr int kWfKeyDigBeyond = 300, kWfKeyOther = 250, kWfKeyRitualBeyond = 200, kWfKeyLandBeyond = 100;
+constexpr int kWfKeyBloomNear = 50;
+constexpr int kWfKeyDeadTutor = 3, kWfKeyDeadDup = 2, kWfKeyDeadInert = 1;
+constexpr int kWfHorizon = 4;
+}   // namespace
+
+WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::vector<Card>* looked, bool turn_over)
+{
+    WorldfireKeepRank out;
+    const Player& pl = s.players[static_cast<std::size_t>(me)];
+    const int now_seq = s.TurnSeq();
+    struct Item { WorldfireKeepRank::Entry e; const CardDefinition* d; WfRole role; bool is_look; };
+    std::vector<Item> it;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const Card& c = pl.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        Item x; x.e.hand_index = i; x.d = d; x.role = WfRoleOf(d); x.is_look = false;
+        it.push_back(x);
+    }
+    if (looked != nullptr)
+    {
+        for (int i = 0; i < static_cast<int>(looked->size()); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached((*looked)[static_cast<std::size_t>(i)]);
+            Item x; x.e.look_index = i; x.d = d; x.role = WfRoleOf(d); x.is_look = true;
+            it.push_back(x);
+        }
+    }
+    const int n = static_cast<int>(it.size());
+    std::vector<char> done(static_cast<std::size_t>(n), 0);
+    auto role = [&](int i) { return it[static_cast<std::size_t>(i)].role; };
+    auto set = [&](int i, int key, bool quota, const char* bucket)
+    {
+        Item& x = it[static_cast<std::size_t>(i)];
+        x.e.key = key; x.e.quota = quota; x.e.bucket = bucket;
+        done[static_cast<std::size_t>(i)] = 1;
+    };
+    // The not-yet-assigned items whose role passes `want`, HAND FIRST (a looked card only takes a slot the hand
+    // has not filled), then by `better` (a strict weak order), then pool order.
+    auto ordered = [&](const std::function<bool(WfRole)>& want, const std::function<bool(int, int)>& better)
+    {
+        std::vector<int> v;
+        for (int i = 0; i < n; ++i) { if (!done[static_cast<std::size_t>(i)] && want(role(i))) { v.push_back(i); } }
+        std::stable_sort(v.begin(), v.end(), [&](int a, int b)
+        {
+            const bool la = it[static_cast<std::size_t>(a)].is_look, lb = it[static_cast<std::size_t>(b)].is_look;
+            if (la != lb) { return !la; }
+            return better(a, b);
+        });
+        return v;
+    };
+    auto is = [](WfRole r) { return [r](WfRole x) { return x == r; }; };
+    auto no_pref = [](int, int) { return false; };
+
+    // ---- DEAD first: Memory Lapse; every tutor when nothing is missing (TutorNeedsCandidate: it is not cast) ----
+    const WorldfireTutorNeed tneed = WorldfireTutorNeedOf(s, me);
+    for (int i = 0; i < n; ++i)
+    {
+        if (role(i) == kWfInert) { set(i, kWfKeyDeadInert, false, "dead"); }
+        else if (WfIsTutor(role(i)) && tneed.NothingMissing()) { set(i, kWfKeyDeadTutor, false, "dead"); }
+    }
+
+    // ---- the board: suspended cards, the battlefield's mana by turn offset ----
+    const int kmin = turn_over ? 1 : 0;                                   // at cleanup this turn is over
+    const int first_drop = (turn_over || pl.lands_played_this_turn > 0) ? 1 : 0;
+    const int suspend_turn = turn_over ? 1 : 0;                           // the first turn the pool can suspend
+    int bolt_pending_arrival = -1, halb_pending_arrival = -1;
+    int board[kWfHorizon + 1] = { 0, 0, 0, 0, 0 };
+    for (const SuspendedCard& sc : pl.suspended_cards)
+    {
+        if (sc.arrive_turn < 0) { continue; }                             // declined: never arrives
+        const int off = sc.arrive_turn - now_seq;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sc.card);
+        const WfRole r = WfRoleOf(d);
+        if (r == kWfBolt)            { bolt_pending_arrival = std::max(bolt_pending_arrival, off); }
+        else if (r == kWfHalberdier) { halb_pending_arrival = std::max(halb_pending_arrival, off); }
+        else if (r == kWfBloom)
+        { for (int k = std::max(off, 0); k <= kWfHorizon; ++k) { board[k] += d->params.sac_for_mana_amount; } }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.sac_for_mana_amount > 0)                            // Lotus Bloom on the battlefield
+        { for (int k = 0; k <= kWfHorizon; ++k) { board[k] += d->params.sac_for_mana_amount; } continue; }
+        const bool source = p.card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock;
+        if (!source || d->params.produces.empty()) { continue; }
+        for (int k = 1; k <= kWfHorizon; ++k)
+        {
+            // Bazaar: its counters + one per turn it is left to charge (this turn too, if untapped mid-turn).
+            if (d->params.storage_land)
+            { board[k] += p.storage_counters + (k - 1) + ((!turn_over && !p.tapped) ? 1 : 0); }
+            else { board[k] += PermanentManaYield(s, p, *d); }
+        }
+    }
+    if (!turn_over) { board[0] += LooseManaCeiling(s, me); }              // untapped now + floating
+
+    // ---- the pool ----
+    std::vector<WfLand> pool_lands;
+    int songs = 0, feats = 0, blooms = 0;
+    bool cantrip_in_hand = false;
+    for (const Item& x : it)
+    {
+        if (x.role == kWfLand)  { pool_lands.push_back(WfLandOf(s, me, *x.d)); }
+        if (x.role == kWfSong)  { ++songs; }
+        if (x.role == kWfFeat)  { ++feats; }
+        if (x.role == kWfBloom) { ++blooms; }
+        if (!x.is_look && WfIsDig(x.role)) { cantrip_in_hand = true; }
+    }
+    const int bloom_arrival = suspend_turn + 3;   // suspend 3 -- {0}; cast at the arrival upkeep
+    const int halb_arrival  = suspend_turn + 4;   // Keldon Halberdier: suspend 4 -- {R}
+
+    // COMBO: the first Worldfire, else the best live tutor (Mystical > Personal). FINISHER's tutor: a second one.
+    const std::vector<int> wf = ordered(is(kWfWorldfire), no_pref);
+    const std::vector<int> bolts = ordered(is(kWfBolt), no_pref);
+    const std::vector<int> halbs = ordered(is(kWfHalberdier), no_pref);
+    std::vector<int> tutors = ordered([](WfRole r) { return WfIsTutor(r); }, [&](int a, int b)
+    { return role(a) == kWfTutorInstant && role(b) == kWfTutorSorcery; });
+    // Tutors in HAND only fill a piece (a looked-at tutor is a card drawn later; it ranks with the rituals).
+    tutors.erase(std::remove_if(tutors.begin(), tutors.end(),
+                                [&](int i) { return it[static_cast<std::size_t>(i)].is_look; }), tutors.end());
+    std::size_t next_tutor = 0;
+    int combo_tutor = -1, fin_tutor = -1;
+    if (wf.empty() && next_tutor < tutors.size()) { combo_tutor = tutors[next_tutor++]; }
+    const bool any_finisher_source = !bolts.empty() || !halbs.empty() || bolt_pending_arrival >= 0
+                                  || halb_pending_arrival >= 0;
+    if (!any_finisher_source && next_tutor < tutors.size()) { fin_tutor = tutors[next_tutor++]; }
+    // When a tutored card is in hand: Mystical (instant: the opponent's end step / our upkeep) on our next draw;
+    // Personal (sorcery) puts it on top this turn, so next turn's draw -- this turn if a cantrip in hand can still
+    // draw it (the tutor's {U} and the cantrip's {U} then come out of this turn's mana); at cleanup it is cast next
+    // turn and arrives the turn after.
+    auto tutor_ready = [&](int i) { return role(i) == kWfTutorInstant ? 1 : (turn_over ? 2 : (cantrip_in_hand ? 0 : 1)); };
+    auto tutor_cost_at = [&](int k)   // mana a tutor line spends on turn k (only the same-turn Personal + cantrip)
+    {
+        int c = 0;
+        for (int i : { combo_tutor, fin_tutor }) { if (i >= 0 && k == 0 && tutor_ready(i) == 0) { c += 2; } }
+        return c;
+    };
+    const int wf_ready = !wf.empty() ? kmin : (combo_tutor >= 0 ? std::max(kmin, tutor_ready(combo_tutor)) : kmin);
+
+    auto supply_at = [&](int k, int use_blooms, int use_songs, int use_feat)
+    {
+        int m = board[k] + WfLandsYield(pool_lands, first_drop, k);
+        if (k >= bloom_arrival) { m += 3 * use_blooms; }
+        return m + 2 * use_songs + 3 * use_feat - tutor_cost_at(k);
+    };
+    // The finisher options. Each: the earliest turn it allows, an exact pin (a suspended arrival: the go-off is the
+    // turn BEFORE it lands, or Worldfire exiles it), and the {R} it costs on the go-off turn (a Rift Bolt suspended
+    // then).
+    enum FinKind { kFinNone = 0, kFinBoltPending, kFinHalbPending, kFinHalbPool, kFinBoltPool, kFinTutor };
+    struct FinOpt { FinKind kind; int ready; int pin; int extra; };
+    std::vector<FinOpt> opts;
+    if (bolt_pending_arrival >= 0) { opts.push_back({ kFinBoltPending, kmin, bolt_pending_arrival - 1, 0 }); }
+    if (halb_pending_arrival >= 0) { opts.push_back({ kFinHalbPending, kmin, halb_pending_arrival - 1, 0 }); }
+    if (!halbs.empty())            { opts.push_back({ kFinHalbPool, halb_arrival - 1, -1, 0 }); }
+    if (!bolts.empty())            { opts.push_back({ kFinBoltPool, kmin, -1, 1 }); }
+    if (fin_tutor >= 0)            { opts.push_back({ kFinTutor, std::max(kmin, tutor_ready(fin_tutor)), -1, 1 }); }
+    const bool fin_none = opts.empty();
+    if (fin_none)                  { opts.push_back({ kFinNone, kmin, -1, 1 }); }   // nothing held: expect a Rift Bolt
+    auto t_for = [&](const FinOpt& o, int use_blooms)
+    {
+        const int lo = std::max({ kmin, o.ready, wf_ready });
+        for (int k = lo; k <= kWfHorizon; ++k)
+        {
+            if (o.pin >= 0 && k != o.pin) { continue; }
+            if (supply_at(k, use_blooms, songs, feats > 0 ? 1 : 0) >= kWorldfireMana + o.extra) { return k; }
+        }
+        return -1;
+    };
+    auto best_opt = [&](int use_blooms, int& t_out)
+    {
+        int best = -1;
+        t_out = -1;
+        for (std::size_t q = 0; q < opts.size(); ++q)
+        {
+            const int t = t_for(opts[q], use_blooms);
+            if (t < 0) { continue; }
+            if (t_out < 0 || t < t_out) { t_out = t; best = static_cast<int>(q); }   // ties: the earlier option
+        }
+        return best;
+    };
+    int t0 = -1;
+    best_opt(0, t0);
+    int blooms_kept = 0;
+    if (blooms > 0 && (t0 < 0 || t0 > bloom_arrival))   // a Bloom only where it can pull the go-off forward
+    {
+        blooms_kept = 1;
+        int t1 = -1;
+        best_opt(1, t1);
+        if (blooms > 1 && t1 < 0) { blooms_kept = 2; }
+    }
+    int tstar = -1;
+    int chosen = best_opt(blooms_kept, tstar);
+    const bool far = tstar < 0;
+    if (chosen < 0)
+    {
+        // Far: which finisher the plan leans on -- a pool Halberdier (there is time), else a pool Rift Bolt, else a
+        // pending one, else the tutor.
+        const FinKind pref[] = { kFinHalbPool, kFinBoltPool, kFinHalbPending, kFinBoltPending, kFinTutor, kFinNone };
+        for (FinKind k : pref)
+        {
+            for (std::size_t q = 0; q < opts.size() && chosen < 0; ++q) { if (opts[q].kind == k) { chosen = static_cast<int>(q); } }
+            if (chosen >= 0) { break; }
+        }
+    }
+    const FinOpt fin = opts[static_cast<std::size_t>(chosen)];
+    out.t_star = tstar;
+
+    // ---- COMBO ----
+    for (std::size_t q = 0; q < wf.size(); ++q)
+    { set(wf[q], q == 0 ? kWfKeyCombo : kWfKeyDeadDup, q == 0, q == 0 ? "combo" : "dead"); }
+    if (combo_tutor >= 0) { set(combo_tutor, kWfKeyComboTutor, true, "combo"); }
+    out.combo_filled = !wf.empty() || combo_tutor >= 0;
+
+    // ---- FINISHER ----
+    {
+        const bool halb_type = fin.kind == kFinHalbPending || fin.kind == kFinHalbPool;
+        const bool pool_fin  = fin.kind == kFinHalbPool || fin.kind == kFinBoltPool;
+        const std::vector<int>& same  = halb_type ? halbs : bolts;
+        const std::vector<int>& other = halb_type ? bolts : halbs;
+        for (std::size_t q = 0; q < same.size(); ++q)
+        {
+            if (q == 0 && pool_fin) { set(same[q], kWfKeyFinisher, true, "finisher"); }
+            else if (halb_type)     { set(same[q], kWfKeyBackupHalb, false, "backup"); }   // a further Halberdier
+            else                    { set(same[q], kWfKeyDeadDup, false, "dead"); }        // a same-type Rift Bolt
+        }
+        for (std::size_t q = 0; q < other.size(); ++q)
+        {
+            if (q == 0)          { set(other[q], kWfKeyBackupOther, false, "backup"); }    // the other-type finisher
+            else if (!halb_type) { set(other[q], kWfKeyBackupHalb, false, "backup"); }     // a 2nd Halberdier
+            else                 { set(other[q], kWfKeyDeadDup, false, "dead"); }          // a 2nd Rift Bolt
+        }
+        if (fin_tutor >= 0) { set(fin_tutor, kWfKeyFinisherTutor, true, "finisher"); }
+        out.finisher_filled = fin.kind != kFinNone;
+    }
+    // MISSING for the DIG quota: a piece with neither the card nor a tutor ("genuine"), or one only a tutor fills
+    // (a cantrip after the tutor draws the tutored card the same turn).
+    const int genuine = (wf.empty() && combo_tutor < 0 ? 1 : 0) + (fin.kind == kFinNone ? 1 : 0);
+    const int tutored = (combo_tutor >= 0 ? 1 : 0) + (fin.kind == kFinTutor ? 1 : 0);
+    const int missing = genuine + tutored;
+    const bool shortp = genuine > 0;   // the PRIORITISED dig (slot 1 above every mana card) is for genuine gaps only
+
+    // ---- MANA: Blooms ----
+    {
+        const std::vector<int> bl = ordered(is(kWfBloom), no_pref);
+        for (std::size_t q = 0; q < bl.size(); ++q)
+        {
+            if (static_cast<int>(q) < blooms_kept) { set(bl[q], kWfKeyBloom, true, "mana"); }
+            else                                   { set(bl[q], kWfKeyBloomNear, false, "bloom-near"); }
+        }
+    }
+    // ---- MANA: lands ----
+    {
+        auto adj_order = [&](int i)
+        {
+            const WfLand l = WfLandOf(s, me, *it[static_cast<std::size_t>(i)].d);
+            int o = l.order;
+            if (l.storage && !far && tstar - first_drop < 2) { o = 0; }   // Bazaar cannot charge in time
+            if (l.tapped && !far && first_drop >= tstar) { o -= 10; }    // no drop left before T*
+            return o;
+        };
+        const std::vector<int> la = ordered(is(kWfLand), [&](int a, int b) { return adj_order(a) > adj_order(b); });
+        const int drops = far ? static_cast<int>(la.size()) : std::max(0, tstar - first_drop + 1);
+        for (std::size_t q = 0; q < la.size(); ++q)
+        {
+            const int o = adj_order(la[q]);
+            const int qi = static_cast<int>(q);
+            if (qi < drops) { set(la[q], (shortp && q == 0) ? kWfKeyNextLandShort : kWfKeyLand + 20 + o, true, "mana"); }
+            else if (qi == drops) { set(la[q], kWfKeyBackupLand, false, "backup"); }
+            else                  { set(la[q], kWfKeyLandBeyond + 20 + o, false, "land-beyond"); }
+        }
+    }
+    // ---- MANA: rituals -- the fewest (Song before Feat; then a spare tutor, whose target is acceleration) that
+    // bring T*'s mana to the need ----
+    {
+        const std::vector<int> ri = ordered([](WfRole r) { return r == kWfSong || r == kWfFeat || WfIsTutor(r); },
+                                            [&](int a, int b)
+        {
+            auto rank = [&](int i) { return role(i) == kWfSong ? 2 : role(i) == kWfFeat ? 1 : 0; };
+            return rank(a) > rank(b);
+        });
+        int deficit = far ? 0 : kWorldfireMana + fin.extra - supply_at(tstar, blooms_kept, 0, 0);
+        bool feat_seen = false, backup_given = false;
+        for (int i : ri)
+        {
+            const WfRole r = role(i);
+            if (r == kWfFeat && feat_seen) { set(i, kWfKeyDeadDup, false, "dead"); continue; }   // a 2nd Irencrag Feat
+            feat_seen = feat_seen || r == kWfFeat;
+            // A spare tutor fetches acceleration only while the mana is short (else nothing is left to find).
+            if (WfIsTutor(r) && !tneed.mana_short) { set(i, kWfKeyDeadTutor, false, "dead"); continue; }
+            const int gain = r == kWfSong ? 2 : r == kWfFeat ? 3 : (feats > 0 ? (r == kWfTutorInstant ? 2 : 0) : 3);
+            const int sub = r == kWfSong ? 2 : r == kWfFeat ? 1 : 0;
+            if (far || deficit > 0)  { set(i, kWfKeyRitual + sub, true, "mana"); deficit -= gain; }
+            else if (!backup_given)  { set(i, kWfKeyBackupRitual, false, "backup"); backup_given = true; }
+            else                     { set(i, kWfKeyRitualBeyond + sub, false, "ritual-beyond"); }
+        }
+    }
+    // ---- DIG (Brainstorm > Ponder > Preordain > Overmaster) ----
+    {
+        out.dig_quota = missing > 0 ? std::max(2, 1 + missing) : (far ? 1 : 0);
+        const std::vector<int> dg = ordered([](WfRole r) { return WfIsDig(r); }, [&](int a, int b)
+        { return WfDigFill(role(a)) > WfDigFill(role(b)); });
+        for (std::size_t q = 0; q < dg.size(); ++q)
+        {
+            const int fill = WfDigFill(role(dg[q]));
+            const int qi = static_cast<int>(q);
+            if (qi < out.dig_quota)
+            {
+                int key = kWfKeyDig + fill;
+                if (shortp && qi == 0)      { key = kWfKeyDig1Short; }
+                else if (shortp && qi == 1) { key = kWfKeyDig2Short; }
+                set(dg[q], key, true, "dig");
+            }
+            else { set(dg[q], kWfKeyDigBeyond + fill, false, "dig-beyond"); }
+        }
+    }
+    for (int i = 0; i < n; ++i) { if (!done[static_cast<std::size_t>(i)]) { set(i, kWfKeyOther, false, "other"); } }
+    out.entries.reserve(it.size());
+    for (const Item& x : it) { out.entries.push_back(x.e); }
+    return out;
+}
+
+namespace
+{
+bool WfBucketDiscardOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_BUCKET_DISCARD");     // DEFAULT OFF until the USER approves the buckets
+    return heurarm::Flag(heurarm::WORLDFIRE_BUCKET_DISCARD, on);
+}
+bool WfBrainstormRuleOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_BRAINSTORM_RULE");    // DEFAULT OFF until the USER approves
+    return heurarm::Flag(heurarm::WORLDFIRE_BRAINSTORM_RULE, on);
+}
+bool WfBrainstormSingleOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_BRAINSTORM_SINGLE", true);   // ON under the rule; =0 -> order only
+    return WfBrainstormRuleOn() && heurarm::Flag(heurarm::WORLDFIRE_BRAINSTORM_SINGLE, on);
+}
+bool WfPonderRuleOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_RULE");        // DEFAULT OFF until the USER approves
+    return heurarm::Flag(heurarm::WORLDFIRE_PONDER_RULE, on);
+}
+bool WfPonderSingleOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_SINGLE", true);       // ON under the rule; =0 -> keep vs shuffle searched
+    return WfPonderRuleOn() && heurarm::Flag(heurarm::WORLDFIRE_PONDER_SINGLE, on);
+}
+bool WfPreordainRuleOn()
+{
+    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_RULE");     // DEFAULT OFF until the USER approves
+    return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_RULE, on);
+}
+// The looked-at cards' disposition: the cards that fill a quota, best first (Ponder also keeps the rest, below).
+std::vector<int> WfLookedKept(const WorldfireKeepRank& r, bool quota_only)
+{
+    std::vector<const WorldfireKeepRank::Entry*> v;
+    for (const WorldfireKeepRank::Entry& e : r.entries)
+    { if (e.look_index >= 0 && (!quota_only || e.quota)) { v.push_back(&e); } }
+    std::stable_sort(v.begin(), v.end(), [](const WorldfireKeepRank::Entry* a, const WorldfireKeepRank::Entry* b)
+    { return a->key > b->key; });
+    std::vector<int> out;
+    for (const WorldfireKeepRank::Entry* e : v) { out.push_back(e->look_index); }
+    return out;
+}
+// Hand indices, most expendable first (ascending key; ties to the later hand card, so the earlier copy is kept).
+std::vector<int> WfShedOrder(const WorldfireKeepRank& r)
+{
+    std::vector<const WorldfireKeepRank::Entry*> v;
+    for (const WorldfireKeepRank::Entry& e : r.entries) { if (e.hand_index >= 0) { v.push_back(&e); } }
+    std::stable_sort(v.begin(), v.end(), [](const WorldfireKeepRank::Entry* a, const WorldfireKeepRank::Entry* b)
+    {
+        if (a->key != b->key) { return a->key < b->key; }
+        return a->hand_index > b->hand_index;
+    });
+    std::vector<int> out;
+    for (const WorldfireKeepRank::Entry* e : v) { out.push_back(e->hand_index); }
+    return out;
+}
+}   // namespace
+
+TopDisposition WorldfireProvider::TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                                     LookKind kind, int keep_decision) const
+{
+    const bool reorder = kind == LookKind::Reorder;
+    if ((reorder && !WfPonderRuleOn()) || (kind == LookKind::Scry && !WfPreordainRuleOn())
+        || (!reorder && kind != LookKind::Scry))
+    { return DeckProvider::TopDispositionPick(s, looked, kind, keep_decision); }
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, s.active_player_index, &looked, false);
+    TopDisposition disp;
+    if (reorder)
+    {
+        // PONDER: keep iff a looked card fills a quota the hand has not filled; all three stay, best first.
+        const bool keep = !WfLookedKept(r, true).empty();
+        if (keep_decision == 0 || (keep_decision == -1 && !keep)) { disp.shuffle = true; return disp; }
+        disp.top_order = WfLookedKept(r, false);
+        return disp;
+    }
+    // PREORDAIN: keep the quota-filling cards on top, best first; bottom the rest.
+    disp.top_order = WfLookedKept(r, true);
+    return disp;
+}
+
+bool WorldfireProvider::KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
+{
+    if (!WfPonderRuleOn()) { return DeckProvider::KeepReorderTop(s, top); }
+    return !WfLookedKept(WorldfireKeepRank::Of(s, s.active_player_index, &top, false), true).empty();
+}
+
+bool WorldfireProvider::ReorderSingleCandidate(const GameState&) const
+{ return WfPonderSingleOn() && !DecisionUnpruned(); }
+
+bool WorldfireProvider::ReorderKeepShuffleOnly(const GameState&) const
+{ return WfPonderRuleOn() && !WfPonderSingleOn() && !DecisionUnpruned(); }
+
+std::vector<int> WorldfireProvider::PutBackRanking(const GameState& s, int controller) const
+{
+    if (WfBrainstormRuleOn() && controller == s.active_player_index)
+    {
+        const std::vector<int> order = WfShedOrder(WorldfireKeepRank::Of(s, controller, nullptr, false));
+        const Player& pl = s.players[static_cast<std::size_t>(controller)];
+        std::vector<int> out;
+        for (int i : order) { if (PutBackEligible(pl.hand[static_cast<std::size_t>(i)])) { out.push_back(i); } }
+        return out;   // ineligible cards are omitted: they rank last, in hand order
+    }
+    if (!WfBucketDiscardOn()) { return DeckProvider::PutBackRanking(s, controller); }
+    // The discard's buckets are ON but the put-back rule is OFF: keep the put-back on the GENERIC shed order (the
+    // base PutBackRanking reads the virtual shed order, which would hand it the buckets), so each lever moves its
+    // own consumer only.
+    const int n = static_cast<int>(s.players[static_cast<std::size_t>(controller)].hand.size());
+    std::vector<int> out;
+    std::vector<char> seen(static_cast<std::size_t>(n), 0);
+    if (controller == s.active_player_index)
+    {
+        for (int i : DeckProvider::CleanupDiscardShedOrder(s, s.m_required_pieces))
+        {
+            if (i < 0 || i >= n || seen[static_cast<std::size_t>(i)]) { continue; }
+            seen[static_cast<std::size_t>(i)] = 1;
+            out.push_back(i);
+        }
+    }
+    for (int i = 0; i < n; ++i) { if (!seen[static_cast<std::size_t>(i)]) { out.push_back(i); } }
+    return out;
+}
+
+bool WorldfireProvider::PutBackRankingPerCard(const GameState&) const { return WfBrainstormRuleOn(); }
+
+bool WorldfireProvider::PutBackSingleCandidate(const GameState&) const
+{ return WfBrainstormSingleOn() && !DecisionUnpruned(); }
+
+std::vector<int> WorldfireProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!WfBucketDiscardOn() || s.players[s.active_player_index].hand.empty())
+    { return DeckProvider::CleanupDiscardShedOrder(s, required_pieces); }
+    const std::vector<int> order = WfShedOrder(WorldfireKeepRank::Of(s, s.active_player_index, nullptr, true));
+    return CleanupDiscardRankingWithOrder(s, required_pieces, order);
+}
+
+std::vector<int> WorldfireProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!WfBucketDiscardOn() || s.players[s.active_player_index].hand.empty())
+    { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked = CleanupDiscardShedOrder(s, required_pieces);
+    if (ranked.size() > 1 && !DecisionUnpruned()) { ranked.resize(1); }
+    return ranked;
+}
+
+// The quotas move with every shed (a land shed changes the drops, a finisher's slot frees), so the rule is asked
+// again per shed while it is on.
+bool WorldfireProvider::CleanupDiscardShedStable() const { return !WfBucketDiscardOn(); }
+
 // ---- CycloneProvider::TutorSearchWidth --------------------------------------
 // Long-Term Plans' tutor axis must reach every distinct NAME (any card is legal); the base width 6 over
 // the library-order candidate list left most unreachable per search, chosen by the shuffle. A coverage

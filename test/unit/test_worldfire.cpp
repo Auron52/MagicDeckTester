@@ -320,3 +320,204 @@ TEST_CASE("worldfire provider: Rift Bolt is held until the combo; Halberdier is 
     CHECK(prov.OffersSuspend(after, 0, bolt));
     CHECK(prov.OffersCastNow(after, 0, bolt));
 }
+
+// ---- THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; every consumer DEFAULT OFF) ----
+namespace {
+struct WFArm
+{
+    explicit WFArm(std::initializer_list<std::pair<heurarm::Slot, int>> v)
+    { for (const auto& [slot, on] : v) { heurarm::t_arm[slot] = static_cast<std::int8_t>(on); } }
+    ~WFArm() { heurarm::Clear(); }
+};
+const WorldfireKeepRank::Entry& WFHandEntry(const WorldfireKeepRank& r, int hand_index)
+{
+    for (const WorldfireKeepRank::Entry& e : r.entries) { if (e.hand_index == hand_index) { return e; } }
+    FAIL("no entry for hand index " << hand_index);
+    return r.entries.front();
+}
+const WorldfireKeepRank::Entry& WFLookEntry(const WorldfireKeepRank& r, int look_index)
+{
+    for (const WorldfireKeepRank::Entry& e : r.entries) { if (e.look_index == look_index) { return e; } }
+    FAIL("no entry for look index " << look_index);
+    return r.entries.front();
+}
+}
+
+TEST_CASE("worldfire keep order: quota-first buckets, dead cards last, Worldfire never shed")
+{
+    GameState s = WFTutorBase(3);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Memory Lapse", 32),
+                         WFCard("Worldfire", 33), WFCard("Island", 34), WFCard("Brainstorm", 35)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.t_star == -1);                                   // 3 + 1 land: nowhere near 10 by now+4 -> far
+    CHECK(r.combo_filled);
+    CHECK(r.finisher_filled);
+    CHECK(r.dig_quota == 1);                                 // both pieces held, mana far
+    const auto& wf = WFHandEntry(r, 0);
+    const auto& bolt = WFHandEntry(r, 1);
+    const auto& lapse = WFHandEntry(r, 2);
+    const auto& wf2 = WFHandEntry(r, 3);
+    const auto& island = WFHandEntry(r, 4);
+    const auto& bs = WFHandEntry(r, 5);
+    CHECK(wf.quota);   CHECK(std::string(wf.bucket) == "combo");
+    CHECK(bolt.quota); CHECK(std::string(bolt.bucket) == "finisher");
+    CHECK(island.quota);                                     // far: every mana card is quota
+    CHECK(bs.quota);   CHECK(std::string(bs.bucket) == "dig");
+    CHECK_FALSE(lapse.quota); CHECK_FALSE(wf2.quota);
+    CHECK(lapse.key < wf2.key);                              // Memory Lapse sheds first, then the duplicate
+    for (const auto& e : r.entries) { if (e.hand_index != 0) { CHECK(e.key < wf.key); } }
+    CHECK(wf.key > bolt.key);
+    CHECK(bolt.key > island.key);
+    CHECK(island.key > bs.key);                              // nothing missing: dig ranks below the mana
+}
+
+TEST_CASE("worldfire keep order: the cleanup discard sheds the lowest card, re-ranked per shed (lever-gated)")
+{
+    WorldfireProvider prov;
+    GameState s = WFTutorBase(5);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Rift Bolt", 32),
+                         WFCard("Mountain", 33), WFCard("Mountain", 34), WFCard("Mountain", 35),
+                         WFCard("Mountain", 36), WFCard("Memory Lapse", 37)};
+    {
+        // Lever OFF: the generic rule (highest mana value) -- it would shed Worldfire.
+        const std::vector<int> off = prov.CleanupDiscardCandidates(s, nullptr);
+        REQUIRE_FALSE(off.empty());
+        CHECK(off.front() == 0);
+        CHECK(prov.CleanupDiscardShedStable());
+    }
+    WFArm arm{{heurarm::WORLDFIRE_BUCKET_DISCARD, 1}};
+    const std::vector<int> c = prov.CleanupDiscardCandidates(s, nullptr);
+    REQUIRE(c.size() == 1);
+    CHECK(c.front() == 7);                                   // Memory Lapse
+    CHECK_FALSE(prov.CleanupDiscardShedStable());
+    s.players[0].hand.erase(s.players[0].hand.begin() + 7);
+    const std::vector<int> c2 = prov.CleanupDiscardCandidates(s, nullptr);
+    REQUIRE(c2.size() == 1);
+    CHECK(c2.front() == 2);                                  // the same-type second Rift Bolt (the later copy)
+    const std::vector<int> order = prov.CleanupDiscardShedOrder(s, nullptr);
+    REQUIRE_FALSE(order.empty());
+    CHECK(order.back() == 0);                                // Worldfire is the last card shed
+}
+
+TEST_CASE("worldfire keep order: Brainstorm puts back the two lowest, the higher of them on top (lever-gated)")
+{
+    WorldfireProvider prov;
+    GameState s = WFTutorBase(8);
+    // Post-draw hand. 8 Mountains + this turn's drop + next turn's: T* = now+1 with the Rift Bolt's {R}.
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Memory Lapse", 32),
+                         WFCard("Island", 33), WFCard("Mountain", 34), WFCard("Ponder", 35)};
+    CHECK_FALSE(prov.PutBackSingleCandidate(s));
+    CHECK_FALSE(prov.PutBackRankingPerCard(s));
+    WFArm arm{{heurarm::WORLDFIRE_BRAINSTORM_RULE, 1}};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.t_star == 1);
+    CHECK(r.dig_quota == 0);                                 // pieces held and the mana covered: no dig needed
+    const std::vector<int> pb = prov.PutBackRanking(s, 0);
+    REQUIRE(pb.size() >= 2);
+    CHECK(pb[0] == 2);                                       // Memory Lapse goes deepest
+    CHECK(pb[1] == 5);                                       // Ponder (dig beyond quota) on top
+    CHECK(prov.PutBackRankingPerCard(s));
+    CHECK(prov.PutBackSingleCandidate(s));
+    WFArm order_only{{heurarm::WORLDFIRE_BRAINSTORM_RULE, 1}, {heurarm::WORLDFIRE_BRAINSTORM_SINGLE, 0}};
+    CHECK_FALSE(prov.PutBackSingleCandidate(s));
+}
+
+TEST_CASE("worldfire keep order: Ponder keeps a set that fills a missing quota, else shuffles (lever-gated)")
+{
+    WorldfireProvider prov;
+    GameState s = WFTutorBase(5);
+    s.players[0].hand = {WFCard("Rift Bolt", 30), WFCard("Mountain", 31)};
+    const std::vector<Card> look = {WFCard("Island", 40), WFCard("Memory Lapse", 41), WFCard("Worldfire", 42)};
+    CHECK_FALSE(prov.ReorderSingleCandidate(s));
+    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
+    CHECK(prov.ReorderSingleCandidate(s));
+    CHECK_FALSE(prov.ReorderKeepShuffleOnly(s));
+    CHECK(prov.KeepReorderTop(s, look));
+    const TopDisposition keep = prov.TopDispositionPick(s, look, LookKind::Reorder, -1);
+    CHECK_FALSE(keep.shuffle);
+    REQUIRE(keep.top_order.size() == 3);
+    CHECK(keep.top_order.front() == 2);                      // Worldfire, the missing piece, drawn now
+    CHECK(keep.top_order.back() == 1);                       // Memory Lapse at the bottom of the three
+
+    GameState t = WFTutorBase(5);
+    t.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Mountain", 32)};
+    const std::vector<Card> junk = {WFCard("Memory Lapse", 40), WFCard("Worldfire", 41), WFCard("Rift Bolt", 42)};
+    CHECK_FALSE(prov.KeepReorderTop(t, junk));
+    CHECK(prov.TopDispositionPick(t, junk, LookKind::Reorder, -1).shuffle);
+    CHECK_FALSE(prov.TopDispositionPick(t, junk, LookKind::Reorder, 1).shuffle);   // a forced keep is honoured
+
+    WFArm ks{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_PONDER_SINGLE, 0}};
+    CHECK_FALSE(prov.ReorderSingleCandidate(s));
+    CHECK(prov.ReorderKeepShuffleOnly(s));                   // keep-in-the-rule's-order vs shuffle is searched
+}
+
+TEST_CASE("worldfire keep order: Preordain keeps the quota-fillers best first, bottoms the rest (lever-gated)")
+{
+    WorldfireProvider prov;
+    GameState s = WFTutorBase(4);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Mountain", 32)};
+    const std::vector<Card> look = {WFCard("Memory Lapse", 40), WFCard("Seething Song", 41)};
+    WFArm arm{{heurarm::WORLDFIRE_PREORDAIN_RULE, 1}};
+    const TopDisposition d = prov.TopDispositionPick(s, look, LookKind::Scry, -1);
+    REQUIRE(d.top_order.size() == 1);
+    CHECK(d.top_order.front() == 1);                         // the Song (short of mana: quota); Memory Lapse bottomed
+
+    const std::vector<Card> look2 = {WFCard("Worldfire", 40), WFCard("Rift Bolt", 41)};
+    CHECK(prov.TopDispositionPick(s, look2, LookKind::Scry, -1).top_order.empty());   // both duplicates
+}
+
+TEST_CASE("worldfire keep order: Lotus Bloom only where it can pull the go-off forward")
+{
+    GameState s = WFTutorBase(8);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Lotus Bloom", 32),
+                         WFCard("Mountain", 33)};
+    const WorldfireKeepRank far = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(WFHandEntry(far, 2).quota);                        // 9 of 10 without it: the Bloom is the go-off mana
+    CHECK(far.t_star == 3);                                  // ... arriving on now+3
+
+    GameState n = WFTutorBase(9);
+    n.players[0].hand = s.players[0].hand;
+    const WorldfireKeepRank near = WorldfireKeepRank::Of(n, 0, nullptr, false);
+    CHECK(near.t_star == 0);                                 // 9 + the land drop = Worldfire + {R} this turn
+    const auto& bloom = WFHandEntry(near, 2);
+    CHECK_FALSE(bloom.quota);
+    CHECK(std::string(bloom.bucket) == "bloom-near");
+    for (const auto& e : near.entries)
+    { if (e.hand_index != 2) { CHECK(e.key > bloom.key); } }     // the first card shed (nothing DEAD here)
+}
+
+TEST_CASE("worldfire keep order: a tutor fills a missing piece; dig is prioritised only for a genuine gap")
+{
+    GameState s = WFTutorBase(3);
+    s.players[0].hand = {WFCard("Mystical Tutor", 30), WFCard("Rift Bolt", 31), WFCard("Ponder", 32),
+                         WFCard("Island", 33)};
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.combo_filled);
+    CHECK(std::string(WFHandEntry(r, 0).bucket) == "combo");
+    CHECK(r.dig_quota == 2);                                 // a tutored piece still counts for the dig quota
+    CHECK(WFHandEntry(r, 2).quota);
+    CHECK(WFHandEntry(r, 2).key < WFHandEntry(r, 3).key);    // ... but that dig ranks below the go-off mana
+
+    GameState g = WFTutorBase(3);
+    g.players[0].hand = {WFCard("Rift Bolt", 31), WFCard("Ponder", 32), WFCard("Island", 33)};
+    const WorldfireKeepRank q = WorldfireKeepRank::Of(g, 0, nullptr, false);
+    CHECK_FALSE(q.combo_filled);
+    CHECK(WFHandEntry(q, 1).key > WFHandEntry(q, 2).key);    // genuinely missing: dig slot 1 above every mana card
+    CHECK(WFHandEntry(q, 1).key < WFHandEntry(q, 0).key);    // ... and below the finisher
+}
+
+TEST_CASE("worldfire keep order: a pending Halberdier pins T* to its arrival - 1; the Rift Bolt is BACKUP")
+{
+    GameState s = WFTutorBase(7);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Mountain", 32),
+                         WFCard("Mountain", 33)};
+    s.players[0].suspended_cards.push_back({WFCard("Keldon Halberdier", 34), s.TurnSeq() + 2});
+    const WorldfireKeepRank r = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(r.t_star == 1);                                    // 7 + two drops = 9, no {R} for a suspend
+    CHECK(r.finisher_filled);
+    const auto& bolt = WFHandEntry(r, 1);
+    CHECK_FALSE(bolt.quota);
+    CHECK(std::string(bolt.bucket) == "backup");             // the other-type finisher: kept above dead / surplus
+    for (const auto& e : r.entries)
+    { if (!e.quota && e.hand_index != 1) { CHECK(e.key < bolt.key); } }
+}
