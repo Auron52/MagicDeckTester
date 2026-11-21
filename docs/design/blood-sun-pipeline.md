@@ -1977,3 +1977,47 @@ does, but doesn't hardcast. Cyclone should be deploying multiples at times."*
   second Emrakul needs {15} with one already out, which its smoke games (avg T4.75-4.92) never afford; its free casts
   already offered the duplicate. Anti-Lifegain, Creature Giving and Five Colour unchanged. Saved as
   `build/scratch/bloodsun/impl7/smoke-step7-batch.log`.
+
+### Implementation notes (viewer readiness: Stage 3, Stage 4 baseline, 4a, step 11 / 5h)
+**Commits:** `git log --grep "Blood Sun viewer"`. Results table: `build/scratch/bloodsun/viewer/5h.md`.
+- **Stage 3:** `analyze_deck.py --coverage-only`: `missing` empty, all 20 cards `full`; the only open bracket items are
+  PROVISIONAL goldfish-inert deferrals already on the ledger (Emrakul's protection from colored spells, Lotus Field's
+  hexproof, Grim Tutor ruling 1, City of Brass's life loss). No Tier 1-3 gap.
+- **Stage 4 baseline profile:** STAGE4_PLACEHOLDER
+- **4a:** PROVIDER_PLACEHOLDER
+- **5h, every §10.1 row forced through the real protocol** (`--claude-play`, uncapped plans, re-checked at the viewer's
+  own `--depth 0`, no `--reveal`: identical decisions and option lists, ~0.3 s per stateless replay). Human play is
+  UNPRUNED, verified explicitly: Revelation offers every X 0..max (B3 / B8 not applied) and its multi-pick lists every
+  library copy with max = X; Grim Tutor lists every distinct library name (B3 cap not applied); the transmute lists
+  every mana-value-3 library name (B10 "Grim only" not applied); the Machinations self cast is offered (B5 not
+  applied); Lotus Vale / Field / Scorched Ruins are offered with 0-1 other lands and with no Blood Sun (the land-play
+  restriction (c) not applied); Overgrown Tomb's pay / tapped is asked on our turn AND on a Burgeoning put on the
+  opponent's turn; Fastbond keeps offering a land at life 5. Under a Blood Sun no sacrifice / bounce / land_entry
+  prompt fired (14 Lotus / Karoo / Tomb land plays in 7 games with a Blood Sun out).
+- **Wired (HARD MISS): Dimir Machinations' "target player".** The viewer never asked it: human play enumerates only
+  the self cast (the opponent-target post-pass is `!HumanPlayActive()`), and the board-click pick in
+  `AIEngine::CastSpellFromHand` sits on the autonomous executor's cast path, which a viewer plan never takes (it runs
+  through `ApplyPlan`'s `apply_one`, the 2c-ter trap). Now `HumanLookTargetPlayer` (SpellEffects.h) asks the
+  players-only `target` at apply_one's resolution, default = the plan's target, not asked when the opponent's library
+  was never dealt; chooser-gated, so search / rollout are unchanged. Audit manifest: the param now also expects
+  `target`; DECISIONS.md row updated; unit test in `test_bloodsun_step5.cpp`.
+- **Fixed: the step-7 off-turn shock fold was dead in every real game.** `ShockPayDominatedOffTurn` read "off our turn"
+  as `ctrl != active_player_index`, but the goldfish keeps OUR seat active while the passive opponent's turn resolves
+  (`ResolvePassiveOpponentLandTurn` never switches it); the step-7 unit test set `active_player_index = 1` by hand,
+  which no game does. Found by the 5h Burgeoning-put repro (seed 509): the prompt's default was "pay 2". Now a
+  thread-local scope (`t_passive_opponent_turn`, set inside `ResolvePassiveOpponentLandTurn`, both worlds) marks the
+  opponent's turn. Scope unchanged (own death live + `SearchesShockLandPay`, Blood Sun only), so no suite deck can move.
+  New unit test drives the real opponent turn.
+- **GUI wording:** Revelation's multi-pick (`dragon`, source "...: up to X cards to HAND") rendered "put which cards onto
+  the battlefield? ... dies to the legend rule"; it now reads "put which cards into your hand?" (index.html branch +
+  the protocol note).
+- **NOT wired, a known gap for the USER: Time Warp's "target player".** Never asked (self only), same mechanism as
+  Machinations. Shared with Extra Turns (Time Warp, Walk the Aeons), whose 10 references were recorded without that
+  prompt, so wiring it would shift their choice streams. In a goldfish the opponent's extra turn only gives it a land
+  play (a Burgeoning trigger) and costs ours, so it is near-dominated; the USER decides.
+- **UX finding, not fixed:** in seed 13 turn 4 (Revelation, hand City of Brass / Rot Farm / Scorched Ruins, 5 lands) the
+  menu listed each "land=Golgari Rot Farm; cast: Diabolic Revelation (X=k)" SEVEN times and the City of Brass X=0/1
+  plans seven times, byte-identical JSON and an identical next state when picked (a hidden plan axis the summary does
+  not name). 147 plans where ~60 are distinct.
+- **Viewer default to flag:** `land_entry` ships "let AI decide" by default in the viewer's options menu (DECISIONS.md
+  "Surfacing options"). In this deck life is a resource (B1), so the USER may want Overgrown Tomb's prompt surfaced.

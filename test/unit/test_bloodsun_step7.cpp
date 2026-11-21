@@ -307,3 +307,35 @@ TEST_CASE("Blood Sun step 7: a Tomb put on the opponent's turn enters tapped unl
         CHECK(put(s) == std::make_pair(false, 18));
     }
 }
+
+// Stage 5h: the fold through the REAL opponent turn. The goldfish keeps OUR seat active while the passive opponent's turn
+// is resolved (ResolvePassiveOpponentLandTurn), so the fold's off-turn test cannot be the active seat alone -- with it the
+// fold never fired in a game (the case above sets active_player_index = 1, which no game does).
+TEST_CASE("Blood Sun 5h: a Burgeoning put of a Tomb on the opponent's land turn enters tapped (active seat stays ours)")
+{
+    GameState s = Base7(Bs7());
+    s.deck_has_crossing_land_put = true;
+    s.opponent_plays_lands       = true;
+    s.phase                      = Phase::Ending;
+    Put7(s, "Swamp", 51, /*tapped=*/true);
+    Put7(s, "Burgeoning", 52);
+    s.players[0].hand.push_back(Card7(kTomb, 80));
+    s.players[0].hand.push_back(Card7("Time Warp", 81));
+    s.players[1].hand.push_back(Card7("Forest", 100730));
+    REQUIRE(s.active_player_index == 0);
+    CHECK_FALSE(ShockPayDominatedOffTurn(s, 0));   // our turn: not the fold
+    GameState t = s;
+    ResolvePassiveOpponentLandTurn(t);
+    const Permanent* tomb = nullptr;
+    for (const Permanent& p : t.battlefield) { if (p.card.m_number == 80) { tomb = &p; } }
+    REQUIRE(tomb != nullptr);
+    CHECK(tomb->tapped);
+    CHECK(t.players[0].life == 20);
+    CHECK(t_passive_opponent_turn == 0);   // the scope closed
+    // An instant in hand is a use: the engine rule pays.
+    GameState u = s;
+    u.players[0].hand.push_back(Card7("Lightning Bolt", 82));
+    ResolvePassiveOpponentLandTurn(u);
+    for (const Permanent& p : u.battlefield) { if (p.card.m_number == 80) { CHECK_FALSE(p.tapped); } }
+    CHECK(u.players[0].life == 18);
+}

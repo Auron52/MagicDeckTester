@@ -56368,7 +56368,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // both are legal and NEITHER is inert: our own look sets up our draws, and the opponent's decides which cards it
     // draws (its land plays -> Burgeoning puts for us) and moves it three cards nearer a deck-out. The ENGINE offers
     // both; the opponent's copy is appended LAST with the lowest eval (an ORDER, not a restriction -- U3 default).
-    // Human play picks the target at cast time (the board-click target chooser, players only).
+    // Human play is asked the target at the resolution in apply_one (HumanLookTargetPlayer, the players-only board click).
     {
         const std::size_t pt_n = actions.size();
         for (std::size_t i = 0; i < pt_n && !HumanPlayActive(); ++i)
@@ -79814,10 +79814,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                   || def.params.set_all_life_totals >= 0))
         { ResolveWorldfire(state, state.active_player_index, def); }
         // Dimir Machinations (Blood Sun step 5): the look on the TARGET's library (lockstep with EffectHandler).
+        // Human play asks the target player here (HumanLookTargetPlayer, SpellEffects.h: the viewer's plan carries only
+        // the self cast). The executor's twin (EffectHandler) is not asked: its cast path already picked the target.
         if (!remand_countered && def.params.look_top_target_player_exile_reorder > 0)
         {
-            LookTopExileReorder(state, cast_player_target != 0 ? 1 - state.active_player_index : state.active_player_index,
-                                def.params.look_top_target_player_exile_reorder, def.card.m_name.str());
+            const int me_idx = state.active_player_index;
+            const int who = HumanLookTargetPlayer(state, def, me_idx, cast_player_target != 0 ? 1 - me_idx : me_idx);
+            LookTopExileReorder(state, who, def.params.look_top_target_player_exile_reorder, def.card.m_name.str());
         }
         if (!remand_countered && (def.params.spell_mill_opponent > 0
                                   || def.params.spell_exile_opponent_until_mv > 0))

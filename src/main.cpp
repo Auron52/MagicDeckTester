@@ -5632,6 +5632,9 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
     else if (source.find("Surgical Extraction (exile from ") == 0)
     { d.Note("reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). "
              "You may choose any number. Default = the AI's pick."); }
+    else if (source.find(" cards to HAND") != std::string::npos)   // Diabolic Revelation (PerformTutorPackageToHand)
+    { d.Note("reply one 0/1 flag per candidate (1 = put this card into your hand), up to max_puts total (any "
+             "number, none included). Then the library is shuffled. Default = the AI's pick."); }
     else
     { d.Note("reply one int per candidate (1 = put this card onto the battlefield), up to max_puts "
              "total. The engine keeps the rule's play order. Default = the AI's pick."); }

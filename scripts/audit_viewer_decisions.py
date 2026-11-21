@@ -2496,6 +2496,10 @@ def expected_for_card(card, deck_cards=None):
     # Equipment put stays sorcery-timed).
     if p.get("tap_put_from_hand_cost") and p.get("tap_put_from_hand_creature_only"):
         exp.add("eot_put")
+    # Dimir Machinations (Blood Sun 5h): "target player" -- the players-only `target` board click, asked at the
+    # resolution in apply_one (HumanLookTargetPlayer) beside the exile_reorder disposition.
+    if p.get("look_top_target_player_exile_reorder", 0) > 0:
+        exp.add("target")
     # Midrange Burn: the activation itself, any-target damage, and two non-targeting fuel costs.
     if p.get("tap_graveyard_exile_damage", 0) > 0:
         exp.update({"main_phase", "target", "gy_return_one"})

@@ -5573,6 +5573,23 @@ function dragonPanelHtml(d){
       '<button id="decconfirm" class="primary">Proliferate</button></div>';
     return h;
   }
+  // Diabolic Revelation ("<card>: up to X cards to HAND"; Blood Sun 5h): the picks go to HAND, not the battlefield.
+  if (/ cards to HAND$/.test(d.source||'')) {
+    const nm=(d.source||'').replace(/:\s*up to[\s\S]*$/,'');
+    let h=`<h3>${esc(nm)} — put which cards into your hand?</h3>`+
+      `<div class="sub">Choose up to <b>${cap}</b> of these library cards to put into your hand (fewer, or none, is allowed); the library is then shuffled. The AI’s picks are preselected.</div><div class="tutgrid">`;
+    (d.candidates||[]).forEach(c=>{
+      const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+      h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+        (isAI?'<span class="deftag">AI pick</span>':'')+'</span>';
+    });
+    const n=sel.size, ok=(n<=cap);
+    h+=`</div><div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
+      '<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>'+
+      `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Take ${n} card${n===1?'':'s'}</button></div>`;
+    return h;
+  }
   if ((d.source||'').startsWith('Surgical Extraction (exile from ')) {
     const zone=(d.source||'').replace(/^Surgical Extraction \(exile from /,'').replace(/\)$/,'');
     let h=`<h3>Surgical Extraction — exile cards from ${esc(zone)}</h3>`+
