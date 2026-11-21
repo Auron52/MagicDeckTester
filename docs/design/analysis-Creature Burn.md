@@ -176,7 +176,7 @@ commits). Conflicts: GT files -> origin's numbers + the new creatureburn keys (s
 are SPLIT until re-accepted); HeuristicArm.h -> origin's slots + CB_BROWBEAT_M2_RESTRICT last. Primary Release built
 09:14 UTC on the rebased tree; USER told the VIEWER IS READY for Creature Burn references.
 
-RUNNING: landing chain `build/scratch/cb-orch/landing/chain.sh` (PID 697752, under push_queue hold; status in
+RUNNING: (unit_par exited 3: test_shadowborn_int9.cpp:184 under sharding -- the order dependency origin documented in 86779a63d, not ours; a SERIAL mtg-test rerun is going, `landing/unit_serial.log`; confirm it passes.) landing chain `build/scratch/cb-orch/landing/chain.sh` (PID 697752, under push_queue hold; status in
 `landing/status`, DONE marker `landing/DONE`): build OK -> unit_par -> scenarios -> full smoke (MTG_PGO=0) ->
 regression --deck=midrangeburn,midrangeburn2hg,onedropburn,onedropburn2hg,creatureburn,creatureburn2hg. Push queue:
 REQUEUED at 08:39 (a waiting session, ft-land-1121, is head); `push_queue.py wait` armed.
