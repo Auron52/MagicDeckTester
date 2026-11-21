@@ -5359,8 +5359,11 @@ static bool PbLazyPonderOn()
     return v;
 }
 
+// kFanCastTrigger (Blood Sun perf part 3, MTG_BLOODSUN_LAZY_CTT): the SEARCHED CAST-TRIGGER TARGETS fan (Ulamog's
+// "exile two target permanents"); entry k carries cast_trigger_target_choice = the k-th rank of
+// StatePinVariantRanks(inherited, width), with `inherited + 1` stored in fan_pin_w (see Edit).
 enum : char { kFanPutBack = 0, kFanLookTop = 1, kFanPonder = 2,
-              kFanProphetsChampion = 3, kFanProphetsSac = 4 };
+              kFanProphetsChampion = 3, kFanProphetsSac = 4, kFanCastTrigger = 5 };
 
 struct PbLazyLayout
 {
@@ -5415,6 +5418,14 @@ struct PbLazyLayout
         {
         case kFanPutBack: out.putback_choice = k; return;
         case kFanPonder:  out.ponder_choice  = k; return;
+        case kFanCastTrigger:
+        {
+            // StatePinVariantRanks(inh, w)[k - 1]: 1..w-1 with no inherited pin, else 0..w-1 without `inh` (an
+            // inherited pin >= w removes nothing, and k - 1 < inh then holds for every entry).
+            const int inh = fan_pin_w[f] - 1;
+            out.cast_trigger_target_choice = static_cast<std::int32_t>(inh < 0 ? k : (k - 1 < inh ? k - 1 : k));
+            return;
+        }
         case kFanProphetsChampion:
         case kFanProphetsSac:
         {
@@ -5501,6 +5512,7 @@ inline std::atomic<long long> g_lazy{0}, g_avoided{0}, g_materialised{0}, g_veri
 // materialise, and the BpLazyPipeline verifier (MTG_PB_LAZY_CANDS_VERIFY).
 inline std::atomic<long long> g_bp_lists{0}, g_bp_avoided{0}, g_bp_verified{0}, g_bp_verified_n{0},
                               g_bp_bad{0}, g_m2_lists{0};
+inline std::atomic<long long> g_ctt_fans{0};   // kFanCastTrigger fans held lazily (MTG_BLOODSUN_LAZY_CTT)
 struct Dump
 {
     ~Dump()
@@ -5515,6 +5527,8 @@ struct Dump
                      " | bp verify lists=%lld entries=%lld MISMATCH=%lld\n",
                      g_bp_lists.load(), g_bp_avoided.load(), g_m2_lists.load(),
                      g_bp_verified.load(), g_bp_verified_n.load(), g_bp_bad.load());
+        if (g_ctt_fans.load() != 0)
+        { std::fprintf(stderr, "[pb-lazy-cands] cast-trigger fans held lazily=%lld\n", g_ctt_fans.load()); }
     }
 };
 inline Dump g_dump;
@@ -101652,8 +101666,25 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             return base_counts;
         };
         std::vector<TurnSolver::Plan> extra;
-        for (const TurnSolver::Plan& p : all)
+        // THE LAZY FAN (MTG_BLOODSUN_LAZY_CTT; DecisionProvider::LazyCastTriggerTargetFan, Blood Sun perf part 3). Held as
+        // one kFanCastTrigger prototype per base plan in the lazy clone layout (MTG_PB_LAZY_CANDS) instead of W-1 Plans.
+        // WHY: on a post-Revelation Blood Sun board every plan casting Ulamog fans into ~54 target ranks (4,848 plans ->
+        // 262,248 measured, fm15 T6), and those clones sit AFTER every base plan; the nested round-win stop scores ~6
+        // candidates of such a list, so 99.99% of the materialised list was built (and walked by every later axis and
+        // fold) only to be destroyed. EXACT: the full list is the same list, position for position -- each entry is
+        // its prototype (the rank-1 clone as `Plan v = p` builds it, with every later write applied by the layout's
+        // own machinery) with the one varied field set from its ordinal -- so every candidate the scorer reaches is
+        // the plan the eager list holds there, in the same order. Every later axis skips a clone
+        // (PlanIsAxisVariantExceptOrder covers cast_trigger_target_choice) or materialises the layout first, as for the
+        // put-back / Ponder / look-top / Prophets fans; MTG_PB_LAZY_CANDS_VERIFY compares every index with the eager
+        // list. Eager clones from the same axis (Raggadragga's instance digits) keep the eager order: a lazy fan
+        // recorded beside one is expanded in place (below), so the layout only ever holds a fan-only axis.
+        const bool ctt_lazy = pb_lazy != nullptr && !cont_axes_only && ResolveProvider(state).LazyCastTriggerTargetFan();
+        struct CttFan { std::size_t at; std::size_t pi; int n; int inh; };   // `at`: extra.size() when recorded
+        std::vector<CttFan> ctt_fans;
+        for (std::size_t ctt_pi = 0, ctt_n = all.size(); ctt_pi < ctt_n; ++ctt_pi)
         {
+            const TurnSolver::Plan& p = all[ctt_pi];
             // Base plans only -- one axis at a time, so cost stays additive.
             if (p.cast_trigger_target_choice >= 0 || p.landfall_target_choice >= 0 || p.scry_choice >= 0
                 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
@@ -101709,12 +101740,55 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             if (w <= 1) { continue; }
             const int width = static_cast<int>(std::min<long long>(w, 32767));   // int16_t rank storage
-            for (const int k : StatePinVariantRanks(CastTriggerTargetPinFor(state), width))
+            const std::vector<int> ranks = StatePinVariantRanks(CastTriggerTargetPinFor(state), width);
+            if (ctt_lazy)
+            {
+                if (!ranks.empty())
+                { ctt_fans.push_back(CttFan{ extra.size(), ctt_pi, static_cast<int>(ranks.size()),
+                                             CastTriggerTargetPinFor(state) }); }
+                continue;
+            }
+            for (const int k : ranks)
             {
                 TurnSolver::Plan v = p;
                 v.cast_trigger_target_choice = static_cast<std::int32_t>(k);
                 extra.push_back(std::move(v));
             }
+        }
+        // The lazy fans' rank of entry k (1-based), as PbLazyLayout::Edit decodes it.
+        auto ctt_rank = [](int inh, int k) { return inh < 0 ? k : (k - 1 < inh ? k - 1 : k); };
+        if (!ctt_fans.empty() && extra.empty())
+        {
+            const std::size_t ctt_p0 = pb_lazy->P;
+            pb_lazy->OpenBlock(all.size());
+            for (const CttFan& f : ctt_fans)
+            {
+                TurnSolver::Plan v = all[f.pi];   // the prototype: the rank-1 entry, built as the eager loop builds it
+                v.cast_trigger_target_choice = static_cast<std::int32_t>(ctt_rank(f.inh, 1));
+                pb_lazy->AddFan(std::move(v), f.n, kFanCastTrigger, f.pi, 0, f.inh + 1);
+            }
+            pb_lazy->CloseBlock();
+            pblazycands::g_lazy.fetch_add(1, std::memory_order_relaxed);
+            pblazycands::g_avoided.fetch_add(static_cast<long long>(pb_lazy->P - ctt_p0), std::memory_order_relaxed);
+            pblazycands::g_ctt_fans.fetch_add(static_cast<long long>(ctt_fans.size()), std::memory_order_relaxed);
+        }
+        else if (!ctt_fans.empty())
+        {
+            // An eager clone beside a lazy fan: expand every fan where the eager loop would have put it.
+            std::vector<TurnSolver::Plan> merged;
+            std::size_t e = 0;
+            for (const CttFan& f : ctt_fans)
+            {
+                for (; e < f.at; ++e) { merged.push_back(std::move(extra[e])); }
+                for (int k = 1; k <= f.n; ++k)
+                {
+                    TurnSolver::Plan v = all[f.pi];
+                    v.cast_trigger_target_choice = static_cast<std::int32_t>(ctt_rank(f.inh, k));
+                    merged.push_back(std::move(v));
+                }
+            }
+            for (; e < extra.size(); ++e) { merged.push_back(std::move(extra[e])); }
+            extra.swap(merged);
         }
         TRACE("casttgt", "T%d cast-trigger-target axis -> %zu variants", state.turn_number, extra.size());
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
@@ -107040,6 +107114,16 @@ std::vector<TurnSolver::Plan> TurnSolver::SubdecisionAxesForTest(const GameState
 {
     AppendSubdecisionAxes(state, is_pre_combat, plans);
     return plans;
+}
+
+std::vector<TurnSolver::Plan> TurnSolver::LazySubdecisionAxesViewForTest(const GameState& state, bool is_pre_combat,
+                                                                         std::vector<Plan> plans,
+                                                                         std::size_t& lazy_entries)
+{
+    PbLazyLayout lz;
+    AppendSubdecisionAxes(state, is_pre_combat, plans, /*idle_pass=*/false, &lz);
+    lazy_entries = lz.active ? lz.P : 0;
+    return CandSeq(plans, &lz).Materialised();
 }
 
 static std::size_t PbAxesAndTwins(const GameState& state, bool is_pre_combat,

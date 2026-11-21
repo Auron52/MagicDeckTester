@@ -1612,6 +1612,12 @@ public:
     // this moves the test before both. Opt-in per provider so every other deck stays byte-identical (Blood Sun perf
     // step: 47% / 78% of the ceiling decisions' candidates were applied after the round was already won). Default false.
     virtual bool NestedRoundWinStop() const { return false; }
+    // LazyCastTriggerTargetFan -- hold the SEARCHED CAST-TRIGGER TARGETS axis (Ulamog's "exile two target permanents";
+    // Plan::cast_trigger_target_choice) as lazy clone fans (PbLazyLayout kFanCastTrigger) where the host asks for a lazy
+    // list, instead of materialising W-1 clones per plan. EXACT: the same list, entry for entry (the lazy layout's
+    // identity; MTG_PB_LAZY_CANDS_VERIFY checks it) -- only clones nothing reads are never built. Opt-in per provider so
+    // every other deck stays byte-identical by construction (Blood Sun perf part 3). Default false.
+    virtual bool LazyCastTriggerTargetFan() const { return false; }
 
     // Extra Turns may try a depth-zero continuation through consecutive own turns.
     // The solver accepts it only after simulation reaches a real same-round win.

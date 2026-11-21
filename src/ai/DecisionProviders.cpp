@@ -73788,6 +73788,15 @@ bool BloodSunProvider::NestedRoundWinStop() const
     return heurarm::Flag(heurarm::BLOODSUN_ROUND_WIN_STOP, on);
 }
 
+// Blood Sun perf part 3: the cast-trigger target fan held lazily (DecisionProvider::LazyCastTriggerTargetFan). An identity
+// of the candidate list (the same plans in the same order, only never-read clones unbuilt), so it is NOT gated on
+// MTG_BLOODSUN_USER_PRUNE. =0 materialises every clone (the old list building, for the byte-identity check).
+bool BloodSunProvider::LazyCastTriggerTargetFan() const
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_LAZY_CTT", true);   // DEFAULT ON (exact); =0 materialises the fan
+    return on;
+}
+
 bool BloodSunProvider::NeverCast(const CardDefinition& def) const
 {
     return BloodSunPruneLive() && BloodSunMachinationsCastPruneOn() && def.params.look_top_target_player_exile_reorder > 0;

@@ -260,3 +260,82 @@ TEST_CASE("Blood Sun B13: Lotus Field takes the tapped twin before the untapped 
     const bool tapped_gone   = std::find(v.begin(), v.end(), 1) != v.end();
     CHECK(!(untapped_gone && !tapped_gone));
 }
+
+// ---- Blood Sun perf part 3: the cast-trigger target fan held lazily (MTG_BLOODSUN_LAZY_CTT) -------------------------
+// The lever's whole claim is an IDENTITY of the candidate list: the scorer, indexing the lazy view, reads exactly the
+// plans the eager axes build, in the same order. So each case builds one node's base plans, runs the axes eagerly
+// (SubdecisionAxesForTest) and lazily (LazySubdecisionAxesViewForTest, as SolveWithLookahead requests the list), and
+// compares every index with Plan::operator== (every member).
+namespace
+{
+GameState UlamogBoardPf()
+{
+    GameState s = BasePf(3, 20);
+    s.deck_has_cast_target_trigger = true;
+    PutPf(s, "Forest", 200);
+    PutPf(s, "Island", 201);
+    PutPf(s, "Mountain", 202);
+    return s;
+}
+std::vector<TurnSolver::Plan> UlamogPlansPf()
+{
+    std::vector<TurnSolver::Plan> plans(3);
+    plans[0].actions = { CastPf("Ulamog, the Ceaseless Hunger") };
+    plans[0].value   = 900;
+    plans[1].actions = {};                                   // the pass: no Ulamog, no fan
+    plans[1].value   = 10;
+    plans[2].actions = { CastPf("Ulamog, the Ceaseless Hunger"), CastPf("Time Warp") };
+    plans[2].value   = 950;
+    for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
+    return plans;
+}
+void CheckSameListPf(const std::vector<TurnSolver::Plan>& eager, const std::vector<TurnSolver::Plan>& lazy)
+{
+    REQUIRE(eager.size() == lazy.size());
+    for (std::size_t i = 0; i < eager.size(); ++i) { CHECK_MESSAGE(eager[i] == lazy[i], "index ", i); }
+}
+}   // namespace
+
+TEST_CASE("Blood Sun lazy cast-trigger fan: the lazy view is the eager list, index for index (no inherited pin)")
+{
+    const GameState s = UlamogBoardPf();
+    const std::vector<TurnSolver::Plan> eager = TurnSolver::SubdecisionAxesForTest(s, true, UlamogPlansPf());
+    std::size_t lazy_n = 0;
+    const std::vector<TurnSolver::Plan> lazy = TurnSolver::LazySubdecisionAxesViewForTest(s, true, UlamogPlansPf(), lazy_n);
+    // Both Ulamog plans fanned: the list holds clones beyond the three base plans...
+    std::size_t clones = 0;
+    for (const TurnSolver::Plan& p : eager) { clones += p.cast_trigger_target_choice >= 0 ? 1 : 0; }
+    REQUIRE(clones > 2);
+    // ...and with the lever on (the default) every one of them was held lazily, none built by the axes.
+    CHECK(lazy_n == (BloodSunProvider().LazyCastTriggerTargetFan() ? clones : 0));
+    CheckSameListPf(eager, lazy);
+}
+
+TEST_CASE("Blood Sun lazy cast-trigger fan: an inherited pin is skipped exactly as the eager ranks skip it")
+{
+    const GameState s = UlamogBoardPf();
+    const ScriptedCastTriggerTarget pin(2, s.TurnSeq());   // a main-1 pin standing when this list is built
+    const std::vector<TurnSolver::Plan> eager = TurnSolver::SubdecisionAxesForTest(s, true, UlamogPlansPf());
+    std::size_t lazy_n = 0;
+    const std::vector<TurnSolver::Plan> lazy = TurnSolver::LazySubdecisionAxesViewForTest(s, true, UlamogPlansPf(), lazy_n);
+    CheckSameListPf(eager, lazy);
+    bool saw0 = false, saw2 = false;
+    for (const TurnSolver::Plan& p : lazy)
+    {
+        saw0 = saw0 || p.cast_trigger_target_choice == 0;
+        saw2 = saw2 || p.cast_trigger_target_choice == 2;
+    }
+    CHECK(saw0);    // rank 0 is a variant now (the inherited pin is the base's)...
+    CHECK(!saw2);   // ...and the inherited rank is not repeated
+}
+
+TEST_CASE("Blood Sun lazy cast-trigger fan: another deck's provider keeps the eager fan (byte-identical by construction)")
+{
+    GameState s = UlamogBoardPf();
+    s.m_provider = nullptr;   // the generic provider: LazyCastTriggerTargetFan() == false
+    const std::vector<TurnSolver::Plan> eager = TurnSolver::SubdecisionAxesForTest(s, true, UlamogPlansPf());
+    std::size_t lazy_n = 0;
+    const std::vector<TurnSolver::Plan> lazy = TurnSolver::LazySubdecisionAxesViewForTest(s, true, UlamogPlansPf(), lazy_n);
+    CHECK(lazy_n == 0);
+    CheckSameListPf(eager, lazy);
+}
