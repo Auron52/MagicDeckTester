@@ -62,7 +62,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   second-main gate must add that record and its state fold together; (2) the root `EtbDigCandidates` does not merge
   same-name copies, so duplicate names give wasted (identical-state) variants -- add a same-name fold in the provider;
   (3) Adaptive Omnitool's combat dig can now reuse this pin (`docs/design/omnitool-combat-dig-greedy.md`).
-* **Running:** none. NEXT = batch E (Migloz).
+* **Running:** integrator E (Migloz). NEXT after it = batch F (Nykthos).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
