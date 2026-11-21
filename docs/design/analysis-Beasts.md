@@ -49,7 +49,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   ~17:05 UTC 2026-11-21 (USER restarted WSL ~21:35). Remaining steps in
   `logs/beasts/integrator-D-handoff.md` (cards.json entry, build + size asserts, viewer mapping, 7 tests,
   audits, then smoke covering C+D). Backup pushed: `origin/backup/2026-11-21/beasts-analysis`.
-* **Running:** none. NEXT = launch a fresh integrator D from the handoff file.
+* **Running:** integrator D2 (fresh agent, from `logs/beasts/integrator-D-handoff.md`; WIP commit 7227280c1). NEXT after it = batch E (Migloz).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
