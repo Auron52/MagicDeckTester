@@ -328,6 +328,12 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   lands": KEEP the bouncelands, which make two mana, and sacrifice the one-mana lands first -- surfaced to the
   USER); (3) then F-L1 (a tapped victim before an untapped one of the same class, Lotus Field). Machinations:
   no new work (B5 prune applied; the perf census confirms its share).
+  USER (verbatim): *"Yes, we keep bouncelands if possible. The only tricky decision is the keep of a bounceland
+  that doesn't meet our colour needs vs a normal land that does. Given that the lotus can kind of fill the gap
+  for one of them I suppose we keep the bounceland in that case."* -> ORDER REVISED: (1) keep bouncelands
+  (sacrifice regular lands first), even over a regular land that would meet a colour need; (2) then the colour
+  rule (1 red, 1 green, 2 black among the kept lands), counting a Lotus Vale / Lotus Field as ONE any-colour
+  source (Scorched Ruins makes only colourless and fills nothing); (3) then F-L1.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
