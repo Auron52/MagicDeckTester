@@ -125,5 +125,21 @@ Before launching, re-confirm on the frozen tip:
 - **Q9 IDG quality-vs-time run: overnight, not urgent.** "I guess we could plan this for a time period while I am asleep
   or something. It seems reasonable to experiment with, but not urgent."
 
+## CHECKPOINT: batch 3 IN PROGRESS (2026-11-21 ~01:20 UTC)
+Branch `wip/maze-batch3` (worktree `.claude/worktrees/maze-shared`), on shared tip c3853c32f:
+- 054f1336f: P5b land-order fold, `MTG_FOLD_LAND_ORDER_SEEN` DEFAULT ON (USER adopted).
+- e78118bd0: Manabond held-tutor prune `MTG_MAZE_MANABOND_TUTOR_PRUNE` (USER Q4).
+- latest commit (PENDING d8): `MTG_MAZE_FETCH_RANK_COND` + `MTG_MAZE_MANABOND_DISCARD` DEFAULT ON. UNBUILT.
+Built binary for measurement: `build/scratch/maze/b3/mtg.b3` (= e78118bd0, levers OFF by default). Units 3809/3809.
+A/B (`b3/m_ab.json`, `b3/ab.out`, `b3/ab_tables.txt`; P5d-7's held-out seeds; same_seed_inflight 0, arms rotated), net per
+deck vs ship (clairvoyant / blind): cond std -8/-41, 2HG -4/-26; q2 std -34/-36, 2HG 0/-3; q2t std -29/-39, 2HG +1/-6
+(FAILS clairvoyant); cond+q2t std -37/-78, 2HG -1/-28 (best; the candidate).
+RUNNING: d8 b0 on cond+q2t's 201 searched slower games, both arms (`b3/m_d8.json`, 402 jobs, 50M ceiling; out `b3/d8.out`,
+marker `b3/d8.done`; launched from the worktree root). Score: `python3 b3/and8.py cq2t` (in b3/).
+NEXT: if no game PERSISTS (lever d8 > ship d8): build the tip, units, `push_queue.py join`, at the lease rebase, smoke +
+regression, accept the moved keys (analyse searched slower games), check_gt_logs, check_references_safe, land, CI watch.
+If games persist: root-cause them (clairvoyance vs blind, per the USER rule), or fall back to cond alone (needs its own d8).
+Also running: subagent on `wip/bp-node-host` (USER Q3 fix, code + units only; measurement overnight with IDG Q9).
+
 ## Open USER questions carried forward
 None (all ten answered 2026-11-21).
