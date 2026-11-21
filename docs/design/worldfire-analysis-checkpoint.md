@@ -1,4 +1,4 @@
-# Worldfire analysis -- checkpoint (2026-11-21 ~12:50 UTC)
+# Worldfire analysis -- checkpoint (2026-11-21 ~20:15 UTC)
 
 Owner: the session analyzing `decks/Worldfire/Worldfire.cod` (USER asked: "Please analyze the
 Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldfire`, branch
@@ -56,32 +56,28 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   worktree .claude/worktrees/wf-featfix, branch wip/wf-featfix -- remove later via safe_worktree_remove.sh).
   Deferred items: docs/design/worldfire-sweep-deferred.md.
 
-## Running
-- FIX RUN (heavy_run, build/scratch/worldfire/fix_run.sh): build, units, regression.sh --both
-  (logs/worldfire/tiers_fix.log), --overnight --deck=worldfire,worldfire2hg (tiers_fix_on.log);
-  marker logs/worldfire/FIX_RUN.DONE. Expect only worldfire*/dragonstorm* to move. Then accept smoke+
-  regression (ack note) + overnight --deck=worldfire,worldfire2hg, check_gt_logs, commit; message the
-  free-turn agent (it waits for that) to rebase onto wip/worldfire.
-- gi4 (seed 9300005) d8 b0 replay on box_lane: build/scratch/worldfire/gi4/{d8b0.out,DONE}.
-- Free-turn agent #2 (.claude/worktrees/freeturn): rebased, building/units; waiting for the parent's message.
+## LANDED 42d819bc0 (2026-11-21 ~18:00 UTC)
+- Rebased onto origin, GT re-accepted smoke + regression (1409 keys, check_gt_logs consistent), pushed via
+  push_queue. Windows CI 44935787667: success. Feat-fix slower game gi52 recovers at b200 (40bd2d0c5);
+  verify_deck --write-ledger GATE PASS (7d2067a9c). Those two docs commits ride along with the next landing.
+
+## Running (~20:15 UTC)
+- stage5b (heavy_run, build/scratch/worldfire/stage5b.sh): 5c2 leaf_tiebreak_check -> logs/worldfire/
+  leaf_tiebreak.log (rc= line), then 5b depth sweep d3b10 / d5b20 / d5b200, 96 games, seed 9400001 ->
+  build/scratch/worldfire/s5b/*.out + DONE.
+- gi4 (seed 9300005) d8 b0 replay, PID 3629867 -> build/scratch/worldfire/gi4/{d8b0.out,DONE}.
+- Free-turn chain1 (freeturn worktree, build/scratch/freeturn/chain1.sh, PID 3724929): build, units,
+  scenarios, flags-OFF smoke -> build/scratch/freeturn/chain1.{out,DONE}. Agent #2 has finished; the parent
+  owns the measurement (handoff logs/freeturn/handoff.md step 3; off arm = build/scratch/freeturn/offarm_parent).
 
 ## Next, in order
-1. (done) integrator #2.
-2. Opponent land-play fixes (own measured commit): MDFC land faces played (`PlayableAsLand`),
-   bouncelands bounce (oldest other land, else itself), Lake of the Dead sacrifices a Swamp. Smoke +
-   regression: show which decks move; accept flow.
-3. Free-turn rule behind flags (default OFF until USER adopts): screw hurdle (replace rightmost
-   nonlands with the list's most common basic up to 2 lands; colour basic for the 4 no-basic lists;
-   then replace one land if all need another land), flood hurdle (replace lands with placeholders up to
-   2 nonlands, right end), lock check after the opponent's simulated turn, all 2HG heads, round counter
-   not advanced, depth counts rounds (DepthAcrossTurn, like extra turns). Report Worldfire raw vs
-   credited + free turns received by non-lock decks + search units.
-4. Stage 4 baseline profile (`analyze_deck.py --no-rebuild`), provider audit.
-5. Stage 4-bis/5j: all three regression tiers (3x Hinata cost gate `suite_gate.py --cost`), accept.
-6. Stage 5: verify_deck.py, nonconv/fd-diverge, multi-depth, leaf_tiebreak_check (combo deck -- the
-   damage-race tie-break may misprice stored value), claude-play sweep (Claude agents, ~15-20 games),
-   viewer audit 5h, discard buckets 5i.
-7. Stage 6 report. Push via push_queue (batch), CI watch.
+1. Read 5c2 (KEEP / NEUTRAL / NO SIGN -> re-run at suggested --blocks / OPT OUT -> GradesNoWinLeaf false) and
+   5b monotonicity (d5b20 vs d3b10; b200 recovery = budget starvation, note in 5c); ledger.
+2. gi4 d8 b0 result -> ledger (misplay candidate: Claude T5 vs search T6).
+3. Free-turn: after chain1, MTG_FREE_TURNS=1 regression + Worldfire direct, report (a)-(d), doc Implementation
+   section, push wip/freeturn (flags OFF; adoption is the USER's).
+4. Stage 6 report; remove scratch worktrees wf-featfix + opp-landplay-base (check_references_safe first);
+   CronDelete cf1c0324.
 
 ## Open USER questions (defaults taken)
 - Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
