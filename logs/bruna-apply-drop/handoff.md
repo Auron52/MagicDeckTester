@@ -220,3 +220,24 @@ Wish from {Wish, Sol Ring} 81/14; Wings from {Wings, Sol Ring} 64/6; Sage from {
 - BUILD DONE: `bad_build2.log` ends `rc=0`; it was admitted to the lane at 11:27 UTC, more than an hour after the last
   src edit (10:21:50), so the 9p clock-lag concern does NOT apply. `build/Release/{mtg,mtg-test}` hold c8f363ac6's src.
   Start at step 1 (copy the binary aside, units, repros).
+
+---
+# Agent 3 progress (2026-11-21)
+- fix12 binary (c8f363ac6) at build/scratch/bad/fix12/{mtg,mtg-test}. Units 3805/3805 pass; the leftover and WG tests
+  FAIL with their flag =0 (as designed).
+- Repros (r_fix, plain/leg): s30054069 12->3, s30051277 8->2, s30051111 60->28 (fix 1; back to base with it off);
+  s30053757 8->0, s30051079 16->0 (fix 2). Sol Ring / tutor residue unchanged (s30051257 8, s30051968 3, s30051794 20,
+  s30051713 30, s30051119 3, s30054921 9).
+- GATE slice (gate/manifest.json: the gate's bruna+boars+sea_creatures jobs, on = both fixes, off = neither,
+  MTG_MANA_ORACLE=2, 20 threads beside the Hinata tail at cap 16): IDENTITY off arm = gate exactly (Bruna 1,891,
+  Boars 12, Sea 37 APPLY-DROP). On: Bruna 1,891 -> 1,221 (-35%), ORDER 112 -> 92, DOMINATED-CREATURE 668 -> 623;
+  Sea 37 -> 29; Boars 12 -> 12 (Boars play digest-identical in all 87 jobs; its DOMINATED-CREATURE 1,606 -> 1,947
+  is the oracle's own what-if payer now booking the Sage surplus general -- engine play unchanged).
+- A/B ab2 (manifest_ab2.json, seed 710000, fix12, NO per-game wins: --log-dir was the wrong flag, use
+  --game-log-dir). Job-level nets (agg2.py): all decks <= 0 except sead0 +1; bruna -8, brunad0 -8, bruna2hg -1,
+  edf2hg -1, alchemistd0 -1. CPU (units unchanged): edfd0 1.38, edf 1.12, edf2hg 1.10, jumbo 1.09, sea 1.05.
+- 7b621e156: fix-2 CPU cut (pre-filter + unheld-first). Build queued: build/scratch/bad/build_fix3.log (copies to
+  build/scratch/bad/fix3/). Then re-run the A/B with --game-log-dir on fix3.
+- Rule-override measurement levers (default OFF): branch wip/bruna-rule-override, worktree
+  .claude/worktrees/bruna-ro (MTG_PAY_LINE_CRIT_LAND / _OPENER / _BEHIND_DORKS + unit test); build queued
+  build/scratch/bad/build_ro2.log.
