@@ -163,3 +163,18 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
 - Worldfire: leaves-the-battlefield triggers of exiled permanents are not fired (no such card in this pool).
 - Viewer paperwork: `exile_all_permanents_hands_graveyards` / `each_player_life_becomes` added to
   `audit_viewer_decisions.py` INERT_PARAMS (no choice exists).
+
+## Claude-play sweep
+- commit: `70fc1c321` (binary; tutor/Bolt prunes + land-play fix, before the Feat-restrictor fix)
+- seeds: 9300001 (seed = base+gi) games: 16 (gi 0-15), 4 Opus players x 4 games; benchmark d5 b200
+- flags: 0 unresolved
+- Results: Claude faster in 3 (gi 0: T6 vs T7, budget-bound -- the search finds T6 at b1000; gi 4: T5 vs T6;
+  gi 11: T5 vs T6), equal in 13, never slower. No legality / rules / state flag.
+- FIXED (search hole, found by gi 8 + gi 11): the Irencrag Feat restrictor counted a SUSPEND as a cast, so
+  "suspend Rift Bolt + Irencrag Feat + Worldfire" was never enumerated at ANY budget (`--validate-line` ->
+  legal_not_enumerated; b0 also misses it). `RestrictorCastsOf` now counts a Suspend as 0.
+- OPEN (search misplay candidate, gi 4 / seed 9300005): from the same mulligan bottom the search wins T6 at d5
+  b200 / b2000 and d8 b200; Claude suspends Halberdier T1 and wins T5 (handed the post-suspend board the search
+  finds T5). d8 b0 pending.
+- Deferred, no win-turn effect: `docs/design/worldfire-sweep-deferred.md` (identical-copy reorder fold, the
+  upkeep win check, the Ponder shuffle label, suspend reporting/labels/log, the target-reply index trap).
