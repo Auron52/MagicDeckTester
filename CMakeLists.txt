@@ -172,6 +172,18 @@ if(MSVC)
     target_compile_options(mtg-core PUBLIC /bigobj /utf-8 /EHsc /permissive-)
 endif()
 
+# /STACK:8388608 -- an 8 MB stack RESERVE, the Linux default (ulimit -s 8192), so a Windows binary
+# recurses as deep as the Linux one every limit was sized on. Windows reserves 1 MB per thread
+# otherwise, and std::thread workers inherit the executable's reserve, so this covers the batch
+# workers too. Reserve only: pages are committed as the stack grows. Without it the executor's
+# draw-breakpoint recursion (AIEngine::TakeTurn resolve_draw_breakpoint, capped at 40 levels, a full
+# TurnSolver::Plan per frame) overflowed on Windows at 906d3c0a4 (CI 44850211999: unit test "Executor
+# d0: an UNPAID draw-engine cast opens no breakpoint re-solve", SIGSEGV - Stack overflow) while
+# passing on Linux. INTERFACE so every executable linking mtg-core gets it (mtg, mtg-analyze, mtg-test).
+if(MSVC)
+    target_link_options(mtg-core INTERFACE /STACK:8388608)
+endif()
+
 # /MP: compile a target's sources in parallel. NOT required, but the Visual Studio generator
 # otherwise builds each project's files one at a time (`--build -j N` only parallelises across
 # projects), so mtg-test's ~150 test TUs compiled serially and the Windows CI build took 2-3x
