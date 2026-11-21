@@ -5110,6 +5110,52 @@ public:
     // Worldfire can go off (or once the opponent is already within reach).
     bool OffersCastNow(const GameState& s, int controller, const CardDefinition& def) const override;
     bool OffersSuspend(const GameState& s, int controller, const CardDefinition& def) const override;
+
+    // THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; DESIGN for USER review, every consumer
+    // DEFAULT OFF until the USER approves the buckets). ONE ranking (WorldfireKeepRank in DecisionProviders.cpp:
+    // quota-first buckets netted against the board, the suspended cards and the go-off projection T*), four
+    // consumers, each its own lever:
+    //   * MTG_WORLDFIRE_BUCKET_DISCARD    -- cleanup sheds the lowest-ranked card (one index, re-ranked per shed);
+    //   * MTG_WORLDFIRE_BRAINSTORM_RULE   -- Brainstorm puts back the two lowest-ranked, the higher on top; the
+    //                                        searched put-back fan is pruned to that pick (MTG_WORLDFIRE_BRAINSTORM_SINGLE,
+    //                                        on under the rule; =0 keeps the rule as the fan's ORDER only);
+    //   * MTG_WORLDFIRE_PONDER_RULE       -- keep (best first) iff a looked card fills an unfilled quota, else
+    //                                        shuffle; the fan is pruned to that disposition (MTG_WORLDFIRE_PONDER_SINGLE,
+    //                                        on under the rule; =0 searches keep-in-the-rule's-order vs shuffle);
+    //   * MTG_WORLDFIRE_PREORDAIN_RULE    -- scry 2: keep a card iff it fills a still-unfilled quota, best first.
+    // Human play and the unpruned audit see every option (the rules are only their defaults).
+    TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                      LookKind kind, int keep_decision) const override;
+    bool KeepReorderTop(const GameState& s, const std::vector<Card>& top) const override;
+    bool ReorderSingleCandidate(const GameState& s) const override;
+    bool ReorderKeepShuffleOnly(const GameState& s) const override;
+    std::vector<int> PutBackRanking(const GameState& s, int controller) const override;
+    bool PutBackRankingPerCard(const GameState& s) const override;
+    bool PutBackSingleCandidate(const GameState& s) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
+};
+
+// The Worldfire keep order's result for one pool (the hand, plus the looked-at cards of a dig spell).
+// Exposed for the unit tests (test_worldfire.cpp) -- the consumers above are its only engine readers.
+struct WorldfireKeepRank
+{
+    struct Entry
+    {
+        int  hand_index  = -1;   // >= 0: a hand card; -1: a looked-at card (look_index)
+        int  look_index  = -1;
+        int  key         = 0;    // keep value: HIGHER keeps; the shed order is ascending key
+        bool quota       = false;// fills a bucket quota (else overflow / BACKUP / DEAD)
+        const char* bucket = "";
+    };
+    std::vector<Entry> entries;   // hand cards (non-staged) in hand order, then looked cards in look order
+    int  t_star  = -1;            // the projected go-off turn OFFSET (0 = this turn); -1 = "far" (nothing by now+4)
+    bool combo_filled = false, finisher_filled = false;
+    int  dig_quota = 0;
+    static WorldfireKeepRank Of(const GameState& s, int controller, const std::vector<Card>* looked, bool turn_over);
 };
 
 // MAZE'S END (onboarding 2026-11-17, docs/design/analysis-Maze's End.md). DERIVES FROM DeckProvider (the
