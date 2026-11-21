@@ -1,0 +1,344 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [15, 19] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 31, "name": "Mountain" }, { "num": 32, "name": "Mountain" }, { "num": 20, "name": "Keldon Champion" }, { "num": 49, "name": "Price of Progress" }, { "num": 33, "name": "Mountain" }, { "num": 34, "name": "Mountain" }, { "num": 27, "name": "Magma Jet" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 4, "name": "Ball Lightning" }, { "num": 20, "name": "Keldon Champion" }, { "num": 60, "name": "Vulshok Sorcerer" }, { "num": 54, "name": "Searing Blaze" }, { "num": 49, "name": "Price of Progress" }, { "num": 26, "name": "Lightning Bolt" }, { "num": 21, "name": "Keldon Champion" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 57, "name": "Teetering Peaks" }, { "num": 44, "name": "Mountain" }, { "num": 19, "name": "Hellspark Elemental" }, { "num": 55, "name": "Spark Elemental" }, { "num": 22, "name": "Keldon Marauders" }, { "num": 15, "name": "Goblin Fireslinger" }, { "num": 17, "name": "Goblin Fireslinger" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 57, "name": "Teetering Peaks", "win_optimal": true }, { "num": 44, "name": "Mountain", "win_optimal": true }, { "num": 19, "name": "Hellspark Elemental", "win_optimal": true }, { "num": 55, "name": "Spark Elemental", "win_optimal": true }, { "num": 22, "name": "Keldon Marauders", "win_optimal": true }, { "num": 15, "name": "Goblin Fireslinger", "win_optimal": true }, { "num": 17, "name": "Goblin Fireslinger", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 15, "name": "Goblin Fireslinger" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 57, "name": "Teetering Peaks", "win_optimal": true }, { "num": 44, "name": "Mountain", "win_optimal": true }, { "num": 19, "name": "Hellspark Elemental", "win_optimal": true }, { "num": 55, "name": "Spark Elemental", "win_optimal": true }, { "num": 22, "name": "Keldon Marauders", "win_optimal": true }, { "num": 17, "name": "Goblin Fireslinger", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 55, "name": "Spark Elemental" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Goblin Fireslinger"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Goblin Fireslinger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Fireslinger", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Goblin Fireslinger"], "actions": [{ "card": "Goblin Fireslinger" }] },
+    { "index": 2, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 1, "num": 17, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 1, "num": 17, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 0, "num": 44, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Spark Elemental", "land=Teetering Peaks"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Price of Progress" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Bloodstained Mire" }, { "turn": 1, "kind": "fetch", "text": "opponent cracks Bloodstained Mire for Godless Shrine" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 2, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 44, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Teetering Peaks", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "land=Teetering Peaks; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 1, "summary": "land=Teetering Peaks (after Spark Elemental); cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "land_slot": 1, "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 2, "summary": "land=none; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": null, "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 3, "summary": "land=Teetering Peaks; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Teetering Peaks", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Teetering Peaks (enters)",
+  "turn": 2,
+  "loyalty": "gets +2/+0 until end of turn",
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 2, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 3, "num": 55, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "legal_targets": [{ "kind": "permanent", "index": 2, "label": "Goblin Fireslinger (1/1) (yours)" }, { "kind": "permanent", "index": 3, "label": "Spark Elemental (3/1) (yours)" }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "Goblin Fireslinger (1/1) (yours)", "targets": [{ "kind": "permanent", "index": 2 }] }, { "index": 1, "label": "Spark Elemental (3/1) (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index) -- the permanent this ability (Teetering Peaks (enters)) targets. It is gets +2/+0 until end of turn. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "⛰ Teetering Peaks (enters): Spark Elemental gets +2/+0 until end of turn" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 2, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 3, "num": 55, "is_land": false, "power": 5, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1), Spark Elemental (5) — 6 to opponent (19→13)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 2, "num": 17, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 3, "num": 55, "tapped": true, "is_land": false, "power": 5, "toughness": 1 }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "Godless Shrine", "idx": 0, "num": 100050, "tapped": true, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": ["Bloodstained Mire"] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Keldon Champion" }],
+  "events": [{ "turn": 2, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (its own trigger)" }, { "turn": 2, "kind": "land", "text": "opponent plays Wooded Foothills" }, { "turn": 2, "kind": "fetch", "text": "opponent cracks Wooded Foothills for Forest" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 3, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 2, "num": 44, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Keldon Marauders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Keldon Marauders", "declared_order_payability": "not_verified", "land": null, "casts": ["Keldon Marauders"], "actions": [{ "card": "Keldon Marauders" }] },
+    { "index": 1, "summary": "land=none; cast: Price of Progress", "declared_order_payability": "not_verified", "land": null, "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "etb", "text": "Keldon Marauders enters with 2 time counters (vanishing)" }, { "turn": 3, "kind": "damage", "text": "🔥 Keldon Marauders: 1 to opponent (12→11)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 3, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 5, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 2 }] }, { "name": "Mountain", "idx": 2, "num": 44, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1) — 1 to opponent (11→10)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 3, "num": 17, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 5, "num": 22, "sick": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 2 }] }, { "name": "Mountain", "idx": 2, "num": 44, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Rift Bolt" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Wooded Foothills" }, { "turn": 3, "kind": "fetch", "text": "opponent cracks Wooded Foothills for Stomping Ground" }, { "turn": 4, "kind": "trigger", "text": "⌛ Keldon Marauders: vanishing -- a time counter removed (1 left)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 6, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 44, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Price of Progress", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 52, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "tapped": true, "is_land": true }], "library_size": 47, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Price of Progress", "declared_order_payability": "not_verified", "land": null, "casts": ["Price of Progress"], "actions": [{ "card": "Price of Progress" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 6, "num": 22, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 44, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Price of Progress", "Spark Elemental"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "tapped": true, "is_land": true }], "library_size": 47, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Fireslinger (1), Keldon Marauders (3) — 4 to opponent (5→1)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 4, "num": 17, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Keldon Marauders", "idx": 6, "num": 22, "tapped": true, "is_land": false, "power": 3, "toughness": 3, "counters": [{ "kind": "time", "label": "time", "count": 1 }] }, { "name": "Mountain", "idx": 3, "num": 44, "tapped": true, "is_land": true }, { "name": "Teetering Peaks", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Price of Progress", "Spark Elemental"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "tapped": true, "is_land": true }], "library_size": 47, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Ball Lightning" }],
+  "events": [{ "turn": 4, "kind": "land", "text": "opponent plays Wooded Foothills" }, { "turn": 5, "kind": "trigger", "text": "⌛ Keldon Marauders: vanishing -- a time counter removed (0 left) -- the last one: sacrificed" }, { "turn": 5, "kind": "damage", "text": "🔥 Keldon Marauders left the battlefield: 1 to opponent (1→0)" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Goblin Fireslinger", "idx": 5, "num": 17, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Mountain", "idx": 4, "num": 44, "is_land": true, "taps": "R" }, { "name": "Teetering Peaks", "idx": 6, "num": 57, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Keldon Champion", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Keldon Marauders", "Price of Progress", "Spark Elemental"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 0, "battlefield": [{ "name": "Forest", "idx": 1, "num": 100015, "is_land": true }, { "name": "Godless Shrine", "idx": 0, "num": 100050, "is_land": true }, { "name": "Stomping Ground", "idx": 2, "num": 100041, "is_land": true }, { "name": "Wooded Foothills", "idx": 3, "num": 100049, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Bloodstained Mire", "Wooded Foothills", "Wooded Foothills"] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ]
+}
