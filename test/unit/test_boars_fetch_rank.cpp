@@ -799,7 +799,7 @@ TEST_CASE("Five Colour MTG_FIVECOLOUR_TRIOME_BESIDE: a tapped top pick searches 
     CHECK(NarrowedFr(only, foothills).size() == 1);
 }
 
-// ---- MTG_FIVECOLOUR_RULE6_SEES_STEPS (default OFF, pending the USER) -------------------------------------------------
+// ---- MTG_FIVECOLOUR_RULE6_SEES_STEPS (default ON, USER 2026-11-21) -----------------------------------------------------------
 // RULE 6's "is the untapped land's mana spendable this turn" test, sharpened for the five blind spots the 2026-11-18
 // TRIOME_BESIDE A/B found. Each hand below reads IDLE to the old test (a triome tops the ranking) and NEEDED to the
 // sharpened one (an untapped land tops it). Width stays 1.

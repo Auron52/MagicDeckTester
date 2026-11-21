@@ -24550,7 +24550,7 @@ static bool FiveColourEntersTapped(const std::string& name)
     return d != nullptr && d->params.enters_tapped;
 }
 
-// MTG_FIVECOLOUR_RULE6_SEES_STEPS (DEFAULT OFF, pending the USER). RULE 6's own "can the untapped land's mana be
+// MTG_FIVECOLOUR_RULE6_SEES_STEPS (DEFAULT ON: USER 2026-11-21 "Rule6 looks good to me.", chosen over TRIOME_BESIDE). RULE 6's own "can the untapped land's mana be
 // SPENT this turn" test (USER 2026-08-19: "if there is a spell that requires the land we should always go for
 // untapped ... triomes are STRICTLY for times when you cannot use the mana") read the board too coarsely: the
 // 2026-11-18 TRIOME_BESIDE A/B found 12 standard games where the untapped land's mana really was spent on a
@@ -24567,7 +24567,7 @@ static bool FiveColourEntersTapped(const std::string& name)
 // The result is OR-ed into RULE 6's own unlocks, so it only ever ADDS untapped preference.
 static bool FiveColourRule6StepsOn()
 {
-    static const bool on = EnvOn("MTG_FIVECOLOUR_RULE6_SEES_STEPS", false);
+    static const bool on = EnvOn("MTG_FIVECOLOUR_RULE6_SEES_STEPS", true);
     return heurarm::Flag(heurarm::FIVECOLOUR_RULE6_SEES_STEPS, on);
 }
 namespace
