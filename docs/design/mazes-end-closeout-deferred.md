@@ -100,10 +100,30 @@ Before launching, re-confirm on the frozen tip:
      dredge. Decide which shape rule 5 ships with from step 2's evidence.
   4. Then switch the default to (amended) rule 5 and delete rule 4's three-Gods natural draw.
 
+## USER answers, 2026-11-21 (second set, VERBATIM)
+- **Q4 Manabond held-tutor case: PRUNE, try it now.** "Good point, that is a probable hold case, which didn't occur to me
+  at the time. We should try it before moving on." Built in batch 3 as `MTG_MAZE_MANABOND_TUTOR_PRUNE` (sub-lever of
+  `MTG_MAZE_MANABOND_DISCARD`): the yes is pruned when it would discard a held land tutor with no Maze's End ours.
+- **Q5 conditional fetch ranking: try it.** "Okay, we'll try it. We do want to wrap up in the next few hours to start
+  another deck, but I do want to clean up some loose ends if possible." Correction: per DECK, P5d-7's cond already met
+  the net bar (std clairvoyant -2 / blind -51; 2HG -4 / -24); only single rows (d5 +1, d0 +3) were positive. Its d8 b0
+  check was never run. Re-measured in batch 3 on the shipped base (reveal guard ON, fold ON).
+- **Q6 Burgeoning: same treatment in both formats.** "I think that's fine. The case it is particularly good is actually
+  early (plus to drop a lot of lands) and if you already played manabond it is no longer early."
+- **Q3 bp-node hole: close it.** "Okay, if there is a potential hole in our design it should be closed." Implementation
+  on `wip/bp-node-host` (lever `MTG_BP_NODE_HOST_GATE`). It moves every deck's budgeted play, so it needs the all-deck
+  screen + held-out A/B on the decks that move + d8 b0, best run overnight.
+- **Q8 pay-refine cap: follow-up next week.** "How can budgeting things bring back slowness? Why would we ever want to do
+  something that does that? Budgeting is meant to be something that helps performance at the cost of quality, so if it
+  makes both worse that is a waste of time and effort. Unless that fixed node cap is actually a major hole in the
+  design? But even if that case I wouldn't want to make a switch that hurts performance and quality... All that said, it
+  seems like this is an item that will need a follow-up. Maybe next week when I'm in less of a rush to use inference
+  budget." The explanation owed: the fixed cap applies at EVERY budget (so at unlimited budget a payment refine can stop
+  short: a small completeness hole); the budget-charged form is complete at unlimited budget, but the executor's real
+  apply runs with no budget, so without its own bound there it would be uncapped (the Galadriel >40 min case). Any switch
+  must keep a bound at the executor's apply and must not be slower.
+- **Q9 IDG quality-vs-time run: overnight, not urgent.** "I guess we could plan this for a time period while I am asleep
+  or something. It seems reasonable to experiment with, but not urgent."
+
 ## Open USER questions carried forward
-3. Build and A/B the bp-node per-host gate? (recommend yes)
-4. Manabond q2: prune "yes" when it would discard the held land tutor and no Maze's End is anywhere? (currently it only orders "no" first; recommend prune)
-5. Conditional fetch ranking: pursue cond (root-cause its clairvoyant +1/+3), or drop it? (recommend pursue; c2 is out)
-6. Burgeoning in 2HG: no measurable effect (std -4/1000, 2HG -1/300); recommend the same treatment in both formats. Matters only if q2 ships.
-8. Fixed pay-refine node cap, or F5R's budget-charged cap? (recommend keep the fixed cap until the screen shows Galadriel stays fast)
-9. IDG: run its quality-vs-time comparison and root-cause Martyr/Hydras/Merfolk Turns? (recommend yes)
+None (all ten answered 2026-11-21).
