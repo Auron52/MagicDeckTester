@@ -126,7 +126,10 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
 - gi 8 (Bolt hold): persists (7 vs 6). Worldfire never reached the hand; OFF hard-cast Halberdier T3 and
   raced it with Rift Bolts as burn (T6). The hold allows a hard cast only when the Bolt alone is lethal.
   PROPOSED AMENDMENT (agent; default OFF, `MTG_WORLDFIRE_BOLT_RACE=1`): release the hold once we control a
-  creature. Measurement below.
+  creature. MEASURED, NOT ADOPTED: same blocks, paired vs prunes ON -- block 1 5.719 vs 5.734 (1 better: gi 8,
+  0 worse); held out 5.781 vs 5.760 (1 better, 3 worse: gi 16, 52, 82). Net ~+1 turn over 160 games, so it
+  stays OFF and the USER's hold stands as shipped. (Race arm ran at --threads 4; block 1 differs from ON only
+  at gi 8, so play is thread-invariant here.)
 
 ## USER rulings this analysis
 
