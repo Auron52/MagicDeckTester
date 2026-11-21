@@ -169,29 +169,33 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~09:20 UTC) — resume here after compaction
-DONE: Stages 1-5 + verify_deck GATE PASS; 5c2 tie-break KEEP ON; Browbeat fold (DEFAULT OFF, measured not an
-identity; ledger section "The per-turn fold"); worktree cb-m2fold removed. REBASED onto origin 449702ab3 (28 local
-commits). Conflicts: GT files -> origin's numbers + the new creatureburn keys (so midrangeburn/onedropburn GT halves
-are SPLIT until re-accepted); HeuristicArm.h -> origin's slots + CB_BROWBEAT_M2_RESTRICT last. Primary Release built
-09:14 UTC on the rebased tree; USER told the VIEWER IS READY for Creature Burn references.
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~12:15 UTC) — resume here after compaction
+DONE: Stages 1-5 + verify_deck GATE PASS; 5c2 tie-break KEEP ON; Browbeat fold DEFAULT OFF (measured); USER's 10
+Creature Burn references committed (s1..s10); GT re-accepted after rebase 1 (smoke + scoped regression, burn decks).
+Rebased AGAIN onto c9a2e1ff6 (ft-land-1121's landing: Site 9 mana skip, Five Colour RULE6); HeuristicArm.h conflict
+-> origin's slots + CB_BROWBEAT_M2_RESTRICT last. 34 local commits. I HOLD the push lease (head since 10:41).
+CONTAINER RESTARTED ~12:08 UTC: every process died; viewer restarted from the primary checkout (12:12,
+MDT_REFERENCE_BACKUP_DIR set); status timer re-created (bf22d918, 2-hourly at :17).
 
-RUNNING: (unit_par exited 3: test_shadowborn_int9.cpp:184 under sharding -- the order dependency origin documented in 86779a63d, not ours; a SERIAL mtg-test rerun is going, `landing/unit_serial.log`; confirm it passes.) landing chain `build/scratch/cb-orch/landing/chain.sh` (PID 697752, under push_queue hold; status in
-`landing/status`, DONE marker `landing/DONE`): build OK -> unit_par -> scenarios -> full smoke (MTG_PGO=0) ->
-regression --deck=midrangeburn,midrangeburn2hg,onedropburn,onedropburn2hg,creatureburn,creatureburn2hg. Push queue:
-REQUEUED at 08:39 (a waiting session, ft-land-1121, is head); `push_queue.py wait` armed.
+RUNNING: validation round 2 `build/scratch/cb-orch/landing2/chain.sh` under `push_queue.py hold` (build -> serial
+unit -> scenarios -> full smoke -> check_gt_logs; status `landing2/status`, marker `landing2/DONE`). Agents (resumed
+after the restart): MANUAL TAP-PING in human play (USER 2026-11-21: "It seems like Cinder Pyromancer auto-taps in the
+viewer, but cannot be manually tapped. Let's leave the auto-tap, but add the option to manually tap."), worktree
+cb-manualtap, brief logs/creature-burn/manualtap-brief.md; OPPONENT KAROO BOUNCE (USER: "One weird thing is that the
+oppoennt plays bouncelands without bouncing anything. I wonder if we should allow that?" / "It seems suspect to say
+the least." / POLICY: "They should prioritize non-bouncelands if they have no lands out of course, but otherwise you
+can just choose the leftmost." + "(to play and to bounce, we shouldn't bounce bouncelands either if possible)" /
+"Okay, I finished 10 references, except I think that 9 will need to be adjusted to turn 5 after fixing the
+bounceland issue."), worktree opp-karoo, brief logs/creature-burn/oppkaroo-brief.md.
 
-NEXT: (1) chain DONE: inspect smoke -- expected changes only on the burn decks (Fireblast order, 591d4c115) and
-creatureburn (origin's engine moves); anything else = investigate. Back up regression_gt.txt + gt_logs, accept smoke
-and the scoped regression (`--deck=...` same list, `--accept`), `python3 test/check_gt_logs.py`, commit GT.
-(2) At turn: fetch + rebase onto origin, check_references_safe; if the rebase replayed gated src changes, rebuild +
-unit + smoke (+ re-accept moved keys) under `hold`; `land`; CI watch --interval 60 in background. (3) Stage 6 report
-+ 6a disclosure in chat (USER items: fold OFF verdict; main-1 "attack, then Browbeat" completeness gap;
-PEAKS_PLAIN_FOLD default ON; Browbeat out of the provider signature; extra Peaks land positions; echo census (NO GAP);
-Pyromancer response ping / accounting un-ping; 1-power pinger attack exemption; Peaks inert-class premise; Price of
-Progress vs Peaks self-damage; heavy unbudgeted tail (backstop screen: 36 games > 5 s, clean blocks chosen); provider
-cert NotAssessed; PROVISIONAL Hellspark unearth routing; Browbeat SECOND-MAIN RELEVANT). (4) Commit any new
-references/Creature_Burn the USER saves. (5) CronDelete b718d9a3 at the end; check_references_safe at session close.
+NEXT: (1) landing2 DONE: smoke should PASS everywhere (GT = origin's + our burn keys); anything moved = investigate
+before accepting. `land`, CI watch --interval 60 in background. (2) Integrate the two agents' results in a LATER
+landing (join once; slow box <= 1 per 4 h); apply the reference-9 T5 adjustment the USER asked for, as the Karoo agent
+reports it. (3) Stage 6 report + 6a disclosure (USER items listed in the 09:20 checkpoint version: fold OFF verdict;
+main-1 attack-then-Browbeat completeness gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
+census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
+heavy unbudgeted tail; cert NotAssessed; PROVISIONAL Hellspark unearth; Browbeat SECOND-MAIN RELEVANT). (4) Commit new
+references as they appear. (5) CronDelete bf22d918 at the end; check_references_safe at session close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
