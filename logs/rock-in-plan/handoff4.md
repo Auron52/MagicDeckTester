@@ -84,3 +84,13 @@ context would cost more than a fresh agent re-reading this file.
 * Machine: one big process at a time under claude_box.lock; small work via scripts/box_lane.sh (<= 4 slots); ./build.sh
   only; wait ~200 s after edits (9p lag) and delete touched objects before building; no `timeout`, no pkill -f / pgrep -f;
   rebase, never merge; never touch references/.
+
+## Update 04:15 UTC: chain7's pre-tier checks all PASSED; the tiers are running
+
+* The lock was taken at 04:05 (head fb32c15c1, clean). Build ok, **units 3720/3720**, **tight-check `[lkr-tight-bad]` = 0**,
+  SIGNET_PAIR 0/1 wins identical to pfx1, and **the exact3 slice is 192/192 byte-identical to ab3** (with prefix 2 and
+  the Signet-pair cut).
+* Signet-pair CPU (paired, Niv 200): rung 15.03 s -> 13.83 s (-8%), held_try 473k -> 406k, tables 254k -> 212k, game CPU
+  204.3 -> 200.3 s. Against the old prefix-1 binary, both cuts together take the rung from ~19.4 s to ~13.8 s (-29%).
+  Niv on/off CPU on the full-core slice is 1.0630 (ab3 1.0650).
+* The tiers (`$S/tiers7.log`) are running under PID 4110419; the marker is `$S/chain7.done`. Steps 3-5 above remain.
