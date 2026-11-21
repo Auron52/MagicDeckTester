@@ -169,33 +169,35 @@ Residual, disclosed (not a loss of this fold): an ATTACKING 1-power pinger deals
 main-2 Browbeat, exactly like every other attacker; whether to attack at all is the standing attack-all
 exemption, unchanged by this batch.
 
-## CHECKPOINT (orchestrator, updated 2026-11-21 ~12:15 UTC) — resume here after compaction
+## CHECKPOINT (orchestrator, updated 2026-11-21 ~16:45 UTC) — resume here after compaction
 DONE: Stages 1-5 + verify_deck GATE PASS; 5c2 tie-break KEEP ON; Browbeat fold DEFAULT OFF (measured); USER's 10
-Creature Burn references committed (s1..s10); GT re-accepted after rebase 1 (smoke + scoped regression, burn decks).
-Rebased AGAIN onto c9a2e1ff6 (ft-land-1121's landing: Site 9 mana skip, Five Colour RULE6); HeuristicArm.h conflict
--> origin's slots + CB_BROWBEAT_M2_RESTRICT last. 34 local commits. I HOLD the push lease (head since 10:41).
-CONTAINER RESTARTED ~12:08 UTC: every process died; viewer restarted from the primary checkout (12:12,
-MDT_REFERENCE_BACKUP_DIR set); status timer re-created (bf22d918, 2-hourly at :17).
+Creature Burn references committed (s1..s10). LANDED 5a07c3df3 at 16:01 UTC (validation round 2: build/unit/scen
+PASS, smoke 239/239 play-changed 0, gt_logs consistent). Slow box: next `join` no earlier than ~20:01 UTC.
+CI watch running (run 44922225716).
 
-RUNNING: validation round 2 `build/scratch/cb-orch/landing2/chain.sh` under `push_queue.py hold` (build -> serial
-unit -> scenarios -> full smoke -> check_gt_logs; status `landing2/status`, marker `landing2/DONE`). Agents (resumed
-after the restart): MANUAL TAP-PING in human play (USER 2026-11-21: "It seems like Cinder Pyromancer auto-taps in the
-viewer, but cannot be manually tapped. Let's leave the auto-tap, but add the option to manually tap."), worktree
-cb-manualtap, brief logs/creature-burn/manualtap-brief.md; OPPONENT KAROO BOUNCE (USER: "One weird thing is that the
-oppoennt plays bouncelands without bouncing anything. I wonder if we should allow that?" / "It seems suspect to say
-the least." / POLICY: "They should prioritize non-bouncelands if they have no lands out of course, but otherwise you
-can just choose the leftmost." + "(to play and to bounce, we shouldn't bounce bouncelands either if possible)" /
-"Okay, I finished 10 references, except I think that 9 will need to be adjusted to turn 5 after fixing the
-bounceland issue."), worktree opp-karoo, brief logs/creature-burn/oppkaroo-brief.md.
+REFERENCE BENCH (USER 2026-11-21: "We should also make sure all of the references are matched if you haven't.
+Beyond seed 9, which I expect to become invalid after the bounceland issue is fixed."), ref_bench on 5a07c3df3:
+human 4.600 / search 4.700; SHORTFALL s6 (4 vs 5), s8 (5 vs 6); s10 search faster (6 vs 5); others equal (s9 4/4).
+Root-cause agent launched (brief logs/creature-burn/refshort-brief.md, worktree cb-refshort if it fixes anything).
 
-NEXT: (1) landing2 DONE: smoke should PASS everywhere (GT = origin's + our burn keys); anything moved = investigate
-before accepting. `land`, CI watch --interval 60 in background. (2) Integrate the two agents' results in a LATER
-landing (join once; slow box <= 1 per 4 h); apply the reference-9 T5 adjustment the USER asked for, as the Karoo agent
-reports it. (3) Stage 6 report + 6a disclosure (USER items listed in the 09:20 checkpoint version: fold OFF verdict;
-main-1 attack-then-Browbeat completeness gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
-census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
-heavy unbudgeted tail; cert NotAssessed; PROVISIONAL Hellspark unearth; Browbeat SECOND-MAIN RELEVANT). (4) Commit new
-references as they appear. (5) CronDelete bf22d918 at the end; check_references_safe at session close.
+AGENTS: MANUAL TAP-PING (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot be manually
+tapped. Let's leave the auto-tap, but add the option to manually tap.") HANDED OFF at ~210K: impl e9c534b1e on
+wip/cb-manualtap (server.js unchanged); validation chain lane PID 70021, outputs build/scratch/cb-manualtap/val/
+(DONE marker); handoff logs/creature-burn/manualtap-handoff.md -> launch a FRESH agent when the chain is DONE.
+OPPONENT KAROO BOUNCE (USER: "One weird thing is that the oppoennt plays bouncelands without bouncing anything. I
+wonder if we should allow that?" / "It seems suspect to say the least." / POLICY: "They should prioritize
+non-bouncelands if they have no lands out of course, but otherwise you can just choose the leftmost." + "(to play and
+to bounce, we shouldn't bounce bouncelands either if possible)" / "Okay, I finished 10 references, except I think that
+9 will need to be adjusted to turn 5 after fixing the bounceland issue."): WIP c28b21f91 on wip/opp-karoo
+(implements the USER policy), lane build running.
+
+NEXT: (1) integrate manual-tap + Karoo + any refshort fix; re-run ref_bench (s9 expected to move to T5); one landing
+>= 20:01 UTC. (2) Stage 6 report + 6a disclosure (USER items: fold OFF verdict; main-1 attack-then-Browbeat
+completeness gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo census NO GAP; Pyromancer
+response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks; heavy unbudgeted tail;
+cert NotAssessed; PROVISIONAL Hellspark unearth; Browbeat SECOND-MAIN RELEVANT; ref bench shortfalls). (3) USER asked
+next: the MULLIGAN PROFILE (mullgen.sh run, alone on the box, frozen commit) after outstanding work + performance.
+(4) Commit new references as they appear. (5) CronDelete bf22d918 at the end; check_references_safe at close.
 
 ## Stage 2 — Batch 3 — implemented (integrator 3 / 3b, 2026-11-20)
 
