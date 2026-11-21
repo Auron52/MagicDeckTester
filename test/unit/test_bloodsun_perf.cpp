@@ -255,5 +255,8 @@ TEST_CASE("Blood Sun B13: Lotus Field takes the tapped twin before the untapped 
     const std::vector<std::vector<int>> picks = LotusSacrificePicks(s, 0, DefPf("Lotus Field"), 3);
     REQUIRE(picks.size() == 1);
     const std::vector<int>& v = picks[0];
-    CHECK(std::find(v.begin(), v.end(), 2) == v.end());   // never the untapped Swamp before the tapped one
+    // Never the untapped Swamp while its tapped twin is KEPT (sacrificing both Swamps ties on (1)-(3) and is allowed).
+    const bool untapped_gone = std::find(v.begin(), v.end(), 2) != v.end();
+    const bool tapped_gone   = std::find(v.begin(), v.end(), 1) != v.end();
+    CHECK(!(untapped_gone && !tapped_gone));
 }

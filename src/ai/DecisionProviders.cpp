@@ -73230,7 +73230,8 @@ bool BloodSunMachinationsCastPruneOn()
 // should be in that ruling, though. Maybe there is an argument to allow the others in your list. We'll have to test it
 // out if it is a notable cost. I would probably not bother with fetching the lands except for the red source or if you
 // don't have enough land to get to 7 mana in this case. The rest can be fetched when you get multiple cards with
-// Diabolic Revelation." DEFAULT ON (USER-authored); =0 keeps the B3 list (the A/B arm); inert while the prune is off.
+// Diabolic Revelation." DEFAULT OFF until measured (USER e3d2622e8: measure first; the default is the USER's call);
+// =1 the narrower list, =0 keeps the B3 list; inert while the prune is off.
 // The transmute's own list (B10: Grim Tutor, Blood Sun while missing) and Diabolic Revelation's packages are untouched.
 bool BloodSunGrimPruneOn()
 {
@@ -73246,7 +73247,8 @@ bool BloodSunGrimPruneOn()
 // Diabolic Revelation is a better use." -> Grim Tutor is not cast while a Diabolic Revelation is in hand and this
 // turn's mana (untapped lands + floating + the best land still playable this turn) is >= MTG_BLOODSUN_GRIM_REV_MANA
 // (default 8; the 7 arm). MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI=1 (default OFF, an A/B arm) exempts the USER's named case:
-// two or more Grim Tutors with exactly one Revelation in hand. DEFAULT ON; inert while the prune is off.
+// two or more Grim Tutors with exactly one Revelation in hand. DEFAULT OFF until measured (the USER's call); inert while
+// the prune is off.
 bool BloodSunGrimRevGateOn()
 {
     static const bool on = EnvOn("MTG_BLOODSUN_GRIM_REV_GATE");   // DEFAULT OFF until measured (USER e3d2622e8)
@@ -73442,8 +73444,11 @@ int BloodSunTurnManaEstimate(const GameState& s, int controller)
 bool BloodSunGrimRevGateHolds(const GameState& s, int controller)
 {
     if (!BloodSunGrimRevGateOn()) { return false; }
-    static const int s_mana = EnvInt("MTG_BLOODSUN_GRIM_REV_MANA", 8);
-    static const bool s_exempt = EnvOn("MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI");   // DEFAULT OFF (an A/B arm)
+    static const int s_mana_env = EnvInt("MTG_BLOODSUN_GRIM_REV_MANA", 8);
+    static const bool s_exempt_env = EnvOn("MTG_BLOODSUN_GRIM_REV_EXEMPT_MULTI");   // DEFAULT OFF (an A/B arm)
+    static const bool s_mana7_env = EnvOn("MTG_BLOODSUN_GRIM_REV_MANA7");          // DEFAULT OFF (the threshold-7 arm)
+    const bool s_exempt = heurarm::Flag(heurarm::BLOODSUN_GRIM_REV_EXEMPT_MULTI, s_exempt_env);
+    const int s_mana = heurarm::Flag(heurarm::BLOODSUN_GRIM_REV_MANA7, s_mana7_env) ? 7 : s_mana_env;
     int revs = 0, grims = 0;
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
     {
@@ -73641,7 +73646,7 @@ bool BloodSunProvider::OffersOpponentLookTarget(const GameState& /*s*/, const Ca
 bool BloodSunGoOffOn()
 {
     static const bool on = EnvOn("MTG_BLOODSUN_GOOFF", true);   // DEFAULT ON (order only); =0 no go-off tier
-    return on;
+    return heurarm::Flag(heurarm::BLOODSUN_GOOFF, on);
 }
 
 // The go-off test (BloodSunGoOffRank). A deliberately small resource model -- it only ORDERS, the engine plays and
@@ -73661,7 +73666,7 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
     for (const Permanent& pm : s.battlefield)
     {
         if (pm.controller_index != me || pm.def_absent || !pm.card.IsCreature()) { continue; }
-        const int pw = std::max(0, pm.card.m_power.value_or(0) + pm.power_modifier);
+        const int pw = std::max(0, pm.EffectivePower());
         bf_power += pw;
         if (!pm.entered_this_turn && !pm.tapped) { now_power += pw; }
     }
@@ -73780,7 +73785,7 @@ void BloodSunProvider::LotusSacrificeRestrict(const GameState& s, int controller
 bool BloodSunProvider::NestedRoundWinStop() const
 {
     static const bool on = EnvOn("MTG_BLOODSUN_ROUND_WIN_STOP", true);   // DEFAULT ON (sound); =0 the old order of work
-    return on;
+    return heurarm::Flag(heurarm::BLOODSUN_ROUND_WIN_STOP, on);
 }
 
 bool BloodSunProvider::NeverCast(const CardDefinition& def) const
