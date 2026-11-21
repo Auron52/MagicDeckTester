@@ -26,7 +26,8 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
 * **Open gap (batch B, surfaced):** a Packleader draw off a fight-death token in main 1 lands in the
   trailing pass, so that card cannot be cast the same main (no breakpoint re-solve for a trailing-activation
   draw). Covered by the per-turn second-main gate planned for the provider batch.
-* **Running:** none (integrator B: smoke byte-identity next).
+* **Smoke byte-identity (batches A + B, at 27e1f4892, no accept):** 235/235 PASS, per-game audit 0 configs changed, play-changed 0 (searched and d0). Log `build/scratch/beasts_smokeB.log` (build volume).
+* **Running:** none.
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
