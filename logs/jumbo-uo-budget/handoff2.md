@@ -101,3 +101,11 @@ and on rc=0 run `cp build/Release/mtg $S/mtg.m`. Then run `box_lane.sh --slots 4
 Box rules: one big run on claude_box.lock with nproc threads, MTG_RSS_CAP_GB=40, MTG_PGO=0 on all arms; lane max 4 slots;
 `setsid ... &` forks, so take the flock PID from ps, not $!; no rm on globs (use fresh dirs); never timeout / pkill -f.
 The lane and the lock have been congested (waits of 1-2 h).
+
+## UPDATE 2: job 2 (diagnostics) FINISHED (`$S/diag/`, DONE marker present)
+Single-game CLI repros (binary mtg.r, 1 thread) reproduce both losses: Bruna gi 904788 on 6 / r16 7; gi 908617 on 4 /
+r16 5. JSON game logs: `$S/diag/<arm>.<gi>/*.json` (diff on vs r16 for the first divergent decision). MTG_UO_PRICE_STATS
+for the r16 games: 904788 enum 7,156 searches / 80,693 steps -> 5,033 units charged, apply 1,174 / 2,558 -> 132 units;
+908617 enum 401 / 1,234 -> 75 units, apply 2,886 / 9,869 -> 631 units, cuts 0 in both. So in these games the charge is NOT
+tiny: 904788's enumeration bills ~5k units over the game. Both "the charge itself" and "charging computations are not
+cached" remain candidate mechanisms; the m_loss run (pcx16 / px16) separates them.
