@@ -7006,6 +7006,12 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         }
         if (target) { bits |= 1ull << static_cast<int>(PermAbilityMode::TapTargetPump); }
     }
+    // Contested Cliffs' fight: the out-of-band block's conditions, mirrored (an untapped, tappable source,
+    // {R}{G} payable, a legal own AND a legal opponent target). See CollectActions, "Contested Cliffs".
+    if (sd.params.tap_fight_cost.has_value() && !src.tapped && CanTapNow(src, state.battlefield)
+        && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.tap_fight_cost))
+        && TapFightTargetsLive(state, ctrl, sd, TapFightPin{}))
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::TapFight); }
     if (sd.params.target_pump_cost.has_value()
         && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.target_pump_cost)))
     {
@@ -20494,7 +20500,9 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
         const bool maze_hold = a.ability_mode == Action::AbilityMode::TapTutorPut && a.def != nullptr
                             && a.def->params.tap_tutor_put_return_self;
         if (!lever && a.ability_mode != Action::AbilityMode::TapBlood
-            && a.ability_mode != Action::AbilityMode::TapTargetPump && !maze_hold) { continue; }
+            && a.ability_mode != Action::AbilityMode::TapTargetPump
+            && a.ability_mode != Action::AbilityMode::TapFight      // Contested Cliffs: a {C} land, same hold
+            && !maze_hold) { continue; }
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != active || p.tapped) { continue; }
@@ -34416,6 +34424,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TapTutorPut, &pp.tap_tutor_put_cost },
         { PermAbilityMode::TapTreasure, &pp.tap_treasure_cost },   // Heap Gate (Maze's End I4) -- appended LAST
         { PermAbilityMode::SelfPing,    &pp.self_ping_cost     },   // Stuffy Doll -- appended LAST (slots = table INDEX)
+        { PermAbilityMode::TapFight,    &pp.tap_fight_cost     },   // Contested Cliffs (Beasts B) -- appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -34450,6 +34459,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         if (modes[i].mode == PermAbilityMode::TapTreasure
             && !PermAbilitySourceLive(state, ctrl, num, modes[i].mode, nullptr)) { continue; }
+        // Contested Cliffs: no key unless a legal own Beast AND opponent creature exist (both targets).
+        if (modes[i].mode == PermAbilityMode::TapFight && !TapFightTargetsLive(state, ctrl, *d, TapFightPin{}))
+        { continue; }
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
     }
@@ -51193,6 +51205,85 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.eval           = 2 * TapTargetPumpPowerAt(*sd, all ? std::max(1, xmax) : x);
                             a.is_noncreature = true;
                             actions.push_back(std::move(a));
+                        }
+                    }
+                }
+            }
+
+            // ---- Contested Cliffs: "{R}{G}, {T}: Choose target Beast creature you control and target creature
+            // an opponent controls. Those creatures fight each other." (PermAbilityMode::TapFight; CardParams::
+            // tap_fight_*; Beasts B.) The Kessig Wolf Run shape, out of band: TWO decisions, both SEARCHED (the
+            // no-greedy rule) -- WHICH of our Beasts and WHICH of their creatures. One variant per (own identity
+            // class x opponent identity class), all ONE activation family (one {T} per plan), so the subset walk
+            // picks at most one; whether to activate is the empty choice. Emitted in EVERY main this enumerator
+            // serves (main 1, and main 2 whenever the deck has one -- the post-combat fight is the same menu).
+            //   * MANA FROM OTHER SOURCES: the land's own {C} cannot pay (its {T} is part of the cost).
+            //   * TARGETS: LandfallTargetFoldKey per side (the SOUND identity fold: two identical 3/3 Beast
+            //     tokens fighting the same spawn are boards that differ only in which copy's number took the
+            //     damage); then DecisionProvider::TapFightTargets may restrict / order (default: all). An
+            //     opponent creature exists only as a goldfish spawn (GoldFishRunner::PopulateOpponentSpawns).
+            //   * HUMAN PLAY: ONE unpinned entry (both pins 0 -- a pinned representative would read as a
+            //     queue-time aura host in the GUI); both targets are picked on the live board at activation
+            //     (ChooseTapFightTargetsAtActivation) over the full rules-legal sets.
+            if (sd->params.tap_fight_cost.has_value() && !src.tapped && CanTapNow(src, state.battlefield))
+            {
+                const int me = state.active_player_index;
+                const bool human = HumanPlayActive();
+                ManaPool others = turn_pool();
+                others.AddPool(state.floating_mana);
+                SubtractPoolClamped(others, PermAbilityTapDebitOf(state, turn_pool(), src.card.m_number));
+                const ManaCost fcost = EffectiveActivationCost(state, me, src.card, *sd->params.tap_fight_cost);
+                if (others.CanPay(fcost))
+                {
+                    std::vector<int> own = TapFightLegalTargets(state, me, *sd, /*own=*/true);
+                    std::vector<int> opp = TapFightLegalTargets(state, me, *sd, /*own=*/false);
+                    if (!own.empty() && !opp.empty())
+                    {
+                        if (human) { own.assign(1, -1); opp.assign(1, -1); }
+                        else
+                        {
+                            std::vector<int> linked;
+                            LandfallTargetLinks(state, linked);
+                            auto fold = [&](std::vector<int>& v)
+                            {
+                                std::vector<std::uint64_t> keys;
+                                std::vector<int> kept;
+                                for (int i : v)
+                                {
+                                    std::uint64_t k = 0;
+                                    if (LandfallTargetFoldKey(state, state.battlefield[static_cast<std::size_t>(i)], k, &linked))
+                                    {
+                                        if (std::find(keys.begin(), keys.end(), k) != keys.end()) { continue; }
+                                        keys.push_back(k);
+                                    }
+                                    kept.push_back(i);
+                                }
+                                v.swap(kept);
+                            };
+                            fold(own);
+                            fold(opp);
+                            ResolveProvider(state).TapFightTargets(state, src, is_pre_combat, own, opp);
+                        }
+                        const int nbf = static_cast<int>(state.battlefield.size());
+                        for (int oi : own)
+                        {
+                            if (!human && (oi < 0 || oi >= nbf)) { continue; }
+                            for (int ti : opp)
+                            {
+                                if (!human && (ti < 0 || ti >= nbf)) { continue; }
+                                Action a;
+                                a.kind           = Action::Kind::ActivatePermAbility;
+                                a.card_name      = src.card.m_name;
+                                a.def            = sd;
+                                a.hand_index     = -1;
+                                a.sac_source_id  = src.card.m_number;
+                                a.sac_victim_id  = human ? 0 : state.battlefield[static_cast<std::size_t>(oi)].card.m_number;
+                                a.enchant_target = human ? 0 : state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                                a.ability_mode   = Action::AbilityMode::TapFight;
+                                a.cost           = fcost;
+                                a.is_noncreature = true;
+                                actions.push_back(std::move(a));
+                            }
                         }
                     }
                 }
@@ -80848,6 +80939,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
             if (tpump && g_play_target_chooser != nullptr) { g_tap_target_pump_pin.target = 0; }
+            // Contested Cliffs' searched fight pair (TapFight: ours on sac_victim_id, theirs on enchant_target),
+            // read by the liveness check and the resolver. {0, 0} for every other mode. Twin in the other world.
+            const bool tfight = a.ability_mode == Action::AbilityMode::TapFight;
+            const TapFightPinScope _tfight_pin(tfight ? a.sac_victim_id : 0, tfight ? a.enchant_target : 0);
             // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
             const CounterPingTargetPinScope _cp_pin(
                 a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
@@ -80860,6 +80955,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (tpump && g_play_target_chooser != nullptr)
                 { g_tap_target_pump_pin.target = ChooseTapTargetPumpTargetAtActivation(
                     state, state.active_player_index, *a.def, a.sac_victim_id); }
+                // Human play picks both fight targets on the live board now (null chooser: pins stand).
+                if (tfight) { ChooseTapFightTargetsAtActivation(state, state.active_player_index, *a.def); }
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 // A CREATURE source's ability may be paid with Secluded Courtyard's coloured mana
                 // (D12). Covers the K-1 repeat payments below too. Executor twin: AIEngine.
@@ -85821,6 +85918,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                     || act.ability_mode == Action::AbilityMode::UntapLand
                     || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)
                 { w.Put("#P"); w.Int(act.sac_victim_id); }
+                // Contested Cliffs' fight: WHICH of ours and WHICH of theirs are distinct plans. Lockstep with
+                // the legacy builder. Every other ability: no tag.
+                if (act.ability_mode == Action::AbilityMode::TapFight)
+                { w.Put("#F"); w.Int(act.sac_victim_id); w.Put('/'); w.Int(act.enchant_target); }
                 // Walking Ballista's ping: WHICH target (0 = face) is a decision. Every other ability: no tag.
                 if (act.ability_mode == Action::AbilityMode::CounterPing && act.sac_victim_id != 0)
                 { w.Put("#B"); w.Int(act.sac_victim_id); }
@@ -91602,6 +91703,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                       && act.ability_mode != Action::AbilityMode::UntapLand
                                       && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch)
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
+                                  // Contested Cliffs' fight pair (TapFight). Every other ability: no tag.
+                                  + (act.ability_mode != Action::AbilityMode::TapFight ? std::string()
+                                     : "#F" + std::to_string(act.sac_victim_id) + "/" + std::to_string(act.enchant_target))
                                   // Walking Ballista's ping target (0 = the face, untagged).
                                   + (act.ability_mode != Action::AbilityMode::CounterPing || act.sac_victim_id == 0
                                      ? std::string() : "#B" + std::to_string(act.sac_victim_id))
@@ -104941,6 +105045,8 @@ static std::string PlanDomKey(const Action& a)
             || a.ability_mode == Action::AbilityMode::UntapLand
             || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch))
     { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
+    if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TapFight)
+    { k += "|F"; k += std::to_string(a.sac_victim_id); k += '/'; k += std::to_string(a.enchant_target); }   // Contested Cliffs
     if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::CounterPing
         && a.sac_victim_id != 0)
     { k += "|P"; k += std::to_string(a.sac_victim_id); }   // Walking Ballista: the ping's creature target
@@ -109601,6 +109707,7 @@ inline bool NumberedTapSource(const Permanent& perm)
         || pp.tap_draw_cost.has_value()       || pp.tap_lifegain_cost.has_value()
         || pp.tap_blood_cost.has_value()      || pp.blood_draw_cost.has_value()
         || pp.tap_target_pump_cost.has_value() || pp.tap_token_cost.has_value()
+        || pp.tap_fight_cost.has_value()
         || pp.tap_put_from_hand_cost.has_value() || pp.self_ping_cost.has_value()
         || pp.life_gated_put_creatures_cost.has_value() || pp.sac_lifegain_per_creature_cost.has_value()
         || (pp.land_search_activation_taps && pp.land_search_activation_cost.has_value());
@@ -136803,6 +136910,14 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                     + " from library onto battlefield");
         }
         else if (a.kind == Action::Kind::ActivatePermAbility
+                 && a.ability_mode == Action::AbilityMode::TapFight)
+        {
+            const std::string on = (st && a.sac_victim_id != 0) ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            const std::string tn = (st && a.enchant_target != 0) ? SubChoiceHostLabel(*st, a.enchant_target) : std::string();
+            cast_names.push_back(a.card_name + ": " + (on.empty() ? std::string("target Beast") : on)
+                                 + " fights " + (tn.empty() ? std::string("target opponent creature") : tn));
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility
                  && a.ability_mode == Action::AbilityMode::TapTargetPump)
         {
             const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
@@ -138957,6 +139072,29 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 { addSub(a.card_name + " activate " + std::to_string(a.chosen_x) + " times",
                          a.card_name + " activations", std::to_string(a.chosen_x), a.card_name.str(), "count"); }
             }
+            // Contested Cliffs' fight (TapFight): BOTH targets are subs (the board-object shape, so two
+            // same-named Beasts get distinct choices). Human play emits one unpinned entry: no subs.
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::TapFight)
+            {
+                if (!HumanPlayActive() && a.sac_victim_id != 0 && a.enchant_target != 0)
+                {
+                    const std::string on = SubChoiceHostLabel(state, a.sac_victim_id);
+                    const std::string tn = SubChoiceHostLabel(state, a.enchant_target);
+                    std::string oart, tart;
+                    for (const Permanent& perm : state.battlefield)
+                    {
+                        if (perm.card.m_number == a.sac_victim_id)  { oart = perm.card.m_name.str(); }
+                        if (perm.card.m_number == a.enchant_target) { tart = perm.card.m_name.str(); }
+                    }
+                    if (!on.empty())
+                    { addSub(a.card_name + " fighter " + on, a.card_name + " fighter", on, oart,
+                             "pumptarget", a.sac_victim_id); }
+                    if (!tn.empty())
+                    { addSub(a.card_name + " fights " + tn, a.card_name + " fights", tn, tart,
+                             "pumptarget", a.enchant_target); }
+                }
+            }
             else if (a.kind == Action::Kind::ActivatePermAbility
                      && a.ability_mode == Action::AbilityMode::TapTargetPump)
             {
@@ -139772,6 +139910,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 { Action::AbilityMode::TapTargetPump,  &bd->params.tap_target_pump_cost },
                 // Heap Gate's "{1}, {T}, Tap an untapped Gate you control: Create a Treasure token" (I4).
                 { Action::AbilityMode::TapTreasure,    &bd->params.tap_treasure_cost    },
+                // Contested Cliffs' "{R}{G}, {T}: ... fight" (Beasts B).
+                { Action::AbilityMode::TapFight,       &bd->params.tap_fight_cost       },
                 // Maze's End's "{3}, {T}, Return this land to its owner's hand: search for a Gate" (and Seahunter's
                 // {3}, {T} Merfolk put). Without the row its {3} was priced at NOTHING, so "Sylvan Scrying + Archdruid's
                 // Charm + two activations", eleven mana from seven lands, read legal_not_enumerated (F6, USER Maze's
@@ -141532,7 +141672,7 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
         "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
         "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "SelfBounce", "TapTutorPut", "TapTreasure",
-        "SelfPing"
+        "SelfPing", "TapFight"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

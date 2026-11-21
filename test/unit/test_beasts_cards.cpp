@@ -1,7 +1,9 @@
-// Beasts Stage 2, integrator batch A (2026-11-21): Garruk's Packleader (power-3 enter draw), Krosan Warchief
-// (Beast reducer, stacking with Urza's Incubator), Questing Beast's duplicate-legend offer (Herald of Ilharg's
-// cast trigger, Packleader's enter draw). Each test drives the SHARED helpers both worlds call
-// (FireEtbWatchers / FireOwnEtbTriggers, EffectiveSpellCost, OfferDuplicateLegendCast).
+// Beasts Stage 2 (2026-11-21). Batch A: Garruk's Packleader (power-3 enter draw), Krosan Warchief (Beast
+// reducer, stacking with Urza's Incubator), Questing Beast's duplicate-legend offer, Thragtusk (LTB token),
+// Cragplate Baloth (kicked counters), Kaheera (lord + vigilance). Batch B: Contested Cliffs (TapFight: the
+// searched two-target fight, deathtouch, the SBA death pass). Each test drives the SHARED helpers both worlds
+// call (FireEtbWatchers / FireOwnEtbTriggers, EffectiveSpellCost, OfferDuplicateLegendCast, ApplyPermAbility,
+// EnumerateMainPlans + ApplyPlan).
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -13,7 +15,9 @@
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -384,4 +388,188 @@ TEST_CASE("Kaheera: a Krosan Warchief entering under her is a 3/3, so Garruk's P
     BeAdd(s, "Kaheera, the Orphanguard", 70);
     BeEnter(s, "Krosan Warchief", 62);
     CHECK(s.players[0].hand.size() == 1);
+}
+
+// ---- Contested Cliffs (PermAbilityMode::TapFight; Beasts B) ---------------------------------------
+
+namespace
+{
+// A goldfish spawn exactly as GameEngine materialises one (an "N/M Creature", opponent's, not a token).
+int BeSpawn(GameState& s, int power, int toughness, int number)
+{
+    Card token;
+    token.m_name = std::to_string(power) + "/" + std::to_string(toughness) + " Creature";
+    token.RehashName();
+    token.AddType(CardType::Creature);
+    token.m_power = power;
+    token.m_toughness = toughness;
+    token.m_number = number;
+    Permanent perm;
+    perm.card = token;
+    perm.controller_index = perm.owner_index = 1;
+    s.battlefield.push_back(perm);
+    return static_cast<int>(s.battlefield.size()) - 1;
+}
+// Fight through the SHARED resolver both worlds call (ApplyPermAbility under the pin).
+void BeCliffsFight(GameState& s, int cliffs, int own, int opp)
+{
+    const TapFightPinScope pin(own, opp);
+    REQUIRE(PermAbilitySourceLive(s, 0, cliffs, PermAbilityMode::TapFight, nullptr));
+    ApplyPermAbility(s, 0, cliffs, PermAbilityMode::TapFight);
+}
+// Every (own, opp) pair the enumerator offers as a TapFight action.
+std::vector<std::pair<int, int>> BeFightPairs(const GameState& s, bool pre_combat = true)
+{
+    std::vector<std::pair<int, int>> out;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(s, pre_combat))
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TapFight) { continue; }
+            const std::pair<int, int> pr{ a.sac_victim_id, a.enchant_target };
+            if (std::find(out.begin(), out.end(), pr) == out.end()) { out.push_back(pr); }
+        }
+    }
+    return out;
+}
+GameState BeCliffsBoard()
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    BeAdd(s, "Contested Cliffs", 70);
+    BeAdd(s, "Mountain", 71);
+    BeAdd(s, "Forest", 72);
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Contested Cliffs: card data -- a {C} land with an {R}{G}, {T} Beast fight")
+{
+    const CardDefinition& cc = BeDef("Contested Cliffs");
+    CHECK(cc.card.IsLand());
+    REQUIRE(cc.params.tap_fight_cost.has_value());
+    CHECK(cc.params.tap_fight_cost->ManaValue() == 2);
+    CHECK(cc.params.tap_fight_requires_subtype == "Beast");
+    CHECK(PermAbilityTaps(PermAbilityMode::TapFight));
+}
+
+TEST_CASE("Contested Cliffs: a plain fight -- simultaneous damage at power, lethal dies, the survivor keeps damage")
+{
+    GameState s = BeCliffsBoard();
+    BeAdd(s, "Krosan Warchief", 80);   // 2/2 Beast
+    BeSpawn(s, 6, 6, 9001);
+    BeCliffsFight(s, 70, 80, 9001);
+    CHECK(BeIndexOf(s, 80) < 0);                       // took 6
+    const int sp = BeIndexOf(s, 9001);
+    REQUIRE(sp >= 0);
+    CHECK(s.battlefield[static_cast<std::size_t>(sp)].damage == 2);
+    CHECK(s.players[0].graveyard.size() == 1);
+    CHECK(s.players[1].graveyard.empty());
+}
+
+TEST_CASE("Contested Cliffs: deathtouch -- Questing Beast's 4 kills a 6/6, and both die simultaneously")
+{
+    CHECK(BeDef("Questing Beast").card.HasKeyword(Keyword::Deathtouch));
+    GameState s = BeCliffsBoard();
+    BeAdd(s, "Questing Beast", 81);    // 4/4 deathtouch
+    BeSpawn(s, 6, 6, 9002);
+    BeCliffsFight(s, 70, 81, 9002);
+    CHECK(BeIndexOf(s, 9002) < 0);     // 4 < 6 toughness, but deathtouch
+    CHECK(BeIndexOf(s, 81) < 0);       // took 6
+    CHECK(s.players[1].graveyard.size() == 1);
+    {   // ...and a 0-power hit is not a deathtouch kill (CR 702.2b needs damage dealt)
+        GameState t = BeCliffsBoard();
+        BeAdd(t, "Questing Beast", 82);
+        BeSpawn(t, 0, 3, 9003);
+        BeCliffsFight(t, 70, 82, 9003);
+        CHECK(BeIndexOf(t, 9003) < 0);             // QB's 4 >= 3: dies to plain lethal damage
+        CHECK(BeIndexOf(t, 82) >= 0);              // the 0-power spawn dealt nothing
+        CHECK(t.battlefield[static_cast<std::size_t>(BeIndexOf(t, 82))].damage == 0);
+    }
+}
+
+TEST_CASE("Contested Cliffs: Thragtusk dies in the fight -> its 3/3 Beast, which Garruk's Packleader draws off")
+{
+    GameState s = BeCliffsBoard();
+    BeAdd(s, "Garruk's Packleader", 83);
+    BeAdd(s, "Thragtusk", 84);          // 5/3
+    BeSpawn(s, 4, 4, 9004);
+    BeCliffsFight(s, 70, 84, 9004);
+    CHECK(BeIndexOf(s, 84) < 0);        // took 4 >= 3
+    CHECK(BeIndexOf(s, 9004) < 0);      // took 5 >= 4
+    CHECK(BeCountTokens(s, "Beast") == 1);
+    CHECK(s.players[0].hand.size() == 1);
+}
+
+TEST_CASE("Contested Cliffs: no activation without BOTH targets, a tapped source, or the mana")
+{
+    {   // no opponent creature
+        GameState s = BeCliffsBoard();
+        BeAdd(s, "Krosan Warchief", 85);
+        CHECK_FALSE(PermAbilitySourceLive(s, 0, 70, PermAbilityMode::TapFight, nullptr));
+        CHECK(BeFightPairs(s).empty());
+    }
+    {   // no Beast of ours (the opponent's creature is not ours; a land is no creature)
+        GameState s = BeCliffsBoard();
+        BeSpawn(s, 2, 2, 9005);
+        CHECK_FALSE(PermAbilitySourceLive(s, 0, 70, PermAbilityMode::TapFight, nullptr));
+        CHECK(BeFightPairs(s).empty());
+    }
+    {   // a stale pin (the pinned spawn is gone) is a clean no-op
+        GameState s = BeCliffsBoard();
+        BeAdd(s, "Krosan Warchief", 86);
+        BeSpawn(s, 2, 2, 9006);
+        const TapFightPinScope pin(86, 9999);
+        CHECK_FALSE(PermAbilitySourceLive(s, 0, 70, PermAbilityMode::TapFight, nullptr));
+    }
+    {   // only the Cliffs' own {C}: {R}{G} must come from other sources
+        GameState s = BeState();
+        s.players[0].lands_played_this_turn = 1;
+        BeAdd(s, "Contested Cliffs", 70);
+        BeAdd(s, "Krosan Warchief", 87);
+        BeSpawn(s, 2, 2, 9007);
+        CHECK(BeFightPairs(s).empty());
+    }
+}
+
+TEST_CASE("Contested Cliffs: both targets are searched -- one variant per (own class x opponent class)")
+{
+    BoarsProvider provider;   // the deck's current route; its TapFightTargets is the base (all)
+    GameState s = BeCliffsBoard();
+    s.m_provider = &provider;
+    BeSearchedScope on(true);
+    BeAdd(s, "Krosan Warchief", 90);
+    BeAdd(s, "Krosan Warchief", 91);    // identical to 90: one class
+    BeAdd(s, "Thragtusk", 92);
+    BeSpawn(s, 1, 1, 9010);
+    BeSpawn(s, 1, 1, 9011);             // identical to 9010: one class
+    BeSpawn(s, 4, 4, 9012);
+    const auto pairs = BeFightPairs(s);
+    CHECK(pairs.size() == 4);
+    auto has = [&](int o, int t) { return std::find(pairs.begin(), pairs.end(), std::make_pair(o, t)) != pairs.end(); };
+    CHECK(has(90, 9010));
+    CHECK(has(90, 9012));
+    CHECK(has(92, 9010));
+    CHECK(has(92, 9012));
+    CHECK(BeFightPairs(s, /*pre_combat=*/false).size() == 4);   // the same menu in a main 2
+    // Applied through the plan route (the rollout's trailing pass): the pinned pair fights, Cliffs + mana tapped.
+    bool applied = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        if (plan.actions.size() != 1 || plan.actions[0].ability_mode != Action::AbilityMode::TapFight
+            || plan.actions[0].sac_victim_id != 92 || plan.actions[0].enchant_target != 9012) { continue; }
+        GameState t = s;
+        TurnSolver::ApplyPlan(t, plan, true);
+        CHECK(BeIndexOf(t, 92) < 0);           // Thragtusk took 4
+        CHECK(BeIndexOf(t, 9012) < 0);         // the 4/4 took 5
+        CHECK(BeIndexOf(t, 9010) >= 0);        // the others untouched
+        CHECK(BeCountTokens(t, "Beast") == 1); // Thragtusk's LTB
+        CHECK(t.battlefield[static_cast<std::size_t>(BeIndexOf(t, 70))].tapped);
+        CHECK(t.battlefield[static_cast<std::size_t>(BeIndexOf(t, 71))].tapped);
+        CHECK(t.battlefield[static_cast<std::size_t>(BeIndexOf(t, 72))].tapped);
+        applied = true;
+        break;
+    }
+    CHECK(applied);
+    CHECK(g_tap_fight_unpinned.load() == 0);
 }

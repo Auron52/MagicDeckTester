@@ -658,6 +658,16 @@ verb is the verbless land convention, `cast=Kessig Wolf Run`; CheckLine carries 
 while the target is chosen on the battlefield. Autonomously the deck provider may fold both
 (LandfallProvider: one attack-eligible target, X = all remaining mana -- `pump_x` -1).
 
+**Targeted tap fight (Contested Cliffs, Beasts B 2026-11-21).** "{R}{G}, {T}: Choose target Beast creature
+you control and target creature an opponent controls. Those creatures fight each other"
+(`PermAbilityMode::TapFight`, `tap_fight_cost`). Autonomously one variant per (own Beast identity class x
+opponent creature identity class), both pins on the Action (`sac_victim_id`, `enchant_target`; plan JSON
+`fight_own` / `fight_opp`). Under `HumanPlayActive()` it is ONE main-phase entry with NO pins (a pinned
+`enchant_target` would read as a queue-time aura host), and both targets are asked at activation, before the
+mana, through the existing `target` board-click frame via `g_play_loyalty_chooser` (the Voracious Hydra
+precedent): our Beast first, then the opponent's creature, each over the full rules-legal set. Line verb: the
+verbless land convention, `cast=Contested Cliffs`. No new decision type (bucket A).
+
 **World War Hulk (Saga) and Natural Order — every choice happens IN ITS ZONE (2026-09-17).** A user
 hand-playing the promoted Stompy list found four decisions the viewer never offered. All four are now
 surfaced, and none of them uses a dialog for an object that is already on screen:

@@ -37968,6 +37968,129 @@ inline void DrainPendingZeroToughness(GameState& state)
     }
 }
 
+// ---- FIGHT (CR 701.14) -- the shared resolver: Voracious Hydra's fight arithmetic, plus deathtouch and an
+// immediate SBA death pass. `a` and `b` are battlefield indices of two DIFFERENT creatures. Each deals damage
+// equal to its power (CombatPowerOf, read now) to the other, simultaneously (both powers are read before either
+// damage is marked). DEATHTOUCH (CR 702.2b / 704.5h): a creature dealt a nonzero amount of damage by a
+// deathtouch source is destroyed by the next SBA check -- modelled by raising its marked damage to its lethal
+// toughness, so the shared lethal-damage predicate (CounterPingSbaDead) kills it, and indestructible still
+// survives (both are "destroy"). The only observable difference is the marked number on an indestructible
+// survivor, which nothing reads. Then the SBA CREATURE-death pass (SbaKillDeadCreatures: simultaneous deaths,
+// owner's graveyard, OnCreatureDies -> leaves/dies triggers, e.g. Thragtusk's 3/3 and the Packleader draw off
+// it), in BOTH worlds at this same instant. Returns the number that died. Damage to a creature only: no
+// dealt-damage event pipeline (dmgrx), no lifelink -- no fight source in any pool has either (disclosed in the
+// card's bracket).
+inline int ResolveFight(GameState& state, int a, int b, const std::string& why)
+{
+    if (a < 0 || b < 0 || a == b || a >= static_cast<int>(state.battlefield.size())
+        || b >= static_cast<int>(state.battlefield.size())) { return 0; }
+    Permanent& pa = state.battlefield[static_cast<std::size_t>(a)];
+    Permanent& pb = state.battlefield[static_cast<std::size_t>(b)];
+    const int pow_a = std::max(0, CombatPowerOf(pa, state));
+    const int pow_b = std::max(0, CombatPowerOf(pb, state));
+    pb.damage += pow_a;
+    pa.damage += pow_b;
+    if (pow_a > 0 && pa.card.HasKeyword(Keyword::Deathtouch))
+    { pb.damage = std::max(pb.damage, LethalToughness(pb, state)); }
+    if (pow_b > 0 && pb.card.HasKeyword(Keyword::Deathtouch))
+    { pa.damage = std::max(pa.damage, LethalToughness(pa, state)); }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      why + ": " + pa.card.m_name.str() + " fights " + pb.card.m_name.str()
+                      + " (deals " + std::to_string(pow_a) + ", takes " + std::to_string(pow_b) + ")");
+    }
+    return SbaKillDeadCreatures(state, "lethal damage (fight)");
+}
+
+// ---- CONTESTED CLIFFS: "{R}{G}, {T}: Choose target Beast creature you control and target creature an
+// opponent controls. Those creatures fight each other." (PermAbilityMode::TapFight; CardParams::tap_fight_*;
+// Beasts B, 2026-11-21.) THE PIN of the activation being applied: OUR creature (Action::sac_victim_id) and
+// THEIRS (Action::enchant_target), both card numbers. ApplyPermAbility carries no Action, so both worlds'
+// trailing passes install it around the liveness check, the payment and the apply (the TapTargetPumpPin
+// shape). 0 = unpinned: never emitted autonomously; the liveness check then asks only that SOME legal pair
+// exists (the human-play route, which picks both at activation).
+struct TapFightPin { int own = 0; int opp = 0; };
+inline thread_local TapFightPin g_tap_fight_pin{};
+// MEASUREMENT: an AUTONOMOUS fight applied unpinned inside the search window (no-greedy: must read 0).
+inline std::atomic<long long> g_tap_fight_unpinned{0};
+struct TapFightPinScope
+{
+    TapFightPin prev;
+    TapFightPinScope(int own, int opp) : prev(g_tap_fight_pin) { g_tap_fight_pin = TapFightPin{ own, opp }; }
+    ~TapFightPinScope() { g_tap_fight_pin = prev; }
+    TapFightPinScope(const TapFightPinScope&) = delete;
+    TapFightPinScope& operator=(const TapFightPinScope&) = delete;
+};
+
+// "target Beast creature you control": our creature (an animated land is a creature, CR 205.3b) of the
+// required subtype (an all-creature-types animated land has it), not shroud (CR 702.18a; our own hexproof
+// does not stop us). ONE predicate for the enumerator, the liveness check, the resolver and the human prompt.
+inline bool TapFightOwnLegal(const GameState& s, const Permanent& q, int controller, const CardDefinition& src)
+{
+    if (q.controller_index != controller || q.card.m_number == 0) { return false; }
+    if (!TapTargetPumpTargetLegal(s, q, controller)) { return false; }
+    return src.params.tap_fight_requires_subtype.empty() || q.AnimatedAllTypes()
+        || CardHasSubtype(q.card, src.params.tap_fight_requires_subtype);
+}
+// "target creature an opponent controls": not shroud, not hexproof (CR 702.11b).
+inline bool TapFightOppLegal(const GameState& s, const Permanent& q, int controller)
+{
+    return q.controller_index != controller && q.card.m_number != 0 && TapTargetPumpTargetLegal(s, q, controller);
+}
+// Battlefield indices of the legal own / opponent targets, battlefield order.
+inline std::vector<int> TapFightLegalTargets(const GameState& s, int controller, const CardDefinition& src, bool own)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (own ? TapFightOwnLegal(s, q, controller, src) : TapFightOppLegal(s, q, controller)) { out.push_back(i); }
+    }
+    return out;
+}
+// Both targets are chosen as the ability is activated (CR 601.2c via 602.2b): the activation is impossible
+// unless BOTH exist. Pinned: those two creatures must still be legal (a stale plan is a clean no-op -- NO
+// substitution, which would be an in-window pick). Unpinned (0): any legal one.
+inline bool TapFightTargetsLive(const GameState& s, int controller, const CardDefinition& src, const TapFightPin& pin)
+{
+    bool own_ok = false, opp_ok = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (!own_ok && (pin.own == 0 || q.card.m_number == pin.own) && TapFightOwnLegal(s, q, controller, src))
+        { own_ok = true; }
+        if (!opp_ok && (pin.opp == 0 || q.card.m_number == pin.opp) && TapFightOppLegal(s, q, controller))
+        { opp_ok = true; }
+    }
+    return own_ok && opp_ok;
+}
+// HUMAN PLAY: both targets on the LIVE board at activation, through the board-click target frame
+// (g_play_loyalty_chooser -- the Voracious Hydra precedent), over the full rules-legal sets. Our Beast
+// first, then theirs (the oracle's order). The plan's representative pins are only the preselected
+// defaults. Null chooser (search, rollouts, autonomous play): the pins stand untouched.
+inline void ChooseTapFightTargetsAtActivation(const GameState& state, int controller, const CardDefinition& src)
+{
+    if (g_play_loyalty_chooser == nullptr) { return; }
+    auto ask = [&](bool own, int suggested, const std::string& prompt) -> int
+    {
+        const std::vector<int> legal = TapFightLegalTargets(state, controller, src, own);
+        if (legal.empty()) { return 0; }
+        int def = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        { if (state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(k)])].card.m_number == suggested)
+          { def = k; break; } }
+        int pick = (*g_play_loyalty_chooser)(state, controller, src.card.m_name.str(), prompt, legal, def);
+        if (pick < 0 || pick >= static_cast<int>(legal.size())) { pick = def; }
+        return state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])].card.m_number;
+    };
+    const std::string sub = src.params.tap_fight_requires_subtype.empty()
+        ? std::string("creature") : src.params.tap_fight_requires_subtype + " creature";
+    g_tap_fight_pin.own = ask(true, g_tap_fight_pin.own,
+                              "your " + sub + " that fights (each deals damage equal to its power to the other)");
+    g_tap_fight_pin.opp = ask(false, g_tap_fight_pin.opp,
+                              "the opponent's creature it fights (each deals damage equal to its power to the other)");
+}
+
 // The creature-damage EVENT pipeline (damage reflection; Stuffy Doll). Included HERE because it needs
 // CounterPingSbaDead / OnCreatureDies / SweepOrphanedAuras / FireOppCreatureDies above. Inert unless
 // GameState::reflect_armed -- see the header.
@@ -39762,6 +39885,14 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             }
             if (!target_ok) { return false; }
         }
+        // Contested Cliffs: BOTH targets are chosen on activation -- the pinned pair must still be legal
+        // (a stale plan is a clean no-op, no substitution); unpinned, some legal pair must exist.
+        if (mode == PermAbilityMode::TapFight)
+        {
+            const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+            if (fd == nullptr || !fd->params.tap_fight_cost.has_value()) { return false; }
+            if (!TapFightTargetsLive(state, controller, *fd, g_tap_fight_pin)) { return false; }
+        }
         if (mode == PermAbilityMode::UntapLand)
         {
             const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
@@ -39911,6 +40042,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
         case PermAbilityMode::SelfPing:       return "it deals 1 damage to itself";
         case PermAbilityMode::TapPing:        return "it deals 1 damage to target player or planeswalker";
+        case PermAbilityMode::TapFight:       return "target Beast creature you control fights target creature an opponent controls";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
@@ -41197,6 +41329,31 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 && d->card.IsCreature() && !state.battlefield[idx].is_token
                 && CardHasSubtype(d->card, "Merfolk"))
             { ResolveDeeprootPilgrimageTap(state, controller); }
+            break;
+        }
+        case PermAbilityMode::TapFight:
+        {
+            // Contested Cliffs: "Those creatures fight each other." The {T} and {R}{G} were paid by the caller.
+            // BOTH targets are the pin -- no substitution (the caller's liveness check proved the pinned pair
+            // legal). If either is no longer a legal target, neither deals nor is dealt damage (CR 608.2b /
+            // 701.14b; unreachable here -- nothing can respond in a goldfish). Unpinned (never emitted
+            // autonomously): no fight at all, counted inside the search window (must read 0).
+            const TapFightPin pin = g_tap_fight_pin;
+            if (pin.own == 0 || pin.opp == 0)
+            {
+                if (!HumanPlayActive() && greedywindow::InWindow(0))
+                { g_tap_fight_unpinned.fetch_add(1, std::memory_order_relaxed); }
+                break;
+            }
+            int oi = -1, ti = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+                if (q.card.m_number == pin.own && TapFightOwnLegal(state, q, controller, *d)) { oi = i; }
+                else if (q.card.m_number == pin.opp && TapFightOppLegal(state, q, controller)) { ti = i; }
+            }
+            if (oi < 0 || ti < 0) { break; }
+            ResolveFight(state, oi, ti, src_name);
             break;
         }
         case PermAbilityMode::UntapLand:

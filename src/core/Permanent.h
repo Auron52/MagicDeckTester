@@ -398,6 +398,12 @@ enum class PermAbilityMode
     // ResolveTapPing(..., ask_human=true), so it asks the same board-click `target` as every other ping.
     // A {T} mode (summoning sickness applies). Appended LAST.
     TapPing,
+    // {R}{G}, {T}: Choose target Beast creature you control and target creature an opponent controls. Those
+    // creatures fight each other  (Contested Cliffs; CardParams::tap_fight_cost / _requires_subtype; Beasts B).
+    // A {T} mode on a LAND (the TapTargetPump shape: {T} paid first, once per untap). BOTH targets are
+    // SEARCHED (Action::sac_victim_id = ours, Action::enchant_target = theirs), emitted out of band (never a
+    // K block); the shared resolver reads both off TapFightPinScope. Appended LAST.
+    TapFight,
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
