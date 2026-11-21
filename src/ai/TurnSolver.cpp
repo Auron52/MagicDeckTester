@@ -33862,12 +33862,33 @@ static bool OwnHasteEquipmentOnBattlefield(const GameState& state, int ctrl)
 }
 
 // MTG_S9_MANA_ABILITY_SKIP (DEFAULT ON; USER 2026-11-21): a sac outlet that ADDS MANA (Skirk Prospector) is a mana
-// ability, spent by the payment as the line needs it -- not a searched activation -- so its arrival (or a new victim
-// for it) does not open site 9. =0 restores the old keying.
+// ability, spent by the payment as the line needs it -- not a searched activation -- so its arrival opens site 9 only
+// where that mana can buy something the board's own mana cannot (S9SacManaDemand). A SOUND fold: ON opens a strict
+// subset of the =0 arm's sites, and only skips a re-plan that has nothing sac-funded to add. =0 restores the old keying.
+// Measured 2026-11-21 (seeds 920001+, 500 games/cell): units x0.990-0.998, 0 slower games; Goblins g146's 1,398 opens
+// all carried real demand, so the r1 skip's ~15% saving was the LOSSY part (see S9SacOutletIsPureManaAbility).
 static bool S9ManaAbilitySkipOn()
 {
     static const bool env = EnvOn("MTG_S9_MANA_ABILITY_SKIP", true);
     return heurarm::Flag(heurarm::S9_MANA_ABILITY_SKIP, env);
+}
+// THE SKIP MIRRORS THE ENUMERATOR'S OWN SUPPRESSION, and only that (CollectActions' `pay_suppress`, the
+// MTG_SAC_OUTLET_PAY §2b carve-out): the outlet is a pure mana ability -- no searched action, the payer eats a body
+// when a cost needs it -- exactly while the payer is live (lever on, not human play) and the death buys nothing
+// (!SacOutletEatHasValue). Where a death PAYS (Rundvelt Hordemaster's impulse exile, Pashalik's ping, a watcher in
+// hand) the enumerator keeps the searched sac action and LiveSacPayOutlet turns the payer OFF, so the activation is a
+// real search option and site 9 is the only way a plan that put the outlet in reaches it. Skipping it there made the
+// line unfindable at any budget: Goblins 2HG seed 920243 gi242, d8 b0 T3 -> T4 (cast Skirk, sac Lackey with
+// Rundvelt on board, impulse-cast the exiled Muxus off the float + more sacs; the r1 skip keyed on mana amount
+// alone). A pure mana ability is still KEYED (kActSacManaOutlet), not dropped: the re-plan is also how a plan that
+// CAST the outlet learns its mana (the plan-start menu is priced without an outlet that is not on the battlefield
+// yet), so dropping the key lost Goblins 2HG seed 920080 gi79 at d8 b0 (T4: cast Skirk, then Muxus off five eaten
+// tokens, which only the site-9 re-plan offered). The gate decides whether a NEW pure-mana key opens the site
+// (S9SacManaDemand).
+static bool S9SacOutletIsPureManaAbility(const GameState& state, int ctrl, const CardParams& pp)
+{
+    return S9ManaAbilitySkipOn() && IsSacManaOutlet(pp) && SacOutletPayEnabled() && !HumanPlayActive()
+        && !SacOutletEatHasValue(state, ctrl, pp);
 }
 
 bool TurnSolver::BpAbilityDeltaOn()
@@ -33969,7 +33990,11 @@ enum : uint64_t {
     kActUntapRefund = 220,
     // An activated untap's REFUND (MTG_BP_UNTAP_FLOAT): the float beside a live mana creature an own untapper can
     // aim at, its value in bits 40+ -- see CollectActivationKeys.
-    kActUntapFloat = 221
+    kActUntapFloat = 221,
+    // A creature sac outlet that is a PURE mana ability (MTG_S9_MANA_ABILITY_SKIP; S9SacOutletIsPureManaAbility): keyed
+    // so a plan that puts one in is still noticed, but a NEW one opens site 9 only where its mana can buy something
+    // the board's own mana cannot (S9SacManaDemand, at the gate).
+    kActSacManaOutlet = 222
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -34430,7 +34455,6 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     { out.push_back(ActKey(num, kActPod)); }
 
     if (pp.sac_creature_outlet
-        && !(pp.sac_outlet_add_mana_amount > 0 && S9ManaAbilitySkipOn())   // a mana ability (MTG_S9_MANA_ABILITY_SKIP)
         && (!pp.sac_creature_cost.has_value()
             || ActAffordable(state, ctrl, p.card, pp.sac_creature_cost, total_cache)))
     {
@@ -34454,7 +34478,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
             // revert to the pre-2026-09-19 gate, which did not ask.
             ok = CanonicalSacVictim(state, ctrl, num, pp.sac_creature_requires_subtype) >= 0;
         }
-        if (ok) { out.push_back(ActKey(num, kActSacOutlet)); }
+        // MTG_S9_MANA_ABILITY_SKIP: a pure mana ability gets its own kind, priced at the gate (S9SacManaDemand).
+        if (ok)
+        {
+            out.push_back(ActKey(num, S9SacOutletIsPureManaAbility(state, ctrl, pp) ? kActSacManaOutlet
+                                                                                    : kActSacOutlet));
+        }
     }
 
     // LURRUS OF THE DREAM-DEN: a graveyard CAST permission is not an activated ability, but it is the
@@ -34535,6 +34564,73 @@ std::vector<uint64_t> TurnSolver::SnapshotActivatableAbilities(const GameState& 
     return out;
 }
 
+// MTG_S9_MANA_ABILITY_SKIP's gate test: CAN A PURE SAC-FOR-MANA OUTLET'S MANA BUY ANYTHING the board's own mana
+// cannot? A site-9 re-plan opened by such an outlet adds, over the plan-start menu, only options whose cost needs the
+// eaten bodies' mana -- everything payable fodder-free now was payable (with the outlet's own cast) from the pool the
+// plan-start menu was priced on. So when the fodder-free pool covers EVERY option at once the re-plan has nothing
+// to add and is skipped (Goblins g146: 1,398 site-9 opens on T2 for identical play); otherwise it opens exactly as
+// the plain key did. CONSERVATIVE IN THE OPENING DIRECTION -- a false "demand" only costs a re-plan, a false "no
+// demand" could hide a line -- so it over-counts wherever it is unsure:
+//   * every non-land card in hand, staged (impulse / exiled-castable) cards included, at its PRINTED flat cost
+//     summed into one cost (reductions only lower the real price; a hybrid/phyrexian/twobrid pip paid as its flat
+//     colour is one legal payment, so "flat sum payable" implies "all payable"); an {X} card is unbounded demand;
+//   * any mana-priced activation live on our permanents: a CollectActivationKeys key present when every cost is
+//     affordable but absent when none is (Siege-Gang's shot, a graveyard cast, a loyalty-free pump), plus the
+//     mana-costed {T}/drain/dig abilities UntapFloatSpendCap reads.
+// The pool is the FODDER-FREE one (PayFodderOffScope: LiveSacPayOutlet answers none), the supply without any body
+// eaten. Colour-exact (CanPayFlat) because Skirk's {R} / Mycon's any colour can fix a colour shortfall as well as an
+// amount. Runs only when a NEW pure-mana key reaches the gate. Budget-independent: no budget is read.
+static bool S9SacManaDemand(const GameState& state, int ctrl)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    ManaCost sum;
+    for (const Card& c : state.players[static_cast<std::size_t>(ctrl)].hand)
+    {
+        const CardDefinition* cd = db.LookupCached(c);
+        const Card& hc = cd ? cd->card : c;
+        if (hc.IsLand()) { continue; }
+        const ManaCost& mc = hc.m_mana_cost;
+        if (mc.has_x || mc.x_pips > 0) { return true; }
+        sum.generic += mc.generic; sum.white += mc.white; sum.blue += mc.blue; sum.black += mc.black;
+        sum.red += mc.red; sum.green += mc.green; sum.colorless += mc.colorless;
+        sum.snow_pips = static_cast<uint8_t>(std::min(255, sum.snow_pips + mc.snow_pips));
+    }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != ctrl || q.def_absent) { continue; }
+        const CardDefinition* qd = db.LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        const CardParams& qp = qd->params;
+        for (const std::optional<ManaCost>* tc : { &qp.tap_draw_cost, &qp.tap_damage_cost, &qp.tap_lifegain_cost,
+                                                   &qp.tap_investigate_cost, &qp.self_ping_cost, &qp.drain_cost,
+                                                   &qp.pay_token_cost, &qp.ping_all_cost, &qp.self_counter_cost,
+                                                   &qp.activated_dig_cost, &qp.sac_draw_cost })
+        { if (tc->has_value() && (*tc)->ManaValue() > 0) { return true; } }
+    }
+    {
+        std::vector<uint64_t> none, all;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != ctrl || q.card.m_number == 0) { continue; }
+            int zero = 0, inf = 1 << 20;
+            none.clear(); all.clear();
+            CollectActivationKeys(state, ctrl, q, zero, none);
+            CollectActivationKeys(state, ctrl, q, inf, all);
+            if (all.size() != none.size()) { return true; }   // a key only mana makes affordable
+            std::sort(none.begin(), none.end()); std::sort(all.begin(), all.end());
+            if (all != none) { return true; }
+        }
+    }
+    if (sum.ManaValue() == 0 && sum.snow_pips == 0) { return false; }
+    ManaPool have;
+    {
+        PayFodderOffScope fodder_free;
+        have = AvailableManaPool(state);
+    }
+    if (!FloatLeftoverManaEnabled()) { have.AddPool(state.floating_mana); }
+    return !have.CanPayFlat(sum);
+}
+
 bool TurnSolver::PostEntryActivationPending(const GameState& state,
                                             const std::vector<uint64_t>& pre_plan_keys)
 {
@@ -34542,6 +34638,7 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
     const int ctrl   = state.active_player_index;
     const bool delta = BpAbilityDeltaOn();
     int total_cache  = -1;   // lazily priced: most applies never reach a candidate
+    int mana_demand  = -1;   // S9SacManaDemand, lazily (MTG_S9_MANA_ABILITY_SKIP)
     std::vector<uint64_t> keys;
     for (const Permanent& p : state.battlefield)
     {
@@ -34555,7 +34652,26 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
         for (const uint64_t k : keys)
         {
             if (!std::binary_search(pre_plan_keys.begin(), pre_plan_keys.end(), k))
-            { return true; }   // activatable NOW, and it was not when the plan started
+            {
+                // MTG_S9_MANA_ABILITY_SKIP. The two outlet kinds are ONE activation for newness: an outlet whose
+                // death value flipped mid-plan (a Rundvelt cast, the last Mogg War Marshal in hand cast) was there at
+                // plan start, exactly as the single kActSacOutlet key of the =0 arm says -- without this every such
+                // flip re-opened the site (r3 measured Goblins units x1.04-1.10). So ON opens a strict SUBSET of
+                // the =0 arm's sites: a genuinely new pure mana ability opens only where its mana can buy something.
+                const uint64_t kind = k & 0xFF;
+                if (kind == kActSacManaOutlet || kind == kActSacOutlet)
+                {
+                    const uint64_t other = (k & ~uint64_t{0xFF}) | (kind == kActSacOutlet ? kActSacManaOutlet
+                                                                                         : kActSacOutlet);
+                    if (std::binary_search(pre_plan_keys.begin(), pre_plan_keys.end(), other)) { continue; }
+                }
+                if (kind == kActSacManaOutlet)
+                {
+                    if (mana_demand < 0) { mana_demand = S9SacManaDemand(state, ctrl) ? 1 : 0; }
+                    if (mana_demand == 0) { continue; }
+                }
+                return true;   // activatable NOW, and it was not when the plan started
+            }
         }
     }
     return false;
