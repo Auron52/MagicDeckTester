@@ -98,5 +98,11 @@
  "budget_ms": 100,
  "max_turns": 5,
  "expect_win_turn": 4,
+ "expect_log_sequence": [
+  "T4 MAIN_1 CAST_SPELL Emrakul, the Aeons Torn",
+  "T4 COMBAT ATTACK",
+  "T4 MAIN_1 PLAY_LAND Island",
+  "T4 COMBAT ATTACK"
+ ],
  "comment": "Blood Sun step 7 (USER B7: 'Cyclone should be deploying multiples at times'): an un-sick Emrakul #1 and 15 Islands (drop used), a second Emrakul in hand, opponent at 30. Searched play (d2 b100) hard-casts Emrakul #2: its cast trigger's extra turn gives Emrakul #1 a second attack this round (15 + 15) -> win at round 4. Before step 7 the duplicate-legend prune dropped the cast (no watcher made a token off it) and the win came at round 5."
 }

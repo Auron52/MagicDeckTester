@@ -139,7 +139,7 @@ bool MenuPlays(const GameState& s, const std::string& land)
 }
 }   // namespace
 
-TEST_CASE("bloodsun prune (a): Revelation never at X 0; at X 1 only with another Revelation in hand")
+TEST_CASE("bloodsun prune (a): Revelation never at X 0; at 6 mana X 1 only with another Revelation in hand")
 {
     const std::vector<std::string> lib = { "Time Warp", "Emrakul, the Aeons Torn", "Lotus Vale", "Scorched Ruins" };
     // Exactly 5 mana: X = 0 only -> never cast, in both arms (fold F-R4 is not the lever's).
@@ -172,13 +172,15 @@ TEST_CASE("bloodsun prune (a): Revelation never at X 0; at X 1 only with another
         PruneArm arm(true);
         CHECK(RevelationXs(two)[1] > 0);
     }
-    // 7 mana, one Revelation: X = 2 is offered, X = 1 still not.
+    // 7 mana, one Revelation: X = 2 is offered, and X = 1 too -- the duplicates rule is scoped to 6 mana (step 7, USER:
+    // "My guidance on duplicates is for when you have 6 mana."): with mana left over after X = 1 the cheap fetch can
+    // be the right line (21 mana: X = 1 for Emrakul, then hard-cast it).
     GameState seven = six;
     PutUp(seven, "Swamp", 30);
     {
         PruneArm arm(true);
         const std::map<int, int> xs = RevelationXs(seven);
-        CHECK(xs.count(1) == 0);
+        CHECK(xs.count(1) == 1);
         CHECK(xs.count(2) == 1);
     }
 }
@@ -215,16 +217,18 @@ TEST_CASE("bloodsun prune (b): a Revelation package never holds a non-target; th
     CHECK_FALSE(two_sun);        // Blood Sun: one while we have none
     CHECK(banned_off);           // the unrestricted arm offers them
     // THE COUNT. Admitted classes: Time Warp (cap 2), Lotus Vale (1), Emrakul (1), Fastbond (cap 1 of 2), Blood Sun
-    // (cap 1 of 2); X = 2 only (X = 1 needs a second Revelation): the multisets of size 2 within those caps.
-    CHECK(static_cast<long long>(on.size()) == revpkg::CountMultisets({ 2, 1, 1, 1, 1 }, 2));
-    for (const auto& pk : on) { CHECK(pk.size() == 2); }
+    // (cap 1 of 2); X in {1, 2} (7 mana: the X = 1 floor is a 6-mana rule, step 7): the multisets of size 1 and 2.
+    CHECK(static_cast<long long>(on.size())
+          == revpkg::CountMultisets({ 2, 1, 1, 1, 1 }, 1) + revpkg::CountMultisets({ 2, 1, 1, 1, 1 }, 2));
+    for (const auto& pk : on) { CHECK((pk.size() == 1 || pk.size() == 2)); }
     // A Blood Sun in hand takes Blood Sun out of the space; one on the battlefield too.
     GameState h = s;
     h.players[0].hand.push_back(CardUp("Blood Sun", 3));
     {
         PruneArm arm(true);
         const std::set<std::vector<std::string>> hp = AllPackages(h);
-        CHECK(static_cast<long long>(hp.size()) == revpkg::CountMultisets({ 2, 1, 1, 1 }, 2));
+        CHECK(static_cast<long long>(hp.size())
+              == revpkg::CountMultisets({ 2, 1, 1, 1 }, 1) + revpkg::CountMultisets({ 2, 1, 1, 1 }, 2));
         for (const auto& pk : hp) { CHECK(std::count(pk.begin(), pk.end(), "Blood Sun") == 0); }
     }
 }
@@ -492,8 +496,8 @@ TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source pe
     for (int k = 0; k < 7; ++k) { PutUp(s, "Swamp", 10 + k); }
     s.players[0].hand.push_back(CardUp("Diabolic Revelation", 1));
     s.players[0].hand.push_back(CardUp("Blood Sun", 2));
-    // 7 mana and ONE Revelation: X = 2 exactly (X = 1 needs a spare Revelation), so a package holds two cards. Time Warp
-    // is the admitted partner: without one a two-card package would need BOTH red sources, which the cap refuses.
+    // 7 mana and ONE Revelation: X in {1, 2} (the X = 1 floor is a 6-mana rule, step 7). Time Warp is the admitted
+    // partner of a two-card package: without one it would need BOTH red sources, which the cap refuses.
     Lib(s, { "Rakdos Carnarium", "Rakdos Carnarium", "City of Brass", "City of Brass", "Swamp", "Time Warp" });
     {
         PruneArm arm(true);
@@ -507,7 +511,7 @@ TEST_CASE("bloodsun prune (b): the red-source exception admits ONE red source pe
             CHECK(red <= 1);
             if (red == 1) { ++with_red; }
         }
-        CHECK(with_red == 2);   // {Carnarium, Time Warp} and {City of Brass, Time Warp}
+        CHECK(with_red == 4);   // {Carnarium}, {City of Brass}, {Carnarium, Time Warp}, {City of Brass, Time Warp}
     }
     {
         PruneArm arm(false);
@@ -539,12 +543,16 @@ TEST_CASE("bloodsun prune (B8): at most one Revelation per package, never a Reve
             CHECK(revs(pk) <= 1);
             CHECK(revs(pk) < static_cast<long>(pk.size()));
         }
-        // Rev (cap 1), Time Warp (1), Emrakul (1); X in {2, 3} (one Revelation in hand): every multiset, none refused
-        // besides the Revelation-only ones (there are none of size >= 2 under the one-copy cap).
+        // Rev (cap 1), Time Warp (1), Emrakul (1); X in {1, 2, 3} (8 mana: the X = 1 floor is a 6-mana rule, step 7):
+        // every multiset except the refused Revelation-only one ({Revelation} at X = 1; none of size >= 2 under the
+        // one-copy cap).
         CHECK(static_cast<long long>(on.size())
-              == revpkg::CountMultisets({ 1, 1, 1 }, 2) + revpkg::CountMultisets({ 1, 1, 1 }, 3));
+              == revpkg::CountMultisets({ 1, 1, 1 }, 1) - 1 + revpkg::CountMultisets({ 1, 1, 1 }, 2)
+                     + revpkg::CountMultisets({ 1, 1, 1 }, 3));
         CHECK(on.count({ "Diabolic Revelation", "Time Warp" }) == 1);   // a replacement Revelation + a useful card
-        // A spare Revelation in hand opens X = 1: {Time Warp} and {Emrakul}, never {Revelation} (keep the mana).
+        CHECK(on.count({ "Emrakul, the Aeons Torn" }) == 1);            // X = 1 at 8 mana (step 7)
+        CHECK(on.count({ "Diabolic Revelation" }) == 0);                // keep the mana
+        // A spare Revelation in hand: X = 1 still {Time Warp} and {Emrakul}, never {Revelation}.
         GameState two = s;
         two.players[0].hand.push_back(CardUp("Diabolic Revelation", 2));
         const std::set<std::vector<std::string>> tp = AllPackages(two);

@@ -5356,10 +5356,13 @@ public:
     // F-R4). The rank-lex enumeration then runs over the restricted caps, so every multiset of the restricted space is
     // still enumerated exactly once (a restriction, never a pick). `hand_index` is the cast copy. It must read only
     // what every enumeration of one node agrees on (the union of hand and battlefield, the life total), never the
-    // mana or the land drop of the moment. Default: nothing restricted -> byte-identical. Never consulted in human play.
+    // mana or the land drop of the moment -- with ONE exception, `x_afford`: the largest X the moment's mana affords
+    // (the emitter's own X ceiling, before the library cap), which the X range is already a function of, so a floor
+    // scoped to it restricts exactly the X values that range holds (Blood Sun step 7: the USER's B3 X = 1 rule is "for
+    // when you have 6 mana"). Default: nothing restricted -> byte-identical. Never consulted in human play.
     virtual void RevelationPackageRestrict(const GameState&, int /*hand_index*/,
                                            const std::vector<const CardDefinition*>& /*class_defs*/,
-                                           std::vector<int>& /*caps*/, int& /*x_min*/) const {}
+                                           std::vector<int>& /*caps*/, int& /*x_min*/, int /*x_afford*/) const {}
     // RevelationPackageGroups -- a JOINT cap over several classes (Blood Sun step 6d, USER: "On the Red-source exception
     // we only need one red source": Rakdos Carnarium and City of Brass are two classes, at most one of either per
     // package). `class_defs` is the restricted, index-aligned rank list; fill `group[k]` (-1 = none; resized by the

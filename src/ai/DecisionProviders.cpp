@@ -73402,12 +73402,16 @@ bool BloodSunProvider::TutorNeedsCandidate(const GameState& /*s*/, int /*control
         && !pp.tutor_from_graveyard;
 }
 
-// (a) Diabolic Revelation, USER (verbatim): "Right at 5 mana the Revelation is useless and should never be cast. My
-// guidance on duplicates is for when you have 6 mana." -> X = 0 never (fold F-R4 already), X = 1 only with another
-// Revelation in hand, X >= 2 unrestricted. (b) every class capped by BloodSunTutorTargetCap.
+// (a) Diabolic Revelation, USER (verbatim): "Generally speaking, if you have only one Diabolic Revelation and only 6 (or
+// 5) mana you don't want to cast it. At 6 mana with an extra it might make sense to play it to fetch something useful."
+// and "Right at 5 mana the Revelation is useless and should never be cast. My guidance on duplicates is for when you
+// have 6 mana." -> X = 0 never (fold F-R4 already); when X = 1 is the LARGEST X the mana affords (x_afford <= 1, i.e.
+// 6 mana), X = 1 only with another Revelation in hand; with more mana a chosen X = 1 is offered (step 7: e.g. 21 mana,
+// X = 1 for Emrakul, then hard-cast Emrakul -- the Claim-L line); X >= 2 unrestricted. (b) every class capped by
+// BloodSunTutorTargetCap.
 void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_index,
                                                  const std::vector<const CardDefinition*>& class_defs,
-                                                 std::vector<int>& caps, int& x_min) const
+                                                 std::vector<int>& caps, int& x_min, int x_afford) const
 {
     if (!BloodSunPruneLive()) { return; }
     const int me = s.active_player_index;
@@ -73416,7 +73420,7 @@ void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_in
         const int cap = class_defs[k] != nullptr ? BloodSunTutorTargetCap(s, me, *class_defs[k], false) : 0;
         caps[k] = std::min(caps[k], cap);
     }
-    bool another = false;
+    bool another = x_afford >= 2;   // more than 6 mana: the X = 1 floor does not apply (USER: "for when you have 6 mana")
     const std::vector<Card>& hand = s.players[static_cast<std::size_t>(me)].hand;
     for (int j = 0; j < static_cast<int>(hand.size()) && !another; ++j)
     {

@@ -4373,7 +4373,8 @@ public:
     // ---- STEP 6c: the USER's RESTRICTIONS (ledger B3 / B4, USER 2026-11-20), one lever MTG_BLOODSUN_USER_PRUNE
     // (heurarm BLOODSUN_USER_PRUNE, DEFAULT ON; =0 -> the unrestricted step-6b search). Restrict / order only; every
     // hook answers the default in human play and under the unpruned gate.
-    //  (a) Revelation: X >= 1 always (F-R4), X = 1 only with another Revelation in hand (RevelationPackageRestrict).
+    //  (a) Revelation: X >= 1 always (F-R4); when X = 1 is the largest X the mana affords (6 mana), only with another
+    //      Revelation in hand (RevelationPackageRestrict; step 7: the rule is scoped to 6 mana, USER B3).
     //  (b) tutor targets: BloodSunTutorTargetCap (Revelation classes, Grim Tutor's and the transmute's names); the
     //      Lotus twins are one class under any Blood Sun (RevelationTwinFoldForced).
     //  (c) pre-Blood Sun land plays / Burgeoning puts (LandPlayOffered).
@@ -4386,7 +4387,7 @@ public:
     bool SearchesShockLandPay() const override { return true; }
     void RevelationPackageRestrict(const GameState& s, int hand_index,
                                    const std::vector<const CardDefinition*>& class_defs,
-                                   std::vector<int>& caps, int& x_min) const override;
+                                   std::vector<int>& caps, int& x_min, int x_afford) const override;
     // Step 6d item 3: the red-source exception's two names form ONE group of cap 1 per package.
     void RevelationPackageGroups(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                                  std::vector<int>& group, std::vector<int>& group_cap) const override;

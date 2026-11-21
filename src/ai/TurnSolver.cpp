@@ -43101,7 +43101,8 @@ namespace revwave
 //     chosen type / keyword, a copy entry, soulbond, an Equipment attach, enters tapped);
 //   * nothing else we control can give the ENTERING creature something lasting: no other creature at all (Giada,
 //     Metallic Mimic, every creature watcher class), no Equipment or Aura (an attach), and no noncreature permanent
-//     carrying an entrant-counter watcher parameter.
+//     carrying an entrant-counter watcher parameter -- on the battlefield AND among the cards the same plan could
+//     put there before this cast (hand, graveyard: the fold is judged on the plan's root board).
 // Anything outside that keeps both twins -- the pre-fold behaviour -- so a missed case costs one extra twin, never a
 // line. Emrakul, the Aeons Torn in the Blood Sun loop is exactly this shape (lands and enchantments beside it).
 static bool LegendKeepOldDominates(const GameState& state, int me, const CardDefinition& d)
@@ -43142,6 +43143,26 @@ static bool LegendKeepOldDominates(const GameState& state, int me, const CardDef
         { return false; }
     }
     if (old_idx < 0) { return false; }
+    // THE SAME PLAN CAN CHANGE THE BOARD BEFORE THIS CAST (step 7 smoke, minotaur2hg d5 gi61: Rageblood Shaman cast
+    // ahead of the second Neheb). The fold is judged on the plan's ROOT board, so anything the plan could put onto
+    // our battlefield first must pass the same test: a creature card (other than this name) or an Equipment / Aura /
+    // entrant-counter watcher in hand or graveyard keeps both twins. Fail-closed, like everything above.
+    auto could_mark_entrant = [&d](const Card& c) -> bool
+    {
+        if (c.m_name == d.card.m_name) { return false; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (hd == nullptr) { return true; }
+        if (hd->card.IsLand()) { return false; }
+        const CardParams& hp = hd->params;
+        return hd->card.IsCreature() || hp.is_equipment || hp.is_aura || hp.soulbond || hp.attach_equipment_on_etb
+            || hp.other_creature_etb_counters != 0 || hp.other_creature_etb_counters_subtype != 0
+            || hp.other_subtype_enters_counters_per_each != 0 || hp.other_chosen_subtype_enters_counters != 0
+            || hp.other_nontoken_enters_counter_haste != 0 || hp.opp_lost_life_other_enters_counters != 0
+            || hp.other_creature_gy_enter_team_counters != 0;
+    };
+    const Player& mp = state.players[static_cast<std::size_t>(me)];
+    for (const Card& c : mp.hand) { if (could_mark_entrant(c)) { return false; } }
+    for (const Card& c : mp.graveyard) { if (could_mark_entrant(c)) { return false; } }
     const Permanent& q = state.battlefield[static_cast<std::size_t>(old_idx)];
     if (q.entered_this_turn || q.tapped || q.is_token || q.gained_control_this_turn || !q.counters.empty()
         || q.damage != 0 || q.pending_death_trigger != 0 || q.aura_attached_to != 0 || q.equipped_to != 0
@@ -44330,7 +44351,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     rdefs.push_back(classes[static_cast<std::size_t>(r)].def);
                 }
                 int x_min = 1;
-                rprov.RevelationPackageRestrict(state, i, rdefs, caps, x_min);
+                rprov.RevelationPackageRestrict(state, i, rdefs, caps, x_min, rmax);
                 {
                     std::size_t w = 0;
                     for (std::size_t k = 0; k < ranked.size(); ++k)

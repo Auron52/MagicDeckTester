@@ -1911,3 +1911,69 @@ occurrence.
   (`MTG_PGO=0`): 227/235 PASS vs GT, the same 8 jobs step 6d moved (GT not accepted); vs
   `impl6d/smoke-step6d-batch.log` **0 of 235 jobs moved digest** (B5 / B8 are Blood Sun-only, the `_ALL` fix is inert
   with the lever off). Saved as `build/scratch/bloodsun/impl6e/smoke-step6e-batch.log`.
+
+### Implementation notes (step 7)
+**Commits:** `git log --grep "Blood Sun step 7"` (WIP 2c32b03ab + the final commit). USER ruling B7 (verbatim): *"Wasn't
+this always considered? It should be because of the extra turn. Extra Turns doesn't have multiple, though. Cyclone
+does, but doesn't hardcast. Cyclone should be deploying multiples at times."*
+- **Item 1 -- a second Emrakul (shared, generic card data).** `DuplicateCastHasUpside` is true for the card's OWN
+  `cast_trigger_extra_turns > 0` (the cast trigger resolves before the spell and even if it leaves the stack, Emrakul
+  ruling 1); `DuplicateEntryOrDeathHasUpside` is true for `put_into_graveyard_shuffles_graveyard` with a non-empty
+  graveyard. Both sit BELOW the d0 gate (USER 2026-08-29 / 2026-11-18), so the autonomous d0 runner still refuses the
+  duplicate; human play is offered it (the human path bypasses the gate by design). Other paths checked:
+  Unpredictable Cyclone's FREE casts go through `CycloneProvider::FreeCastTakeDominated`, which answers false for a
+  duplicate legend, so the take / decline was already searched and Cyclone already deployed multiples off its trigger
+  -- only the HARD cast met the prune (now fixed: `cyclone_hardcast_second_emrakul_searched` wins round 4 by the hard
+  cast, `_d0_refused` pins d0). Diabolic Revelation puts into HAND, so its recast meets the same hand-cast prune (fixed
+  by the same change). In searched games the rollout shares `g_searched_play` and sees the offer.
+- **Item 2 -- fold F-E1** (`LegendKeepOldDominates`, TurnSolver.cpp; `MTG_LEGEND_KEEP_OLD_FOLD`, DEFAULT ON, `=0`
+  keeps both twins). Fail-closed shape: `vanilla_creature` legend, no self-entry params, exactly one old copy and it is
+  plain (untapped, not entered this turn, has not attacked, no counters / attachments / temp effects ...), and none of
+  our other non-land permanents is a creature, an Equipment, an Aura or an entrant-counter watcher -- and (found by
+  this step's first smoke, minotaur2hg d5 gi61) the same holds for every card the SAME PLAN could put onto the
+  battlefield before this cast: the fold is judged on the plan's root board, and that game cast Rageblood Shaman ahead
+  of a second Neheb, the Worthy, so any creature card (other than the name) or Equipment / Aura / entrant-counter
+  watcher in hand or graveyard now keeps both twins. (gi61 itself was a harmless tie -- identical T4 board and T6 win,
+  the search reached keep-newest through the Aether Vial put instead -- but a watcher cast first would have made the
+  fold unsound.) Applied in the
+  hand-cast LEGEND-KEEP pass only; the plan-level / turn LEGEND-KEEP fans (Cyclone's free casts) are untouched. It is
+  generic: Boars' Ilharg (a `vanilla_creature` template legend) folds too -- `test_boars_i5b` now pins both the
+  twinned (old copy entered this turn) and the folded (plain old copy) boards.
+- **Item 3 -- B3 (a) scoped to 6 mana (parent's resolution of the step-7 open question).** USER (verbatim):
+  *"Generally speaking, if you have only one Diabolic Revelation and only 6 (or 5) mana you don't want to cast it. At
+  6 mana with an extra it might make sense to play it to fetch something useful."* and *"Right at 5 mana the Revelation
+  is useless and should never be cast. My guidance on duplicates is for when you have 6 mana."* The hook
+  `RevelationPackageRestrict` gained `x_afford` (the emitter's own X ceiling off the moment's mana, before the library
+  cap -- the one mana-of-the-moment input the contract now allows, because the X range is already a function of it):
+  the "X = 1 only with another Revelation in hand" floor applies only when `x_afford <= 1`. B8 (no X = 0, no
+  all-Revelation package, one Revelation per package) unchanged. The 21-mana Claim-L line (X = 1 {Emrakul} + Emrakul)
+  now wins round 5 with the prune ON (`bloodsun_emrakul_claimL_21_pruneon_{budgeted,unbudgeted}`; the old
+  `_pruneon_noround5` pin is gone) and OFF (`_pruneoff_*`). Unit counts in `test_bloodsun_userprune.cpp` re-derived
+  (X = 1 packages now counted at 7 / 8 mana).
+- **Item 4 -- Overgrown Tomb.** Under Blood Sun: untapped, nothing paid, no prompt (step 3's gating already did this).
+  **Finding:** the "existing land-entry pin" did NOT cover shocks -- autonomous play always paid. Added
+  `DecisionProvider::SearchesShockLandPay()` (BloodSunProvider true) and `LandShockPayPinned` (SpellEffects.h): with own
+  death live, no Blood Sun, no Gond Gate and life > N, the land drop fans pin 1 (pay, first) and pin 0 (tapped);
+  `PlayLandCore` honours the pin. At life <= N only tapped (B1). **Opponent-turn puts (parent's resolution 2):**
+  `ShockPayDominatedOffTurn` -- a SOUND dominance fold: a shock put onto our battlefield on a turn that is not ours
+  (Burgeoning) untaps in our untap step before any sorcery-speed use, so with no instant / flash card, no
+  non-graveyard param mana cost (transmute is sorcery-speed, CR 702.53a, not a use), no "untapped lands" consumer in
+  hand (Lotus Vale / Scorched Ruins: a later put of the same turn sacrifices UNTAPPED lands) and no fetch / mana-costed
+  / unclassified non-mana ability on our battlefield, it enters tapped and pays nothing. Same scope (own death live +
+  opted-in provider), so other decks keep always-pay; fail-closed (any doubt = the engine rule). Human play is still
+  asked (the default answer follows the fold). Residual: a shock PUT on our own turn (no such route in this list) still
+  pays by the engine rule. Other own-death decks' shocks keep always-pay (pre-existing, outside this step).
+- **Viewer:** no new human decision; `DECISIONS.md` rows `legend_keep` (F-E1) and `land_entry` (searched pay, the
+  off-turn fold) updated; `audit_viewer_decisions.py "decks/Blood Sun/Blood Sun.cod" --no-sweep` clean.
+- **Rules review (mtg-rules.md):** legend rule = SBA, controller chooses (CR 704.5j; F-E1 only removes a dominated
+  choice); summoning sickness is the only difference F-E1 admits (CR 302.6); Emrakul's cast trigger is independent of
+  the spell (CR 603.2 / ruling); the shock is an "as enters" replacement (CR 614.12), and CR 119.4 lets a player pay
+  life equal to their total -- refusing it at life <= N is the B1 own-death prune, not a rule.
+- **Measurements (final step-7 tree, `MTG_PGO=0`):** `mtg-test` 3849/3849; `test/scenarios.sh` 655/655 (8 new: the loop
+  x2, Claim-L prune on x2 / off x2, Cyclone searched / d0). Smoke: **0 of 235 jobs moved digest** vs
+  `impl6e/smoke-step6e-batch.log`; 227/235 vs GT, the same 8 jobs step 6d moved. The first smoke (before the F-E1
+  hand / graveyard tightening) moved 1 job (minotaur2hg d5 gi61, T6 = T6; `MTG_LEGEND_KEEP_OLD_FOLD=0` reproduced the
+  old digest), table in `build/scratch/bloodsun/impl7/moves.md`. Unpredictable Cyclone did not move: a hard cast of a
+  second Emrakul needs {15} with one already out, which its smoke games (avg T4.75-4.92) never afford; its free casts
+  already offered the duplicate. Anti-Lifegain, Creature Giving and Five Colour unchanged. Saved as
+  `build/scratch/bloodsun/impl7/smoke-step7-batch.log`.
