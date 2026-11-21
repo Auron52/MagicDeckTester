@@ -1036,6 +1036,27 @@ inline bool PayBurstLeadOn()
     return env_on;
 }
 
+// MTG_CREATURE_LEFTOVER_EXACT (2026-11-21; DEFAULT ON, =0 -> the legacy min(restricted produced, leftover) booking): a
+// creature payment's over-produced unit is booked into the creature-only reserve only when the restricted units it
+// tapped (Somberwald Sage, Ancient Ziggurat) could NOT all be absorbed by this bill's pips -- a maximum matching, each
+// restricted unit to a pip of its colour or a generic pip. Bruna mana-clean gate (s30054069 T4, s30051277 T3). Sound
+// dominance (a general unit pays everything a restricted one of its colour could). commit_leftover in
+// TapForCostSharedOnceImpl (ManaPayment.cpp), the one payer the executor, rollout and walks share. Per-job slot.
+inline bool CreatureLeftoverExactOn()
+{
+    static const bool env_on = EnvOn("MTG_CREATURE_LEFTOVER_EXACT", true);
+    return heurarm::Flag(heurarm::CREATURE_LEFTOVER_EXACT, env_on);
+}
+
+// MTG_AURA_HOST_LINE_KEEP (2026-11-21; DEFAULT ON, =0 -> the unconditional host hold): a land Aura's host is hidden
+// while the Aura pays only when that does not strand the rest of the line that paying unheld would keep
+// (AuraHostHoldKeepsLine, ManaPayment.cpp). Bruna mana-clean gate s30053757 T2 / s30051079 T3. Per-job slot.
+inline bool AuraHostLineKeepOn()
+{
+    static const bool env_on = EnvOn("MTG_AURA_HOST_LINE_KEEP", true);
+    return heurarm::Flag(heurarm::AURA_HOST_LINE_KEEP, env_on);
+}
+
 inline bool PayNarrowRestrictedFirstOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_NARROW_RESTRICTED_FIRST", true);
