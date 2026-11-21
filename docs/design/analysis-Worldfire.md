@@ -210,6 +210,20 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
   SETTINGS question for the USER (the depth matrix / play budget), not a search change: raising the budget
   roughly 10x the per-game cost (worldfire is 2.06x Hinata at b20 today).
 
+## Budget curve at d5 (2026-11-21, held-out seed 9500001, 200 games, paired, profile attached, BEFORE the cantrip buckets)
+One pooled `--batch` (800 jobs, 32/32 workers). Raw: `build/scratch/worldfire/budget/`; summary `logs/worldfire/budget_curve.txt`.
+
+| budget | avg win turn | vs b20 better / worse | wall s/game | units/game |
+|---|---|---|---|---|
+| b20 (play) | 5.595 | -- | 11.8 | 0.57M |
+| b50 | 5.560 | 9 / 2 | 23.9 | 0.95M |
+| b100 | 5.530 | 17 / 4 | 36.3 | 1.38M |
+| b200 | 5.485 | 26 / 4 | 61.5 | 2.13M |
+
+Monotone in aggregate; each worse game is a single +1 turn (gi 23, 29, 76, 93, 97, 193 across the arms), not
+attributed. b200 buys 0.11 turns/game at ~3.7x units. A SETTINGS question for the USER; re-measure after the
+cantrip buckets (`docs/design/worldfire-discard-buckets.md`), which change both the cost and what each budget finds.
+
 ## Free-turn rule (MTG_FREE_TURNS, default OFF -- adoption is the USER's) -- measured 2026-11-21
 Branch `wip/freeturn` (2d373428c implementation, d35211372 doc; spec + measurement in
 `docs/design/opponent-lockdown-free-turns.md`). Flags OFF: smoke 243/243 byte-identical, scenarios 605/605.
