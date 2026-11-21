@@ -11072,8 +11072,32 @@ bool AuraHostHoldKeepsLine(const GameState& s, const Card& aura, int host_num, c
     if (!AuraHostLineKeepOn() || host_num <= 0) { return true; }
     ManaCost rest = g_line_unpaid_cost;
     SubManaCost(rest, bill);
-    if (rest.white + rest.blue + rest.black + rest.red + rest.green == 0) { return true; }
+    const int owed[5] = { rest.white, rest.blue, rest.black, rest.red, rest.green };
+    unsigned owed_mask = 0;
+    for (int ci = 0; ci < 5; ++ci) { if (owed[ci] > 0) { owed_mask |= 1u << ci; } }
+    if (owed_mask == 0) { return true; }
     const int active = s.active_player_index;
+    // CHEAP NECESSARY CONDITIONS FIRST (CPU: the payability walks consult this per subset; the A/B measured EDF d0
+    // +38% cpu with every check on scratch boards). The hold can strand the rest only if SOME OTHER untapped source
+    // makes a colour the rest owes: otherwise the held payment spends nothing the rest could use that the host would
+    // not have supplied, and keeping the host up is at least as good. One battlefield scan, no scratch.
+    bool host_up = false, other_owed = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active || q.tapped || q.def_absent) { continue; }
+        if (q.card.m_number == host_num) { host_up = q.card.IsLand(); continue; }
+        if (other_owed) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr || qd->params.creature_mana_only || qd->params.colored_creature_only) { continue; }
+        const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield);
+        if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+        for (Color c : EffectiveProducesFor(s, active, *qd, &q))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5 && (owed_mask & (1u << ci))) { other_owed = true; break; }
+        }
+    }
+    if (!host_up || !other_owed) { return true; }
     auto attach = [&](GameState& g)
     {
         Permanent ap;
@@ -11083,24 +11107,26 @@ bool AuraHostHoldKeepsLine(const GameState& s, const Card& aura, int host_num, c
         ap.aura_attached_to = host_num;
         g.battlefield.push_back(ap);
     };
-    {
-        RampScratch sc(s);
-        GameState& a = sc.Board();
-        Permanent* h = PermByNumber(a, host_num);
-        if (h == nullptr || h->tapped || h->controller_index != active) { return true; }
-        h->tapped = true;
-        const bool ok = TapForCostShared(a, bill, for_creature, nullptr, true);
-        h = PermByNumber(a, host_num);
-        if (h != nullptr) { h->tapped = false; }
-        if (!ok) { return true; }   // the site's unheld retry decides this one
-        attach(a);
-        if (LineBillPayable(a, rest, false)) { return true; }
-    }
-    RampScratch sc(s);
-    GameState& b = sc.Board();
+    // The UNHELD payment first: when it spares the host anyway the hold changes nothing (keep it), and when it does
+    // not keep the rest payable either the hold cannot be what strands it.
+    RampScratch sb(s);
+    GameState& b = sb.Board();
     if (!TapForCostShared(b, bill, for_creature, nullptr, true)) { return true; }
+    const Permanent* hb = PermByNumber(b, host_num);
+    if (hb == nullptr || !hb->tapped) { return true; }
     attach(b);
-    return !LineBillPayable(b, rest, false);
+    if (!LineBillPayable(b, rest, false)) { return true; }
+    RampScratch sc(s);
+    GameState& a = sc.Board();
+    Permanent* h = PermByNumber(a, host_num);
+    if (h == nullptr) { return true; }
+    h->tapped = true;
+    const bool ok = TapForCostShared(a, bill, for_creature, nullptr, true);
+    h = PermByNumber(a, host_num);
+    if (h != nullptr) { h->tapped = false; }
+    if (!ok) { return true; }   // the site's unheld retry decides this one
+    attach(a);
+    return LineBillPayable(a, rest, false);
 }
 
 // Make the oracle-table option `opt` for `cost_in` on `b` (PayRefineAfter's procedure): its taps, its set-aside units
