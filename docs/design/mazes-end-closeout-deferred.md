@@ -125,21 +125,86 @@ Before launching, re-confirm on the frozen tip:
 - **Q9 IDG quality-vs-time run: overnight, not urgent.** "I guess we could plan this for a time period while I am asleep
   or something. It seems reasonable to experiment with, but not urgent."
 
-## CHECKPOINT: batch 3 IN PROGRESS (2026-11-21 ~01:20 UTC)
-Branch `wip/maze-batch3` (worktree `.claude/worktrees/maze-shared`), on shared tip c3853c32f:
-- 054f1336f: P5b land-order fold, `MTG_FOLD_LAND_ORDER_SEEN` DEFAULT ON (USER adopted).
-- e78118bd0: Manabond held-tutor prune `MTG_MAZE_MANABOND_TUTOR_PRUNE` (USER Q4).
-- latest commit (PENDING d8): `MTG_MAZE_FETCH_RANK_COND` + `MTG_MAZE_MANABOND_DISCARD` DEFAULT ON. UNBUILT.
-Built binary for measurement: `build/scratch/maze/b3/mtg.b3` (= e78118bd0, levers OFF by default). Units 3809/3809.
-A/B (`b3/m_ab.json`, `b3/ab.out`, `b3/ab_tables.txt`; P5d-7's held-out seeds; same_seed_inflight 0, arms rotated), net per
-deck vs ship (clairvoyant / blind): cond std -8/-41, 2HG -4/-26; q2 std -34/-36, 2HG 0/-3; q2t std -29/-39, 2HG +1/-6
-(FAILS clairvoyant); cond+q2t std -37/-78, 2HG -1/-28 (best; the candidate).
-RUNNING: d8 b0 on cond+q2t's 201 searched slower games, both arms (`b3/m_d8.json`, 402 jobs, 50M ceiling; out `b3/d8.out`,
-marker `b3/d8.done`; launched from the worktree root). Score: `python3 b3/and8.py cq2t` (in b3/).
-NEXT: if no game PERSISTS (lever d8 > ship d8): build the tip, units, `push_queue.py join`, at the lease rebase, smoke +
-regression, accept the moved keys (analyse searched slower games), check_gt_logs, check_references_safe, land, CI watch.
-If games persist: root-cause them (clairvoyance vs blind, per the USER rule), or fall back to cond alone (needs its own d8).
-Also running: subagent on `wip/bp-node-host` (USER Q3 fix, code + units only; measurement overnight with IDG Q9).
+## CHECKPOINT: batch 3 IN PROGRESS (2026-11-21 ~04:50 UTC)
+
+### Branch
+
+`wip/maze-batch3` (worktree `.claude/worktrees/maze-shared`) is REBASED onto shared tip 906d3c0a4 (resolution below).
+It is in the push queue, requeued at the back while the fix is measured. Its commits, oldest first:
+
+- **5007342fa:** the P5b fold, `MTG_FOLD_LAND_ORDER_SEEN` DEFAULT ON.
+- **482ede8c8:** the tutor prune.
+- **3eee6531b:** `MTG_MAZE_FETCH_RANK_COND` + `MTG_MAZE_MANABOND_DISCARD` DEFAULT ON.
+- **eca34e3de:** the P5 unit pin for COND.
+- **ac15d5ede:** the tutor prune does NOT fire while a Guild Summit of ours is out (the yes's Gates draw).
+  - Unit case in `test_mazes_end_p5d6.cpp`.
+  - Found on regression std d5 s3003 gi100 at d8 b0. Prune on: T5 (blind T6). Prune off: T4 (blind T5).
+    Not clairvoyance; the T3 end-step yes with Summit out draws 3 and wins T4.
+- **9fa7468bf:** `scripts/unit_par.sh` plus `docs/design/unit-test-order-dependency.md`. NOT yet usable as the unit
+  step, because of the order dependency that doc describes.
+
+**Rebase resolution:** the `HeuristicArm.h` enum and kNames are keep-both, shared slots first;
+FOLD_LAND_ORDER appears once. `check_references_safe` OK.
+
+### Validation
+
+**First lease, on the rebased pre-amendment tip.** Build and units passed. Smoke and regression moved only
+mazesend keys:
+
+| Tier | Searched slower | Searched faster |
+|---|---|---|
+| smoke | 8 | 0 |
+| regression | 6 | 8 |
+
+All 14 slower games ran at d8 b0 (`b3/m_t8.json`, `b3/t8.out`). 13 recover; gi100 persisted, and the amendment
+fixes it. Those smoke/regression runs PREDATE the amendment, so they must be re-run at the next lease.
+
+### A/B
+
+`b3/m_ab2.json`, `b3/ab2.out`, `b3/ab2_tables.txt`, slower games in `b3/slow2.txt`. Binary `b3/mtg.ab2` (= ac15d5ede).
+Arms: ship = fold only; cq2 = COND + DISCARD, prune off; cq2ta = the amended defaults.
+
+Net turns per deck, cq2ta vs ship (cq2 is almost identical):
+
+| Deck | Clairvoyant | Blind |
+|---|---|---|
+| std, all rows | -44 (d0 -30) | -75 |
+| 2HG | -2 | -29 |
+
+PASSES the net bar.
+
+### d8 attribution
+
+The 3 clairvoyant persists of the OLD d8 (`b3/d8.out`, cq2t):
+- **d3 g120:** recovered on the rebased binary.
+- **d5 g224 and 2HG g3:** caused by MANABOND_DISCARD (nodisc = ship; nocond and noprune do not help).
+- **Blind d8:** g224 ship = nodisc = cq2ta = T6, so the loss is clairvoyance only (USER rule: OK). g3 blind: ship 6,
+  nodisc 6, cq2ta pending in `b3/d8b.out` (job `AT8B_mazesend2hg-d5_g3_cq2ta`).
+
+### RUNNING
+
+The d8 b0 check of cq2ta's slower games, both arms, on `b3/mtg.ab2`.
+- **Inputs:** `b3/m_d8b.json`, 392 jobs, 50M-unit ceiling. 76 clairvoyant jobs first, then 310 blind; d0 skipped.
+- **Outputs:** `b3/d8b.out`, marker `b3/d8b.done`.
+- **Scoring:** adapt `b3/and8.py` (it reads `slow.txt` and `d8.out`) to `slow2.txt`, `d8b.out` and arm cq2ta.
+
+### NEXT
+
+1. **Score d8b.** A clairvoyant persist must be shown clairvoyance-only by its blind run. Blind persists: report them
+   (blind d8 is not deterministic-optimal; it has sampled worlds).
+2. **If OK:** `push_queue.py join` and a `wait` waiter. At the lease: fetch and rebase, build, units (serial
+   `mtg-test` until the unit_par dependency is fixed), smoke + regression under `hold`. Then d8 b0 the searched
+   slower games (`mktier8.py` pattern), `--accept`, check_gt_logs, `land`, and a CI watch with `--interval 60`.
+   Finally fast-forward the primary checkout and rebuild (the viewer).
+3. **If the discard rule fails:** land with `MTG_MAZE_MANABOND_DISCARD` OFF (and so its sub-levers). That is the
+   USER's call; surface it.
+
+### Done elsewhere
+
+`wip/bp-node-host` 82dd3a38f (USER Q3), `MTG_BP_NODE_HOST_GATE`:
+- units 3807/3807 both ways; Windows CI success;
+- repro stale leaf hits 1 -> 0;
+- unmeasured (overnight with IDG Q9).
 
 ## Open USER questions carried forward
 None (all ten answered 2026-11-21).
