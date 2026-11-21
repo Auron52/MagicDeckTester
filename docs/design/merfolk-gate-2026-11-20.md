@@ -157,4 +157,10 @@ needed. Whatever does better can win out. We are looking for the cheapest that c
 Merfolk first) are to be built behind a temporary selector, measured (gate-slice ENUM-GAP count, held-out A/B, d8 b0 on
 slower games, CPU), and the cheapest that corrects the issue and meets the bar ships; the other is deleted.
 
-(pending)
+**Status 2026-11-21 (1d34d618c, all flags default OFF).** Two menu cuts, not one: the scalar bound AND
+`SpwfProvablySupplyShort` (the filter rescue's supply pre-gate) both read City at its current count; both now credit +1
+per City-matching creature cast (MTG_SCALED_GROWTH_BOUND). Seahunter is a Human Mercenary, so the grower order moves every
+tied creature cast cheapest-first once one cast grows the City. Gate slice (gi 0-399, distinct game-turns, off / (a)
+decider fallback / (b) Merfolk rule): ENUM-GAP 27 / 17 / 17, APPLY-DROP 1 / 3 / 6, ORACLE-GAP 9 / 8 / 20. (a) adds two
+APPLY-DROPs on newly admitted lines (s30000034 T5, s30000075 T5: the engine's second payment strands the City feed);
+under investigation, A/B pending. Handoff: `logs/merfolk-gate/handoff2.md` in the worktree.
