@@ -11023,6 +11023,43 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // loose joint passed there only by the rock's slack.
     ManaCost joint_t = joint;
     bool tight = false;
+    // A board converter of the RAMP-FILTER rock's own shape ("{1},{T}: Add {a}{b}", the same two colours: a second Izzet
+    // Signet, Ferrous Lake) does not break the rock's tight test below, so it is no guard (exact; MTG_LKR_SIGNET_PAIR=0
+    // restores the guard, for the byte-identity check). PROOF. Take a repair: the bill paid off the board, then the
+    // rest off what is left plus the rock, the rock fed by a unit f, its outputs o_a, o_b. Drop the rock: f is free and
+    // o_a, o_b are gone. Every such converter is fed by ANY one unit and makes one {a} and one {b}, so the rest of the
+    // payment can be re-fed in its own order: f takes the place of the first rock output that fed a converter; if the
+    // other also fed one, an {a}/{b} unit already floating from the first converter's outputs feeds it (a converter
+    // consumes one such unit and makes two, so one of EACH colour is always floating after it; a re-fed unit that fed
+    // something later is replaced the same way). The board alone thus pays everything the repair paid but one unit:
+    // both rock outputs less f (no rock output fed a converter), the unfed output (one did), or a re-fed unit x
+    // whose colour we choose (both did). Against rest_t = rest - m_a - m_b + {1} (m_c: a {c} pip, else a generic):
+    // (i) both m_a and m_b exist: the lost unit's part was an {a}/{b} pip or a generic (or nothing), and the freed
+    // payers of m_a and m_b pay it and the {1} (an {a} payer for an {a} pip, after the usual pip swap); (ii) only m_a
+    // exists and it is an {a} pip: the rest has no {b} pip and no generic, so every {b} is wasted -- choose x = {b}, or
+    // use a {b} the board's converters still make, for the {1}; f pays it when nothing was re-fed; (iii) only m_a
+    // exists and it is the rest's one generic: rest_t = rest, and no other part of the rest can take an {a}/{b} unit, so
+    // f (nothing re-fed) or an {a}/{b} unit the board's converters still make pays that generic. NOT for a hybrid-fed
+    // filter land (Cascade Bluffs, is_filter, guarded below): it makes TWO of one colour, so a rock {b} into it is two
+    // {a}, which the board's own f cannot reproduce ({U}{U}{U} off one Island + the Signet + the Bluffs). NOT for a
+    // {C}-only rock (Sol Ring): its {C} into a board Signet frees a COLOURED feed ({U}{U} off Island + Signet + Sol
+    // Ring), so the board's Signets stay guards there.
+    static const bool s_signet_pair = EnvOn("MTG_LKR_SIGNET_PAIR", true);
+    auto signet_pair = [&](const CardDefinition& d) -> bool
+    {
+        if (!s_signet_pair || rock.def == nullptr) { return false; }
+        const CardParams& rq = rock.def->params;
+        const CardParams& dq = d.params;
+        if (!rq.ramp_filter || rq.any_color_filter || rq.is_filter || rq.produces_amount > 1 || rq.produces.size() != 2
+            || rq.produces[0] == rq.produces[1] || rq.produces[0] == Color::Colorless
+            || rq.produces[1] == Color::Colorless)
+        { return false; }
+        if (!dq.ramp_filter || dq.any_color_filter || dq.is_filter || dq.mana_per_creature_feeder_generic > 0
+            || dq.produces_amount > 1 || dq.produces.size() != 2)
+        { return false; }
+        return (dq.produces[0] == rq.produces[0] && dq.produces[1] == rq.produces[1])
+            || (dq.produces[0] == rq.produces[1] && dq.produces[1] == rq.produces[0]);
+    };
     auto generic_fed_converter_up = [&]()
     {
         if (state.deck_has_ondemand_sac) { return true; }
@@ -11033,7 +11070,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             if (pd == nullptr) { continue; }
             if (pd->params.sac_for_mana_amount > 0 || pd->params.sac_outlet_add_mana_amount > 0) { return true; }
             if (!p.tapped && (pd->params.ramp_filter || pd->params.any_color_filter
-                              || pd->params.mana_per_creature_feeder_generic > 0)) { return true; }
+                              || pd->params.mana_per_creature_feeder_generic > 0) && !signet_pair(*pd)) { return true; }
             // A hybrid-fed filter land (Cascade Bluffs, is_filter) that one of a RAMP-FILTER rock's own colours can feed:
             // the Signet's {U} into the Bluffs makes two, and when the Signet was fed a {C} (Sol Ring, Saprazzan Skerry)
             // the board alone has no coloured unit to feed the Bluffs in its place -- so the bound below (the board pays
@@ -11243,9 +11280,11 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     // the same order. The first option that keeps the rest is the payment either way: a prefix holding it ends the
     // search without the rest of the enumeration, and otherwise the full table is asked for and made from where the
     // prefix ended (the prefix's options already failed). Niv-Mizzet Combo spent ~40% of the rung's time building
-    // tables; MTG_LKR_TABLE_PREFIX (default 1; 0 = one full ask) is the prefix size, every value the same payments.
+    // tables; MTG_LKR_TABLE_PREFIX (default 2; 0 = one full ask) is the prefix size, every value the same payments.
+    // Paired 1-thread Niv probes (200 games, seeds 680000, rung ms): 0 -> 18.4 s, 1 -> 19.4, 2 -> 14.7, 4 -> 15.0. Most
+    // repairs fire at the table's SECOND option, so a prefix of 1 pays two asks for them.
     static const std::size_t s_prefix = static_cast<std::size_t>(
-        std::clamp(EnvInt("MTG_LKR_TABLE_PREFIX", 1), 0, static_cast<int>(kLineKeepTableOpts)));
+        std::clamp(EnvInt("MTG_LKR_TABLE_PREFIX", 2), 0, static_cast<int>(kLineKeepTableOpts)));
     std::size_t made = 0;   // options of the table already made (they failed)
     for (int ask = 0; ask < 2; ++ask)
     {
