@@ -411,12 +411,13 @@ bool PayableOrderOn();
 // Prospector, Utopia Mycon); these let the plan menu (EnumeratePlansCore) and the apply's payable-order walk
 // (PayableCastOrderCore) see the outlet the plan itself puts in, and the bodies the plan itself adds.
 bool SacFodderMenuOn();
+bool SacFodderMenuLeverOn();   // the lever itself, whatever the context (SacFodderMenuOn() also stands it down beyond the horizon)
 bool SacFodderNeededOnlyOn();   // MTG_SAC_FODDER_NEEDED_ONLY (default ON under the lever)
 bool SacFodderInertPruneOn();  // MTG_SAC_FODDER_INERT_PRUNE (default ON under the lever)
 bool SacFodderWaveOn();        // MTG_SAC_FODDER_WAVE (default ON under the lever)
 bool SacFodderStagePlayoutOn();   // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm, default OFF)
-bool SacFodderStageBpEnumOn();    // MTG_SAC_FODDER_STAGE_BPENUM (WIP staging arm, default OFF)
-bool SacFodderStageRootOn();      // MTG_SAC_FODDER_STAGE_ROOT (DIAGNOSTIC, default OFF)
+bool SacFodderWaveEarlyOn();      // MTG_SAC_FODDER_WAVE_EARLY (WIP arm, default OFF)
+bool SacFodderWaveCtxOn();        // MTG_SAC_FODDER_WAVE_CTX (WIP arm, default OFF)
 // Does this action put a permanent onto the battlefield (cast, Vial, Bronze put, retrace)?
 bool SacFodderPutKind(const Action& a);
 // The legal fodder bodies this action adds for an outlet with params `op`: its own body (a matching

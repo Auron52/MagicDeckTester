@@ -5729,27 +5729,31 @@ bool SacFodderMenuOn()
     // DEFAULT OFF: its held-out A/B (seeds 620000+, x5000) failed the adoption bar -- Goblins net +4 (2 / 6), Fungus
     // net +5 (0 / 5; gi 630182 and 630865 do not recover at d8 b0, 4 -> 5). It clears most ENUM-GAPs (Goblins
     // 705 -> 57, Fungus 129 -> 10) at units x1.07 / x1.03. =1 turns it on; docs/design/sac-fodder-menu-2026-11-18.md.
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
-    if (!heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on)) { return false; }
-    // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm): beyond the horizon the lever is off -- no credited plan on a
-    // playout's menu and the apply's order decider exactly as with the lever off.
-    if (SacFodderStagePlayoutOn() && TurnSolver::InRolloutPlayout()) { return false; }
+    if (!SacFodderMenuLeverOn()) { return false; }
+    // MTG_SAC_FODDER_STAGE_PLAYOUT (WIP staging arm): beyond the horizon (a playout, the depth-0 runner) the lever is
+    // off -- no credited plan on a playout's menu and the apply's order decider exactly as with the lever off.
+    if (SacFodderStagePlayoutOn() && (TurnSolver::InRolloutPlayout() || TurnSolver::InD0Runner())) { return false; }
     return true;
+}
+bool SacFodderMenuLeverOn()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_MENU");
+    return heurarm::Flag(heurarm::SAC_FODDER_MENU, env_on);
 }
 bool SacFodderStagePlayoutOn()
 {
     static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_PLAYOUT");
     return heurarm::Flag(heurarm::SAC_FODDER_STAGE_PLAYOUT, env_on);
 }
-bool SacFodderStageBpEnumOn()
+bool SacFodderWaveEarlyOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_BPENUM");
-    return heurarm::Flag(heurarm::SAC_FODDER_STAGE_BPENUM, env_on);
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_EARLY");
+    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_EARLY, env_on);
 }
-bool SacFodderStageRootOn()
+bool SacFodderWaveCtxOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_STAGE_ROOT");
-    return heurarm::Flag(heurarm::SAC_FODDER_STAGE_ROOT, env_on);
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_CTX");
+    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_CTX, env_on);
 }
 bool SacFodderNeededOnlyOn()
 {
@@ -7814,6 +7818,8 @@ static bool BuildPoSacFodder(const GameState& state, const std::vector<Action>& 
 {
     sf = PoSacFodder{};
     if (g_pay_fodder_off || !state.deck_has_sac_mana_outlet || !SacFodderMenuOn()) { return false; }
+    { static const bool s_noapply = EnvOn("MTG_SFM_DIAG_NOAPPLY");   // TEMP diagnostic: the apply's decider as lever-off
+      if (s_noapply && !order_only) { return false; } }
     bool sf_on = false;
     const int active = state.active_player_index;
     const SacPayOutlet live = LiveSacPayOutlet(state, active);
