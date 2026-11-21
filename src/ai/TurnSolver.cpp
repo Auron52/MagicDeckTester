@@ -4230,23 +4230,34 @@ bool          TurnSolver::InD0Runner()       { return g_d0_permit_nest > 0; }
 // entirely) -- and restored on exit, so a nested or later solve never inherits another frame's
 // budget. `set` false => a pure no-op scope. While a set scope is open DecisionRootOpen() is true,
 // which is how an UNLIMITED root (budget nullptr) is told apart from no root at all.
+// MTG_UO_BUDGET_RESID (uoprice::ResidOn): the unlock-order walks' steps not yet billed, carried across the searches
+// of ONE decision. SCOPED TO THE DECISION FRAME (saved, zeroed, restored by DecisionBudgetScope), like
+// g_greedy_charge_acc to its guard: a residual surviving the frame would carry work between decisions, and between
+// GAMES on a batch worker, which is a scheduling fact. Per-decision loss is at most W-1 steps.
+static thread_local long long g_uo_resid = 0;
 struct DecisionBudgetScope
 {
     SearchBudget* const prev;
     const bool          prev_open;
     const int           prev_turn;
+    const long long     prev_uo_resid;
     DecisionBudgetScope(bool set, SearchBudget* b, int turn)
-        : prev(g_decision_budget), prev_open(g_decision_root_open), prev_turn(g_decision_root_turn)
+        : prev(g_decision_budget), prev_open(g_decision_root_open), prev_turn(g_decision_root_turn),
+          prev_uo_resid(g_uo_resid)
     {
         if (set)
         {
             g_decision_budget    = (b != nullptr && !b->Unlimited()) ? b : nullptr;
             g_decision_root_open = true;
             g_decision_root_turn = turn;
+            g_uo_resid           = 0;
         }
     }
     ~DecisionBudgetScope()
-    { g_decision_budget = prev; g_decision_root_open = prev_open; g_decision_root_turn = prev_turn; }
+    {
+        g_decision_budget = prev; g_decision_root_open = prev_open; g_decision_root_turn = prev_turn;
+        g_uo_resid = prev_uo_resid;
+    }
 };
 // Charge `n` units of provider-side sub-search work to the decision's budget. Attributed to its own
 // census bucket so the u_* columns still sum to `units` (turn_census.py refuses a row otherwise).
@@ -12228,6 +12239,22 @@ inline int StepsPerUnit()
     static const int v = std::max(1, EnvInt("MTG_UO_BUDGET_PRICE_W", kDefaultW));
     return v;
 }
+// MTG_UO_BUDGET_RESID (DEFAULT OFF -- PROPOSED 2026-11-21; per-job manifest "uo_price_resid"): the CARRIED-RESIDUAL
+// charge. The ceil-per-search charge above bills every search at least one unit (its step 0), and a search is
+// usually short: Bruna's price arms charged ~280 units a game whatever W was (W 16 / 32 / 64 played game for game
+// the same and lost the same 6 of 10,000 games to `on`), and a computation that charged ANY unit is not stored by
+// the plan caches (cachecharge mode 1), so the floor also made every enumeration that reached the search
+// uncacheable. Under this mode a step adds one to the decision's residual (g_uo_resid) and a unit is charged each
+// time it reaches W -- steps/W units per decision, no floor -- and the cut is tested only where a unit would be
+// charged, so a search that charges nothing reads no budget either. Deterministic: the residual is scoped to the
+// decision frame (DecisionBudgetScope). Inert at an unlimited root like the rest (no budget, no residual).
+inline bool ResidOn()
+{
+    const int job = valuearm::t_arm.uo_price_resid;
+    if (job >= 0) { return job != 0; }
+    static const bool env = EnvOn("MTG_UO_BUDGET_RESID");
+    return env;
+}
 // MTG_UO_PRICE_STATS=1 (diagnostic, never read by play): per site, searches / steps / exempt steps / units charged /
 // cuts / wall ns, and what ceil-per-search pricing would charge at several W -- the calibration of W. Printed at exit.
 inline bool StatsOn() { static const bool v = EnvOn("MTG_UO_PRICE_STATS"); return v; }
@@ -12263,6 +12290,7 @@ struct Meter
 {
     SearchBudget* budget = nullptr;
     int           w      = 1;
+    bool          resid  = false;   // MTG_UO_BUDGET_RESID: carry the decision's residual (g_uo_resid), no floor
     bool          cut_ok = false;
     bool          cut    = false;
     long long     steps  = 0;    // charged (chargeable) steps
@@ -12276,6 +12304,7 @@ struct Meter
         {
             budget = TurnSolver::DecisionBudget();
             w      = StepsPerUnit();
+            resid  = ResidOn();
             cut_ok = cut_allowed && CutOn();
         }
         if (StatsOn()) { t0 = std::chrono::steady_clock::now(); }
@@ -12298,6 +12327,19 @@ struct Meter
     // One chargeable step, BEFORE it is walked. False = the search is cut for budget (the step is not walked).
     bool Step()
     {
+        if (budget != nullptr && resid)
+        {
+            if (g_uo_resid + 1 >= w)
+            {
+                if (cut_ok && (budget->Exhausted() || budget->Overrun())) { cut = true; return false; }
+                ConsumeAtN(budget, unitsite::kUnlockOrder, 1);
+                ++units;
+                g_uo_resid = g_uo_resid + 1 - w;
+            }
+            else { ++g_uo_resid; }
+            ++steps;
+            return true;
+        }
         if (budget != nullptr && steps % w == 0)
         {
             if (cut_ok && (budget->Exhausted() || budget->Overrun())) { cut = true; return false; }
@@ -12310,6 +12352,13 @@ struct Meter
     // `k` steps already walked (an order-by-order walk's tail, the apply's given walk): charged, never cut.
     void Add(long long k)
     {
+        if (budget != nullptr && resid)
+        {
+            g_uo_resid += k;
+            steps += k;
+            while (g_uo_resid >= w) { ConsumeAtN(budget, unitsite::kUnlockOrder, 1); ++units; g_uo_resid -= w; }
+            return;
+        }
         for (long long i = 0; i < k; ++i)
         {
             if (budget != nullptr && steps % w == 0) { ConsumeAtN(budget, unitsite::kUnlockOrder, 1); ++units; }
