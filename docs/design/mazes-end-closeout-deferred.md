@@ -125,86 +125,40 @@ Before launching, re-confirm on the frozen tip:
 - **Q9 IDG quality-vs-time run: overnight, not urgent.** "I guess we could plan this for a time period while I am asleep
   or something. It seems reasonable to experiment with, but not urgent."
 
-## CHECKPOINT: batch 3 IN PROGRESS (2026-11-21 ~04:50 UTC)
+## Batch 3: LANDED (2026-11-21 ~07:40 UTC)
 
-### Branch
+**What shipped:** batch 3 landed through the push queue, with these levers DEFAULT ON:
+- `MTG_FOLD_LAND_ORDER_SEEN` (the P5b fold);
+- `MTG_MAZE_FETCH_RANK_COND` (Q5);
+- `MTG_MAZE_MANABOND_DISCARD` (Q2), with its sub-lever `MTG_MAZE_MANABOND_TUTOR_PRUNE` (Q4).
 
-`wip/maze-batch3` (worktree `.claude/worktrees/maze-shared`) is REBASED onto shared tip 906d3c0a4 (resolution below).
-It is in the push queue, requeued at the back while the fix is measured. Its commits, oldest first:
+The tutor prune does not fire while a Guild Summit of ours is out (regression std d5 s3003 gi100 at d8 b0).
+Scratch for all of it is under `build/scratch/maze/b3/`.
 
-- **5007342fa:** the P5b fold, `MTG_FOLD_LAND_ORDER_SEEN` DEFAULT ON.
-- **482ede8c8:** the tutor prune.
-- **3eee6531b:** `MTG_MAZE_FETCH_RANK_COND` + `MTG_MAZE_MANABOND_DISCARD` DEFAULT ON.
-- **eca34e3de:** the P5 unit pin for COND.
-- **ac15d5ede:** the tutor prune does NOT fire while a Guild Summit of ours is out (the yes's Gates draw).
-  - Unit case in `test_mazes_end_p5d6.cpp`.
-  - Found on regression std d5 s3003 gi100 at d8 b0. Prune on: T5 (blind T6). Prune off: T4 (blind T5).
-    Not clairvoyance; the T3 end-step yes with Summit out draws 3 and wins T4.
-- **9fa7468bf:** `scripts/unit_par.sh` plus `docs/design/unit-test-order-dependency.md`. NOT yet usable as the unit
-  step, because of the order dependency that doc describes.
+### Held-out A/B
 
-**Rebase resolution:** the `HeuristicArm.h` enum and kNames are keep-both, shared slots first;
-FOLD_LAND_ORDER appears once. `check_references_safe` OK.
-
-### Validation
-
-**First lease, on the rebased pre-amendment tip.** Build and units passed. Smoke and regression moved only
-mazesend keys:
-
-| Tier | Searched slower | Searched faster |
-|---|---|---|
-| smoke | 8 | 0 |
-| regression | 6 | 8 |
-
-All 14 slower games ran at d8 b0 (`b3/m_t8.json`, `b3/t8.out`). 13 recover; gi100 persisted, and the amendment
-fixes it. Those smoke/regression runs PREDATE the amendment, so they must be re-run at the next lease.
-
-### A/B
-
-`b3/m_ab2.json`, `b3/ab2.out`, `b3/ab2_tables.txt`, slower games in `b3/slow2.txt`. Binary `b3/mtg.ab2` (= ac15d5ede).
-Arms: ship = fold only; cq2 = COND + DISCARD, prune off; cq2ta = the amended defaults.
-
-Net turns per deck, cq2ta vs ship (cq2 is almost identical):
+Run as `m_ab2.json`. Net turns, all defaults against the fold alone:
 
 | Deck | Clairvoyant | Blind |
 |---|---|---|
-| std, all rows | -44 (d0 -30) | -75 |
+| std | -44 | -75 |
 | 2HG | -2 | -29 |
 
-PASSES the net bar.
+### d8 b0 checks
 
-### d8 attribution
+- **The A/B's slower games** (`m_d8b.json`, `d8b.out`, scored by `and8b.py cq2ta`):
+  - Clairvoyant: 37 of 38 recover. The persist, 2HG d5 g3, is a tie in its blind replay (T6 in ship, nodisc and
+    cq2ta), so it is clairvoyance only. The same holds for std d5 g224.
+  - Blind replays: 106 recover, 38 are still slower, 6 hit the 50M-unit ceiling, and 5 were not run (the
+    batch's tail was stopped so the landing could take the heavy lock).
+  - Blind d8 searches sampled worlds, so these results were reported, not gated on. A follow-up, if the USER
+    wants one: replay the 38 with several blind salts.
+- **The tiers:** smoke and regression moved only the 10 Maze's End keys, with 12 searched slower games. All 12
+  recover at d8 b0 (`m_t8.json`, `t8.out`). GT accepted, `check_gt_logs` 1358 consistent.
 
-The 3 clairvoyant persists of the OLD d8 (`b3/d8.out`, cq2t):
-- **d3 g120:** recovered on the rebased binary.
-- **d5 g224 and 2HG g3:** caused by MANABOND_DISCARD (nodisc = ship; nocond and noprune do not help).
-- **Blind d8:** g224 ship = nodisc = cq2ta = T6, so the loss is clairvoyance only (USER rule: OK). g3 blind: ship 6,
-  nodisc 6, cq2ta pending in `b3/d8b.out` (job `AT8B_mazesend2hg-d5_g3_cq2ta`).
+### Still open
 
-### RUNNING
-
-The d8 b0 check of cq2ta's slower games, both arms, on `b3/mtg.ab2`.
-- **Inputs:** `b3/m_d8b.json`, 392 jobs, 50M-unit ceiling. 76 clairvoyant jobs first, then 310 blind; d0 skipped.
-- **Outputs:** `b3/d8b.out`, marker `b3/d8b.done`.
-- **Scoring:** adapt `b3/and8.py` (it reads `slow.txt` and `d8.out`) to `slow2.txt`, `d8b.out` and arm cq2ta.
-
-### NEXT
-
-1. **Score d8b.** A clairvoyant persist must be shown clairvoyance-only by its blind run. Blind persists: report them
-   (blind d8 is not deterministic-optimal; it has sampled worlds).
-2. **If OK:** `push_queue.py join` and a `wait` waiter. At the lease: fetch and rebase, build, units (serial
-   `mtg-test` until the unit_par dependency is fixed), smoke + regression under `hold`. Then d8 b0 the searched
-   slower games (`mktier8.py` pattern), `--accept`, check_gt_logs, `land`, and a CI watch with `--interval 60`.
-   Finally fast-forward the primary checkout and rebuild (the viewer).
-3. **If the discard rule fails:** land with `MTG_MAZE_MANABOND_DISCARD` OFF (and so its sub-levers). That is the
-   USER's call; surface it.
-
-### Done elsewhere
-
-`wip/bp-node-host` 82dd3a38f (USER Q3), `MTG_BP_NODE_HOST_GATE`:
-- units 3807/3807 both ways; Windows CI success;
-- repro stale leaf hits 1 -> 0;
-- unmeasured (overnight with IDG Q9).
-
-## Open USER questions carried forward
-None (all ten answered 2026-11-21).
+- `docs/design/unit-test-order-dependency.md` (unit_par).
+- `docs/design/batch-serial-job-prep.md`.
+- The tail-release threshold in `scripts/heavy_run.sh`: with exactly nproc/4 one-core games left, the load stays
+  just above nproc/4, so the lock never moves on. Raised with the USER.
