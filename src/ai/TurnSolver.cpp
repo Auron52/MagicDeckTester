@@ -44273,9 +44273,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // A joint cap over classes (RevelationPackageGroups; Blood Sun step 6d): a multiset over a group's cap
                 // is skipped and takes no ordinal. Empty for every other provider -> the loop below is unchanged.
                 std::vector<int> grp, grp_cap;
+                std::vector<const CardDefinition*> gdefs;
+                for (int r : ranked) { gdefs.push_back(classes[static_cast<std::size_t>(r)].def); }
                 {
-                    std::vector<const CardDefinition*> gdefs;
-                    for (int r : ranked) { gdefs.push_back(classes[static_cast<std::size_t>(r)].def); }
                     grp.assign(gdefs.size(), -1);
                     rprov.RevelationPackageGroups(state, gdefs, grp, grp_cap);
                     if (grp_cap.empty()) { grp.clear(); }
@@ -44307,6 +44307,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     do
                     {
                         if (over_group_cap(c)) { continue; }   // -> the NextLex condition below
+                        // One refused multiset (RevelationPackageRefused; Blood Sun step 6e, the USER's B8): skipped
+                        // like a group-cap overflow, no ordinal spent. Default false.
+                        if (rprov.RevelationPackageRefused(state, gdefs, c)) { continue; }
                         if (o >= end) { revwave::g_state.pending = true; break; }
                         int ev = 0;
                         for (std::size_t r = 0; r < c.size(); ++r) { ev += c[r] * cls_eval[r]; }
@@ -56275,6 +56278,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].def->params.look_top_target_player_exile_reorder <= 0
                 || actions[i].player_target != 0) { continue; }
             if (!state.opponent_library_dealt) { continue; }   // no opponent library to look at: the cast is a no-op
+            // The provider's RESTRICTION (OffersOpponentLookTarget; Blood Sun step 6e, the USER's B5). Default true.
+            if (!ResolveProvider(state).OffersOpponentLookTarget(state, *actions[i].def)) { continue; }
             Action v = actions[i];                   // copy BEFORE push_back (reallocation)
             v.player_target = 1;
             v.eval          = std::min(v.eval, 0);
@@ -75869,6 +75874,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
         if (seen_before >= 0) { g_bp_seen_last = seen_before + 1; }
+        // MTG_BP_DEV_SEQ_ALL under FullSearchLine's TWO PASSES (Blood Sun step 6e): _ALL opens a compound slot at every
+        // counted occurrence a variant reaches PAST its deviation (DevSeqOpen's reach = seen), so such an occurrence is,
+        // for the pass-2 trigger, exactly what a latent one is for the shipped scope -- the only thing a compound wave
+        // is built from. Pass 1 (compound waves suppressed) recorded only the latent / canon-drop ones, so under _ALL
+        // pass 2 never ran and the arm's compound lines were unreachable at EVERY budget: Machinations -> Grim ->
+        // Revelation X = 2 -> Bolts stayed T5 at d1 b0, and MTG_DEV_SEQ_VERIFY read "TWO-PASS LATER two=5 one=4
+        // UNLIMITED" (the soundness failure that diagnostic exists for). Marked like a latent occurrence (hard: no
+        // hybrid deferral), so the node is dirty and pass 2 re-walks it. Inert unless MTG_BP_DEV_SEQ_ALL=1 (DEFAULT OFF).
+        if (seen_before > plan.bp_at && plan.bp_at >= 0 && !plan.bp_all && g_devseq_suppress > 0
+            && g_rollout_nest == 0 && g_bp_enum_depth == 0 && BpDevSeqAllOn())
+        {
+            g_devseq_latent_hit = true; ++g_devseq_latent_n; ++g_devseq_hard_n;
+            g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+        }
         // A 2nd+ breakpoint in the same apply that wave 0 did not cover. Still reachable (the wave
         // phase opens it); the counter measures how much of the nesting lands there.
         const bool nested_blocked = plan.bp_choice >= 0 && class_on

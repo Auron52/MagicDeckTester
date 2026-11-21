@@ -1828,4 +1828,82 @@ human play and under `DecisionUnpruned(UnprunedGate::Tutor)`. Adoption stays the
   shadowborn_d3 / shadowborn_d5 gi 14. Each deck holds a tutor-to-hand cast that can follow a breakpoint (Hinata's
   Gamble, Maze's End's Archdruid's Charm, ...): the expected shape of this fix, NOT yet confirmed game by game (see the
   handoff, `logs/bloodsun/impl-step6d-handoff.md`). Saved as `build/scratch/bloodsun/impl6d/smoke-step6d-batch.log`.
-- **Item 3: WIP** (see the handoff).
+- **Item 3: DONE in step 6e** (`git log --grep "Blood Sun step 6e"`): the failing red-source case was a FIXTURE error, not
+  a code one (see the step-6e notes).
+
+### Implementation notes (step 6e)
+**Commits:** `git log --grep "Blood Sun step 6e"`.
+- **Item 1 -- the 17 smoke games step 6d moved, root-caused game by game** (table:
+  `build/scratch/bloodsun/impl6e/moves.md`). Each game re-run as a one-game batch job off its own smoke manifest row (deck,
+  profile, depth, budget, 2HG life / heads, ignore_play_profile; `seed = 1001 + gi`, `game_index = gi`) under
+  `MTG_BP_NEST_REARM=1` / `=0`, then through the CLI with `MTG_BP_NEST_TRACE=1` and game logs. **17 / 17: REARM=0 gives the
+  GT (6c) digest, REARM=1 the 6d digest**, every win turn equal, every ON run traces nested ACQUISITION re-arms (Gamble,
+  Soulfire Eruption's dig, Eladamri's Call, Living Wish, Sylvan Scrying, Diabolic Intent / Demonic Tutor). The moves
+  are tie-equivalent lines the search now sees with one more occurrence: a different cast order or main-1 / combat
+  split (Hinata x 11), a Ponder shuffle vs keep (hinata_d5 gi 34, T1, through the d5 look-ahead's T3 Gamble re-arms),
+  Living Wish -> Adarkar Wastes instead of Dimensional Infiltrator (edf gi 71), a fetched Cloud of Faeries cast after
+  the combo win (edf gi 57), two land plays swapped (mazesend gi 16, T2, look-ahead), a main-2 Dark Ritual
+  (Shadowborn x 3). Every line is a logged, rules-enforced executor line; none is a bug.
+- **Item 2 (6d item 3) -- the failing red-source case was the FIXTURE.** 7 Swamps and ONE Revelation in hand give X = 2
+  exactly (X = 1 needs a spare Revelation, B3 (a)), so a package holds two cards; the library's only admitted cards
+  were the two red sources, which the joint cap of 1 forbids together, so the restricted space was rightly EMPTY. The
+  fixture now carries a Time Warp (`{Carnarium, Time Warp}`, `{City of Brass, Time Warp}`: `with_red == 2`).
+- **Item 3 -- new USER restrictions** (`BloodSunProvider`, under `MTG_BLOODSUN_USER_PRUNE`; USER quotes in the code):
+  * B8: Revelation class cap 1 per package (`RevelationPackageRestrict`); a package whose every card is a Revelation is
+    refused (new hook `DecisionProvider::RevelationPackageRefused`, default false; the emitter skips it like a group-cap
+    overflow, no wave ordinal spent, so the restricted space is still enumerated once). X = 0: fold F-R4, every arm.
+  * B5: the opponent-target Machinations cast is not offered (new hook `DecisionProvider::OffersOpponentLookTarget`,
+    default true, read where TurnSolver appends the opponent variant). The SELF-target cast too while the new
+    sub-lever **`MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST`** (heurarm `BLOODSUN_PRUNE_MACHINATIONS_CAST`, `EnvOn(..., true)`,
+    DEFAULT ON, PROVISIONAL -- the Stage 5 A/B) is on: `BloodSunProvider::NeverCast` (the hand-cast choke point only;
+    the transmute is a Channel action from its own emitter and is untouched -- tested).
+  * B10 verified (already B3's rule): a Blood Sun in hand, including one a tutor fetched earlier this turn, leaves Grim
+    Tutor the transmute's only target and drops Blood Sun from Grim Tutor's list. New test fetches it with
+    `PerformTutor` first.
+  * Tests: `test_bloodsun_userprune.cpp` +3 cases (B8, B5 with all three lever arms, B10); the two step-5 Machinations
+    mechanics cases run with the prune off; the two `bloodsun_machinations_self_exiles_to_bolt_*` scenarios run with the
+    sub-lever at 0 (they pin the self-target mechanics); new `bloodsun_prune_machinations_cast_{on,selfonly,off}` menu
+    scenarios (Machinations rows 0 / 16 / 32, opponent rows 0 / 0 / 16).
+
+#### Two-deviation gap (step 6e diagnosis)
+**The chain.** Machinations -> (transmute) Grim Tutor -> Diabolic Revelation (Grim's target, occurrence 0, rank 2 of
+[Swamp, Bolt, Revelation]) -> X = 2 {Bolt, Bolt} (occurrence 1, rank 3) -> kill, 15 lands, opponent at 6
+(`test/scenarios/bloodsun_nested3_mach_grim_rev_bolts_devseqall_*`). Shipped settings: T5 at d1 b0, d3 b0, d8 b0 and
+d3 b100.
+**Which mechanism, and is the bound deliberate?** Breakpoint-occurrence choices are enumerated by the wave walker
+(`BpWaveWalker`): `Plan::bp_choice` / `bp_at` carry ONE deviation per apply, every other class-on occurrence plays its
+canon front. `MTG_BP_DEV_SEQ` (default ON) adds deviation SEQUENCES (`Plan::bp_pre`, compound slots, wave = deviation
+count, priced through `CanonWaveBillScope`), but its SHIPPED SCOPE opens them only at LATENT occurrences (site 9's
+re-open) and canon-drop ones; at every other counted occurrence "the one-deviation walk is the designed coverage"
+(TurnSolver.cpp, `BpDevSeqOn`'s comment; `docs/design/bp-empty-arm-deferred-site.md` §6.1). The full cross product is
+`MTG_BP_DEV_SEQ_ALL` (default OFF), kept off after the 2026-10-29 measurement (Fluctuator's unbudgeted backstop abandoned
+2 of 20 games at the 2,000,000-unit ceiling, Goblins +35-39% units for -0.0007 avg); §6.1 states the gap at counted
+occurrences "stays open until" a breakpoint-level transposition (a `BpPrefixSnap` at every site) exists. So the
+single-deviation shape is a DELIBERATE, documented bound -- and it is the same open conflict with the completeness
+invariant that §6.1 records, not a new defect. Step 8's kill-first package order would make the occurrence-1 canon
+the kill: a budget ordering, NOT a completeness fix.
+**A real defect found under it: `_ALL` was inert in every FullSearchLine host.** `MTG_DEV_SEQ_STATS=1` with `_ALL=1`:
+`pass1=2 met_latent=0 pass2=0`, and `MTG_DEV_SEQ_VERIFY=1`: `TWO-PASS LATER two=5 one=4 UNLIMITED`. FullSearchLine's two
+passes (pass 1 with compound waves suppressed, pass 2 only "if pass 1 met a latent occurrence -- the only thing a
+compound wave is ever built from") were argued for the shipped scope; under `_ALL` a compound slot is built from any
+counted occurrence a variant reaches past its deviation, which pass 1 never recorded, so pass 2 never ran and `_ALL`'s
+compound lines were unreachable at every budget (the 6d note "also with MTG_BP_DEV_SEQ_ALL=1" was this, not the walker).
+**FIXED (small, sound, inert by default):** at the occurrence-count site of `ApplyPlanDirect`, under `_ALL` and pass-1
+suppression, a searched apply's counted occurrence past the plan's deviation is recorded as a (hard) latent one, so the
+node is dirty and pass 2 runs. With `_ALL=1` the chain wins **T4 at d1 b0, d3 b0, d8 b0 and d3 b100**; units d3 b0
+208 + 51 (pass 2), d3 b100 912 + 137, wall 0.2-0.3 s per scenario process; `_ALL=0` is untouched (smoke below).
+**Cost of a complete multi-deviation enumeration.** W^L per main phase over L counted occurrences of widths W (vs the
+walker's sum of W), priced per compound hand-out by `CanonWaveBillScope` (inert at an unlimited root, where only the
+two-pass branch and bound limits it). The 2026-10-29 `_ALL` cost figures date from the day the two passes landed and
+must be treated as unknown for the fixed arm: since the two passes, `_ALL` acted only at nodes that also met a latent
+occurrence.
+**Proposal (the parent schedules; shared search):**
+1. Re-measure `_ALL` with the fix: the unbudgeted backstop rows (Fluctuator d3 / d5, seeds 30009 / 30018, the old
+   blow-up), Goblins at its play setting, and Blood Sun held-out once it plays (step 8+).
+2. A scoped default-ON candidate that stays complete where it matters here: compound slots at DEFERRED-SITE (site 3:
+   tutor / cantrip resolution) occurrences, where `ApplyPlanDirect` already captures a `BpPrefixSnap` (the
+   prefix-resume `bp_capture`) -- the transposition §6.1 says `_ALL` needs exists at exactly these sites -- or,
+   narrower, at an occurrence CREATED by the deviation itself (the step-6d nested acquisition pass: it exists only
+   because the deviating choice fetched a tutor / Revelation, so the one-deviation walk can never vary it -- latent
+   in spirit). Waves = deviation count, so a finite budget first spends exactly what it spends today.
+3. Keep step 8's go-off front as the budget ORDER on top; it does not substitute for 1-2.

@@ -1,0 +1,48 @@
+{
+ "deck": "decks/Blood Sun/Blood Sun.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "library_filler": "Swamp",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "battlefield": [
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Swamp",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Dimir Machinations"
+ ],
+ "env": {
+  "MTG_BLOODSUN_USER_PRUNE": "1",
+  "MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST": "1"
+ },
+ "expect_menu": [
+  {
+   "summary_contains": "Dimir Machinations",
+   "count": 0
+  },
+  {
+   "summary_contains": "target: opponent",
+   "count": 0
+  }
+ ],
+ "comment": "Blood Sun step 6e: MTG_BLOODSUN_USER_PRUNE and its sub-lever MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST both ON (the defaults): Dimir Machinations is not cast at all (USER B5: the opponent target is pruned, DECIDED; the self-target cast too on the USER's \"tempted\" lean, PROVISIONAL). No mana-value-3 card in the library, so no transmute row either. Three Swamps, Machinations in hand, the autonomous main-phase menu on the board as authored, counted by summary substring."
+}

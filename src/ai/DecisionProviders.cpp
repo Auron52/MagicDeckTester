@@ -73200,6 +73200,16 @@ bool BloodSunExplorationAnyLifeOn()
     return heurarm::Flag(heurarm::BLOODSUN_EXPLORATION_ANYLIFE, on);
 }
 
+// MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST: the SUB-LEVER of the prune that drops Dimir Machinations' self-target CAST as
+// well (ledger B5; USER 2026-11-21, verbatim: "Honestly I'm tempted to fully prune the cast option, since the effect is
+// extremely weak compared to the transmute."). DEFAULT ON on the USER's lean -- PROVISIONAL: the Stage 5 A/B measures
+// it and the USER decides. =0 keeps the self-target cast (the opponent target stays pruned); inert while the prune is off.
+bool BloodSunMachinationsCastPruneOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST", true);   // DEFAULT ON; =0 the self cast kept
+    return heurarm::Flag(heurarm::BLOODSUN_PRUNE_MACHINATIONS_CAST, on);
+}
+
 namespace
 {
 // The USER's "life is looking dicey" threshold for Exploration (B3; a PARENT-chosen number surfaced to the USER, who
@@ -73401,6 +73411,47 @@ void BloodSunProvider::RevelationPackageRestrict(const GameState& s, int hand_in
         another = d != nullptr && d->params.tutor_up_to_x;
     }
     if (!another) { x_min = std::max(x_min, 2); }
+    // B8 (USER 2026-11-21, verbatim): "I guess technically fetching multiple Revelations is a net-positive, but that is
+    // also dominated by fetching Revelation and something else useful for our situation. (since the next chain can get
+    // the second Revelation)" -> at most ONE Diabolic Revelation per package.
+    for (std::size_t k = 0; k < class_defs.size() && k < caps.size(); ++k)
+    {
+        if (class_defs[k] != nullptr && class_defs[k]->params.tutor_up_to_x) { caps[k] = std::min(caps[k], 1); }
+    }
+}
+
+// B8 (USER 2026-11-21, verbatim): "Revelation for X=0 should be pruned entirely in the heuristic provider. It is a net
+// negative. ... Searching for only Revelation wouldn't be worth it and should be pruned. (i.e. keep the mana)" -> a
+// package whose every card is a Diabolic Revelation is refused (with the one-copy cap: X = 1 fetching only a
+// Revelation). X = 0 is never cast autonomously in any arm (fold F-R4), so it needs no rule here.
+bool BloodSunProvider::RevelationPackageRefused(const GameState& /*s*/, const std::vector<const CardDefinition*>& class_defs,
+                                                const std::vector<int>& counts) const
+{
+    if (!BloodSunPruneLive()) { return false; }
+    int total = 0, revs = 0;
+    for (std::size_t k = 0; k < counts.size() && k < class_defs.size(); ++k)
+    {
+        total += counts[k];
+        if (class_defs[k] != nullptr && class_defs[k]->params.tutor_up_to_x) { revs += counts[k]; }
+    }
+    return total > 0 && revs == total;
+}
+
+// B5 (USER 2026-11-21, verbatim): "I would prune this as it only matters under clairvoyance." -> Dimir Machinations is
+// never cast at the opponent's library (DECIDED). A restriction of the engine's two-target fan; human play unaffected.
+bool BloodSunProvider::OffersOpponentLookTarget(const GameState& /*s*/, const CardDefinition& def) const
+{
+    return !(BloodSunPruneLive() && def.params.look_top_target_player_exile_reorder > 0);
+}
+
+// B5, the NOT-decided half (USER, verbatim: "Honestly I'm tempted to fully prune the cast option, since the effect is
+// extremely weak compared to the transmute.") -> under the sub-lever MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST (DEFAULT ON,
+// provisional) the self-target CAST is not offered either. NeverCast is the hand-cast choke point only: the transmute
+// (a from-hand Channel action, its own emitter) is untouched. The line it removes: {2}{B} without {1}{B}{B}, or a top-3
+// look worth more than any mana-value-3 card -- the Stage 5 A/B measures it.
+bool BloodSunProvider::NeverCast(const CardDefinition& def) const
+{
+    return BloodSunPruneLive() && BloodSunMachinationsCastPruneOn() && def.params.look_top_target_player_exile_reorder > 0;
 }
 
 // Step 6d item 3 (USER, VERBATIM): "On the Red-source exception we only need one red source." -> Rakdos Carnarium and

@@ -240,6 +240,7 @@ TEST_CASE("grim tutor: the per-cast named axis -- every pick of every copy is a 
 
 TEST_CASE("dimir machinations on self: all 16 dispositions are distinct candidates and every one is reachable")
 {
+    const Unrestricted5 unrestricted;   // step 6e: the USER's B5 prune drops these casts (test_bloodsun_userprune.cpp)
     GameState s = Base5();
     for (int k = 0; k < 3; ++k) { Put5(s, "Swamp", 700 + k); }
     s.players[0].lands_played_this_turn = 1;
@@ -294,6 +295,7 @@ TEST_CASE("dimir machinations on self: all 16 dispositions are distinct candidat
 
 TEST_CASE("dimir machinations on the opponent: the look moves the opponent's next land play")
 {
+    const Unrestricted5 unrestricted;   // step 6e: the USER's B5 prune drops these casts (test_bloodsun_userprune.cpp)
     GameState s = Base5();
     s.opponent_library_dealt = true;
     s.opponent_plays_lands   = true;

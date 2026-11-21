@@ -5373,6 +5373,18 @@ public:
     // scan). A provider-owned identity the USER ruled (B3 (c): "with blood sun out, Lotus Field and Vale are the same
     // so they can be collapsed"). Default false: the engine's conservative condition -> byte-identical.
     virtual bool RevelationTwinFoldForced(const GameState&) const { return false; }
+    // RevelationPackageRefused -- a provider RESTRICTION of ONE multiset of the autonomous package space (Blood Sun step
+    // 6e, USER B8: "Searching for only Revelation wouldn't be worth it and should be pruned. (i.e. keep the mana)").
+    // `class_defs` / `counts` are the restricted, index-aligned rank list and the multiset's copies per class. True skips
+    // it exactly like a group-cap overflow: a skipped multiset takes no wave ordinal, so the rest of the restricted space
+    // is still enumerated exactly once. Default false -> byte-identical. Never consulted in human play.
+    virtual bool RevelationPackageRefused(const GameState&, const std::vector<const CardDefinition*>& /*class_defs*/,
+                                          const std::vector<int>& /*counts*/) const { return false; }
+    // OffersOpponentLookTarget -- may autonomous play cast a "target player" look-and-exile spell (Dimir Machinations,
+    // CardParams::look_top_target_player_exile_reorder) at the OPPONENT? The engine offers both targets (U3: neither is
+    // inert); false RESTRICTS it to the self target (Blood Sun step 6e, USER B5). Default true -> byte-identical. Never
+    // consulted in human play (the target is the person's board click).
+    virtual bool OffersOpponentLookTarget(const GameState&, const CardDefinition&) const { return true; }
 };
 
 // ---------------------------------------------------------------------------------------------------

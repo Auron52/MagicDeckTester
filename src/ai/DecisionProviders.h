@@ -4389,11 +4389,23 @@ public:
     void RevelationPackageGroups(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
                                  std::vector<int>& group, std::vector<int>& group_cap) const override;
     bool RevelationTwinFoldForced(const GameState& s) const override;
+    // ---- STEP 6e (ledger B5 / B8, USER 2026-11-21), under the same lever:
+    //  B8: at most ONE Diabolic Revelation per package (RevelationPackageRestrict), no package that is only Revelation
+    //      (RevelationPackageRefused); X = 0 never (fold F-R4, every arm).
+    //  B5: Dimir Machinations is never cast at the opponent (OffersOpponentLookTarget); its SELF-target cast is not
+    //      offered either while the sub-lever MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST (DEFAULT ON, provisional) is on
+    //      (NeverCast). The transmute is untouched (its own emitter, not the hand-cast loop).
+    bool RevelationPackageRefused(const GameState& s, const std::vector<const CardDefinition*>& class_defs,
+                                  const std::vector<int>& counts) const override;
+    bool OffersOpponentLookTarget(const GameState& s, const CardDefinition& def) const override;
+    bool NeverCast(const CardDefinition& def) const override;
 };
 // MTG_BLOODSUN_USER_PRUNE's ONE reader (env DEFAULT ON + the heurarm slot) and its Exploration A/B arm
 // MTG_BLOODSUN_EXPLORATION_ANYLIFE (DEFAULT OFF; inert while the prune is off).
 bool BloodSunUserPruneOn();
 bool BloodSunExplorationAnyLifeOn();
+// MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST (heurarm BLOODSUN_PRUNE_MACHINATIONS_CAST; DEFAULT ON; inert while the prune is off).
+bool BloodSunMachinationsCastPruneOn();
 // The USER's tutor-target rule (B3) for one card: the most copies of it a tutor may fetch now (0 = not a target;
 // a large number = unlimited). `transmute` = Dimir Machinations' transmute search (Grim Tutor is a target there only).
 int BloodSunTutorTargetCap(const GameState& s, int controller, const CardDefinition& def, bool transmute);

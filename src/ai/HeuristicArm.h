@@ -1097,6 +1097,7 @@ enum Slot : int
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
     BLOODSUN_USER_PRUNE,      // MTG_BLOODSUN_USER_PRUNE  Blood Sun step 6c: the USER's tutor-target and land-play RESTRICTIONS (ledger B3 / B4, USER 2026-11-20; BloodSunProvider): Revelation never at X 0, at X 1 only with another Revelation in hand; tutor targets (Revelation packages, Grim Tutor, Machinations' transmute) limited to Blood Sun while we have none, Fastbond until one is out or in hand, Exploration at life <= 10 with no Fastbond out, the Lotuses / Scorched Ruins, Time Warp, Revelation, Emrakul (+ Carnarium / City of Brass when Blood Sun is in hand with no red source; Grim Tutor by transmute only); Lotus Field == Lotus Vale under Blood Sun always; pre-Blood Sun no Scorched Ruins and a Lotus only to cast a Blood Sun in hand. Default ON (USER-authored); =0 -> the unrestricted step-6b search (the A/B arm)
     BLOODSUN_EXPLORATION_ANYLIFE,// MTG_BLOODSUN_EXPLORATION_ANYLIFE  A/B ARM of MTG_BLOODSUN_USER_PRUNE: Exploration is a tutor target at ANY life (still never with a Fastbond on our battlefield). Default OFF (the USER's low-life reading, life <= 10); inert while the prune is off
+    BLOODSUN_PRUNE_MACHINATIONS_CAST,// MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST  SUB-LEVER of MTG_BLOODSUN_USER_PRUNE (Blood Sun step 6e, ledger B5): Dimir Machinations' CAST mode (the top-3 look) is not offered at all, the transmute only. The opponent-target cast is pruned by MTG_BLOODSUN_USER_PRUNE itself (B5, decided); this sub-lever removes the SELF-target cast too (the USER's "tempted" lean, measured at Stage 5). Default ON (provisional); inert while the prune is off
     COUNT
 };
 
@@ -2138,6 +2139,7 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_REACH",
         "MTG_BLOODSUN_USER_PRUNE",
         "MTG_BLOODSUN_EXPLORATION_ANYLIFE",
+        "MTG_BLOODSUN_PRUNE_MACHINATIONS_CAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
