@@ -6,12 +6,10 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
 
 ## Checkpoint (update after every milestone)
 
-* **Last completed stage:** Stage 1 coverage; Stage 2 research drafts 11/13 in
+* **Last completed stage:** Stage 1 coverage; Stage 2 research drafts 13/13 (ALL) in
   `logs/beasts/drafts/*.md` (Thragtusk, Contested Cliffs, Packleader, Cragplate Baloth, Krosan
   Warchief, Questing Beast, Elder Gargaroth, Garruk's Harbinger, Kaheera(+Cavern recheck), Migloz,
   Nykthos).
-* **Still running (background agents, read-only):** Woodland Bellower, Bloated Contaminator
-  research. Both were sent the correction that Contaminator is a Phyrexian Beast.
 * **Baseline build:** `./build.sh` (Release) of the worktree, log
   `/workspaces/MagicDeckTester/build/scratch/beasts_build0.log` (rc appended at the end).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
@@ -77,6 +75,8 @@ Bracket notes to re-check for THIS deck:
 | Migloz | 3 | drafted | oil_counters int; searched pump (ActivatePump mode 4); Steelbane destroy w/ oil + own-target provider prune; vig/menace PROVISIONAL |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
 | Nykthos | 2 | drafted | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, cache key!) |
+| Bloated Contaminator | 2 (+3) | drafted | NEW toxic + combat_damage_self_proliferate (closed-table dominant set, viewer dragon multi-pick); poison in sim key + no-win bounds; 2HG 15 poison |
+| Woodland Bellower | 2 | drafted | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order PROVISIONAL |
 | Garruk's Packleader | 1 | drafted | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
 
 Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
@@ -113,6 +113,14 @@ Beasts-only params from several new cards.
    alternative is a per-turn gate live only after a combat-time draw/dig.
 3. **Elder Gargaroth's life mode** is folded away in the provider as a sound dominance (nothing
    reads our life; max self-damage 13 < 20). The viewer still offers all three modes.
+
+4. **Packleader + Bellower trigger order (CR 603.3b).** When Bellower enters, Packleader's draw
+   and Bellower's search trigger together; the engine always resolves the draw first (pre-shuffle
+   top card). Default: disclose as an ordering collapse; the alternative is a searched order axis.
+5. **Other deck (Merfolk Turns):** Cavern of Souls' "any creature" simplification lets its
+   coloured mana pay 4 Seahunter (Human Mercenary, not Merfolk). Fixing it moves Merfolk Turns GT.
+6. **Adaptive Omnitool** (another deck) appears to take its combat dig as the provider's top
+   pick with no searched pin — a possible in-window greedy (found while drafting Harbinger).
 
 ## Approved deferrals
 
