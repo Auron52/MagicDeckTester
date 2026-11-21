@@ -554,6 +554,10 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state);
 // (AIEngine::TapForCost / TurnSolver's TapForCostDirect) differing only in the `available`
 // accounting snapshot; parameters as in TapForCostSharedOnce (executor: &pool,false;
 // rollout: nullptr,true).
+// MTG_AURA_HOST_LINE_KEEP: false when hiding a land Aura's declared host (`host_num`) while it pays `bill` strands the
+// rest of the applying line (g_line_unpaid_cost net of `bill`) and paying it unheld would not -- every host-hold cast
+// site (executor, rollout apply, both payability walks) consults it before reserving. True (hold) otherwise.
+bool AuraHostHoldKeepsLine(const GameState& s, const Card& aura, int host_num, const ManaCost& bill, bool for_creature);
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco);
 

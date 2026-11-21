@@ -11359,7 +11359,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // `available` is re-derived around the reservation exactly like the tap-ahead blocks above
         // (a failed TapForCost restores the board atomically).
         int reserved_host = -1;
-        if (((def->params.is_land_aura && def->params.land_aura_extra_mana > 0)
+        if (((def->params.is_land_aura && def->params.land_aura_extra_mana > 0
+              && AuraHostHoldKeepsLine(state, def->card, enchant_target, effective, def->card.IsCreature()))
               || riders.awaken)
             && enchant_target > 0)
         {
