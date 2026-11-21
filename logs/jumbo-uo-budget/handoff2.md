@@ -72,6 +72,16 @@ ran contended, so its CPU column is NOT comparable). `on` 1000-game slice identi
    Outputs `$S/prof/<tag>/batch.{out,err}`, DONE marker `$S/prof/DONE_m`. If build_m fails, the waiter exits 1.
 4. Box-lock screen chain (chain_scr.sh, flock PID 200977): FINISHED 15:53 UTC rc=0 (section C).
 
+## UPDATE (after the handoff was written): jobs 1 and 3 are GONE
+The lane build (PID 199788) and the chained memo-check waiter (283403/283808/283809) were TERMINATED while still waiting
+for lane slots. The build never started (no `$S/build_m.log`), so this was NOT a compile failure, and `$S/mtg.m` does not
+exist. Only job 2 (diagnostics, PID 276284) is still queued. The stale objects for ValueArm.h dependents and TurnSolver.cpp
+are already deleted in `build/wt/agent-a1cd888d17514cedb`.
+FIRST STEP for the successor: re-run the build of 102922d37 in the lane:
+`cd <worktree> && bash /workspaces/MagicDeckTester/scripts/box_lane.sh --slots 4 --cap-gb 3 -- bash -c "./build.sh > $S/build_m.log 2>&1; echo rc=\$? >> $S/build_m.log"`,
+and on rc=0 run `cp build/Release/mtg $S/mtg.m`. Then run `box_lane.sh --slots 4 --cap-gb 3 -- $S/prof/run_m.sh` (DONE marker
+`$S/prof/DONE_m`). Arm the waiters on PIDs or markers yourself.
+
 ## Remaining, in order
 1. When `$S/prof/DONE_m` exists: check m_verify mismatches (grep "\[pay-memo\]" batch.err) = 0; per-game identity of
    m_on vs m_on_nomemo and m_off vs m_off_nomemo (turn + digest + units in .wins / batch.out); CPU m_on vs m_on_nomemo.
