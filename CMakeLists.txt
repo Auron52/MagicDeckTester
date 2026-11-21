@@ -609,6 +609,7 @@ add_executable(mtg-test
     test/unit/test_rollout_burn_kill.cpp
     test/unit/test_owner_graveyard.cpp
     test/unit/test_nc_scry_unseen.cpp
+    test/unit/test_cast_scry_search.cpp
     test/unit/test_izzet_mana_fidelity.cpp
     test/unit/test_depletion_hold.cpp
     test/unit/test_lfe_fury.cpp

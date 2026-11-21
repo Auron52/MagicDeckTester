@@ -1039,7 +1039,13 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
 
     ContinueChainLightning(state, def, chain_hit_controller);
     if (def.params.cast_scry > 0)
-    { ScryTop(state, def.params.cast_scry, def.card.m_name); }
+    {
+        // The burn's own searched scry (Action::scry_pin via CastRiders -> entry.scry_pin; Magma Jet): the pin the
+        // search scored, consumed by this ScryTop. Lockstep with apply_one's DirectDamage branch.
+        std::optional<ScriptedTopChoice> stc_pin;
+        if (entry.scry_pin >= 0) { stc_pin.emplace(entry.scry_pin); }
+        ScryTop(state, def.params.cast_scry, def.card.m_name);
+    }
     MoveToGraveyard(state, entry);
 }
 
