@@ -1510,3 +1510,69 @@ TEST_CASE("Three Tree City: Dockhand before Seahunter is on the menu and applies
         MESSAGE("bound alone: applied=" << applied);
     }
 }
+
+// Option (a)'s gate slice (2026-11-21), s30000034 T5: four Islands (one just played), Three Tree City and four Merfolk
+// (two Tidal Warriors, Emperor Mihail II, Merfolk Sovereign); the line is Rishadan Dockhand with Mihail's {1} paid, then
+// Wanderwine Prophets. Dockhand's {U} takes an Island; Mihail's {1} then took City's plain {C}, and Prophets' {4}{U}{U}
+// met two Islands. An Island for the {1} leaves two Islands to feed City, which the cast Dockhand and the token grow to
+// six Merfolk: six {U}. The scaled-land route saw no hold-out because it priced City at the four Merfolk on the board
+// while the trigger is paid; MTG_SCALED_GROWTH_BOUND credits the two entrants (PendingScaledEntrants) to its
+// rest-of-line check.
+TEST_CASE("Mihail's {1} keeps Three Tree City for Wanderwine Prophets (s30000034 T5, MTG_SCALED_GROWTH_BOUND)")
+{
+    LoadMerfolkCards();
+    const CardDefinition* dock = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    const CardDefinition* prophets = CardDatabase::Instance().Lookup("Wanderwine Prophets");
+    REQUIRE(dock != nullptr);
+    REQUIRE(prophets != nullptr);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = on ? 1 : 0;
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 5;
+        AddPermanent(s, "Island", 10);
+        AddPermanent(s, "Tidal Warrior", 53);
+        AddPermanent(s, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+        AddPermanent(s, "Tidal Warrior", 54);
+        AddPermanent(s, "Island", 11);
+        AddPermanent(s, "Emperor Mihail II", 8);
+        AddPermanent(s, "Island", 12);
+        AddPermanent(s, "Merfolk Sovereign", 27);
+        AddPermanent(s, "Island", 13);
+        REQUIRE(ScaledManaCreatureCount(s, &s.battlefield[2]) == 4);
+        const ManaCost pro = EffectiveSpellCost(*prophets, s);
+        ManaCost hold = dock->card.m_mana_cost;
+        AddManaCost(hold, pro);
+        s.scripted_mihail_pay_choice.Pin(1);
+        s.scripted_mihail_pay_choice.bits[0] = 1;
+        bool prophets_paid = false;
+        int tokens = 0;
+        {
+            LineUnpaidCostScope luc(hold);
+            Card dc = dock->card;
+            dc.m_number = 31;
+            {
+                SpellSubtypePayScope pay(&dc);
+                REQUIRE(TapForCostDirect(s, dock->card.m_mana_cost, /*for_creature=*/true));
+            }
+            SubManaCost(g_line_unpaid_cost, dock->card.m_mana_cost);
+            FireOnCastTriggers(s, *dock, 1);   // Mihail: pay {1}, a Merfolk token
+            for (const Permanent& p : s.battlefield) { tokens += p.is_token ? 1 : 0; }
+            CHECK(s.battlefield[2].tapped == !on);   // City held out of the {1} only with the credit
+            Permanent dp;
+            dp.card = dc;
+            dp.controller_index = 0;
+            dp.owner_index = 0;
+            s.battlefield.push_back(dp);
+            Card pc = prophets->card;
+            pc.m_number = 57;
+            SpellSubtypePayScope pay(&pc);
+            prophets_paid = TapForCostDirect(s, pro, /*for_creature=*/true);
+        }
+        heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = -1;
+        CHECK(tokens == 1);
+        CHECK(prophets_paid == on);
+    }
+}

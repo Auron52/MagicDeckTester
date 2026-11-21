@@ -11525,12 +11525,34 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
     if (later.ManaValue() <= 0) { return 0; }
     if (cost_in.ManaValue() <= static_cast<int>(state.floating_mana.Total())) { return 0; }
     const int active = state.active_player_index;
+    // MTG_SCALED_GROWTH_BOUND: the creatures this payment is made ahead of count for City in the rest of the line --
+    // a cast trigger's (Mihail's {1}: the cast creature and its token, PendingScaledEntrants) or, for a creature
+    // spell's own payment, that creature. Armed (ScaledEntrantCreditArmed) only around the rest-of-line solves
+    // below: THIS payment is made at City's current count.
+    const bool grow = ScaledGrowthBoundOn();
+    std::optional<PendingScaledEntrantsScope> _own_entrant;
+    if (grow && PendingScaledEntrants().k == 0)
+    {
+        if (const Card* pc = PayingSpellCard(); pc != nullptr && pc->IsCreature())
+        {
+            ScaledEntrants own;
+            own.e[own.k++] = {&pc->m_subtypes, nullptr, 1};
+            _own_entrant.emplace(own);
+        }
+    }
+    struct ArmCredit
+    {
+        bool prev;
+        explicit ArmCredit(bool on) : prev(ScaledEntrantCreditArmed()) { ScaledEntrantCreditArmed() = on || prev; }
+        ~ArmCredit() { ScaledEntrantCreditArmed() = prev; }
+    };
     bool scaled_up = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr || !IsScaledManaLand(*d) || LandTypeChangedToIsland(state, p)) { continue; }
+        const ArmCredit _arm(grow);
         if (ScaledManaCreatureCount(state, &p) >= 1) { scaled_up = true; break; }
     }
     if (!scaled_up) { return 0; }
@@ -11566,9 +11588,15 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         { return 0; }
         // (No amount-short exit, unlike the ramp route: a fed scaled land MAKES mana, so a trial board short of the
         // rest's amount can still be the greedy's strand.)
+        const ArmCredit _arm(grow);
         if (RampLaterPayableConsume(t.Board(), later, rock)) { return 0; }
     }
-    if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
+    {
+        // (An upper bound that gates the search for a hold-out: crediting the entrants to this payment's share too
+        // only lets the route look; each hold-out below pays this bill at City's real count.)
+        const ArmCredit _arm(grow);
+        if (!RampLaterPayable(state, AddManaCosts(cost_in, later), rock)) { return 0; }
+    }
     // A strand (rare): the same trial again, for the sources it tapped.
     RampScratch a(state);
     ManaPool av_a = available ? *available : ManaPool{};
@@ -11583,6 +11611,7 @@ static int ScaledLandRouteHold(const GameState& state, const ManaCost& cost_in, 
         ManaPool av_b = available ? *available : ManaPool{};
         if (!PayHolding(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
         { continue; }
+        const ArmCredit _arm(grow);
         if (!RampLaterPayableConsume(b.Board(), later, rock)) { continue; }
         g_slr_fired.fetch_add(1, std::memory_order_relaxed);
         return held;
