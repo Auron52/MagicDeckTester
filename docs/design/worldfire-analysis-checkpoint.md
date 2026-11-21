@@ -49,15 +49,21 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   default White Knights). Cherry-picked here as 4668b69b7, 355e5282f. Its tiers: smoke 176/235, regression
   277/375 keys move; 32 better / 213 worse games, 199 of the worse vs life-gain lists (correct rules).
 
+## Done since (~17:00 UTC)
+- GT accepted smoke+regression for the land-play fix + Worldfire NEW keys: c81c9fd51 (1369 keys, consistent).
+- Claude-play sweep DONE (16 games, ledger f2577e4a5): 0 legality flags; FOUND + FIXED the Irencrag Feat
+  restrictor counting a SUSPEND as a cast (008f1147d, scenario worldfire_feat_suspend_bolt_kill; scratch
+  worktree .claude/worktrees/wf-featfix, branch wip/wf-featfix -- remove later via safe_worktree_remove.sh).
+  Deferred items: docs/design/worldfire-sweep-deferred.md.
+
 ## Running
-- ACCEPT RUN (heavy_run, build/scratch/worldfire/accept_run.sh): regression.sh --both (logs/worldfire/
-  tiers_both.log, BOTH_EXIT=) then --overnight --deck=worldfire,worldfire2hg (tiers_on_wf.log, ON_EXIT=);
-  marker logs/worldfire/ACCEPT_RUN.DONE. Then: inspect, --both --accept, --overnight --deck=worldfire,
-  worldfire2hg --accept, check_gt_logs, commit; message the free-turn agent.
-- Claude-play sweep: 4 Opus agents x 4 games, seed 9300001 gi 0-15 (scratch build/scratch/worldfire/sweep/a1..a4).
-  DO NOT rebuild this worktree while they run.
-- Free-turn agent #2 in .claude/worktrees/freeturn: rebasing wip/freeturn onto wip/worldfire; waits for the
-  accept before smoke; handoff2 at logs/freeturn/handoff2.md if it stops.
+- FIX RUN (heavy_run, build/scratch/worldfire/fix_run.sh): build, units, regression.sh --both
+  (logs/worldfire/tiers_fix.log), --overnight --deck=worldfire,worldfire2hg (tiers_fix_on.log);
+  marker logs/worldfire/FIX_RUN.DONE. Expect only worldfire*/dragonstorm* to move. Then accept smoke+
+  regression (ack note) + overnight --deck=worldfire,worldfire2hg, check_gt_logs, commit; message the
+  free-turn agent (it waits for that) to rebase onto wip/worldfire.
+- gi4 (seed 9300005) d8 b0 replay on box_lane: build/scratch/worldfire/gi4/{d8b0.out,DONE}.
+- Free-turn agent #2 (.claude/worktrees/freeturn): rebased, building/units; waiting for the parent's message.
 
 ## Next, in order
 1. (done) integrator #2.
