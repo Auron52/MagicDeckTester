@@ -143,7 +143,24 @@ branch has not done. One repro checked on the screened binary:
 
 ## 2b. What the capped decisions cost after the screen
 
-(pending: perf of g30 T6 on the screened binary)
+`perf record -F 49` of g30 T6 on the screened binary (49 plans audited before the backstop, 6.0M applies). The prune's
+comparisons fell from ~75% to ~7% (`memcmp` 3.4%, `_Rb_tree_increment` 1.7%, `ParetoCovers` 0.8%). The top entries
+now:
+
+* `Realize` self time 20.9%. The online prune's bucket scan is inlined here: each admission still walks every live
+  frontier of its key and tests the screen, so the scan is still quadratic, just much cheaper per pair. The likely next
+  exact step is to index each key's live frontiers by sum: a strict cover of x is only possible by a smaller sum, and
+  x is only coverable by a sum >= its own, so each loop can skip half the bucket without testing it, or more with
+  mask groups.
+* `BuildSimKeyBase` 7.9% + its lambda 1.5% (the `simkey` priced kind; ~15 per apply).
+* String hashing / `_Hashtable<std::string>` 3.8%, `MazeControlsGateNamed` 1.9%, `CollectActivationKeys` 1.4%,
+  `FsOrderSig` 1.4%, `GameState` copy 1.2%, `operator new/delete` 2.8%: per-node costs of an apply, none dominant.
+
+So the branching is the remaining lever: these decisions make 6-8M applies for 106 plans (~75K per plan). Before more
+per-node work, the next step is the census of what those applies enumerate (pay options per frontier, `options` 11.9M
+for 4.7M frontiers), looking for a sound collapse among name-distinct Gates. The handoff's hypothesis is a capability
+dominance of plain lands with the same parameters except `produces`, scoped to the oracle's checks only, since
+Res/Covers are also read by the engine payer's RefinePayment.
 
 ## 4. Questions for the USER
 
