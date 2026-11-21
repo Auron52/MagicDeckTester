@@ -4001,6 +4001,18 @@
     "toughness": "2",
     "type_line": "Creature — Human Barbarian"
   },
+  "Keldon Halberdier": {
+    "cmc": 5.0,
+    "keywords": [
+      "First strike",
+      "Suspend"
+    ],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "First strike\nSuspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)",
+    "power": "4",
+    "toughness": "1",
+    "type_line": "Creature — Human Warrior"
+  },
   "Keldon Marauders": {
     "cmc": 2.0,
     "keywords": [
@@ -5124,6 +5136,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Mystical Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Search your library for an instant or sorcery card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Mythic Proportions": {
     "cmc": 7.0,
     "keywords": [
@@ -5494,6 +5515,15 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Drake"
+  },
+  "Personal Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Search your library for a sorcery card, reveal it, then shuffle and put that card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Phantasmal Image": {
     "cmc": 2.0,
@@ -8691,6 +8721,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Saga"
+  },
+  "Worldfire": {
+    "cmc": 9.0,
+    "keywords": [],
+    "mana_cost": "{6}{R}{R}{R}",
+    "oracle_text": "Exile all permanents. Exile all cards from all hands and graveyards. Each player's life total becomes 1.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Worldly Tutor": {
     "cmc": 1.0,

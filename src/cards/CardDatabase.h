@@ -1666,6 +1666,19 @@ struct CardParams
     // Destroy all enchantments on resolution (Reverent Silence) -- includes the caster's own.
     bool destroy_all_enchantments = false;
 
+    // WORLDFIRE (2026-11-21, docs/design/analysis-Worldfire.md): "Exile all permanents. Exile all cards
+    // from all hands and graveyards. Each player's life total becomes 1." Two clauses, two params, one
+    // shared resolver (ResolveExileAllAndSetLife, SpellEffects.h), called at the instant/sorcery
+    // resolution site of BOTH worlds (EffectHandler::ResolveImpl / TurnSolver apply_one), in the oracle's
+    // order: the exile first, then the life totals. Cards ALREADY in exile (suspended, staged, linked)
+    // are untouched -- a suspended Rift Bolt keeps its time counter -- and floating mana survives (the
+    // pool empties only at the end of a step). Both default OFF -> every other card is byte-identical.
+    bool exile_all_permanents_hands_graveyards = false;
+    // "Each player's life total becomes N" (CR 119.5: the player gains or loses the difference). -1 = off.
+    // Also ARMS own_death_live (GoldFishRunner::StampDeckTraits): at life 1 every life payment (a fetch's
+    // 1) kills us, so our own death must end the game in both worlds.
+    int  each_player_life_becomes = -1;
+
     // Tutor: search the library for a card whose card type is in tutor_types and move it to
     // the hand (tutor_to_hand) or the top of the library (tutor_to_top). The target is the deck
     // provider's TutorCandidates (searched over the tutor axis; Anti-Lifegain narrows it). Idyllic

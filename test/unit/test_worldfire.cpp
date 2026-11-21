@@ -1,0 +1,231 @@
+// WORLDFIRE onboarding (2026-11-21, docs/design/analysis-Worldfire.md): the exile-everything / life-becomes-1
+// resolver (ResolveExileAllAndSetLife) in both worlds, the zones it must leave alone (exile: suspended cards,
+// staged cards; floating mana), and Keldon Halberdier's suspend haste (CR 702.62a).
+#include <doctest/doctest.h>
+#include "ai/AIEngine.h"
+#include "ai/ManaPayment.h"
+#include "ai/TurnSolver.h"
+#include "cards/CardDatabase.h"
+#include "core/EffectHandler.h"
+#include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
+#include "runner/GoldFishRunner.h"
+#include "mtg_test_seam.h"
+
+#include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+const CardDefinition& WFDef(const std::string& name)
+{
+    static const bool loaded = [] { CardDatabase::Instance().LoadFromJson(
+        ResolveHeuristicDefaultsPath("src/cards/data/cards.json")); return true; }();
+    REQUIRE(loaded);
+    const auto* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE(d != nullptr);
+    return *d;
+}
+Card WFCard(const std::string& name, int id)
+{ Card c = WFDef(name).card; c.m_number = id; return c; }
+void WFPut(GameState& s, const std::string& name, int id, int who = 0, bool tapped = false)
+{
+    Permanent p; p.card = WFCard(name, id); p.controller_index = who; p.owner_index = who;
+    p.tapped = tapped; p.entered_this_turn = false; s.battlefield.push_back(p);
+}
+// A scheduled opponent spawn: a def-less "1/1 Creature" token in the spawn number band.
+void WFSpawn(GameState& s)
+{
+    Card t; t.m_name = "1/1 Creature"; t.RehashName(); t.AddType(CardType::Creature);
+    t.m_power = 1; t.m_toughness = 1; t.m_number = s.next_opp_spawn_number++;
+    Permanent p; p.card = t; p.controller_index = 1; p.owner_index = 1; s.battlefield.push_back(p);
+}
+// The board both worlds start from: our nine Mountains (Worldfire's {6}{R}{R}{R}), a Lotus Bloom in play,
+// a Sandstone Needle carrying its depletion counters, a creature, one of OUR tokens; the opponent's land
+// and a scheduled spawn; cards in every hand and graveyard; a Rift Bolt suspended this turn.
+GameState WFBase()
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 5;
+    for (int i = 0; i < 9; ++i) { WFPut(s, "Mountain", 10 + i); }
+    WFPut(s, "Lotus Bloom", 20);
+    WFPut(s, "Sandstone Needle", 21);
+    s.battlefield.back().counters.Add(Counter::Type::Depletion, 2);
+    WFPut(s, "Keldon Halberdier", 22);
+    {
+        Permanent tok; tok.card = WFCard("Keldon Halberdier", s.next_token_number++);
+        tok.is_token = true; tok.controller_index = 0; tok.owner_index = 0; s.battlefield.push_back(tok);
+    }
+    WFPut(s, "Island", 100001, 1);
+    WFSpawn(s);
+    s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Ponder", 31), WFCard("Rift Bolt", 32)};
+    s.players[0].graveyard = {WFCard("Brainstorm", 33)};
+    s.players[1].hand = {WFCard("Mountain", 100002), WFCard("Lightning Bolt", 100003)};
+    s.players[1].graveyard = {WFCard("Island", 100004)};
+    s.players[0].suspended_cards.push_back({WFCard("Rift Bolt", 34), s.TurnSeq() + 1});
+    for (int i = 0; i < 5; ++i) { s.players[0].library.push_back(WFCard("Island", 40 + i)); }
+    return s;
+}
+std::vector<std::pair<std::string, int>> WFZone(const std::vector<Card>& z)
+{
+    std::vector<std::pair<std::string, int>> out;
+    for (const Card& c : z) { out.emplace_back(c.m_name.str(), c.m_number); }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+bool WFInExile(const GameState& s, int number)
+{
+    return std::any_of(s.exile.begin(), s.exile.end(), [&](const Card& c) { return c.m_number == number; });
+}
+}
+
+TEST_CASE("worldfire: executor and rollout reach the same post-Worldfire state")
+{
+    const GameState base = WFBase();
+
+    GameState real = base;
+    AIEngine ai;
+    ManaPool available = AvailableManaPool(real, nullptr);
+    MtgTestSeam::CastSpellFromHand(ai, real, real.players[0].hand.front(), available, 0);
+    REQUIRE(real.stack.size() == 1);
+    StackEntry entry = real.stack.back(); real.stack.pop_back();
+    EffectHandler::Resolve(real, entry, WFDef("Worldfire"));
+
+    GameState roll = base;
+    TurnSolver::Plan plan; Action cast; cast.kind = Action::Kind::CastFromHand;
+    cast.card_name = "Worldfire"; cast.hand_index = 0;
+    plan.actions.push_back(cast);
+    TurnSolver::ApplyPlan(roll, plan, true);
+
+    for (const GameState* g : {&real, &roll})
+    {
+        const GameState& s = *g;
+        CHECK(s.battlefield.empty());
+        CHECK(s.players[0].hand.empty());
+        CHECK(s.players[1].hand.empty());
+        // Worldfire is on the stack while it resolves, so it lands in the graveyard AFTER the exile.
+        REQUIRE(s.players[0].graveyard.size() == 1);
+        CHECK(s.players[0].graveyard[0].m_name.str() == "Worldfire");
+        CHECK(s.players[1].graveyard.empty());
+        CHECK(s.players[0].life == 1);
+        CHECK(s.players[1].life == 1);
+        CHECK(s.opponent_lost_life_this_turn);
+        // Every nontoken card that was on the battlefield, in a hand or in a graveyard is in exile ...
+        for (int n : {10, 18, 20, 21, 22, 31, 32, 33, 100001, 100002, 100003, 100004}) { CHECK(WFInExile(s, n)); }
+        // ... the tokens (ours and the spawn) ceased to exist, and the exiled Needle is its printed card.
+        CHECK(s.exile.size() == 9 + 3 + 1 + 2 + 2 + 2);   // battlefield 13, hands 4, graveyards 2
+        // The suspended Rift Bolt is untouched: still exiled with its counter, arriving next turn.
+        REQUIRE(s.players[0].suspended_cards.size() == 1);
+        CHECK(s.players[0].suspended_cards[0].arrive_turn == base.TurnSeq() + 1);
+        CHECK(s.players[0].library.size() == 5);
+    }
+    CHECK(WFZone(real.exile) == WFZone(roll.exile));
+    CHECK(WFZone(real.players[0].graveyard) == WFZone(roll.players[0].graveyard));
+    CHECK(real.floating_mana.Total() == roll.floating_mana.Total());
+}
+
+TEST_CASE("worldfire: a Rift Bolt suspended this turn kills at the next upkeep")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 4;
+    for (int i = 0; i < 10; ++i) { WFPut(s, "Mountain", 10 + i); }
+    s.players[0].hand = {WFCard("Rift Bolt", 30), WFCard("Worldfire", 31)};
+    for (int i = 0; i < 5; ++i) { s.players[0].library.push_back(WFCard("Island", 40 + i)); }
+    TurnSolver::Plan plan;
+    Action sus; sus.kind = Action::Kind::Suspend; sus.card_name = "Rift Bolt"; sus.hand_index = 0;
+    sus.cost = WFDef("Rift Bolt").params.suspend_cost.value();
+    Action cast; cast.kind = Action::Kind::CastFromHand; cast.card_name = "Worldfire"; cast.hand_index = 1;
+    plan.actions = {sus, cast};
+    TurnSolver::ApplyPlan(s, plan, true);
+    CHECK(s.battlefield.empty());
+    CHECK(s.players[1].life == 1);
+    REQUIRE(s.players[0].suspended_cards.size() == 1);
+    CHECK_FALSE(OpponentHasLost(s));
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    CHECK(s.players[1].life <= 0);
+    CHECK(OpponentHasLost(s));
+    CHECK(s.players[0].suspended_cards.empty());
+}
+
+TEST_CASE("worldfire: exile, staged cards and floating mana are untouched")
+{
+    GameState s = WFBase();
+    s.floating_mana.red = 3; s.floating_mana.blue = 1;
+    Card staged = WFCard("Ponder", 50); staged.m_is_staged = true; staged.m_staged_expiry = s.TurnSeq();
+    s.players[0].hand.push_back(staged);
+    s.players[0].staged_cards.push_back({WFCard("Brainstorm", 51), s.TurnSeq()});
+    s.exile.push_back(WFCard("Lightning Bolt", 52));
+    ResolveExileAllAndSetLife(s, WFDef("Worldfire").params);
+    CHECK(s.floating_mana.red == 3);
+    CHECK(s.floating_mana.blue == 1);
+    REQUIRE(s.players[0].hand.size() == 1);            // the rollout's merged impulse card is IN exile already
+    CHECK(s.players[0].hand[0].m_number == 50);
+    CHECK(s.players[0].staged_cards.size() == 1);
+    CHECK(WFInExile(s, 52));
+    REQUIRE(s.players[0].suspended_cards.size() == 1);
+    CHECK(s.players[0].suspended_cards[0].card.m_name.str() == "Rift Bolt");
+    // 2HG: the second head's hand is exiled too.
+    GameState h = WFBase();
+    h.opponent2_hand = {WFCard("Mountain", 110001), WFCard("Ponder", 110002)};
+    ResolveExileAllAndSetLife(h, WFDef("Worldfire").params);
+    CHECK(h.opponent2_hand.empty());
+    CHECK(WFInExile(h, 110001));
+    CHECK(WFInExile(h, 110002));
+}
+
+TEST_CASE("worldfire: the deck arms own death, so a 1-life payment at 1 loses in the rollout")
+{
+    Decklist with;
+    with.mainboard.push_back(WFDef("Worldfire").card);
+    with.mainboard.push_back(WFDef("Mountain").card);
+    GameState a;
+    GoldFishRunner::StampDeckTraits(a, with);
+    CHECK(a.own_death_live);
+    Decklist without;
+    without.mainboard.push_back(WFDef("Rift Bolt").card);
+    without.mainboard.push_back(WFDef("Mountain").card);
+    GameState b;
+    GoldFishRunner::StampDeckTraits(b, without);
+    CHECK_FALSE(b.own_death_live);
+    // At 1 life with own death armed, a win the same instant we die is not a win (OpponentHasLost).
+    a.players[0].life = 0; a.players[1].life = 0;
+    CHECK_FALSE(OpponentHasLost(a));
+}
+
+TEST_CASE("worldfire: Keldon Halberdier arrives off suspend with haste and attacks that turn")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 6;
+    s.players[0].suspended_cards.push_back({WFCard("Keldon Halberdier", 60), s.TurnSeq()});
+    ProcessSuspendArrivals(s, 0);
+    REQUIRE(s.battlefield.size() == 1);
+    const Permanent& h = s.battlefield[0];
+    CHECK(h.entered_this_turn);
+    CHECK(h.card.HasKeyword(Keyword::Haste));
+    CHECK(h.card.HasKeyword(Keyword::FirstStrike));
+    CHECK(h.CanAttack());
+    CHECK(s.spells_cast_this_turn == 1);
+    // A HARD-CAST Halberdier has no haste (the grant is the suspend cast's).
+    CHECK_FALSE(WFDef("Keldon Halberdier").card.HasKeyword(Keyword::Haste));
+
+    // The rollout sees the hasty attack: with the opponent at 4, a Halberdier arriving at the next upkeep wins
+    // THAT turn (without haste it would be the turn after).
+    GameState r; r.active_player_index = 0; r.turn_number = 3; r.players[1].life = 4;
+    r.players[0].suspended_cards.push_back({WFCard("Keldon Halberdier", 61), r.TurnSeq() + 1});
+    for (int i = 0; i < 8; ++i) { r.players[0].library.push_back(WFCard("Island", 70 + i)); }
+    const int win = TurnSolver::SimulateToEndForTest(r, /*depth=*/1, /*max_turns=*/8, /*cutoff=*/99,
+                                                     /*second_main=*/false);
+    CHECK(win == 4);
+}
+
+TEST_CASE("worldfire: suspending Halberdier is not a cast, so it stays legal after Irencrag Feat")
+{
+    GameState s; s.active_player_index = 0; s.turn_number = 2;
+    WFPut(s, "Mountain", 10);
+    s.players[0].hand = {WFCard("Keldon Halberdier", 20)};
+    s.casts_remaining_this_turn = 0;   // Irencrag Feat's "only one more spell" already spent
+    ApplySuspend(s, 0, "Keldon Halberdier");
+    CHECK(s.players[0].hand.empty());
+    REQUIRE(s.players[0].suspended_cards.size() == 1);
+    CHECK(s.players[0].suspended_cards[0].arrive_turn == s.TurnSeq() + 4);
+    CHECK(s.spells_cast_this_turn == 0);
+}

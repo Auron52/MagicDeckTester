@@ -1639,6 +1639,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("reveal_or_pay_cost"))
         p.reveal_or_pay_cost = ManaCostFromString(params["reveal_or_pay_cost"].get<std::string>());
     p.destroy_all_enchantments  = params.value("destroy_all_enchantments", false);
+    p.exile_all_permanents_hands_graveyards = params.value("exile_all_permanents_hands_graveyards", false);
+    p.each_player_life_becomes  = params.value("each_player_life_becomes", -1);
     p.tutor_to_hand             = params.value("tutor_to_hand", false);
     p.tutor_to_top              = params.value("tutor_to_top", false);
     p.tutor_library_position    = params.value("tutor_library_position", 0);

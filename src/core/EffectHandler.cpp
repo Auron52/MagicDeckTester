@@ -813,6 +813,11 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 for (int k = 0; k < def.params.extra_turns_on_resolve; ++k)
                 { ResolveCastTriggerExtraTurn(state, def.card.m_name.str(),
                     entry.player_target != 0 ? 1 - entry.controller_index : entry.controller_index); }
+                // Worldfire: exile every permanent / hand / graveyard, then each life total becomes 1 --
+                // the LAST effect before the spell itself moves to the (emptied) graveyard. Shared resolver;
+                // rollout twin in apply_one just before its graveyard move (lockstep). Two param tests else.
+                if (def.params.exile_all_permanents_hands_graveyards || def.params.each_player_life_becomes >= 0)
+                { ResolveExileAllAndSetLife(state, def.params); }
                 MoveToGraveyard(state, entry);
             }
             return true;
