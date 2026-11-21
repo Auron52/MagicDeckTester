@@ -1071,6 +1071,7 @@ enum Slot : int
     FIVECOLOUR_TRIOME_BESIDE, // MTG_FIVECOLOUR_TRIOME_BESIDE  Five Colour (USER 2026-11-17 "On Five Colour we could give it a try."): when RULE 6 ranks an enters-tapped land (Zagoth Triome, Jetmir's Garden) first, the best untapped pick moves to second place and both are searched (width 2, every route: legacy, battlefield, land drop). Default OFF pending the USER; =1 enables
     CYCLONE_LOUNGE_IDLE_AMEND,// MTG_CYCLONE_LOUNGE_IDLE_AMEND  amendment to CYCLONE_LOUNGE_IDLE's "needed" test (2026-11-18 A/B root causes, std gi 649 / 663): a mana cycling cost counts as a use only while Unpredictable Cyclone is on our battlefield, and a ritual (Seething Song) only when its float pays for another hand card. Default ON (refines the USER-adopted rule); =0 -> the 2026-11-18 test
     FIVECOLOUR_RULE6_SEES_STEPS, // MTG_FIVECOLOUR_RULE6_SEES_STEPS  Five Colour RULE 6's "is the untapped land's mana spendable this turn" test also sees, as an added use: Deathrite fuel from the cracked fetch, a colour-exact pool (multicolour lands and domain dorks no longer wild), domain growth from a coloured permanent cast first, a Greaves-hasted mana creature cast this turn, and a bigger spell replacing a cheaper one (best total mana value, not card count). Width 1 (one target). Only ever ADDS untapped preference. Default ON (USER 2026-11-21 "Rule6 looks good to me."); =0 -> the coarse RULE 6 test
+    S9_MANA_ABILITY_SKIP,     // MTG_S9_MANA_ABILITY_SKIP  site 9 (post-entry re-plan, and its after-deferred twin) is NOT opened by a creature sac outlet whose activation is a MANA ability (sac_outlet_add_mana_amount > 0: Skirk Prospector "Sacrifice a Goblin: Add {R}"). USER 2026-11-21: "the Skirk Prospector ability shouldn't be messing us up in terms of cost because it is a mana ability and should not be part of the search." The plan menus already credit the outlet as mana (MTG_SUBSET_SAC_OUTLETS / MTG_SAC_FODDER_MENU) and the payment sacrifices per the line. Default ON; =0 -> the outlet keys site 9 like any activation
     COUNT
 };
 
@@ -2086,6 +2087,7 @@ inline const char* Name(int slot)
         "MTG_FIVECOLOUR_TRIOME_BESIDE",
         "MTG_CYCLONE_LOUNGE_IDLE_AMEND",
         "MTG_FIVECOLOUR_RULE6_SEES_STEPS",
+        "MTG_S9_MANA_ABILITY_SKIP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
