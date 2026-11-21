@@ -86,9 +86,9 @@ Step-4 review (mtg-rules.md), per card -- no findings:
   never removed because control never changes in a goldfish.
 - Mystical / Personal Tutor: search, reveal, shuffle, then put on top (tutor_to_top); instant timing for
   Mystical via the upkeep window, sorcery timing for Personal.
-- Overmaster: draw 1; the uncounterable rider is inert (provisional deferral).
+- Overmaster: draw 1; the uncounterable rider is inert (approved deferral).
 - Mistrise Village: check-land semantics on Mountain/Forest subtypes (Steam Vents counts); {T}: U; the
-  {U},{T} rider is inert (provisional deferral).
+  {U},{T} rider is inert (approved deferral).
 
 Sanity (d5 b20, 40 games, seed 9100001, no profile): 39/40 won, avg 6.075 (unwon = 9), no crash or assert.
 Worldfire cast in 28/40 games, 23 of them winning the next turn. Two casts had nothing suspended and no
@@ -96,6 +96,16 @@ mana source left: game 28 (T3, with no suspend card in reach; won T7 off a topde
 game 14 (T7; unwon at max_turns 8). Whether the T3 cast is a misplay is a Stage-5 question. NOTE: the
 game log JSON writes NO action for a suspend (pre-existing, true of Rift Bolt decks too), so a suspend is
 visible only as a card leaving the hand.
+
+## Stage 4 -- baseline profile (2026-11-21, BEFORE the tutor/Bolt prunes; to be re-run after them)
+
+- `analyze_deck.py --no-rebuild` rc 0: profile written (card_scores + mulligan defaults).
+- Cost-aggregate diagnostic: COST_NEUTRAL.
+- Discard analysis: NO_RULE_CONSIDER_SEARCH on only 4 labelled decisions (0.25 regret) -- too few to act on.
+- provider_policy: PASS.
+- Card scores: Keldon Halberdier +0.44 (1st copy), Lotus Bloom +0.35/+0.37, Seething Song +0.18/+0.17,
+  Worldfire +0.05 then -0.66 for a 2nd copy, Rift Bolt -0.22/-0.28, Memory Lapse -0.44.
+- Card-score games took 85-130 s each: watch the 3x-Hinata suite cost gate.
 
 ## USER rulings this analysis
 
@@ -110,11 +120,7 @@ visible only as a card leaving the hand.
 - 2026-11-21: opponent-lockdown FREE TURNS -- see `docs/design/opponent-lockdown-free-turns.md`
   (verbatim proposal + provisional defaults).
 
-## Approved deferrals
-
-(none yet)
-
-## Provisional deferrals (await USER sign-off)
+## Approved deferrals (USER 2026-11-21: *"Yes, those are fine."*; INERT_PARAMS: see rulings above)
 
 - Overmaster: "The next instant or sorcery spell you cast this turn can't be countered" -- inert: the
   passive opponent casts no spells and our Memory Lapse is never cast (goldfish_inert).
