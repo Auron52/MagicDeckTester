@@ -1499,20 +1499,21 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // continuation, so do not reserve its red over that named cast.
         static const bool s_named_priority = EnvOn("MTG_PD_NAMED_LINE_PRIORITY", true);
         const bool named_priority = heurarm::Flag(heurarm::PD_NAMED_LINE_PRIORITY, s_named_priority);
-        // TEMP selector (pd-landdrop): 1 = no hand hold inside a known line that opens nothing unseen;
-        // 2 = 1 + that known line's own remainder is the demand even when the plan traits are stale.
-        static const int s_hold_fix = EnvInt("MTG_PD_HOLD_FIX", 0);
-        bool lu_holds_this = false;
-        {
-            const ManaCost& lu0 = g_line_unpaid_cost;
-            lu_holds_this = lu0.ManaValue() > 0 && lu0.ManaValue() >= cost_in.ManaValue()
-                && lu0.white >= cost_in.white && lu0.blue >= cost_in.blue && lu0.black >= cost_in.black
-                && lu0.red >= cost_in.red && lu0.green >= cost_in.green;
-        }
-        const bool known_line = s_hold_fix >= 1 && lu_holds_this && !g_line_opens_unseen;
-        const bool lu_line = s_hold_fix >= 2 && known_line && !named_line
-            && g_line_unpaid_cost.ManaValue() > cost_in.ManaValue();
-        const bool later_hand_hold = !known_line && state.dmg_events_armed && (!named_line || !named_priority)
+        // A CASTLESS LINE HOLDS NOTHING FOR THE HAND (MTG_PD_CASTLESS_LINE_NO_HOLD; DEFAULT ON, =0 restores the
+        // hold on every armed bill). The hold exists for a continuation that casts the in-hand Earthquake (or the
+        // Spellshock) after this payment within the same line. A plan whose live traits name no mana cast and
+        // that opens nothing unseen has no such continuation: it pays only activations (Vito's lifelink), so
+        // the extra pain buys a red no step of this line can spend. Overnight s6006 gi47 T7: the lifelink
+        // {3}{B}{B} was paid with Ancient Tomb (14 -> 8) instead of City + Citadel and three painless {C}
+        // (14 -> 10), to keep a Forge for the Earthquake nothing that turn cast; the T8 kill lands at 1 life,
+        // so the two lost life made every land-drop line lose its win (also at --depth 8 --budget-ms 0) and
+        // the search stopped playing lands on T4/T5. No plan traits at all (pt == nullptr) still holds: there
+        // nothing says what the line casts.
+        static const bool s_castless_no_hold = EnvOn("MTG_PD_CASTLESS_LINE_NO_HOLD", true);
+        const bool castless_line = pt != nullptr && pt->mana_casts == 0 && !g_line_opens_unseen
+            && heurarm::Flag(heurarm::PD_CASTLESS_LINE_NO_HOLD, s_castless_no_hold);
+        const bool later_hand_hold = state.dmg_events_armed && !castless_line
+            && (!named_line || !named_priority)
             && (cost_in.red == 0 || s_multi_quake)
             && heurarm::Flag(heurarm::PD_LATER_HAND_HOLD, s_later_hand_hold);
         std::vector<ManaCost> hand_holds = later_hand_hold
@@ -1538,32 +1539,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             hand_holds.erase(std::remove_if(hand_holds.begin(), hand_holds.end(), [](const ManaCost& hold)
             { return hold.ManaValue() == 0; }), hand_holds.end());
         }
-        if (!named_line && !lu_line && hand_holds.empty()) { return -1; }
+        if (!named_line && hand_holds.empty()) { return -1; }
         if (probe) { return 1; }
-        {   // TEMP diagnostic (pd-landdrop), print-only
-            static const int s_tt = EnvInt("MTG_PD_HOLD_TRACE_TURN", 0);
-            if (s_tt != 0 && !hand_holds.empty() && state.turn_number == s_tt)
-            {
-                std::fprintf(stderr, "[pd-hold] T%d ph=%d cost=%dW%dU%dB%dR%dG%dC mc=%d named=%d lu_mv=%d lu_r=%d unseen=%d carried=%d acts=%d life=%d luht=%d\n",
-                             state.turn_number, static_cast<int>(state.phase), cost_in.white, cost_in.blue, cost_in.black,
-                             cost_in.red, cost_in.green, cost_in.generic, pt ? pt->mana_casts : -1, named_line ? 1 : 0,
-                             g_line_unpaid_cost.ManaValue(), g_line_unpaid_cost.red, g_line_opens_unseen ? 1 : 0,
-                             g_line_unseen_carried ? 1 : 0, g_line_hold_has_acts ? 1 : 0,
-                             state.players[state.active_player_index].life, lu_holds_this ? 1 : 0);
-            }
-        }
         const int cur[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
         int need[5] = { 0, 0, 0, 0, 0 };
         int need_tot = named_line ? std::max(0, pt->cast_mv_total - cost_in.ManaValue()) : 0;
         if (named_line)
         { for (int c = 0; c < 5; ++c) { need[c] = std::max(0, pt->cast_pips[c] - cur[c]); } }
-        if (lu_line)
-        {
-            const ManaCost& lu = g_line_unpaid_cost;
-            const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
-            for (int c = 0; c < 5; ++c) { need[c] = std::max(0, owed[c] - cur[c]); }
-            need_tot = std::max(0, lu.ManaValue() - cost_in.ManaValue());
-        }
         // EXACT REST OF LINE, demand half (MTG_PD_LINE_OK_EXACT -- see dmgev::LineOkExactEnabled).
         // That estimate still counts every cast the line has ALREADY paid, so on its last cast it
         // asks the board to pay the earlier casts a second time; once the supply test below is

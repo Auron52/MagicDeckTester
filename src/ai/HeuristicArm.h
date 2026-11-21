@@ -1055,6 +1055,7 @@ enum Slot : int
     MAZE_FETCH_RANK_COND,     // MTG_MAZE_FETCH_RANK_COND   Maze's End P5d-6 (USER Q1 2026-11-20, the conditional ranking): in that tier the fetch is kMazeFetchWins only NEAR THE WIN (this fetch leaves at most two names to go); otherwise `full`, and one below `full` while a Guild Summit is in hand (Summit first early). ORDER only. Default OFF; =1 -> on (overrides MAZE_FETCH_TIER_FULL)
     MAZE_MANABOND_DISCARD,    // MTG_MAZE_MANABOND_DISCARD  Maze's End P5d-6 (USER Q2 2026-11-20): the Manabond DISCARD-VALUE rule (MazeDumpDiscards). Manabond's end-step yes/no: "no" pruned when every nonland card the yes discards is free; "no" ordered first when a tutor or a kept card would go for too few lands; and prune (a) / the fetch eval count Manabond as putting Maze's End back only when its discards are free. Default OFF; =1 -> on
     MAZE_DISCARD_BURGEONING,  // MTG_MAZE_DISCARD_BURGEONING  sub-lever of MAZE_MANABOND_DISCARD (USER 2026-11-20: "Yes, Burgeoning is probably droppable. It is a bit too unreliable."; "It's a lot better in 2HG, though." -- the 2HG treatment is the USER's call, per-format numbers owed): Burgeoning counts as a droppable accelerator. Default ON (read only under MAZE_MANABOND_DISCARD); =0 -> Burgeoning is a kept card
+    PD_CASTLESS_LINE_NO_HOLD, // MTG_PD_CASTLESS_LINE_NO_HOLD  Prevent Damage: the Earthquake/Spellshock-in-hand red hold stands down while the current plan names no mana cast and opens nothing unseen (an activation-only line: no step of it can spend the held red; s6006 gi47 T7). Default ON; =0 holds on every armed bill
     COUNT
 };
 
@@ -2054,6 +2055,7 @@ inline const char* Name(int slot)
         "MTG_MAZE_FETCH_RANK_COND",
         "MTG_MAZE_MANABOND_DISCARD",
         "MTG_MAZE_DISCARD_BURGEONING",
+        "MTG_PD_CASTLESS_LINE_NO_HOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

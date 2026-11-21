@@ -1624,22 +1624,41 @@ TEST_CASE("Prevent Damage: the later-hand Earthquake hold pays no pain for a lin
         CHECK(Me(s) == 10);                 // City + Citadel for {B}{B}, three painless {C}
         CHECK_FALSE(s.battlefield[6].tapped);   // Ancient Tomb left
     }
-    {
+    {   // No plan traits: nothing says what the line casts, so the hold stands (Tomb pays, a Forge is kept).
         HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
         GameState s = board();
         REQUIRE(Pay(s, lifelink));
-        MESSAGE("hold on, no line: life " << Me(s) << ", Tomb tapped " << s.battlefield[6].tapped);
+        CHECK(Me(s) == 8);
+        CHECK(s.battlefield[6].tapped);
+    }
+    {   // The applying plan is the activation alone: no mana cast, nothing unseen -> no hold.
+        HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
+        PlanTraits t;
+        PlanTraitsScope traits(&t);
+        GameState s = board();
+        REQUIRE(Pay(s, lifelink));
         CHECK(Me(s) == 10);
         CHECK_FALSE(s.battlefield[6].tapped);
     }
-    {
+    {   // ...and =0 restores the hold on that castless plan.
         HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
-        LineUnpaidCostScope line(lifelink);   // the applying line: the activation alone
+        HeurArmSet castless(heurarm::PD_CASTLESS_LINE_NO_HOLD, false);
+        PlanTraits t;
+        PlanTraitsScope traits(&t);
         GameState s = board();
         REQUIRE(Pay(s, lifelink));
-        MESSAGE("hold on, line bound: life " << Me(s) << ", Tomb tapped " << s.battlefield[6].tapped);
-        CHECK(Me(s) == 10);
-        CHECK_FALSE(s.battlefield[6].tapped);
+        CHECK(Me(s) == 8);
+        CHECK(s.battlefield[6].tapped);
+    }
+    {   // A plan that names a mana cast (the T8 shape: Earthquake beside the lifelink) keeps the hold.
+        HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
+        PlanTraits t;
+        t.mana_casts = 1;
+        PlanTraitsScope traits(&t);
+        GameState s = board();
+        REQUIRE(Pay(s, lifelink));
+        CHECK(Me(s) == 8);
+        CHECK(s.battlefield[6].tapped);
     }
 }
 
