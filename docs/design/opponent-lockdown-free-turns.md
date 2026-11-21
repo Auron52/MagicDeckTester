@@ -147,3 +147,171 @@ HURDLE EXTENSION (after that fix, per the USER): after the < 2-lands swap, if NO
 hand's lands can stay on an empty battlefield (all bouncelands / Lake of the Dead), replace the
 RIGHTMOST of them with a basic (same basic choice as the screw hurdle). Post-Worldfire this is correct
 as is: a drawn bounceland returns itself and the opponent stays locked.
+
+## Implementation (2026-11-21, branch wip/freeturn; flags DEFAULT OFF -- adoption is the USER's)
+
+Flags (`src/ai/EngineFlags.h`, shared readers): `MTG_FREE_TURNS` (default OFF) arms the credit and the
+hurdles; `MTG_FREE_TURN_HURDLES` (default ON under `MTG_FREE_TURNS`, inert without it) `=0` measures the
+credit without the hurdles. One definition of the rule: `src/core/FreeTurns.h`. Unit tests:
+`test/unit/test_free_turns.cpp`.
+
+* **Lock check, both worlds in lockstep.** `freeturn::NoteOpponentTurnEnd` runs right after the
+  opponent's REGULAR turn in `GameEngine::RunTurnFrom` and in `TurnSolver`'s
+  `SimulateEndAndStartNextTurn` (same instant, same function). Not before our extra turn (the opponent
+  gets none), not on the pre-game opponent turn when we are on the draw, not after an opponent EXTRA
+  turn (the regular turn that follows it is the one checked). A locked turn raises
+  `GameState::pending_free_turn`; the next `AdvanceTurnCounter` consumes it: `turn_number` stays,
+  `++free_turns_taken`, `in_free_turn = true`.
+* **Accounting.** `TurnSeq()` counts free turns (same-turn stamps stay correct); `RawRound()` =
+  `turn_number + free_turns_taken` is the uncredited round; `TurnSeqCapped` (the 4 x max_turns
+  termination backstop) also covers free turns. `PlayOutFrom` plays a free turn owed at the end of round
+  `max_turns`, as it does an extra turn.
+* **Lock condition** (`freeturn::LockHolds`). Per head (2HG: both heads, each on its own card-number
+  band): no land on the battlefield (tokens included) OR no nonland card in hand; AND no opposing
+  creature on the shared board (an animated permanent counts), counting a scheduled spawn due with our
+  next turn (that body is the opponent's for the turn that just ended). Only the real-opponent model
+  (`opponent_plays_lands`) locks; a legacy replay never does. In hand an MDFC spell//land is a NONLAND
+  card (outside the stack and battlefield an MDFC has only its front-face characteristics), while the
+  hurdles count it as a LAND (USER: land faces count).
+* **Spawns** key on `RawRound()` (the opponent took its turn, locked or not), so a free turn's spawns
+  arrive. Identical while the flag is off.
+* **Search depth**: `DepthAcrossTurn` and the rollout's entry give-back use `InSameRoundTurn()`
+  (extra OR free), so a free turn costs no ply (the Q5 default, matching extra turns).
+* **Turn-edge prunes.** Every prune gated on `deck_has_extra_turn` because it assumes "the next turn is
+  round + 1" is now gated on `NextTurnMayShareRound()` = `deck_has_extra_turn || deck_has_free_turn`:
+  EchoEdgeFold, FslEdgeNoReach, WinlessCertificate, LastPlyFold, go-off dominance, edge-tail elide; the
+  leaf kill-only turn additionally requires `!deck_has_free_turn`. `deck_has_free_turn` (a deck
+  constant, `StampDeckTraits`) = `MTG_FREE_TURNS` on AND `GoldFishRunner::DeckMayLockOpponent` (main +
+  sideboard hold a card that strips the opponent's lands or hand: mass exile, Sire of Insanity's
+  end-step discard, combat-damage discard, land destruction, land steal). Gating per deck keeps every
+  other deck's search identical; a deck the list misses still receives the credit in play (the rule is
+  general), only its edge prunes stay armed, and the batch reports it with `trait=0`.
+* **Keys.** `free_turns_taken` / `in_free_turn` are folded, value-gated, into `BuildSimKey`,
+  `dominance::Build` and the DecisionProviders route signature. `pending_free_turn` is never live at a
+  search node (raised and consumed inside one transition) and `deck_has_free_turn` is a deck constant;
+  neither is folded. The four fields cost +8 bytes (`sizeof(GameState)` 1712 -> 1720, Dominance.h).
+* **Hurdles** (`freeturn::ApplyOpeningHurdles`, right after `opponentdeck::Deal` in
+  `GoldFishRunner::SetupGame` and in the scenario loader; every head): screw, then flood, then the
+  bounceland extension, exactly as Q1 and the bounceland section describe. Hurdle cards are numbered
+  inside their head's band (+9000 basics, +9100 placeholders) so `HeadOfNumber` holds. The flood
+  placeholder is a synthetic DB card, "Opponent Placeholder Spell" (Sorcery {20}), registered beside the
+  "Opponent Basic Land" marker; no effect reads it by name, and registering it is byte-identical
+  (smoke). "Can stay alone" = not `etb_bounce_land` and no `etb_replace_sacrifice_land_subtype`.
+  Hurdle basics for the four lists with no basic: Eldrazi Displacer Flicker = Forest, Fluctuator =
+  Plains, Galadriel = Island, Prevent Damage = Plains.
+* **Output.** A `free_turn` play event at the start of each free turn; the play-event `turn_seq`
+  stamp counts extra + free turns; the decision JSON writes `free_turn` / `turn_seq` only once a free
+  turn was taken (every other game's JSON is byte-identical); the viewer turnbar shows "(free k)";
+  `mtg --batch` prints `[free-turn] job= gi= wt= free= raw= opp_slot= trait=` on stderr per game that
+  took one.
+* **Scenarios under the flag.** All 605 fixtures pass with `MTG_FREE_TURNS=1` (the hurdles apply to a
+  fixture's dealt opponent too), so the tier's concurrent scenario stage needed no change.
+  `worldfire_feat_suspend_bolt_kill` reports win_turn 4 instead of 5 (the credit), within its bound.
+
+### Agent defaults (surfaced to the USER, not settled)
+
+1. The flood hurdle removes the RIGHTMOST lands.
+2. An MDFC spell//land in hand is a NONLAND card for the lock, a LAND for the hurdles.
+3. A scheduled spawn due with our next turn blocks the lock.
+4. After an opponent extra turn, the lock is checked once, after its following regular turn.
+5. A legacy-replay board (no dealt opponent list) never locks.
+
+### Validation (flags OFF)
+
+Rebased onto 42d819bc0 (land-play fix + Worldfire + accepted GT). Units: 3884 / 3885 pass (the one
+failure is the pre-existing `test_shadowborn_int9` "Thrumming Stone"); scenarios 605 / 605; smoke
+243 / 243 PASS, per-game audit play-changed = 0 (byte-identical with the flag off).
+
+## Measurement (2026-11-21, `MTG_FREE_TURNS=1`, hurdles on; regression tier, no accept)
+
+One pooled run, `MTG_PGO=0 MTG_FREE_TURNS=1 test/regression.sh --regression` on 2d373428c (= 42d819bc0 +
+the WIP). OFF arm: the accepted GT of 42d819bc0 (`test/gt_logs/*.wins`) and the flag-off batch log of the
+same src (e6cc83f3e). Per-key table: `logs/freeturn/analysis_reg_on.txt`. Units are the work measure
+(cpu ms on a shared box is noise at the +-5% level).
+
+### (a) Worldfire: credited vs raw
+
+| key | games | free turns (games with any) | OFF avg | ON credited | ON raw rounds |
+|---|---|---|---|---|---|
+| worldfire d5 s2002 | 60 | 118 (57) | 5.567 | **4.500** | 6.467 |
+| worldfire d5 s3003 | 60 | 135 (60) | 5.483 | **4.300** | 6.550 |
+| worldfire d3 s2002 | 15 | 34 (15) | 5.533 | **4.533** | 6.800 |
+| worldfire2hg d5 s2002 | 30 | 39 (30) | 5.733 | **4.633** | 5.933 |
+| worldfire d0 s2002 | 1000 (390 won) | 1389 (753) | 8.344 | 7.977 | -- |
+
+Direct run, d5 b20 seed 9100001, 64 games: OFF 5.547, ON 4.422 credited.
+
+So the rule credits Worldfire ~1.0-1.2 turns (2HG ~1.1), and every Worldfire game at d5 takes at least
+one free turn. **The RAW round gets SLOWER than the flag-off game (+0.4 to +1.3)**: paired per game, raw
+on - off is 0 in 38 / 60 games but reaches +5..+10 in a few (s2002 gi58: off T5, ON credited T5 with 10
+free turns, raw 15; gi1: credited T3 after 8 free turns, raw 11). Nothing in the search prefers fewer
+turns TAKEN at an equal credited round, and with no cap a lock that holds (the opponent draws only lands
+after Worldfire) is time the deck spends rebuilding for free. Not a defect of the implementation; a
+question for the USER (below).
+
+### (b) Free turns received by every other deck (expected ~0)
+
+| deck | games with a free turn | trait | mechanism |
+|---|---|---|---|
+| Unpredictable Cyclone | 161 / 1454 (free = 1 each) | 1 | legitimate: Ulamog / Emrakul strip the opponent's lands; the game ends on the free turn |
+| Shadowborn Apostle | 18 (52 free turns) | 1 | legitimate: Sire of Insanity's end-step discard |
+| Burn | 5 / 3015 | **0** | **hole** (below) |
+| Extra Turns | 5 / 1375 | **0** | **hole** (below) |
+| Modern RW Burn | 1 / 1375 | **0** | **hole** (below) |
+| every other deck | 0 | -- | -- |
+
+**The hole: the passive opponent's cleanup discards its OLDEST cards first** (`opponentdeck::
+EndOfTurnCleanup` sheds `hand.front()` down to 7). All three trait-0 decks PUT CARDS INTO THE OPPONENT'S
+HAND: Goblin Guide's reveal (Burn, Modern RW Burn) and Howling Mine / Horn of Greed (Extra Turns). The
+hand passes 7, the cleanup sheds the opening hand's nonlands (the left end, the two the hurdle
+guaranteed), and against the land-heavy cycling lists (Galadriel slot 16, Fluctuator slot 14) the hand
+that is left can be all lands -> "no nonland in hand" with lands out and no creature -> locked. Repro:
+`MTG_FREE_TURNS=1 build/Release/mtg decks/Burn/Burn.txt --profile decks/Burn/Burn.profile.json --seed 3664
+--game-index 661 --games 1 --budget-ms 30` (credited T3, raw T4, vs Galadriel). A real player discards
+excess LANDS, so the natural fix (agent proposal, NOT built): under `MTG_FREE_TURNS`, the passive cleanup
+discards the leftmost LAND first and a nonland only when the hand holds no land. It moves every game where
+our cards overfill the opponent's hand, so it needs its own measurement.
+
+### (c) Whose play moved, and why
+
+* Win turns moved (searched + d0 audit: 212 + 336 faster, 19 + 16 slower): almost all Worldfire (credit)
+  and Cyclone / Shadowborn (credit). Per deck, games whose WIN TURN changed: Worldfire 394 faster;
+  worldfire2hg 29 faster; Cyclone 75 faster / 6 slower; Shadowborn 17 / 2; Maze's End 13 / 4;
+  Creature Burn 4 / 4; Midrange Burn 4 / 2; Burn 4 / 0, Extra Turns 3 / 0, Knights 3 / 0, Modern RW Burn
+  1 / 0, Merfolk Turns 1 / 0; a handful of single-game moves (0-2 each) in ~20 other decks.
+* **Hurdles**: every deck's per-game DIGEST moves in a few games (the opponent's opening hand differs in
+  ~20% of games), but the win turn moves only in a few decks whose play depends on the opponent's
+  lands or hand: Maze's End, Creature Burn, Midrange Burn, Knights, Merfolk Turns (mechanism per deck
+  not traced). Those moves come with no free turn at all (Burn's / Extra Turns' / Modern RW Burn's are
+  the trait-0 holes above).
+* **Prune stand-down** (`deck_has_free_turn` disarms the turn-edge prunes): Vampires (Captivating
+  Vampire's `steal_tap_count`, plus Worldfire in the list) and Sea Creatures (Kiora Bests the Sea God
+  ch. 3) received ZERO free turns, yet play moved (Vampires 2 slower) and their search work rose (d).
+  Captivating Vampire steals creatures only, which a passive opponent never has: it cannot lock, so the
+  trait list over-reaches there (candidate fix: drop `steal_tap_count`).
+* Reference replays under the flag: 1 play-drift of 940, `references/Creature_Burn/claude_s9_gi8.json`
+  (replay no win vs ref T4; the hurdles change the opponent's opening hand). Owed before any adoption
+  (the reference is the engine's to fix, never the USER's to re-save).
+* Scenarios: 605 / 605 pass under the flag.
+
+### (d) Search work, ON vs OFF (units, regression tier)
+
+| deck | units ON / OFF | why |
+|---|---|---|
+| Worldfire / 2HG | 0.661 / 0.669 | credited wins sit inside a shallower window |
+| Unpredictable Cyclone | 0.947 | same |
+| Shadowborn Apostle | 1.143 | prune stand-down |
+| Sea Creatures / 2HG | 1.257 / 1.202 | prune stand-down, no free turn ever |
+| **Vampires / 2HG** | **3.06 / 2.63** | prune stand-down, no free turn ever (e.g. d3 s30001: same digest, 2.25M vs 0.91M units) |
+| every other deck | 0.99 - 1.01 (all non-trait decks pooled: 1.001) | -- |
+
+The per-deck stand-down is expensive where the trait over-reaches: Vampires pays 3x for a lock it cannot
+make. Tightening `DeckMayLockOpponent` (or arming the stand-down only once a lock is reachable in the game)
+is the obvious lever; not built.
+
+### Open USER questions (from this measurement)
+
+6. **Raw vs credited tie-break.** The search spends free turns without limit (raw +0.4..+1.3 vs OFF). Keep
+   it, cap free turns per game (Q4, default none), or tie-break equal credited rounds on fewer turns taken?
+7. **The cleanup hole** (b): adopt "the passive cleanup discards lands first" under the flag?
+8. **Trait over-reach**: drop `steal_tap_count` (Captivating Vampire) from `DeckMayLockOpponent`?
