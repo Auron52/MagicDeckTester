@@ -190,6 +190,26 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
 - Deferred, no win-turn effect: `docs/design/worldfire-sweep-deferred.md` (identical-copy reorder fold, the
   upkeep win check, the Ponder shuffle label, suspend reporting/labels/log, the target-reply index trap).
 
+## Stage 5b / 5c -- depth sweep and leaf tie-break (2026-11-21, committed profile, Release/PGO)
+- **5c2 leaf_tiebreak_check (`--tag worldfire`, 12000 paired games at play settings): KEEP THE DEFAULT (ON).**
+  Net -21 turns (half A -11, half B -10, same sign in both halves); 303 better / 283 worse; binds in 4.9% of
+  games. The damage-race tie-break helps this combo deck slightly; no opt-out.
+- **5b depth sweep, seed 9400001, 96 games, paired per game (`MTG_DUMP_WINS`):**
+
+  | setting | avg (unwon = max_turns+1) | vs d5 b20 |
+  |---|---|---|
+  | d3 b10 | 5.531 | 2 better / 2 worse |
+  | d5 b20 (play) | 5.531 | -- |
+  | d5 b200 | 5.344 | 17 better / **0 worse** |
+
+  Monotone: no setting is worse than a cheaper one in aggregate, and b200 never loses a game to b20. The one
+  unwon game (gi53, seed 9400054) is unwon at every setting. d3 b10 vs d5 b20 is a tie (gi35 / gi60 slower at
+  d5 b20, two others faster), so depth 5 buys nothing at 20 ms.
+- **5c budget starvation: YES at the play setting.** d5 b200 is 0.19 turns/game faster with zero losers, so the
+  20 ms play budget leaves wins unfound (the sweep's gi0 and the Feat-fix gi52 tell the same story). This is a
+  SETTINGS question for the USER (the depth matrix / play budget), not a search change: raising the budget
+  roughly 10x the per-game cost (worldfire is 2.06x Hinata at b20 today).
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)
 
