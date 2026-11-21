@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -292,6 +293,68 @@ TEST_CASE("Bruna: the Wild Growth host hold yields when it strands the rest of t
         LineUnpaidCostScope hold(line);
         CHECK(AuraHostHoldKeepsLine(b.s, CardBr("Wild Growth", 90), host, wg, false));
     }
+}
+
+// MEASUREMENT-ONLY rule overrides (default OFF; USER-owned): MTG_PAY_LINE_CRIT_BEHIND_DORKS and MTG_PAY_LINE_CRIT_LAND +
+// MTG_PAY_LINE_CRIT_OPENER. Each subcase checks the lever ON fixes the board and the lever OFF reproduces the drop.
+TEST_CASE("Bruna: line-critical land variants (measurement levers)")
+{
+    struct ArmPin
+    {
+        ArmPin(int land, int opener, int behind)
+        {
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_LAND]         = static_cast<std::int8_t>(land);
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_OPENER]       = static_cast<std::int8_t>(opener);
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_BEHIND_DORKS] = static_cast<std::int8_t>(behind);
+        }
+        ~ArmPin()
+        {
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_LAND]         = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_OPENER]       = -1;
+            heurarm::t_arm[heurarm::PAY_LINE_CRIT_BEHIND_DORKS] = -1;
+        }
+    };
+    // s30051257 T2 {Sol Ring, Arcanum Wings}: Sol Ring's {1} off Avacyn's Pilgrim keeps Botanical Sanctum's {U}.
+    auto sol_wings = [](bool behind) -> bool
+    {
+        ArmPin pin(0, 0, behind ? 1 : 0);
+        BoardBr b;
+        b.Put("Botanical Sanctum");
+        b.Put("Avacyn's Pilgrim");
+        ManaCost sol;   sol.generic = 1;
+        ManaCost wings; wings.generic = 1; wings.blue = 1;
+        ManaCost line = sol;
+        AddManaCost(line, wings);
+        {
+            LineUnpaidCostScope hold(line);
+            if (!TapForCostShared(b.s, sol, /*for_creature=*/false, nullptr, true)) { return false; }
+        }
+        b.Put("Sol Ring");
+        LineUnpaidCostScope hold(wings);
+        return TapForCostShared(b.s, wings, /*for_creature=*/false, nullptr, true);
+    };
+    SUBCASE("behind dorks: Pilgrim pays Sol Ring") { CHECK(sol_wings(true)); CHECK_FALSE(sol_wings(false)); }
+    // s30051968 T2 {Forest, Sol Ring, Glittering Wish} (an opener line): Remote Farm pays the {1} and floats the {W}.
+    auto sol_wish = [](bool on) -> bool
+    {
+        ArmPin pin(on ? 1 : 0, on ? 1 : 0, 0);
+        BoardBr b;
+        b.Put("Remote Farm");
+        b.Put("Forest");
+        ManaCost sol;  sol.generic = 1;
+        ManaCost wish; wish.white = 1; wish.green = 1;
+        ManaCost line = sol;
+        AddManaCost(line, wish);
+        LineOpensUnseenScope opens(true);
+        {
+            LineUnpaidCostScope hold(line);
+            if (!TapForCostShared(b.s, sol, /*for_creature=*/false, nullptr, true)) { return false; }
+        }
+        b.Put("Sol Ring");
+        LineUnpaidCostScope hold(wish);
+        return TapForCostShared(b.s, wish, /*for_creature=*/false, nullptr, true);
+    };
+    SUBCASE("opener line: Remote Farm pays Sol Ring") { CHECK(sol_wish(true)); CHECK_FALSE(sol_wish(false)); }
 }
 
 TEST_CASE("Bruna: the gather dominance collapse -- one subset, or take/skip for Almost Perfect only")
