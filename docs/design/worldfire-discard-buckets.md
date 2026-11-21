@@ -1,7 +1,7 @@
 # Worldfire: bucketed keep order (discard + Brainstorm / Ponder / Preordain) -- DESIGN, for USER review
 
 Status: **proposed 2026-11-21, amended by the USER the same day (other-type finisher kept above dead cards; dig
-prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
+prioritised while short a combo piece; Bloom dropped near the combo turn; multiple dig while short; tutors fill the two pieces first; every wait counted in the projection); not adopted.** Discard buckets are USER-owned (analyze-deck Stage 5i); this is the
 AI's best shot, built to be amended. USER request (verbatim): *"It seems pretty clear we are going to need prunes
 for Brainstorm, Ponder and Preordain. Probably similar to those in Cyclone, but a bit simpler because we don't need
 to worry about our topdeck."* -- *"But essentially what we'll need to design is the discard heuristic to do this
@@ -27,8 +27,24 @@ library top only matters as "what we draw next".
 ## The go-off projection (the mana need)
 
 The quotas depend on WHEN we expect to cast Worldfire, as the tutor ruling already said (*"It really depends on
-when we project to go off."*). Project T\* = the earliest turn from now (now .. now+4) on which the mana reaches the
-need:
+when we project to go off."*). Project T\* = the earliest turn from now (now .. now+4) on which EVERYTHING is ready
+-- the mana reaches the need AND both pieces are castable that turn. **Every wait counts** (USER 2026-11-21: *"(and
+we need to count any waiting in our projection)"*):
+
+- **Worldfire ready:** in hand now; or tutored -- Mystical Tutor (instant: cast in the opponent's end step or our
+  upkeep) delivers it on our next draw step; Personal Tutor (sorcery) puts it on top this turn, so it arrives on
+  the NEXT turn's draw unless a cantrip we can still cast this turn draws it. Each tutor also spends the mana to
+  cast it on its turn ({U}) and the draw it replaces.
+- **Finisher ready:** a Rift Bolt in hand (or tutored, same delays) is suspended on T\* itself; a Halberdier
+  pending arrives on its own turn (`arrive_turn`), and one in hand arrives on now+4 if suspended now -- either way
+  T\* must be the turn BEFORE it arrives (Worldfire would exile it if it arrived first), so a Halberdier finisher
+  pins T\* to arrival-1.
+- **Mana ready:** as below, with each wait counted -- tapped lands from the turn after they are played, a Bloom 3
+  turns after it is suspended, Bazaar one storage counter per turn it is left to charge, one land drop per turn.
+- T\* = the earliest turn on which all three hold. A wait on any one piece pushes T\*; the quotas are then
+  computed against that T\*, so e.g. a slow finisher also slackens the mana quota.
+
+Mana detail:
 
 - **Need:** 9 with RRR for Worldfire, **+1 R** when the finisher is a Rift Bolt that must be suspended that turn
   (no Rift Bolt pending on suspend and no Halberdier arriving on T\*+1).
