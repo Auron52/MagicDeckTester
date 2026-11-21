@@ -465,6 +465,7 @@ void GameEngine::UntapStep(GameState& state)
     LegendKeepOpenUpkeep(state);
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_attack_reanimate = -1;  // searched Thunderkin Awakener return (same lockstep)
+    state.scripted_attack_choose_mode = -1;  // searched Elder Gargaroth mode (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
@@ -1194,6 +1195,10 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // the top two and play one"). Same CR 508.4 position as the two calls above. The MODE is the
     // searched Plan::tectonic_mode_choice pin. Mirrors TurnSolver::SimulateCombat.
     ApplyAttackModalTriggers(state, state.active_player_index, atk_idx);
+    // Elder Gargaroth's "choose one" attack trigger (token / life / draw): same CR 508.4 point, the searched
+    // GameState::scripted_attack_choose_mode pin. Mirrors TurnSolver's SimulateOneCombat (lockstep, ONE shared
+    // helper). Deck-gated inert.
+    ApplyAttackChooseOneTriggers(state, state.active_player_index, atk_idx);
 
     // Primeval Titan's attack trigger ("whenever this creature enters or attacks, you may search
     // your library for up to two land cards, put them onto the battlefield tapped"): same CR 508.4

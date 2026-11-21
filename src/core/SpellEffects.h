@@ -26954,6 +26954,160 @@ inline void ApplyAttackModalTriggersImpl(GameState& state, int controller,
     }
 }
 
+// ---- Elder Gargaroth: "Whenever this creature attacks or blocks, choose one --" -----------------------------------
+// (CardParams::attack_choose_one; Beasts C, 2026-11-21.) Three modes, ids fixed by the card: 0 = "Create a 3/3 green
+// Beast creature token", 1 = "You gain 3 life", 2 = "Draw a card". A mode is LEGAL when its payload param is set.
+// The SEARCHED pin (Plan::attack_choose_mode_choice -> GameState::scripted_attack_choose_mode) is packed 2 bits per
+// trigger ordinal (the k-th attack_choose_one trigger of this combat, in declare order): field 0 = unpinned, m + 1 =
+// mode m. Which copy holds which ordinal does not matter (every copy's trigger is the same), only the ordered
+// sequence of choices. -1 = nothing pinned. An unpinned trigger takes the FRONT of AttackChooseOneSearchModes --
+// the provider's ordered (and soundly restricted) list -- which is the playout policy beyond the horizon and an
+// ordinal past the axis's product cap; inside the window every ordinal the axis can reach is pinned.
+// CR 700.2b chooses the mode as the trigger is put on the stack; the pin is decided in the main phase, before
+// that, and nothing can change between the two in a goldfish, so the resolution-time read is exact.
+constexpr int kAttackChooseMaxOrdinals = 7;   // 14 bits of the int16 pin; the deck holds 4
+inline int AttackChooseModePinAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kAttackChooseMaxOrdinals) { return -1; }
+    const int f = (packed >> (2 * k)) & 3;
+    return f == 0 ? -1 : f - 1;
+}
+// Pack per-ordinal modes (each -1 = unpinned); all-unpinned packs to -1.
+inline int AttackChoosePackModes(const int* modes, int n)
+{
+    int v = 0; bool any = false;
+    for (int k = 0; k < n && k < kAttackChooseMaxOrdinals; ++k)
+    {
+        if (modes[k] < 0 || modes[k] > 2) { continue; }
+        any = true;
+        v |= (modes[k] + 1) << (2 * k);
+    }
+    return any ? v : -1;
+}
+// Every LEGAL mode of the card, in mode-id order (the human's menu; the provider's input).
+inline void AttackChooseOneLegalModes(const CardParams& p, std::vector<int>& out)
+{
+    out.clear();
+    if (!p.attack_choose_one) { return; }
+    if (p.attack_choose_token_power > 0 || p.attack_choose_token_toughness > 0) { out.push_back(0); }
+    if (p.attack_choose_lifegain > 0) { out.push_back(1); }
+    if (p.attack_choose_draw > 0)     { out.push_back(2); }
+}
+// The modes the SEARCH branches over, in the provider's order (front = the unpinned default): the legal list
+// handed to DecisionProvider::AttackChooseOneModes, which may ORDER it or RESTRICT it by a stated sound fold (the
+// root drops "gain life" when nothing reads our life -- USER 2026-11-21). An emptied list falls back to the legal one.
+inline void AttackChooseOneSearchModes(const GameState& state, int controller, const CardDefinition& d,
+                                       std::vector<int>& out)
+{
+    AttackChooseOneLegalModes(d.params, out);
+    if (out.empty()) { return; }
+    std::vector<int> legal = out;
+    ResolveProvider(state).AttackChooseOneModes(state, controller, d, out);
+    std::vector<int> kept;
+    for (int m : out)
+    { if (std::find(legal.begin(), legal.end(), m) != legal.end()
+          && std::find(kept.begin(), kept.end(), m) == kept.end()) { kept.push_back(m); } }
+    out = kept.empty() ? legal : kept;
+}
+// Resolve ONE mode of one trigger (shared by both worlds through ApplyAttackChooseOneTriggers).
+// Returns false when the draw decked us (the caller stops resolving).
+inline bool ResolveAttackChooseOneMode(GameState& state, int controller, const CardParams& p,
+                                       const std::string& src_name, int mode)
+{
+    if (mode == 0)
+    {
+        // The token enters NOT attacking (it was never declared, CR 508.4) and runs the shared enter cascade
+        // (Garruk's Packleader's power-3 draw, Kaheera's lord, doublers) through CreateToken.
+        CreateToken(state, controller, p.attack_choose_token_power, p.attack_choose_token_toughness,
+                    p.attack_choose_token_subtypes, p.attack_choose_token_color, {});
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          "\xE2\x9A\x94 " + src_name + " attack trigger: create a "
+                          + std::to_string(p.attack_choose_token_power) + "/"
+                          + std::to_string(p.attack_choose_token_toughness) + " token");
+        }
+        return true;
+    }
+    if (mode == 1)
+    {
+        GainLife(state, controller, p.attack_choose_lifegain);   // bumps life_gained_this_turn, lifegain watchers
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          "\xE2\x9A\x94 " + src_name + " attack trigger: gain "
+                          + std::to_string(p.attack_choose_lifegain) + " life");
+        }
+        return true;
+    }
+    // mode 2: "Draw a card." A real CR 121 draw (the ApplyAttackDrawTriggers loop): deck-out, the per-turn draw
+    // count, the viewer's draw sink.
+    Player& pl = state.players[controller];
+    for (int r = 0; r < p.attack_choose_draw; ++r)
+    {
+        const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
+        if (!draw.satisfied) { state.player_lost_on_draw = true; return false; }
+        if (draw.drew) { ++pl.cards_drawn_this_turn; }
+        if (draw.drew && g_play_draw_sink)
+        { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
+    }
+    if (g_play_event_sink)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xE2\x9A\x94 " + src_name + " attack trigger: draw "
+                      + std::to_string(p.attack_choose_draw) + (p.attack_choose_draw == 1 ? " card" : " cards"));
+    }
+    return true;
+}
+// Fire every DECLARED attack_choose_one attacker's trigger, in BOTH worlds, at declare-attackers (GameEngine::
+// CombatPhase and TurnSolver's SimulateOneCombat call it right after ApplyAttackModalTriggers -- the same CR 508.4
+// point: a creature put onto the battlefield attacking never "attacked"). `attacker_indices` holds only declared
+// attackers at that point. The sources are snapshotted first (a created token can reallocate the battlefield);
+// a trigger resolves even if its source has since left (CR 603.3). The pin is SPENT afterwards whether or not a
+// trigger fired, so a variant whose Gargaroth never attacked leaves combat in its base plan's state (the
+// MTG_COMBAT_PIN_FOLD comparison) and a later projection this turn reads the default.
+inline void ApplyAttackChooseOneTriggers(GameState& state, int controller, const std::vector<int>& attacker_indices)
+{
+    if (!state.deck_has_attack_choose_one) { return; }
+    const int packed = state.scripted_attack_choose_mode;
+    state.scripted_attack_choose_mode = -1;
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    std::vector<const CardDefinition*> srcs;
+    std::vector<std::string> names;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& self = state.battlefield[static_cast<std::size_t>(idx)];
+        if (self.controller_index != controller || self.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (d == nullptr || !d->params.attack_choose_one) { continue; }
+        srcs.push_back(d);
+        names.push_back(self.card.m_name.str());
+    }
+    if (srcs.empty()) { return; }
+    DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
+    std::vector<int> modes, legal;
+    for (std::size_t k = 0; k < srcs.size(); ++k)
+    {
+        const CardParams& p = srcs[k]->params;
+        int mode = AttackChooseModePinAt(packed, static_cast<int>(k));
+        AttackChooseOneLegalModes(p, legal);
+        if (legal.empty()) { continue; }
+        if (std::find(legal.begin(), legal.end(), mode) == legal.end())
+        {
+            AttackChooseOneSearchModes(state, controller, *srcs[k], modes);
+            mode = modes.front();
+        }
+        if (g_play_attack_mode_chooser != nullptr)   // real human resolution only: the FULL legal menu
+        {
+            const int pick = (*g_play_attack_mode_chooser)(state, controller, names[k], mode);
+            if (std::find(legal.begin(), legal.end(), pick) != legal.end()) { mode = pick; }
+        }
+        if (!ResolveAttackChooseOneMode(state, controller, p, names[k], mode)) { return; }
+    }
+}
+
 // Projection twin of the mode-A half, for PendingAttackDamage. Resolves the mode exactly as
 // ApplyAttackModalTriggers does (minus the human chooser, which never fires in a projection).
 inline int CountAttackTriggerModalDamage(const GameState& state, int controller,

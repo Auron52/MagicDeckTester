@@ -6273,11 +6273,13 @@ function demonstratePanelHtml(d){
 // shown so the choice is anchored to the permanent that caused it, per the play-viewer principle
 // that decisions live in the dialog with images, never as text in the history panel.
 function attackModePanelHtml(d){
-  const def = (d.heuristic_default===1) ? 1 : 0;
   const opts = d.options || [
     {index:0, text:'Deal 3 damage to each opponent'},
     {index:1, text:'Exile the top two cards; play one until end of your next turn'}
   ];
+  // The AI default is whichever listed option it names (Elder Gargaroth has THREE: 0 token, 1 life, 2 draw);
+  // an unlisted default falls back to the first option.
+  const def = opts.some(o=>o.index===d.heuristic_default) ? d.heuristic_default : opts[0].index;
   let h=`<h3>Choose one — ${esc(d.source||'')}</h3>`;
   // trigger "etb": a modal ENTER trigger (Trufflesnout) rides the same decision type.
   if (d.trigger==='etb')

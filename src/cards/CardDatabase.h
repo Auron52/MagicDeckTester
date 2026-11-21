@@ -218,6 +218,26 @@ struct CardParams
     int         attack_trigger_impulse_exile = 0;
     int         attack_trigger_impulse_playable = 0;
     bool        attack_trigger_impulse_expiry_next_turn = false;
+    // ELDER GARGAROTH (Beasts C, 2026-11-21): "Whenever this creature attacks or blocks, choose one --
+    // * Create a 3/3 green Beast creature token. * You gain 3 life. * Draw a card." A SEPARATE modal
+    // attack trigger from Tectonic Giant's attack_trigger_modal (that param is the Giants provider
+    // signature and Giants cast-order rank; reusing it would misroute the deck). The MODE is a SEARCHED
+    // plan axis (Plan::attack_choose_mode_choice -> GameState::scripted_attack_choose_mode, packed 2 bits
+    // per trigger ordinal), resolved by the shared ApplyAttackChooseOneTriggers in BOTH worlds at
+    // declare-attackers. Mode ids: 0 = token, 1 = life, 2 = draw; a mode is legal when its payload is set.
+    //   attack_choose_one                  -- gates the trigger and the axis.
+    //   attack_choose_token_power/_toughness/_subtypes/_color -- mode 0's token (enters NOT attacking,
+    //                                        through the shared CreateToken: doublers + the enter cascade).
+    //   attack_choose_lifegain             -- mode 1: GainLife amount.
+    //   attack_choose_draw                 -- mode 2: cards drawn (a real CR 121 draw).
+    // NOT in DeckUsesSecondMain (USER 2026-11-21: the second main is unsettled; a per-turn gate is planned).
+    bool                     attack_choose_one = false;
+    int                      attack_choose_token_power = 0;
+    int                      attack_choose_token_toughness = 0;
+    std::vector<std::string> attack_choose_token_subtypes;
+    std::string              attack_choose_token_color;
+    int                      attack_choose_lifegain = 0;
+    int                      attack_choose_draw = 0;
 
     bool        attack_sac_fling = false;
     // Non-empty = the subtype that DOUBLES the damage ("was a Giant" -- past tense, so it is

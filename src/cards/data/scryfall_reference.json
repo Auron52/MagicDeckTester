@@ -2120,6 +2120,19 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Elder Gargaroth": {
+    "cmc": 5.0,
+    "keywords": [
+      "Reach",
+      "Trample",
+      "Vigilance"
+    ],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "Reach, vigilance, trample\nWhenever this creature attacks or blocks, choose one —\n• Create a 3/3 green Beast creature token.\n• You gain 3 life.\n• Draw a card.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Beast"
+  },
   "Elderscale Wurm": {
     "cmc": 7.0,
     "keywords": [

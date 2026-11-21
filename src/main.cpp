@@ -5419,6 +5419,37 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
         d.Note("reply 0 to double its +1/+1 counters or 1 to fight; the fight target is a separate board decision.");
         return;
     }
+    // Elder Gargaroth (Beasts C, 2026-11-21): "Whenever this creature attacks or blocks, choose one -- token /
+    // life / draw" (attack_choose_one), asked from ApplyAttackChooseOneTriggers. THREE options (mode ids 0 token,
+    // 1 life, 2 draw -- the human always gets the full legal menu; the search's life-mode fold is the provider's,
+    // autonomous play only). Only the legal modes are listed (a mode whose payload param is unset is absent).
+    if (src_def != nullptr && src_def->params.attack_choose_one)
+    {
+        const CardParams& gp = src_def->params;
+        os << "  \"options\":[";
+        bool first = true;
+        auto opt = [&](int idx, const std::string& text)
+        {
+            os << (first ? "" : ",") << "{\"index\":" << idx << ",\"text\":\"" << text << "\"}";
+            first = false;
+        };
+        if (gp.attack_choose_token_power > 0 || gp.attack_choose_token_toughness > 0)
+        {
+            std::string kind;
+            for (const std::string& st : gp.attack_choose_token_subtypes) { kind += (kind.empty() ? "" : " ") + st; }
+            opt(0, "Create a " + std::to_string(gp.attack_choose_token_power) + "/"
+                   + std::to_string(gp.attack_choose_token_toughness) + " " + kind + " creature token");
+        }
+        if (gp.attack_choose_lifegain > 0)
+        { opt(1, "You gain " + std::to_string(gp.attack_choose_lifegain) + " life"); }
+        if (gp.attack_choose_draw > 0)
+        { opt(2, gp.attack_choose_draw == 1 ? std::string("Draw a card")
+                                            : "Draw " + std::to_string(gp.attack_choose_draw) + " cards"); }
+        os << "],\n";
+        EmitRevealsField(os, reveals);
+        d.Note("reply 0 for the token, 1 to gain life or 2 to draw. The trigger resolves before combat damage; the token does not attack.");
+        return;
+    }
     os << "  \"options\":[";
     os << "{\"index\":0,\"text\":\"Deal 3 damage to each opponent\"},";
     os << "{\"index\":1,\"text\":\"Exile the top two cards; play one until end of your next turn\"}";
@@ -8870,7 +8901,10 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             {
                 int chosen = choices[cursor++];
                 ++decisions_made;
-                const int mode = (chosen == 1) ? 1 : (chosen == 0 ? 0 : heuristic_default);
+                // Elder Gargaroth's three-mode trigger (attack_choose_one) takes 0..2; every other source 0..1.
+                const CardDefinition* am_def = CardDatabase::Instance().Lookup(source);
+                const int n_modes = (am_def != nullptr && am_def->params.attack_choose_one) ? 3 : 2;
+                const int mode = (chosen >= 0 && chosen < n_modes) ? chosen : heuristic_default;
                 if (!log_dir.empty())
                 {
                     std::ostringstream ss;

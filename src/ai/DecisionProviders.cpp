@@ -1371,6 +1371,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"extraturntarget", UnprunedGate::ExtraTurnTarget},
     {"heuristicrequired", UnprunedGate::HeuristicRequired},
     {"oppdraw",    UnprunedGate::OpponentDraw},
+    {"attackchooselife", UnprunedGate::AttackChooseLife},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -9385,6 +9386,33 @@ std::vector<int> DecisionProvider::OpponentDrawCandidates(const GameState& s, co
     if (max_picks <= 0 || draws_per_pick <= 0 || !s.opponent_library_dealt) { return {}; }
     return OpponentDrawCandidatesFor(s, def, max_picks, draws_per_pick,
                                      DecisionUnpruned(UnprunedGate::OpponentDraw), HumanPlayActive());
+}
+
+void RestrictAttackChooseOneModesFor(const GameState& s, std::vector<int>& modes, bool unpruned)
+{
+    // ORDER: token (0) first -- a 3/3 that can only add damage, never a cost; then draw (2) -- a card, but a draw
+    // off an empty library loses; then life (1).
+    static constexpr int kRank[3] = { 0, 2, 1 };
+    std::stable_sort(modes.begin(), modes.end(), [](int a, int b)
+    {
+        const int ra = (a >= 0 && a < 3) ? kRank[a] : 3;
+        const int rb = (b >= 0 && b < 3) ? kRank[b] : 3;
+        return ra < rb;
+    });
+    // THE FOLD (USER 2026-11-21, "Yes, we don't need this in the search."): with nothing in the deck reading our
+    // life total or a life-gain event (deck_life_inert, StampDeckTraits) and our own death not live, gaining life
+    // changes no future state the game can observe, so the token mode dominates it. Only drop it while the token
+    // mode is on the menu (the dominating option must remain).
+    const bool has_token = std::find(modes.begin(), modes.end(), 0) != modes.end();
+    if (!unpruned && has_token && s.deck_life_inert && !s.own_death_live)
+    { modes.erase(std::remove(modes.begin(), modes.end(), 1), modes.end()); }
+}
+
+void DecisionProvider::AttackChooseOneModes(const GameState& s, int controller, const CardDefinition& src,
+                                            std::vector<int>& modes) const
+{
+    (void)controller; (void)src;
+    RestrictAttackChooseOneModesFor(s, modes, DecisionUnpruned(UnprunedGate::AttackChooseLife));
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
@@ -47923,6 +47951,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_upkeep_gy_reanimate);
     v.push_back(s.scripted_echo);
     v.push_back(s.scripted_doth_put);
+    if (s.scripted_attack_choose_mode != -1) { v.push_back(0x6A26C000LL + s.scripted_attack_choose_mode); }   // Gargaroth, value-gated
     if (const long long dk = s.DoublerDeferKey(); dk != -1) { v.push_back(dk); }   // doubler-after-exalted run
     v.push_back(s.scripted_demon_trigger); v.push_back(s.creature_died_this_turn);
     v.push_back(s.combat_damage_prevented_this_turn);

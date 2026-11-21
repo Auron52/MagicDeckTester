@@ -215,6 +215,8 @@ enum class UnprunedGate
     OpponentDraw,    // the OPPONENT target of Garth One-Eye's conjured Braingeyser and of Unite the Coalition's draw
                      // mode opened to every count, lethal or not (DecisionProvider::OpponentDrawCandidates prunes it
                      // to the minimal lethal count; USER 2026-11-17)
+    AttackChooseLife, // Elder Gargaroth: the "gain N life" mode restored to the searched mode list
+                      // (DecisionProvider::AttackChooseOneModes' life-inert fold; USER 2026-11-21)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -228,6 +230,10 @@ bool DecisionUnpruned(UnprunedGate g);
 // and HumanPlayActive) passed in, so a unit test can pin every branch. See the virtual's comment.
 std::vector<int> OpponentDrawCandidatesFor(const GameState& s, const CardDefinition& def, int max_picks,
                                            int draws_per_pick, bool unpruned, bool human);
+
+// DecisionProvider::AttackChooseOneModes' default body with MTG_UNPRUNE passed in (unit-testable): order token,
+// draw, life; drop life when s.deck_life_inert && !s.own_death_live && !unpruned. See the virtual's comment.
+void RestrictAttackChooseOneModesFor(const GameState& s, std::vector<int>& modes, bool unpruned);
 
 // A/B gate for the learned mid-game evaluator (MTG_EVAL_MODEL). Default OFF: even when a deck ships
 // an eval sidecar, the learned plan ranking is used only when this is set, so every existing ground

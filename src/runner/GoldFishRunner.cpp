@@ -1737,6 +1737,45 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Elder Gargaroth (Beasts C): the modal attack trigger's presence gate (MAINBOARD: a sideboard card never
+    // reaches play here), and GameState::deck_life_inert -- the provider's sound fold of a "gain N life" mode.
+    // deck_life_inert is TRUE only when none of the life-total / life-gain readers above fire AND no card in the
+    // same zone set carries a life-gain PAYOFF or a life-total condition (the list below). Err toward false.
+    state.deck_has_attack_choose_one = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.attack_choose_one) { return true; }
+        }
+        return false;
+    }();
+    state.deck_life_inert = [&deck, &state]{
+        if (state.deck_reads_life_total || state.deck_reads_lifegain_in_play
+            || state.deck_endstep_lifegain_max_threshold > 0) { return false; }
+        const bool wish = GoldFishRunner::DeckWishesFromSideboard(deck);
+        for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+        {
+            if (zone == &deck.sideboard && !wish) { break; }
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { return false; }
+                const CardParams& p = d->params;
+                if (p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
+                    || p.lifegain_self_counters_that_many || p.lifegain_each_own_creature_counters_that_many
+                    || p.lifegain_target_own_counter || p.lifegain_to_loss
+                    || p.lifegain_multiplier != 1 || p.lifegain_plus != 0
+                    || p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0
+                    || p.pump_per_life_gained_power > 0 || p.pump_per_life_gained_tough > 0
+                    || p.mana_per_life_gained || p.attack_team_pump_per_life_gained
+                    || p.endstep_lifegain_tokens > 0 || p.activate_min_life > 0
+                    || p.life_threshold_pump_life > 0 || p.life_above_start_anthem_life > 0
+                    || p.tap_token_min_life_above_start > 0)
+                { return false; }
+            }
+        }
+        return true;
+    }();
     // ON-DEMAND sac-for-mana sources (GameState::deck_has_ondemand_sac): MAINBOARD ONLY, the Moraug
     // reasoning -- the stamp moves the source from the plan enumerator to the payer, a behaviour. A
     // conjured Black Lotus (Garth) is not in the list, so FiveColour keeps its own conjure-and-crack route.

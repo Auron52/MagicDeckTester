@@ -2391,6 +2391,19 @@ public:
                                  std::vector<int>& own, std::vector<int>& opp) const
     { (void)s; (void)source; (void)is_pre_combat; (void)own; (void)opp; }
 
+    // AttackChooseOneModes -- ELDER GARGAROTH (CardParams::attack_choose_one; Beasts C, 2026-11-21): the modes the
+    // SEARCH branches over for one "choose one" attack trigger. `modes` arrives as the card's LEGAL mode ids in id
+    // order (0 token / 1 life / 2 draw); reorder in place (front = the default an unpinned trigger takes -- the
+    // playout beyond the horizon, an ordinal past the axis's cap) or RESTRICT by a stated, tested SOUND fold. An
+    // emptied list is ignored. Never consulted for the human's menu (the viewer offers every legal mode).
+    // ROOT (DecisionProviders.cpp, RestrictAttackChooseOneModesFor): token first, then draw, then life; and the
+    // "gain N life" mode is DROPPED when GameState::deck_life_inert && !own_death_live -- nothing this deck can play
+    // reads our life total or a life-gain event and our life cannot lose the game, so the gain is unobservable and
+    // the token mode (a 3/3 that can only add damage) dominates it (USER 2026-11-21: "Yes, we don't need this in
+    // the search."). MTG_UNPRUNE=attackchooselife restores it.
+    virtual void AttackChooseOneModes(const GameState& s, int controller, const CardDefinition& src,
+                                      std::vector<int>& modes) const;
+
     // MainPhaseTeamPumpCounts -- MAIN-PHASE activation counts for a stacking P/T team pump with no
     // keyword rider and no {T} (Ezuri, Renegade Leader's "{2}{G}{G}{G}: Elf creatures you control get
     // +3/+3"; Action::Kind::ActivatePump mode 2). The combat converter (ApplyFirebreathing) already

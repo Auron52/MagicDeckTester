@@ -669,7 +669,11 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-21, opponent-lockdown FREE TURNS, MTG_FREE_TURNS; 1712 -> 1720): pending_free_turn (never live
 // at a search node: raised and consumed inside one turn transition -- not folded), in_free_turn + free_turns_taken
 // (FOLDED in Build() value-gated, and in BuildSimKey), deck_has_free_turn (a DECK CONSTANT, never folded).
-static_assert(sizeof(GameState) == 1720,   // +8 free turns; Boars fields fit in upstream storage; +8 Maze's End I3; +24 Stuffy 5b; +8 padding; +56 2HG second head (+8 padding: Maze's End took its holes)
+// +8 bytes (2026-11-21, Beasts C): Elder Gargaroth's `scripted_attack_choose_mode` (int16, FUTURE-DETERMINING within
+// the turn -- the packed per-ordinal attack-trigger modes; FOLDED in Build() value-gated beside the Thunderkin pin)
+// and two DECK CONSTANTS `deck_has_attack_choose_one` / `deck_life_inert` (stamped once in StampDeckTraits --
+// nothing to fold). No hole fit after the Thunderkin / Soulstoke bools, so the three add a padded 8 bytes.
+static_assert(sizeof(GameState) == 1728,   // combined upstream free turns and Beasts Gargaroth fields; verify at build
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1049,6 +1053,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Thunderkin Awakener's packed attack-return ranks: the same FUTURE-DETERMINING class, value-gated.
     if (s.scripted_attack_reanimate >= 0)
     { fold(0x7A4E1C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_reanimate))); }
+    // Elder Gargaroth's packed attack-trigger modes: the same FUTURE-DETERMINING class, value-gated.
+    if (s.scripted_attack_choose_mode >= 0)
+    { fold(0x6A26C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(s.scripted_attack_choose_mode))); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

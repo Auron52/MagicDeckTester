@@ -2047,6 +2047,11 @@ public:
         // its front. Copied onto GameState::scripted_attack_reanimate (decided in main, consumed at
         // declare-attackers -- the attack_attach_choice route).
         int attack_reanimate_choice = -1;
+        // ELDER GARGAROTH's "choose one" attack trigger (token / life / draw): PACKED 2 bits per attack-trigger
+        // ordinal (AttackChoosePackModes, SpellEffects.h; field 0 = unpinned, m + 1 = mode m); -1 == every trigger
+        // takes the provider's front. Copied onto GameState::scripted_attack_choose_mode (decided in main,
+        // consumed at declare-attackers -- the attack_reanimate_choice route).
+        int attack_choose_mode_choice = -1;
         // Set only on the depth<=0 HORIZON LEAF plan (SolveWithLookahead): the one plan the
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.

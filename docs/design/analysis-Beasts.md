@@ -27,7 +27,24 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   trailing pass, so that card cannot be cast the same main (no breakpoint re-solve for a trailing-activation
   draw). Covered by the per-turn second-main gate planned for the provider batch.
 * **Smoke byte-identity (batches A + B, at 27e1f4892, no accept):** 235/235 PASS, per-game audit 0 configs changed, play-changed 0 (searched and d0). Log `build/scratch/beasts_smokeB.log` (build volume).
-* **Running:** integrator C (Elder Gargaroth modal attack axis + viewer).
+* **Batch C integrated (Elder Gargaroth, integrator C 2026-11-21; see the batch C commit on this branch):** NEW
+  `attack_choose_one` + `attack_choose_token_*` / `attack_choose_lifegain` / `attack_choose_draw` (NOT
+  `attack_trigger_modal`). Shared `ApplyAttackChooseOneTriggers` (SpellEffects.h) called right after
+  `ApplyAttackModalTriggers` in GameEngine::CombatPhase AND the rollout's SimulateOneCombat (lockstep), per
+  DECLARED copy. Searched pin `Plan::attack_choose_mode_choice` -> `GameState::scripted_attack_choose_mode` (int16,
+  2 bits/ordinal, spent after the loop, cleared at both turn starts). Axis on the Tectonic pattern in
+  AppendSubdecisionAxes (after Thunderkin), product cap 27, skipped under HumanPlayActive and on a dead post-combat
+  list. Life fold = root `DecisionProvider::AttackChooseOneModes` (token, draw, life; life dropped when the NEW deck
+  stamp `deck_life_inert` && !own_death_live; `MTG_UNPRUNE=attackchooselife` restores it). Folded into
+  Dominance::Build, BuildDedupKey combat pins (new LAST slot), plan-cache scalar key (value-gated), BpCandFingerprint,
+  solvememo, PlanDomCensus, RouteSig, every axis skip list. sizeof(GameState) 1712 -> 1720, Plan 784 -> 792 (asserts updated).
+  Viewer: attack_mode widened to 3 options (main.cpp clamp 0..2 for an attack_choose_one source + Gargaroth JSON
+  branch; index.html default reads any listed index); DECISIONS.md row; audit manifest. 8 new unit tests, all pass;
+  full unit suite 3843/3843. Viewer audit `--no-sweep` clean. Smoke NOT run (next batch runs one pass for C + D).
+* **Open gap (batch C, surfaced):** a card drawn by Gargaroth's draw mode (or Packleader off its token) arrives in
+  combat; the deck has no searched second main (NOT added to DeckUsesSecondMain, USER unsettled), so it waits a
+  turn. Covered by the per-turn second-main gate planned for the provider batch (J).
+* **Running:** nothing (integrator C).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -85,7 +102,7 @@ Bracket notes to re-check for THIS deck:
 | Kaheera companion (sideboard) | 3 | planned | companion {3} put-into-hand, once/game, sorcery speed |
 | Krosan Warchief | 1 | integrated 375a50399 | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
 | Questing Beast | 1 | integrated 375a50399 | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
-| Elder Gargaroth | 3 | drafted | new attack_choose_one 3-mode searched axis (Tectonic-style), viewer attack_mode widened to 3; 'or blocks' PROVISIONAL; life mode = provider dominance fold |
+| Elder Gargaroth | 3 | integrated (batch C, see Checkpoint) | NEW attack_choose_one 3-mode trigger, searched per-ordinal axis (Tectonic-style, cap 27), shared executor+rollout helper; life mode = root provider fold on deck_life_inert (USER approved); viewer attack_mode widened to 3; 'or blocks' PROVISIONAL deferral; NOT in DeckUsesSecondMain (combat draw waits a turn until the per-turn gate) |
 | Garruk's Harbinger | 3 | drafted | new combat-damage dig (PerformLookTakeDig, random bottom), searched card-number pin (Lackey shape); hexproof-from-black + PW PROVISIONAL |
 | Kaheera | 2 | lord+vigilance integrated 53e68dcd3; companion pending (batch I) | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
 | Migloz | 3 | drafted | oil_counters int; searched pump (ActivatePump mode 4); Steelbane destroy w/ oil + own-target provider prune; vig/menace PROVISIONAL |
@@ -100,6 +117,8 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 ## Viewer classifications (2c-ter)
 
 * Contested Cliffs (batch B): bucket A. ONE unpinned main-phase entry under human play; both fight targets (our Beast, then theirs) are `target` board clicks at activation via `g_play_loyalty_chooser` (Voracious precedent). `audit_viewer_decisions.py`: `tap_fight_cost` -> target / activate, `tap_fight_requires_subtype` inert. Registry: tools/play/DECISIONS.md "Targeted tap fight".
+
+* Elder Gargaroth (batch C): bucket A (reuse, widened). `attack_mode` with THREE options (0 token, 1 life, 2 draw), asked per declared copy at declare-attackers from `ApplyAttackChooseOneTriggers` over the full legal menu (the search's life fold never narrows the human). `audit_viewer_decisions.py`: `attack_choose_one` -> attack_mode, payload params inert. Registry: tools/play/DECISIONS.md attack_mode Gargaroth row.
 
 ## Verification verdicts (Stage 5)
 
