@@ -76,6 +76,14 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
         colours as the host, the held remainder dominates by count.
     Whatever is built must show identical digests on EDF/Jumbo/Bruna/Sea d0, KEEP-cut on vs off.
 
+## Milestone 15:20 UTC
+- wip/bruna-apply-drop has been REBASED onto origin/phase-1-2-deck-analyzer cd330ec5a, which includes the Merfolk
+  ENUM-GAP fix 714532cda. The lord fix is cherry-picked on top as d5c0c9d50. The only conflicts were heurarm slot
+  appends, union-resolved. Force-pushed (it is a wip branch).
+- Lane build + full units of that tree: `$B/a7/build_gt.sh` (lane PID 994375) -> `$B/a7/build_gt.status`,
+  `build_gt.DONE`, `units_gt.log`. If lpab says to flip TOKEN_SELF: commit the flip, rebuild (incremental, under
+  the lock at full cores), then run the GT.
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
