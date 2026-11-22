@@ -10,12 +10,15 @@ Prior root-cause notes: /workspaces/MagicDeckTester/logs/hinata-gi548/handoff.md
   src tree a7c19c1db77c64aaa2b8e3abf56cc81232042caf.
 
 ## Running
-- Chain /workspaces/MagicDeckTester/build/scratch/claude_prepayc/chain1.sh, PID 877255 (setsid wrapper 877254 is gone):
-  waits on box lock build/scratch/claude_box.lock, then `./build.sh` (log build.log), copies binary to
-  build/scratch/claude_prepayc/mtg.fix, then `MTG_PGO=0 MTG_RSS_CAP_GB=40 bash test/regression.sh --both` (NO accept)
-  -> regr.log. Status lines in chain1.status; DONE marker chain1.DONE (holds rc).
-  Wait: `while kill -0 877255 2>/dev/null; do sleep 60; done` (run in background).
-
+- Step 1 DONE (chain1 rc=1 = keys moved, expected): tiers smoke+regression at 628fcc728, log
+  build/scratch/claude_prepayc/regr.log. Moved (all digest-only except one): hinata smoke d3/d5, hinata regr d5 s2002/s3003,
+  hinata2hg smoke d5, hinata2hg regr d5 s2002 5.4133 -> 5.4000 (faster), edf smoke d0, niv regr d0/d5 s2002/d5 s3003,
+  niv2hg regr d5 s2002. Tier audit: searched slower=0 (smoke 0 faster, regr 1 faster), d0 slower=0.
+- Step 2 RUNNING: A/B batch build/scratch/claude_prepayc/ab1/ (run.sh, PID 1005245, waits on box lock; status file
+  `status`; DONE marker `DONE` holds rc; out ab.out/ab.err; per-job .wins/.units in ab1/wins). Binary mtg.fix (=628fcc728).
+  Shapes (seed 81000, held out): hinata d3b10/d5b30/2hg-d5b30 x2000, hinata d0 x5000; niv d3b10/d5b20/2hg-d5b20 x2000,
+  niv d0 x5000; edf d3b10/d5b20 x2000, edf d0 x5000. Jobs `<deck>_<shape>__on|off`.
+  Report: `python3 test/paired_arms.py build/scratch/claude_prepayc/ab1/wins --base off --arm on --list-moved`.
 ## Next (in order)
 1. Read regr.log / test/results to find which tier keys moved (smoke + regression vs GT at 94cd1e06b).
 2. Held-out A/B on the decks that moved: ONE pooled `mtg --batch` manifest, binary mtg.fix, arms
