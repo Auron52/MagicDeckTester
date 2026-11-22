@@ -79,11 +79,12 @@ commit "GT: accept smoke + regression for Blood Sun integration ...". If git log
    9b / 10); Stage 5 (5c2, the play sweep -- driven by agents of the parent's own type, see CLAUDE.md -- 5h audit,
    discard buckets); Stage 6 (report, 6a) per `.claude/skills/analyze-deck.md`.
 
-## Open USER decisions (repeat in every closing message until answered)
-- B12 Grim list: adoption after item 4's numbers (red-source arm pre-authorised: best wins).
-- The >= 8 Revelation gate (`MTG_BLOODSUN_GRIM_REV_GATE`): measure jointly with item 4, then present.
-- Discard order (item 6), cast order / mulligan drafts (ledger B11).
-- Scoped `MTG_BP_DEV_SEQ_ALL` default (step 7b / item 5): present with numbers.
+## Open USER decisions
+NONE right now. USER rule: a question for the USER is only a decision you cannot proceed without; never an item that
+still needs an agent's investigation, test or measurement. Items 4-6 above (the Grim list, the >= 8 gate measured
+jointly with it, the discard draft, a scoped `MTG_BP_DEV_SEQ_ALL`) and the cast-order / mulligan drafts (ledger B11)
+become USER decisions only once their measurement is done and the result is in hand -- then present the numbers with a
+recommendation.
 
 ## Box rules learned this session
 - The 9p repo mount dies under memory pressure, and another container shares the VM (~22 GB): keep `free -g`
