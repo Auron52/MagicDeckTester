@@ -3263,6 +3263,86 @@ inline void OpponentLandEnters(GameState& state, const Card& entering, const Car
     if (face.params.etb_lifegain > 0) { life_gains.emplace_back(name, face.params.etb_lifegain); }
 }
 
+// REPLAY ONLY (--legacy-opponent-land-entry, GameLogger.h OpponentLandEntryRulesOn): the land drop as it was
+// before the entry rules (ce5866171, OpponentDeck.h's PlayLeftmostLandFrom), kept verbatim so a reference
+// recorded against it replays exactly. The leftmost card whose FRONT face is a land; it enters tapped only when
+// printed so (or a shock, declined); no MDFC land face, no Karoo bounce, no Lake replacement, no legend rule, no
+// ETB life (notes and life_gains stay empty); a fetch is cracked as below. The caller has already returned on
+// !opponent_plays_lands / opponent_decked.
+inline LandPlayResult PlayLeftmostLandFromLegacy(GameState& state, std::vector<Card>& hand, Library& library,
+                                                 std::vector<Card>* graveyard)
+{
+    LandPlayResult result;
+    Player& opp = state.players[1];
+    auto held = std::find_if(hand.begin(), hand.end(), [](const Card& c) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->card.IsLand();
+    });
+    if (held == hand.end()) { return result; }
+    const Card card = *held;
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
+    hand.erase(held);
+    result.played = true;
+    result.land_name = card.m_name.str();
+    auto enter = [&](const Card& entering, const CardDefinition& land_def, bool force_tapped) {
+        Permanent perm;
+        perm.card = land_def.card;
+        perm.card.m_number = entering.m_number;
+        perm.controller_index = 1;
+        perm.owner_index = 1;
+        perm.entered_this_turn = true;
+        // The passive opponent declines optional shock-land life payments.
+        perm.tapped = force_tapped || land_def.params.enters_tapped
+            || land_def.params.etb_pay_life_to_untap > 0;
+        if (OpponentLandsFrontOn())
+        {
+            auto pos = state.battlefield.begin();
+            while (pos != state.battlefield.end() && pos->controller_index == 1) { ++pos; }
+            state.battlefield.insert(pos, std::move(perm));
+            return;
+        }
+        state.battlefield.push_back(std::move(perm));
+    };
+    const bool typed_fetch = !def->params.fetch_land_types.empty();
+    const bool basic_fetch = def->params.land_search_activation_sacrifice_self
+        && def->params.land_search_basic_only && def->params.land_search_count == 1
+        && def->params.land_search_activation_cost.has_value()
+        && def->params.land_search_activation_cost->ManaValue() == 0;
+    // Older typed-fetch definitions omit the activation fields because the
+    // normal fetch resolver charges their printed one life directly.
+    const int life_cost = typed_fetch
+        ? std::max(1, def->params.land_search_activation_life_cost)
+        : def->params.land_search_activation_life_cost;
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost)
+    {
+        enter(card, *def, false);
+        return result;
+    }
+    // Fetch activation: tap and sacrifice this just-played land as costs.
+    opp.life -= life_cost;
+    if (graveyard != nullptr) { graveyard->push_back(card); }
+    result.searched = true;
+    auto pick = std::find_if(library.begin(), library.end(), [&](const Card& candidate) {
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(candidate);
+        if (land == nullptr || !land->card.IsLand()) { return false; }
+        if (basic_fetch) { return land->card.HasSupertype(Supertype::Basic); }
+        for (const std::string& type : def->params.fetch_land_types)
+        for (const std::string& subtype : land->card.m_subtypes)
+        { if (type == subtype) { return true; } }
+        return false;
+    });
+    if (pick != library.end())
+    {
+        const Card fetched = *pick;
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(fetched);
+        library.erase(pick);
+        result.fetched_name = fetched.m_name.str();
+        // A passive opponent never pays a shock land's optional two life.
+        enter(fetched, *land, basic_fetch && def->params.land_search_tapped);
+    }
+    return result;
+}
+
 // One head's land drop from the given hand and library: players[1]'s (head 1), or 2HG's second head's
 // (head 2, graveyard == nullptr: nothing reads that head's graveyard). Life is the team's. A fetch that
 // can be cracked at once is cracked (tap and sacrifice as costs) for the first eligible library land; the
@@ -3272,6 +3352,7 @@ inline LandPlayResult PlayLeftmostLandFrom(GameState& state, std::vector<Card>& 
 {
     LandPlayResult result;
     if (!state.opponent_plays_lands || state.opponent_decked) { return result; }
+    if (!OpponentLandEntryRulesOn()) { return PlayLeftmostLandFromLegacy(state, hand, library, graveyard); }
     Player& opp = state.players[1];
     const int at = OpponentLandDropIndex(state, hand, head);
     if (at < 0) { return result; }
@@ -31093,10 +31174,12 @@ inline int SweepOrphanedAuras(GameState& state)
 // double-count their continuous buffs in the damage step.
 // 2HG: both opponent heads sit under controller 1, but the legend rule is per PLAYER (CR 704.5j), so a
 // legend of each head's is not a duplicate. The head is the card-number band (opponentdeck::HeadOfNumber);
-// for a single opponent every card is head 1's, so this is always true outside 2HG.
+// for a single opponent every card is head 1's, so this is always true outside 2HG. Part of the opponent
+// land-entry rules (ce5866171): a replay under --legacy-opponent-land-entry legend-rules across both heads, as
+// the game was played (OpponentLandEntryRulesOn, GameLogger.h).
 inline bool LegendSameHead(int controller, const Permanent& a, const Permanent& b)
 {
-    return controller != 1
+    return controller != 1 || !OpponentLandEntryRulesOn()
         || opponentdeck::HeadOfNumber(a.card.m_number) == opponentdeck::HeadOfNumber(b.card.m_number);
 }
 

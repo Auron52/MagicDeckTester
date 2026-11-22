@@ -537,7 +537,14 @@ def recording_rule_args(ref):
     deals damage in two steps, so first-step lifelink reaches Thune / Pridemate / Serra Ascendant's
     30-life threshold before the regular step. A recording made before carries no key and replays with
     --legacy-single-damage-step -- the one summed step it was played with. CritterLifegain/claude_s6_gi5
-    (recorded T5) otherwise replays T4. Inert on every deck without a first or double striker."""
+    (recorded T5) otherwise replays T4. Inert on every deck without a first or double striker.
+
+    `opponent_land_entry` (2026-11-21, ce5866171): from then on the passive opponent's land drop follows each
+    land's entry rules (MDFC land faces, Karoo bounce, Lake of the Dead, per-head enters-tapped conditions,
+    ETB life, the legend rule per 2HG head). An `opponent_land_model` recording without the stamp was played
+    against the old drop (leftmost front-face land, no entry triggers), so it replays with
+    --legacy-opponent-land-entry. Creature_Burn/claude_s9_gi8 is the case: its opponent's Gruul Turf now
+    bounces a land, so the recorded Price of Progress line no longer wins T4."""
     args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
@@ -549,6 +556,8 @@ def recording_rule_args(ref):
         args.append("--legacy-passive-opponent-lands")
     if not ref.get("opponent_shuffle_ordinal"):
         args.append("--legacy-shared-shuffle-ordinal")
+    if ref.get("opponent_land_model") and not ref.get("opponent_land_entry"):
+        args.append("--legacy-opponent-land-entry")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):

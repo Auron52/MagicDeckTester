@@ -355,3 +355,66 @@ TEST_CASE("2HG: each head's land entry reads and moves only that head's lands")
         CHECK(OppBoard(s) == std::vector<std::string>{"Boseiju, Who Endures", "Boseiju, Who Endures"});
     }
 }
+
+TEST_CASE("reference replay: --legacy-opponent-land-entry restores the drop a reference was recorded against")
+{
+    // Creature_Burn/claude_s9_gi8 was recorded before the entry rules (ce5866171). The legacy drop is the leftmost
+    // FRONT-face land with no entry trigger: a Gruul Turf does not bounce, an MDFC is never the drop, no ETB life,
+    // and the legend rule groups both 2HG heads' legends (one controller), as before.
+    struct LegacyScope
+    {
+        LegacyScope() { g_play_legacy_opponent_land_entry = true; }
+        ~LegacyScope() { g_play_legacy_opponent_land_entry = false; }
+    };
+    auto board = [] {
+        GameState s = Fresh();
+        OnBoard(s, "Forest", 100010);
+        s.players[1].hand.push_back(Opp("Turntimber Symbiosis", 100001));
+        s.players[1].hand.push_back(Opp("Gruul Turf", 100002));
+        return s;
+    };
+    {
+        GameState s = board();
+        ResolvePassiveOpponentLandTurn(s);
+        CHECK(OppBoard(s) == std::vector<std::string>{"Gruul Turf"});   // the rules: bounced the Forest
+        REQUIRE(s.players[1].hand.size() == 2u);
+        CHECK(s.players[1].hand[0].m_name == "Turntimber Symbiosis");
+        CHECK(s.players[1].hand[1].m_name == "Forest");
+    }
+    {
+        LegacyScope legacy;
+        GameState s = board();
+        ResolvePassiveOpponentLandTurn(s);
+        CHECK(OppBoard(s) == std::vector<std::string>{"Forest", "Gruul Turf"});   // no bounce
+        REQUIRE(Find(s, 100002) != nullptr);
+        CHECK(Find(s, 100002)->tapped);                                           // printed enters-tapped
+        REQUIRE(s.players[1].hand.size() == 1u);
+        CHECK(s.players[1].hand[0].m_name == "Turntimber Symbiosis");             // an MDFC is never the drop
+    }
+    {
+        LegacyScope legacy;
+        GameState s = Fresh();
+        s.players[1].hand.push_back(Opp("Turntimber Symbiosis", 100001));
+        ResolvePassiveOpponentLandTurn(s);
+        CHECK(OppBoard(s).empty());
+        CHECK(s.players[1].hand.size() == 1u);
+    }
+    {
+        LegacyScope legacy;
+        GameState s = Fresh();
+        const int life = s.players[1].life;
+        s.players[1].hand.push_back(Opp("Radiant Fountain", 100001));
+        ResolvePassiveOpponentLandTurn(s);
+        CHECK(OppBoard(s) == std::vector<std::string>{"Radiant Fountain"});
+        CHECK(s.players[1].life == life);                                         // no ETB life
+    }
+    {
+        LegacyScope legacy;
+        GameState s = Fresh(2);
+        OnBoard(s, "Boseiju, Who Endures", 100010);
+        s.opponent2_hand.push_back(Opp("Boseiju, Who Endures", 110001));
+        ResolvePassiveOpponentLandTurn(s);
+        LegendRuleSbaCheckpoint(s);
+        CHECK(OppBoard(s) == std::vector<std::string>{"Boseiju, Who Endures"});   // one controller, one legend
+    }
+}

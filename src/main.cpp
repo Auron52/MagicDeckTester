@@ -6718,6 +6718,9 @@ if (!log_dir.empty())
     // carry no stamp and replay through the old immediate-fetch path.
     if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
     if (opponent_land_model) { out << ", \"opponent_land_model\": 1"; }
+    // The opponent's land drop follows each land's entry rules (ce5866171; OpponentLandEntryRulesOn, GameLogger.h).
+    // A reference without `opponent_land_entry` predates them and replays under --legacy-opponent-land-entry.
+    if (opponent_land_model && OpponentLandEntryRulesOn()) { out << ", \"opponent_land_entry\": 1"; }
     // The opponent's library shuffles on its OWN ordinal (2ad8c3d41, ShuffleAfterSearch). A reference
     // recorded before shuffled it on the shared search_count, carries no `opponent_shuffle_ordinal`,
     // and replays under --legacy-shared-shuffle-ordinal.
@@ -12136,6 +12139,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-spell-copy")   { g_play_legacy_spell_copy = true; continue; }  // replay a reference recorded before the resolved-spell copy id (value-less; see GameLogger.h, Cyclone Q53)
+        if (flag == "--legacy-opponent-land-entry") { g_play_legacy_opponent_land_entry = true; continue; } // replay a reference recorded before the opponent's land entry rules (no opponent_land_entry stamp; value-less; see GameLogger.h)
         if (flag == "--legacy-gsz-shuffle")  { g_play_legacy_gsz_shuffle = true; continue; } // replay a reference recorded before the Green Sun's Zenith copy-id shuffle (value-less; see GameLogger.h)
         if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try

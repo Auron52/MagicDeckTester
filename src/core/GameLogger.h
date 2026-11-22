@@ -1690,6 +1690,19 @@ inline bool SpellCopyIdOn()
 inline bool g_play_legacy_single_damage_step = false;
 inline bool CombatDamageStepsOn() { return !g_play_legacy_single_damage_step; }
 
+// THE PASSIVE OPPONENT'S LAND ENTRY RULES (ce5866171, 2026-11-21, opponentdeck::PlayLeftmostLandFrom in
+// SpellEffects.h): from then on the opponent's land drop follows each land's own entry rules (an MDFC's land
+// face, a Karoo's bounce, Lake of the Dead's sacrifice, enters-tapped conditions per head, ETB life gain, the
+// legend rule per 2HG head). A reference recorded before carries no `opponent_land_entry` key and was played
+// against the old drop (the leftmost FRONT-face land, no entry triggers, tapped only when printed so, the legend
+// rule across both 2HG heads), so its replayer (test/viewer_protocol_check.py) passes
+// `--legacy-opponent-land-entry` and the opponent develops exactly as it did when the game was played -- an OLD
+// recording must never be invalidated by a NEW rule. Creature_Burn/claude_s9_gi8 is the case: its opponent's
+// Gruul Turf now returns a land, so the recorded Price of Progress line deals less and no longer wins T4.
+// REPLAY ONLY; process-global like the flags above.
+inline bool g_play_legacy_opponent_land_entry = false;
+inline bool OpponentLandEntryRulesOn() { return !g_play_legacy_opponent_land_entry; }
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit
