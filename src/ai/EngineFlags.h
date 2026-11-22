@@ -1066,6 +1066,14 @@ inline bool CreatureLeftoverExactOn()
     static const bool env_on = EnvOn("MTG_CREATURE_LEFTOVER_EXACT", true);
     return heurarm::Flag(heurarm::CREATURE_LEFTOVER_EXACT, env_on);
 }
+// MTG_CREATURE_FLOAT_SWAP (2026-11-22; DEFAULT ON, read only under MTG_CREATURE_LEFTOVER_EXACT): the creature-only leftover
+// of a creature payment is swapped for the general float the pre-tap drain spent on a generic pip when the line casts no
+// other creature (ManaPayment.cpp commit_leftover; Bruna d0 gi21770). Per-job slot.
+inline bool CreatureFloatSwapOn()
+{
+    static const bool env_on = EnvOn("MTG_CREATURE_FLOAT_SWAP", true);
+    return heurarm::Flag(heurarm::CREATURE_FLOAT_SWAP, env_on);
+}
 
 // MTG_AURA_HOST_LINE_KEEP (2026-11-21; DEFAULT ON, =0 -> the unconditional host hold): a land Aura's host is hidden
 // while the Aura pays only when that does not strand the rest of the line that paying unheld would keep

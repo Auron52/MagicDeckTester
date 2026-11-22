@@ -1086,6 +1086,7 @@ enum Slot : int
     SCALED_GROWER_DECIDER,    // MTG_SCALED_GROWER_DECIDER  the apply's payable-order decider, when the given order pays in neither the whole-turn prepay nor the sequential walk, tries the order with City-growing creature casts cheapest-first among comparator ties (ScaledLandGrowerOrder) and takes it when the walk pays it (s30000762 T4: Dockhand before Seahunter). Default ON; =0 -> the given order
     CREATURE_LEFTOVER_EXACT,  // MTG_CREATURE_LEFTOVER_EXACT  a creature payment's over-produced unit is creature-only only when the restricted units could not all pay this bill's pips (Bruna mana-clean, Somberwald Sage). =0 -> the legacy min(restricted, leftover) booking
     AURA_HOST_LINE_KEEP,      // MTG_AURA_HOST_LINE_KEEP  a land Aura's host is held while it pays only when the hold does not strand the rest of the line that an unheld payment keeps (Bruna mana-clean, Wild Growth). =0 -> the unconditional hold
+    CREATURE_FLOAT_SWAP,      // MTG_CREATURE_FLOAT_SWAP  sub-lever of CREATURE_LEFTOVER_EXACT: a creature payment's creature-only leftover is swapped for the GENERAL float the pre-tap drain spent on a generic pip, when the line casts no other creature (Bruna d0 gi21770). Default ON; =0 -> no swap
     EVAL_COMBAT_TOKEN_SELF,   // MTG_EVAL_COMBAT_TOKEN_SELF  greedy policy (EvalCard: d0 runner + playout): a creature whose OWN combat damage triggers its token maker (Spawning Kraken, Koma, Millicent) is credited the tokens' power for each of its own attacks in the horizon (Sea d0: Kraken tied a vanilla 6/6 six-drop). Default OFF (heuristic weight, USER call); =1 -> on
     COUNT
 };
@@ -2117,6 +2118,7 @@ inline const char* Name(int slot)
         "MTG_SCALED_GROWER_DECIDER",
         "MTG_CREATURE_LEFTOVER_EXACT",
         "MTG_AURA_HOST_LINE_KEEP",
+        "MTG_CREATURE_FLOAT_SWAP",
         "MTG_EVAL_COMBAT_TOKEN_SELF",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
