@@ -10804,12 +10804,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 inline std::uint64_t FsOrderSig(const GameState& state);        // fwd (defined much later)
 namespace paycensus
 {
-enum Fn : int { SPWF = 0, SPS, OPS, OPWT, ASEXEC, kN };
+enum Fn : int { SPWF = 0, SPS, OPS, OPWT, ASEXEC, UOT, kN };
 inline const char* FnName(int f)
 {
     static const char* n[kN] = { "SubsetPayableWithFilters", "SubsetPayableSequential",
                                  "OrderPaysSequentially", "OrderPrepaysWholeTurn",
-                                 "SubsetPayableAsExecuted" };
+                                 "SubsetPayableAsExecuted", "UnlockOrderTree(enum)" };
     return n[f];
 }
 inline bool On() { static const bool v = EnvOn("MTG_PAY_CENSUS"); return v; }
@@ -10851,6 +10851,7 @@ inline std::uint64_t ActSig(const Action& a)
     MixA(h, CostSig(a.cost));
     MixA(h, static_cast<std::uint64_t>(a.enchant_target) * 131 + static_cast<std::uint64_t>(a.chosen_x + 7));
     MixA(h, static_cast<std::uint64_t>(a.sac_source_id) * 17 + static_cast<std::uint64_t>(a.ability_mode));
+    MixA(h, static_cast<std::uint64_t>(a.sac_victim_id) + 0x5AC7ull);   // an equip's / sac's target
     MixA(h, static_cast<std::uint64_t>(a.free_cast) | (static_cast<std::uint64_t>(a.alt_cost) << 1)
             | (static_cast<std::uint64_t>(a.evoke) << 2) | (static_cast<std::uint64_t>(a.kicked) << 3)
             | (static_cast<std::uint64_t>(a.sacrifice_land) << 4)
@@ -10862,10 +10863,32 @@ inline std::uint64_t ActSig(const Action& a)
     if (a.legend_keep != 0) { MixA(h, 0x1E6Cull + static_cast<std::uint64_t>(a.legend_keep)); }   // CR 704.5j keep (set-gated)
     return h;
 }
-struct Seen { const GameState* obj; bool verdict; };
+struct Seen { const GameState* obj; bool verdict; int kind; };
+// The enumerator whose paymemo scope is innermost (1 = greedy SolveUncached, 2 = EnumeratePlans, 0 = none), for the
+// UOT repeat attribution: rep_kind[first asker][repeat asker].
+inline thread_local int t_enum_kind = 0;
+inline std::atomic<long long> g_uot_rep_kind[3][3]{};
+struct EnumKindScope
+{
+    int saved;
+    explicit EnumKindScope(int k) : saved(t_enum_kind) { t_enum_kind = k; }
+    ~EnumKindScope() { t_enum_kind = saved; }
+};
+struct UotKindPrinter
+{
+    ~UotKindPrinter()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[pay-census] UOT repeats by (first asker -> repeat asker; 0 none, 1 greedy Solve, 2 EnumeratePlans):");
+        for (int a = 0; a < 3; ++a) { for (int b = 0; b < 3; ++b)
+        { std::fprintf(stderr, " %d->%d:%lld", a, b, g_uot_rep_kind[a][b].load()); } }
+        std::fprintf(stderr, "\n");
+    }
+};
+inline UotKindPrinter g_uot_kind_printer;
 // `ids` are indices into `acts`, in the asked order; `ids2` optional (OPS's subset vs order).
 inline void Record(int fn, const GameState& s, const std::vector<Action>& acts, const std::vector<int>& ids,
-                   bool verdict, unsigned long long t0)
+                   bool verdict, unsigned long long t0, std::uint64_t extra = 0)
 {
     const long long cyc = static_cast<long long>(__rdtsc() - t0);
     (verdict ? g_c.cyc_true : g_c.cyc_false)[fn].fetch_add(cyc, std::memory_order_relaxed);
@@ -10884,9 +10907,11 @@ inline void Record(int fn, const GameState& s, const std::vector<Action>& acts, 
     MixA(h, static_cast<std::uint64_t>(fm.wild));
     MixA(h, CostSig(g_line_unpaid_cost));
     MixA(h, static_cast<std::uint64_t>(fn));
+    if (extra != 0) { MixA(h, extra); }   // UOT: the payment-context globals' contents (UoTreeCtxSig)
     for (int j : ids) { MixA(h, ActSig(acts[static_cast<std::size_t>(j)])); }
     auto it = seen.find(h);
-    if (it == seen.end()) { seen.emplace(h, Seen{ &s, verdict }); return; }
+    if (it == seen.end()) { seen.emplace(h, Seen{ &s, verdict, t_enum_kind }); return; }
+    if (fn == UOT) { g_uot_rep_kind[it->second.kind][t_enum_kind].fetch_add(1, std::memory_order_relaxed); }
     g_c.repeats[fn].fetch_add(1, std::memory_order_relaxed);
     g_c.cyc_rep[fn].fetch_add(cyc, std::memory_order_relaxed);
     if (!verdict) { g_c.rep_false[fn].fetch_add(1, std::memory_order_relaxed); }
@@ -13759,6 +13784,132 @@ static bool UnlockOrderRealisesGiven(const std::vector<Action>& acts, const std:
     return true;
 }
 
+// MTG_PAY_CENSUS (diagnostic only): the payment-context globals paymemo::Ctx compares, by CONTENT, for the
+// unlock-order tree's cross-enumeration repeat census (paycensus fn UOT). Pointers are mixed as-is.
+static std::uint64_t UoTreeCtxSig()
+{
+    std::uint64_t h = 0x55AA1234ull;
+    paycensus::MixA(h, reinterpret_cast<std::uintptr_t>(CurrentPlanContext()));
+    paycensus::MixA(h, reinterpret_cast<std::uintptr_t>(CurrentPlanTraits()));
+    paycensus::MixA(h, paycensus::CostSig(g_act_line_paid));
+    paycensus::MixA(h, paycensus::CostSig(g_act_line_current));
+    paycensus::MixA(h, static_cast<std::uint64_t>(g_human_untap_need) + 101);
+    for (int r : g_plan_reserved_sources) { paycensus::MixA(h, static_cast<std::uint64_t>(r) + 7); }
+    return h | 1;
+}
+
+// MTG_UOT_XMEMO (PROTOTYPE, default OFF): the enumeration site's unlock-order tree verdict memoised ACROSS
+// enumerations inside one decision (TurnSolver::DecisionEpoch), keyed by board CONTENT (BuildSimKey at depth 0 + the
+// zone-order signature), the floating pools, the line's unpaid cost, the payment-context globals (UoTreeCtxSig) and
+// the asked actions in `sel` order (paycensus::ActSig). The census found 65% of these trees repeating inside a decision
+// with no paymemo scope shared. MTG_UOT_XMEMO_VERIFY=1 re-runs the tree on every hit and counts mismatches.
+// Not consulted under the unlock-order price (the tree's charges read the budget) or human play.
+namespace uotx
+{
+inline bool On()     { static const bool v = EnvOn("MTG_UOT_XMEMO"); return v; }
+inline bool Verify() { static const bool v = EnvOn("MTG_UOT_XMEMO_VERIFY"); return v; }
+inline std::atomic<long long> g_hits{0}, g_misses{0}, g_mismatch{0};
+struct Printer
+{
+    ~Printer()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr, "[uot-xmemo] hits=%lld misses=%lld VERIFY_MISMATCH=%lld (verify %s)\n", g_hits.load(),
+                     g_misses.load(), g_mismatch.load(), Verify() ? "on" : "off");
+    }
+};
+inline Printer g_printer;
+struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
+struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
+}   // namespace uotx
+template <class F>
+static bool UoTreeXMemo(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel, F&& run)
+{
+    if (!uotx::On() || HumanPlayActive() || uoprice::PriceOn()) { return run(); }
+    static thread_local std::uint64_t epoch = ~0ull;
+    static thread_local std::unordered_map<uotx::K, bool, uotx::KH> table;
+    if (epoch != TurnSolver::DecisionEpoch() || table.size() > (1u << 20)) { table.clear(); epoch = TurnSolver::DecisionEpoch(); }
+    const TranspositionTable::Key bk = BuildSimKey(state, 0, 0, false);
+    std::uint64_t h = 0x7C3Bull;
+    paycensus::MixA(h, FsOrderSig(state));
+    const ManaPool* pools[3] = { &state.floating_mana, &state.floating_creature_mana, &state.floating_bigspell_mana };
+    for (const ManaPool* fm : pools)
+    {
+        paycensus::MixA(h, static_cast<std::uint64_t>(fm->white) | (static_cast<std::uint64_t>(fm->blue) << 10)
+                         | (static_cast<std::uint64_t>(fm->black) << 20) | (static_cast<std::uint64_t>(fm->red) << 30)
+                         | (static_cast<std::uint64_t>(fm->green) << 40) | (static_cast<std::uint64_t>(fm->colorless) << 50));
+        paycensus::MixA(h, static_cast<std::uint64_t>(fm->wild) + 3);
+    }
+    paycensus::MixA(h, paycensus::CostSig(g_line_unpaid_cost));
+    paycensus::MixA(h, UoTreeCtxSig());
+    for (int j : sel) { paycensus::MixA(h, paycensus::ActSig(cands[static_cast<std::size_t>(j)])); }
+    paycensus::MixA(h, sel.size());
+    const uotx::K key{ bk.h1 ^ (h * 0x2545F4914F6CDD1Dull), bk.h2 + h };
+    auto it = table.find(key);
+    if (it != table.end())
+    {
+        uotx::g_hits.fetch_add(1, std::memory_order_relaxed);
+        if (uotx::Verify())
+        {
+            const bool r = run();
+            if (r != it->second)
+            {
+                const long long n = uotx::g_mismatch.fetch_add(1, std::memory_order_relaxed);
+                if (n < 10) { std::fprintf(stderr, "[uot-xmemo] MISMATCH t=%d memo=%d walk=%d\n", state.turn_number,
+                                           it->second ? 1 : 0, r ? 1 : 0); }
+            }
+            return r;
+        }
+        return it->second;
+    }
+    uotx::g_misses.fetch_add(1, std::memory_order_relaxed);
+    const bool r = run();
+    table.emplace(key, r);
+    return r;
+}
+
+// MTG_PAY_CENSUS (diagnostic only): the unlock-order tree's verdicts by a CRUDE mana gap -- the subset's cast mana
+// values (EffectiveCost, no X, no same-line reducer; free/alt casts 0) minus the board's untapped supply
+// (AvailableManaPool + floating) -- with the tree's cycles per bucket. Asks whether a supply bound that credits the
+// unlocks could refuse the false searches before the tree runs. Prints at exit.
+namespace uotgap
+{
+constexpr int kB = 12;   // gap buckets: <=-4, -3 .. 7, >=8 -> index gap+4 clamped to [0, 11]
+struct Counters
+{
+    std::atomic<long long> n[2][kB]{}, cyc[2][kB]{};
+    ~Counters()
+    {
+        if (!paycensus::On()) { return; }
+        for (int v = 0; v < 2; ++v)
+        {
+            std::fprintf(stderr, "[uot-gap] verdict=%d", v);
+            for (int b = 0; b < kB; ++b)
+            { std::fprintf(stderr, " g%+d:%lld/%.2fG", b - 4, n[v][b].load(), cyc[v][b].load() / 1e9); }
+            std::fprintf(stderr, "\n");
+        }
+    }
+};
+inline Counters g_c;
+}   // namespace uotgap
+static void UoTreeGapCensus(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
+                            bool verdict, unsigned long long t0)
+{
+    const long long cyc = static_cast<long long>(__rdtsc() - t0);
+    long long lb = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || a.free_cast || a.alt_cost) { continue; }
+        lb += EffectiveCost(*a.def, state, 1).ManaValue();
+    }
+    const long long ub = AvailableManaPool(state).Total() + state.floating_mana.Total()
+                       + state.floating_creature_mana.Total() + state.floating_bigspell_mana.Total();
+    const int b = static_cast<int>(std::clamp<long long>(lb - ub + 4, 0, uotgap::kB - 1));
+    uotgap::g_c.n[verdict ? 1 : 0][b].fetch_add(1, std::memory_order_relaxed);
+    uotgap::g_c.cyc[verdict ? 1 : 0][b].fetch_add(cyc, std::memory_order_relaxed);
+}
+
 static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, std::vector<int>& order)
 {
@@ -13852,9 +14003,17 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         {
             std::vector<int> uo = order;
             uoprice::Meter meter(uoprice::kEnum, /*cut_allowed=*/true);   // MTG_UO_BUDGET_PRICE
-            if (UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false, /*include_given=*/true,
-                                      &meter))
-            { return true; }
+            const unsigned long long uot_t0 = paycensus::On() ? __rdtsc() : 0;
+            const bool uot = UoTreeXMemo(state, cands, sel, [&]
+                { return UnlockOrderSearchTree(state, cands, sel, uo, seq_rv_charged, /*nearest=*/false,
+                                               /*include_given=*/true, &meter); });
+            // MTG_PAY_CENSUS (diagnostic): this tree's repeats inside the decision, keyed by board + context contents.
+            if (paycensus::On())
+            {
+                paycensus::Record(paycensus::UOT, state, cands, sel, uot, uot_t0, UoTreeCtxSig());
+                UoTreeGapCensus(state, cands, sel, uot, uot_t0);
+            }
+            if (uot) { return true; }
             return etb_ord != order && !UnlockOrderRealisesGiven(cands, order, etb_ord) && run_walk(etb_ord);
         };
         if (!UoDfsVerifyOn()) { if (fold()) { return true; } }
@@ -62692,6 +62851,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     const bool any_haste_rider = AppendGreedySelfHasteRiders(state, is_pre_combat, cands);
     // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
     paymemo::Scope _pay_memo(state, cands);
+    paycensus::EnumKindScope _pc_kind(1);   // MTG_PAY_CENSUS attribution only
     t_greedy_last_ncands = static_cast<int>(cands.size());
     // Does any candidate need the deck's order check (a restrictor or a spliced cast)? One pass, so a
     // deck without either never even scans the subset (see OrderedSubsetRealisable in consider).
@@ -85693,6 +85853,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
     // Opened only once `cands` is final in size (the two appends above may reallocate it).
     paymemo::Scope _pay_memo(state, cands);
+    paycensus::EnumKindScope _pc_kind(2);   // MTG_PAY_CENSUS attribution only
     // Does any candidate need the deck's order check (a restrictor or a spliced cast)? Twin of Solve's.
     bool order_check_cands = false;
     for (const Action& oc : cands)
