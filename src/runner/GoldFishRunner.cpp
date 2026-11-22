@@ -80,10 +80,13 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // again, keyed on DAMAGE: combat damage is what makes the opponent a legal target, so its
         // post-combat cast is a real line.
         if (def->params.target_dealt_damage_this_turn) { return true; }
-        // BROWBEAT (Creature Burn, 2026-11-20; PROVISIONAL -- surfaced to the USER, cost to be measured): the
-        // opponent takes Browbeat's 5 or lets us draw three according to its life AT RESOLUTION, so the
-        // post-combat cast ("attack, then Browbeat") meets a different choice than the pre-combat one -- a line
-        // that is otherwise unfindable at any budget (the spectacle bucket, keyed on the opponent's life).
+        // BROWBEAT (Creature Burn, 2026-11-20; PROVISIONAL -- surfaced to the USER): the opponent takes Browbeat's
+        // 5 or lets us draw three according to its life less the visible damage still to come (USER 2026-11-22,
+        // OpponentAnticipatedLife) and whether we hold a card. A pre-combat cast after the same plays anticipates
+        // exactly the combat that follows, so most post-combat casts have a main-1 twin -- but a haste creature
+        // (or Teetering Peaks) played AFTER combat empties the hand (threshold 8 -> 5) without adding visible
+        // damage, and no main-1 order reproduces that choice (cast first it is anticipated, held the threshold
+        // stays 8): a line otherwise unfindable at any budget, so the deck keeps its post-combat main.
         // CREATURE BURN (MTG_CB_BROWBEAT_M2_RESTRICT, DEFAULT OFF, 2026-11-21): =1 stops that deck paying for the main 2
         // on EVERY turn (1.6x units); CreatureBurnProvider::RestrictedSecondMainLive then opens it per turn, exactly while
         // a castable Browbeat is in hand post-combat. Measured NOT an identity, so OFF (STATUS at the definition).

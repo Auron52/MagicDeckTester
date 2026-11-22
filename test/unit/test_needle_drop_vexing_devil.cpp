@@ -329,6 +329,39 @@ TEST_CASE("Vexing Devil: while we HOLD a card the opponent declines at <= 7 and 
     CHECK_FALSE(OnBattlefield(exec, "Vexing Devil"));
 }
 
+TEST_CASE("Vexing Devil: the opponent subtracts the VISIBLE damage still to come; the Devil itself is not counted (both worlds)")
+{
+    // USER 2026-11-22: "Vexing Devil should act the same way" (as Browbeat: life less the visible damage). Holding a
+    // card (decline at <= 7), opponent at 9, two untapped Swiftspears that can still attack: pre-combat it decides at
+    // 9 - 2 = 7 and DECLINES (the Devil stays); after combat (nothing more to see) the same 9 TAKES (-> 5).
+    for (const bool post : {false, true})
+    {
+        CAPTURE(post);
+        GameState board = NBoard(1, {"Vexing Devil", "Lava Spike"}, 9);
+        if (post) { board.phase = Phase::PostCombatMain; }
+        NPut(board, "Monastery Swiftspear", 20);
+        NPut(board, "Monastery Swiftspear", 21);
+        CHECK(OpponentVisibleDamageThisTurn(board, 0) == (post ? 0 : 2));
+        GameState roll = board;
+        TurnSolver::ApplyPlan(roll, NPlan({ NCast("Vexing Devil") }), /*is_pre_combat=*/!post);
+        CHECK(roll.players[1].life == (post ? 5 : 9));
+        CHECK(OnBattlefield(roll, "Vexing Devil") == !post);
+
+        GameState exec = board;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        NExecCast(eng, exec, "Vexing Devil");
+        CHECK(exec.players[1].life == (post ? 5 : 9));
+        CHECK(OnBattlefield(exec, "Vexing Devil") == !post);
+    }
+    // The entering Devil is excluded even when it could attack (a hasted Devil's attack hangs on this very choice).
+    GameState s = NBoard(0, {}, 9);
+    Permanent& dv = NPut(s, "Vexing Devil", 30);
+    dv.temp_haste = true;
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 4);
+    CHECK(OpponentVisibleDamageThisTurn(s, 0, /*exclude_number=*/30) == 0);
+    CHECK(VexingDevilOpponentTakesDamage(s, 0, 1, 4, /*devil_number=*/30) == (9 > 4));
+}
+
 TEST_CASE("Vexing Devil's taken damage makes Needle Drop castable in the same main (it is cast after the Devil)")
 {
     const GameState board = NBoard(2, {"Needle Drop", "Vexing Devil"});

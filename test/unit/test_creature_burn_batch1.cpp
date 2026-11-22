@@ -5,7 +5,7 @@
 //   * Flame Javelin    -- {2/R}{2/R}{2/R} (twobrid, MV 6) and the MONO-COLOUR FOLD
 //     (MTG_TWOBRID_COLOUR_FOLD, default ON): an all-red board is offered only {R}{R}{R}.
 //   * Browbeat         -- the punisher draw (opp_may_take_damage_instead_of_draw) and its PROVISIONAL
-//     policy A (BrowbeatOpponentTakesDamage: take iff life > 5 + (we hold a card ? 3 : 0)).
+//     policy A (BrowbeatOpponentTakesDamage: take iff life - visible combat damage > 5 + (we hold a card ? 3 : 0)).
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
@@ -374,6 +374,64 @@ TEST_CASE("Browbeat: while we HOLD a card the opponent declines at 8 and takes a
         CHECK(exec.players[1].life == (takes ? 4 : life));
         CHECK(exec.players[0].hand.size() == (takes ? 1u : 4u));
     }
+}
+
+TEST_CASE("Browbeat policy: the opponent subtracts the VISIBLE combat damage still to come (both worlds)")
+{
+    // USER 2026-11-22: the opponent takes the visible combat damage into account. Holding a card (threshold 8),
+    // opponent at 10, a Keldon Champion (3, untapped, not sick) that can still attack: pre-combat it decides at
+    // 10 - 3 = 7 and DECLINES (we draw three); after combat (visible 0) the same 10 TAKES.
+    for (const bool post : {false, true})
+    {
+        CAPTURE(post);
+        GameState board = CbBoard(3, {"Browbeat", "Lightning Bolt"}, /*opp_life=*/10);
+        if (post) { board.phase = Phase::PostCombatMain; }
+        CbPut(board, "Keldon Champion", 20);
+        CHECK(OpponentVisibleDamageThisTurn(board, 0) == (post ? 0 : 3));
+        GameState roll = board;
+        TurnSolver::ApplyPlan(roll, CbPlan({ CbCast("Browbeat") }), /*is_pre_combat=*/!post);
+        CHECK(roll.players[1].life == (post ? 5 : 10));
+        CHECK(roll.players[0].hand.size() == (post ? 1u : 4u));
+
+        GameState exec = board;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        CbExecCast(eng, exec, "Browbeat");
+        CHECK(exec.players[1].life == (post ? 5 : 10));
+        CHECK(exec.players[0].hand.size() == (post ? 1u : 4u));
+    }
+}
+
+TEST_CASE("Browbeat policy: what is visible -- sick, tapped, hasted, pumped, prevented, ready pings")
+{
+    GameState s = CbBoard(0, {});
+    CbPut(s, "Keldon Champion", 20, /*sick=*/true);               // haste: counts the turn it lands
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 3);
+    CbPut(s, "Goblin Fireslinger", 21, /*sick=*/true);            // summoning-sick, no haste: cannot attack
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 3);
+    Permanent& t = CbPut(s, "Goblin Fireslinger", 22);            // ready 1/1
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 4);
+    t.tapped = true;                                                // tapped: cannot attack
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 3);
+    s.battlefield.front().temp_power_bonus = 2;                     // (a Mountain-less board: front = Champion) pumped
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 5);
+    s.combat_damage_prevented_this_turn = true;
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 0);
+    s.combat_damage_prevented_this_turn = false;
+    s.active_player_index = 1;                                      // not our turn: nothing is coming
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 0);
+    s.active_player_index = 0;
+    s.phase = Phase::PostCombatMain;                                // combat is over...
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 0);
+    t.tapped = false;                                               // ...but a READY pinger's ping is still visible
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 1);
+    t.tapped = true;
+    s.phase = Phase::PreCombatMain;
+    CbPut(s, "Cinder Pyromancer", 23);                              // a ready 0/1 pinger: its ping (1), not its attack (0)
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 6);
+    s.battlefield.back().tapped = true;
+    s.players[1].life = 11;                                         // 11 - 5 = 6: takes with our hand empty, declines holding
+    CHECK(BrowbeatOpponentTakesDamage(s, 1, 5, false));
+    CHECK_FALSE(BrowbeatOpponentTakesDamage(s, 1, 5, true));
 }
 
 TEST_CASE("Browbeat policy: staged (exiled-playable) cards are not held; 2HG reads the team's life and deals x1")

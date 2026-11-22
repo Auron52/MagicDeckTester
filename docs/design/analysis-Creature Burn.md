@@ -384,16 +384,27 @@ creature; d0 smoke 25 slower / 0 faster). An amended fold would keep both of tho
 Default tree byte-identical (creatureburn + 2hg smoke play-changed 0; `=1` smoke on the other burn decks + redelem
 PASS). **USER item** (surfaced 2026-11-21): ship OFF as is, or fund the amended fold.
 
-### Completeness gap: "attack, then Browbeat" is unfound from the MAIN-1 frame (2026-11-21, open)
+### Completeness gap: "attack, then Browbeat" from the MAIN-1 frame -- DIAGNOSED 2026-11-22: a fixture artifact
 
 Turn 5, opponent at 10, Keldon Champion untapped, hand Browbeat + an unplayable Mountain, three Lightning Bolts on
-top, six Mountains. Line: attack (10 -> 7), main-2 Browbeat (7 <= 8 while holding -> declined), draw the Bolts, cast
-three: win T5. From the main-1 frame the full-depth search does NOT find it on EITHER arm at d2, d3 or d5 with
-budget 0 (commits a T6 line, "PROVEN NO-WIN" for the turn), although the executor's own main-2 solve does (scenario
-`creatureburn_browbeat_m2_post_combat_browbeat`, which resumes at main 2). The one line the every-turn main 2 exists
-for is unreachable from main 1 at any budget -- likely why that main 2 measured 0.000 turns. Suspected cause (not
-confirmed): the nested post-combat main does not continue search after a draw. A CLAUDE.md COMPLETENESS defect,
-pre-existing, not caused by the fold. Owed: root-cause + fix (follow-up engine task).
+top, six Mountains. The main-1 fixture failed for two reasons, neither of them a nested-main-2 draw defect:
+1. **Echo.** A fixture-placed Keldon Champion carries `Permanent::echo_resolved = false` (the scenario harness has
+   no field for it), so the search pays its echo {2}{R}{R} this turn: the post-combat main had 2 untapped Mountains
+   (`MTG_M2T_TRACE=3`: `pool=2`, four Mountains tapped) and Browbeat was never castable. No real game reaches an
+   untapped, non-sick Champion with its echo unresolved.
+2. **No pass at a mid-turn root.** `lands_played_this_turn = 1` at a main-1 resume is a MID-TURN root with the drop
+   spent. There `EnumeratePlansWithLand` takes its no-drop path (`EnumeratePlans`: non-empty subsets only) and
+   `FSLineWin` seeds the idle pass only when the list is EMPTY (TurnSolver.cpp, the `MTG_FS_IDLE_NODE` block,
+   `if ((pre.empty() || fu_hold) ...)`; `SolveWithLookahead` has the same `candidates.empty()` shape) -- so with
+   Browbeat castable, "cast nothing in main 1" is not a candidate and "pass, attack, Browbeat" has no plan to ride.
+   At a real TURN START the drop is open and the DEFER branch always carries "cast nothing", so this never binds at
+   the search's interior nodes. With the drop open (and a non-echo 3-power attacker) the OLD binary finds the T5 line
+   (pass holding the Mountain, attack, main-2 Browbeat, three Bolts).
+So the every-turn main 2's 0.000-turn measurement is NOT explained by an unreachable line. Under the anticipating
+opponent the main-1 frame wins by a main-1 Browbeat (scenario `creatureburn_browbeat_m1_anticipates_combat`).
+Residual engine gap (all decks, narrow): a mid-turn root -- the executor's second entry after a main-1 draw, a
+breakpoint re-solve, a viewer search-from-here frame, a `resume_at` fixture -- offers no "cast nothing (more)" plan
+while anything is castable. Measured with a temporary arm (MTG_FS_ROOT_IDLE_PASS, never landed): see the bbgap report.
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)
