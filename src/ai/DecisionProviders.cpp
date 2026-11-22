@@ -73933,8 +73933,9 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
         warp_in_hand |= hd->params.extra_turns_on_resolve > 0;
         revelation_in_hand += hd->params.tutor_up_to_x ? 1 : 0;
     }
-    bool fetch_emrakul = false, bridge = false;
+    bool fetch_emrakul = false, bridge = false, fastbond_bridge = false;
     int bridge_revelation_cost = 1 << 20;
+    ManaCost fastbond_bridge_bill;
     for (int j : sel)
     {
         if (j < 0 || j >= static_cast<int>(cands.size())) { continue; }
@@ -73948,7 +73949,7 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
         if (d->params.tutor_up_to_x && revpkg::IsPackage(a.tutor_target.str()))
         {
             int lotuses = 0;
-            bool warp = false, rev = false, exploration = false;
+            bool warp = false, rev = false, exploration = false, fastbond = false;
             for (const std::string& nm : revpkg::DecodePackage(a.tutor_target.str()))
             {
                 const CardDefinition* fd = CardDatabase::Instance().Lookup(nm);
@@ -73958,12 +73959,28 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
                 warp |= fd->params.extra_turns_on_resolve > 0;
                 rev |= fd->params.tutor_up_to_x;
                 exploration |= fd->params.static_extra_land_drops > 0 && !fd->params.unlimited_land_plays;
+                fastbond |= fd->params.unlimited_land_plays;
             }
             if ((warp || warp_in_hand) && (rev || revelation_in_hand >= 2)
                 && exploration && lotuses >= 2)
             {
                 bridge = true;
                 bridge_revelation_cost = std::min(bridge_revelation_cost, a.cost.ManaValue());
+            }
+            if ((warp || warp_in_hand) && (rev || revelation_in_hand >= 2)
+                && fastbond && lotuses >= 2)
+            {
+                const CardDefinition* fb = CardDatabase::Instance().Lookup("Fastbond");
+                if (fb != nullptr)
+                {
+                    fastbond_bridge = true;
+                    fastbond_bridge_bill = a.cost;
+                    const ManaCost& fc = fb->card.m_mana_cost;
+                    fastbond_bridge_bill.generic += fc.generic;
+                    fastbond_bridge_bill.white += fc.white; fastbond_bridge_bill.blue += fc.blue;
+                    fastbond_bridge_bill.black += fc.black; fastbond_bridge_bill.red += fc.red;
+                    fastbond_bridge_bill.green += fc.green; fastbond_bridge_bill.colorless += fc.colorless;
+                }
             }
         }
     }
@@ -73988,6 +74005,10 @@ int BloodSunGoOffRank(const GameState& s, const std::vector<Action>& cands, cons
     if (bridge && LandNonManaAbilitiesSuppressed(s) && pl.lands_played_this_turn < pl.LandDropsAvailable()
         && before_revelation >= bridge_revelation_cost && next_turn_board + 6 >= 16
         && pl.life > 0) { return 1; }
+    // Fastbond buys both drops even when the ordinary drop was already spent. The held {G} must
+    // pay its cast after Revelation, and both non-first land plays must leave us alive.
+    if (fastbond_bridge && LandNonManaAbilitiesSuppressed(s) && next_turn_board + 6 >= 16
+        && pl.life > 2 && TurnSolver::CostPayableExact(s, fastbond_bridge_bill, false)) { return 1; }
     return 0;
 }
 

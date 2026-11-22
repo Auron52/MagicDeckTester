@@ -147,6 +147,22 @@ TEST_CASE("Blood Sun go-off front: Revelation's two-Lotus Exploration bridge nee
     CHECK(BloodSunGoOffRank(s, { CastPf("Diabolic Revelation", hand_warp_pkg, 4) }, { 0 }) == 1);
 }
 
+TEST_CASE("Blood Sun go-off front: Fastbond buys two drops only with held green and life")
+{
+    GameState s = BasePf(10, 20);
+    PutPf(s, "City of Brass", 200);
+    s.players[0].lands_played_this_turn = s.players[0].LandDropsAvailable();
+    const std::string pkg = revpkg::EncodePackage(0,
+        { "Time Warp", "Diabolic Revelation", "Fastbond", "Lotus Vale", "Lotus Field" });
+    const std::vector<Action> cands = { CastPf("Diabolic Revelation", pkg, 5) };
+    CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 1);
+    s.players[0].life = 2;
+    CHECK(BloodSunGoOffRank(s, cands, { 0 }) == 0);
+    GameState no_green = BasePf(11, 20);
+    no_green.players[0].lands_played_this_turn = no_green.players[0].LandDropsAvailable();
+    CHECK(BloodSunGoOffRank(no_green, cands, { 0 }) == 0);
+}
+
 TEST_CASE("Blood Sun go-off front: ORDER only, off under MTG_BLOODSUN_GOOFF's human-play guard")
 {
     GameState s = BasePf(25, 15);
