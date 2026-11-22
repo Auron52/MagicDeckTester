@@ -47,3 +47,22 @@ ALL3 reintroduces the "all" option that the USER's ruling questioned ("Why do we
 The reason it may be needed: Guild Summit is a BREAKPOINT (it draws), so the line after it is planned only after the
 draws, and the Maze's End reserve is speculative at resolution time. If ALL3 wins and NAMED does not, the USER must
 be told which one was adopted, and why.
+
+## UPDATE 2026-11-22 ~18:55 UTC
+- 3-arm A/B DONE (`ab2.out`, fresh seeds):
+  | arm | d5 b20 (n 2500) | 2HG (n 1000) | d0 (n 4000) | cpu d5 / 2HG |
+  |---|---|---|---|---|
+  | NAMED | +8 (18 faster / 26 slower) FAIL | +3 (6/9) FAIL | -57 (99/50) | 1.003 / 0.985 |
+  | ALL3 | **-1 (10/9)** | **-1 (3/2)** | = plain pay-first: -17 (43/23, old seeds 27000000+gi) | 1.003 / 0.999 |
+  ALL3 slower: d5 g331 g513 g607 g973 g1094 g1585 g1667 g2021 g2349 (seed 25100000+gi); 2HG g137 g292 (26100000+gi).
+- ADOPTION prepared and committed (`git log`: "pay-first tap set DEFAULT ON, with the all pin ..."): ALL3 folded in
+  unconditionally, NAMED deleted, both temporary heurarm slots removed, MTG_MAZE_SUMMIT_PAY_FIRST default ON (=0 is the
+  hatch), P1d tests updated. The branch is REBASED onto origin/phase-1-2-deck-analyzer (HeuristicArm.h conflicts resolved:
+  both sides kept). wip/maze-summit was force-pushed (with lease) after the rebase.
+- RUNNING: the d8 b0 paired replay (off vs all3, the frozen b2 binary) of the 9 + 2 searched slower games and the 23 d0 slower
+  games of the first A/B: manifest `d8.json` (`logs/maze-summit/mk_d8.py`), under the box lock, `abandon_units` 2e7.
+  Output `d8.out`, marker `d8.DONE`. Analyse with `python3 logs/maze-summit/an_ab2.py d8.out all3` (a recovered game
+  is not slower at d8 b0; an abandoned game, avg 0, needs an escalated-budget replay instead).
+- RUNNING: the lane rebuild of the rebased adoption commit: log `build3.log`, marker `build3.DONE`.
+- NEXT: when both finish: run the units (lane, 1 slot), then `test/regression.sh --both` under the box lock
+  (MTG_PGO=0, MTG_RSS_CAP_GB=40), accept with an attributing note, run `test/check_gt_logs.py`, update the ledger, and push.

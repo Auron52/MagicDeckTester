@@ -23,6 +23,7 @@ for tag,gs in rows.items():
         if a[1]!=b[1]: dig+=1
         u[0]+=a[3];u[1]+=b[3];c[0]+=a[4];c[1]+=b[4]
     slow[tag]=sl
+    if n==0: continue
     print(f"{tag}: n={n} net={net:+.0f} faster={f} slower={s} digest_differs={dig} unwon_rows={zero} units_ratio={u[1]/max(1,u[0]):.4f} cpu_ratio={c[1]/max(1,c[0]):.4f} mean_off={sum((R[f'{tag}_{g}_off'][0] or MT) for g in gs)/n:.4f}")
 for tag,sl in slow.items():
     print(tag,"slower:",' '.join(f"{g}:{a:g}->{b:g}" for g,a,b in sl))
