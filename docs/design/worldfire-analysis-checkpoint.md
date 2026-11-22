@@ -80,6 +80,11 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 - FOUND: my landing 42d819bc0 shipped a reference play-drift (Creature_Burn/claude_s9_gi8; tiers_land.log said
   REGRESSION DETECTED). Every session's regression tier inherits it.
 
+- Reference fix LANDED d0d5f8463 (join --urgent), Windows CI 44965126799 success.
+- Free-turn pass 2 DONE: wip/freeturn 23588e8a8 (rebased on d0d5f8463; cleanup floor replaces lands-first;
+  no trait=0 free turns; Vampires / Sea Creatures units 1.000). Flags default OFF; USER questions in the report.
+- Found: scripts/unit_par.sh --first/--last does nothing (every shard runs all 3889 cases) -- deferred tooling fix.
+
 ## Running
 - URGENT ref-fix agent: ports only the opponent_land_entry stamp + --legacy-opponent-land-entry replay from
   b861f7160 onto origin in worktree .claude/worktrees/refland (branch wip/refland); validates; parent lands with
@@ -89,7 +94,7 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 
 ## Next, in order
 1. Land wip/refland urgently once validated (join --urgent; land; CI watch).
-2. Then a fresh free-turn agent from handoff2.md (floor version: build, units, smoke, one flag-ON tier, doc, push).
+2. (done) free-turn pass 2.
 3. Relay the bucket agent's A/B; surface the bucket doc's open questions.
 4. gi4 d8 b0 DONE (2026-11-22): RECOVERS -- the search itself suspends Halberdier T1, Worldfire T4, wins T5
    (Claude's line). Add to the ledger's sweep OPEN line once the bucket agent's ledger edit is committed (do not
