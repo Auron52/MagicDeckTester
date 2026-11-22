@@ -4507,8 +4507,7 @@ inline void ForEachDedicatedCounterField(P& p, F&& f)
     f("charge", p.charge_counters); f("verse", p.verse_counters); f("lore", p.lore_counters);
     f("storage", p.storage_counters); f("ice", p.ice_counters); f("age", p.age_counters);
     f("spore", p.spore_counters); f("fade", p.fade_counters); f("quest", p.quest_counters);
-    f("hone", p.hone_counters); f("time", p.time_counters);
-    f("hone", p.hone_counters); f("oil", p.oil_counters);   // oil: Migloz (Beasts E)
+    f("hone", p.hone_counters); f("time", p.time_counters); f("oil", p.oil_counters);   // oil: Migloz (Beasts E)
 }
 
 // "Each counter on it" counts every type, not merely +1/+1. Capture this
