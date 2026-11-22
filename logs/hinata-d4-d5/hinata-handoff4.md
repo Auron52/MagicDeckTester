@@ -20,9 +20,7 @@ Last commit before this file: c3eb0a931.
   `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate2/run.sh`. It waits on the box lock, then runs
   `./build.sh`, the units, and `MTG_PGO=0 MTG_RSS_CAP_GB=40 test/regression.sh --both` (no accept). It writes
   `gate2/status`, `gate2/pid` (the real PID) and `gate2/DONE`, plus logs `build.log`, `unit.log`, `regression.log`.
-- WAITING: the coordinator is landing the Merfolk ENUM-GAP fix on origin/phase-1-2-deck-analyzer, and it is queued on
-  the box lock for smoke. Nothing of mine is running except a git-fetch waiter loop (a harmless Claude background task).
-  NOT yet rebased, built or run.
+- 15:00 UTC: Merfolk landed (origin cd330ec5a). Rebased cleanly onto it; check_gt_logs clean. gate2 LAUNCHED 15:00:38 UTC, PID 989382 (gate2/pid), waiting on the box lock -> next is step 4 (inspect).
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
