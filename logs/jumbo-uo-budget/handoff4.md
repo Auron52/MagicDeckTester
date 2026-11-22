@@ -43,6 +43,23 @@ PID with `kill -0` or on a DONE file). Rebase, never merge. Never touch `referen
 
   Per-arm markers: `$S/id1/<arm>/DONE`. Final marker: `$S/id1/DONE` (or "buildfail").
 
+## UPDATE 2026-11-22 23:00 UTC -- the identity slice is NOT byte-identical
+- The box lock never admitted big.sh's slice (5.5 h of queueing), so a reduced slice ran in the lane:
+  `$S/id1/idl.json` (100 games per deck, Jumbo 1000, gi 733000+), arms `lon` (memo on) and `loff` (MTG_SPS_XMEMO=0).
+  59 decks are identical. **Extra Turns** has 4 jobs where units differ and 1 where the digest differs (gi 733038 and
+  733048 play different lines with the same win turn). **Hinata** has 2 jobs where only units differ.
+  `big.sh` was cut down to regression `--both` plus check_gt; it started 22:20 UTC under the lock, built at a27e75565
+  with the memo ON. `lver` (VERIFY over `verl.json`) is still running in the lane.
+- Repro: `$S/et1/m.json` (Extra Turns gi 733038, 1 game). ON gives 824a46aa and OFF gives faaf957a; it diverges at
+  trace turn index 58 (Horn of Greed + land vs land + Nexus of Fate). **VERIFY gives 824a46aa with 0 hits**, so the
+  verdicts are not the cause. A SIDE EFFECT of the memo wrapper on a miss changes play.
+  Suspect: stored Action copies keep shared_ptr members alive (cont_pins / rec_payment_traits / rec_line_hold /
+  breakpoint_casts). That changes allocation addresses, which would matter to any ADDRESS-keyed cache elsewhere
+  (paymemo::Ctx keys plan contexts by address, for one). It cannot be index carry, which is off by default.
+- Bisect running: a TEMP uncommitted flag `MTG_SPSX_EXP` (1 = no key, 2 = key only, 3 = store with the shared_ptr
+  members cleared), binary `$S/mtg.exp`, outputs `$S/et1/e{0,1,2,3}/g/*.wins`, marker `$S/et1/EXPDONE`. Remove the
+  flag after the bisect.
+
 ## Next steps
 1. When `$S/id1/on/DONE` and `off/DONE` exist, diff the arms with
    `sed 's/ ms=[0-9]*//;s/ cpu=[0-9]*//' batch.out | grep played= | sort` on each. The result must be identical
