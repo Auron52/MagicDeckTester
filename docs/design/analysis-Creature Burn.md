@@ -183,10 +183,12 @@ LANDED 5a07c3df3 16:01 UTC (CI green). Since then, local (rebased onto origin 42
 * OPPONENT KAROO: origin's ce5866171 (another session, same USER report) implements it: Karoo returns the oldest other
   non-Karoo land, else another Karoo, else itself; a Karoo with nothing to return is played after a real land.
   = the USER policy here ("leftmost" = oldest). Our wip/opp-karoo (c28b21f91) is SUPERSEDED, agent stopped.
-RUNNING: validation round 3 build/scratch/cb-orch/landing3/chain.sh (build, serial unit, scenarios, FULL smoke,
-check_gt_logs, ref_bench creature_burn+midrange_burn; status landing3/status, marker landing3/DONE), NOT under the
-lease. Expect smoke to move ONLY creatureburn/creatureburn2hg/midrangeburn(/2hg) (Magma Jet) -> attribute, accept;
-then scoped regression on those + accept; then `join` + `land` (no re-validation if origin did not move), CI watch.
+ROUND 3 DONE 00:54 UTC 2026-11-22 (HEAD 532aab341): build/unit/scen PASS; smoke moved ONLY creatureburn d3/d5,
+creatureburn2hg d5, midrangeburn d3/d5 (22 faster / 0 slower / 20 same-turn) -> ACCEPTED f95d5e065; gt_logs consistent;
+ref_bench 0/20 short (creature_burn human 4.600 / search 4.500; midrange_burn 4.700 / 4.500). s9 under origin's Karoo
+fix: opp T1 Haven, T2 Gruul Turf bouncing Haven, PoP hits 2 -- search STILL wins T4 (Bolt, PoP, Ball Lightning, then
+Ball Lightning + Fireblast), = the reference's T4. RUNNING: scoped regression creatureburn,creatureburn2hg,midrangeburn,
+midrangeburn2hg (landing3/reg.log, marker landing3/reg.done) -> accept, check_gt_logs, commit; then join + land.
 USER QUESTIONS (surface): MTG_SCRY_WIDTH=2 (engine-wide, pre-existing) leaves 3 of 5 two-card-scry dispositions
 unfindable at any budget -- width 5 + a Burn ScryVerdict prune would satisfy completeness; Burn scry heuristic ignores
 lands in hand (provider change, USER's call); Midrange Burn keep table regen after the play change (USER's call).
