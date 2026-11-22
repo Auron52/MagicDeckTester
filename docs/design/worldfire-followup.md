@@ -29,3 +29,18 @@ The paired d5/b20 batch used 500 new games in two 250-game blocks, seeds 9500001
 | Cap kept tutors at two | 4.412, 0/0 | 4.260, 0/0 |
 
 No change repeats as a gain in the held-out block. The baseline stays; the temporary levers were removed. The paired manifest and per-game results are in `build/scratch/worldfire/cantrip/ab5/`.
+
+## Budget curve and budget-zero backstops after the cantrip adoption
+
+The accepted integrated binary ran 200 paired games at seed 9700001+gi, fixed depth 5 and budgets 20/50/100/200 ms. Every arm won all 200 games. The loss-penalized means, per-game comparisons against b20, and mean search units were:
+
+| Budget | Mean credited win turn | Faster/slower vs b20 | Units/game |
+|---|---:|---:|---:|
+| 20 ms | 4.380 | — | 82,733 |
+| 50 ms | 4.290 | 19/1 | 166,304 |
+| 100 ms | 4.235 | 31/2 | 252,614 |
+| 200 ms | 4.200 | 37/2 | 364,339 |
+
+The curve remains monotone in aggregate. A higher budget improves the mean by 0.18 credited turns at 200 ms, with 4.4× the search units. The play budget remains 20 ms pending a separate settings choice; this experiment changes no deck or engine default. Raw paired jobs are in `build/scratch/worldfire/budget-after-cantrip/` of the integration worktree.
+
+Both budget-zero backstop seeds were rerun with the normal two-million-unit abandonment ceiling. At seed 30401, d3 and d5 both won T5 in 5,695 and 1,011 units. At seed 30521, d3 and d5 both won T5 in 39,189 and 7,656 units. The formerly degenerate rows are now far below the ceiling, so no backstop-row adjustment or special optimization is warranted. Raw jobs are in `build/scratch/worldfire/backstop-after-cantrip/` of the integration worktree.
