@@ -120,7 +120,7 @@ the payer is OFF and the searched action stays. The lever's context (`BuildSacFo
 `PlanSacOutletDef`) uses the same carve-out, so it is dead exactly where the searched action lives. No board has both.
 What the lever adds is the one supply the payer could not reach: an outlet CAST this turn.
 
-**So where did the extra work go? Into keys, not menus.** 7f322b6d3 folded the lever's admission mode (1 beyond the
+**Hypothesis tested first (it was WRONG): keys, not menus.** 7f322b6d3 folded the lever's admission mode (1 beyond the
 horizon, 2 wave first pass, 3 admitting pass) into `BuildBreakpointKey` whenever a sac outlet was merely IN REACH
 (battlefield, hand, graveyard, exile). That key feeds the m1/m2 enumeration memos, the solve memo, the searched-m2
 memo, the breakpoint continuation lists and `MidTurnStateKeyOf`. It folded even where the context was DEAD -- e.g. all
@@ -138,3 +138,19 @@ Three exact cuts (no plan list changes; every one is a re-keying or a necessary-
 3. `MTG_SFM_MODE_SHARE` -- a live-context enumeration body that applied NO fodder credit enumerated the same list in the
    wave's first pass as in the admitting pass (the wave drops only credited plans), so its memo entry
    (`Entry::sfm_touched` false) serves the other mode too, and the other mode's first-visit marker counts toward promotion.
+
+**Measured: the three exact cuts are inert.** One pooled batch (ab1, build/scratch/claude_sacfodder_fix5): units x1.099 ->
+x1.096 on the dev seeds, every game unchanged, and 622286's T1 pass 1 is 54,039 units / no win with or without them.
+
+**Where the work really goes** (400 Goblins games, MTG_ROLLOUT_STATS + MTG_DEV_SEQ_STATS, off -> on: 3.725M -> 4.338M units,
++612K): dev-seq pass 1 +60K; pass 2 +385K (66 -> 117 runs); the deferred canon-drop pass 2 +168K (6 -> 17 runs); the
+SolveWithLookahead root loop +65K. `pass2_better = 0` in both arms. So ~90% of the extra work is the second passes the
+wave opens to search the credited plans, and in that slice they never took a better line. 622286 is the other shape:
+860 of the 909 live contexts of its T1 search are BREAKPOINT enumerations inside pass 1 (Skirk on the battlefield,
+Rundvelt eaten earlier in the line, Siege-Gang's three ETB tokens credited as fodder for the same plan), which the wave
+does not stage; every variant (all cuts, wave without latents, wave off) misses the T3 kill there.
+
+**Quality (held-out, one pooled batch, gi 640000+/650000+ x5000):** the lever (onP) is ALREADY net negative -- Goblins
+4 faster / 1 slower (**-3**), Fungus 1 / 0 (**-1**); dev seeds +1 / 0. The held-out slower game 640933 recovers at d8 b0
+(3 = 3). d0 is unchanged (the lever is off in the d0 runner). Cost: units x1.107 / x1.041, CPU x1.17 / x1.07. Wave off:
+units x1.076 / x1.025 but Fungus +3 dev and +3 held-out. Pass-2 pricing arms (x2, x4, skip) were queued as ab2.
