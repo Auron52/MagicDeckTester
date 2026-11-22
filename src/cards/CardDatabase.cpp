@@ -823,6 +823,25 @@ void CardDatabase::RebuildInternedIndex()
         kv.second.enter_watcher    = DefHasCreatureEnterWatcher(kv.second.params);
         kv.second.landfall_watcher = DefHasLandfallTrigger(kv.second.params);   // same contract
         kv.second.gy_landfall_watcher = kv.second.params.landfall_return_self_from_gy;   // Bloodghast
+        // The fetchland hand hint's bytes (CardDefinition::fh_*; FetchReachColourMask, SpellEffects.h).
+        CardDefinition& d = kv.second;
+        d.fh_land_types = 0; d.fh_colours = 0; d.fh_tapped = false; d.fh_seek_types = 0; d.fh_seek_exotic = false;
+        for (const std::string& t : d.params.fetch_land_types)
+        {
+            const int b = FetchHintBasicTypeBit(t);
+            if (b < 0) { d.fh_seek_exotic = true; } else { d.fh_seek_types |= static_cast<uint8_t>(1u << b); }
+        }
+        if (d.card.IsLand() && d.params.fetch_land_types.empty())
+        {
+            for (const std::string& sub : d.card.m_subtypes)
+            {
+                const int b = FetchHintBasicTypeBit(sub);
+                if (b >= 0) { d.fh_land_types |= static_cast<uint8_t>(1u << b); }
+            }
+            for (Color col : d.params.produces)
+            { if (col != Color::Colorless) { d.fh_colours |= static_cast<uint8_t>(1u << static_cast<unsigned>(col)); } }
+            d.fh_tapped = d.params.enters_tapped;
+        }
     }
 }
 

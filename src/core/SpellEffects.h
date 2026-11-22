@@ -47592,7 +47592,24 @@ inline unsigned FetchReachColourMask(const GameState& state, int controller, con
 {
     unsigned mask = 0;
     const bool tapped_ok = FetchHintCountsTapped();
-    for (const Card& c : state.players[static_cast<std::size_t>(controller)].library)
+    const auto& library = state.players[static_cast<std::size_t>(controller)].library;
+    // FAST PATH: the load-time bytes (CardDefinition::fh_*) carry exactly this predicate -- a non-fetch land, one
+    // of its basic types among the fetch's, untapped unless tapped_ok -- one load per library card instead of a
+    // string match and three CardParams probes. A fetch type outside the five basics (none in cards.json), or a
+    // definition built outside the DB (fh_seek_types never derived), takes the string match below.
+    if (!def.fh_seek_exotic && def.fh_seek_types != 0)
+    {
+        const unsigned seek = def.fh_seek_types;
+        for (const Card& c : library)
+        {
+            const CardDefinition* land = CardDatabase::Instance().LookupCached(c);
+            if (land == nullptr || (land->fh_land_types & seek) == 0) { continue; }
+            if (land->fh_tapped && !tapped_ok) { continue; }
+            mask |= land->fh_colours;
+        }
+        return mask;
+    }
+    for (const Card& c : library)
     {
         const CardDefinition* land = CardDatabase::Instance().LookupCached(c);
         if (land == nullptr || !land->card.IsLand() || !land->params.fetch_land_types.empty()) { continue; }
