@@ -63,3 +63,23 @@ The drop annotation catches some ordering cases but not a cast refused by Irencr
 limit (seed 9300007 T4 plan "Irencrag Feat, Seething Song, Worldfire": Worldfire silently not cast, no
 `dropped_casts`, and the next frame re-offers "cast: Worldfire", which silently does nothing), nor casts
 listed after Worldfire exiles the hand (seed 9300006 T5; there `dropped_reasons` IS reported). Reporting only.
+
+## Mass-exile LTB follow-ups (2026-11-22)
+
+Worldfire's mass exile now goes through the shared leave-the-battlefield trigger
+path in both execution and rollout. The `wip/wfltb` gate found no smoke or
+regression play changes and no saved-reference drift. The following separate
+issues remain:
+
+- `DestroyAllEnchantments`, `SweepOrphanedAuras`, and `SacrificeDepletedLands`
+  still bypass the shared LTB path. They are unreachable in the currently
+  analyzed decks.
+- Ilharg's exile half, Detention Sphere's return, and Severance Priest's Spirit
+  LTB need their own rule work.
+- An opponent-controlled Keldon Marauders LTB ping marks
+  `opponent_lost_life_this_turn` for the wrong player.
+- Skyclave and Wanderwine exile markers share the base `-0x20000000` and need
+  distinct identities before their effects can coexist safely.
+
+These are follow-up correctness items; the Worldfire mass-exile change does not
+claim to resolve them.
