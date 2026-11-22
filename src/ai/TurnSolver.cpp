@@ -13438,6 +13438,22 @@ struct Entry { bool verdict = false; std::vector<Action> acts; };
 // a cast's permanent takes the hand card at that index -- so it is never normalised).
 inline std::atomic<long long> g_diff_field[2][5]{};   // hand_index, equiv_ord, eval, cont_pins, other
 inline bool NormOn() { static const bool v = EnvOn("MTG_XMEMO_NORM", true); return v; }
+// Diagnostic: per-field census of EVERY Action member on an action difference (fields in declaration order).
+#define UOTX_FIELDS(X) X(kind) X(steal_spec) X(card_name) X(hand_index) X(equiv_tag) X(equiv_ord) X(cost) X(sacrifice_land) X(discard_lands) X(vial_bf_index) X(dig_sacrifice) X(land_face) X(land_fetch_target) X(land_rad_mode) X(land_from_top) X(cast_from_top) X(alt_cost) X(awaken) X(alt_lifegain) X(tutor_target) X(ability_mode) X(ritual_float) X(rock_mana) X(chosen_x) X(splice_count) X(chosen_float_color) X(sac_source_id) X(sac_victim_id) X(needs_cast_mask) X(victim_name) X(discard_name) X(sac_count) X(pooled_sac) X(vamp_casts_needed) X(madness_choice) X(madness_arm) X(madness_mv) X(convoke_plan_pip) X(convoke_plan_other) X(player_target) X(dies_tuck) X(legend_keep) X(scry_pin) X(gy_cast_source_id) X(gy_exile_mode) X(loyalty_ability) X(free_cast) X(phyrexian_life) X(twobrid_colored) X(convoke_green) X(convoke_other) X(soulfire_own_targets) X(mint_gain) X(mint_hand_magnet) X(mint_magnet) X(crackle_targets) X(max_casts_after) X(enchant_target) X(trick_hand_target) X(trick_put_target) X(attach_equip_id) X(draw_target) X(attach_equip_hand) X(attach_equip_hand_ord) X(evoke) X(emerge) X(adventure) X(bestow) X(kicked) X(face_down) X(trick_redirect) X(cont_pins) X(ponder_keep) X(devour_count) X(seed_pay_split) X(replicate_count) X(remand_by) X(remand_slot) X(remand_chain_by) X(pitch_name) X(pitch_slot) X(eval) X(direct_damage) X(is_noncreature) X(card_mv) X(vial_attack_power) X(haste_attack_power) X(haste_rider_hand) X(cond_artifact_haste_power) X(adds_durable_artifact) X(haste_prowess) X(is_draw) X(has_spectacle) X(is_draw_until_nonland) X(discard_land_damage) X(ripple_pinned) X(ripple_reveals) X(ripple_take_cap) X(ripple_mask) X(ripple_decline) X(ripple_free_tutor) X(ripple_free_victim) X(ripple_granter_req) X(ripple_chain_float) X(def) X(breakpoint_casts) X(rec_mana_casts) X(rec_pump_target) X(rec_payment_traits) X(rec_line_hold) X(rec_bp_ord)
+inline constexpr const char* kFieldNames[] = {
+#define UOTX_NAME(f) #f,
+UOTX_FIELDS(UOTX_NAME)
+#undef UOTX_NAME
+};
+inline constexpr int kNFields = static_cast<int>(sizeof(kFieldNames) / sizeof(kFieldNames[0]));
+inline std::atomic<long long> g_all_field[2][kNFields]{};
+inline void CensusAll(const Action& a, const Action& b, int site)
+{
+    int i = 0;
+#define UOTX_CMP(f) if (!(a.f == b.f)) { g_all_field[site][i].fetch_add(1, std::memory_order_relaxed); } ++i;
+    UOTX_FIELDS(UOTX_CMP)
+#undef UOTX_CMP
+}
 // Equal for the walk: the whole Action, with the copy ordinal (equiv_ord, the subset fold's), the valuation scalar
 // (eval, read by plan scoring only) and the continuation pins (cont_pins, read by the executor and the fold) taken
 // from `a`. Counts which fields differed when `site` >= 0.
@@ -13450,6 +13466,7 @@ inline bool WalkSame(const Action& a, const Action& b, int site)
         if (a.equiv_ord != b.equiv_ord)   { g_diff_field[site][1].fetch_add(1, std::memory_order_relaxed); }
         if (a.eval != b.eval)             { g_diff_field[site][2].fetch_add(1, std::memory_order_relaxed); }
         if (a.cont_pins != b.cont_pins)   { g_diff_field[site][3].fetch_add(1, std::memory_order_relaxed); }
+        CensusAll(a, b, site);
     }
     if (!NormOn()) { return false; }
     Action c = b;
@@ -13473,6 +13490,13 @@ struct Printer
                          "other_after_norm=%lld (norm %s)\n", site == 0 ? "UOT" : "SPS", g_diff_field[site][0].load(),
                          g_diff_field[site][1].load(), g_diff_field[site][2].load(), g_diff_field[site][3].load(),
                          g_diff_field[site][4].load(), NormOn() ? "on" : "off");
+            std::string fl;
+            for (int i = 0; i < kNFields; ++i)
+            {
+                const long long n = g_all_field[site][i].load();
+                if (n != 0) { fl += ' '; fl += kFieldNames[i]; fl += '='; fl += std::to_string(n); }
+            }
+            std::fprintf(stderr, "[uot-xmemo] site=%s all-field diffs:%s\n", site == 0 ? "UOT" : "SPS", fl.c_str());
         }
     }
 };
