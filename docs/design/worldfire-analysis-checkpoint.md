@@ -11,6 +11,9 @@ The USER is moving this work from Claude to Codex (out of Claude usage). The Cla
 asked to stop at a clean step and write a handoff file. Its 2-hourly cron (cf1c0324) dies with that session: SET YOUR
 OWN 2-hourly status timer (CLAUDE.md "Codex IDE equivalent"), and wait on PIDs / DONE markers, never `pgrep -f`.
 The push queue was NOT joined (no stale lease).
+Claude-side state at handoff (~12:15 UTC): every Claude agent has STOPPED except that free-turn pass 6 may wake ONCE when
+chain8 (PID 205142) finishes and write the "Fourth pass" section on wip/freeturn -- check `git -C .claude/worktrees/freeturn
+log -3` and `git status` before editing there. The Claude cron cf1c0324 was deleted. Nothing else of Claude's is running.
 
 ### Four change sets, one landing batch
 | set | branch / worktree | state | handoff |
