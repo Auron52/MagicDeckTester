@@ -2261,6 +2261,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green, cost.ManaValue());
     // What this payment's TAPS pay (after every float drain): the leftover attribution below reads it.
     const ManaCost tap_bill = cost;
+    // ...and the GENERAL float the drains above left (reserve_pre minus this = the general units this payment
+    // spent before tapping), for commit_leftover's restricted-for-general swap (MTG_CREATURE_LEFTOVER_EXACT).
+    const ManaPool gen_after_drain = state.floating_mana;
     // ...and this payment's OWN coloured pips as the line hold counts them (cost_in, before any
     // float is spent: the hold carries the cast's full cost until it lands). The generic-pip
     // readers of the hold take them back out -- see g_pay_own_line_pips in SpellEffects.h.
@@ -4126,7 +4129,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // assignments are made -- the greedy's tap-by-tap view (below) misses them entirely.
     // Restricted to real play (AllPlayHooksNull is false only there), so the search's millions of
     // speculative payments stay silent.
-    auto commit_leftover = [&](const ManaPool& lo_in, bool use_restr_cols)
+    auto commit_leftover = [&](const ManaPool& lo_in, bool use_restr_cols, bool float_drain_known)
     { ManaPool lo = lo_in;
       // GENERATOR SERVANT's haste tag: whatever {C} this payment drained took the UNTAGGED units first
       // (see HasteFloatUnits), so the tag is clamped to the {C} that SURVIVED -- before the leftover
@@ -4273,7 +4276,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
           const int restricted_made = restricted;
           restricted = std::min(restricted, lo.Total());
           // THE RESTRICTED UNITS PAY FIRST (MTG_CREATURE_LEFTOVER_EXACT, DEFAULT ON; =0 the legacy booking below).
-          // Bruna mana-clean gate, about half of its 1,891 APPLY-DROPs: Somberwald Sage's creature-only {U}{U}{U} +
+          // Bruna mana-clean gate (this fix and MTG_AURA_HOST_LINE_KEEP together took its 1,891 APPLY-DROPs to 1,221,
+          // -35%): Somberwald Sage's creature-only {U}{U}{U} +
           // Forest + Azorius Chancery + Razorverge Thicket pay Bruna's {3}{W}{W}{U} with one unit over, and the legacy
           // booking min(restricted produced, leftover) put that unit in the CREATURE-ONLY reserve -- it treated the
           // restricted units as spent LAST -- so Arcanum Wings' {1}{U} (an Aura) had no {U}, though the Sage's three
@@ -4314,6 +4318,54 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
               }
               restricted = std::min(restricted, std::max(0, restricted_made - spent_max));
           }
+          // ...AND THE GENERAL FLOAT THE DRAINS SPENT BEFORE TAPPING (same flag). The booking above reads tap_bill,
+          // the bill AFTER the float drains, so a general unit that the drain put on a generic pip is invisible to
+          // it: Bruna d0 gi21770 T8 {Bruna + Arcanum Wings}, the floating {G} paid one of Bruna's {3}, two Somberwald
+          // Sages' WWW + UUU paid the rest with a {U} over, and that {U} went creature-only -- so Skycloud Expanse had
+          // no {1} to filter and Wings was dropped (the mana oracle: Sages pay Bruna, keep the {G}). By the same
+          // exchange, a restricted unit pays that generic pip (any unit pays a generic pip of a creature spell) and
+          // the general unit floats instead. That is NOT a dominance by itself (a general {G} cannot pay a later
+          // creature's {U}), so it is taken only when no later creature cast of the line could spend the restricted
+          // unit: the plan casts exactly one creature (this payment's; cast_names complete) and still owes mana
+          // after it. Within the line the general unit then pays everything the restricted one could. Only
+          // W/U/B/R/G units drained beyond the cost's own pips of their colour count (they can only have paid a
+          // generic pip); wild, {C} and snow bills are left alone. Greedy and first-backtracker paths only (the
+          // filter retry re-allocates the whole reserve itself).
+          int swap_k = 0;
+          ManaPool swap_back;
+          if (s_cre_exact && float_drain_known && for_creature && restricted > 0 && cost_in.snow_pips == 0
+              && FloatLeftoverManaEnabled())
+          {
+              const PlanTraits* pt = CurrentPlanTraits();
+              int room = cost_in.generic - tap_bill.generic;
+              if (pt != nullptr && room > 0 && pt->cast_name_count < PlanTraits::kMaxCastNames
+                  && (g_line_unpaid_cost.ManaValue() > cost_in.ManaValue() || pt->act_mana_total > 0))
+              {
+                  int creatures = 0;
+                  for (int k = 0; k < pt->cast_name_count && creatures <= 1; ++k)
+                  {
+                      const CardDefinition* cd = pt->cast_names[k] != nullptr
+                          ? CardDatabase::Instance().Lookup(*pt->cast_names[k]) : nullptr;
+                      if (cd == nullptr || cd->card.IsCreature()) { ++creatures; }   // unknown counts as a creature
+                  }
+                  if (creatures == 1)
+                  {
+                      const int pre[5]  = { reserve_pre.white, reserve_pre.blue, reserve_pre.black, reserve_pre.red,
+                                            reserve_pre.green };
+                      const int post[5] = { gen_after_drain.white, gen_after_drain.blue, gen_after_drain.black,
+                                            gen_after_drain.red, gen_after_drain.green };
+                      const int pip[5]  = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+                      int* back[5] = { &swap_back.white, &swap_back.blue, &swap_back.black, &swap_back.red,
+                                       &swap_back.green };
+                      room = std::min(room, restricted);
+                      for (int c = 0; c < 5 && swap_k < room; ++c)
+                      {
+                          const int t = std::min(std::max(0, pre[c] - post[c] - pip[c]), room - swap_k);
+                          *back[c] += t; swap_k += t;
+                      }
+                  }
+              }
+          }
           if (restricted > 0)
           {
               // Take the restricted units from the colour holding the MOST leftover first: a
@@ -4335,6 +4387,24 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                   if (best < 0) { break; }
                   if (cre_cap[best] > 0) { --cre_cap[best]; }
                   --*src[best]; ++*dst[best];
+              }
+              // The swap (see swap_k): swap_k of the booked restricted units pay the generic pips the drained
+              // general units paid, and those general units float instead (in the general leftover, lo).
+              for (int k = 0; k < swap_k; ++k)
+              {
+                  int best = -1;
+                  for (int c = 0; c < 7; ++c) { if (*dst[c] > 0 && (best < 0 || *dst[c] > *dst[best])) { best = c; } }
+                  if (best < 0) { swap_k = k; break; }
+                  --*dst[best];
+              }
+              if (swap_k > 0)
+              {
+                  // Trim swap_back to the units actually swapped (the loop above stops early only on an empty r).
+                  int* back[5] = { &swap_back.white, &swap_back.blue, &swap_back.black, &swap_back.red,
+                                   &swap_back.green };
+                  int keep = swap_k;
+                  for (int c = 0; c < 5; ++c) { const int t = std::min(*back[c], keep); *back[c] = t; keep -= t; }
+                  lo.AddPool(swap_back);
               }
               if (FloatLeftoverManaEnabled()) { state.floating_creature_mana.AddPool(r); }
           }
@@ -4566,7 +4636,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     {
         if (!dmgev::PaymentOverCap(state, active))
         { if (tapstats::Enabled()) { tapstats::g_pay_greedy_ok.fetch_add(1, std::memory_order_relaxed); }
-          commit_leftover(floating, true); CommitPaySacSacrifices(state, active); return true; }
+          commit_leftover(floating, true, true); CommitPaySacSacrifices(state, active); return true; }
         if (cap_live && available) { *available = av_pre_greedy; }
     }
     // Greedy failed: try the backtracking solver from a clean board.
@@ -4694,7 +4764,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 bt_leftover                        = best_lo;
             }
         }
-        commit_leftover(bt_leftover, false); CommitPaySacSacrifices(state, active); return true;
+        commit_leftover(bt_leftover, false, true); CommitPaySacSacrifices(state, active); return true;
     }
     // Floating-fed conversion retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
@@ -4723,7 +4793,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
             state.floating_creature_mana = cre_reserve_pre;   // ...which paid the FULL cost_in from it
             state.floating_bigspell_mana = big_reserve_pre;   // (same: the big-only reserve is untouched)
-            commit_leftover(bt2_leftover, false);
+            commit_leftover(bt2_leftover, false, false);
             CommitPaySacSacrifices(state, active);
             return true;
         }
