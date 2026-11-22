@@ -253,51 +253,81 @@ TEST_CASE("Tap pingers: a 0-power Pyromancer is held home; a 1-power pinger and 
 
 // ---- Browbeat's pre-ping sub-decision --------------------------------------------------------------------
 
-TEST_CASE("Browbeat flip: base TAKE -> fire the fewest pings first and the opponent DECLINES (both worlds)")
+TEST_CASE("Browbeat flip: a READY ping is visible -- the opponent anticipates it, and a base TAKE has no flip (both worlds)")
 {
-    // Holding a card, so the opponent takes iff life > 8. At 9 it takes (-> 4); one Fireslinger ping first
-    // brings it to 8, and it declines: we draw three.
-    GameState board = Cb2Board(3, {"Browbeat", "Lightning Bolt"}, /*opp_life=*/9);
-    Cb2Put(board, "Goblin Fireslinger", 11);
-    Cb2Put(board, "Goblin Fireslinger", 14);
+    // Post-combat, holding a card (threshold 8), two ready Fireslingers: the opponent sees their 2 pings coming.
+    // At 10 it decides at 8 and DECLINES (we draw three); at 11 it decides at 9 and TAKES (-> 6) -- and firing the
+    // pings first cannot change that (each lowers the life AND the visible damage by 1), so the flip is the base.
+    for (const int life : {10, 11})
+    {
+        CAPTURE(life);
+        const bool takes = life == 11;
+        GameState board = Cb2Board(3, {"Browbeat", "Lightning Bolt"}, life);
+        board.phase = Phase::PostCombatMain;
+        Cb2Put(board, "Goblin Fireslinger", 11);
+        Cb2Put(board, "Goblin Fireslinger", 14);
+        CHECK(OpponentVisibleDamageThisTurn(board, 0) == 2);
+        for (const int flip : {0, 1})
+        {
+            CAPTURE(flip);
+            GameState roll = board;
+            TurnSolver::ApplyPlan(roll, Cb2Plan({ Cb2Cast("Browbeat", flip) }), /*is_pre_combat=*/false);
+            CHECK(roll.players[1].life == (takes ? 6 : 10));
+            CHECK(roll.players[0].hand.size() == (takes ? 1u : 4u));
+            CHECK_FALSE(Cb2Find(roll, "Goblin Fireslinger")->tapped);   // nothing fired early
 
-    GameState base = board;
-    TurnSolver::ApplyPlan(base, Cb2Plan({ Cb2Cast("Browbeat") }), /*is_pre_combat=*/true);
-    CHECK(base.players[1].life == 4);
-    CHECK(base.players[0].hand.size() == 1u);
+            GameState exec = board;
+            AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+            Cb2ExecCast(eng, exec, "Browbeat", /*flip=*/flip != 0);
+            CHECK(exec.players[1].life == (takes ? 6 : 10));
+            CHECK(exec.players[0].hand.size() == (takes ? 1u : 4u));
+        }
+    }
+}
 
-    GameState roll = board;
-    TurnSolver::ApplyPlan(roll, Cb2Plan({ Cb2Cast("Browbeat", 1) }), /*is_pre_combat=*/true);
-    CHECK(roll.players[1].life == 8);
-    CHECK(roll.players[0].hand.size() == 4u);
-    int tapped = 0;
-    for (const Permanent& p : roll.battlefield) { if (p.card.m_name == "Goblin Fireslinger" && p.tapped) { ++tapped; } }
-    CHECK(tapped == 1);                                   // the FEWEST: one ping, the other stays ready
-    CHECK(PingDorkEndSweep(roll, 0) == 1);                // ...and pings at the end step: no damage lost
-    CHECK(roll.players[1].life == 7);
-
-    GameState exec = board;
-    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
-    Cb2ExecCast(eng, exec, "Browbeat", /*flip=*/true);
-    CHECK(exec.players[1].life == 8);
-    CHECK(exec.players[0].hand.size() == 4u);
+TEST_CASE("Browbeat flip: no pre-ping can LOWER the anticipated life (pre-combat: a pinger that could attack drops out)")
+{
+    // Pre-combat: Champion 3 (attack), Fireslinger max(1 attack, 1 ping) = 1, Pyromancer max(0, 1 ping) = 1.
+    GameState s = Cb2Board(4, {}, /*opp_life=*/13);
+    Cb2Put(s, "Keldon Champion", 10);
+    Cb2Put(s, "Goblin Fireslinger", 11);
+    Cb2Put(s, "Cinder Pyromancer", 12);
+    CHECK(OpponentVisibleDamageThisTurn(s, 0) == 5);
+    const int before = OpponentAnticipatedLife(s, 1);
+    CHECK(before == 8);
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[i].card);
+        if (d != nullptr && d->params.tap_ping_damage > 0) { ResolveTapPing(s, 0, i, *d, /*ask_human=*/false); }
+    }
+    CHECK(s.players[1].life == 11);                        // both pinged...
+    CHECK(OpponentAnticipatedLife(s, 1) == before);       // ...and the opponent decides at the same 8
+    // A Peaks-pumped 2/1 Pyromancer would attack for 2: pinging instead RAISES the anticipated life.
+    GameState t = Cb2Board(4, {}, /*opp_life=*/13);
+    Permanent& py = Cb2Put(t, "Cinder Pyromancer", 12);
+    py.temp_power_bonus = 2;
+    CHECK(OpponentVisibleDamageThisTurn(t, 0) == 2);
+    ResolveTapPing(t, 0, t.battlefield.size() - 1, Cb2Def("Cinder Pyromancer"), false);
+    CHECK(OpponentAnticipatedLife(t, 1) == 12);
 }
 
 TEST_CASE("Browbeat flip: base DECLINE -> withhold the Pyromancer's response ping and the opponent TAKES (both worlds)")
 {
-    // Holding a card (threshold 8), opponent at 9. Browbeat is red: the Pyromancer pings in response (9 -> 8), so
-    // the base declines (we draw three). The flip is the world in which it did NOT ping: 9 > 8, it takes 5 -> 4.
-    GameState board = Cb2Board(3, {"Browbeat", "Lightning Bolt"}, /*opp_life=*/9);
+    // Holding a card (threshold 8), opponent at 10, a ready Pyromancer (its ping is visible: 1). Browbeat is red: the
+    // Pyromancer pings in response (10 -> 9) and untaps -- ready again, so still visible -- and the opponent decides
+    // at 9 - 1 = 8: the base DECLINES (we draw three). The flip is the world in which it did NOT ping: 10 - 1 = 9 > 8,
+    // it takes 5 -> 5.
+    GameState board = Cb2Board(3, {"Browbeat", "Lightning Bolt"}, /*opp_life=*/10);
     Cb2Put(board, "Cinder Pyromancer", 12);
 
     GameState base = board;
     TurnSolver::ApplyPlan(base, Cb2Plan({ Cb2Cast("Browbeat") }), /*is_pre_combat=*/true);
-    CHECK(base.players[1].life == 8);
+    CHECK(base.players[1].life == 9);
     CHECK(base.players[0].hand.size() == 4u);
 
     GameState roll = board;
     TurnSolver::ApplyPlan(roll, Cb2Plan({ Cb2Cast("Browbeat", 1) }), /*is_pre_combat=*/true);
-    CHECK(roll.players[1].life == 4);
+    CHECK(roll.players[1].life == 5);
     CHECK(roll.players[0].hand.size() == 1u);
     CHECK(roll.OptPingsLive() == 0);
     CHECK_FALSE(Cb2Find(roll, "Cinder Pyromancer")->tapped);
@@ -305,18 +335,20 @@ TEST_CASE("Browbeat flip: base DECLINE -> withhold the Pyromancer's response pin
     GameState exec = board;
     AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
     Cb2ExecCast(eng, exec, "Browbeat", /*flip=*/true);
-    CHECK(exec.players[1].life == 4);
+    CHECK(exec.players[1].life == 5);
     CHECK(exec.players[0].hand.size() == 1u);
 }
 
 TEST_CASE("Browbeat flip: no flip exists -> the variant is the base (too few pingers, nothing to withhold)")
 {
-    // Opponent at 11 holding a card: two pings are needed to decline, one Fireslinger is ready.
+    // Opponent at 11 holding a card, post-combat, one ready Fireslinger (visible: 11 - 1 = 10 > 8): a base TAKE,
+    // and no pre-ping can flip a TAKE.
     GameState board = Cb2Board(3, {"Browbeat", "Lightning Bolt"}, /*opp_life=*/11);
+    board.phase = Phase::PostCombatMain;
     Cb2Put(board, "Goblin Fireslinger", 11);
     GameState a = board, b = board;
-    TurnSolver::ApplyPlan(a, Cb2Plan({ Cb2Cast("Browbeat") }), true);
-    TurnSolver::ApplyPlan(b, Cb2Plan({ Cb2Cast("Browbeat", 1) }), true);
+    TurnSolver::ApplyPlan(a, Cb2Plan({ Cb2Cast("Browbeat") }), false);
+    TurnSolver::ApplyPlan(b, Cb2Plan({ Cb2Cast("Browbeat", 1) }), false);
     CHECK(a.players[1].life == 6);
     CHECK(b.players[1].life == 6);
     CHECK_FALSE(Cb2Find(b, "Goblin Fireslinger")->tapped);
@@ -327,10 +359,10 @@ TEST_CASE("Browbeat flip: no flip exists -> the variant is the base (too few pin
     CHECK(c.players[0].hand.size() == 3u);
 }
 
-TEST_CASE("Browbeat flip: emitted only for a tap-pinger deck with a pinger live, as a distinct plan")
+TEST_CASE("Browbeat flip: emitted only for a tap-pinger deck with a WITHDRAWABLE ping source, as a distinct plan")
 {
     GameState s = Cb2Board(3, {"Browbeat"});
-    Cb2Put(s, "Goblin Fireslinger", 11);
+    Cb2Put(s, "Cinder Pyromancer", 11);
     auto flips = [](const GameState& st) {
         int base = 0, flip = 0;
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(st, /*is_pre_combat=*/true))
@@ -351,6 +383,9 @@ TEST_CASE("Browbeat flip: emitted only for a tap-pinger deck with a pinger live,
     CHECK(flips(off).second == 0);
     GameState none = Cb2Board(3, {"Browbeat"});           // no pinger anywhere
     CHECK(flips(none).second == 0);
+    GameState sling = Cb2Board(3, {"Browbeat"});          // a Fireslinger's ready ping is anticipated: nothing to flip
+    Cb2Put(sling, "Goblin Fireslinger", 11);
+    CHECK(flips(sling).second == 0);
 }
 
 // ---- the MANUAL ping (human play only; USER 2026-11-21: "leave the auto-tap, but add the option to manually tap") ----

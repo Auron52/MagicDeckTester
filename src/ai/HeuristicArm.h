@@ -1119,6 +1119,8 @@ enum Slot : int
     BLOODSUN_GRIM_V2_LAND_CUT,// MTG_BLOODSUN_GRIM_V2_LAND_CUT  Fastbond alone when the surplus has a big land. Default OFF
     BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
     BLOODSUN_BUCKET_DISCARD,    // MTG_BLOODSUN_BUCKET_DISCARD  B14 USER cleanup buckets. Default OFF pending A/B
+    OPP_ANTICIPATE,           // MTG_OPP_ANTICIPATE  TEMPORARY MEASUREMENT ARM (cb-bbgap, never lands): =0 restores the pre-2026-11-22 punisher policies (bare life, the old pre-ping flip half and its emission gate)
+    FS_ROOT_IDLE_PASS,        // MTG_FS_ROOT_IDLE_PASS  TEMPORARY MEASUREMENT ARM (cb-bbgap, never lands): FSLineWin offers the idle pass at a node whose enumeration has no empty plan (a mid-turn root with the drop spent)
     COUNT
 };
 
@@ -2182,6 +2184,8 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_V2_LAND_CUT",
         "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
         "MTG_BLOODSUN_BUCKET_DISCARD",
+        "MTG_OPP_ANTICIPATE",
+        "MTG_FS_ROOT_IDLE_PASS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

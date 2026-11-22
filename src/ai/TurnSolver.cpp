@@ -39129,9 +39129,11 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // Spectacle: the alternate cost turns ON during combat (Light Up the Stage -- the USER's
     // named example), so post-combat is cheaper-or-equal and never worse.
     if (p.spectacle_cost.has_value()) { return MP::Main2; }
-    // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's take-or-decline is read off its life AT
-    // RESOLUTION, which combat changes, and the declined half draws three that can dig into a main-1 card --
-    // so either main can be the right one. Both (the search decides per state).
+    // BROWBEAT (opp_may_take_damage_instead_of_draw): the opponent's take-or-decline reads its life less the
+    // visible damage still to come (OpponentAnticipatedLife) and whether we hold a card. Cast after combat the
+    // same life is reached, but a haste creature (or Teetering Peaks) played after combat empties the hand
+    // without being anticipated -- a choice no main-1 order reproduces -- and the declined half draws three
+    // that can dig into a main-1 card, so either main can be the right one. Both (the search decides per state).
     if (p.opp_may_take_damage_instead_of_draw > 0) { return MP::Both; }
     // ATTACK-HELPING classes stay pre-combat (USER placement rule 2026-08-15: bake in "the
     // cards that help with the attack phase" explicitly, so the residual doubt class can
@@ -56150,33 +56152,38 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
-    // BROWBEAT PRE-PING post-pass (Action::browbeat_flip; Creature Burn 2026-11-20, the [ORCH] soundness
-    // amendment). Browbeat's opponent policy reads the opponent's life as it resolves, and the tap pingers'
-    // folds (end-step sweep, Pyromancer's response ping) fix WHEN their damage lands, so without this the
-    // "ping first, then Browbeat" and "hold the Pyromancer ping, then Browbeat" lines were unfindable at any
-    // budget. The outcome is binary, so ONE variant per Browbeat cast -- flip = 1, the other outcome at the
-    // least cost (BrowbeatFlipPrePings has the dominance argument) -- covers it; it shares the base's group
-    // key (mutually exclusive) and plan_signature's #BB keeps the dedup from folding it. DECISION SPACE only
-    // (searched collect, executor, human play -- the human picks it as a plan variant); a rollout leaf keeps
-    // the base (beyond-horizon greedy). Gated on deck_has_tap_ping AND a tap pinger on our battlefield or in
-    // our hand (one cast earlier in the plan can still ping), so every other deck emits nothing.
+    // BROWBEAT FLIP post-pass (Action::browbeat_flip; Creature Burn 2026-11-20, the [ORCH] soundness
+    // amendment). Browbeat's opponent policy reads the opponent's ANTICIPATED life as it resolves (life less the
+    // visible damage, ready pings included -- OpponentAnticipatedLife), and Cinder Pyromancer's response-ping fold
+    // fixes that it pings in response to every red cast, so without this the "hold the Pyromancer ping, then
+    // Browbeat" line was unfindable at any budget. The outcome is binary, so ONE variant per Browbeat cast --
+    // flip = 1, the other outcome at the least cost (BrowbeatFlipPrePings has the dominance argument) -- covers it;
+    // it shares the base's group key (mutually exclusive) and plan_signature's #BB keeps the dedup from folding it.
+    // DECISION SPACE only (searched collect, executor, human play -- the human picks it as a plan variant); a
+    // rollout leaf keeps the base (beyond-horizon greedy). Gated on deck_has_tap_ping AND a source of a
+    // WITHDRAWABLE ping -- a response pinger (cast_color_untap_self) on our battlefield or in our hand, or
+    // withdrawable pings already banked this turn -- since withdrawal is the only flip left (2026-11-22: a ready
+    // ping is anticipated, so the old "pre-ping first" half can never flip a TAKE); every other deck and board
+    // emits nothing (a sound collapse: the variant would duplicate its base).
     if (state.deck_has_tap_ping && (g_search_candidate_enum || g_condemn_root_turn < 0))
     {
         const int me = state.active_player_index;
-        int pinger = -1;   // lazily: is a tap pinger on our battlefield or in our hand?
+        int pinger = -1;   // lazily: can a ping be withdrawn at this Browbeat's resolution?
         auto pinger_live = [&]() -> bool {
             if (pinger >= 0) { return pinger != 0; }
             pinger = 0;
+            if (!OppAnticipateOn() ? false : state.OptPingsLive() > 0) { pinger = 1; return true; }
+            const bool old_gate = !OppAnticipateOn();   // TEMPORARY measurement arm: the old any-pinger gate
+            auto response_pinger = [old_gate](const CardDefinition* d)
+            { return d != nullptr && d->params.tap_ping_damage > 0 && (old_gate || d->params.cast_color_untap_self >= 0); };
             for (const Permanent& q : state.battlefield)
             {
                 if (q.controller_index != me || q.def_absent) { continue; }
-                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                if (qd != nullptr && qd->params.tap_ping_damage > 0) { pinger = 1; return true; }
+                if (response_pinger(CardDatabase::Instance().LookupCached(q.card))) { pinger = 1; return true; }
             }
             for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
             {
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd != nullptr && hd->params.tap_ping_damage > 0) { pinger = 1; return true; }
+                if (response_pinger(CardDatabase::Instance().LookupCached(hc))) { pinger = 1; return true; }
             }
             return false;
         };
@@ -122115,6 +122122,11 @@ static bool RevContWaves(const GameState& state, const CandSeq& plans, std::size
     return false;
 }
 
+// TEMPORARY MEASUREMENT (cb-bbgap, MTG_FS_ROOT_IDLE_PASS): how many FSLineWin nodes had plans but no empty one.
+static std::atomic<long long> g_fs_root_pass_seeded{0};
+struct FsRootPassDump { ~FsRootPassDump() { const long long n = g_fs_root_pass_seeded.load();
+    if (n > 0) { std::fprintf(stderr, "[fs-root-pass] seeded=%lld\n", n); } } };
+static FsRootPassDump g_fs_root_pass_dump;
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget)
@@ -123178,7 +123190,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // ...and THE HOLD PASS (FaceUpHoldPassMissing): a node with plans, its drop made, and a face-down
         // permanent whose opponent-end-step flip the pass keeps open.
         const bool fu_hold = FaceUpHoldPassMissing(state, pre);
-        if ((pre.empty() || fu_hold) && s_fs_idle_node)
+        // TEMPORARY MEASUREMENT ARM (cb-bbgap, MTG_FS_ROOT_IDLE_PASS): the idle pass at a node with plans but no
+        // empty one -- a mid-turn root with the drop spent (an interior node is a turn start: the drop is open and
+        // EnumeratePlansWithLand's DEFER branch already carries "cast nothing").
+        bool root_pass = false;
+        static const bool s_root_pass_env = EnvOn("MTG_FS_ROOT_IDLE_PASS");
+        if (!pre.empty() && !fu_hold && heurarm::Flag(heurarm::FS_ROOT_IDLE_PASS, s_root_pass_env))
+        {
+            PbLazyMaterialize(pre, pre_lazy);
+            root_pass = std::none_of(pre.begin(), pre.end(), [](const TurnSolver::Plan& q)
+                                     { return IsApplyEmptyPlan(q) && q.land_to_play.empty(); });
+            if (root_pass) { g_fs_root_pass_seeded.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if ((pre.empty() || fu_hold || root_pass) && s_fs_idle_node)
         {
             if (fu_hold) { PbLazyMaterialize(pre, pre_lazy); }   // the pass and its clones go after every plan
             TurnSolver::Plan idle;

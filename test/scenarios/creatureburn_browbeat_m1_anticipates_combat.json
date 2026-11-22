@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "CREATURE BURN, Browbeat's ANTICIPATING opponent (USER 2026-11-22: the opponent takes the visible damage still to come this turn into account -- OpponentAnticipatedLife, SpellEffects.h).",
+    "MAIN-1 frame of turn 5: opponent at 10, a Spark Elemental (3, haste, untapped) that can still attack, the land drop used, six untapped Mountains, hand Browbeat + a Mountain we cannot play (so we HOLD a card), library top three Lightning Bolts.",
+    "Main-1 Browbeat: the opponent decides at 10 - 3 (visible combat damage) = 7 <= 8 while we hold a card -> it DECLINES; we draw the three Bolts and cast them off the three Mountains left (10 -> 1), and the Elemental's attack kills: WIN THIS TURN.",
+    "Before the policy change the opponent read its bare life 10 > 8 and TOOK the 5 (-> 5, attack -> 2): no T5 kill from this frame (the drop is spent, so the mid-turn root offers no main-1 pass -- the 'attack, then Browbeat' line needs a pass)."
+  ],
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 5,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 10,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Spark Elemental",
+      "controller": 0,
+      "sick": false,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Browbeat",
+    "Mountain"
+  ],
+  "library_top": [
+    "Lightning Bolt",
+    "Lightning Bolt",
+    "Lightning Bolt"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 2,
+  "budget_ms": 0,
+  "max_turns": 5,
+  "expect_win_turn": 5
+}

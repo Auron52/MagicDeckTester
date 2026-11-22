@@ -16088,6 +16088,64 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     }
 }
 
+// ---- THE OPPONENT'S VISIBLE DAMAGE THIS TURN (the "any opponent may" punisher policies) ----------------
+// USER 2026-11-22: *"Maybe we should actually make the opponent take the visible combat damage into account when
+// deciding on browbeat. It doesn't really make sense to exclude it."* and *"If the pinger pings are visible they
+// probably should. Yes, Vexing Devil should act the same way."* So the passive opponent's two punisher choices
+// (BrowbeatOpponentTakesDamage, VexingDevilOpponentTakesDamage) judge against its life MINUS the damage it can SEE
+// coming this turn -- ONE helper both read, executor and rollout alike (GameState::phase is faithful in both
+// worlds: the executor stamps it per main phase, the rollout at its turn start and at the end of SimulateCombat).
+//
+// On the ATTACKER's own turn, per permanent q it controls (skipping `exclude_number`, a Vexing Devil whose own
+// attack hangs on the very choice being made):
+//   * c = its COMBAT damage still to come: only during the pre-combat main, if it can still attack this turn
+//     (CanAttackFull: untapped, no defender, not summoning-sick unless hasted), max(0, CombatPowerOf) -- the
+//     current power with this turn's pumps, lords and Equipment -- doubled for double strike; 0 while this turn's
+//     combat damage is prevented. Exact against the never-blocking goldfish under the attack-all exemption.
+//   * p = its READY tap ping (TapPingerReady: untapped, able to {T} now): tap_ping_damage, to the face (x1 in
+//     2HG, the team's shared life). A ping that needs a FUTURE cast (Cinder Pyromancer's untap-on-red-cast
+//     response ping) is not visible and not counted.
+//   * it adds max(c, p): a ready pinger that can also attack does ONE of the two (attack, or {T} to ping), never
+//     both, so a 1/1 Fireslinger is 1, a 0/1 Pyromancer 1 (its ping; AttackWith holds it home), a Peaks-pumped
+//     2/1 Pyromancer 2 (it attacks).
+// From the post-combat main on only the ready pings remain. 0 on any other player's turn. In 2HG every hit lands
+// on the opposing team's shared life (players[opponent]).
+inline bool TapPingerReady(const GameState& state, const Permanent& q, int active, const CardDefinition** out);   // defined below
+inline bool OppAnticipateOn()   // TEMPORARY MEASUREMENT ARM (cb-bbgap; removed before landing)
+{
+    static const bool v = EnvOn("MTG_OPP_ANTICIPATE", true);
+    return heurarm::Flag(heurarm::OPP_ANTICIPATE, v);
+}
+inline int OpponentVisibleDamageThisTurn(const GameState& s, int attacker, int exclude_number = -1)
+{
+    if (!OppAnticipateOn()) { return 0; }
+    if (s.active_player_index != attacker) { return 0; }
+    const bool combat_ahead = s.phase == Phase::PreCombatMain && !s.combat_damage_prevented_this_turn;
+    std::optional<HasteSources> hs;
+    int dmg = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != attacker || q.card.m_number == exclude_number) { continue; }
+        int c = 0;
+        if (combat_ahead && (q.card.IsCreature() || q.is_animated))
+        {
+            if (!hs) { hs = GatherHasteSources(s.battlefield, attacker); }
+            if (CanAttackFull(q, s.battlefield, attacker, &*hs))
+            { c = std::max(0, CombatPowerOf(q, s)) * (CreatureHasDoubleStrike(q, s) ? 2 : 1); }
+        }
+        const CardDefinition* pd = nullptr;
+        const int p = TapPingerReady(s, q, attacker, &pd) ? pd->params.tap_ping_damage : 0;
+        dmg += std::max(c, p);
+    }
+    return dmg;
+}
+// The life the opponent decides at: its life (the team's in 2HG) less the visible damage above.
+inline int OpponentAnticipatedLife(const GameState& s, int opponent, int exclude_number = -1)
+{
+    return s.players[static_cast<std::size_t>(opponent)].life
+         - OpponentVisibleDamageThisTurn(s, 1 - opponent, exclude_number);
+}
+
 // ---- VEXING DEVIL (CardParams::etb_opp_may_take_damage_to_sac) ---------------------------------------
 // "When this creature enters, any opponent may have it deal N damage to them. If a player does, sacrifice
 // this creature."
@@ -16105,11 +16163,15 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
 // (CLAUDE.md "NO GREEDY PICK"): no option of OURS is collapsed. Executor and rollout reach it through the
 // same cascade (FireOwnEtbTriggers), so they cannot disagree.
 inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
-inline bool VexingDevilOpponentTakesDamage(const GameState& s, int controller, int opponent, int amount)
+// ANTICIPATION (USER 2026-11-22, "Vexing Devil should act the same way"): the life compared is the opponent's life
+// LESS the damage it can see coming this turn (OpponentAnticipatedLife, shared with Browbeat), the Devil itself
+// excluded (`devil_number`: whether it attacks is what the choice decides; -1 = not on the battlefield yet).
+inline bool VexingDevilOpponentTakesDamage(const GameState& s, int controller, int opponent, int amount,
+                                           int devil_number = -1)
 {
     const bool holding = !s.players[static_cast<std::size_t>(controller)].hand.empty();
     const int  decline_at_or_below = amount + (holding ? 3 : 0);
-    return s.players[static_cast<std::size_t>(opponent)].life > decline_at_or_below;
+    return OpponentAnticipatedLife(s, opponent, devil_number) > decline_at_or_below;
 }
 // Resolve the trigger for the entrant `devil_number` (re-found by number: the ETB body may have moved
 // the vector). Taken: N damage from the Devil (a red CREATURE source -- noncombat damage, so it marks the
@@ -16121,7 +16183,7 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
     const int amount = def.params.etb_opp_may_take_damage_to_sac;
     const int opp    = 1 - controller;
     const int before = state.players[static_cast<std::size_t>(opp)].life;
-    if (!VexingDevilOpponentTakesDamage(state, controller, opp, amount))
+    if (!VexingDevilOpponentTakesDamage(state, controller, opp, amount, devil_number))
     {
         if (g_play_event_sink && !g_tap_speculating)
         {
@@ -16162,7 +16224,8 @@ inline void ResolveVexingDevilEtb(GameState& state, int controller, int devil_nu
 // the USER's Vexing Devil ruling above (VexingDevilOpponentTakesDamage): *"I would probably do the same thing as
 // devil, which is take the damage unless it puts you within 3 life."* and *"No, your idea is good. (hand empty =
 // take the damage unless lethal)"*. The opponent TAKES the N damage iff its life (the opposing TEAM's shared life
-// in 2HG, players[opponent]) is > N + (we hold any card ? 3 : 0) -- i.e. it declines (we draw three) once N
+// in 2HG, players[opponent]) LESS THE DAMAGE IT CAN SEE COMING THIS TURN (OpponentAnticipatedLife, above -- USER
+// 2026-11-22) is > N + (we hold any card ? 3 : 0) -- i.e. it declines (we draw three) once N
 // would leave it within reach of our hand, guessing from our hand SIZE only, never its contents. N = 5 for the
 // only card, so it takes above 5 (unless lethal) with our hand empty and at 9 or more while we hold a card. Like
 // the Devil it is an ENVIRONMENT model of the passive goldfish opponent: the choice is THEIRS, so it is neither
@@ -16182,7 +16245,7 @@ inline int HeldCardCount(const GameState& s, int who)
 inline int BrowbeatTakeThreshold(int amount, bool we_hold_cards) { return amount + (we_hold_cards ? 3 : 0); }
 inline bool BrowbeatOpponentTakesDamage(const GameState& s, int opponent, int amount, bool we_hold_cards)
 {
-    return s.players[static_cast<std::size_t>(opponent)].life > BrowbeatTakeThreshold(amount, we_hold_cards);
+    return OpponentAnticipatedLife(s, opponent) > BrowbeatTakeThreshold(amount, we_hold_cards);
 }
 // The shared resolver, called at the TOP of both draw resolutions (EffectHandler::ResolveDrawSpell and the
 // rollout's apply_one DrawSpell branch, lockstep). Taken: N damage from the spell (a red noncombat source --
@@ -40421,35 +40484,36 @@ inline void TapPingCastUntap(GameState& state, int active, const CardDefinition&
     }
 }
 
-// THE BROWBEAT PRE-PING SUB-DECISION (Action::browbeat_flip; the [ORCH] soundness amendment of Creature
-// Burn Stage 2). Browbeat's opponent policy (BrowbeatOpponentTakesDamage) reads the opponent's LIFE as it
-// resolves, so pings fired just before it can turn TAKE into DECLINE, and Pyromancer pings already fired
-// this turn could have been withheld to turn DECLINE into TAKE. Its outcome is BINARY in that life
-// (take iff life > T, T = 5 + (we hold a card ? 3 : 0); pings change neither the hand nor T), so TWO
-// variants cover every reachable outcome, each with its maximum-damage allocation:
-//   * flip = 0 (the base cast, every deck): no pre-ping, nothing withdrawn -- Browbeat reads the life as
-//     it stands. Every ready pinger still pings later (end step), so no damage is lost.
-//   * flip = 1 (emitted only for a deck with a tap pinger): the OTHER outcome, at the least cost --
-//       - base outcome TAKE: fire the FEWEST ready pings that bring life to <= T (life - T of them). A ping
-//         fired now instead of at the end step loses nothing, except a pinger that could still attack this
-//         turn; so the pingers fire in ascending combat power (a 0-power Pyromancer first -- its attack is
-//         worth nothing), the min-loss order. Too few ready pingers -> nothing fires (no flip exists).
-//       - base outcome DECLINE: withdraw the FEWEST withdrawable pings (T + 1 - life of them, at most
-//         GameState::opt_pings): the world in which Pyromancer did not ping in response to those earlier
-//         red casts -- the identical board with that much more opponent life and that much less damage.
-//         Too few -> nothing (no flip exists). Not available while the damage-event layer or the
-//         noncombat-damage trackers are armed (their records cannot be withdrawn; no such deck has a pinger).
-// Any other pre-ping count k gives one of these two outcomes with no more damage, so it is dominated; the
-// fold is sound, and a no-op flip simply duplicates its base (the post-apply dedup absorbs it).
+// THE BROWBEAT FLIP SUB-DECISION (Action::browbeat_flip; the [ORCH] soundness amendment of Creature Burn Stage 2,
+// re-derived 2026-11-22 for the ANTICIPATING opponent). Browbeat's opponent policy (BrowbeatOpponentTakesDamage)
+// reads OpponentAnticipatedLife -- the opponent's life less the damage it can see coming this turn, READY TAP PINGS
+// INCLUDED (USER 2026-11-22: "If the pinger pings are visible they probably should.") -- as it resolves. Its outcome
+// is BINARY in that number (take iff anticipated > T, T = 5 + (we hold a card ? 3 : 0)), so TWO variants cover every
+// reachable outcome:
+//   * flip = 0 (the base cast, every deck): Browbeat reads the anticipated life as it stands.
+//   * flip = 1 (emitted only for a deck whose list can WITHDRAW a ping -- a Cinder Pyromancer live, TurnSolver's
+//     post-pass): base outcome DECLINE -> withdraw the FEWEST withdrawable pings (T + 1 - anticipated of them, at
+//     most GameState::opt_pings): the world in which Pyromancer did not ping in response to those earlier red
+//     casts -- the identical board (it untaps either way, so it is equally visible) with that much more opponent
+//     life and that much less damage. Too few -> nothing (no flip exists). Not available while the damage-event
+//     layer or the noncombat-damage trackers are armed (their records cannot be withdrawn; no such deck has a
+//     pinger).
+// THE OLD "PRE-PING" HALF IS GONE (base TAKE -> fire ready pings first so the opponent declines): a ready ping is
+// already in the anticipated damage, so firing it lowers the life by its damage AND the visible damage by at least
+// as much (pre-combat a pinger that could attack drops out by max(combat, ping) >= ping; after combat by its ping)
+// -- no pre-ping can lower the anticipated life, so that variant can never flip a TAKE. Any withdrawal count other
+// than the fewest gives one of the two outcomes with less damage, so it is dominated; a no-op flip simply
+// duplicates its base (the post-apply dedup absorbs it).
 inline void BrowbeatFlipPrePings(GameState& state, int controller, int amount, bool holding)
 {
     const std::size_t opp = static_cast<std::size_t>(1 - controller);
-    const int life      = state.players[opp].life;
-    const int threshold = BrowbeatTakeThreshold(amount, holding);
-    if (life > threshold)
+    const int life        = state.players[opp].life;
+    const int anticipated = OpponentAnticipatedLife(state, static_cast<int>(opp));
+    const int threshold   = BrowbeatTakeThreshold(amount, holding);
+    if (!OppAnticipateOn() && life > threshold)   // TEMPORARY: the pre-2026-11-22 pre-ping half, verbatim
     {
         const int need = life - threshold;
-        std::vector<std::pair<int, int>> ready;   // (combat power, card number), battlefield order
+        std::vector<std::pair<int, int>> ready;
         for (const Permanent& q : state.battlefield)
         {
             const CardDefinition* d = nullptr;
@@ -40471,8 +40535,9 @@ inline void BrowbeatFlipPrePings(GameState& state, int controller, int amount, b
         }
         return;
     }
+    if (anticipated > threshold) { return; }   // base TAKE: no pre-ping can flip it (see above)
     if (state.dmg_events_armed || state.deck_tracks_noncombat_damage) { return; }
-    const int need = threshold + 1 - life;
+    const int need = threshold + 1 - anticipated;
     const int have = state.OptPingsLive();
     if (need > have) { return; }
     state.players[opp].life += need;
