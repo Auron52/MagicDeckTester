@@ -56495,15 +56495,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
-    // WORLDFIRE (exile_all_permanents; Blood Sun step 5, design §9.3 / U2): cast-enumerated normally and ORDERED LAST
-    // (the no-gain eval: the beyond-horizon greedy never prefers it) -- an order, not a restriction (U2 default). It
-    // exiles every attacker and this list deals damage with nothing else, so no goldfish line found speeds a win.
-    for (Action& a : actions)
-    {
-        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.exile_all_permanents)
-        { a.eval = std::min(a.eval, kNoGainCastEval); }
-    }
-
     // REMAND post-pass (CardParams::counters_target_spell_to_hand; Remand -- Hinata2, Unpredictable
     // Cyclone, NivMizzetCombo). Remand's only legal target is one of OUR OWN spells on the stack (the
     // passive opponent never casts; CR 115.1), so it has no cast of its own (the hand loop skips it,
@@ -79918,10 +79909,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
         if (!remand_countered && def.params.boros_charm_modal)
         { ApplyBorosCharm(state, state.active_player_index, chosen_x, enchant_target); }
-        // Worldfire (Blood Sun step 5): exile everything, then each life total becomes 1 (lockstep with EffectHandler).
-        if (!remand_countered && (def.params.exile_all_permanents || def.params.exile_all_hands_and_graveyards
-                                  || def.params.set_all_life_totals >= 0))
-        { ResolveWorldfire(state, state.active_player_index, def); }
         // Dimir Machinations (Blood Sun step 5): the look on the TARGET's library (lockstep with EffectHandler).
         // Human play asks the target player here (HumanLookTargetPlayer, SpellEffects.h: the viewer's plan carries only
         // the self cast). The executor's twin (EffectHandler) is not asked: its cast path already picked the target.

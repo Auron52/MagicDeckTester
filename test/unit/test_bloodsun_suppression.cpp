@@ -386,6 +386,9 @@ TEST_CASE("blood sun G4: the opponent's Karoo enters untapped under Blood Sun, t
         GameState s = BaseSun(3);
         s.opponent_plays_lands = true;
         if (sun) { PutSun(s, "Blood Sun", 1); }
+        // The opponent's entry rules (origin, USER 2026-11-21): a Karoo bounces one of the head's lands, ITSELF when
+        // it has no other -- so give the head a Swamp to return. Under Blood Sun the bounce is lost too.
+        PutSun(s, "Swamp", 71, false, /*controller=*/1);
         s.players[1].hand.push_back(CardSun("Rakdos Carnarium", 70));
         const opponentdeck::LandPlayResult r = opponentdeck::PlayLeftmostLand(s);
         REQUIRE(r.played);
@@ -393,5 +396,6 @@ TEST_CASE("blood sun G4: the opponent's Karoo enters untapped under Blood Sun, t
         REQUIRE(k != nullptr);
         CHECK(k->controller_index == 1);
         CHECK(k->tapped == !sun);
+        CHECK((FindNum(s, 71) != nullptr) == sun);   // the Swamp stays only when the bounce is lost
     }
 }

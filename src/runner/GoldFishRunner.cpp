@@ -2293,8 +2293,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                           // should not fastbond so much that it loses."): armed from each card's OWN param, the
                           // Stuffy Doll precedent. These params are carried by no other list's cards.
                           || d->params.land_play_damage_after_first > 0     // Fastbond (step 4)
-                          || d->params.lose_life_on_resolve > 0             // Grim Tutor (param lands in step 5)
-                          || d->params.set_all_life_totals >= 0))           // Worldfire (step 5; -1 = absent)
+                          || d->params.lose_life_on_resolve > 0))           // Grim Tutor (step 5)
                 { return true; }
             }
             return false;

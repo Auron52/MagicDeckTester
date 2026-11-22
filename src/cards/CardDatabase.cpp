@@ -2754,10 +2754,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (p.unlimited_land_plays) { p.static_extra_land_drops += kUnlimitedDrops; }
     p.land_play_damage_after_first             = params.value("land_play_damage_after_first", 0);
     p.lose_life_on_resolve                     = params.value("lose_life_on_resolve", 0);
-    p.set_all_life_totals                      = params.value("set_all_life_totals", -1);
     p.look_top_target_player_exile_reorder     = params.value("look_top_target_player_exile_reorder", 0);
-    p.exile_all_permanents                     = params.value("exile_all_permanents", false);
-    p.exile_all_hands_and_graveyards           = params.value("exile_all_hands_and_graveyards", false);
     p.opponent_land_play_put_land_from_hand    = params.value("opponent_land_play_put_land_from_hand", false);
     p.endstep_may_dump_hand_lands_discard_hand = params.value("endstep_may_dump_hand_lands_discard_hand", false);
     if (params.contains("etb_sacrifice_unless_pay"))

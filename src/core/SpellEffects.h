@@ -6489,67 +6489,8 @@ inline void ResolveExileAllAndSetLife(GameState& state, const CardParams& pp)
                           "Each player's life total becomes " + std::to_string(n));
         }
     }
-    // The exiled permanents' leaves-the-battlefield triggers, after the whole spell (see the block note).
+    // The exiled permanents’ leaves-the-battlefield triggers resolve after the whole spell.
     PermanentsLeftBattlefieldTogether(state, departed);
-}
-
-// WORLDFIRE (Blood Sun step 5, design §9.3): "Exile all permanents. Exile all cards from all hands and graveyards.
-// Each player's life total becomes 1." In that ORDER, with no trigger resolving in between (ruling 1):
-//   1. every permanent of BOTH sides -- the opponent's lands and spawns, every token -- leaves to exile (a token
-//      ceases to exist). Exiled, never put into a graveyard: Emrakul's "put into a graveyard from anywhere" shuffle
-//      does NOT trigger.
-//   2. every card in every hand and graveyard (both players, and a 2HG second head's hand) goes to exile.
-//   3. each life total becomes N (set_all_life_totals): for a player above N that is LIFE LOSS (ruling 2) -- the
-//      opponent's counts toward its total like any loss; nothing is "dealt".
-// Then, after the resolution, the leaves-the-battlefield consequences (ruling 1: they wait until Worldfire is done):
-// FireLeavesBattlefieldTriggers per nontoken card that left -- which recomputes the land drops of a leaving
-// Exploration / Fastbond (OnStaticLandDropSourceLeft, step 4). Pending extra turns, the floating mana pool and the
-// spell itself are not objects on the battlefield / in a hand: untouched (the caller moves Worldfire to the
-// graveyard as the final part of its resolution, ruling 3). Lockstep: both worlds call this one body.
-inline void ResolveWorldfire(GameState& state, int controller, const CardDefinition& def)
-{
-    const CardParams& pp = def.params;
-    std::vector<std::pair<int, Card>> left;   // (controller, card) of every nontoken permanent exiled
-    if (pp.exile_all_permanents)
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.is_token) { continue; }   // a token in exile ceases to exist (CR 111.7)
-            state.exile.push_back(p.card);
-            left.emplace_back(p.controller_index, p.card);
-        }
-        state.battlefield.clear();
-    }
-    if (pp.exile_all_hands_and_graveyards)
-    {
-        for (Player& pl : state.players)
-        {
-            for (Card& c : pl.hand)      { state.exile.push_back(std::move(c)); }
-            for (Card& c : pl.graveyard) { state.exile.push_back(std::move(c)); }
-            pl.hand.clear();
-            pl.graveyard.clear();
-        }
-        for (Card& c : state.opponent2_hand) { state.exile.push_back(std::move(c)); }
-        state.opponent2_hand.clear();
-    }
-    if (pp.set_all_life_totals >= 0)
-    {
-        for (std::size_t i = 0; i < state.players.size(); ++i)
-        {
-            Player& pl = state.players[i];
-            if (pl.life > pp.set_all_life_totals && static_cast<int>(i) != controller)
-            { state.opponent_lost_life_this_turn = true; }
-            pl.life = pp.set_all_life_totals;
-        }
-    }
-    if (g_play_event_sink && !g_tap_speculating)
-    {
-        EmitPlayEvent(state.turn_number, "trigger",
-                      def.card.m_name.str() + ": every permanent, hand and graveyard is exiled; each life total "
-                      "becomes " + std::to_string(pp.set_all_life_totals));
-    }
-    for (const std::pair<int, Card>& lc : left) { FireLeavesBattlefieldTriggers(state, lc.first, lc.second); }
-    (void)controller;
 }
 
 // ==================== Auras (attach-to-creature enchantments) =========================
@@ -55929,6 +55870,9 @@ inline void ResolveLandEtbTargetPump(GameState& state, int controller, const Car
 {
     const CardParams& lp = land_def.params;
     if (lp.etb_target_creature_pump_power <= 0 && lp.etb_target_creature_pump_toughness <= 0) { return; }
+    // BLOOD SUN (G3): the land's own "when this land enters" trigger never triggers for a land that entered under
+    // Blood Sun (ruling 3) -- both callers (the land drop, EnterLand) reach it here. Inert without a Blood Sun out.
+    if (LandNonManaAbilitiesSuppressed(state)) { return; }
     std::vector<int> legal, reps;
     LandEtbPumpReps(state, controller, legal, reps);
     if (legal.empty()) { return; }   // CR 603.3d: no legal target -> the trigger is removed

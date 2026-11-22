@@ -537,10 +537,6 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     ApplyBorosCharm(state, entry.controller_index,
                                     entry.chosen_x.value_or(1), entry.enchant_target);
                 }
-                // Worldfire (Blood Sun step 5): exile everything, then each life total becomes 1 (lockstep with apply_one).
-                if (def.params.exile_all_permanents || def.params.exile_all_hands_and_graveyards
-                    || def.params.set_all_life_totals >= 0)
-                { ResolveWorldfire(state, entry.controller_index, def); }
                 // Dimir Machinations (Blood Sun step 5): the look on the TARGET's library (lockstep with apply_one).
                 if (def.params.look_top_target_player_exile_reorder > 0)
                 {

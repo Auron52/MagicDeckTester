@@ -65,8 +65,8 @@ inline bool CardCanEndOwnEnchantment(const CardParams& p)
         || p.cast_trigger_destroy_target_permanents > 0 || p.modal_exile_target_artifact_enchantment
         || p.etb_destroy_artifact_enchantment_land || p.etb_destroy_artifact_enchantment_optional
         || p.sac_outlet_destroy_artifact_enchantment_optional || p.sac_outlet_allows_enchantment
-        || p.etb_destroy_own_noncreature_max > 0 || p.cast_trigger_bounce_nonland || p.etb_bounce_nonland
-        || (p.exile_all_permanents && !p.exile_all_hands_and_graveyards);
+        || p.etb_destroy_own_noncreature_max > 0 || p.cast_trigger_bounce_nonland || p.etb_bounce_nonland;
+    // (Worldfire, exile_all_permanents_hands_graveyards, exiles every hand with the board: excluded by construction.)
 }
 
 // Fold F-R2's condition: a Blood Sun suppresses land abilities NOW, and no card of ours that could end it is
