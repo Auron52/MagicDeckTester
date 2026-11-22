@@ -69,12 +69,22 @@ RUNNING:
 
 ## Next, in order
 1. When DONE_clair: report decoupled numbers (item 3) into the doc.
-2. DONE_build rc=0 (14:52). First unit run: 2 failures, both tests with an EMPTY library (Mill fetch proxy, CG C6), where the
-   library-derived hint is correctly empty; tests now get a library (committed). Rerun: r4/unit2.sh -> r4/unit2.log,
-   marker r4/DONE_unit2. Mill fixed. CG C6 OPEN: with an EMPTY library the order is 6 1 7 5 2 4 3 0 (colourless Heath kept
-   over the U Breeding Pool); the test now prints both the empty and a Godless Shrine + Stomping Ground library variant
-   (expected 6 0 7 5 2 4 3 1). Read r4/unit2.log 'values:' lines, pin C6 on the library-backed state, and explain any
-   difference (a library land may also wake Crop Rotation's tutor slot). r4/chain.sh started (base arm waiting on the box lock since 14:52).
+2. DONE: build rc=0 (14:52); units 3877/3877 at 16:29 (r4/unit2.log). Test changes: Mill fetch proxy is library-derived;
+   CG C6 pinned on both cases -- the default test library holds a Breeding Pool, so the Heath reaches U and is kept
+   (6 1 7 5 2 4 3 0); with no library Breeding Pool the original order (6 0 7 5 2 4 3 1) holds. All committed + pushed.
+   r4 A/B RUNNING: chain PID 892503 (r4/chain.sh; base-arm flock PID 970357 waiting on claude_box.lock since 14:52 UTC),
+   progress r4/progress, DONE marker /workspaces/MagicDeckTester/build/scratch/heath/r4/DONE_ab. Waiter:
+   `while kill -0 892503 2>/dev/null; do sleep 60; done` or `while [ ! -f .../r4/DONE_ab ]; do sleep 60; done`.
+   Compare (exact):
+     cd /workspaces/MagicDeckTester/build/scratch/heath/r4 && mkdir -p rep && ln -sfn ../wins_base rep/wins_base && \
+       ln -sfn ../wins_derived rep/wins_new && python3 ../ab_report.py rep rep/detail.txt
+     # tapped report-only arm (Five Colour) vs derived:
+     mkdir -p tap/wins_base tap/wins_new && for f in wins_derived/fivecolour_*.wins; do ln -sfn ../../$f tap/wins_base/$(basename $f); \
+       ln -sfn ../../wins_derived/$(basename $f | sed 's/^fivecolour_/fivecolourtap_/') tap/wins_new/$(basename $f); done && python3 ../ab_report.py tap
+     # CPU per key:
+     for a in base derived; do grep -h "played=" $a.out | python3 -c "import sys,re,collections;c=collections.Counter()
+     [c.update({l.split(':')[0].rsplit('_o',1)[0]:int(re.search(r'cpu=(\d+)',l)[1])}) for l in sys.stdin];print('$a',dict(c))"; done
+   Report searched (_play keys) FIRST, then d0, then CPU (USER).
 3. When DONE_ab: searched per deck FIRST, then d0, then CPU; d8 b0 every slower searched game (d8_manifest.py with
    r4/manifest_derived.json + detail file; run base arm with `r3/d8_arm.sh`-style script pointing at mtg.base/heath-base and
    derived at mtg.derived/heath-derived, lane 2 slots each). Root-cause any deck > 0 (first-divergence summary: see r3 python
