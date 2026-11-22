@@ -154,4 +154,11 @@ private:
     long long m_limit         = 0;   // 0 (or negative) == unlimited
     long long m_used          = 0;
     long long m_overrun_limit = 0;   // 0 == disarmed (no mid-pass abort)
+public:
+    // MTG_LKR_PRICE (ManaPayment.cpp LineReducerKeepHold): the fractional milli-units of the line-keep rung's price
+    // not yet charged. Carried on the BUDGET (one decision frame), never on the thread, so play cannot depend on which
+    // games a batch worker ran before. A rung call costs a fraction of a unit; rounding each call up overcharged 3-6x.
+    long long& LkrMilliResidual() { return m_lkr_milli_residual; }
+private:
+    long long m_lkr_milli_residual = 0;
 };

@@ -49,6 +49,17 @@ Finding: the price rounds up per call, so MILLI 85 and 43 both charge ~1 unit pe
 fix = carry the residual on the decision frame, then re-measure. Remaining: d8_ab2 replays (lane, marker
 $S/d8_ab2.done), then write the menu (step 4 below).
 
+## Progress 13:30 UTC (2): price residual FIX committed (SearchBudget::LkrMilliResidual, carried per decision budget).
+Chain `ab2/run2.sh`, real PID **921057**: sleeps 210 s (9p clock), takes the box lock, builds rock-cpu-dev at full core
+(`build_dev2.log`), stages `$S/mtg.dev2`, identity vs base (`ab2/ident2.txt`; must say 0 differ), batch C = arm pricec
+at MILLI 85 (`C.out`, `logs_C/`), batch D = arm pricec05 at MILLI 43 (`D.out`, `logs_D/`), searched only, same seeds
+as A, then perf counts (`ab2/perf2/`, arms pc85 / pc43, seeds 796000). Progress `ab2/status2`; markers `ab2/DONE2` /
+`ab2/STOPPED2`. Compare vs A's def: `cat ab2/A.out ab2/C.out ab2/D.out > ab2/ACD.out; mkdir -p ab2/logs_ACD;
+ln -sf $S/ab2/logs_A/* $S/ab2/logs_C/* $S/ab2/logs_D/* ab2/logs_ACD/; python3 cmp.py ab2/ACD.out ab2/logs_ACD def pricec --list`
+(and pricec05). perf: instr(pc85__k__s.perf)-416153462 over instr(ab2/perf/def__k__s.perf)-416153462.
+Then d8 b0: the price is inert at b0, so its slower games recover by construction (the d8_ab2 manifest includes two
+price games as a check).
+
 ## Next, in order
 1. When `status` shows `batchA`: `cd .../claude_rock_cpu && for a in poff pnt price; do python3 cmp.py ab2/A.out ab2/logs_A def $a --list > ab2/cmp_$a.txt; done`
    For price05: `cat ab2/A.out ab2/B.out > ab2/AB.out; mkdir -p ab2/logs_AB; ln -sf $PWD/ab2/logs_A/* $PWD/ab2/logs_B/* ab2/logs_AB/;

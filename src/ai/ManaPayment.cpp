@@ -11014,11 +11014,12 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     //    payment table (41-55% of the rung's time on Niv-Mizzet Combo).
     //  * MTG_LKR_PRICE: the rung's work is CHARGED to the decision's budget (TurnSolver::DecisionBudget), at
     //    MTG_LKR_PRICE_MILLI milli-units per work event (a payment trial, a backtracker judge, a table option made) and
-    //    MTG_LKR_PRICE_TABLE events per table ask, rounded up per call. A price, not a gate: DecisionBudget() is nullptr
+    //    MTG_LKR_PRICE_TABLE events per table ask. A price, not a gate: DecisionBudget() is nullptr
     //    at an unlimited root and with no decision frame, so unbudgeted play, the executor and the d0 runner are
     //    untouched by construction, and a finite budget only spends itself sooner -- nothing becomes unfindable.
-    //    Per call, never carried between calls (a residual carried on the thread would make play depend on which
-    //    games the batch worker ran before).
+    //    The fractional remainder is carried on the decision's budget (SearchBudget::LkrMilliResidual), never on the
+    //    thread (that would make play depend on which games the batch worker ran before). Rounding up per call charged
+    //    ~1 unit per call at any MILLI below ~250 (3-6x the calibrated price; 2026-11-22 batch B).
     const bool in_playout = keep_all && TurnSolver::InRolloutPlayout();
     {
         static const bool s_off_env = EnvOn("MTG_LKR_PLAYOUT_OFF", false);
@@ -11039,11 +11040,15 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         {
             if (price && work > 0)
             {
-                const long long u = (work * s_price_milli + 999) / 1000;
-                if (u > 0)
+                SearchBudget* const b = TurnSolver::DecisionBudget();
+                if (b != nullptr)
                 {
-                    SearchBudget* const b = TurnSolver::DecisionBudget();
-                    if (b != nullptr)
+                    // The residual is carried on the decision's budget (see SearchBudget::LkrMilliResidual).
+                    long long& res = b->LkrMilliResidual();
+                    res += work * s_price_milli;
+                    const long long u = res / 1000;
+                    res -= u * 1000;
+                    if (u > 0)
                     {
                         TurnSolver::ChargeLineKeepUnits(b, static_cast<int>(std::min<long long>(u, 1 << 30)));
                         if (stats) { g_lkc_charged.fetch_add(static_cast<unsigned long long>(u), std::memory_order_relaxed); }
