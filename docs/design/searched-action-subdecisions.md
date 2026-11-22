@@ -177,8 +177,11 @@ pieces) and cost that game 3.09M units, so it was replaced before its A/B.
 **Melira Pod, Recruiter of the Guard** (`MeliraPodProvider::TutorCandidates`): the missing role /
 Pod-fuel names (score > 0) plus the USER's Pod/Chord whitelist (`PutTargetOk`: free outlets, persist
 bodies, Celes, an enabler while none is held, a piece-tutor or digger while a piece is missing,
-Voice-class fuel while a Pod is active) -- the USER's 2026-09-05 spec for these tutors. Dorks,
-the goldfish-dead toolbox, a second enabler and a tutor with nothing left to find are not fetched.
+Voice-class fuel while a Pod is active) -- the USER's 2026-09-05 spec for these tutors. Dorks
+are excluded unless a persist payoff already held needs more known mana. The goldfish-dead toolbox,
+a second enabler and a tutor with nothing left to find are also excluded. The held-payoff exception (`0f6cdbd80`)
+restores Melira regression s2002 gi78 from T6 to T5 at depth 8, budget 0, by offering Birds of
+Paradise for the held Murderous Redcap; 3,881 serial tests pass. Its held-out A/B remains to run.
 Nothing qualifies -> the full ranked list.
 
 Held-out A/B, same apparatus and seeds as above (rule arm vs the stored OLD-width arm, which
@@ -195,6 +198,13 @@ Backstops (b0, abandon 2M): Hinata d5 s30001 gi1 **1.46M** (w6 1.35M, full 5.53M
 gi1 **1.85M** (w6 1.46M, full 3.10M); both win on the same turn with the same digest as w6. Every
 other backstop game is within 2M (the two pre-existing abandons, Hinata d3 gi1 and Melira d5 gi11,
 abandon on both arms).
+
+The one Hinata held-out slowdown that stayed T6 at depth 8 / budget 0 on every arm (play seed
+910893, game 893) is a favorable visible-library result for the old width's budgeted T5. In an
+eight-salt blind ensemble of that same game at the shipped budget, NONE of the old-width, full-list
+or merit-rule arms wins T5; their averages are respectively 7.00, 6.875 and 6.75 turns. The merit
+rule is better than the old width under the blind comparison, so this is not an unfindable T5 line
+introduced by the width deletion.
 
 The per-deck history below is kept as the record of what the width measured; it no longer
 describes the engine.
