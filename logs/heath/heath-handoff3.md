@@ -27,7 +27,7 @@ Read CLAUDE.md first (box lock, lane, never push phase-1-2-deck-analyzer, refere
    r3/crep/wins_new; python3 ab_report.py r3/crep`. Reading: if Sea's +9 vanishes when the search's shuffle is decoupled /
    blind, the deficit is the clairvoyant "crack-when-the-reshuffle-helps" option value that holding the Heath gives base.
 
-## NEW WORK: deck-derived fetch hint (wip/heath-derived, uncommitted at time of writing -> commit it)
+## NEW WORK: deck-derived fetch hint (wip/heath-derived, committed; build+units pending)
 USER rulings (verbatim):
 * "I don't know what this is for, but W/U is understating the power of fetchlands. They can get any shock in the deck, so
   they can theoritically produce any colour those can get."
