@@ -142,3 +142,14 @@ W = value warm-up, X = heuristic (emulated) pass, H = ladder pass (value leaf in
    vs d4E; 1.65x d5N units; clean CPU owed); (b) if the beam probe confirms, the depth-5-only beam/value-recording as
    the depth-residual cause, and a fix that keeps depth 5 (beam off, or the beam applied by a depth-independent rule).
    The adoption bar applies: a held-out A/B on the decks that move.
+
+## ADDENDUM 2026-11-22: the beam probe finished and CONFIRMS the hypothesis (first-decision level)
+`$D/nb/` (MTG_ESC_BEAM=0, 30 games s61001, gi33 skipped) vs `$D/st1/`, comparing the P16 pass sequence of each game's
+FIRST decision (same state in both arms):
+- d5E with the beam OFF vs d4E: **29 of 30 identical** (with the beam ON, d5E vs d4E: 2 of 150 identical).
+- d5N with the beam OFF vs d4N: 21 of 30 identical (the hybrid also differs through its depth-dependent trust and
+  escalation targets).
+So the main reason d5 searches differently from d4 at the same state is the depth-5-only value-ranked beam
+(W3/ld2 + value recording, TurnSolver.cpp ~125071). Depth alone is not the reason. The tr2 traces (Q4) also finished;
+they are not yet read. Next: step 2 of the remaining steps (a pooled held-out quality + CPU measurement of the no-beam
+d5 candidates).
