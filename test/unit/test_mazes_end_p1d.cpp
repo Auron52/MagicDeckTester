@@ -96,8 +96,13 @@ TEST_CASE("Maze's End P1d (USER B1): Guild Summit's count menu is {rest-of-line,
     Put(s, "Boros Guildgate", 701);
     Put(s, "Dimir Guildgate", 702);
     Put(s, "Golgari Guildgate", 703, /*tapped=*/true);
-    // Three untapped Gates: pruned to {0 = rest-of-line (unpinned), 1 = N 0, 4 = all}.
-    CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1, 4 });
+    // Three untapped Gates: pruned to {0 = rest-of-line (unpinned), 1 = N 0, 4 = all} (the pay-first menu off; on, it
+    // is {all unneeded, none} with no untapped Maze's End -- test_mazes_end_summit_pay.cpp).
+    {
+        const Arm pf_off(heurarm::MAZE_SUMMIT_PAY_FIRST, 0);
+        CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1, 4 });
+    }
+    CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1 });
     {
         const Arm off(heurarm::MAZE_SUMMIT_COUNT, 0);
         CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 1, 2, 3, 4 });
@@ -137,7 +142,11 @@ TEST_CASE("Maze's End P1d (USER B1): Guild Summit's count menu is {rest-of-line,
     // One untapped Gate: the base {0, all} menu is already within the prune.
     GameState one = Base();
     Put(one, "Azorius Guildgate", 740);
-    CHECK(prov.EtbChoiceCandidates(one, 0, summit) == std::vector<int>{ 1, 2 });
+    {
+        const Arm pf_off(heurarm::MAZE_SUMMIT_PAY_FIRST, 0);
+        CHECK(prov.EtbChoiceCandidates(one, 0, summit) == std::vector<int>{ 1, 2 });
+    }
+    CHECK(prov.EtbChoiceCandidates(one, 0, summit) == std::vector<int>{ 0, 1 });   // pay-first: {unneeded, none}
 }
 
 TEST_CASE("Maze's End P1d (USER P1): a chosen-colour land is offered ONE colour, G before U, never R")
