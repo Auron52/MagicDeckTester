@@ -85,29 +85,28 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   no trait=0 free turns; Vampires / Sea Creatures units 1.000). Flags default OFF; USER questions in the report.
 - Found: scripts/unit_par.sh --first/--last does nothing (every shard runs all 3889 cases) -- deferred tooling fix.
 
-## Running (2026-11-22 ~02:00 UTC)
-- BUCKET agent DONE (6976574c2; ledger "Consumers ..." section): ON vs OFF -5 / -11 net turns at 0.28x units;
-  ON + MTG_WORLDFIRE_ORDER_DEADLINE -6 / -12. Parent took ON + deadline under the USER's clean-win approval
-  (surfaced to the USER 2026-11-22 ~02:30). ADOPTION agent (fresh) in THIS worktree: attribute ON+deadline's worse
-  games (b200, then d8 b0), flip defaults ON if none persists, units/scenarios/smoke/regression, accept worldfire
-  GT keys, ledger. Handoff: logs/worldfire/adopt-handoff.md. Never `commit -a` here while it runs.
-- FREE-TURN pass 3 DONE (9d396adc8, 5267c39d0; logs/freeturn/handoff4.md): flags-OFF smoke 243/243 play-changed=0;
-  flag-ON smoke: no trait-0 deck moved; Worldfire d5 5.725 -> 4.550 credited (1.98 free turns/game), Cyclone d5
-  4.710 -> 4.660, Shadowborn d5 4.780 -> 4.750. 2a/2b built; 2b flips Elementals, Prevent Damage, Sea Creatures to
-  trait 1. Spawn land rule GLOBAL moves 58 smoke keys (+0.635 summed; Stuffy, Burn) -- a genuine USER choice
-  (global vs free-turn-scoped). PASS 4 agent (fresh) from handoff4: waits on chain PID 4152934 ->
-  build/scratch/freeturn/chain5.DONE, then fairness batch, ref LIST, bounceland measurement, doc, full units.
-  Handoff: logs/freeturn/handoff5.md.
-- TUTOR-WIDTH pass 1 DONE (b8ea0658e code, af4b5fe83 doc, wip/tutorwidth): coverage decks byte-identical; held-out
-  A/B Hinata +44 / 1900 (x1.11 units), hinata2hg +22, Goblins -8, Melira -1, others 0. Two b0 backstop rows now
-  abandon (Hinata 5.5M, Melira 3.1M units). NOT landable. Parent: Hinata Gamble merit rule in
-  HinataProvider::TutorCandidates (no fixed count), Melira tutor prune for its b0 row (USER Q16 optimize first, never
-  raise abandon_units), Goblins reserve deletion kept, stale cards.json notes fixed. Handoff:
-  .claude/worktrees/tutorwidth/logs/tutorwidth/handoff.md -> fresh pass-2 agent.
+## Running (2026-11-22 ~07:30 UTC) -- 4 agents, all parent-launched
+- CANTRIP ADOPTION (worldfire worktree; never `commit -a` here): ON + MTG_WORLDFIRE_ORDER_DEADLINE; no game persisted
+  at b200 (so the clairvoyance clause never applied). Units done; tiers ran; now a 72-job attribution batch. Then
+  GT accept (worldfire keys only), ledger, push wip/worldfire. Handoff if needed: logs/worldfire/adopt-handoff.md.
+  Results so far: ON vs OFF -5 / -11 at 0.28x units; ON+deadline -6 / -12.
+- FREE-TURN pass 4 (freeturn worktree, from logs/freeturn/handoff4.md): flag-ON regression (reg_on5) 0 trait-0 keys
+  moved of 389, trait-0 units 1.000; flags-OFF smoke 243/243 play-changed=0; units 3896/3896 on 5267c39d0. chain6
+  queued: fairness batch, spawn global-vs-scoped + root cause, flag-ON reference sweep (LIST only), bounceland
+  measurement; then the doc "Third pass" with the flip-to-default-ON delta. Handoff: logs/freeturn/handoff5.md.
+- TUTOR-WIDTH pass 2 (tutorwidth worktree, from logs/tutorwidth/handoff.md): Hinata Gamble merit rule (v2 built),
+  Melira tutor prune for its b0 row, Goblins reserve deletion kept, stale cards.json notes; held-out A/B vs OLD widths
+  queued on the heavy lock. Bar: every deck net <= 0, every slower game recovers at d8 b0. Handoff: handoff2.md.
+- LTB (.claude/worktrees/wfltb, wip/wfltb off f9a59b8a7): Worldfire mass exile through the shared LTB path; built
+  after repeated 9p ENOMEM retries; sharded unit run going. Handoff: logs/wfltb/handoff.md.
+- box_lane admission bug FIXED 6c5ae8c8d (wip/worldfire): a 4-slot job at cap 6 needed 26 GB on a 23 GB box.
 
 ## Next, in order
 1. Relay each agent's report as it lands; surface its USER questions.
-2. Tutor-width: if the bar is met, land via push_queue (batch with anything else ready); CI watch --interval 60.
+2. LANDING BATCH via push_queue when ready: cantrip adoption + box_lane fix + worldfire docs, tutor-width (if bar met),
+   LTB (if tiers byte-identical), free turns default ON (USER: adoption is not a question, once checks pass). CI watch
+   --interval 60.
+   USER-pending (bring with numbers when measured): spawn-land rule global vs free-turn-scoped; the reference LIST.
 3. Free-turn: when trait=0 decks are byte-identical and the USER answers the remaining Qs, adoption is the USER's.
 4. Buckets: relay the A/B; the bucket flags' default is the USER's. Then re-measure the budget curve and re-screen
    the b0 backstop rows (USER Q16: optimize first).
