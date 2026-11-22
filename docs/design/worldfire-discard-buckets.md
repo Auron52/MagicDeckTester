@@ -110,8 +110,11 @@ Flooded Strand (the fetches also shuffle away a Brainstorm put-back) > Mountain 
 **the last land of all, below Mistrise Village, and the first land shed** -- USER 2026-11-21: *"Mercadian Bazaar
 should be greatly deprioritized if we are not early in the game. It is pretty slow if you don't drop it early."* **Exception: really short on mana** -- T\* is "far" (no go-off within the horizon) -- the Bazaar keeps its
 normal place as a land drop even late, *"just because it eventually builds up"* (USER, same day).) > Saprazzan Skerry (UU: generic only) > Island >
-Mistrise Village. A tapped land (Needle, Skerry, Bazaar) is only worth its yield before T\*; on T\*-1 or later an
-untapped land ranks above it.
+Mistrise Village. **Tapped lands** (Needle, Skerry, Bazaar) are judged by WHEN we can play them (USER 2026-11-21: *"If we can play
+them this turn that is incorrect, but if we only have the option to play them next turn and have the ability to go
+off then then we don't need them."*): a tapped land we can still play THIS turn keeps its place (it is untapped by
+the go-off turn); a tapped land whose earliest possible play is the go-off turn T\* itself (this turn's drop
+already made or taken by a better land, and we can go off next turn) contributes nothing to T\* and is overflow.
 
 ### Global shed order of the overflow (most expendable first)
 
@@ -139,12 +142,19 @@ FINISHER. **Nothing missing:** DIG first, then the last-needed land, then ritual
    removes the tutor's wait.
 4. **Extra mana:** ANSWERED -- none; never more than 10 (plus a same-turn cantrip / Personal Tutor's {U}; Mystical
    Tutor from the previous turn's spare blue).
-5. **Tapped lands late.** Needle / Skerry / Bazaar ranked below untapped lands from T\*-1 on: right?
-6. **Projection horizon now+4** before calling T\* "far".
+5. **Tapped lands late:** ANSWERED -- judged by when they can be played (above).
+6. **Projection horizon now+4:** ANSWERED -- *"I suppose that makes sense."*
 7. **Ponder shuffle:** ANSWERED -- keep-vs-shuffle stays searched; only the order is fixed by the ranking.
-8. **Preordain aggression:** while a piece is genuinely missing, should a dig spell on top (Brainstorm / Ponder)
-   also be kept, or bottomed with everything else (default: bottomed)? And does a missing FINISHER trigger the
-   aggressive mode, or only a missing Worldfire (default: either piece)?
+8. **Preordain aggression:** ANSWERED -- dig spells go to the bottom too (USER: *"I think dig spells going to the
+   bottom is correct from what we have found with other decks. this is something you can feel to experiment with,
+   though. Arguably it could be incorrect when we have multiple blue mana remaining, nothing else to use it for and
+   no ability to combo if we find the right piece, but our tests in Hinata generally showed that it was better to
+   bottom. I think either one is correct."*). Default: bottom. EXPERIMENT ARM: keep a dig spell on top when we have
+   2+ blue mana left this turn, nothing else to spend it on, and no way to combo this turn even if the piece is
+   found. Either missing piece (Worldfire or finisher) triggers the mode (agent's reading of "either one is correct").
+9. **Bazaar "early" = turns 1-2:** ANSWERED -- *"That seems fine to me. In the best case scenario the bazaar taps
+   for 2 on turn 4 if played on turn 1. Turn 3 would be 1 mana on turn 5 and 2 on turn 6. Neither is particularly
+   inspiring, though it should be fine to experiment if you are unsure."* Optional arm: early = turn 1 only.
 
 ## Build and measurement plan
 
