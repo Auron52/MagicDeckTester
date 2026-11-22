@@ -1457,7 +1457,6 @@ INERT_PARAMS = {
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
-    "hand_fixing_produces": "Windswept Heath: an IN-HAND colour hint for Creature Giving's discard cover; never a mana ability, no choice",
     # Misty Rainforest (Sea Creatures I1): its battlefield hold is offered to the HUMAN (the land drop's hold variant +
     # the held activation's tutor_etb target, both existing decisions); the flag only keeps AUTONOMOUS play on the
     # immediate route. It creates no decision of its own.

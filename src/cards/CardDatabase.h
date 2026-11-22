@@ -84,11 +84,6 @@ struct CardParams
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     std::optional<ManaCost> self_bounce_cost; // Oboro: {1}: return this land to hand
-    // A battlefield fetchland's IN-HAND colour hint (the uncracked-fetchland.md "split the field" step, Boars I1):
-    // the colours a copy in hand stands for in a deck's colour-cover heuristics, kept OFF `produces` so the
-    // permanent can never tap for them. Read only by CreatureGivingProvider's cleanup-discard cover (land_bits),
-    // whose USER-settled rule was written against Windswept Heath's old W/B/R/G hint. Empty = no hint.
-    std::vector<Color> hand_fixing_produces;
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
     // is this card (name + `produces` above); the BACK face is a distinct single-color land the
     // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face

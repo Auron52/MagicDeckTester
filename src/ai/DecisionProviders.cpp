@@ -23472,11 +23472,6 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
         if (d == nullptr || d->params.reflecting) { return 0u; }
         unsigned b = 0;
         for (Color c : d->params.produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
-        // A battlefield fetchland in hand (Windswept Heath since Boars I1) produces nothing itself: read its
-        // in-hand hint, the W/B/R/G it carried as `produces` when this USER-settled rule was written, so the
-        // rule's cover is unchanged by the fetchland model change.
-        if (d->params.produces.empty())
-        { for (Color c : d->params.hand_fixing_produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } } }
         return b;
     };
     auto land_tier = [](const CardDefinition* d) -> int
