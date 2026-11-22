@@ -123,7 +123,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   without a HW PMU. A clean wall A/B also needs a quiet box (the outside load made both designs above +/-2% at
   best). Scratch, all on the build volume: `build/scratch/beastsEperf/` (`ab3_*`, `abc_*`, `cg_*`, `cache_*`,
   `rc_*`, `perf_*.data`).
-* **Running:** none. NEXT = batch F (Nykthos).
+* **Running:** integrator F (Nykthos). NEXT after it = batch G (Bloated Contaminator).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
