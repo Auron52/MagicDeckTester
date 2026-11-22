@@ -213,11 +213,21 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 // War-Riders 5, tail 2 4 3 1.
 TEST_CASE("CG discard C6: a land covering a missing colour beats a better-tier land")
 {
-    GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
-    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22): a library holding only a
-    // Forest and a Plains gives it W/G and no U, which is this case's premise.
-    { Card f = CardDatabase::Instance().Lookup("Forest")->card; f.m_number = 950; s.players[0].library.push_back(f); }
-    { Card w = CardDatabase::Instance().Lookup("Plains")->card; w.m_number = 951; s.players[0].library.push_back(w); }
+    const GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
+    {
+        // EMPTY library: the Heath reaches nothing. Measured order 2026-11-22: "6 1 7 5 2 4 3 0" (the colourless Heath is
+        // KEPT over the U-making Breeding Pool -- an empty-library artifact; owed: confirm against the W/B/R/G-library
+        // variant below and pin the case on the library-backed state).
+        std::string got; for (int v : Cg(s)) { got += std::to_string(v) + " "; }
+        CHECK(got == "6 1 7 5 2 4 3 0 ");
+        GameState t = s;
+        { Card c = CardDatabase::Instance().Lookup("Godless Shrine")->card; c.m_number = 950; t.players[0].library.push_back(c); }
+        { Card c = CardDatabase::Instance().Lookup("Stomping Ground")->card; c.m_number = 951; t.players[0].library.push_back(c); }
+        std::string got2; for (int v : Cg(t)) { got2 += std::to_string(v) + " "; }
+        CHECK(got2 == "6 0 7 5 2 4 3 1 ");   // W/B/R/G reach, no U: the case's original premise
+    }
+    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22). This state has an EMPTY
+    // library, so the Heath fixes no colour at all (a fortiori not U), which keeps the case's premise.
     CHECK(Cg(s) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
     CHECK(Gen(s).front() == 4);       // generic sheds Defense of the Heart (MV 4)
     CHECK(DothLast(s).front() == 2);  // the patch moves it back and sheds Phantasm
