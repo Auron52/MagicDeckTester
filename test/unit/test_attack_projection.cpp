@@ -383,6 +383,41 @@ TEST_CASE("F3 team pump ETB: MTG_ATTACK_TEAM_PUMP_ETB=0 credits the printed powe
                     [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Craterhoof Behemoth" }); }) == 9);
 }
 
+// ---- F3b: a lord cast this turn pumps the attackers already there (MTG_ATTACK_LORD_CAST) ---------------
+// Two Silvergill Adepts (2/1 Merfolk) attack; Lord of Atlantis ({U}{U}, "other Merfolk get +1/+1") is cast
+// first. It is summoning-sick, so it adds no attack of its own, but each Adept hits for 3: 6, not 4.
+// (Spirits d0 gi2341: Drogskol Captain + Supreme Phantom were lethal through the pump and read as 8 vs 12.)
+namespace
+{
+GameState LordBoard(int opp, int salt)
+{
+    GameState s = Bare(opp, salt, { "Lord of Atlantis" }, "Island");
+    Put(s, "Silvergill Adept", 40);
+    Put(s, "Silvergill Adept", 41);
+    for (int k = 0; k < 4; ++k) { Put(s, "Island", 50 + k); }
+    return s;
+}
+}
+
+TEST_CASE("F3b lord cast: a lord cast before combat pumps the board's attackers, not itself")
+{
+    EnsureCardsLoaded();
+    heurarm::Clear();
+    CHECK(Threshold([](int l) { return LordBoard(l, 0); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lord of Atlantis" }); }) == 6);
+    const TurnSolver::Plan g = GreedySolve(LordBoard(6, 0));
+    CHECK((g.wins_this_turn && Casts(g, "Lord of Atlantis")));
+    CHECK_FALSE(GreedySolve(LordBoard(7, 0)).wins_this_turn);
+}
+
+TEST_CASE("F3b lord cast: MTG_ATTACK_LORD_CAST=0 credits nothing for the lord")
+{
+    EnsureCardsLoaded();
+    ArmScope arm({ { heurarm::ATTACK_LORD_CAST, 0 } });
+    CHECK(Threshold([](int l) { return LordBoard(l, 1); },
+                    [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lord of Atlantis" }); }) == 4);
+}
+
 // ---- F4a: a spent dork loses its team-pump share too (MTG_ATTACK_TAP_REPROJECT) ------------------
 // Blossoming Bogbeast + Llanowar Elves attack: Bogbeast gains 2, then +2/+2 to each attacker -> 3 + 1
 // + 2 x 2 = 8. Elvish Mystic's {G} can only come from the Llanowar, which then cannot attack and gets

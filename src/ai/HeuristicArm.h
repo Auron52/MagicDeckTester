@@ -1059,6 +1059,7 @@ enum Slot : int
     AURA_HOST_LINE_KEEP,      // MTG_AURA_HOST_LINE_KEEP  a land Aura's host is held while it pays only when the hold does not strand the rest of the line that an unheld payment keeps (Bruna mana-clean, Wild Growth). =0 -> the unconditional hold
     CREATURE_FLOAT_SWAP,      // MTG_CREATURE_FLOAT_SWAP  sub-lever of CREATURE_LEFTOVER_EXACT: a creature payment's creature-only leftover is swapped for the GENERAL float the pre-tap drain spent on a generic pip, when the line casts no other creature (Bruna d0 gi21770). Default ON; =0 -> no swap
     EVAL_COMBAT_TOKEN_SELF,   // MTG_EVAL_COMBAT_TOKEN_SELF  greedy policy (EvalCard: d0 runner + playout): a creature whose OWN combat damage triggers its token maker (Spawning Kraken, Koma, Millicent) is credited the tokens' power for each of its own attacks in the horizon (Sea d0: Kraken tied a vanilla 6/6 six-drop). Default OFF (heuristic weight, USER call); =1 -> on
+    ATTACK_LORD_CAST,         // MTG_ATTACK_LORD_CAST  the this-turn attack projection (Solve / EnumeratePlans, via AttackTapLoss's plan walk) keeps a lord / anthem creature the subset casts on the scratch board, so its static pump reaches the attackers already there (Spirits d0 gi2341: Drogskol Captain + Supreme Phantom were lethal but read proj_atk 8 vs 12). Default ON; =0 -> lords cast this turn add nothing to the projection
     COUNT
 };
 
@@ -2062,6 +2063,7 @@ inline const char* Name(int slot)
         "MTG_AURA_HOST_LINE_KEEP",
         "MTG_CREATURE_FLOAT_SWAP",
         "MTG_EVAL_COMBAT_TOKEN_SELF",
+        "MTG_ATTACK_LORD_CAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
