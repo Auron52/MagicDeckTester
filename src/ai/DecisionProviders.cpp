@@ -71868,35 +71868,25 @@ static bool MazeSummitCountOn()
     return heurarm::Flag(heurarm::MAZE_SUMMIT_COUNT, s_on);
 }
 
-// THE PAY-FIRST TAP SET (USER 2026-11-22, MTG_MAZE_SUMMIT_PAY_FIRST, DEFAULT OFF until measured): "Why do we need to
-// search tapping all gates? Isn't that just a special case of fitting it into the turn's plan? Heap Gate is quite
-// unimportant compared to any other effect, so I'm not particularly worried about holding that back. In this deck
-// Black Gate and Basilisk Gate don't do anything special. Baldur's Gate makes some sense. An order is probably workable
-// here, but generally speaking we shouldn't need to make much in terms of decisions of this sort if we are only
-// considering all unneeded and none. We can just pay our mana costs and then tap the rst." So the menu is {all
-// unneeded (the unpinned cast), none (pin 1)} -- "all" is gone (a plan ending at the Summit already gets all Gates as
-// its unneeded set) -- and the tap set is a MANA-PAYMENT CONSEQUENCE of the plan, the standing mana-payment
-// exemption: EtbTapSubtypePayFirst below pays the rest of the line for real and taps every Gate that payment does not
-// use. "none" stays searched.
+// THE PAY-FIRST TAP SET (USER 2026-11-22, MTG_MAZE_SUMMIT_PAY_FIRST, DEFAULT ON; =0 -> the {rest-of-line, 0, all}
+// mana-value menu): "Why do we need to search tapping all gates? Isn't that just a special case of fitting it into the
+// turn's plan? Heap Gate is quite unimportant compared to any other effect, so I'm not particularly worried about
+// holding that back. In this deck Black Gate and Basilisk Gate don't do anything special. Baldur's Gate makes some
+// sense. An order is probably workable here, but generally speaking we shouldn't need to make much in terms of decisions
+// of this sort if we are only considering all unneeded and none. We can just pay our mana costs and then tap the rst."
+// The tap set is a MANA-PAYMENT CONSEQUENCE of the line, the standing mana-payment exemption:
+// EtbTapSubtypePayFirst below pays the rest of the line for real and taps every Gate that payment does not use.
+// The menu is {all unneeded (the unpinned cast), none (pin 1)}, PLUS "all" while an untapped Maze's End of ours
+// exists. Why "all" stays there: Guild Summit is a BREAKPOINT (it draws), so the line after it is planned only after
+// the draws, and the Maze's End {3} that "unneeded" reserves is SPECULATIVE at resolution -- the continuation may
+// never activate it. Without an untapped Maze's End there is no reserve, so "all unneeded" already is "all" on the
+// segment the Summit ends. Measured 2026-11-22 (held-out, fresh seeds): {unneeded, none} alone netted +15 at d5 b20
+// (6 faster / 21 slower); the reserve only for the plan's NAMED activations netted +8 (18/26) and 2HG +3; this menu
+// netted d5 b20 -1 (10/9, n 2500), 2HG -1 (3/2, n 1000), d0 -17 (43/23, n 4000). "none" stays searched.
 static bool MazeSummitPayFirstOn()
 {
-    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PAY_FIRST");   // DEFAULT OFF until measured
+    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PAY_FIRST", true);   // DEFAULT ON; =0 is the A/B hatch
     return heurarm::Flag(heurarm::MAZE_SUMMIT_PAY_FIRST, s_on);
-}
-// TEMPORARY A/B levers on top of the pay-first tap set (2026-11-22; the first A/B netted +15 at d5 b20: the speculative
-// Maze's End {3} reserve held Gates back for an activation the line never made, where the deleted "all" pin drew them).
-// NAMED: inside a plan apply, the bill carries the plan's OWN pending trailing activations (their mana and their {T}
-// sources) instead of the speculative reserve -- the reserve only where the line really activates Maze's End.
-// ALL3: keep the "all" pin as a third menu entry while an untapped Maze's End of ours exists (the reserve can bind).
-static bool MazeSummitPfNamedOn()
-{
-    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PF_NAMED");   // DEFAULT OFF (A/B lever)
-    return heurarm::Flag(heurarm::MAZE_SUMMIT_PF_NAMED, s_on);
-}
-static bool MazeSummitPfAll3On()
-{
-    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PF_ALL3");   // DEFAULT OFF (A/B lever)
-    return heurarm::Flag(heurarm::MAZE_SUMMIT_PF_ALL3, s_on);
 }
 static bool MazeUntappedOwnMaze(const GameState& s, int controller)
 {
@@ -71916,7 +71906,7 @@ std::vector<int> MazesEndProvider::EtbChoiceCandidates(const GameState& s, int c
     { return base; }
     if (MazeSummitPayFirstOn())
     {
-        if (base.size() > 2 && MazeSummitPfAll3On() && MazeUntappedOwnMaze(s, controller)) { return { 0, 1, base.back() }; }
+        if (base.size() > 2 && MazeUntappedOwnMaze(s, controller)) { return { 0, 1, base.back() }; }
         return base.size() >= 2 ? std::vector<int>{ 0, 1 } : base;
     }
     if (base.size() <= 2) { return base; }
@@ -71945,22 +71935,7 @@ int MazesEndProvider::EtbTapSubtypePayFirst(const GameState& s, int controller, 
     if (g_line_reducer_credit > 0) { line.generic = std::max(0, line.generic - g_line_reducer_credit); }
     ManaCost bill = line;
     std::vector<int> unavailable;
-    const PlanTraits* pt = MazeSummitPfNamedOn() ? CurrentPlanTraits() : nullptr;
-    if (!g_line_hold_has_acts && pt != nullptr)
-    {
-        // NAMED: the plan's own pending trailing activations (Maze's End's {3}, Heap Gate's {1}), net of those
-        // paid and the one being paid, and their {T} sources set aside.
-        bill.generic += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue());
-        for (int k = 0; k < pt->act_src_count; ++k)
-        {
-            for (const Permanent& p : s.battlefield)
-            {
-                if (p.card.m_number == pt->act_src_nums[k] && p.controller_index == controller && !p.tapped)
-                { unavailable.push_back(p.card.m_number); break; }
-            }
-        }
-    }
-    else if (!g_line_hold_has_acts)
+    if (!g_line_hold_has_acts)
     {
         for (const Permanent& p : s.battlefield)
         {
