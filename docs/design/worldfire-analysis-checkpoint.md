@@ -181,6 +181,7 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 
 ## USER rulings 2026-11-22 (~04:00 UTC), VERBATIM
 - 2c (MDFC tie -> NONLAND): *"Sure, that sounds fine."*
+- 2a tie (majority-kind discard, exact tie -> discard a land): *"Defaulting to discarding land sounds fine."*
 - 2d (free-turn adoption): *"Okay, but this is not a question."* -- i.e. the rule is the USER's design; adopt once the
   agent's checks (trait=0 byte-identical, fairness arms, reference list) pass, and report.
 - 3 (no ply cost for free turns): *"Let's try it this way for now. If we find this restrictive or troublesome we can
@@ -194,4 +195,3 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 
 ## Open USER questions (defaults taken)
 - 1c4 (next-drop tier after this turn's land), 1c5 (Mystical Tutor free {U}).
-- 2a tie: exact tie in the majority-kind discard -> discard a land.
