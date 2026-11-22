@@ -346,7 +346,7 @@ Validation (Release, post-change):
 4. Browbeat is kept out of the provider signature (generic staple).
 5. Land positions: all k plus the unearth clone (beyond the brief's "first haste cast"), kept per coordinator ruling.
 
-## Claude-play sweep
+## Earlier Claude-play sweep
 - commit: `a478b813c`
 - seeds: 50001 games: 16 (8 Sonnet player agents x 2 games; every flag verified by an Opus agent).
   Disjoint from every suite seed. Games 0 and 2 were dealt the same hand (the two player agents read the seed
@@ -372,6 +372,19 @@ Validation (Release, post-change):
   POSITIVE: the engine did what the reply said, and the note says "reply an option index". Every option-list
   `target` note now names `options[].index` vs `legal_targets[].index` explicitly, and so does `claude-play.md`
   (`c5f3b7610`, usability only).
+
+## Codex-play sweep
+- commit: `d5c8f5718` (frozen Release binary SHA-256 `ee8e61521b0d8c9a1b43a23fd920812ef884a2099bd23908c99519be3bf2d015`)
+- seeds: 51001..51016; games: 16 distinct deals, disjoint from the suite and earlier sweep. Three Codex player
+  agents drove the interactive protocol on the frozen binary and checked their plans against the deck, card data,
+  and observed game state. Full choice streams: `build/scratch/cb-integrated/codex-play/aggregate.json`.
+- result: 16/16 completed, 327 decisions. Search won on T4 x9, T5 x6, T8 x1. Codex tied the search in 13 games,
+  won one turn later in seeds 51004 and 51010, and four turns later in seed 51011; none won earlier. Seed 51004
+  kept two Mountains in a Magma Jet scry; seed 51011 sacrificed both Mountains to Fireblast on T4 and drew no
+  replacement land until T8. These are agent line choices, with no verified legality or state-transition issue.
+  The replay covered mulligan, bottom, main phase, target, scry, free cast, and sacrifice decisions, including
+  Hellspark, Browbeat, Price of Progress, and Fireblast lines.
+- flags: 0 unresolved (0 verified correctness flags).
 
 ## Stage 5c2 — horizon-honest tie-break check (2026-11-21)
 
