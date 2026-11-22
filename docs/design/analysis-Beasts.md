@@ -213,6 +213,15 @@ options (same-name dig fold, heuristic top-k per ordinal, Gargaroth mode order) 
 fits the cap, and the host then branches over everything admitted; no host-side default for an
 over-cap ordinal. Audit every other cap-27 axis the Beasts cards reach for the same shape.
 
+Follow-up on HOW to prune: *"And certainly one of the ways to prune is looking for leathal. For example
+with Gargaroth it is obvious we should drop the beast if it will speed up lethal. Otherwise we can at
+least consider the draw."* -> BeastsProvider Gargaroth rule: if making the 3/3 Beast token brings
+lethal sooner (the token cannot attack this turn, so compare the earliest lethal turn with vs without
+it), that ordinal is pruned to token only; otherwise the draw stays in the menu (token + draw searched,
+life already folded). Lethal-awareness is the first pruning key for the other over-cap axes too
+(e.g. Harbinger: keep the dig ranks that enable an earlier lethal). Interpretation surfaced to the
+USER 2026-11-22; check the draft provider against it.
+
 ## Open USER questions (surfaced, not blocking)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
