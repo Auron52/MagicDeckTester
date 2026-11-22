@@ -13429,6 +13429,35 @@ inline bool On(int site)
 inline bool Verify() { static const bool v = EnvOn("MTG_UOT_XMEMO_VERIFY"); return v; }
 inline std::atomic<long long> g_hits[2]{}, g_misses[2]{}, g_mismatch[2]{};
 inline std::atomic<long long> g_bypass_ctx[2]{}, g_act_diff[2]{};
+struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
+struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
+// The asked actions are stored and compared WHOLE (Action's defaulted operator==) on every hit, never trusted to
+// the hash: only the board and the context are hashed.
+struct Entry { bool verdict = false; std::vector<Action> acts; };
+// Diagnostic: on an action difference, which of the fields the walk does not read differed (hand_index is READ --
+// a cast's permanent takes the hand card at that index -- so it is never normalised).
+inline std::atomic<long long> g_diff_field[2][5]{};   // hand_index, equiv_ord, eval, cont_pins, other
+inline bool NormOn() { static const bool v = EnvOn("MTG_XMEMO_NORM", true); return v; }
+// Equal for the walk: the whole Action, with the copy ordinal (equiv_ord, the subset fold's), the valuation scalar
+// (eval, read by plan scoring only) and the continuation pins (cont_pins, read by the executor and the fold) taken
+// from `a`. Counts which fields differed when `site` >= 0.
+inline bool WalkSame(const Action& a, const Action& b, int site)
+{
+    if (a == b) { return true; }
+    if (site >= 0)
+    {
+        if (a.hand_index != b.hand_index) { g_diff_field[site][0].fetch_add(1, std::memory_order_relaxed); }
+        if (a.equiv_ord != b.equiv_ord)   { g_diff_field[site][1].fetch_add(1, std::memory_order_relaxed); }
+        if (a.eval != b.eval)             { g_diff_field[site][2].fetch_add(1, std::memory_order_relaxed); }
+        if (a.cont_pins != b.cont_pins)   { g_diff_field[site][3].fetch_add(1, std::memory_order_relaxed); }
+    }
+    if (!NormOn()) { return false; }
+    Action c = b;
+    c.equiv_ord = a.equiv_ord; c.eval = a.eval; c.cont_pins = a.cont_pins;
+    const bool same = a == c;
+    if (!same && site >= 0) { g_diff_field[site][4].fetch_add(1, std::memory_order_relaxed); }
+    return same;
+}
 struct Printer
 {
     ~Printer()
@@ -13440,15 +13469,14 @@ struct Printer
                          "bypass_ctx=%lld (verify %s)\n", site == 0 ? "UOT" : "SPS", g_hits[site].load(),
                          g_misses[site].load(), g_mismatch[site].load(), g_act_diff[site].load(),
                          g_bypass_ctx[site].load(), Verify() ? "on" : "off");
+            std::fprintf(stderr, "[uot-xmemo] site=%s field diffs: hand_index=%lld equiv_ord=%lld eval=%lld cont_pins=%lld "
+                         "other_after_norm=%lld (norm %s)\n", site == 0 ? "UOT" : "SPS", g_diff_field[site][0].load(),
+                         g_diff_field[site][1].load(), g_diff_field[site][2].load(), g_diff_field[site][3].load(),
+                         g_diff_field[site][4].load(), NormOn() ? "on" : "off");
         }
     }
 };
 inline Printer g_printer;
-struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
-struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
-// The asked actions are stored and compared WHOLE (Action's defaulted operator==) on every hit, never trusted to
-// the hash: only the board and the context are hashed.
-struct Entry { bool verdict = false; std::vector<Action> acts; };
 }   // namespace uotx
 template <class F>
 static bool UoTreeXMemo(int site, const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
@@ -13485,7 +13513,7 @@ static bool UoTreeXMemo(int site, const GameState& state, const std::vector<Acti
     {
         bool same = it->second.acts.size() == sel.size();
         for (std::size_t i = 0; same && i < sel.size(); ++i)
-        { same = it->second.acts[i] == cands[static_cast<std::size_t>(sel[i])]; }
+        { same = uotx::WalkSame(it->second.acts[i], cands[static_cast<std::size_t>(sel[i])], site); }
         if (!same)
         {
             uotx::g_act_diff[site].fetch_add(1, std::memory_order_relaxed);
