@@ -530,18 +530,18 @@ TEST_CASE("worldfire keep order: Lotus Bloom only where it can pull the go-off f
     GameState s = WFTutorBase(8);
     s.players[0].hand = {WFCard("Worldfire", 30), WFCard("Rift Bolt", 31), WFCard("Lotus Bloom", 32),
                          WFCard("Mountain", 33)};
-    const WorldfireKeepRank far = WorldfireKeepRank::Of(s, 0, nullptr, false);
-    CHECK(WFHandEntry(far, 2).quota);                        // 9 of 10 without it: the Bloom is the go-off mana
-    CHECK(far.t_star == 3);                                  // ... arriving on now+3
+    const WorldfireKeepRank distant_rank = WorldfireKeepRank::Of(s, 0, nullptr, false);
+    CHECK(WFHandEntry(distant_rank, 2).quota);              // 9 of 10 without it: the Bloom is the go-off mana
+    CHECK(distant_rank.t_star == 3);                        // ... arriving on now+3
 
     GameState n = WFTutorBase(9);
     n.players[0].hand = s.players[0].hand;
-    const WorldfireKeepRank near = WorldfireKeepRank::Of(n, 0, nullptr, false);
-    CHECK(near.t_star == 0);                                 // 9 + the land drop = Worldfire + {R} this turn
-    const auto& bloom = WFHandEntry(near, 2);
+    const WorldfireKeepRank imminent_rank = WorldfireKeepRank::Of(n, 0, nullptr, false);
+    CHECK(imminent_rank.t_star == 0);                       // 9 + the land drop = Worldfire + {R} this turn
+    const auto& bloom = WFHandEntry(imminent_rank, 2);
     CHECK_FALSE(bloom.quota);
     CHECK(std::string(bloom.bucket) == "bloom-near");
-    for (const auto& e : near.entries)
+    for (const auto& e : imminent_rank.entries)
     { if (e.hand_index != 2) { CHECK(e.key > bloom.key); } }     // the first card shed (nothing DEAD here)
 }
 
