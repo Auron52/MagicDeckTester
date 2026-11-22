@@ -276,7 +276,29 @@ instructions), Extra Turns (+3.3% / +6.7%) and Hinata (+2.9% / +2.9%); Dragons, 
 are +1-2%, the rest under 1%. Units are unchanged everywhere (the rung is not charged to the budget), so the whole cost
 is per-unit. At d0 it is ~0.1% of instructions on every deck. Quality on these fresh seeds: searched net -10 (14 faster,
 4 slower, all slower games Niv: gi 79, 1250, 1494, 1527), d0 net -20 (slower: bruna 772, fivecolour 686, niv 74 / 201 /
-401). Those 9 slower games are queued for `--depth 8 --budget-ms 0` replay (`d8_m1.json`, both arms).
+401). Those 9 slower games were replayed at `--depth 8 --budget-ms 0` replay (`d8_m1.json`, both arms).
+**All 9 recover**: at d8 b0 the on and off arms win on the same turn in every one (niv s gi 79 T5/T5, 1250 T4/T4, 1494
+T4/T4, 1527 T6/T6; d0 bruna 772 T4/T4, fivecolour 686 T5/T5, niv 74 T4/T4, 201 T4/T4, 401 T5/T5). None hit the unit cap
+(the longest, niv s gi 1527, ran ~23-26 min and 8.3-8.6 M units per arm). `logs_d8_m1/`, `d8_m1.out`.
+
+**Larger instruction slice (perf_base100, base binary, 1 thread, seeds 760000 / 770000, start-up baseline of 416 M
+instructions per process subtracted).** On/off instruction ratio, searched 100 games / d0 300 games per deck:
+
+| deck | searched | d0 | | deck | searched | d0 |
+|---|---|---|---|---|---|---|
+| niv | **1.0477** | **1.0409** | | stompy | 1.0088 | 1.0022 |
+| extraturns | **1.0391** | 1.0116 | | angels | 1.0076 | 1.0016 |
+| hinata | **1.0235** | **1.0376** | | stuffy | 1.0067 | 1.0031 |
+| dragons | 1.0173 | 1.0027 | | sea | 1.0046 | 1.0008 |
+| galadriel | 1.0157 | 1.0100 | | giants | 1.0045 | 1.0007 |
+| whiteknights | 1.0108 | 1.0017 | | merfolkturns | 1.0023 | 1.0009 |
+| fungusv3 | 1.0100 | 1.0013 | | fivecolour | 1.0006 | 1.0020 |
+| bruna | 0.9992 | 1.0020 | | kittyv3 | 1.0000 | 1.0000 |
+| **ALL** | **1.0203** | **1.0090** | | | | |
+
+With start-up subtracted, d0 is not ~0.1% everywhere: Niv +4.1% and Hinata +3.8% of d0 instructions are the rung (in the
+d0 runner / executor, which no playout cut or budget price reaches). d0 games are ~2-13 M instructions each, so d0 is
+still negligible in absolute terms. Files: `build/scratch/claude_rock_cpu/perf_base100/`.
 
 ### Lossy / priced cuts built (wip/rock-cpu, all DEFAULT OFF, not yet measured)
 
@@ -290,3 +312,23 @@ In `LineReducerKeepHold` (ManaPayment.cpp), applying only to a line with no redu
   `--budget-ms 0`, in the executor and at d0: the preferred budget-priced shape.
 * `MTG_LINE_REDUCER_KEEP_STATS=1` now also prints `[line-keep-ctx]` (trials / ms / work / tables / fired split by
   executor / window / playout / d0) and `[line-keep-cut]` (units charged, cuts taken) -- needed to calibrate the price.
+
+### Step 2-3: dev binary identity and price calibration (agent rock-cpu 2, 2026-11-22)
+
+**Identity.** `mtg.dev` (wip/rock-cpu b9013484b, every new flag at its default OFF) replayed the first chunk of every
+deck x mode x arm of `m1` (64 jobs: 25 searched / 100 d0 games each, both `MTG_LINE_KEEP_ROCK` arms): **64 of 64 jobs
+byte-identical** to `mtg.base` (games, avg, digest, units). `build/scratch/claude_rock_cpu/ab2/ident.txt`.
+
+**Where the rung's time goes** (`MTG_LINE_REDUCER_KEEP_STATS=1`, dev binary, default flags, 1 thread, seeds 795000):
+
+| deck | games | rung % of CPU | executor ms | window ms | playout ms | d0 ms | ns / work event | ns / budget unit | MILLI at 1x |
+|---|---|---|---|---|---|---|---|---|---|
+| niv | 60 | 4.5% | 0.5 | 310 | **2,243** | 0 | 3,730 | 44,010 | 85 |
+| extraturns | 40 | 4.2% | 1.0 | **2,280** | 73 | 0 | 10,470 | 120,920 | 87 |
+| hinata | 20 | 1.4% | 0.2 | **760** | 126 | 0 | 2,976 | 37,681 | 79 |
+
+So the playout cuts can only reach Niv (88% of its rung time is in horizon playouts); on Extra Turns and Hinata the rung
+runs in the search window (Extra Turns: 107 K window trials, two work events each, no oracle table ever -- its trials end
+at the witness), where only the price applies. The price was calibrated so that the units charged equal the rung's
+window + playout time at each deck's own ns per unit: MILLI = 1000 x (ns per work event) / (ns per unit), median **85**
+(1x, ~970 units per Niv game, ~4.5% of its units); the half price is **43**. `ab2/calib.txt`, `ab2/stats_*.err`.
