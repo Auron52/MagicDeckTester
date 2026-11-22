@@ -3,7 +3,8 @@
 // Cragplate Baloth (kicked counters), Kaheera (lord + vigilance). Batch B: Contested Cliffs (TapFight: the
 // searched two-target fight, deathtouch, the SBA death pass). Batch C: Elder Gargaroth (the searched
 // three-mode attack trigger, the provider's life fold). Batch D: Garruk's Harbinger. Batch E: Migloz, Maze Crusher
-// (oil counters, the searched oil pump, the pruned vigilance grant and destroy). Each test drives the SHARED helpers both worlds
+// (oil counters, the searched oil pump, the pruned vigilance grant and destroy). Batch F: Nykthos. Batch G: Bloated
+// Contaminator (toxic, the combat-damage proliferate, poison in the search, 2HG's fifteen). Each test drives the SHARED helpers both worlds
 // call (FireEtbWatchers / FireOwnEtbTriggers, EffectiveSpellCost, OfferDuplicateLegendCast, ApplyPermAbility,
 // EnumerateMainPlans + ApplyPlan).
 #include <doctest/doctest.h>
@@ -1919,3 +1920,351 @@ TEST_CASE("Nykthos: a red devotion made INSIDE the line opens the red pip -- Vex
     ManaCacheClearPerGame();
 }
 
+
+// ---- Bloated Contaminator (Beasts G) ----------------------------------------------------------------------------
+// "Trample / Toxic 1 / Whenever this creature deals combat damage to a player, proliferate." Toxic is part of the
+// damage event (ApplyToxicPoison, both damage-step shapes of the shared combat core); the proliferate is
+// FireCombatDamageProliferate, the subset ranked through the proliferate half of the combat-time pin and collapsed
+// by the root provider (ProliferateCollapse) when every kind is proven beneficial.
+namespace
+{
+constexpr const char* kCont = "Bloated Contaminator";
+GameState BeContBoard()
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    s.deck_has_combat_proliferate = true;
+    s.phase = Phase::Combat;
+    return s;
+}
+Permanent& BeNum(GameState& s, int number)
+{
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == number) { return p; } }
+    REQUIRE_MESSAGE(false, "no permanent #", number);
+    return s.battlefield.front();
+}
+int BeProlifPin(std::initializer_list<int> ranks)
+{
+    int r[kProlifMaxOrdinals];
+    int n = 0;
+    for (int x : ranks) { r[n++] = x; }
+    return ProlifPackRanks(r, n);
+}
+std::set<int> BeProlifCodes(const GameState& s)
+{
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    std::set<int> out;
+    for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { base }))
+    { if (p.combat_dig_choice >= 0) { out.insert(p.combat_dig_choice); } }
+    return out;
+}
+// A board with one counter of every kind the deck makes: Herald (2 +1/+1, sick), Garruk (3 loyalty), Migloz (5 oil,
+// sick), and a Contaminator able to attack.
+GameState BeContKinds()
+{
+    GameState s = BeContBoard();
+    BeAdd(s, kCont, 50);
+    BeAdd(s, "Herald of Ilharg", 51, 0, /*sick=*/true);
+    BeNum(s, 51).counters.Add(Counter::Type::PlusOnePlusOne, 2);
+    BeAdd(s, "Garruk, Primal Hunter", 52);
+    BeNum(s, 52).loyalty = 3;
+    BeNum(s, 52).counters.Add(Counter::Type::Loyalty, 3);
+    BeAdd(s, "Migloz, Maze Crusher", 53, 0, /*sick=*/true);
+    BeNum(s, 53).oil_counters = 5;
+    return s;
+}
+int BeLoyaltyMirror(const Permanent& p)
+{
+    for (const Counter& c : p.counters) { if (c.type == Counter::Type::Loyalty) { return c.count; } }
+    return -1;
+}
+// A provider whose collapse refuses (what MTG_UNPRUNE=proliferate does at the root): the full subset menu.
+struct BeFullProlifProvider : BoarsProvider
+{
+    bool ProliferateCollapse(const GameState&, int, const std::vector<ProliferateCand>&) const override { return false; }
+};
+struct BeHeadsScope
+{
+    int saved = gamesetup::t_setup.opponent_heads;
+    explicit BeHeadsScope(int h) { gamesetup::t_setup.opponent_heads = h; }
+    ~BeHeadsScope() { gamesetup::t_setup.opponent_heads = saved; }
+};
+}   // namespace
+
+TEST_CASE("Contaminator: card data -- a 4/4 trample Phyrexian Beast with toxic 1 and the combat-damage proliferate")
+{
+    const CardDefinition& d = BeDef(kCont);
+    CHECK(d.card.m_power.value_or(0) == 4);
+    CHECK(d.card.m_toughness.value_or(0) == 4);
+    CHECK(d.card.HasKeyword(Keyword::Trample));
+    std::vector<std::string> subs;
+    for (const std::string& st : d.card.m_subtypes) { subs.push_back(st); }
+    CHECK(subs == std::vector<std::string>{ "Phyrexian", "Beast" });
+    CHECK(d.params.toxic == 1);
+    CHECK(d.params.combat_damage_self_proliferate);
+    CHECK(PoisonPerHitOf(&d) == 2);
+}
+
+TEST_CASE("Contaminator: toxic poisons on BOTH damage-step shapes, as part of the damage (before the proliferate)")
+{
+    for (int two_step = 0; two_step < 2; ++two_step)
+    {
+        for (int prolif = 0; prolif < 2; ++prolif)
+        {
+            GameState s = BeContBoard();
+            s.deck_has_combat_proliferate = prolif != 0;   // off: only the damage result is left to see
+            BeAdd(s, kCont, 50);
+            if (two_step != 0) { BeAdd(s, "Knight of Meadowgrain", 60); }   // a first striker: the two-step shape
+            RolloutSimulateCombat(s);
+            CAPTURE(two_step); CAPTURE(prolif);
+            CHECK(s.players[1].life == 20 - 4 - (two_step != 0 ? 2 : 0));
+            // toxic 1 is on as the damage lands; the proliferate trigger then adds the second counter.
+            CHECK(s.players[1].poison_counters == (prolif != 0 ? 2 : 1));
+        }
+    }
+    // A creature WITHOUT toxic gives no poison (and a prevented hit gives none: no damage, no toxic).
+    GameState q = BeContBoard();
+    BeAdd(q, "Questing Beast", 61);
+    RolloutSimulateCombat(q);
+    CHECK(q.players[1].poison_counters == 0);
+    GameState pv = BeContBoard();
+    BeAdd(pv, kCont, 50);
+    pv.combat_damage_prevented_this_turn = true;
+    RolloutSimulateCombat(pv);
+    CHECK(pv.players[1].poison_counters == 0);
+    CHECK(pv.players[1].life == 20);
+}
+
+TEST_CASE("Contaminator: executor and rollout combat give the same toxic + proliferate (every kind)")
+{
+    GameState ro = BeContKinds();
+    RolloutSimulateCombat(ro);
+    GameState ex = BeContKinds();
+    BeNum(ex, 52).loyalty_activated_this_turn = true;   // the executor plays on to main 2: keep Garruk's loyalty still
+    BeNum(ro, 52).loyalty_activated_this_turn = true;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+    GameEngine ge(eng);
+    ge.PlayOutFrom(ex, ex.turn_number, GameEngine::ResumeAt::Combat);
+    for (GameState* g : { &ro, &ex })
+    {
+        CHECK(g->players[1].life == 16);
+        CHECK(g->players[1].poison_counters == 2);               // toxic 1, then proliferate +1
+        CHECK(PlusCountersOn(BeNum(*g, 51)) == 3);               // Herald 2 -> 3
+        CHECK(BeNum(*g, 52).loyalty == 4);                       // Garruk 3 -> 4 ...
+        CHECK(BeLoyaltyMirror(BeNum(*g, 52)) == 4);              // ... and its counter mirror in step
+        CHECK(BeNum(*g, 53).oil_counters == 6);                  // Migloz 5 -> 6
+        CHECK(PlusCountersOn(BeNum(*g, 50)) == 0);               // the Contaminator itself had none
+        CHECK(g->scripted_combat_dig == -1);
+    }
+}
+
+TEST_CASE("Contaminator: the poison clock -- 1 then 2 on the first hit, 3 then 4 on the second; none after a lethal toxic")
+{
+    // CR 120.3g / 702.164c: the toxic counter is a RESULT of the damage; the proliferate is a trigger that resolves
+    // after it (CR 603.2 / 603.3), so on a 0-poison opponent the first hit is toxic -> 1, proliferate -> 2.
+    GameState s = BeContBoard();
+    BeAdd(s, kCont, 50);
+    {
+        GameState t = s;
+        t.deck_has_combat_proliferate = false;
+        RolloutSimulateCombat(t);
+        CHECK(t.players[1].poison_counters == 1);
+    }
+    RolloutSimulateCombat(s);
+    CHECK(s.players[1].poison_counters == 2);
+    BeNum(s, 50).tapped = false;
+    s.phase = Phase::Combat;
+    {
+        GameState t = s;
+        t.deck_has_combat_proliferate = false;
+        RolloutSimulateCombat(t);
+        CHECK(t.players[1].poison_counters == 3);
+    }
+    RolloutSimulateCombat(s);
+    CHECK(s.players[1].poison_counters == 4);
+    // At 8: toxic 9, proliferate 10 -> the opponent has lost (poison) at 12 life.
+    GameState w = BeContBoard();
+    w.players[1].poison_counters = 8;
+    BeAdd(w, kCont, 50);
+    RolloutSimulateCombat(w);
+    CHECK(w.players[1].poison_counters == 10);
+    CHECK(w.players[1].life == 16);
+    CHECK(OpponentHasLost(w));
+    // At 9: toxic makes 10, the SBA ends the game before the trigger resolves -- no proliferate (Herald stays at 2).
+    GameState l = BeContKinds();
+    l.players[1].poison_counters = 9;
+    RolloutSimulateCombat(l);
+    CHECK(l.players[1].poison_counters == 10);
+    CHECK(PlusCountersOn(BeNum(l, 51)) == 2);
+    CHECK(OpponentHasLost(l));
+}
+
+TEST_CASE("Contaminator: the search finds a 10-poison win where life damage alone cannot win")
+{
+    // Opponent at 20 life (4 damage cannot kill) and 8 poison: the Contaminator's hit wins by poison THIS turn. Unlimited
+    // budget and max_turns = this turn arm every no-win proof the engine has (proven_no_win included).
+    for (int poison = 7; poison <= 8; ++poison)
+    {
+        GameState s = BeContBoard();
+        s.phase = Phase::PreCombatMain;
+        s.players[1].poison_counters = poison;
+        BeAdd(s, kCont, 50);
+        BeAdd(s, "Forest", 40);
+        AIEngine eng(MulliganProfile::DefaultProfile(), 2, 0);
+        eng.SetMaxTurns(s.turn_number);
+        GameEngine ge(eng);
+        const int won = ge.PlayOutFrom(s, s.turn_number, GameEngine::ResumeAt::Main1);
+        CAPTURE(poison);
+        CHECK(won == (poison == 8 ? s.turn_number : -1));
+        CHECK(s.players[1].life == 16);
+        CHECK(s.players[1].poison_counters == poison + 2);
+    }
+    // The life-only lethal-exempt drops and the X-waste early proof read this over-approximation (both twins).
+    GameState r = BeContBoard();
+    r.deck_poison_hit_bound = 2;               // the stamped Beasts bound: one Contaminator, toxic 1 + proliferate
+    r.players[1].poison_counters = 5;
+    CHECK_FALSE(PoisonWinReachableThisTurn(r));   // 5 + 2 x 2 (the double-strike allowance) = 9 < 10
+    r.players[1].poison_counters = 6;
+    CHECK(PoisonWinReachableThisTurn(r));         // 6 + 4 = 10
+    r.deck_poison_hit_bound = 0;
+    r.players[1].poison_counters = 9;
+    CHECK_FALSE(PoisonWinReachableThisTurn(r));   // a deck that cannot poison: never
+    // Poison is part of the search's state key (two boards differing only in poison never share a memo entry).
+    GameState a = BeContBoard();
+    BeAdd(a, kCont, 50);
+    GameState b = a;
+    b.players[1].poison_counters = 3;
+    GameState c = a;
+    CHECK(TurnSolver::MidTurnStateKeyOf(a) != TurnSolver::MidTurnStateKeyOf(b));
+    CHECK(TurnSolver::MidTurnStateKeyOf(a) == TurnSolver::MidTurnStateKeyOf(c));
+}
+
+TEST_CASE("Contaminator: Two-Headed Giant -- the team loses at FIFTEEN poison, and toxic is not doubled by the second head")
+{
+    BeHeadsScope two(2);
+    REQUIRE(gamesetup::OpponentHeads() == 2);
+    CHECK(Player::PoisonLossThreshold() == 15);
+    Player p;
+    p.life = 30;
+    p.poison_counters = 14;
+    CHECK_FALSE(p.HasLost());
+    p.poison_counters = 15;
+    CHECK(p.HasLost());
+    // 13: toxic 1 (one counter for the team, not one per head) -> 14, proliferate -> 15 (one counter for the team).
+    GameState s = BeContBoard();
+    s.players[1].life = 30;
+    s.players[1].poison_counters = 13;
+    BeAdd(s, kCont, 50);
+    RolloutSimulateCombat(s);
+    CHECK(s.players[1].poison_counters == 15);
+    CHECK(s.players[1].life == 26);
+    CHECK(OpponentHasLost(s));
+    // 10 poison is NOT a loss in 2HG (CR 704.5c is ignored there; 704.6b).
+    GameState t = BeContBoard();
+    t.players[1].life = 30;
+    t.players[1].poison_counters = 8;
+    BeAdd(t, kCont, 50);
+    RolloutSimulateCombat(t);
+    CHECK(t.players[1].poison_counters == 10);
+    CHECK_FALSE(OpponentHasLost(t));
+    t.deck_poison_hit_bound = 2;
+    t.players[1].poison_counters = 10;
+    CHECK_FALSE(PoisonWinReachableThisTurn(t));   // 10 + 4 < 15
+    t.players[1].poison_counters = 11;
+    CHECK(PoisonWinReachableThisTurn(t));         // 11 + 4 = 15
+}
+
+TEST_CASE("Contaminator: the root collapses the menu to the dominant set; MTG_UNPRUNE=proliferate exposes every subset")
+{
+    GameState s = BeContKinds();
+    s.players[1].poison_counters = 1;
+    const std::vector<ProliferateCand> cands = ProliferateCandidates(s);
+    REQUIRE(cands.size() == 4);   // Herald, Garruk, Migloz, the opponent (the Contaminator has no counter)
+    CHECK(ProliferateCollapseFor(s, 0, cands, /*unpruned=*/false));
+    CHECK_FALSE(ProliferateCollapseFor(s, 0, cands, /*unpruned=*/true));
+    CHECK(std::string(GateName(UnprunedGate::Proliferate)) == "proliferate");
+    CHECK(ProliferateDefaultSubset(s, 0, cands) == std::vector<int>{ 0, 1, 2, 3 });
+    {
+        BoarsProvider provider;
+        s.m_provider = &provider;
+        const auto menu = ProliferateMenu(s, 0, cands);
+        REQUIRE(menu.size() == 1);
+        CHECK(menu[0] == std::vector<int>{ 0, 1, 2, 3 });
+        // Collapsed: nothing to branch, the axis adds no variant.
+        GameState m = s;
+        m.phase = Phase::PreCombatMain;
+        CHECK(BeProlifCodes(m).empty());
+    }
+    {
+        BeFullProlifProvider provider;   // the unpruned root
+        s.m_provider = &provider;
+        const auto menu = ProliferateMenu(s, 0, cands);
+        CHECK(menu.size() == 16);                                   // every subset of four distinct candidates
+        CHECK(menu[0] == std::vector<int>{ 0, 1, 2, 3 });           // the default first
+        CHECK(menu.back().empty());                                 // ... "none" (fewest counters) last
+        std::set<std::vector<int>> uniq(menu.begin(), menu.end());
+        CHECK(uniq.size() == 16);
+        // The axis branches the ranks (one Contaminator, 4 candidates + the plan's 0 casts + 1 -> width 31 capped).
+        GameState m = s;
+        m.phase = Phase::PreCombatMain;
+        const std::set<int> codes = BeProlifCodes(m);
+        CHECK(codes.size() == 30);
+        CHECK(codes.count(BeProlifPin({ 15 })) == 1);
+        // A pinned rank resolves that exact subset: rank 15 = "none" -> only the toxic counter lands.
+        GameState t = s;
+        t.scripted_combat_dig = BeProlifPin({ 15 });
+        RolloutSimulateCombat(t);
+        CHECK(t.players[1].poison_counters == 2);                   // 1 + toxic, no proliferate
+        CHECK(PlusCountersOn(BeNum(t, 51)) == 2);
+        CHECK(t.scripted_combat_dig == -1);
+    }
+    // An UNPROVEN kind refuses the collapse at the root (a -1/-1 counter on our creature): searched, never auto-added.
+    GameState u = BeContKinds();
+    BeNum(u, 51).counters.clear();
+    BeNum(u, 51).counters.Add(Counter::Type::MinusOneMinusOne, 1);
+    const std::vector<ProliferateCand> uc = ProliferateCandidates(u);
+    CHECK_FALSE(ProliferateCollapseFor(u, 0, uc, false));
+    CHECK(ProliferateDefaultSubset(u, 0, uc) == std::vector<int>{ 1, 2 });   // Garruk, Migloz -- never the -1/-1 Herald
+    // The two halves of the one pin never disturb each other.
+    const int both = CombatPinMerge(BeDigPin({ 2 }), BeProlifPin({ 5, 1 }));
+    CHECK(CombatDigRankAt(both, 0) == 2);
+    CHECK(ProlifRankAt(both, 0) == 5);
+    CHECK(ProlifRankAt(both, 1) == 1);
+    CHECK(ProlifRankAt(CombatDigPinShift(both), 0) == 5);
+    CHECK(CombatDigRankAt(ProlifPinShift(both), 0) == 2);
+    CHECK(ProlifRankAt(ProlifPinShift(both), 0) == 1);
+    CHECK(ProlifPinShift(ProlifPinShift(BeProlifPin({ 5, 1 }))) == -1);
+}
+
+TEST_CASE("Contaminator: the human proliferate chooser sees every candidate, an empty reply stands")
+{
+    GameState s = BeContKinds();
+    s.players[1].poison_counters = 1;
+    std::vector<std::string> names;
+    std::vector<int> heur_seen;
+    int max_seen = -1;
+    DragonChooser chooser = [&](const GameState&, int, const std::string& source, const std::vector<Card>& cands,
+                                int max_puts, const std::vector<int>& heur) -> std::vector<int>
+    {
+        CHECK(source.find("(proliferate)") != std::string::npos);
+        for (const Card& c : cands) { names.push_back(c.m_name.str()); }
+        heur_seen = heur;
+        max_seen = max_puts;
+        return {};
+    };
+    DragonChooser* saved = g_play_dragon_chooser;
+    g_play_dragon_chooser = &chooser;
+    RolloutSimulateCombat(s);
+    g_play_dragon_chooser = saved;
+    // The opponent's poison is 2 here (1 + toxic) when the trigger asks; every candidate is offered, the player as a
+    // tile named "Opponent".
+    CHECK(names == std::vector<std::string>{ "Herald of Ilharg", "Garruk, Primal Hunter", "Migloz, Maze Crusher", "Opponent" });
+    CHECK(heur_seen == std::vector<int>{ 0, 1, 2, 3 });
+    CHECK(max_seen == 4);
+    CHECK(s.players[1].poison_counters == 2);                       // empty reply: proliferate nothing
+    CHECK(PlusCountersOn(BeNum(s, 51)) == 2);
+    CHECK(BeNum(s, 52).loyalty == 3);
+}

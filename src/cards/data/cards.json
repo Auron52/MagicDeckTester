@@ -19006,6 +19006,28 @@
     "mana_per_creature_feeder_generic": 2,
     "mana_per_devotion": true
    }
+  },
+  {
+   "name": "Bloated Contaminator",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Phyrexian",
+    "Beast"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Trample\nToxic 1 (Players dealt combat damage by this creature also get a poison counter.)\nWhenever this creature deals combat damage to a player, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.) [TOXIC (CR 702.164c / 120.3g): each combat-damage hit on the opponent also gives toxic 1 poison counter AS PART OF THE DAMAGE, in BOTH damage-step shapes of the shared combat core (ApplyToxicPoison: one body, executor and rollout), so the poison is on before any trigger resolves. The opponent loses at 10 poison (CR 704.5c) or, in Two-Headed Giant, when the TEAM has 15 (CR 704.6b / 810.10: shared team poison; toxic is not doubled by the second head). PROLIFERATE (CR 701.34): one trigger per connecting damage event, after every other combat-damage trigger of that step (FireCombatDamageProliferate); none once the opponent has lost. Each chosen permanent / player gets one more counter of EACH kind it has: +1/+1 (doubler-aware), loyalty (Permanent::loyalty and its counter mirror in step), oil, every other dedicated kind, and the opponent's poison (in 2HG one counter for the team, CR 701.34b). So the first hit gives 1 poison (toxic), then 2 (proliferate), and every later hit +2. WHICH ones is a real choice: the engine builds every subset (identical permanents folded k-of-m) and the search ranks it through the proliferate half of the combat-time trigger pin. The ROOT provider collapses the menu to the one dominant subset (every candidate) when every candidate holds only kinds proven weakly beneficial here -- our +1/+1, loyalty, oil, energy and the opponent's poison -- a sound dominance prune (DecisionProvider::ProliferateCollapse); MTG_UNPRUNE=proliferate restores the full menu. Any unproven kind (-1/-1, charge, lore, age, rad, our poison, a counter on an opponent's permanent) refuses the collapse and the subsets are searched. The goldfish opponent's permanents never carry counters, so they are never candidates in practice. HUMAN PLAY: every candidate and every subset (the dragon multi-pick; players as tiles), never narrowed by the search's collapse. Trample recorded (inert: the goldfish never blocks). Poison is folded into the search keys and the lethal-exempt drops are poison-aware; the value leaf and the no-win leaf grade do not price poison (disclosed). Second main: NOT added to DeckUsesSecondMain (USER: unsettled) -- proliferating Garruk's loyalty or Herald's counters is a main-2 reason for the per-turn gate (batch J).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "toxic": 1,
+    "combat_damage_self_proliferate": true
+   }
   }
- ]
+]
 }

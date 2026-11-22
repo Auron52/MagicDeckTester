@@ -1653,6 +1653,19 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Bloated Contaminator (Beasts G): the proliferate walk / axis gate and the poison-projection gate (MAINBOARD).
+    state.deck_has_combat_proliferate = false;
+    {
+        int bound = 0;
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (d->params.combat_damage_self_proliferate) { state.deck_has_combat_proliferate = true; }
+            bound += PoisonPerHitOf(d);
+        }
+        state.deck_poison_hit_bound = static_cast<std::uint8_t>(std::min(bound, GameState::kPoisonBoundUnstamped - 1));
+    }
     state.deck_life_inert = [&deck, &state]{
         if (state.deck_reads_life_total || state.deck_reads_lifegain_in_play
             || state.deck_endstep_lifegain_max_threshold > 0) { return false; }

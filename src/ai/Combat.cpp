@@ -413,6 +413,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
             if (power > 0)
             {
                 state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, power, /*combat=*/true);
+                ApplyToxicPoison(state, opp_idx, adef);   // toxic: part of THIS damage event (CR 120.3g), both shapes
                 step_idx.push_back(idx);
                 step_pw.push_back(power);
                 if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }
@@ -461,6 +462,8 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         FireCombatDamageTokens(state, active, step_idx, step_pw);
         // Garruk's Harbinger's dig (deck-gated inert): this step's own connectors and the damage each dealt.
         FireCombatDamageDig(state, active, step_idx, step_pw);
+        // Bloated Contaminator's proliferate (deck-gated inert): LAST of this step's counter-putting triggers.
+        FireCombatDamageProliferate(state, active, step_idx);
         FireNehebCombatDamageDiscards(state, active, step_idx);
         if (stable) { RefindCombatSources(state, active, step_idx, step_id); }   // a madness cast can remove
         // A double striker connects in BOTH steps, so it draws once per step -- the two events the
@@ -650,6 +653,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         if (power > 0)
         {
             state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, power, /*combat=*/true);
+            ApplyToxicPoison(state, opp_idx, adef);   // toxic: part of THIS damage event (CR 120.3g), both shapes
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
             if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }
@@ -731,6 +735,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // post-counter damage that actually left the opponent's life. Deck-gated inert; touches only library + hand, so
     // no re-find is needed after it. Shared core: executor and rollout fire it at the same point.
     FireCombatDamageDig(state, active, damaging_idx, damaging_pw);
+
+    // Bloated Contaminator: "Whenever this creature deals combat damage to a player, proliferate" -- after every other
+    // counter-putting combat-damage trigger (Drana, Lackey's put, Shroofus, the dig), so the proliferate sees them. The
+    // toxic poison is already on (above, in the damage loop). Deck-gated inert; adds counters only, no re-find needed.
+    FireCombatDamageProliferate(state, active, damaging_idx);
 
     // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
     // card." Fired here, after damage, off the same damaging_idx list Goblin Lackey uses -- so it

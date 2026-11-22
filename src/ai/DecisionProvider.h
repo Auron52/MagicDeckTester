@@ -3738,6 +3738,20 @@ public:
     // counter the pump could use. MTG_UNPRUNE=oilgrant restores it.
     virtual bool OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const;
 
+    // ProliferateCollapse -- Bloated Contaminator's "Whenever this creature deals combat damage to a player, proliferate"
+    // (CR 701.34a: choose ANY number of the permanents / players that have a counter; each gets one more of each kind
+    // it has). The ENGINE builds and searches the full subset menu (ProliferateMenu, SpellEffects.h; ranked through
+    // the proliferate half of the combat-time trigger pin). This hook decides whether that menu COLLAPSES to the one
+    // dominant subset (ProliferateDefaultSubset = every candidate). ROOT (ProliferateCollapseFor): collapse iff every
+    // candidate is ProliferateCandBeneficial -- an OWN permanent whose every kind is +1/+1, loyalty or oil, our own
+    // energy, or the OPPONENT's poison. Adding one of those never hurts in this goldfish (no card in the pool punishes
+    // a bigger body, more loyalty, more oil or more energy; poison only moves the opponent toward a loss), so the
+    // all-candidates subset weakly dominates every other: a SOUND dominance prune, not a heuristic. Any other kind
+    // (-1/-1, charge, lore, age, depletion, rad, our poison, ANY counter on an opponent's permanent) is not proven,
+    // so the collapse is refused and the search branches the subsets. MTG_UNPRUNE=proliferate restores the menu.
+    // Human play never consults it (the viewer offers every subset).
+    virtual bool ProliferateCollapse(const GameState& s, int controller, const std::vector<ProliferateCand>& cands) const;
+
     // EtbFightTargets -- the fight targets the SEARCH is offered for Voracious Hydra's modal ETB ("double the
     // +1/+1 counters on this creature" OR "this creature fights target creature you don't control";
     // CollectActions' enters-with-X branch emits the double mode plus one cast variant per returned

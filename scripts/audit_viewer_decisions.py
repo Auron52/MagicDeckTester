@@ -180,6 +180,14 @@ MANIFEST = {
     # = the printed "may". Fired by FireCombatDamageDig in both damage-step shapes of the shared combat core;
     # autonomous play searches the pick (Plan::combat_dig_choice, a rank pin; the axis is skipped in human play).
     "combat_damage_dig_per_damage": ("dig",               positive),
+    # ---- Beasts G (2026-11-22) ----
+    # Bloated Contaminator's "whenever this creature deals combat damage to a player, proliferate" REUSES the generic
+    # `dragon` multi-pick (source "<name> (proliferate) -- choose any number of (k: name: counters; ...)"): every
+    # counter-bearing permanent AND player (a player is a candidate card numbered < 0, rendered as a tile), the pinned
+    # subset or the dominant default preselected, an EMPTY reply stands. Fired by FireCombatDamageProliferate in both
+    # damage-step shapes of the shared combat core; autonomous play ranks the subset menu (the proliferate half of
+    # Plan::combat_dig_choice), collapsed by the root provider when every kind is proven beneficial.
+    "combat_damage_self_proliferate": ("dragon",            truthy),
     "etb_modal_fight_opp_creature":   ("target",      truthy),
     # ---- SelesnyaLifegain (2026-09-30) ----
     # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
@@ -1129,6 +1137,7 @@ INERT_PARAMS = {
     "attack_choose_token_color": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_lifegain": "Elder Gargaroth's life-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_draw": "Elder Gargaroth's draw-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
+    "toxic": "Bloated Contaminator -- toxic N: combat damage to a player also gives N poison counters (CR 702.164c), automatic, no choice",
     "combat_damage_dig_types": "Garruk's Harbinger -- the dig's take FILTER (Creature / Garruk), a legality predicate; WHICH match is taken rides combat_damage_dig_per_damage -> dig",
     "tap_fight_requires_subtype": "Contested Cliffs -- the own target's legality filter (a Beast); the TARGETS ride tap_fight_cost (both chosen on the live battlefield)",
     "tap_target_pump_per_subtype_both": "Basilisk Gate -- the pump's X (the Gates you control at resolution), a computed magnitude; the TARGET rides tap_target_pump_cost (chosen on the live battlefield)",
@@ -2306,6 +2315,11 @@ STATE_GATED_TYPES = {
         "battlefield (Brinelin: MV >= 6); a short forward sweep can cast the 7-8 drop without reaching that later "
         "state. Pinned by test/unit/test_sea_bounce.cpp 'human play -- the full legal set (both sides) and (no "
         "target) declines'.",
+    ("combat_damage_self_proliferate", "dragon"):
+        "Bloated Contaminator asks only when it CONNECTS (combat damage to the opponent) and something then has a "
+        "counter -- always true after its own toxic poison, but a short forward sweep rarely reaches an attack with the "
+        "3-drop one-of. Pinned by test/unit/test_beasts_cards.cpp 'Contaminator: the human proliferate chooser sees "
+        "every candidate, an empty reply stands'.",
     ("as_enters_harvest_counters", "dragon"):
         "Sin, Unending Cataclysm asks only when a counter-bearing artifact / creature / enchantment is on the "
         "battlefield as it enters (in Sea Creatures: a Saga mid-chapter); a short forward sweep can cast the 7-drop "

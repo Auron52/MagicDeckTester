@@ -22,6 +22,7 @@
 // Verify any addition with a deterministic callgrind Ir A/B on a fixed workload. Do NOT reason
 // about what looks hot: these helpers are fully inlined today, so they do not appear in a profile
 // by name at all -- only the total Ir moves.
+#include <cstring>
 #include "Tier1Ledger.h"
 #include "Tier2Overflow.h"
 #include "WorkCounters.h"
@@ -2768,6 +2769,297 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
     }
 }
 
+// ==== BLOATED CONTAMINATOR's PROLIFERATE (Beasts G; see the SpellEffects.h declaration notes) ======================
+
+static bool PermHasAnyCounter(const Permanent& q) { return q.loyalty > 0 || TotalCountersOn(q) > 0; }
+
+std::vector<ProliferateCand> ProliferateCandidates(const GameState& state)
+{
+    std::vector<ProliferateCand> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (PermHasAnyCounter(state.battlefield[static_cast<std::size_t>(i)])) { out.push_back(ProliferateCand{ i, -1 }); } }
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        const Player& pl = state.players[static_cast<std::size_t>(pi)];
+        if (pl.poison_counters > 0 || pl.rad_counters > 0 || pl.energy_counters > 0)
+        { out.push_back(ProliferateCand{ -1, pi }); }
+    }
+    return out;
+}
+
+// The closed table of PROVEN weakly-beneficial kinds (see DecisionProvider::ProliferateCollapse). Everything else --
+// -1/-1, poison or depletion or coin on a permanent, charge / verse / lore / storage / ice / age / spore / fade / quest
+// / hone, rad, our own poison, any counter on an opponent's permanent, energy on the opponent -- is NOT proven, so a
+// candidate holding one is not beneficial and the dominance collapse is refused (the subsets are searched instead).
+// OPPONENT PERMANENTS: the goldfish opponent's permanents never carry a counter today (lands, and the 1/1 spawns), so
+// they never become candidates; one that did would be refused here, never auto-added.
+bool ProliferateCandBeneficial(const GameState& s, int controller, const ProliferateCand& c)
+{
+    if (c.player >= 0)
+    {
+        const Player& pl = s.players[static_cast<std::size_t>(c.player)];
+        if (pl.rad_counters > 0) { return false; }
+        if (c.player == controller) { return pl.poison_counters == 0; }   // own energy only
+        return pl.energy_counters == 0;                                    // the opponent's poison only
+    }
+    if (c.bf < 0 || c.bf >= static_cast<int>(s.battlefield.size())) { return false; }
+    const Permanent& q = s.battlefield[static_cast<std::size_t>(c.bf)];
+    if (q.controller_index != controller) { return false; }
+    for (const Counter& k : q.counters)
+    {
+        if (k.count <= 0) { continue; }
+        if (k.type != Counter::Type::PlusOnePlusOne && k.type != Counter::Type::Loyalty) { return false; }
+    }
+    bool other = false;
+    ForEachDedicatedCounterField(q, [&other](const char* name, const int& v)
+    { if (v != 0 && std::strcmp(name, "oil") != 0) { other = true; } });
+    return !other;
+}
+
+std::vector<int> ProliferateDefaultSubset(const GameState& state, int controller,
+                                          const std::vector<ProliferateCand>& cands)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+    { if (ProliferateCandBeneficial(state, controller, cands[static_cast<std::size_t>(i)])) { out.push_back(i); } }
+    return out;
+}
+
+// Kinds a candidate holds = the counters one proliferate of it adds (the menu's secondary order).
+static int ProliferateKindsOn(const GameState& state, const ProliferateCand& c)
+{
+    if (c.player >= 0)
+    {
+        const Player& pl = state.players[static_cast<std::size_t>(c.player)];
+        return (pl.poison_counters > 0) + (pl.rad_counters > 0) + (pl.energy_counters > 0);
+    }
+    const Permanent& q = state.battlefield[static_cast<std::size_t>(c.bf)];
+    int n = 0;
+    bool mirror = false;
+    for (const Counter& k : q.counters)
+    {
+        if (k.count <= 0) { continue; }
+        ++n;
+        if (k.type == Counter::Type::Loyalty) { mirror = true; }
+    }
+    if (q.loyalty > 0 && !mirror) { ++n; }
+    ForEachDedicatedCounterField(q, [&n](const char*, const int& v) { if (v != 0) { ++n; } });
+    return n;
+}
+
+std::vector<std::vector<int>> ProliferateMenu(const GameState& state, int controller,
+                                              const std::vector<ProliferateCand>& cands)
+{
+    std::vector<std::vector<int>> out;
+    const std::vector<int> dflt = ProliferateDefaultSubset(state, controller, cands);
+    if (cands.empty() || ResolveProvider(state).ProliferateCollapse(state, controller, cands))
+    { out.push_back(dflt); return out; }
+    // Identity classes: permanents by controller + RemovalSelfTargetFoldKey (every per-permanent field, counters,
+    // attachments, references), each player its own class.
+    std::vector<std::vector<int>> classes;   // indices into cands, candidate order
+    std::vector<std::string> keys;
+    for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+    {
+        const ProliferateCand& c = cands[static_cast<std::size_t>(i)];
+        std::string k;
+        if (c.player >= 0) { k = "P" + std::to_string(c.player); }
+        else
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(c.bf)];
+            k = std::to_string(q.controller_index) + "#" + RemovalSelfTargetFoldKey(state, q);
+        }
+        const auto it = std::find(keys.begin(), keys.end(), k);
+        if (it == keys.end()) { keys.push_back(k); classes.push_back({ i }); }
+        else { classes[static_cast<std::size_t>(it - keys.begin())].push_back(i); }
+    }
+    std::vector<int> dflt_k(classes.size(), 0);
+    for (std::size_t c = 0; c < classes.size(); ++c)
+        for (int i : classes[c])
+        { if (std::find(dflt.begin(), dflt.end(), i) != dflt.end()) { ++dflt_k[c]; } }
+    struct Sub { std::vector<int> k; int added; bool is_default; };
+    std::vector<Sub> subs;
+    std::vector<int> k(classes.size(), 0);
+    while (static_cast<int>(subs.size()) < kProlifMenuCap)
+    {
+        Sub sub{ k, 0, k == dflt_k };
+        for (std::size_t c = 0; c < classes.size(); ++c)
+            for (int j = 0; j < k[c]; ++j)
+            { sub.added += ProliferateKindsOn(state, cands[static_cast<std::size_t>(classes[c][static_cast<std::size_t>(j)])]); }
+        subs.push_back(std::move(sub));
+        std::size_t c = 0;   // odometer over the per-class counts
+        while (c < classes.size() && k[c] == static_cast<int>(classes[c].size())) { k[c] = 0; ++c; }
+        if (c == classes.size()) { break; }
+        ++k[c];
+    }
+    if (std::none_of(subs.begin(), subs.end(), [](const Sub& x) { return x.is_default; }))
+    { subs.push_back(Sub{ dflt_k, 0, true }); }   // past the cap: the default is still offered (first)
+    std::stable_sort(subs.begin(), subs.end(), [](const Sub& a, const Sub& b)
+    { if (a.is_default != b.is_default) { return a.is_default; } return a.added > b.added; });
+    out.reserve(subs.size());
+    for (const Sub& sub : subs)
+    {
+        std::vector<int> pick;
+        for (std::size_t c = 0; c < classes.size(); ++c)
+            for (int j = 0; j < sub.k[c]; ++j) { pick.push_back(classes[c][static_cast<std::size_t>(j)]); }
+        std::sort(pick.begin(), pick.end());
+        out.push_back(std::move(pick));
+    }
+    return out;
+}
+
+void ApplyProliferate(GameState& state, int controller, const std::vector<ProliferateCand>& cands,
+                      const std::vector<int>& chosen)
+{
+    (void)controller;
+    for (int ci : chosen)
+    {
+        if (ci < 0 || ci >= static_cast<int>(cands.size())) { continue; }
+        const ProliferateCand& c = cands[static_cast<std::size_t>(ci)];
+        if (c.player >= 0)
+        {
+            Player& pl = state.players[static_cast<std::size_t>(c.player)];
+            if (pl.poison_counters > 0) { ++pl.poison_counters; }   // the TEAM's one extra counter in 2HG (CR 701.34b)
+            if (pl.rad_counters    > 0) { ++pl.rad_counters; }
+            if (pl.energy_counters > 0) { ++pl.energy_counters; }
+            continue;
+        }
+        if (c.bf < 0 || c.bf >= static_cast<int>(state.battlefield.size())) { continue; }
+        Permanent& q = state.battlefield[static_cast<std::size_t>(c.bf)];
+        // Snapshot the kinds first: one of EACH kind already there, never a kind a put below creates.
+        const CounterList before = q.counters;
+        const bool had_oil = q.oil_counters > 0;
+        for (const Counter& k : before)
+        {
+            if (k.count <= 0) { continue; }
+            switch (k.type)
+            {
+                case Counter::Type::PlusOnePlusOne: PutPlusCounters(state, q, 1); break;   // doubler-aware
+                case Counter::Type::Loyalty:        break;                                  // below, with p.loyalty
+                default:                            q.counters.Add(k.type, 1); break;
+            }
+        }
+        if (q.loyalty > 0)
+        {
+            ++q.loyalty;
+            bool mirrored = false;
+            for (Counter& k : q.counters)
+            { if (k.type == Counter::Type::Loyalty) { k.count = q.loyalty; mirrored = true; break; } }
+            if (!mirrored) { q.counters.Add(Counter::Type::Loyalty, q.loyalty); }
+        }
+        ForEachDedicatedCounterField(q, [](const char* name, auto& v)
+        { if (v > 0 && std::strcmp(name, "oil") != 0) { ++v; } });
+        if (had_oil) { PutOilCounters(state, q, 1); }   // doubler-aware, int16-clamped
+        AnnihilateCounters(q);                           // CR 704.5r (a -1/-1 beside a +1/+1)
+        RefreshCounterThresholdKeywords(q);
+        if ((q.card.IsCreature() || q.is_animated) && LethalToughness(q, state) <= 0)
+        { g_pending_zero_toughness.push_back(q.card.m_number); }
+    }
+}
+
+// The human chooser's per-candidate label ("Herald of Ilharg: 4 +1/+1" / "Opponent: 3 poison").
+static std::string ProliferateCandLabel(const GameState& state, const ProliferateCand& c, int controller)
+{
+    if (c.player >= 0)
+    {
+        const Player& pl = state.players[static_cast<std::size_t>(c.player)];
+        std::string out = c.player == controller ? "You" : "Opponent";
+        std::string ks;
+        auto add = [&ks](int n, const char* what)
+        { if (n > 0) { ks += (ks.empty() ? "" : ", ") + std::to_string(n) + " " + what; } };
+        add(pl.poison_counters, "poison"); add(pl.rad_counters, "rad"); add(pl.energy_counters, "energy");
+        return out + ": " + ks;
+    }
+    const Permanent& q = state.battlefield[static_cast<std::size_t>(c.bf)];
+    std::string d = DescribeCountersOn(q);
+    if (q.loyalty > 0 && d.find("loyalty") == std::string::npos)
+    { d += (d.empty() ? "" : ", ") + std::to_string(q.loyalty) + " loyalty"; }
+    return q.card.m_name.str() + (q.controller_index != controller ? " (opponent's)" : "") + ": " + d;
+}
+
+void FireCombatDamageProliferate(GameState& state, int controller, const std::vector<int>& damaging_idx)
+{
+    if (!state.deck_has_combat_proliferate || damaging_idx.empty()) { return; }
+    std::vector<std::string> trigs;   // the connecting sources' names, one per trigger, snapshotted first
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int idx : damaging_idx)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& src = state.battlefield[static_cast<std::size_t>(idx)];
+        if (src.controller_index != controller || src.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+        if (d == nullptr || !d->params.combat_damage_self_proliferate) { continue; }
+        trigs.push_back(src.card.m_name.str());
+    }
+    for (const std::string& name : trigs)
+    {
+        // A lethal combat (life OR toxic poison) ends at the state-based-action check before its triggers resolve.
+        if (OpponentHasLost(state) || state.players[static_cast<std::size_t>(controller)].life <= 0) { return; }
+        const int rank = ProlifRankAt(state.scripted_combat_dig, 0);
+        state.scripted_combat_dig = ProlifPinShift(state.scripted_combat_dig);
+        const std::vector<ProliferateCand> cands = ProliferateCandidates(state);
+        if (cands.empty()) { continue; }   // nothing has a counter: the proliferate does nothing
+        std::vector<int> chosen;
+        if (g_play_dragon_chooser && !g_tap_speculating)
+        {
+            // HUMAN PLAY: every candidate, every subset (the search's collapse never narrows the human). Preselected:
+            // the pinned subset, else the dominant default. The reply REPLACES the selection; an empty reply stands.
+            std::vector<int> heur = ProliferateDefaultSubset(state, controller, cands);
+            if (rank > 0)
+            {
+                const std::vector<std::vector<int>> menu = ProliferateMenu(state, controller, cands);
+                heur = menu[static_cast<std::size_t>(std::min<int>(rank, static_cast<int>(menu.size()) - 1))];
+            }
+            std::vector<Card> shown;
+            std::string listing;
+            for (std::size_t k = 0; k < cands.size(); ++k)
+            {
+                const ProliferateCand& c = cands[k];
+                if (c.player >= 0)
+                {
+                    Card pc;
+                    pc.m_name   = InternedName(c.player == controller ? "You" : "Opponent");
+                    pc.m_number = -1 - c.player;   // a PLAYER tile (the viewer renders it as one)
+                    shown.push_back(pc);
+                }
+                else { shown.push_back(state.battlefield[static_cast<std::size_t>(c.bf)].card); }
+                listing += (listing.empty() ? "" : "; ") + std::to_string(k + 1) + ": "
+                         + ProliferateCandLabel(state, c, controller);
+            }
+            const std::vector<int> got = (*g_play_dragon_chooser)(
+                state, controller,
+                name + " (proliferate) \xE2\x80\x94 choose any number of (" + listing
+                    + "); each gets one more counter of each kind it has",
+                shown, static_cast<int>(shown.size()), heur);
+            for (int g : got)
+            {
+                if (g >= 0 && g < static_cast<int>(cands.size())
+                    && std::find(chosen.begin(), chosen.end(), g) == chosen.end()) { chosen.push_back(g); }
+            }
+            std::sort(chosen.begin(), chosen.end());
+        }
+        else
+        {
+            const std::vector<std::vector<int>> menu = ProliferateMenu(state, controller, cands);
+            const int r = std::clamp(rank, 0, static_cast<int>(menu.size()) - 1);
+            chosen = menu[static_cast<std::size_t>(r)];
+        }
+        std::string narration;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            for (int ci : chosen)
+            { narration += (narration.empty() ? "" : "; ") + ProliferateCandLabel(state, cands[static_cast<std::size_t>(ci)], controller); }
+        }
+        ApplyProliferate(state, controller, cands, chosen);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "combat",
+                          name + " proliferates: " + (narration.empty() ? std::string("nothing chosen") : narration)
+                          + " (+1 each kind)"
+                          + (OpponentHasLost(state) ? " -- the opponent has lost (poison)" : ""));
+        }
+    }
+}
+
 // Garruk's Harbinger's combat-damage dig (see the SpellEffects.h declaration note). The connectors are snapshotted
 // (card number, count, filter, name) before any dig resolves: a dig mutates the library and the hand, and a card
 // entering hand may fire watchers, so nothing is read lazily underneath a resolution. ONE trigger per connecting
@@ -2803,7 +3095,7 @@ void FireCombatDamageDig(GameState& state, int controller, const std::vector<int
         // gate): no dig, and in human play no dig dialog for a decision that cannot affect the game.
         if (OpponentHasLost(state) || state.players[static_cast<std::size_t>(controller)].life <= 0) { return; }
         const int rank = CombatDigRankAt(state.scripted_combat_dig, 0);
-        state.scripted_combat_dig = static_cast<std::int16_t>(CombatDigPinShift(state.scripted_combat_dig));
+        state.scripted_combat_dig = CombatDigPinShift(state.scripted_combat_dig);
         ScriptedEtbDig this_trigger_pin(rank);   // -1 = the provider's front (no searching apply pinned it)
         PerformLookTakeDig(state, controller, t.count, t.def->params.combat_damage_dig_types, /*max_mv=*/-1,
                            t.name + " (combat damage dig)", /*took_number=*/nullptr, /*bottom_random=*/true);

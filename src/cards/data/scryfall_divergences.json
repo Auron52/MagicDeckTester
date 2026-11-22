@@ -54,5 +54,8 @@
  },
  "Garruk's Harbinger": {
   "keywords": "'Hexproof from black' is a real keyword but INERT here (PROVISIONAL, user sign-off pending; disclosed in the card's bracket): the passive goldfish opponent never casts a spell or activates an ability that targets, and the Beasts list has no black cards. Scryfall reports it as ['Hexproof', 'Hexproof from']; tagging plain Hexproof would be WRONG (full hexproof is broader than hexproof from black), and 'Hexproof from' is not an engine keyword (the loader rejects it). Mirrors the Auriok Champion / Goblin Piledriver protection precedent. Reviewed 2026-11-21 (Beasts D)."
+ },
+ "Bloated Contaminator": {
+  "keywords": "Toxic and Proliferate are not engine keywords (the loader has no tag for either): toxic 1 is the toxic param (ApplyToxicPoison, both combat damage-step shapes) and the proliferate is combat_damage_self_proliferate (FireCombatDamageProliferate, a searched subset). Trample is tagged (inert vs the goldfish, which never blocks). Reviewed 2026-11-22 (Beasts G)."
  }
 }

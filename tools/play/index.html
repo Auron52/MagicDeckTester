@@ -2707,7 +2707,10 @@ function renderBoard() {
   h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
        // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
        (opp.library_size!=null?`<span class="life" title="cards left in the opponent's library${opp.decked?' -- DECKED':''}">library <b>${opp.library_size}</b>${opp.decked?' (decked)':''}</span>`:'')+
-       (opp.hand_size!=null?`<span class="life">hand <b>${opp.hand_size}</b></span>`:'')+`</div>`;
+       (opp.hand_size!=null?`<span class="life">hand <b>${opp.hand_size}</b></span>`:'')+
+       // POISON (Bloated Contaminator's toxic + proliferate, Beasts G): shown once the opponent has any; the loss is at
+       // poison_loss_at (10, a 2HG team 15). The engine emits the field only when nonzero.
+       (opp.poison_counters?`<span class="life" title="poison counters -- the opponent loses at ${opp.poison_loss_at||10}">☠ poison <b>${opp.poison_counters}</b>/${opp.poison_loss_at||10}</span>`:'')+`</div>`;
   if (opp.starting_deck) {
     const deck = opp.starting_deck;
     h += `<details class="opp-public" id="oppdeckdetails"${S.oppDeckOpen?' open':''}>`+
@@ -5503,6 +5506,33 @@ function dragonPanelHtml(d){
     h+='</div><div class="pbtns"><span class="pcount">'+sel.size+' selected &rarr; '+sel.size+'/'+sel.size+'</span>'+
       '<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>'+
       '<button id="decconfirm" class="primary">Exile selected</button></div>';
+    return h;
+  }
+  // BLOATED CONTAMINATOR's PROLIFERATE (Beasts G): "choose any number of permanents and/or players that have a
+  // counter, then give each another counter of each kind already there". EVERY candidate is offered (the search's
+  // dominance collapse never narrows the human); a PLAYER is a tile (the engine sends it as a card numbered < 0).
+  // Each tile carries its counter label (parsed from the source's "k: name: counters" listing).
+  if (/\(proliferate\)/.test(d.source||'')) {
+    const nm=(d.source||'').replace(/\s*\(proliferate\)[\s\S]*$/,'');
+    const list=((d.source||'').match(/choose any number of \(([\s\S]*)\); each gets/)||[])[1]||'';
+    const labels={};
+    list.split('; ').forEach(e=>{ const m=e.match(/^(\d+): ([\s\S]*)$/); if(m){ labels[Number(m[1])-1]=m[2]; } });
+    let h=`<h3>${esc(nm)} — proliferate</h3>`+
+      `<div class="sub">Choose any number of these permanents and players. Each one chosen gets one more counter of EACH kind it already has (+1/+1, loyalty, oil, poison, …). Choosing none is allowed. The AI's picks are preselected.</div><div class="tutgrid">`;
+    (d.candidates||[]).forEach(c=>{
+      const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+      const lab=labels[c.index]||c.name, ctr=lab.replace(/^[^:]*: /,'');
+      const isPlayer=(c.name==='Opponent'||c.name==='You') && !/ \(opponent's\)/.test(lab) && /^(Opponent|You): /.test(lab);
+      h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(lab)}">`+
+        (isPlayer
+          ? `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:86px;font-size:28px;border:1px solid #888;border-radius:6px">${c.name==='Opponent'?'☠':'🙂'}</span><em>${esc(c.name)} (player)</em>`
+          : `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`)+
+        `<em style="font-style:normal;font-size:11px">${esc(ctr)}</em>`+
+        (isAI?'<span class="deftag">AI pick</span>':'')+'</span>';
+    });
+    h+='</div><div class="pbtns"><span class="pcount">'+sel.size+' selected</span>'+
+      '<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>'+
+      '<button id="decconfirm" class="primary">Proliferate</button></div>';
     return h;
   }
   if ((d.source||'').startsWith('Surgical Extraction (exile from ')) {

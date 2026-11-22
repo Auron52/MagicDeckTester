@@ -4797,6 +4797,21 @@ struct CardParams
     // into the provider's EtbDigCandidates); the rest go to the bottom via BottomInRandomOrder.
     int                      combat_damage_dig_per_damage = 0;
     std::vector<std::string> combat_damage_dig_types;
+    // BLOATED CONTAMINATOR (Beasts G, 2026-11-22).
+    //   toxic -- "Toxic N" (CR 702.164): combat damage this creature deals to a PLAYER also gives that player N
+    //     poison counters, as part of the damage result (CR 120.3g), so the poison is on before any combat-damage
+    //     trigger resolves and the loss check (CR 704.5c: ten, or fifteen for a 2HG team, CR 704.6b) sees it. Applied
+    //     by the shared ApplyToxicPoison (SpellEffects.h) at the `power > 0` connector point of BOTH damage-step
+    //     shapes of the shared combat core (Combat.cpp), so the executor and the rollout give it identically. Not
+    //     scaled by gamesetup::OpponentHeads(): the hit is on one head and the poison is the TEAM's (CR 810.10).
+    //     Printed value only (the total toxic value of CR 702.164b; nothing grants toxic). 0 = none.
+    //   combat_damage_self_proliferate -- "Whenever this creature deals combat damage to a player, proliferate"
+    //     (CR 701.34). One trigger per connecting damage event (FireCombatDamageProliferate, SpellEffects.h), after
+    //     every other combat-damage trigger of that step. WHICH permanents / players is a real choice: searched
+    //     through the combat-time trigger pin (GameState::scripted_combat_dig, the proliferate half), collapsed to
+    //     the dominant set by the ROOT DecisionProvider (ProliferateCollapse, MTG_UNPRUNE=proliferate).
+    int                      toxic                          = 0;
+    bool                     combat_damage_self_proliferate = false;
     // Den Protector: "When this creature is turned face up, return target card from your graveyard to your
     // hand." The target is SEARCHED (named variants; a human gets the dig chooser).
     bool turned_face_up_return_gy_to_hand = false;
