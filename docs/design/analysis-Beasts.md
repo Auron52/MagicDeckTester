@@ -92,7 +92,38 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   (`OffersOilVigilanceMenace`, the oil branch of `RestrictCounterDestroyTargetsFor`); move them if wanted, and consider
   a provider prune of the pump when Migloz cannot attack and nothing reads its power (no Garruk -3 live) -- today every
   K is searched each main.
-* **Running:** perf agent E-perf (root-cause + recover the batch E +3.9% CPU at identical units, byte-identical). NEXT after it = batch F (Nykthos).
+* **Batch E perf (agent E-perf 2026-11-22): `8907da8a9`.** PROFILE FINDING: batch E does almost no extra WORK.
+  Callgrind exact Ir on a 7-job single-thread subset (Profile builds, digests identical) was D 88.228G vs E 88.309G
+  (**+0.09%**). The grown functions are DecisionUnpruned (+34M Ir, the bitset test and the static guard) and the
+  per-permanent oil param tests in CollectActions (~45M). perf `cpu-clock` sampling of the 40-job manifest (no HW PMU
+  under WSL) put E at +3.4% CPU over D. The growth is spread over hundreds of symbols (CollectActions,
+  EnumeratePlansCore, AppendSubdecisionAxes, GameState copy, memmove), with no new hot spot, which points to
+  memory/layout rather than code. Cachegrind with simulated caches, same subset: I1 misses **+1.54%**, D1 misses
+  **+0.35%**, LL negligible. FIX (layout only, no field added or removed, no key changed):
+  `Permanent::oil_counters` is now an `int16_t` in the 2-byte pad before `paired_with`.
+  `loyalty_activated_this_turn` and `colored_cast_lifegain_used_this_turn` became 1-bit fields in the
+  `storied_draw_used_this_turn` run (2 bits were free), which opens that pad. **sizeof(Permanent) 336 -> 328** (back
+  to D). `PutOilCounters` clamps to INT16_MAX, and the ForEachDedicatedCounterField writers take `auto&`. The
+  unprune mask test became plain uint64 words (shift + AND). AFTER, cachegrind on Release binaries, same subset,
+  vs D: **Ir E +0.07% / F -0.04%; D1 misses E +0.35% / F -0.01%; I1 misses E +1.54% / F +0.81%**; LL E +0.4% /
+  F -1.2% (about 0.75M misses, noise-level). So the fix restores D's data-side behaviour exactly.
+  TIMING (the box carried a heavy OUTSIDE load the whole time, load avg 30-75 on 24 cpus, from another container):
+  (1) sequential interleaved 3-arm A/B, 40 smoke jobs, 24 threads, 4 rotated rounds (DEF FDE EFD DEF), Release,
+  MTG_PGO=0. CPU vs D: E +1.46%, F +2.57%. Wall vs D: E +3.99%, F +0.95%. Same-arm spread **17% CPU, 25-48% wall**,
+  per-round E-vs-D CPU from -1.2% to +6.0%, so this measures nothing at the 1-4% level. (2) CONCURRENT Latin
+  square: D, E and F run at the same time, each pinned to its own 8-cpu set with --threads 8, the sets rotated over 3
+  rounds. Arm sums vs D: CPU E +1.26%, F +0.29%. Wall E +2.0%, F -0.8%. The cpu-set effect alone was 25-35% (0-7
+  fastest), so the band is about +/-2%. Units 28,615,548 and digests identical on every arm of every run. The batch
+  E "+3.9% CPU / +3.1% wall" (2 reps, load ~40) is NOT reproducible above this box's noise. By the deterministic
+  counters, E's real extra cost was well under 1%, and F is within noise of D. SMOKE at `8907da8a9`'s code (no
+  accept): **235/235 PASS, per-game audit 0 configs changed, play-changed 0** (searched and d0), scenarios 596/596,
+  makespan 1305 s. Log `build/scratch/beastsEperf/smoke.log`. Units 3858/3858. **OWED (unattributed residual):**
+  F's I1 misses are still +0.81% over D (about 22M on 2.76G). This is the code footprint the new Migloz branches add
+  to CollectActions / ActivatePump / the pay sites, at an estimated ~0.2% of cycles. It is not attributable further
+  without a HW PMU. A clean wall A/B also needs a quiet box (the outside load made both designs above +/-2% at
+  best). Scratch, all on the build volume: `build/scratch/beastsEperf/` (`ab3_*`, `abc_*`, `cg_*`, `cache_*`,
+  `rc_*`, `perf_*.data`).
+* **Running:** none. NEXT = batch F (Nykthos).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
