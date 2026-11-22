@@ -28,7 +28,17 @@ Cloud of Faeries; EDF) leaks the same way on a failed payment -- wrap it in `Tap
 move and accept.
 
 ## Next, in order
-1. **Land it (the parent's steps, after the GT commit):** `python3 scripts/check_references_safe.py`; `git fetch`; if
+0. **ORIGIN MOVED after the accept (checked 2026-11-22 ~12:00 UTC): 21 new commits on
+   `origin/phase-1-2-deck-analyzer` (Creature Burn: Magma Jet cast_scry search, Fireblast pair fold, their GT accepts;
+   CLAUDE.md "do nothing more is always an option" hard rule). They touch `src/` and GT, so: `git rebase
+   origin/phase-1-2-deck-analyzer` (a `git merge-tree` preview shows only TWO conflicts: `src/ai/HeuristicArm.h` --
+   both sides appended lever slots / names, keep both, keep the enum and the name table in lockstep -- and
+   `test/regression_gt.txt` -- take ORIGIN's side, never hand-merge numbers), verify with `git range-diff`, rebuild
+   (`MTG_BUILD_JOBS=12 ./build.sh`), `mtg-test`, `test/scenarios.sh`, ONE pooled `test/regression.sh --both` at full
+   threads, inspect moves (expected: the same 27 keys as integration 2, and nothing from Creature Burn / Midrange Burn;
+   any other moved key needs a mechanism), every slower game recovers at d8 b0, then `--accept`,
+   `test/check_gt_logs.py`, commit. Only then step 1. `check_references_safe.py` passed (rc 0) at ~12:00.
+1. **Land it (after the GT commit):** `python3 scripts/check_references_safe.py`; `git fetch`; if
    origin moved, rebase (never merge), rebuild (`MTG_BUILD_JOBS=12 ./build.sh`), smoke, `test/check_gt_logs.py`; push
    `bloodsun-analysis` to `origin/phase-1-2-deck-analyzer` (shared branch: at most once per 4 h per session); CI watch
    in the background with `--interval 60`, report the Windows result when it lands.
