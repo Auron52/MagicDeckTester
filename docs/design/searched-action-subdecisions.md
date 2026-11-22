@@ -181,7 +181,11 @@ Voice-class fuel while a Pod is active) -- the USER's 2026-09-05 spec for these 
 are excluded unless a persist payoff already held needs more known mana. The goldfish-dead toolbox,
 a second enabler and a tutor with nothing left to find are also excluded. The held-payoff exception (`0f6cdbd80`)
 restores Melira regression s2002 gi78 from T6 to T5 at depth 8, budget 0, by offering Birds of
-Paradise for the held Murderous Redcap; 3,881 serial tests pass. Its held-out A/B remains to run.
+Paradise for the held Murderous Redcap; 3,881 serial tests pass. The final held-out
+Melira A/B reran 1,620 jobs / 1,619 completed games with this fix: two better,
+zero worse, net -2 turns across 1,300 solo games vs old widths; 300 2HG games
+were identical. Every held-out slowdown remains in the already classified Hinata
+arm; the fix introduces none.
 Nothing qualifies -> the full ranked list.
 
 Held-out A/B, same apparatus and seeds as above (rule arm vs the stored OLD-width arm, which
