@@ -221,7 +221,14 @@ adoption, after a fresh pull, never under the lease.
 USER 2026-11-22: "If the pinger pings are visible they probably should. Yes, Vexing Devil should act the same way.
 That's good if we don't need to work with the fold anymore." -> relayed to cb-bbgap: visible = combat to come + one ping
 per READY tap pinger; same anticipation for Vexing Devil (shared helper; its decks join the A/B); fold lever deleted if
-the main-2 trigger goes. No USER questions open.
+the main-2 trigger goes.
+cb-bbgap agent 1 HANDED OFF (bbgap-handoff.md, WIP b372fd612 unbuilt); agent 2 continues. FINDINGS: the main-1 gap was a
+FIXTURE artifact (scenario Champion echo unresolved + land drop pre-used) -- real residual: a search started MID-main
+never offers "cast nothing more" (engine-wide). Browbeat's main-2 trigger STAYS (a post-combat haste body / Peaks
+empties the hand without visible damage: threshold 8 -> 5, unreachable from main 1), fold lever kept. USER QUESTIONS:
+(a) visible damage per creature = max(combat to come, ready ping)? (b) opponent assumes attack-all (a searched hold is
+not anticipated) OK? (c) always offer "cast nothing" at a mid-turn search root (engine-wide play change)? (d) Vexing
+Devil's held-card count includes staged cards (Browbeat excludes them) -- align?
 NEXT after landing: s9 check (USER expects T5 with the opponent Karoo fix); Stage 6 report + 6a disclosure (items: fold
 OFF verdict; main-1 attack-then-Browbeat gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
 census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
