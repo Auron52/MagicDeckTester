@@ -198,9 +198,22 @@ scen; status landing5/status, marker landing5/BUILT) outside the lease. THEN: jo
 incremental rebuild if origin moved), smoke -> expect ONLY Magma Jet decks to move -> accept; scoped regression
 creatureburn,creatureburn2hg,midrangeburn,midrangeburn2hg (+ any other Magma Jet deck smoke moved) -> accept; check_gt_logs;
 refs --only Creature_Burn,Midrange_Burn; land; CI watch.
-USER QUESTIONS (surface): MTG_SCRY_WIDTH=2 (engine-wide, pre-existing) leaves 3 of 5 two-card-scry dispositions
-unfindable at any budget -- width 5 + a Burn ScryVerdict prune would satisfy completeness; Burn scry heuristic ignores
-lands in hand (provider change, USER's call); Midrange Burn keep table regen after the play change (USER's call).
+USER RULINGS 2026-11-22 (verbatim): (1) scry width: "I don't like widths period because they provide either too many
+or too few options. My preference is to fully open it up and prune with a heuristic as needed." (2) Burn scry: "Yes, we
+should fix it. Ideally we would make it a relatively smart heuristic that keeps things based on impact and
+castability. So, for example, you would often keep bolt because it can fit in to the curve wherever, but you may not
+keep a 3-drop if you have too many even if you have enough mana. Also, we should certainly consider pruning orderings
+of the top. Those should be something the heuristic can handle." (3) main-1 Browbeat gap: "I'm not sure how necessary
+this is, but let's look into it before generating. I'm not in a rush to start the generation at this point." (5)
+Browbeat: "Is this the primary reason why we are considering second main? Maybe we should actually make the opponent
+take the visible combat damage into account when deciding on browbeat. It doesn't really make sense to exclude it."
+AGENTS (Opus, background): scry -> brief logs/creature-burn/scry-brief.md, worktree cb-scry (wip/cb-scry), handoff
+scry-handoff.md; Browbeat policy + gap -> brief logs/creature-burn/browbeat-gap-brief.md, worktree cb-bbgap
+(wip/cb-bbgap), handoff bbgap-handoff.md. MULLIGAN GENERATION WAITS for both (USER: not in a rush).
+STILL OPEN for the USER: (4) per-turn fold ship-OFF vs amended (explained 2026-11-22; likely moot if the Browbeat
+policy makes main 2 dominated); Hellspark unearth PROVISIONAL; Midrange Burn keep-table regen; overnight FULL-set
+expansion vs the slow-box once-only rule; recipe fast; pingers counted in "visible" damage?; same anticipation for
+Vexing Devil?
 NEXT after landing: s9 check (USER expects T5 with the opponent Karoo fix); Stage 6 report + 6a disclosure (items: fold
 OFF verdict; main-1 attack-then-Browbeat gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
 census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
