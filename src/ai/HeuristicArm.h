@@ -1119,6 +1119,7 @@ enum Slot : int
     BLOODSUN_GRIM_V2_LAND_CUT,// MTG_BLOODSUN_GRIM_V2_LAND_CUT  Fastbond alone when the surplus has a big land. Default OFF
     BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
     BLOODSUN_BUCKET_DISCARD,    // MTG_BLOODSUN_BUCKET_DISCARD  B14 USER cleanup buckets. Default OFF pending A/B
+    FETCH_HINT_TAPPED,        // MTG_FETCH_HINT_TAPPED  REPORT-ONLY arm (USER 2026-11-22): a fetchland's deck-derived hand hint (HandFixingProduces) also counts the always-tapped fetchable lands (triomes). Default OFF (the USER: untapped reach only)
     COUNT
 };
 
@@ -2182,6 +2183,7 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_V2_LAND_CUT",
         "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
         "MTG_BLOODSUN_BUCKET_DISCARD",
+        "MTG_FETCH_HINT_TAPPED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

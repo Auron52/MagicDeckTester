@@ -91,6 +91,29 @@ TEST_CASE("Boars haste order advances mana creatures only with our Greaves in pl
     CHECK(provider.CastOrderRank(s, druid) < provider.CastOrderRank(s, boar));
 }
 
+TEST_CASE("A fetchland's hand colour hint is the untapped reach of THIS deck's library (USER 2026-11-22)")
+{
+    const CardDefinition& h = BDef("Windswept Heath");   // Forest / Plains
+    GameState s = BBase();
+    s.players[0].library = Library{};
+    // Empty library: nothing to fetch, so the hint is empty (the static `produces` is not consulted).
+    CHECK(HandFixingProduces(s, 0, h).empty());
+    CHECK(EffectiveProduces(s, 0, h, /*in_hand=*/true).empty());
+    s.players[0].library.push_back(BCard("Breeding Pool", 900));   // Forest Island shock: G and U
+    s.players[0].library.push_back(BCard("Plains", 901));          // W
+    s.players[0].library.push_back(BCard("Zagoth Triome", 902));   // Swamp Forest Island, ALWAYS tapped: not counted
+    s.players[0].library.push_back(BCard("Island", 903));          // not a Forest or Plains
+    const std::vector<Color> want{ Color::White, Color::Blue, Color::Green };
+    CHECK(HandFixingProduces(s, 0, h) == want);
+    CHECK(EffectiveProduces(s, 0, h, /*in_hand=*/true) == want);
+    // A non-fetch land keeps its own produces.
+    const CardDefinition& pool = BDef("Breeding Pool");
+    CHECK(&HandFixingProduces(s, 0, pool) == &pool.params.produces);
+    // The battlefield is unchanged: a held fetchland makes no mana.
+    Permanent& held = BPut(s, "Windswept Heath", 20);
+    CHECK(EffectiveProducesFor(s, 0, h, &held).empty());
+}
+
 TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills shape)")
 {
     const CardDefinition& h = BDef("Windswept Heath");

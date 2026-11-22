@@ -23478,7 +23478,8 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
     {
         if (d == nullptr || d->params.reflecting) { return 0u; }
         unsigned b = 0;
-        for (Color c : d->params.produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
+        // A fetchland in hand covers the colours it can fetch in this deck (HandFixingProduces, USER 2026-11-22).
+        for (Color c : HandFixingProduces(s, s.active_player_index, *d)) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
         return b;
     };
     auto land_tier = [](const CardDefinition* d) -> int

@@ -47571,6 +47571,55 @@ inline bool FreshMintSpendableNow(const GameState& state, int controller)
     return HeroismFreshHoldOn() && HeroismCopiesLive(state, controller) > 0;
 }
 
+// THE FETCHLAND HAND HINT, DECK-DERIVED (USER 2026-11-22). A fetchland in HAND fixes exactly the colours of the
+// lands it can still fetch in THIS deck, not a static basic-type list: "W/U is understating the power of
+// fetchlands. They can get any shock in the deck, so they can theoritically produce any colour those can get."
+// So the hint is the union of the colours of every land in the controller's LIBRARY whose land types match the
+// fetch's `fetch_land_types` -- the same subtype match the fetch itself resolves with (PerformFetch /
+// PlayLeftmostLandFrom). The library's CONTENTS are known information (decklist minus cards seen); its ORDER is not
+// read, so this is not clairvoyance. Only lands that can enter UNTAPPED count (shocks, basics): USER, same day,
+// "Yes, for 1 we should count shocks. I'm less certain about triomes because of the come-into-play-tapped, but
+// usually shocks cover the colours we need." MTG_FETCH_HINT_TAPPED=1 (REPORT-ONLY arm, default off) also counts the
+// always-tapped ones (triomes, tapped duals). A non-fetch land returns its own `produces`. The BATTLEFIELD is
+// unchanged: EffectiveProducesFor strips every fetch_land_types permanent, so a held fetchland never makes mana.
+// Returns a thread_local buffer for a fetchland (consume it before the next call).
+inline bool FetchHintCountsTapped()
+{
+    static const bool on = EnvOn("MTG_FETCH_HINT_TAPPED");
+    return heurarm::Flag(heurarm::FETCH_HINT_TAPPED, on);
+}
+inline unsigned FetchReachColourMask(const GameState& state, int controller, const CardDefinition& def)
+{
+    unsigned mask = 0;
+    const bool tapped_ok = FetchHintCountsTapped();
+    for (const Card& c : state.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(c);
+        if (land == nullptr || !land->card.IsLand() || !land->params.fetch_land_types.empty()) { continue; }
+        if (land->params.enters_tapped && !tapped_ok) { continue; }
+        bool match = false;
+        for (const std::string& type : def.params.fetch_land_types)
+        {
+            for (const std::string& sub : land->card.m_subtypes) { if (type == sub) { match = true; break; } }
+            if (match) { break; }
+        }
+        if (!match) { continue; }
+        for (Color col : land->params.produces)
+        { if (col != Color::Colorless) { mask |= 1u << static_cast<unsigned>(col); } }
+    }
+    return mask;
+}
+inline const std::vector<Color>& HandFixingProduces(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (def.params.fetch_land_types.empty()) { return def.params.produces; }
+    thread_local std::vector<Color> buf;
+    buf.clear();
+    const unsigned mask = FetchReachColourMask(state, controller, def);
+    static const Color kOrder[] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+    for (Color col : kOrder) { if (mask & (1u << static_cast<unsigned>(col))) { buf.push_back(col); } }
+    return buf;
+}
+
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
 // a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /
@@ -47593,6 +47642,9 @@ inline const std::vector<Color>& EnergySpentColors(const CardDefinition& def)
 inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
                                                    const CardDefinition& def, bool in_hand = false)
 {
+    // A fetchland in HAND: its deck-derived reach (HandFixingProduces above). On the battlefield (in_hand false)
+    // EffectiveProducesFor strips it before this is reached.
+    if (in_hand && !def.params.fetch_land_types.empty()) { return HandFixingProduces(state, controller, def); }
     if (def.params.domain_mana) { return DomainColors(state, controller); }
     // A pay-sac source makes one mana of ANY colour. Giving it a real `produces` is what admits it to
     // every source scan, and AddSourceToPool already credits a multi-colour source as `wild += amt`
