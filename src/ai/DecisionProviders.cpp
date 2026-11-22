@@ -72275,6 +72275,14 @@ bool BloodSunGrimTwAnyOn()
     static const bool on = EnvOn("MTG_BLOODSUN_GRIM_TW_ANY");   // DEFAULT OFF (an A/B arm; the USER's call)
     return heurarm::Flag(heurarm::BLOODSUN_GRIM_TW_ANY, on);
 }
+// MTG_BLOODSUN_GRIM_AMEND_LATE (perf part 6b): ORDER only -- a Grim target admitted ONLY by one of the three arms above
+// ranks after every base B12 target in TutorCandidates (the in-place first combination and the beyond-horizon front).
+// The budget-staged admission shape: nothing is refused, so the searched set is unchanged at an unlimited budget.
+bool BloodSunGrimAmendLateOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_AMEND_LATE");   // DEFAULT OFF (an A/B arm; the USER's call)
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_AMEND_LATE, on);
+}
 
 namespace
 {
@@ -72511,7 +72519,9 @@ bool BloodSunGrimTimeWarpCastable(const GameState& s, int controller, const Card
     return TurnSolver::CostPayableExact(s, both, false);
 }
 
-bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& d)
+// `amend` = the three amendment arms apply (each still gated on its own lever); false = the base B12 list, which
+// MTG_BLOODSUN_GRIM_AMEND_LATE reads to rank an amendment-only target after it.
+static bool BloodSunGrimAdmitImpl(const GameState& s, int controller, const CardDefinition& d, bool amend)
 {
     const CardParams& p = d.params;
     if (p.lands_lose_nonmana_abilities) { return true; }   // the cap already requires none out / in hand
@@ -72522,7 +72532,7 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
         return !rv_hand;
     }
     // TWNEXT arm: Time Warp whenever none is in hand (Grim this turn, Time Warp next turn -- gi 431's line).
-    if (p.extra_turns_on_resolve > 0 && BloodSunGrimTwAnyOn())
+    if (amend && p.extra_turns_on_resolve > 0 && BloodSunGrimTwAnyOn())
     {
         bool tw_bf = false, tw_hand = false;
         BsHave(s, controller, [](const CardDefinition& c) { return c.params.extra_turns_on_resolve > 0; }, tw_bf, tw_hand);
@@ -72535,7 +72545,7 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
         // DROP arm: a land play still open THIS turn (the engine's own test, the one EnumeratePlansWithLand offers the
         // drop on: lands_played_this_turn < LandDropsAvailable, which carries Exploration's extra and Fastbond's
         // unlimited drops) -> the fetched land can be played at once, at any mana (gi 7 / 277).
-        if (BloodSunGrimLandDropOn() && controller == s.active_player_index)
+        if (amend && BloodSunGrimLandDropOn() && controller == s.active_player_index)
         {
             const Player& me = s.players[static_cast<std::size_t>(controller)];
             if (me.lands_played_this_turn < me.LandDropsAvailable()) { return true; }
@@ -72563,10 +72573,15 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
             if (ld != nullptr && ld->card.IsLand()) { best = std::max(best, net(*ld)); }
         }
         // BOARD arm: battlefield lands only (gi 141: 6 on the battlefield + a 2-mana Karoo in hand read as "enough").
-        if (BloodSunGrimLandBoardOn()) { best = 0; }
+        if (amend && BloodSunGrimLandBoardOn()) { best = 0; }
         return mana + best < kBloodSunGrimLandMana;
     }
     return false;   // Time Warp, Emrakul, Fastbond, Exploration: B3 targets Grim Tutor no longer fetches
+}
+
+bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDefinition& d)
+{
+    return BloodSunGrimAdmitImpl(s, controller, d, true);
 }
 
 // Grim Tutor (and the transmute's synthesized exact-MV search): the generic list restricted to the USER's targets,
@@ -72583,18 +72598,25 @@ std::vector<std::string> BloodSunProvider::TutorCandidates(const GameState& s, i
     // B12's second gate: with a Revelation in hand at 8+ mana, Grim Tutor is cast only for a same-turn Time Warp (else
     // an empty list: not cast, TutorNeedsCandidate).
     const bool rev_gate = !transmute && BloodSunGrimRevGateHolds(s, controller);
+    const bool late = grim && BloodSunGrimAmendLateOn();
     std::vector<std::pair<int, std::string>> keep;
     for (std::string& nm : all)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
         if (d == nullptr || BloodSunTutorTargetCap(s, controller, *d, transmute) <= 0) { continue; }
+        bool tw = false;
         if (grim || rev_gate)
         {
-            const bool tw = BloodSunGrimTimeWarpCastable(s, controller, *d);
+            tw = BloodSunGrimTimeWarpCastable(s, controller, *d);
             if (rev_gate && !tw) { continue; }
             if (grim && !tw && !BloodSunGrimTargetAdmitted(s, controller, *d)) { continue; }
         }
-        keep.emplace_back(BloodSunRole(s, d, sun_out, true), std::move(nm));
+        int key = BloodSunRole(s, d, sun_out, true);
+        // MTG_BLOODSUN_GRIM_AMEND_LATE (ORDER only): a target only an amendment arm admits ranks after every base
+        // B12 target -- last in the in-place first combination and never the beyond-horizon front while a base
+        // target exists. Nothing is refused, so the list is the same set at every budget.
+        if (late && !tw && !BloodSunGrimAdmitImpl(s, controller, *d, false)) { key += 1000; }
+        keep.emplace_back(key, std::move(nm));
     }
     std::stable_sort(keep.begin(), keep.end(),
                      [](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b)

@@ -4499,6 +4499,8 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
 bool BloodSunGrimLandDropOn();
 bool BloodSunGrimLandBoardOn();
 bool BloodSunGrimTwAnyOn();
+// MTG_BLOODSUN_GRIM_AMEND_LATE (DEFAULT OFF, ORDER only): amendment-only Grim targets rank after the base B12 ones.
+bool BloodSunGrimAmendLateOn();
 // MTG_BLOODSUN_GRIM_REV_GATE (heurarm BLOODSUN_GRIM_REV_GATE; B12's second gate; DEFAULT OFF until measured): Grim Tutor is not cast
 // while a Revelation is in hand and BloodSunTurnManaEstimate >= MTG_BLOODSUN_GRIM_REV_MANA (default 8). DEFAULT OFF.
 bool BloodSunGrimRevGateOn();

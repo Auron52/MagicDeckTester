@@ -447,3 +447,23 @@ TEST_CASE("Blood Sun Grim amendments are inert while MTG_BLOODSUN_GRIM_PRUNE is 
     CHECK(HasPf(t, "Scorched Ruins"));
     CHECK(HasPf(t, "Time Warp"));
 }
+
+TEST_CASE("Blood Sun Grim amendment LATE: amendment-only targets rank after the base B12 targets, none refused")
+{
+    GameState s = GrimBoardPf(7);
+    s.players[0].hand.pop_back();   // no Revelation in hand: Revelation is a base B12 target
+    GrimAmend a(1, 0, 0);
+    {
+        const std::vector<std::string> t = GrimTargetsPf(s);
+        REQUIRE(!t.empty());
+        CHECK(t.front() != "Diabolic Revelation");   // BloodSunRole: the big lands first
+        CHECK(HasPf(t, "Scorched Ruins"));
+    }
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_AMEND_LATE] = 1;
+    const std::vector<std::string> t = GrimTargetsPf(s);
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_AMEND_LATE] = -1;
+    REQUIRE(!t.empty());
+    CHECK(t.front() == "Diabolic Revelation");   // the base target first, the DROP-only lands after it
+    CHECK(HasPf(t, "Scorched Ruins"));
+    CHECK(HasPf(t, "Lotus Vale"));
+}
