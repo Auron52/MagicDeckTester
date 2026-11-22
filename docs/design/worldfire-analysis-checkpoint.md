@@ -1,5 +1,18 @@
 # Worldfire analysis -- checkpoint (2026-11-21 ~22:30 UTC)
 
+## Codex continuation (2026-11-22 ~12:05 UTC)
+
+No USER decision is outstanding. The Sire fairness ruling is implemented on
+`wip/freeturn` as castable nonland permanents; annihilator fairness is default ON
+with the no-land-turn exception. The focused 27 tests and full 3,903-test serial
+suite passed. A paired 8,700-game fairness batch is complete; the detailed table
+is in `docs/design/opponent-lockdown-free-turns.md` on that branch. The pooled
+smoke/regression/reference tier is running in `logs/freeturn/both9.log` and must
+be inspected before the branch is considered ready. Tutor-width remains at
+`8fda9b83a`: the Melira gi78 dork fix and Hinata gi893 blind classification are
+recorded, with a Melira held-out A/B and the full tier still owed. No push queue
+lease has been joined.
+
 Owner: the session analyzing `decks/Worldfire/Worldfire.cod` (USER asked: "Please analyze the
 Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldfire`, branch
 `wip/worldfire` (rebased on origin/phase-1-2-deck-analyzer bd5a2c93f). Ledger:
