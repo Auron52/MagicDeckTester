@@ -13,6 +13,11 @@ two local file edits were stashed and restored. We are push-queue head, with a d
 and per-game audit against the new Blood Sun GT, scoped regression, GT accept, and `land`. Requeue if the validation
 exceeds the head window, then launch the fast profile after landing.
 
+**23:33 UTC queue update:** Worldfire joined during the full integrated build. This session requeued behind it
+to keep the head lease within the 1–2 hour validation window; the old heartbeat was stopped. The four-job build
+continues locally (`POSTBLOOD_BUILD_DONE` still pending). A fresh `run-queue-wait-profile.sh` waiter is active;
+the old `QUEUE_PROFILE_READY` marker was archived as `.previous`.
+
 The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
 Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
 tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
