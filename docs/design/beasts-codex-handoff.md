@@ -50,7 +50,7 @@ instructions below are retained for context.
    commits; ledger commit (Bellower row integrated + approved, "Batch H integrated" Checkpoint bullet,
    Running -> batch I). Known gaps found by H: (a) in HUMAN play, if the pre-search Packleader draw takes the
    card the human named, the put falls back to the provider's top candidate (viewer only; fix by re-asking);
-   (b) a put creature is not counted for a later Craterhoof pump in the damage projection (not live for Beasts).
+   (b) a put creature is not counted for a later Craterhoof pump in the damage projection (live in Beasts: the list has one Craterhoof).
 2. **Batch I, Kaheera companion**: CR 702.139, "{3}: put your companion into your hand", sorcery speed,
    once per game, searched; viewer offer; teach `scripts/analyze_deck.py`'s coverage that a companion
    makes the sideboard card reachable. Draft `logs/beasts/drafts/kaheera.md`.
