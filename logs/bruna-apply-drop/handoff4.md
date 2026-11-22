@@ -76,6 +76,26 @@ Read `handoff3.md` and `handoff.md` in this directory for the history. This file
   s30051119 (7a targets), s30051968, s30051794 (7b targets), plus controls s30053757 and s30054069, into
   build/scratch/bad/r_ro2/<arm>/. DONE = `ALLDONE`.
 
+## RESULTS of the two jobs (05:00-05:30 UTC; both DONE, nothing of agent 4's is still running)
+- **fix4 (685d4eb75) built rc=0** -> build/scratch/bad/fix4/{mtg,mtg-test}; Bruna units pass.
+- **THE MEMO NEVER ENGAGES:** in every verify run (edfd0 200 games, edf 20, jumbo 40, sead0 2000, sea 40, bruna 40)
+  `[pay-memo] AuraHostHoldKeepsLine hits=0`, misses=0 (jumbo: misses=2). VERIFY_MISMATCH=0 everywhere, trivially. So
+  `paymemo::AuraHoldScopeFor` returns nullptr for nearly every walk: either the walk's `state`/`cands` are not the
+  innermost scope's objects (SubsetPayableSequential may walk a copy, or run outside an enumeration scope), or
+  `ctx.Same()` fails at walk entry (an enclosing LineUnpaidCostScope, e.g. SubsetPayableAsExecuted ->
+  SubsetPayableWithFilters, changes g_line_unpaid_cost). fix4 is therefore play- AND CPU-identical to fix3 in effect.
+  NEXT (step 1 replaced): add bypass-reason counters to AuraHoldScopeFor (no scope / s mismatch / acts mismatch /
+  ctx mismatch), and trace which caller reaches SeqWalkFixedOrder at the Aura step (callgrind caller tree in
+  cg/d0on.cg: SeqWalkFixedOrder's callers). Then re-key. One option is a per-thread memo keyed on the walk's
+  `state` POINTER + a BoardHash/BoardsEqual check (boardid::BoardsEqual, src/ai/BoardIdentity.h) + the AuraWalkKey
+  + the scope-independent payment globals. Another is to open a paymemo::Scope where those walks are issued. Decide
+  this before the fix4 A/B; do not run ab4 on fix4 as built.
+- **Rule-override repros (bruna-ro e4fd2d3c7, binary build/scratch/bad/ro2/; per-run files r_ro2/<arm>/):** Bruna units
+  50/50 pass (incl. the crit-lever test). APPLY-DROP off / 7a (BEHIND_DORKS) / 7b (LAND+OPENER):
+  s30051257 T2 8 / **0** / 8; s30051119 T2 3 / **0** / 3; s30051968 T2 3 / 3 / **0**; s30051794 T4 20 / 15 / **0**;
+  controls s30053757 0/0/0, s30054069 3/3/3. Each lever fixes its own targets; off = the fix12/fix3 residue exactly.
+  Next for 7a/7b is the all-deck measurement (step 6). REPORT ONLY.
+
 ## What remains, in order
 1. **fix4 verify** (job 630157): every VERIFY_MISMATCH must be 0 and the AuraHostHoldKeepsLine memo must hit. If any
    mismatch shows up, find the input the key misses, and fix the key or bypass that case. If the hit rate is low,
