@@ -170,6 +170,12 @@ main-2 Browbeat, exactly like every other attacker; whether to attack at all is 
 exemption, unchanged by this batch.
 
 ## CHECKPOINT (orchestrator, updated 2026-11-21 ~22:10 UTC) — resume here after compaction
+**2026-11-22 ~07:50 UTC: the USER reloaded VSCode ~06:30-07:45; it killed every process (rebuild, 3 agents + their
+builds, the viewer).** Restarted: viewer (primary, MDT_REFERENCE_BACKUP_DIR set; log build/scratch/cb-orch/viewer.log);
+landing5/rebuild.sh (PID 5322, incremental build + unit + scen of HEAD fc57da098+, marker landing5/BUILT2). The lost
+agents' uncommitted edits were committed as WIP (cb-scry d9982edbf UNBUILT, cb-unearth a313b8e48 UNBUILT) and three new
+Opus agents resumed from those + bbgap-handoff.md. Next unchanged: BUILT2 -> join -> under hold: smoke, scoped
+regression, accepts -> land.
 DONE: Stages 1-5 + verify_deck GATE PASS; Browbeat fold DEFAULT OFF (measured); USER's 10 references committed;
 LANDED 5a07c3df3 16:01 UTC (CI green). Since then, local (rebased onto origin 42d819bc0, unpushed):
 * 2352c2241 manual tap-ping in human play (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot
