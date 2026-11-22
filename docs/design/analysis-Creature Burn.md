@@ -194,7 +194,8 @@ origin d0d5f8463 (opponent_land_entry stamp + --legacy-opponent-land-entry), ano
 But origin then moved to f9a59b8a7 (periodic overnight accept, burn damage order, Merfolk gate, ...) -> rebased again
 04:45 UTC, DROPPING my two GT commits (regenerate under the rebased binary; backup/cb-pre-rebase4 holds them);
 HeuristicArm.h conflict = both appended a slot (kept both). RUNNING: build_chain landing5 (PID 323234; build, unit,
-scen; status landing5/status, marker landing5/BUILT) outside the lease. THEN: join; under `hold`: fetch (rebase +
+scen; status landing5/status, marker landing5/BUILT) outside the lease. ADDED f7daf7049 (USER: fold Fireblast's Mountain pairs like the other
+burn decks) after the build started -> after BUILT: incremental ./build.sh + unit again, then join. THEN: join; under `hold`: fetch (rebase +
 incremental rebuild if origin moved), smoke -> expect ONLY Magma Jet decks to move -> accept; scoped regression
 creatureburn,creatureburn2hg,midrangeburn,midrangeburn2hg (+ any other Magma Jet deck smoke moved) -> accept; check_gt_logs;
 refs --only Creature_Burn,Midrange_Burn; land; CI watch.
