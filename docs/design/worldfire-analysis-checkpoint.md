@@ -194,4 +194,5 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 - The "two Worldfire settings" were the viewer-audit INERT_PARAMS entries (no human-play choice), approved 2026-11-21.
 
 ## Open USER questions (defaults taken)
-- 1c4 (next-drop tier after this turn's land), 1c5 (Mystical Tutor free {U}).
+- NONE. 1c4 (next-drop tier after this turn's land) and 1c5 (Mystical Tutor free {U}) are AGENT readings, not USER
+  questions (USER 2026-11-22: stop raising items not blocked on the USER): keep them; the follow-up A/B may test them.
