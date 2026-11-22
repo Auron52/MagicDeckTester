@@ -402,42 +402,59 @@ inline bool AnnihilatorWouldKeepPermanent(const GameState& state, int total)
 }
 
 // UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn AND the deck's lock trait, GameState::deck_has_free_turn) the cleanup
-// keeps the flood hurdle's floor: it still sheds the oldest card, except that a shed may not take the hand below
-// kCleanupNonlandFloor (2) nonlands (CountHandSides) -- then it sheds the oldest card whose loss keeps the nonland
-// count, i.e. the oldest land (CleanupShedIndex). Plain oldest-first shed the opening hand's nonlands -- the two the
-// hurdle guarantees -- once one of OUR cards grew the opponent's hand past seven (Goblin Guide's reveal, Howling
-// Mine, Horn of Greed), so a land-heavy list kept a hand of lands only and "locked" with no lock card in play
-// (Burn s3664 gi661 vs Galadriel). The opponent never casts and a land drop takes only lands, so with the floor
-// its nonlands fall below two only to one of OUR effects (the USER's "the opponent needing to show that they can
-// remove things"). The floor binds only in that case, so the opponent's land development is otherwise untouched
-// (an unconditional lands-first shed measured as moving long games of nearly every deck: it discards the lands
-// the opponent would have played). Off the rule, and for every deck without the lock trait: oldest first, as ever.
-inline constexpr int kCleanupNonlandFloor = 2;
-inline int CleanupShedIndex(const std::vector<Card>& hand, bool keep_floor)
+// discards the MORE COMMON kind (USER 2026-11-22: "The opponent should discard whichever is more common between lands
+// and nonlands including hand and field I suppose. (not counting the creature tokens) That should avoid any weirdness
+// as we will try to keep the thing we might be missing."). Before EVERY discard: count lands vs nonlands over the
+// head's hand AND its battlefield (creature tokens excluded); an MDFC in hand joins the smaller side (CountHandSides'
+// rule, ties to nonland). Discard the OLDEST hand card of the more common kind; an exact tie discards a LAND (agent
+// default, the earlier lands-first order; surfaced to the USER). A kind with no plain card in hand falls to the oldest
+// MDFC, then to the oldest card. Replaces the two-nonland floor (a46be7cb2) and the lands-first order (9791b0c70).
+// Plain oldest-first shed the opening hand's nonlands once one of OUR cards grew the opponent's hand past seven
+// (Goblin Guide's reveal, Howling Mine), so a land-heavy list kept a hand of lands only and "locked" with no lock card
+// in play (Burn s3664 gi661). Off the rule, and for every deck without the lock trait: oldest first, as ever.
+inline int CleanupShedIndex(const GameState& state, const std::vector<Card>& hand, int head, bool by_kind)
 {
-    if (!keep_floor || hand.empty()) { return 0; }
-    const int before = CountHandSides(hand).nonlands;
-    const int need = std::min(kCleanupNonlandFloor, before);
-    if (CountHandSides(hand, 0).nonlands >= need) { return 0; }
-    for (int i = 1; i < static_cast<int>(hand.size()); ++i)
-    { if (CountHandSides(hand, i).nonlands >= need) { return i; } }
-    return 0;   // every shed costs a nonland (a hand of over seven nonlands): the floor cannot bind
+    if (!by_kind || hand.empty()) { return 0; }
+    int lands = 0, nonlands = 0, mdfcs = 0;
+    for (const Card& c : hand)
+    {
+        if (IsSpellLandMdfc(CardDatabase::Instance().LookupCached(c))) { ++mdfcs; }
+        else if (HandCardIsLandFront(c)) { ++lands; }
+        else { ++nonlands; }
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (!HeadControls(p, head)) { continue; }
+        if (p.card.IsLand()) { ++lands; }
+        else if (p.is_token && p.card.IsCreature()) { continue; }   // "not counting the creature tokens"
+        else { ++nonlands; }
+    }
+    for (; mdfcs > 0; --mdfcs) { if (lands < nonlands) { ++lands; } else { ++nonlands; } }
+    const bool shed_land = lands >= nonlands;   // tie -> a land (agent default)
+    int mdfc_at = -1;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        const Card& c = hand[static_cast<std::size_t>(i)];
+        if (IsSpellLandMdfc(CardDatabase::Instance().LookupCached(c))) { if (mdfc_at < 0) { mdfc_at = i; } continue; }
+        if (HandCardIsLandFront(c) == shed_land) { return i; }
+    }
+    return mdfc_at >= 0 ? mdfc_at : 0;
 }
 inline void EndOfTurnCleanup(GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return; }
     Player& opp = state.players[1];
-    const bool keep_floor = FreeTurnHurdlesOn() && state.deck_has_free_turn;
+    const bool by_kind = FreeTurnHurdlesOn() && state.deck_has_free_turn;
     while (opp.hand.size() > 7)
     {
-        const int at = CleanupShedIndex(opp.hand, keep_floor);
+        const int at = CleanupShedIndex(state, opp.hand, 1, by_kind);
         opp.graveyard.push_back(opp.hand[static_cast<std::size_t>(at)]);
         opp.hand.erase(opp.hand.begin() + at);
     }
     // The second head discards the same way (into no modelled zone: nothing reads it).
     while (state.opponent2_hand.size() > 7)
     {
-        const int at = CleanupShedIndex(state.opponent2_hand, keep_floor);
+        const int at = CleanupShedIndex(state, state.opponent2_hand, 2, by_kind);
         state.opponent2_hand.erase(state.opponent2_hand.begin() + at);
     }
 }

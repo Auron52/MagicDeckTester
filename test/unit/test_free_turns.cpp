@@ -438,16 +438,16 @@ TEST_CASE("free turns: the lock trait arms only on a card that can strip ALL lan
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Captivating Vampire" })));
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Neheb, the Worthy" })));
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "White Orchid Phantom" })));
-    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Acidic Slime" })));
-    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Fulminator Mage" })));
-    CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Kiora Bests the Sea God" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Acidic Slime" })));   // one-land removal: IN (USER 2026-11-22)
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Fulminator Mage" })));   // one-land removal: IN (USER 2026-11-22)
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Kiora Bests the Sea God" })));   // one-land removal: IN (USER 2026-11-22)
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({})));
     // The SIDEBOARD counts only when a main-deck wish can reach it: Vampires' wishless sideboard Worldfire is out.
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Captivating Vampire" }, { "Worldfire" })));
     CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Living Wish" }, { "Emrakul, the Aeons Torn" })));
 }
 
-TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands (the flood hurdle's floor)")
+TEST_CASE("free turns: under the rule the opponent's cleanup discards the more common kind (hand + field)")
 {
     auto overfull = [] {
         GameState s = FtFresh();
@@ -468,9 +468,10 @@ TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands 
         GameState s = overfull();
         s.players[1].hand.insert(s.players[1].hand.begin(), FtCard("Rift Bolt", 100003));   // 10 cards, 3 nonlands
         opponentdeck::EndOfTurnCleanup(s);
-        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Rift Bolt", "Mountain", "Mountain" });
+        // 8 lands (7 in hand + 1 in play) vs 3 nonlands (the MDFC joins the smaller side): three lands go.
+        CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Mountain", "Mountain", "Mountain" });
     }
-    {   // ON: at the floor, the two oldest LANDS go; the spells stay (the MDFC joins the smaller, nonland side), so no lock.
+    {   // ON: lands are the more common kind, the two oldest LANDS go; the spells stay (the MDFC joins the smaller, nonland side), so no lock.
         FtScope f(1);
         GameState s = overfull();
         opponentdeck::EndOfTurnCleanup(s);
@@ -494,7 +495,7 @@ TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands 
     }
 }
 
-TEST_CASE("free turns: 2HG -- the second head's cleanup keeps the floor too")
+TEST_CASE("free turns: 2HG -- the second head's cleanup discards the more common kind too")
 {
     FtScope f(1);
     GameState s = FtFresh(2);
@@ -765,5 +766,42 @@ TEST_CASE("free turns: MTG_OPP_BOUNCE_OPENING -- the bounceland opening rule in 
         const std::vector<std::string> kb = FtNames(k.players[1].hand);
         freeturn::ApplyOpeningHurdles(k);
         CHECK(FtNames(k.players[1].hand) == kb);
+    }
+}
+
+TEST_CASE("free turns: cleanup by kind -- the field counts, creature tokens do not, a tie sheds a land")
+{
+    FtScope f(1);
+    GameState s = FtFresh();
+    // 4 nonlands + 4 lands in hand, nothing in play: a tie -> the oldest LAND (agent default).
+    s.players[1].hand = { FtCard("Lightning Bolt", 100001), FtCard("Mountain", 100002), FtCard("Ponder", 100003),
+                          FtCard("Mountain", 100004), FtCard("Lightning Bolt", 100005), FtCard("Mountain", 100006),
+                          FtCard("Ponder", 100007), FtCard("Mountain", 100008) };
+    {
+        GameState t = s;
+        opponentdeck::EndOfTurnCleanup(t);
+        CHECK(FtNames(t.players[1].graveyard) == std::vector<std::string>{ "Mountain" });
+        CHECK(t.players[1].graveyard.front().m_number == 100002);
+    }
+    {   // Two nonland permanents in play: 4 lands vs 6 nonlands -> the oldest NONLAND goes.
+        GameState t = s;
+        FtOppPerm(t, "Sol Ring", 100020);
+        FtOppPerm(t, "Sol Ring", 100021);
+        opponentdeck::EndOfTurnCleanup(t);
+        CHECK(t.players[1].graveyard.front().m_number == 100001);
+    }
+    {   // Creature TOKENS do not count: two token bodies leave the tie -> a land.
+        GameState t = s;
+        FtOppPerm(t, "Goblin Guide", 100030);
+        FtOppPerm(t, "Goblin Guide", 100031);
+        for (Permanent& p : t.battlefield) { if (p.controller_index == 1) { p.is_token = true; } }
+        opponentdeck::EndOfTurnCleanup(t);
+        CHECK(t.players[1].graveyard.front().m_number == 100002);
+    }
+    {   // Off the rule: oldest first.
+        FtScope off(0);
+        GameState t = s;
+        opponentdeck::EndOfTurnCleanup(t);
+        CHECK(t.players[1].graveyard.front().m_number == 100001);
     }
 }
