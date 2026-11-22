@@ -45,3 +45,9 @@ The PGO sample's slowest 1% accounted for 16.1% of time; its maximum was
 size-seven compositions alone projects to about 3.4 hours. A full profile
 adds the floor's second rollout, refinement, and smaller-hand tables, so this
 sample does not estimate its total time.
+
+A 15-second low-frequency `perf` sample during the PGO scout found no single
+dominant engine function. The largest exclusive samples were `CollectActions`
+(4.3%), `BuildSimKeyBase` (3.7%), plan enumeration (3.0%), and `memmove`
+(2.6%); `WorldfireKeepRank::Of` was 1.9%. The cost is spread across search
+work, so a small local rewrite is unlikely to change the generation bill.
