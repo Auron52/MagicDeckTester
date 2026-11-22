@@ -2145,7 +2145,17 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
   (15.3 s CPU). The unfixed binary gives 191,319 units, the same digest `ae8cb12829df6b22` and a byte-identical game
   log (runId aside); the 4 units are a not-wide node's skipped pass 0. So the Grim prune costs this game a TURN (T8 vs
   T7). That is a play result for the USER's B12 decision, not a perf one.
-- **Smoke** (THREADS=4 while the A/B, the Stage 4 analyzer and `rec8` ran): see below.
+- **Other stalled A/B games, same binary:** `bs_d5_grimgate8` gi 319: wt 8, 131,079 units, 43 s. `bs_d5_rws0`
+  (`MTG_BLOODSUN_ROUND_WIN_STOP=0`) gi 69, still running at 3.8 h in the A/B: wt 8, 406,936 units, 205 s. With
+  the pass ceiling off it gives the same units and digest. With the probe off it was still running at 10.5 min and I
+  killed it. So it is very likely the same node; no gdb was run on it.
+- **Not the budget, the line:** the same game with the Grim prune at `--depth 8 --budget-ms 0` (`perf2/rec8`) wins T5
+  in 7,894 units. It never reaches the T8 extra-turn board, and that board is what the crossing node degenerates on.
+  Nothing in the node is budget-specific: at an unlimited budget its pass 0 is just as unbounded, and the probe is
+  inert to the budget.
+- **Smoke** (THREADS=4 while the Stage 4 analyzer and `rec8` ran): 235 / 235 jobs, **0 moved** by digest vs
+  `impl7/smoke-step7-batch.log` (saved as `perf5/smoke-perf5-batch.log`). Scenarios 655 / 655. The 8 GT FAILs against
+  origin GT are the step-7 tree's (same digests). Unit 3,861 / 3,861.
 - **Open:** (a) a WIDE crossing node's pass 0 is still unbounded. Bounding it changes play at the shipped budget (pass
   0 always stands) and would need a USER call and a held-out A/B. (b) `CrossingLandUncoveredPending` could also be
   false when the crossing is into our own extra turn and only Burgeoning asks. That is a sharper predicate, but it
