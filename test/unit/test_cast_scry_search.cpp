@@ -111,22 +111,37 @@ TEST_CASE("cast-scry search: Magma Jet's scry 2 is twinned per disposition, and 
         REQUIRE(lib.size() == exec.players[0].library.size());
         REQUIRE(lib.size() == initial.players[0].library.size());
         for (std::size_t i = 0; i < lib.size(); ++i) { CHECK(lib[i].m_number == exec.players[0].library[i].m_number); }
-        if (jet->scry_pin < 0)
-        {   // the provider's disposition (candidate 0): both nonlands kept on top, in look order
-            CHECK(lib[0].m_number == 5120);
-            CHECK(lib[1].m_number == 5121);
-        }
-        else
-        {   // candidate 1 = the first OTHER disposition in EnumerateTopDispositions order: all to the bottom
-            CHECK(lib[0].m_number == 5130);
-            CHECK(lib[lib.size() - 2].m_number == 5120);
-            CHECK(lib[lib.size() - 1].m_number == 5121);
+        // THE WHOLE FAN (no width cap, USER 2026-11-22): candidate 0 is the provider's disposition, then every other
+        // disposition in EnumerateTopDispositions order -- {}, {Browbeat}, {Fireslinger}, {Fireslinger, Browbeat}.
+        const std::size_t n = lib.size();
+        switch (jet->scry_pin)
+        {
+        case -1: CHECK(lib[0].m_number == 5120); CHECK(lib[1].m_number == 5121); break;   // both kept, look order
+        case 1:  CHECK(lib[0].m_number == 5130); CHECK(lib[n - 2].m_number == 5120); CHECK(lib[n - 1].m_number == 5121); break;
+        case 2:  CHECK(lib[0].m_number == 5120); CHECK(lib[1].m_number == 5130); CHECK(lib[n - 1].m_number == 5121); break;
+        case 3:  CHECK(lib[0].m_number == 5121); CHECK(lib[1].m_number == 5130); CHECK(lib[n - 1].m_number == 5120); break;
+        case 4:  CHECK(lib[0].m_number == 5121); CHECK(lib[1].m_number == 5120); break;
+        default: FAIL("unexpected scry_pin ", static_cast<int>(jet->scry_pin));
         }
         ++checked;
     }
-    CHECK(pins.count(-1) == 1);
-    CHECK(pins.count(1) == 1);
-    CHECK(checked >= 2);
+    // A two-card look has five dispositions: the base plus four pinned twins, sized off the look COUNT alone.
+    CHECK(pins == std::set<int>{ -1, 1, 2, 3, 4 });
+    CHECK(checked >= 5);
+}
+
+TEST_CASE("cast-scry search: a one-card look is the full two-option fan")
+{
+    GameState s = JetBoard();
+    Library one;
+    one.push_back(CardCs("Browbeat", 5120));
+    s.players[0].library = one;
+    std::set<int> pins;
+    for (const auto& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions) { if (a.card_name.str() == "Magma Jet") { pins.insert(a.scry_pin); } }
+    }
+    CHECK(pins == std::set<int>{ -1, 1 });
 }
 
 TEST_CASE("cast-scry search: an empty library emits no twin (nothing to look at)")

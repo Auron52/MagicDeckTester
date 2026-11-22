@@ -1082,6 +1082,10 @@ enum Slot : int
     LAVAMANCER_TARGET_PRUNE,  // MTG_LAVAMANCER_TARGET_PRUNE  Grim Lavamancer's ping (gy-exile mode 3) targets only the OPPONENT and opponent-controlled creatures / planeswalkers in autonomous play (Midrange Burn / 1 Drop Burn GraveyardDamageTargetCandidates; USER 2026-11-21: "This indeed should be pruned. In fact everything but the opponent should be pruned."). Human play and MTG_UNPRUNE=fixedburntarget keep every target. DEFAULT ON; =0 -> every legal target
     FIREBLAST_COPY_PINS,      // MTG_FIREBLAST_COPY_PINS  two Fireblast alternative casts whose pinned Mountains overlap are one physically impossible selection (SubsetHasDuplicateSacSource kDupFireblast; the apply silently dropped the second), and under a provider's one-pair fold each further Fireblast copy is pinned to the best pair DISJOINT from the earlier copies' pins, so two Fireblasts on four Mountains stay findable. Sound (rejects only selections no order can pay). DEFAULT ON; =0 -> the pre-2026-11-21 shared pins
     CAST_SCRY_SEARCH,         // MTG_CAST_SCRY_SEARCH  a DirectDamage spell's own scry (Magma Jet's cast_scry) is SEARCHED: every cast is twinned per alternative disposition (Action::scry_pin, the step-9d mechanism), sized off the look count, the pin consumed by the spell's ScryTop in both worlds. USER 2026-11-17: every scry site is searched, then pruned by the provider (ScryVerdict). Creature Burn s6 gi5 / s8 gi7 references. Default ON; =0 -> the provider's single pick, byte-identical to before
+    BURN_SCRY_PICK,           // MTG_BURN_SCRY_PICK   Creature Burn / Midrange Burn: candidate 0 of Magma Jet's searched scry is the burnscry rule (impact + castability: lands vs the hand's land goal counting lands in HAND, cheap burn kept, a crowded slot bottomed; USER 2026-11-22) instead of the generic "keep nonlands, a land below two in play". Not a prune. Default ON; =0 -> the generic pick
+    BURN_SCRY_FIRM,           // MTG_BURN_SCRY_FIRM   ...its FIRM verdicts (ScryVerdict, a lossy prune of the fan): a one-mana 3-damage burn spell always stays on top; a land two beyond the land goal (no Figure of Destiny) always goes to the bottom. Default ON; =0 -> no verdict
+    SCRY_LEGACY_WIDTH2,       // MTG_SCRY_LEGACY_WIDTH2  MEASUREMENT ONLY (the 2026-11-22 width-removal A/B; deleted in the commit after): the deleted MTG_SCRY_WIDTH=2 cap at the three scry fans and no same-name fold, i.e. the pre-change engine
+    BURN_SCRY_ORDER,          // MTG_BURN_SCRY_ORDER  ...its ORDER prune (ScryKeptOrder, lossy): a kept set is offered in the rule's draw order only (needed land first, castable spells, recurring damage, cheaper first). Default ON; =0 -> every order searched and the pick keeps look order
     COUNT
 };
 
@@ -2108,6 +2112,10 @@ inline const char* Name(int slot)
         "MTG_LAVAMANCER_TARGET_PRUNE",
         "MTG_FIREBLAST_COPY_PINS",
         "MTG_CAST_SCRY_SEARCH",
+        "MTG_BURN_SCRY_PICK",
+        "MTG_BURN_SCRY_FIRM",
+        "MTG_SCRY_LEGACY_WIDTH2",
+        "MTG_BURN_SCRY_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

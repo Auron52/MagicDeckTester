@@ -51768,9 +51768,45 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
         for (const Card& c : looked) { verdict.push_back(prov.ScryVerdict(state, c)); any |= verdict.back() >= 0; }
         if (!any) { verdict.clear(); }
     }
+    // THE IDENTITY FOLD (sound; every provider; scry / surveil only). Two dispositions that put the same NAMES on top
+    // in the same order and send the same names away in the same order leave an identical library and graveyard -- two
+    // Mountains in a scry 2 make "keep the first, bottom the second" and "keep the second, bottom the first" one line,
+    // and "both on top" in either order one more. EnumerateTopDispositions works on look INDICES, so those duplicates
+    // were separate candidates; with the fan open (no width cap, USER 2026-11-22) each would be its own searched twin.
+    // Only the alternatives fold (candidate 0 is untouched; the first index-order representative of a name pattern
+    // stays). Not for a reorder (the Ponder axes index that list; it is out of this change's scope).
+    const bool fold_names = (kind == LookKind::Scry || kind == LookKind::Surveil)
+                         && !heurarm::Flag(heurarm::SCRY_LEGACY_WIDTH2, false);   // MEASUREMENT ONLY
+    std::vector<std::vector<const void*>> seen_names;
+    auto name_key = [&](const TopDisposition& d) -> std::vector<const void*>
+    {
+        const int m = static_cast<int>(looked.size());
+        std::vector<const void*> key;
+        std::vector<char> top(static_cast<std::size_t>(m), 0);
+        for (int idx : d.top_order)
+        {
+            if (idx < 0 || idx >= m || top[static_cast<std::size_t>(idx)]) { continue; }
+            top[static_cast<std::size_t>(idx)] = 1;
+            key.push_back(&looked[static_cast<std::size_t>(idx)].m_name.str());
+        }
+        key.push_back(nullptr);   // separator: top sequence | away sequence (look order, as ApplyTopDisposition places it)
+        for (int i = 0; i < m; ++i)
+        { if (!top[static_cast<std::size_t>(i)]) { key.push_back(&looked[static_cast<std::size_t>(i)].m_name.str()); } }
+        return key;
+    };
+    if (fold_names) { seen_names.push_back(name_key(h)); }
+    // THE ORDER PRUNE (DecisionProvider::ScryKeptOrder; scry / surveil only): of the alternatives keeping one SET of
+    // two or more cards, only the provider's order of that set is offered. Default: no order is firm.
+    const DecisionProvider* order_prov = fold_names ? &ResolveProvider(state) : nullptr;
     for (const TopOption& o : EnumerateTopDispositions(kind, looked))
     {
         if (o.disp.shuffle == h.shuffle && o.disp.top_order == h.top_order) { continue; }
+        if (order_prov != nullptr && o.disp.top_order.size() >= 2)
+        {
+            std::vector<int> set = o.disp.top_order;
+            std::sort(set.begin(), set.end());
+            if (order_prov->ScryKeptOrder(state, looked, set) && set != o.disp.top_order) { continue; }
+        }
         if (!verdict.empty())
         {
             bool violates = false;
@@ -51782,6 +51818,12 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
                 violates = (verdict[i] == 1) != kept;
             }
             if (violates) { continue; }
+        }
+        if (fold_names)
+        {
+            std::vector<const void*> key = name_key(o.disp);
+            if (std::find(seen_names.begin(), seen_names.end(), key) != seen_names.end()) { continue; }
+            seen_names.push_back(std::move(key));
         }
         out.push_back(o.disp);
     }
