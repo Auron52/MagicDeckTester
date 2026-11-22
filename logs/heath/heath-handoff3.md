@@ -69,7 +69,9 @@ RUNNING:
 
 ## Next, in order
 1. When DONE_clair: report decoupled numbers (item 3) into the doc.
-2. When DONE_build: check unit.log passes (expect 3877/3877); commit heath-derived WIP; push `wip/heath-derived` only.
+2. DONE_build rc=0 (14:52). First unit run: 2 failures, both tests with an EMPTY library (Mill fetch proxy, CG C6), where the
+   library-derived hint is correctly empty; tests now get a library (committed). Rerun: r4/unit2.sh -> r4/unit2.log,
+   marker r4/DONE_unit2 (expect 3877/3877). r4/chain.sh started (base arm waiting on the box lock since 14:52).
 3. When DONE_ab: searched per deck FIRST, then d0, then CPU; d8 b0 every slower searched game (d8_manifest.py with
    r4/manifest_derived.json + detail file; run base arm with `r3/d8_arm.sh`-style script pointing at mtg.base/heath-base and
    derived at mtg.derived/heath-derived, lane 2 slots each). Root-cause any deck > 0 (first-divergence summary: see r3 python
