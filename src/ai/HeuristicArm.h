@@ -1089,6 +1089,7 @@ enum Slot : int
     PAY_LINE_CRIT_BEHIND_DORKS, // MTG_PAY_LINE_CRIT_BEHIND_DORKS  MEASUREMENT ONLY (overrides "no creature ever ranks ahead of any land"): a line-critical land ranks behind the creature band. Default OFF
     PAY_LINE_CRIT_UNTAPPER_LAST, // MTG_PAY_LINE_CRIT_UNTAPPER_LAST  MEASUREMENT ONLY, amendment to PAY_LINE_CRIT_BEHIND_DORKS (USER 2026-11-22 "7a ... along with the amendment"): a land-untapping creature (untap_target_land: Voyaging Satyr) is not one of the creatures a line-critical land ranks behind -- when it would win a pip only because a critical land was moved back, it pays after that land. Default OFF; read only with a crit lever
     PAY_LINE_CRIT_HASTE_SAC_LAST, // MTG_PAY_LINE_CRIT_HASTE_SAC_LAST  MEASUREMENT ONLY, amendment to PAY_LINE_CRIT_LAND (USER 2026-11-22 "7b. That seems fine"): a sacrifice-for-mana source whose mana carries a creature-spell rider (sac_for_mana_grants_haste: Generator Servant) is not sacrificed for a NONCREATURE cost only because a line-critical land was moved back -- it pays after that land. Default OFF; read only with a crit lever
+    D0_HASTE_SAC_CHARGE,      // MTG_D0_HASTE_SAC_CHARGE  MEASUREMENT ONLY (USER-owned, 7b follow-up 2026-11-22): the greedy (d0 / playout) plan score charges a plan that casts no creature spell the EvalCard of each sac_for_mana_grants_haste source (Generator Servant) its cost can only be paid by sacrificing. Default OFF
     COUNT
 };
 
@@ -2122,6 +2123,7 @@ inline const char* Name(int slot)
         "MTG_PAY_LINE_CRIT_BEHIND_DORKS",
         "MTG_PAY_LINE_CRIT_UNTAPPER_LAST",
         "MTG_PAY_LINE_CRIT_HASTE_SAC_LAST",
+        "MTG_D0_HASTE_SAC_CHARGE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

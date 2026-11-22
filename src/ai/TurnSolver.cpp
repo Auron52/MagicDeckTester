@@ -63354,6 +63354,27 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         for (std::size_t k = 0; k < bodies.size(); ++k)
         { pay_fodder_prefix[k + 1] = pay_fodder_prefix[k] + bodies[k].second; }
     }
+    // HASTE-ENABLER SAC CHARGE (MTG_D0_HASTE_SAC_CHARGE, MEASUREMENT ONLY, default OFF; USER-owned, the 7b follow-up
+    // 2026-11-22). A sacrifice-for-mana source whose mana carries a creature-spell rider (sac_for_mana_grants_haste:
+    // Generator Servant) is credited to the pool as plain mana, so a plan of noncreature casts that can only be paid
+    // by sacrificing it scored its casts and nothing for the enabler it spends. NivMizzetCombo d0 gi532 (seed 1310532)
+    // T3 {Izzet Signet, Brainstorm, Ponder}: Ponder was paid by the Servant and T4 had no hasty Niv (5 -> 7). So such a
+    // plan -- one that casts no creature spell (the rider would apply to it) -- is charged the enabler's EvalCard for each
+    // source its cost reaches. THE GREEDY's SCORE ONLY (d0 runner / playout), like the fodder charge above.
+    int haste_sac_units = 0;
+    std::vector<int> haste_sac_value;   // per live source, in battlefield order
+    if (D0HasteSacChargeOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.sac_for_mana_grants_haste || d->params.sac_for_mana_amount <= 0) { continue; }
+            if (d->params.sac_for_mana_requires_tap && !CanTapNow(p, state.battlefield)) { continue; }
+            haste_sac_units += d->params.sac_for_mana_amount;
+            haste_sac_value.push_back(EvalCard(*d, state));
+        }
+    }
     // ...AND THE BODIES THE SEARCHED OUTLET ACTION SACRIFICES (Skirk Prospector's / Utopia Mycon's own
     // SacForMana, single or burst -- the lever's OFF arm, a death-value board, a same-line spore pop). Same
     // price, same reason: the action's eval is 0 and its ritual_float credits the pool, so the subset scored
@@ -65148,6 +65169,23 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
             {
                 const int nb = static_cast<int>(sac_victim_prefix.size()) - 1;
                 total_eval -= sac_victim_prefix[static_cast<std::size_t>(std::min(nb, sacs))];
+            }
+        }
+        // ...and the haste enablers a noncreature plan's cost reaches (see haste_sac_value).
+        if (!wins && !haste_sac_value.empty())
+        {
+            bool casts_creature = false;
+            for (int j : sel)
+            {
+                const Action& ca = cands[static_cast<std::size_t>(j)];
+                if (ca.kind == Action::Kind::CastFromHand && !ca.is_noncreature) { casts_creature = true; break; }
+            }
+            const int short_by = combined.ManaValue() - ((credited ? eff : pool).Total() - haste_sac_units);
+            if (!casts_creature && short_by > 0)
+            {
+                const int per = std::max(1, haste_sac_units / static_cast<int>(haste_sac_value.size()));
+                const int n = std::min(static_cast<int>(haste_sac_value.size()), (short_by + per - 1) / per);
+                for (int k = 0; k < n; ++k) { total_eval -= haste_sac_value[static_cast<std::size_t>(k)]; }
             }
         }
         int rank_value = total_eval;

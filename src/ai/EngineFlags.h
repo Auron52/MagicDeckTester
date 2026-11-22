@@ -1093,6 +1093,13 @@ inline bool PayLineCritHasteSacLastOn()
     static const bool env_on = EnvOn("MTG_PAY_LINE_CRIT_HASTE_SAC_LAST");
     return heurarm::Flag(heurarm::PAY_LINE_CRIT_HASTE_SAC_LAST, env_on);
 }
+// MTG_D0_HASTE_SAC_CHARGE (MEASUREMENT ONLY, default OFF; USER-owned): TurnSolver::Solve's greedy plan score charges a
+// noncreature plan for each haste-rider sac source (Generator Servant) its cost must sacrifice (haste_sac_value).
+inline bool D0HasteSacChargeOn()
+{
+    static const bool env_on = EnvOn("MTG_D0_HASTE_SAC_CHARGE");
+    return heurarm::Flag(heurarm::D0_HASTE_SAC_CHARGE, env_on);
+}
 
 inline bool PayNarrowRestrictedFirstOn()
 {

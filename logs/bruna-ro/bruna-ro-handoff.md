@@ -32,7 +32,22 @@ branch; never phase-1-2-deck-analyzer). Read /workspaces/MagicDeckTester/CLAUDE.
 - rep1.sh: ro2 (old binary) repros in the lane: rep/j1447_{off,a}.* (Jumbo d0 seed 1311447 gi1447 T3),
   rep/n532_{off,b}.* (Niv d0 seed 1310532 gi532 T3). Output: build/scratch/claude_bruna_ro/rep/, logs in rep/<tag>.logs/.
 
-## Chain (launched 2026-11-22 ~14:20 UTC, PID 936334, setsid)
+## NEW LEVER (coordinator 2026-11-22, relaying: build to measure; adoption is the USER's call)
+MTG_D0_HASTE_SAC_CHARGE (default OFF; TurnSolver::Solve greedy score, next to the §2b fodder charge: `haste_sac_value`):
+a plan that casts no creature spell is charged EvalCard of each sac_for_mana_grants_haste source (Generator Servant) its
+cost can only be paid by sacrificing (cost > pool - Servant units). UNBUILT when written; no unit test yet (a Solve-level
+board is heavy) -- chain3 checks the real game gi532 (7b + charge 0/1) instead; WRITE a unit test if it fixes gi532.
+Coordinator: "Keep the narrow 7b-amended arm in the A/B as planned." New arms (Niv / Niv 2HG only, searched + d0):
+h = charge alone, bh = 7b + charge (mk_ab.py).
+
+## CURRENT CHAIN: chain3.sh (launched ~16:00 UTC, PID 1018227, setsid; chain2 was killed -- it never got the lock)
+box lock -> 200 s edit guard -> ./build.sh (build3.log; binaries bin3/) -> gi532 7b+charge 0/1 real-game check (lines
+"gi532 7b+charge=..." in chain3.log) -> units (units.txt) -> probe (probe/) -> A/B (ab/, 1810000, 1000/400/2000, arms
+off a aa b ba [+h bh on niv]) if probe ratio <= 1.6. Log build/scratch/claude_bruna_ro/chain3.log, last line DONE.
+Wait on it: `while kill -0 1018227 2>/dev/null; do sleep 60; done` (run_in_background), plus a 2-hourly CronCreate
+status timer (durable:false) if the run spans 12:30-20:00 UTC.
+
+## (old) Chain (launched 2026-11-22 ~14:20 UTC, PID 936334, setsid) -- KILLED, superseded by chain3
 build/scratch/claude_bruna_ro/chain2.sh: waits for build1 DONE -> units (units.txt) -> box lock -> cost probe (probe/, off
 arm, 25 g per searched shape, seed base 1790000) -> if probe cost ratio <= 1.6 vs ro2: the FULL A/B
 (ab/m.json from mk_ab.py 1810000 1000 400 2000; output ab/ab.out, ab/wins/). Status log chain2.log, last line DONE.
