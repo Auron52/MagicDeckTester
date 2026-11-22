@@ -7,6 +7,13 @@
    "id": "8854e545ddab:bloodsun-analysis",
    "joined": "2026-11-22T21:28:56Z",
    "note": "Blood Sun landing and viewer setup"
+  },
+  {
+   "branch": "phase-1-2-deck-analyzer",
+   "host": "a7c2d36c718e",
+   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
+   "joined": "2026-11-22T21:29:54Z",
+   "note": "Creature Burn final validation and fast mulligan profile"
   }
  ]
 }
