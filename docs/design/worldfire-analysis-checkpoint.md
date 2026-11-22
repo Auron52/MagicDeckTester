@@ -48,6 +48,7 @@ Follow-up cantrip A/B (USER 1b/1c list below); re-measure the Worldfire budget c
 (USER Q16: optimize first); write the LTB owed items into a deferred doc; Stage 6 report.
 
 ### USER ruling 2026-11-22 ~12:00 UTC on the fairness checks (ANSWERED -- build it; no open USER decision remains)
+USER clarification later on 2026-11-22, VERBATIM: *"the fairness rule for sire should only count nonland permanents. It's an underestimation of the lockdown capabilities of the card and the board, but that's okay for this mode."* Sire's virtual deployable-card test therefore counts castable **nonland permanent** cards only: creatures, artifacts, enchantments, and planeswalkers, including combinations; exclude lands and nonpermanent spells. Keep the deliberate underestimation documented. This refines the Sire instruction below without changing annihilator's separate no-land-turn exception.
 VERBATIM: *"I think we should do the fairness rule you mentioned for annihilator and sire, but for annihilator with
 multiple attacks it should always be possible to get a lock on turns when they don't play a land."*
 So: Sire-fair (MTG_FREE_TURN_SIRE_FAIR or its actual name) and annihilator-fair (MTG_FREE_TURN_ANNIHILATOR_FAIR) go
