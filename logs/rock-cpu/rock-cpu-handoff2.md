@@ -60,6 +60,8 @@ ln -sf $S/ab2/logs_A/* $S/ab2/logs_C/* $S/ab2/logs_D/* ab2/logs_ACD/; python3 cm
 Then d8 b0: the price is inert at b0, so its slower games recover by construction (the d8_ab2 manifest includes two
 price games as a check).
 
+## Progress 14:50 UTC: d8_ab2 DONE, all recovered (doc). run2.sh still waiting for the box lock (since 13:31).
+
 ## Next, in order
 1. When `status` shows `batchA`: `cd .../claude_rock_cpu && for a in poff pnt price; do python3 cmp.py ab2/A.out ab2/logs_A def $a --list > ab2/cmp_$a.txt; done`
    For price05: `cat ab2/A.out ab2/B.out > ab2/AB.out; mkdir -p ab2/logs_AB; ln -sf $PWD/ab2/logs_A/* $PWD/ab2/logs_B/* ab2/logs_AB/;

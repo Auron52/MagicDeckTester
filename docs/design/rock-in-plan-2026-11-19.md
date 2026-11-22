@@ -385,3 +385,11 @@ sampled game had the same outcome and digest as def, so these ratios are per-uni
 The batch's thread-CPU ratios for the price arm (extraturns 0.876, hinata 1.198) do not agree with these counts
 (0.991, 1.000), so I read them as shared-box timing noise, not as a cost. On Extra Turns the price left all 1,500 games
 byte-identical (the same digests), so it can only have trimmed search that did not change any choice. `ab2/perf/`.
+
+### d8 b0 replays of the A/B's slower games (lane, `ab2/d8_ab2.json`, `logs_d8_ab2/`)
+
+**Every one recovers, byte-identically**: at `--depth 8 --budget-ms 0` each cut arm plays the SAME game as def (same
+win turn, same digest): poff niv 352 T4, 871 T5, 1346 T4, hinata 975 T5; pnt niv 871 T5, hinata 975 T5; and the
+two price checks (niv 360 T4, hinata 141 T4: the price is inert at b0, as built). None hit the unit cap (the longest,
+niv 871, ran ~3.4 M units and ~7-9 min per arm). The 23 per-call-price slower games recover by construction (the price
+never reads a budget at b0); only the two above were replayed as a check.
