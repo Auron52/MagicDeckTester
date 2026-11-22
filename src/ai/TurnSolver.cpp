@@ -76721,13 +76721,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // MANA ORACLE (ManaOracle.h): on the oracle's own copy the tap-ahead is the oracle's choice --
             // every set of sources to tap ahead is a scripted step -- not this heuristic's. Null elsewhere.
             const bool oracle_owns = manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target;
+            // A failed untap-ritual payment rolls its tap-ahead back (TapAheadUndo; executor twin: CastSpellFromHand).
+            TapAheadUndo _tau;
             // (An oracle ENGINE step -- the rollback census -- runs the heuristic as an unhooked apply does.)
             if (def.params.untap_x_mana_sources)
             {
+                _tau.Run(state, state.active_player_index, [&]
+                {
                 if (oracle_owns && !manaoracle::TakeEngineStep(state, chosen_x)
                     && manaoracle::ScriptedTapAhead(state, chosen_x, /*lands_only=*/false)) {}
                 else
                 { manaoracle::EngineStepScope _es(state, oracle_owns); RitualTapAheadIntoFloat(state, chosen_x); }
+                });
             }
             if (def.params.etb_untap_lands > 0)
             {
@@ -76849,12 +76854,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!paid_ok && cast_haste_from_mana) { UndoHasteFloatTake(state); cast_haste_from_mana = false; }
             if (paid_ok)
             {
+                _tau.Commit();
                 _cv.Commit();
                 if (g_convoke_tap_record != nullptr && g_apd_depth == g_convoke_record_depth)
                 { _cv.RecordInto(*g_convoke_tap_record); }   // the viewer's convoke labels (item D)
             }
             if (!paid_ok)
             {
+                _tau.Restore();   // the board and float as before the tap-ahead (TapAheadUndo)
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
                 if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
                 // SERVER-TRUTH RESOLUTION: a declared cast that can't be paid is dropped (left in hand).

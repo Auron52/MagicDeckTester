@@ -11320,9 +11320,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // ritual (lockstep twin of the rollout apply's call -- see RitualTapAheadIntoFloat).
         // `available` EXCLUDES floating, so the pre-computed snapshot would double-count the
         // just-tapped sources for the remainder of this one payment; re-derive it.
+        // A failed untap-ritual payment rolls its tap-ahead back (TapAheadUndo; rollout twin: apply_one).
+        TapAheadUndo _tau;
         if (def->params.untap_x_mana_sources && SpasmUntapLiteralOn())
         {
-            RitualTapAheadIntoFloat(state, chosen_x);
+            _tau.Run(state, state.active_player_index, [&] { RitualTapAheadIntoFloat(state, chosen_x); });
             {   // MTG_EXEC_TAP_TRACE: the tap-ahead's float (diagnosis only, default off)
                 static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
                 if (s_tr)
@@ -11437,6 +11439,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         if (!paid_ok && haste_from_mana) { UndoHasteFloatTake(state); haste_from_mana = false; }
         if (!paid_ok)
         {
+            if (_tau.Restore()) { available = AvailableManaPool(state); }   // the board the caller sees again
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
             if (!m_in_rollout) { m_real_drop_this_pass = true; }   // MTG_EXEC_DROP_REPLAN input
             // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).
@@ -11481,6 +11484,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             }
             return;
         }
+        _tau.Commit();  // the tap-ahead stands: the ritual is cast
         _cv.Commit();   // the convoke bodies stay tapped (and the event names them)
         // ...and the life half of a phyrexian payment, now that the mana half is committed
         // (CR 601.2h; lockstep twin of the rollout apply's deduction).

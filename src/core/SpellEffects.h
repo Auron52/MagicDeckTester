@@ -35331,6 +35331,63 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
     }
 }
 
+// A FAILED untap-ritual cast leaves NO trace (Blood Sun integration 2, 2026-11-22). RitualTapAheadIntoFloat runs
+// BEFORE the payment, so when the payment then fails (Reality Spasm's {U}{U} with one blue source left) the
+// tapped-ahead sources stayed tapped and their mana stayed FLOATING -- and that float is the engine's NET model of
+// a filter land (Cascade Bluffs counts as one free coloured mana with no {U/R} input), i.e. mana the real board
+// never had. A dropped cast is never RECORDED (the sink holds only what happened), so the executor's replay of the
+// committed line never taps ahead for it: the scoring world spent mana the played game did not have. Hinata
+// seed 2019 gi 17 (d8 b0): a nested-acquisition pass's canon continuation tried Spasm / Gamble / Preordain off a
+// lone Cascade Bluffs, all three failed, and the leaked float paid for the next section's Preordain, Ornithopter,
+// Spasm and the lethal Crackle -- a "verified" T4 kill the T1 search committed over the real one, which the
+// executor could not pay (T5). Snapshot the float and the sources the tap-ahead taps; restore both unless the
+// payment succeeds (Commit). Every exit of the cast branch after the tap-ahead is covered (RAII). Lockstep: both
+// ApplyPlanDirect's apply_one and AIEngine's CastSpellFromHand use it. Inert unless an untap ritual is cast.
+struct TapAheadUndo
+{
+    GameState*       st = nullptr;
+    ManaPool         fl;
+    std::vector<int> tapped;   // m_numbers the tap-ahead tapped
+    void Before(GameState& s, int active, std::vector<int>& untapped_out) const
+    {
+        untapped_out.clear();
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == active && !p.tapped) { untapped_out.push_back(p.card.m_number); } }
+    }
+    // Wrap the tap-ahead: `fn` runs it; what it newly tapped is remembered.
+    template <class Fn> void Run(GameState& s, int active, Fn&& fn)
+    {
+        std::vector<int> was_untapped;
+        Before(s, active, was_untapped);
+        const ManaPool before = s.floating_mana;
+        fn();
+        if (st == nullptr) { st = &s; fl = before; }   // the FIRST tap-ahead's float is the baseline
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active || !p.tapped) { continue; }
+            if (std::find(was_untapped.begin(), was_untapped.end(), p.card.m_number) != was_untapped.end())
+            { tapped.push_back(p.card.m_number); }
+        }
+    }
+    void Commit() { st = nullptr; tapped.clear(); }
+    // Undo now (true if there was a tap-ahead to undo); the destructor is the same call.
+    bool Restore()
+    {
+        if (st == nullptr) { return false; }
+        st->floating_mana = fl;
+        for (Permanent& p : st->battlefield)
+        {
+            if (std::find(tapped.begin(), tapped.end(), p.card.m_number) != tapped.end()) { p.tapped = false; }
+        }
+        Commit();
+        return true;
+    }
+    ~TapAheadUndo() { Restore(); }
+    TapAheadUndo() = default;
+    TapAheadUndo(const TapAheadUndo&) = delete;
+    TapAheadUndo& operator=(const TapAheadUndo&) = delete;
+};
+
 // --- Blink ("exile another target creature, then return it to the battlefield") -----------------
 // Eldrazi Displacer "{2}{C}:" (any creature, returns TAPPED) and Emiel the Blessed "{3}:" (a
 // creature YOU CONTROL, returns untapped). Neither cost contains {T}, so a summoning-sick outlet
