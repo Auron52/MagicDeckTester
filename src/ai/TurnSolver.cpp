@@ -118186,6 +118186,77 @@ std::vector<std::pair<int, std::string>> TurnSolver::UpkeepLandBoundaryForTest(c
     }
     return out;
 }
+namespace {
+// THE CROSSING NODES' WIDTH PROBE (same perf part 5; MTG_CROSSING_WIDTH_PROBE, DEFAULT ON, =0 the old order of work).
+// The seven BoundaryFan nodes below return "nothing to decide" (-2) when no crossing of their pass-0 fan carries a pin
+// (`if (!wide) return -2`), and `wide` is a property of the CROSSINGS alone: every digit's width is learned inside
+// BoundaryFan::Cross (the probes it installs), the fan's odometer advances on those widths only, and the pin is read
+// right after the crossing -- no rollout result feeds either. So the node can answer "not wide" from the crossings
+// before it runs any rollout. An IDENTITY: the same fan (same arguments, same state) walked in the same order gives
+// the same `wide`; when it is wide the probe is discarded and the deepening below runs unchanged; when it is not, the
+// node returns exactly what its pass 0 returned, minus pass 0's rollouts, whose answers nothing read. Not a budget
+// matter at all (inert at every budget, including none). The game that needed it: seed 910319 gi 319 d5 b20 with
+// MTG_BLOODSUN_GRIM_PRUNE=1 -- the real T8 is an extra turn with 3 more pending, Burgeoning out and lands in hand, so
+// CrossingLandUncoveredPending is live (it cannot see that the next turn is our own extra turn, where no opponent land
+// play asks Burgeoning anything); the crossing observed no ordinal (cl_nobs_ 0), yet ChooseRealCrossingLands' pass 0
+// rolled the horizon round's extra-turn chain out in full (no ceiling: not a decision root) -- 1.4M units after
+// ~4 min, still running hours later -- to return -2.
+// WHY ONLY THE LANDS NODE BY DEFAULT. AIEngine::DecideCrossingFetch runs the seven nodes in a row on ONE DecisionBudget
+// (Fetch, Reanimate, Land, Horn, UpkeepLegend, FaceUp, Lands). The probe is an identity for the node itself, but the
+// units a skipped pass 0 would have spent are units the LATER nodes then still have, so a later wide node may complete
+// a deeper pass it used to break before: a play change. ChooseRealCrossingLands runs last (nothing reads the budget
+// after it), so there it is exact; the other six take it only under MTG_CROSSING_WIDTH_PROBE_ALL (DEFAULT OFF, an A/B
+// arm: a held-out measurement on the decks with two live crossing nodes is owed before it can be adopted).
+inline bool CrossingWidthProbeOn(bool last_node)
+{
+    static const bool on  = EnvOn("MTG_CROSSING_WIDTH_PROBE", true);       // DEFAULT ON; =0 the rollouts run first
+    static const bool all = EnvOn("MTG_CROSSING_WIDTH_PROBE_ALL", false);  // DEFAULT OFF; =1 the six earlier nodes too
+    return on && (last_node || all);
+}
+template <class PinOf>
+bool CrossingFanWide(BoundaryFan& fan, const GameState& state, PinOf pin_of)
+{
+    while (fan.Next())
+    {
+        GameState ce = state;
+        fan.Stamp(ce);
+        fan.Cross(ce);
+        if (pin_of(fan)) { return true; }
+    }
+    return false;
+}
+// THE CROSSING NODES' PASS CEILING (Blood Sun perf part 5, 2026-11-22; MTG_CROSSING_PASS_CEILING, DEFAULT ON, =0 the old
+// unbounded pass). Every executor crossing / resolution node below (ChooseRealCrossing*, ChooseRealResolution*,
+// ChooseRealAttackLand) deepens sub = 0 .. depth-1 under its own DecisionBudget and keeps a pass sub > 0 only if the
+// budget is NOT exhausted after it ("a pass the budget cut short is not a completed pass"). But nothing stopped a pass
+// once it was running: these nodes are not decision roots (no priced ceiling, no unit ceiling, no overrun limit -- only
+// FullSearchLine / SolveWithLookahead roots arm those), and the nested solves inside their rollouts score every
+// candidate to completion (enforce_budget = false). So a pass begun just under the limit ran to its natural end, then
+// was thrown away -- the same unbounded shape as the width probe's game (there it was pass 0, which no ceiling
+// may cut; a WIDE node's deeper pass has no such excuse).
+// The ceiling arms the pass's OVERRUN limit at the budget's own limit, so the pass bails (through every rollout's
+// existing Overrun() poll) at the first unit at which Exhausted() is true. EXACT: a pass that trips it ends with
+// Exhausted() true, which the post-pass check already discards (the loop breaks; `chosen` keeps the previous pass's
+// answer, and the node's TranspositionTable dies with the node); any pass that does not trip it is unchanged unit for
+// unit. Pass 0 (which always stands) is never armed. Inert at budget == nullptr and at an unlimited budget (Limit() 0).
+// A re-price of discarded work, never a refused line: at a larger budget the same passes complete.
+struct CrossingPassCeiling
+{
+    SearchBudget* b = nullptr;
+    long long     saved = 0;
+    CrossingPassCeiling(SearchBudget* budget, int sub)
+    {
+        static const bool s_on = EnvOn("MTG_CROSSING_PASS_CEILING", true);   // DEFAULT ON; =0 the unbounded pass
+        if (!s_on || sub <= 0 || budget == nullptr || budget->Unlimited()) { return; }
+        b = budget;
+        saved = budget->OverrunLimit();
+        budget->SetOverrunLimit(saved > 0 ? std::min(saved, budget->Limit()) : budget->Limit());
+    }
+    ~CrossingPassCeiling() { if (b != nullptr) { b->SetOverrunLimit(saved); } }
+    CrossingPassCeiling(const CrossingPassCeiling&) = delete;
+    CrossingPassCeiling& operator=(const CrossingPassCeiling&) = delete;
+};
+}   // namespace
 // THE EXECUTOR'S CROSSING NODE for Profane Tutor's fetch. USER 2026-11-04, on the executor's upkeep falling back to the
 // provider's pick: "We should search and use a heuristic on that decision like any other." The fetch is normally
 // decided by the BoundaryFan where the SEARCH crosses into that upkeep and rides the committed plan
@@ -118207,9 +118278,18 @@ int TurnSolver::ChooseRealCrossingFetch(GameState& state, int depth, int max_tur
     RevealLogPause _rlp;   // a search, not the real game: no reveal logging, no viewer sink
     TranspositionTable tt;
     int chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, /*stut_only=*/true);
+        if (!(f.StutLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.StutPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/true);
         if (!fan.StutLive()) { return -2; }
         int best_wt = max_turns + 2, best_pin = -2;
@@ -118249,9 +118329,18 @@ std::pair<int, int> TurnSolver::ChooseRealCrossingReanimate(GameState& state, in
     RevealLogPause _rlp;
     TranspositionTable tt;
     std::pair<int, int> chosen{ -2, -2 };
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, /*stut_only=*/false, /*reanim_only=*/true);
+        if (!(f.GraceLive() || f.EmeriaLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.GracePin() != -2 || f.EmeriaPin() != -2; }))
+        { return { -2, -2 }; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/false, /*reanim_only=*/true);
         int best_wt = max_turns + 2;
         std::pair<int, int> best{ -2, -2 };
@@ -118288,9 +118377,18 @@ int TurnSolver::ChooseRealCrossingFaceUp(GameState& state, int depth, int max_tu
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, false, false, false, /*face_up_only=*/true);
+        if (!(f.FaceUpLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.FaceUpPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, /*face_up_only=*/true);
         if (!fan.FaceUpLive()) { return -2; }
         int best_wt = max_turns + 2, best_pin = -2;
@@ -118320,9 +118418,18 @@ std::int64_t TurnSolver::ChooseRealCrossingLands(GameState& state, int depth, in
     RevealLogPause _rlp;
     TranspositionTable tt;
     std::int64_t chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/true))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, false, false, false, false, false, false, /*cl_only=*/true);
+        if (!(f.CrossingLandLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.CrossingLandPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, false, /*cl_only=*/true);
         if (!fan.CrossingLandLive()) { return -2; }
         int best_wt = max_turns + 2;
@@ -118375,9 +118482,19 @@ int TurnSolver::ChooseRealCrossingLand(GameState& state, int depth, int max_turn
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, /*stut_only=*/false,
+                      /*reanim_only=*/false, /*land_only=*/true);
+        if (!(f.LandLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.LandPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, /*stut_only=*/false,
                         /*reanim_only=*/false, /*land_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
@@ -118411,9 +118528,18 @@ int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turn
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, false, false, false, false, /*horn_only=*/true);
+        if (!(f.HornLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.HornPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, /*horn_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
         bool wide = false;
@@ -118466,9 +118592,18 @@ int TurnSolver::ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int 
     RevealLogPause _rlp;
     TranspositionTable tt;
     int chosen = -2;
+    // Nothing to decide unless some crossing has a pin: answer that from the crossings alone, before any rollout
+    // (CrossingFanWide, an identity -- the pass-0 loop below would return the same thing after its rollouts).
+    if (CrossingWidthProbeOn(/*last_node=*/false))
+    {
+        BoundaryFan f(state, /*with_echo=*/false, false, false, false, false, false, /*ulk_only=*/true);
+        if (!(f.UpkeepLegendLive()) || !CrossingFanWide(f, state, [](BoundaryFan& f) { return f.UpkeepLegendPin() != -2; }))
+        { return -2; }
+    }
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, /*ulk_only=*/true);
         int best_wt = max_turns + 2, best_pin = -2;
         bool wide = false;
@@ -118535,6 +118670,7 @@ int TurnSolver::ChooseRealResolutionFetch(const GameState& state, int controller
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         int best_wt = max_turns + 2, best_rank = 0;
         for (int r = 0; r < width; ++r)
         {
@@ -118576,6 +118712,7 @@ int TurnSolver::ChooseRealResolutionLand(const GameState& state, int controller,
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         int best_wt = max_turns + 2, best_rank = 0;
         for (int r = 0; r < width; ++r)
         {
@@ -118657,6 +118794,7 @@ int TurnSolver::ChooseRealAttackLand(const GameState& state, const std::vector<i
     for (int sub = 0; sub <= depth - 1; ++sub)
     {
         if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        CrossingPassCeiling _cpc(budget, sub);   // a pass that will be discarded stops where it becomes discardable
         int best_wt = max_turns + 2, best_pin = 0;
         for (int pin : pins)
         {
