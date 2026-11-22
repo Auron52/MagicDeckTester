@@ -47,6 +47,46 @@
      "seed": 30000000,
      "src": "a6df06278a604b72ee681d07193afee937ab6d59",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 8,
+      "APPLY-DROP-ORDER": 4,
+      "DROP-COVERED": 165,
+      "ORACLE-GAP": 708,
+      "PHANTOM": 60719
+     },
+     "commit": "a55928b13f8b66293396a5ab3c7990a9adc665c1",
+     "date": "2026-11-22T00:17:12Z",
+     "decisions": 31642,
+     "deck": "decks/1 Drop Burn/1 Drop Burn.cod",
+     "deck_sha": "a0e40f445b6bcf894dcc8d0a2789cf0a1c12c9f0",
+     "game_index": 5000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 720,
+     "life_breakpoints": [],
+     "ms_off": 445885,
+     "ms_on": 765658,
+     "report": "logs/mana_clean/bdo3-gate-20261121/report.md",
+     "run": "bdo3-gate-20261121",
+     "seed": 30005000,
+     "src": "fe6a1436eac52b1b4b949927f2da10319269db27",
+     "verdict": "issues"
     }
    ]
   },
@@ -9004,6 +9044,50 @@
      "run": "claude-queue-20261120b",
      "seed": 30105000,
      "src": "a6df06278a604b72ee681d07193afee937ab6d59",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 25,
+      "APPLY-DROP-ORDER": 250,
+      "DOMINATED-LAND": 57,
+      "DOMINATED-LIFE": 28,
+      "DROP-COVERED": 3326,
+      "ENUM-GAP": 392,
+      "HIDDEN-INFO": 4,
+      "ORACLE-GAP": 131,
+      "PHANTOM": 1061
+     },
+     "commit": "a55928b13f8b66293396a5ab3c7990a9adc665c1",
+     "date": "2026-11-22T00:17:12Z",
+     "decisions": 38687,
+     "deck": "decks/Midrange Burn/Midrange Burn.cod",
+     "deck_sha": "1f2a61922536f0e448d0b5941222b0183975f2fc",
+     "game_index": 110000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 798,
+     "life_breakpoints": [],
+     "ms_off": 1258695,
+     "ms_on": 1669800,
+     "report": "logs/mana_clean/bdo3-gate-20261121/report.md",
+     "run": "bdo3-gate-20261121",
+     "seed": 30110000,
+     "src": "fe6a1436eac52b1b4b949927f2da10319269db27",
      "verdict": "issues"
     }
    ]
