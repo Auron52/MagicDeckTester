@@ -15,12 +15,16 @@ Last commit before this file: c3eb0a931.
 3. 2026-11-22 12:35 (via coordinator): "Claude usage is at 5%, so keep running until it runs out, but keep a Codex
    handoff current."
 
-## Status (18:25 UTC): DONE except the final push
-- Rebased onto origin cd330ec5a (Merfolk landed). gate2: build 0, units 0, `--both` 624 passed, 8 FAIL (all Hinata), with
-  digests byte-identical to the 4a7f65983 gate, and the slower-game listing identical (the 23 from handoff3). Logs:
-  `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate2/`.
-- Accepted smoke + regression: **a579747bf** (GT + job_cost + gt_logs + doc section 5). check_gt_logs clean (1409).
-- check_references_safe exit 0; wip branch pushed. NOTHING LEFT for this agent; the coordinator lands it.
+## Status (21:20 UTC): REDO on origin 138f60c83 (Worldfire + Beasts integrations moved Hinata GT)
+- The earlier accept (a579747bf, on cd330ec5a) is VOID. Origin's Worldfire GT accept 9575556d5 changed six Hinata gt_logs.
+  On the rebase I took origin's side for ALL of test/gt_logs, test/job_cost.tsv and test/regression_gt.txt, and kept only
+  the doc change (87e70386b). test/ is identical to origin; check_gt_logs is clean. The ship (beam_width 0, emulated) is intact.
+- gate3 launched 21:19 UTC, PID 1126869, on the box lock (long queue: Bruna-RO A/B + ~6 waiters). Output in
+  `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate3/` (status, DONE, build/unit/regression.log).
+- Next: step 4 below, against gate3. The "before" values are now origin's GT, so re-derive the table with
+  `grep 'FAIL ' gate3/regression.log`. Classify every slower game NOT in handoff3's 23 with
+  `bash test/classify_turn_later.sh smoke|regression` (under the box lock), escalating any that persist.
+  Then run step 5's accept (change "re-gated on cd330ec5a" to "re-gated on 138f60c83"), steps 6 and 8, and commit GT + handoff.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
