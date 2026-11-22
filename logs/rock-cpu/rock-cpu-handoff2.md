@@ -81,3 +81,14 @@ Remaining only: the USER's decision on MTG_LKR_PLAYOUT_OFF (recommended), and th
 4. Write the menu in the doc and report it: per deck, CPU ratio (batch CPU and perf instructions) and searched net turns /
    slower games for each cut, then d0; recommendation. Note: poff / pnt are predicate gates in the horizon playout (they
    change b0 play too; lossy), price is the budget-priced shape (inert at b0).
+
+## Follow-up (parent, 16:10 UTC): confirmatory re-measure of MTG_LKR_PLAYOUT_OFF (do not adopt; USER decides)
+Brief: "Re-measure Hinata searched shapes at 4,000 pairs on FRESH seeds ... off vs PLAYOUT_OFF in one pooled batch
+under the box lock. If it's cheap, add Niv 2HG and Extra Turns 2HG at 1,000 pairs. Replay any slower games at d8 b0."
+Running: `build/scratch/claude_rock_cpu/hc/run.sh`, real PID **1021918** (script copy `logs/rock-cpu/hc_run.sh`), binary
+mtg.dev2. Manifest `hc/H.json`: arms def / poff; hinata play settings 4000 pairs (seeds 800000), hinata d3 b10 1000
+(805000), niv2hg d5 b20 1000 (810000), extraturns2hg d5 b20 1000 (812000; 2HG = starting_life 30, opponent_heads 2).
+Out `hc/H.out`, logs `hc/logs/`, perf `hc/perf/` (first chunk, 12-20 games/arm), progress `hc/status`, marker `hc/DONE`.
+Next: `python3 cmp.py hc/H.out hc/logs def poff --list` (use `--mt` = the deck's max_turns if any game is unwon), d8 b0
+replays of slower games (`mkd8.py`, but with the shape's seed base and, for 2HG rows, add starting_life / opponent_heads
+to the jobs), then the doc + handoff.
