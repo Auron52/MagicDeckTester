@@ -1983,8 +1983,39 @@ does, but doesn't hardcast. Cyclone should be deploying multiples at times."*
 - **Stage 3:** `analyze_deck.py --coverage-only`: `missing` empty, all 20 cards `full`; the only open bracket items are
   PROVISIONAL goldfish-inert deferrals already on the ledger (Emrakul's protection from colored spells, Lotus Field's
   hexproof, Grim Tutor ruling 1, City of Brass's life loss). No Tier 1-3 gap.
-- **Stage 4 baseline profile:** STAGE4_PLACEHOLDER
-- **4a:** PROVIDER_PLACEHOLDER
+- **Stage 4 baseline profile** (committed `f412afe50`, `decks/Blood Sun/Blood Sun.profile.json`; analyzer output
+  `build/scratch/bloodsun/viewer/stage4.json`, log `stage4.err`). Ran IN FULL, no early stop: `analyze_deck.py
+  --no-rebuild --analyzer-seed 2026112101`, 12 cores (`taskset 12-23`), 21:58 -> 06:38 UTC, rc 0, binary built from the
+  tree at 155b31e2b (perf parts 1-4). Contents: `card_scores` for all 20 cards (1000 games, depth 5; top: Blood Sun
+  0.748 / -1.013, Grim Tutor 0.341 / -0.333, Graven Cairns 0.321; bottom: Ulamog -0.312, Burgeoning -0.217, Lotus Vale
+  -0.179 / -0.338, Time Warp -0.171); `hand_score_threshold` -1e18 (no hand-score gate); `mulligan` = the default land
+  window (`min_lands` 1, `max_lands` 5, `curve_check` two_drop, `bottom_order` count_first, `stop_at` 4, no
+  `required_pieces`, no `min_color_sources`); `mulligan_flags` empty; no keep table, no value sidecar. The profile
+  names no provider and carries no play settings (no profile does): the provider is chosen by archetype signature
+  (4a below), and play depth / budget come from the caller; Blood Sun is not yet in `test/regression_cases.sh`.
+  - **Cost diagnostic: RAN**, verdict `NO_COST_INTERACTIONS` (no same-turn cost-interaction cards; the base mana
+    aggregate suffices).
+  - **Discard analysis: RAN**, verdict `RULE_FOUND`. Evidence 400 games d3, 114 cleanup-discard decisions (110 at hand
+    8, 4 at 9+), multi-optimal rate 0.921. Label table (mean regret / optimal rate): status quo 0.307 / 0.789, band
+    0.272 / 0.807, order 0.114 / 0.895. Derived order (discard first -> last): City of Brass, Blooming Marsh,
+    Burgeoning, Scorched Ruins, Diabolic Revelation, Lotus Field, Ulamog, Lotus Vale. Paired outcome A/B of the order
+    arm: d0 -0.133 turns (t -13.6, n 4000, 420 changed), d3 -0.0075 (t -0.3, n 800, 148 changed). **USER decision
+    pending: the discard policy is USER-OWNED; it is recorded here, NOT implemented or adopted** (the analyzer's
+    suggested shape is a `CleanupDiscardCandidates` override in the provider).
+  - **Slow games** (`viewer/slowgames.txt`, regenerated from `stage4.err`: gi, ms, sorted by ms; the killed first run's
+    list is kept as `slowgames.killed-wsl-restart.txt`): 417 of the 1000 card-score games crossed the 30 s
+    slow-game line, median of those 94 s, 299 over 60 s, 59 over 300 s, none over 30 min; worst gi 903 1443 s, 843
+    1026 s, 893 1002 s, 613 834 s, 103 818 s. Sum of the logged games 66,027 s (~5.5 h of the run's 12 cores); the
+    heaviest games cluster in the high indexes (900s), so they ran in the tail. These are the pre-part-5 binary's
+    costs; the perf work owns them.
+- **4a:** `python3 scripts/provider_audit.py --check` rc 0: Blood Sun -> `BloodSun` (BloodSunProvider), no misroute,
+  no name-mismatch note; winless certificate NotAssessed (as for 58 of 62 decks).
+- **Part 3 checks (2026-11-22, built tree f412afe50 = perf parts 5-6 included):** mtg-test 3866/3866, scenarios
+  655/655. Full `audit_viewer_decisions.py` sweep (40 games from seed 9001, `viewer/audit.txt`): **5h PASS**, 0 HARD
+  MISS, 0 SELF-GUARD FAILURE, 0 DRIVER FAILURE; the oracle cross-check is clean; the sweep's 2 misses (Machinations
+  `exile_reorder`, Emrakul `legend_keep`) were auto-escalated and VERIFIED reachable, so nothing is left UNVERIFIED.
+  ONE smoke: per-job digest vs `impl7/smoke-step7-batch.log`: 235 jobs joined, **0 moved** (the harness's 8 FAILs are
+  the stale origin GT, as in every earlier step); batch log `viewer/smoke-viewer-batch.log`.
 - **5h, every §10.1 row forced through the real protocol** (`--claude-play`, uncapped plans, re-checked at the viewer's
   own `--depth 0`, no `--reveal`: identical decisions and option lists, ~0.3 s per stateless replay). Human play is
   UNPRUNED, verified explicitly: Revelation offers every X 0..max (B3 / B8 not applied) and its multi-pick lists every
