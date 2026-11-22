@@ -27,8 +27,11 @@ Nykthos (63aa2fe6b), G Bloated Contaminator (e2838e47a). Commit list: `git log -
 
 ## Remaining, in order
 
-Batch H is now integrated as `c279a5ff3` and verified (3888/3888 units, 235/235 smoke,
-0 play changes). Its original handoff below is retained as history. Resume at batch I.
+Batch H is integrated as `c279a5ff3`; batch I is integrated locally as `cd1ea5116`.
+Batch I passed 3892/3892 units and 235/235 smoke configurations with 0 play changes before
+a human-only viewer menu follow-up. That follow-up passed 60 human-mode assertions and awaits
+the final pre-push regression. Resume at step 3 (viewer readiness); historical batch H/I
+instructions below are retained for context.
 
 1. **Batch H, Woodland Bellower -- IN PROGRESS, start here.** Everything is in WIP commit `f75719a58`
    (ETB Natural-Order put route in `FireOwnEtbTriggersBody` step 4b, `tutor_nonlegendary` +
