@@ -2104,3 +2104,50 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
 - Diagnostic `MTG_PB_LAZY_MAT_TRACE=1` prints the caller line of every lazy-list materialisation.
 - **Smoke** (THREADS=13 outside the heavy lock, the Stage 4 analyzer held 10 threads): 235 / 235 jobs, **0 moved** by
   digest vs `impl7/smoke-step7-batch.log`; the 8 GT FAILs against origin GT are the step-7 tree's (same digests).
+
+### Implementation notes (perf part 5, 2026-11-22): game 319 under the Grim prune -- an executor crossing node with no ceiling
+- **The finding:** held-out A/B (`perf2/ab`, d5 b20, max_turns 8): seed 910319 gi 319 ran for hours in every arm with
+  `MTG_BLOODSUN_GRIM_PRUNE=1`, while the shipped arm took 191k units / 28 s.
+- **Stuck point (gdb on a Profile build, census, perf):** not a search decision. Every decision root is done (the
+  census's last row is the T8 main-1 decision, 247 units). The worker sits in `AIEngine::DecideCrossingFetch` ->
+  `TurnSolver::ChooseRealCrossingLands` (AIEngine.cpp:3314; the executor's end-of-turn Burgeoning / Manabond node), in
+  its PASS 0, on the first crossing of the fan. The node's `DecisionBudget` was at 99,562 units (limit 18,000) after
+  ~2.5 min and 3.44M by ~11 min. That is about 9k units/s, so the units ARE charged; nothing reads them.
+- **Mechanism:** under B12, Grim Tutor no longer fetches Fastbond / Time Warp, so the T7 line differs from the shipped
+  one, which wins in round 7. The real T8 (the horizon round) is an extra turn with 3 more pending, Burgeoning on the
+  battlefield and a hand of lands. `CrossingLandUncoveredPending` is live (Burgeoning + `opponent_plays_lands` + a land
+  in hand); it cannot see that the next turn is our own extra turn, where no opponent land play asks Burgeoning
+  anything. So the node fans the crossing. The crossing observes no ordinal (`cl_nobs_` 0), so the node will return
+  -2 ("nothing to decide"), but only after pass 0's rollout. That rollout enters an extra turn, which gets its ply
+  back (`DepthAcrossTurn`), and walks the horizon round's extra-turn chain through nested solves that score every
+  candidate (`enforce_budget = false`): the perf-step-A shape. A decision root caps that shape with the 25x pass
+  overrun and the priced ceiling. The executor's crossing nodes are not decision roots, so nothing armed either, and
+  pass 0 always stands, so no ceiling may cut it.
+- **Fix 1, the WIDTH PROBE (`MTG_CROSSING_WIDTH_PROBE`, DEFAULT ON):** `ChooseRealCrossingLands` first walks its
+  pass-0 fan with `Stamp` + `Cross` only, and returns "nothing to decide" when no crossing carries a pin. For the node
+  this is an IDENTITY: `wide` depends only on the crossings (every digit's width is learned inside
+  `BoundaryFan::Cross`, the odometer advances on those widths, no rollout result feeds either). When the node is wide,
+  the probe is discarded and the node runs unchanged. Inert at every budget, including none. The other six BoundaryFan
+  nodes (Fetch, Reanimate, Land, Horn, UpkeepLegend, FaceUp) have the same probe, but only under
+  `MTG_CROSSING_WIDTH_PROBE_ALL` (DEFAULT OFF). `DecideCrossingFetch` runs all seven in a row on ONE `DecisionBudget`,
+  so a skipped pass 0 in an earlier node leaves units for a later wide node, which can then complete a deeper pass: a
+  play change on decks with two live crossing nodes. Lands runs last, so nothing reads the budget after it and the
+  default arm is exact.
+- **Fix 2, the PASS CEILING (`MTG_CROSSING_PASS_CEILING`, DEFAULT ON):** all ten executor nodes (the seven above plus
+  `ChooseRealResolutionFetch` / `ChooseRealResolutionLand` / `ChooseRealAttackLand`) arm a pass `sub > 0` with an
+  overrun limit equal to the budget's own limit. Such a pass was already discarded when the budget ended exhausted;
+  now it stops at the first unit at which it becomes discardable. EXACT, and inert at `budget == nullptr` and at an
+  unlimited budget. It did NOT trip in game 319 (`=0` gives the same digest and units there), so it is defence for a
+  WIDE node's deeper pass, unexercised by any measured game so far.
+- **Game 319 after the fix (one pooled 2-thread batch on the busy box, units exact, wall contended):** Grim prune arm:
+  **wt 8, 126,005 units, 38.9 s wall** (32.3 s CPU). The census rows sum to all of it, T6 / T7 13.5 s each at ~18k
+  units: the known materialisation cost, now bounded. Shipped arm in the same batch: wt 7, 191,315 units, 24.0 s
+  (15.3 s CPU). The unfixed binary gives 191,319 units, the same digest `ae8cb12829df6b22` and a byte-identical game
+  log (runId aside); the 4 units are a not-wide node's skipped pass 0. So the Grim prune costs this game a TURN (T8 vs
+  T7). That is a play result for the USER's B12 decision, not a perf one.
+- **Smoke** (THREADS=4 while the A/B, the Stage 4 analyzer and `rec8` ran): see below.
+- **Open:** (a) a WIDE crossing node's pass 0 is still unbounded. Bounding it changes play at the shipped budget (pass
+  0 always stands) and would need a USER call and a held-out A/B. (b) `CrossingLandUncoveredPending` could also be
+  false when the crossing is into our own extra turn and only Burgeoning asks. That is a sharper predicate, but it
+  also gates the in-search BoundaryFan, so it is a play-path change; not done. (c) The running A/B's Grim arms on
+  `mtg.v1` (the unfixed binary) cannot finish game 319. Any other game with this shape would also stall.
