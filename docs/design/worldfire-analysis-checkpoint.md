@@ -107,10 +107,9 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
    LTB (if tiers byte-identical), free turns default ON (USER: adoption is not a question, once checks pass). CI watch
    --interval 60.
    USER-pending (bring with numbers when measured): spawn-land rule global vs free-turn-scoped; the reference LIST.
-3. Free-turn: when trait=0 decks are byte-identical and the USER answers the remaining Qs, adoption is the USER's.
-4. Buckets: relay the A/B; the bucket flags' default is the USER's. Then re-measure the budget curve and re-screen
-   the b0 backstop rows (USER Q16: optimize first).
-5. Land the worldfire docs commits with the next landing (wip/worldfire is pushed; ungated docs).
+3. After the cantrip adoption: FOLLOW-UP A/B agent (USER 1b/1c list in "USER rulings on the cantrip keep order").
+4. Then re-measure the Worldfire budget curve and re-screen the b0 backstop rows (USER Q16: optimize first).
+5. Only surface GENUINE USER decisions (USER 2026-11-22: nothing waiting on our side or on measurement).
 6. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
 ## Pending for the NEXT free-turn agent (from handoff3.md, plus these USER items given after it)
