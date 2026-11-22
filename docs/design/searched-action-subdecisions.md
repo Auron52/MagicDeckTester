@@ -126,6 +126,36 @@ EDF 8, AA 9, PreventDamage 20, Bruna / Cyclone / LFE / Shadowborn 32, Maze's End
 narrowings that were real — Goblins 6 over a ~16-name ranked list, and every deck that rode the
 base 6 with more than six candidates (Hinata's Gamble among them) — now search everything.
 
+### Measured at deletion (2026-11-22, commit on `wip/tutorwidth`; GT NOT accepted)
+
+Smoke + regression: every coverage-width deck is byte-identical (Giants, Pirates, Kitty, EDF, AA,
+PreventDamage, Bruna, Cyclone, LFE, Shadowborn, Maze's End, AntiLifegain, ...). Keys move only for
+Hinata, Melira Pod, Goblins, Soldiers and Creature Giving (and their 2HG rows). All 17 completed
+searched-slower tier games recover at `--depth 8 --budget-ms 0` (Hinata s3003 gi41 was still running).
+
+Held-out A/B, ONE pooled batch, arms innermost (old arm = a temporary per-job flag restoring the
+deleted widths and the Goblins reserve; it reproduced GT turn-for-turn on every sanity game),
+seeds 910000 (play rows), 920000 (d3 b10), 930000 (2HG), net loss-penalized turn-units:
+
+| deck | games | better | worse | net | per game (se) | units |
+|---|---|---|---|---|---|---|
+| hinata | 1900 | 15 | 49 | **+44** | +0.023 | x1.11 |
+| hinata2hg | 500 | 6 | 20 | **+22** | +0.044 (0.015) | x1.11 |
+| goblins | 2500 | 10 | 2 | -8 | -0.003 | x1.27 |
+| goblins2hg | 500 | 1 | 0 | -1 | -0.002 | x1.29 |
+| melira | 1300 | 1 | 0 | -1 | -0.001 | x1.17 |
+| melira2hg | 300 | 0 | 0 | 0 | 0 | x1.24 |
+| soldiers | 2000 | 0 | 0 | 0 | 0 | x1.06 |
+| creature_giving | 2000 | 0 | 0 | 0 | 0 | x1.01 |
+
+**Hinata is net worse** and fails the adoption bar as it stands; every slower tier game recovers at
+d8 b0, so this is budget dilution (Gamble now fans every library name at a budget-starved deck),
+not an unreachable line. The fix the ruling points at is a merit rule inside
+`HinataProvider::TutorCandidates` for Gamble, not a count. **Two unbudgeted backstop games now hit
+the 2M-unit abandonment ceiling** (Hinata d5 s30001 gi1: 1.35M -> 5.53M units, still wins T5;
+Melira d5 s30001 gi1: 1.46M -> 3.10M, still wins T6), which fails those backstop rows. Both are
+USER calls.
+
 The per-deck history below is kept as the record of what the width measured; it no longer
 describes the engine.
 
