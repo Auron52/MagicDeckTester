@@ -1,16 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/merfolk-gate",
-   "head_since": "2026-11-22T10:23:42Z",
-   "heartbeat": "2026-11-22T14:44:28Z",
-   "host": "839667a3a15d",
-   "id": "839667a3a15d:wip/merfolk-gate",
-   "joined": "2026-11-22T09:39:54Z",
-   "note": ""
-  },
-  {
    "branch": "wip/worldfire-integration",
+   "head_since": "2026-11-22T14:58:52Z",
    "host": "550a08fdc1f3",
    "id": "550a08fdc1f3:wip/worldfire-integration",
    "joined": "2026-11-22T13:01:22Z",
