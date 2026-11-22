@@ -5820,23 +5820,19 @@ bool SacFodderStagePlayoutOn()
 }
 bool SacFodderWaveEarlyOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_EARLY");
-    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_EARLY, env_on);
+    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
 }
 bool SacFodderWaveCtxOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_CTX");
-    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_CTX, env_on);
+    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
 }
 bool SacFodderWaveInwinOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_INWIN");
-    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_INWIN, env_on);
+    return false;   // arm DELETED (measured no better); its heurarm slot is borrowed by a TEMP A/B arm in TurnSolver.cpp
 }
 bool SacFodderWaveBpEnumOn()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_WAVE_BPENUM");
-    return heurarm::Flag(heurarm::SAC_FODDER_WAVE_BPENUM, env_on);
+    return false;   // arm DELETED (measured harmful, 2/9 +7)
 }
 bool SacFodderNeededOnlyOn()
 {
