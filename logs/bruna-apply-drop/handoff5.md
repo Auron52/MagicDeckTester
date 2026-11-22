@@ -48,22 +48,35 @@ Per-arm comparison script: `build/scratch/bad/cmp_arms.py <wins_dir> <batch.out>
   7b (MTG_PAY_LINE_CRIT_LAND + _OPENER): ALL 12 / 14, **+6**. Worse: **niv d0 +13 (1/11)**. Better: dragons d0 -4,
   elementals d0 -2, niv2hg d5 -1; bruna d0, cyclone d0, hinata d0 net 0.
 
-## Running / queued (all agent 5's; none USER-requested)
-- **chain1** (lock waiter, `flock claude_box.lock env MTG_RSS_CAP_GB=40 build/scratch/bad/chain1/run.sh`): one pooled
-  batch (fix5) = tok2 (Sea d0 fixes on vs off WITH the lever on, seeds 710000 x10k + 810000 x50k: does the lever
-  remove the +3?) + the 115 lever slower games at d8 b0 (tok/m_d8.json); beside it callgrind cg5/run.sh (fix5:
-  EDF d0 200, Sea d0 2000 on/off, Jumbo d0 1000) -> cg5/*.cg. Status: chain1/STATUS (`ALLDONE`).
-- **build_fix6.sh** (lane, 2 slots): builds d97ac2b14 -> fix6/, Bruna units, VERIFY+STATS runs (edfd0, jumbod0,
-  sead0) printing the bypass counters, then paired CPU screens edfd0 300 / sead0 30000 / jumbod0 10000 on vs off.
-  Log build/scratch/bad/build_fix6.log (`ALLDONE`).
+## chain1 results (DONE 09:4x UTC; agent5/chain1.txt)
+- **tok2: with the lever ON, fixes on vs off on the OLD Sea d0 seeds** (710000 x10k, 810000 x50k): **0 faster / 0
+  slower, net 0** (the +3 is gone). So with MTG_EVAL_COMBAT_TOKEN_SELF on, the fixes are net 0 on Sea d0 over 120k
+  pairs; without it, +3 over 120k (0 faster).
+- **The lever's 115 slower games at d8 b0** (114 sead0 + spirits d0 gi2341, seeds 1410000+gi): **ALL RECOVER**.
+- **Callgrind cg5 (fix5)**: EDF d0 200 games (seed 710000) 332.7G Ir vs fix3-off 624.1G/400 (~312G/200): ~1.066.
+  AuraHostHoldKeepsLine still 5.54% (18.4G): 881,121 calls from SeqWalkFixedOrder (296,527 scratch payments 13.2G,
+  160,727 LineBillPayable 3.2G), 2.5M from SubsetPayableWithFiltersImpl (0.31G, prefilter rejects). Sea d0 2000
+  games: helper 1.47% (SPWF 1.04%, CastSpellFromHand 0.43%); Sea d0 cpu ratio 1.006-1.015 in the A/Bs.
+- **Rejected idea (do not retry):** keying the Aura memo on the CURRENT g_line_unpaid_cost instead of the walk's
+  starting total, to share verdicts across subsets. Unsound: the prefix casts are PAID under the line hold (tap-ahead
+  line-priority commit), so the board at the Aura step depends on the whole order's total, and SubManaCost clamps, so
+  the current hold does not determine the total.
+
+## Running / queued (agent 5's; none USER-requested)
+- **build_fix6.sh under the box lock** (`flock claude_box.lock env MTG_RSS_CAP_GB=40 build/scratch/bad/build_fix6.sh`,
+  waiting behind another session's job at 10:00 UTC): full-core build of d97ac2b14 -> fix6/, Bruna units,
+  VERIFY+STATS runs (edfd0 200, jumbod0 1000, sead0 2000 at 8 threads) printing the new bypass counters
+  (`[pay-memo] AuraHostHoldKeepsLine bypass: ...` in fix6/verify/*.err), then paired CPU screens edfd0 300 / sead0
+  30000 / jumbod0 10000 (fix6/cpu/*.time: user, wall). Log build/scratch/bad/build_fix6.log (`ALLDONE`).
+  NOTE: the d97ac2b14 tree is what it builds; src is clean at d97ac2b14 (a reverted edit touched fix_edit_ts).
 
 ## What remains, in order
-1. Read fix6 bypass counters + cg5 callgrind (who still calls AuraHostHoldKeepsLine unmemoised; Sea/Jumbo d0 call it
+1. Read fix6 bypass counters (881K unmemoised SeqWalk calls per 200 EDF d0 games: misses or bypass?) + cg5 (who still calls AuraHostHoldKeepsLine unmemoised; Sea/Jumbo d0 call it
    from a non-OPS site, likely SubsetPayableWithFiltersImpl or the SPS walk outside a scope). Cut it (exact), rebuild,
    re-screen. Then a CPU/identity A/B: `ab/run_cpu5.sh <bin> <nproc> 40 cpu6` (manifest_cpu5.json = land-Aura decks
    + cheap d0, seeds = ab3's) under the box lock; on__ digests must equal ab3's, cpu on/off near noise.
-2. chain1: if tok2 shows the lever removes the Sea d0 +3 and the lever's 115 slower games recover at d8 b0, the USER
-   decides the lever (report it). Without the lever, Sea d0 is +3 over 120k pairs (0 faster).
+2. Sea d0 bar: met ONLY with MTG_EVAL_COMBAT_TOKEN_SELF on (a USER decision). Without it +3 / 120k. Do not accept
+   GT until the USER rules (or the CPU work is also done and the USER accepts Sea d0 +3).
 3. GT step (handoff4 step 5) once the bar is met or the USER rules on Sea d0.
 
 ## USER questions (surface, do not settle)
