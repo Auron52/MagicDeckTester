@@ -186,7 +186,12 @@ that it must always be able to do nothing to end the phase." -> CLAUDE.md hard r
 unconditional at every root (cb-bbgap) (d) "staged cards should be counted because the idea is the opponent thinks you
 may have burn in hand to finish them off. (it being staged instead does not change this reasoning)" -> both policies
 count staged cards (cb-bbgap).
-**08:44 UTC: JOINED, I HOLD THE LEASE; smoke RUNNING (landing6/smoke.sh PID 25933 under flock, keepalive running; status landing6/status, marker landing6/SMOKE_DONE; GT backup gtbak6).** Earlier resume point (08:25): rebuild PASSED (landing5 BUILD2/UNIT2 3895/SCEN2 608, binary build/Release =
+**LANDED 94cd1e06b 10:23 UTC 2026-11-22** (manual tap, Magma Jet cast_scry search, Creature Burn Fireblast pair fold;
+smoke 22 faster / 0 slower, regression 33 faster / 1 churn; refs 18 ok 2 repaired 0 drift). CI run 45012242724 watched
+in the background. build/scratch/cb-orch/LANDED created -> the three agents (cb-scry, cb-bbgap, cb-unearth) now build
+one at a time under flock build/.heavy.lock. NEXT: their reports -> integrate as ONE batch -> validate -> land (next
+join >= 14:23 UTC, 4-h slow-box rule); then Stage 6 report; then the mulligan profile (fast) alone on the box.
+(History below.) **08:44 UTC: JOINED, I HOLD THE LEASE; smoke RUNNING (landing6/smoke.sh PID 25933 under flock, keepalive running; status landing6/status, marker landing6/SMOKE_DONE; GT backup gtbak6).** Earlier resume point (08:25): rebuild PASSED (landing5 BUILD2/UNIT2 3895/SCEN2 608, binary build/Release =
 src of eb56e245e). Rebased onto origin 4a7f65983 (box_lane.sh + CLAUDE.md only; src tree hash UNCHANGED, so the binary
 stands). NEXT: `push_queue.py join` -> wait -> at my turn, under `push_queue.py hold --` and `flock build/.heavy.lock`,
 MTG_PGO=0: fetch (if origin moved with src: rebase + MTG_BUILD_JOBS=4 rebuild), back up GT, `regression.sh --smoke` ->
