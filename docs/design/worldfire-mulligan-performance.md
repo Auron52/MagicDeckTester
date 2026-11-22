@@ -36,3 +36,12 @@ The suite PGO training manifest initially read generation settings only from
 depth 5 / 20 ms despite the new contract. `pgo_train_manifest.py` now reads
 the profile first, then lets a value sidecar override it. The regenerated
 manifest reports `gen_worldfire` at depth 2 / 8 ms.
+
+On the same 1,000 uniformly sampled size-seven rollouts, Release used 497 ms
+of thread CPU per rollout and PGO+LTO used 346 ms (1.44x throughput). Both
+reported 18,680 search units per rollout and digest `5b57e1a7c0074163`.
+The PGO sample's slowest 1% accounted for 16.1% of time; its maximum was
+15.4 s. At 32 fully occupied cores, one rollout per side across all 562,383
+size-seven compositions alone projects to about 3.4 hours. A full profile
+adds the floor's second rollout, refinement, and smaller-hand tables, so this
+sample does not estimate its total time.
