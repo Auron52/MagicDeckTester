@@ -226,6 +226,90 @@ TEST_CASE("Blood Sun Grim -> Time Warp counts a land drop still available from h
     CHECK_FALSE(BloodSunGrimTimeWarpCastable(s, 0, tw));
 }
 
+TEST_CASE("Blood Sun B12-bis: one productive Lotus, otherwise one Ruins")
+{
+    GrimArms old(1, 0);
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = 1;
+    GameState s = BasePf(0, 20);
+    for (int i = 0; i < 3; ++i) { PutPf(s, "City of Brass", 300 + i); }
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 40));
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 41));
+    s.players[0].hand.push_back(CardPf("Diabolic Revelation", 42));
+    for (const char* n : { "Lotus Vale", "Lotus Field", "Scorched Ruins", "Fastbond" })
+    { s.players[0].library.push_back(CardPf(n, 500 + static_cast<int>(s.players[0].library.size()))); }
+    const CardParams& gp = DefPf("Grim Tutor").params;
+    const auto t = ProvPf().TutorCandidates(s, 0, gp);
+    CHECK(HasPf(t, "Lotus Vale"));
+    CHECK_FALSE(HasPf(t, "Lotus Field"));
+    CHECK_FALSE(HasPf(t, "Scorched Ruins"));
+    CHECK_FALSE(HasPf(t, "Fastbond"));
+    s.players[0].hand.erase(s.players[0].hand.begin() + 1);   // no second Grim to unlock
+    const auto u = ProvPf().TutorCandidates(s, 0, gp);
+    CHECK(HasPf(u, "Scorched Ruins"));
+    CHECK_FALSE(HasPf(u, "Lotus Vale"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = -1;
+}
+
+TEST_CASE("Blood Sun B12-bis: Fastbond surplus threshold and land cut are independent arms")
+{
+    GrimArms old(1, 0);
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = 1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_FASTBOND] = 1;
+    GameState s = BasePf(3, 20);
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 40));
+    s.players[0].hand.push_back(CardPf("Diabolic Revelation", 41));
+    s.players[0].hand.push_back(CardPf("Lotus Vale", 42));
+    s.players[0].hand.push_back(CardPf("Swamp", 43));
+    s.players[0].library.push_back(CardPf("Fastbond", 500));
+    s.players[0].library.push_back(CardPf("Scorched Ruins", 501));
+    const CardParams& gp = DefPf("Grim Tutor").params;
+    CHECK(HasPf(ProvPf().TutorCandidates(s, 0, gp), "Fastbond"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_FB_T2] = 1;
+    CHECK_FALSE(HasPf(ProvPf().TutorCandidates(s, 0, gp), "Fastbond"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_FB_T2] = -1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_LAND_CUT] = 1;
+    const auto cut = ProvPf().TutorCandidates(s, 0, gp);
+    CHECK(HasPf(cut, "Fastbond"));
+    CHECK_FALSE(HasPf(cut, "Scorched Ruins"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_LAND_CUT] = -1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_FASTBOND] = -1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = -1;
+}
+
+TEST_CASE("Blood Sun B12-bis: red-source arms and only-missing arm")
+{
+    GrimArms old(1, 0);
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = 1;
+    GameState s = BasePf(3, 20);
+    s.battlefield.erase(s.battlefield.begin());   // Blood Sun is held, no red source yet
+    s.players[0].hand.push_back(CardPf("Blood Sun", 40));
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 41));
+    s.players[0].library.push_back(CardPf("City of Brass", 500));
+    s.players[0].library.push_back(CardPf("Diabolic Revelation", 501));
+    s.players[0].library.push_back(CardPf("Scorched Ruins", 502));
+    const CardParams& gp = DefPf("Grim Tutor").params;
+    CHECK(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_COND] = 1;
+    CHECK_FALSE(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));
+    s.players[0].hand.push_back(CardPf("Diabolic Revelation", 42));
+    CHECK(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_OFF] = 1;
+    CHECK_FALSE(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_OFF] = -1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_COND] = -1;
+    s = BasePf(3, 20);   // Sun out, Revelation missing: without ONLY_MISSING, the one-land row also fires
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 43));
+    s.players[0].library.push_back(CardPf("Diabolic Revelation", 503));
+    s.players[0].library.push_back(CardPf("Scorched Ruins", 504));
+    CHECK(HasPf(ProvPf().TutorCandidates(s, 0, gp), "Scorched Ruins"));
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_ONLY_MISSING] = 1;
+    const auto only = ProvPf().TutorCandidates(s, 0, gp);
+    CHECK(only.size() == 1);
+    CHECK(only[0] == "Diabolic Revelation");
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_ONLY_MISSING] = -1;
+    heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2] = -1;
+}
+
 namespace
 {
 struct LotusArm

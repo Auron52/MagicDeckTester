@@ -73288,6 +73288,44 @@ bool BloodSunGrimAmendLateOn()
     return heurarm::Flag(heurarm::BLOODSUN_GRIM_AMEND_LATE, on);
 }
 
+// B12-bis (ledger, USER 2026-11-22): the replacement Grim list and its independent pooled A/B arms.
+// Every reader defaults OFF; all are inert without both the USER prune and MTG_BLOODSUN_GRIM_PRUNE.
+bool BloodSunGrimV2On()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2, on);
+}
+bool BloodSunGrimV2RedOff()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_RED_OFF");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_RED_OFF, on);
+}
+bool BloodSunGrimV2RedCond()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_RED_COND");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_RED_COND, on);
+}
+bool BloodSunGrimV2Fastbond()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_FASTBOND");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_FASTBOND, on);
+}
+bool BloodSunGrimV2FbT2()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_FB_T2");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_FB_T2, on);
+}
+bool BloodSunGrimV2LandCut()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_LAND_CUT");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_LAND_CUT, on);
+}
+bool BloodSunGrimV2OnlyMissing()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_GRIM_V2_ONLY_MISSING");
+    return heurarm::Flag(heurarm::BLOODSUN_GRIM_V2_ONLY_MISSING, on);
+}
+
 namespace
 {
 // B12's land threshold (USER, verbatim: "if you don't have enough land to get to 7 mana").
@@ -73603,6 +73641,129 @@ bool BloodSunGrimTargetAdmitted(const GameState& s, int controller, const CardDe
     return BloodSunGrimAdmitImpl(s, controller, d, true);
 }
 
+// B12-bis's one-land rule: a Lotus is worth fetching instead of Ruins only when its immediate colour
+// turns a SECOND held Grim, a Machinations transmute, or Time Warp into a same-turn play. Compare exact
+// joint bills before and after the fetched land's real entry; the probe never commits a choice.
+static bool BsV2LotusUnlocksFollowup(const GameState& s, int controller, const CardDefinition& lotus)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    if (controller != s.active_player_index || pl.lands_played_this_turn >= pl.LandDropsAvailable()) { return false; }
+    const CardDefinition* grim = nullptr;
+    int grims = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.tutor_to_hand && !d->params.tutor_up_to_x && !d->params.wish_from_sideboard
+            && !d->params.tutor_from_graveyard && d->params.tutor_exact_mv < 0)
+        { grim = d; ++grims; }
+    }
+    if (grim == nullptr) { return false; }
+    GameState probe = s;
+    Card fetched = lotus.card;
+    fetched.m_number = 1000000000;
+    probe.players[static_cast<std::size_t>(controller)].hand.push_back(std::move(fetched));
+    const std::size_t at = probe.players[static_cast<std::size_t>(controller)].hand.size() - 1;
+    if (!PlayLandFromHand(probe, at, lotus, LandPlayOptions{})) { return false; }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !(d->params.extra_turns_on_resolve > 0
+            || d->params.tutor_exact_mv >= 0 || (d == grim && grims >= 2))) { continue; }
+        ManaCost bill = grim->card.m_mana_cost;
+        const ManaCost& follow = d->card.m_mana_cost;
+        bill.generic += follow.generic; bill.white += follow.white; bill.blue += follow.blue;
+        bill.black += follow.black; bill.red += follow.red; bill.green += follow.green;
+        bill.colorless += follow.colorless;
+        if (!TurnSolver::CostPayableExact(s, bill, false)
+            && TurnSolver::CostPayableExact(probe, bill, false)) { return true; }
+    }
+    return false;
+}
+
+static std::vector<std::string> BloodSunGrimV2Candidates(const GameState& s, int controller,
+                                                         const std::vector<std::string>& all)
+{
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool sun_bf = false, sun_hand = false, rev_bf = false, rev_hand = false;
+    bool fb_bf = false, fb_hand = false, red_bf = false, red_hand = false;
+    BsHave(s, controller, BsIsSun, sun_bf, sun_hand);
+    BsHave(s, controller, [](const CardDefinition& d) { return d.params.tutor_up_to_x; }, rev_bf, rev_hand);
+    BsHave(s, controller, BsIsFastbond, fb_bf, fb_hand);
+    BsHave(s, controller, [](const CardDefinition& d) { return d.card.IsLand() && BsProducesRed(d.params); }, red_bf, red_hand);
+    const bool sun_missing = !sun_bf && !sun_hand, rev_missing = !rev_hand;
+    const int mana = BloodSunTurnManaEstimate(s, controller);
+    const bool open_drop = controller == s.active_player_index && pl.lands_played_this_turn < pl.LandDropsAvailable();
+    int hand_lands = 0, next_drops = 1, floor = 0;
+    bool big_in_hand = false;
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != controller || pm.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d == nullptr) { continue; }
+        if (pm.card.IsLand()) { floor += std::max(1, EffectiveLandDef(s, *d).params.produces_amount); }
+        else { next_drops += d->params.static_extra_land_drops; }
+    }
+    int best_hand_land = 0;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(c));
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        ++hand_lands;
+        big_in_hand |= BsIsBigLand(*d);
+        const CardParams& e = EffectiveLandDef(s, *d).params;
+        int net = std::max(1, e.produces_amount) - std::max(e.etb_replace_sacrifice_untapped_lands,
+                                                               e.etb_sacrifice_lands);
+        if (e.etb_bounce_land) { --net; }
+        best_hand_land = std::max(best_hand_land, net);
+    }
+    const bool fb_target = BloodSunGrimV2Fastbond() && sun_bf && rev_hand && !fb_bf && !fb_hand
+        && mana <= 6 && hand_lands - next_drops >= (BloodSunGrimV2FbT2() ? 2 : 1);
+    const bool only_missing = BloodSunGrimV2OnlyMissing() && (sun_missing || rev_missing);
+    const bool land_cut = BloodSunGrimV2LandCut() && fb_target && hand_lands >= 2 && big_in_hand
+        && next_drops == 1;
+    const bool land_target = !land_cut && !only_missing &&
+        ((sun_bf && rev_hand && mana <= 6) || (sun_bf && rev_hand && fb_bf) || floor + best_hand_land < 7);
+    const CardDefinition* lotus = CardDatabase::Instance().Lookup("Lotus Vale");
+    std::string lotus_name = "Lotus Vale";
+    if (std::find(all.begin(), all.end(), lotus_name) == all.end())
+    { lotus_name = "Lotus Field"; lotus = CardDatabase::Instance().Lookup(lotus_name); }
+    const bool lotus_now = land_target && !fb_bf && sun_bf && open_drop && lotus != nullptr
+        && BsV2LotusUnlocksFollowup(s, controller, *lotus);
+    const bool ruins_available = std::find(all.begin(), all.end(), "Scorched Ruins") != all.end();
+    const std::string land_name = (lotus_now || !ruins_available) ? lotus_name : "Scorched Ruins";
+    std::vector<std::string> out;
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { continue; }
+        const bool sun = d->params.lands_lose_nonmana_abilities && sun_missing;
+        const bool rev = d->params.tutor_up_to_x && rev_missing;
+        const bool red = (nm == "Rakdos Carnarium" || nm == "City of Brass") && sun_hand
+            && !red_bf && !red_hand && !BloodSunGrimV2RedOff()
+            && (!BloodSunGrimV2RedCond() || rev_hand);
+        if (sun || rev || red) { out.push_back(nm); continue; }
+        if (only_missing) { continue; }
+        if (BloodSunGrimTimeWarpCastable(s, controller, *d)) { out.push_back(nm); continue; }
+        if (fb_target && d->params.unlimited_land_plays) { out.push_back(nm); continue; }
+        if (land_target && nm == land_name) { out.push_back(nm); }
+    }
+    auto rank = [](const std::string& nm)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return 6; }
+        if (d->params.lands_lose_nonmana_abilities) { return 0; }
+        if (d->params.tutor_up_to_x) { return 1; }
+        if (nm == "Rakdos Carnarium" || nm == "City of Brass") { return 2; }
+        if (d->params.extra_turns_on_resolve > 0) { return 3; }
+        if (d->params.unlimited_land_plays) { return 4; }
+        return 5;
+    };
+    std::stable_sort(out.begin(), out.end(), [&](const std::string& a, const std::string& b)
+                     { return rank(a) < rank(b); });
+    return out;
+}
+
 // Grim Tutor (and the transmute's synthesized exact-MV search): the generic list restricted to the USER's targets,
 // ordered by BloodSunRole (the per-cast named axis searches every name; the order is its in-place first combination and
 // the beyond-horizon front). Diabolic Revelation's packages ride RevelationPackageRestrict instead.
@@ -73618,6 +73779,19 @@ std::vector<std::string> BloodSunProvider::TutorCandidates(const GameState& s, i
     // an empty list: not cast, TutorNeedsCandidate).
     const bool rev_gate = !transmute && BloodSunGrimRevGateHolds(s, controller);
     const bool late = grim && BloodSunGrimAmendLateOn();
+    if (grim && BloodSunGrimV2On())
+    {
+        std::vector<std::string> v2 = BloodSunGrimV2Candidates(s, controller, all);
+        if (rev_gate)
+        {
+            v2.erase(std::remove_if(v2.begin(), v2.end(), [&](const std::string& nm)
+                     {
+                         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                         return d == nullptr || !BloodSunGrimTimeWarpCastable(s, controller, *d);
+                     }), v2.end());
+        }
+        return v2;
+    }
     std::vector<std::pair<int, std::string>> keep;
     for (std::string& nm : all)
     {

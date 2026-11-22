@@ -1109,6 +1109,13 @@ enum Slot : int
     BLOODSUN_GRIM_LAND_BOARD, // MTG_BLOODSUN_GRIM_LAND_BOARD  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (perf part 6): the big lands' 7-mana test counts our BATTLEFIELD lands only, not the best land in hand (an alternative reading of the USER's "if you don't have enough land to get to 7 mana"). Default OFF; inert while the Grim prune is off
     BLOODSUN_GRIM_TW_ANY,     // MTG_BLOODSUN_GRIM_TW_ANY  AMENDMENT ARM of MTG_BLOODSUN_GRIM_PRUNE (perf part 6): Time Warp is a Grim target whenever none is in hand (the next-turn Time Warp line), not only when Grim + Time Warp are both castable this turn. Default OFF; inert while the Grim prune is off
     BLOODSUN_GRIM_AMEND_LATE, // MTG_BLOODSUN_GRIM_AMEND_LATE  ORDER-only arm of the Grim amendments (perf part 6b): a Grim target admitted ONLY by MTG_BLOODSUN_GRIM_LAND_DROP / _LAND_BOARD / _TW_ANY ranks after every base B12 target (TutorCandidates' stable sort: the in-place first combination and the beyond-horizon front). Nothing refused; complete at unlimited budget. Default OFF; inert while the Grim prune is off
+    BLOODSUN_GRIM_V2,         // MTG_BLOODSUN_GRIM_V2  B12-bis one-land list. Default OFF; inert without the Grim prune
+    BLOODSUN_GRIM_V2_RED_OFF, // MTG_BLOODSUN_GRIM_V2_RED_OFF  no red-source target. Default OFF (red ON)
+    BLOODSUN_GRIM_V2_RED_COND,// MTG_BLOODSUN_GRIM_V2_RED_COND  red source only with Revelation held. Default OFF
+    BLOODSUN_GRIM_V2_FASTBOND,// MTG_BLOODSUN_GRIM_V2_FASTBOND  low-mana Fastbond target. Default OFF
+    BLOODSUN_GRIM_V2_FB_T2,   // MTG_BLOODSUN_GRIM_V2_FB_T2  require two surplus hand lands. Default OFF (one)
+    BLOODSUN_GRIM_V2_LAND_CUT,// MTG_BLOODSUN_GRIM_V2_LAND_CUT  Fastbond alone when the surplus has a big land. Default OFF
+    BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
     COUNT
 };
 
@@ -2162,6 +2169,13 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_LAND_BOARD",
         "MTG_BLOODSUN_GRIM_TW_ANY",
         "MTG_BLOODSUN_GRIM_AMEND_LATE",
+        "MTG_BLOODSUN_GRIM_V2",
+        "MTG_BLOODSUN_GRIM_V2_RED_OFF",
+        "MTG_BLOODSUN_GRIM_V2_RED_COND",
+        "MTG_BLOODSUN_GRIM_V2_FASTBOND",
+        "MTG_BLOODSUN_GRIM_V2_FB_T2",
+        "MTG_BLOODSUN_GRIM_V2_LAND_CUT",
+        "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
