@@ -30133,9 +30133,11 @@ static int BpSearchWidth()
 // See docs/design/post-breakpoint-search.md.
 static bool SearchedPlayActive();   // defined with the searched-play depth gate, below
 
-// Searched land-ETB scry/surveil disposition (MTG_SCRY_SEARCH, default ON; MTG_SCRY_WIDTH caps how
-// many candidates the enumeration emits, heuristic-first). Off => the provider heuristic decides
-// every look at resolution, byte-identical to before the branch existed.
+// Searched land-ETB scry/surveil disposition (MTG_SCRY_SEARCH, default ON; every candidate is emitted,
+// heuristic-first -- there is no width cap: USER 2026-11-22, "I don't like widths period because they provide
+// either too many or too few options. My preference is to fully open it up and prune with a heuristic as
+// needed." The prune is the provider's, at resolution: ScryVerdict / ScryKeptOrder in TopDispositionCandidates).
+// Off => the provider heuristic decides every look at resolution, byte-identical to before the branch existed.
 //
 // DEPTH-GATED like cantrip-first and the Ponder branch: at depth 0 there is no rollout to score the
 // variants, so an extra plan variant would not be a search -- just enumeration order picking a
@@ -30173,28 +30175,11 @@ static int LandDropTriggeredScry(const GameState& state, const CardDefinition& l
     }
     return 0;
 }
-// NOT under-measured -- SATURATED, which is why there is no sweep to point at. Both modelled ETB
-// look cards examine exactly ONE card (Temple of Epiphany etb_scry 1, Thundering Falls etb_surveil 1,
-// Treasure Hunt the only deck running either), and for a 1-card look EnumerateTopDispositions yields
-// 2^1 = 2 dispositions, so TopDispositionCandidates returns 2 and `min(k, width)` is already the
-// whole legal space at width 2. Raising this is a provable no-op at the current card pool.
-// It starts to matter the moment a multi-card look is modelled: k becomes 2^m ordered subsets
-// (4 at scry 2, 8 at scry 3), and only THEN is the prune real and a sweep meaningful.
-static std::size_t ScrySearchWidth()
-{
-    static const std::size_t w = []() -> std::size_t
-    {
-        const char* v = std::getenv("MTG_SCRY_WIDTH");
-        if (v == nullptr || *v == '\0') { return 2; }
-        const int n = std::atoi(v);
-        return n < 1 ? 1 : static_cast<std::size_t>(n);
-    }();
-    return w;
-}
-
 // MTG_CAST_SCRY_SEARCH (default ON; per-job lever heurarm::CAST_SCRY_SEARCH): a DirectDamage spell's own scry
 // (Magma Jet's cast_scry) is a SEARCHED axis -- see the CollectActions post-pass that twins each cast per
 // alternative disposition. =0 -> the provider's single in-window pick, byte-identical to before.
+// MEASUREMENT ONLY (MTG_SCRY_LEGACY_WIDTH2): the deleted width-2 cap, for the 2026-11-22 A/B's baseline arm.
+static std::size_t ScryLegacyCap(std::size_t k) { return heurarm::Flag(heurarm::SCRY_LEGACY_WIDTH2, false) ? std::min<std::size_t>(k, 2) : k; }
 static bool CastScrySearchOn()
 {
     static const bool s_on = EnvOn("MTG_CAST_SCRY_SEARCH", true);
@@ -46491,7 +46476,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // ALTERNATIVE disposition of the look (k >= 1, pinned by Action::scry_pin; the untwinned variant is
                 // candidate 0, the provider's disposition).
                 // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is SIZED OFF THE LOOK COUNT ONLY (every ordered subset of
-                // `look` cards, capped by MTG_SCRY_WIDTH, as the land-ETB axis caps it), never off the cards now on top
+                // `look` cards -- the WHOLE fan, no width cap: USER 2026-11-22 "fully open it up and prune with a heuristic as
+                // needed"), never off the cards now on top
                 // -- the player has not seen them when choosing the line. The Ponder ORDER axis is the precedent (sized
                 // off the library size, pin clamped at resolution). The disposition, and the provider's ScryVerdict
                 // prune, are read only at RESOLUTION (ChooseTopDisposition -> TopDispositionCandidates on the card the
@@ -46507,7 +46493,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     const int look = std::min(def.params.cast_scry, static_cast<int>(ap.library.size()));
                     const std::size_t disp = ScryLookDispositionCount(look);   // ordered subsets kept on top
-                    scry_alts = std::min(126, static_cast<int>(std::min(disp, ScrySearchWidth())) - 1);
+                    scry_alts = std::min(126, static_cast<int>(ScryLegacyCap(disp)) - 1);
                 }
                 for (const auto& t : esc)
                 {
@@ -57146,7 +57132,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // unfindable at --depth 8 --budget-ms 0, and both games were a turn slow.
     // The step-9d (Loran's Escape) shape, applied AFTER the target fan so every target variant is twinned: candidate
     // 0 is the untwinned cast (scry_pin -1, the provider's disposition), each k >= 1 pins TopDispositionCandidates[k].
-    // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is sized off the look COUNT (capped by MTG_SCRY_WIDTH), never off the
+    // NO CLAIRVOYANCE ABOUT THE LOOK: the fan is sized off the look COUNT (every disposition, no width cap), never off the
     // cards now on top; the provider's ScryVerdict prune applies at RESOLUTION on the seen cards, where a pin past the
     // surviving candidates clamps (the twin then duplicates its base, which is enumerated first and wins the tie).
     // A ROLLOUT LEAF emits only the base (beyond the horizon the permitted playout policy is the provider's
@@ -57163,8 +57149,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (d == nullptr || d->tmpl != CardTemplate::DirectDamage || d->params.cast_scry <= 0 || a.scry_pin >= 0)
             { scry_twins.push_back(std::move(a)); continue; }
             const int look = std::min(d->params.cast_scry, static_cast<int>(ap.library.size()));
-            const int alts = std::min(126, static_cast<int>(std::min(ScryLookDispositionCount(look),
-                                                                     ScrySearchWidth())) - 1);
+            const int alts = std::min(126, static_cast<int>(ScryLegacyCap(ScryLookDispositionCount(look))) - 1);
             const Action base = a;
             scry_twins.push_back(std::move(a));
             for (int k = 1; k <= alts; ++k)
@@ -99187,8 +99172,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const int look = std::min<int>(n, static_cast<int>(ap.library.size()));
             if (look <= 0) { continue; }
             // NON-CLAIRVOYANT ENUMERATION (EnumUnseenBlindScope; MTG_NC_SEARCH): the top `look` cards are
-            // unseen when the line is chosen, so the fan is sized off the LOOK COUNT alone (capped by
-            // MTG_SCRY_WIDTH, the Loran's Escape / step-9d shape) and the cards -- with the provider's firm
+            // unseen when the line is chosen, so the fan is sized off the LOOK COUNT alone (every disposition,
+            // the Loran's Escape / step-9d shape) and the cards -- with the provider's firm
             // ScryVerdict prune -- are read only at RESOLUTION, on the card the scry actually sees (a firm
             // verdict leaves one candidate, so the pin clamps to 0 and the variant duplicates its base).
             // Known positions (placed, or a revealed top) are read as before. A chain is sized off the
@@ -99213,7 +99198,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // watcher is on the battlefield, or when the plan casts one BEFORE its land (a non-first
             // land_slot: the land is played after the watcher resolves). Not width-capped: k is the
             // whole decision of a chain that can run a dozen looks deep, and each distinct value is a
-            // different line (MTG_SCRY_WIDTH bounds a single look's ordered subsets, not this).
+            // different line.
             bool chain = !surveil && look == 1
                       && ScryWatcherCopies(state, state.active_player_index) > 0;
             if (!chain && !surveil && look == 1 && state.deck_has_scry_watcher && p.land_slot != 0)
@@ -99230,8 +99215,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 : unseen_look ? ScryLookDispositionCount(look)
                 : TopDispositionCandidates(state, looked,
                                            surveil ? LookKind::Surveil : LookKind::Scry).size();
-            const std::size_t width = chain ? k : ScrySearchWidth();
-            for (std::size_t c = 1; c < std::min(k, width); ++c)
+            // NO WIDTH CAP (USER 2026-11-22): every candidate is a variant; the provider prunes the candidate set.
+            for (std::size_t c = 1; c < (chain ? k : ScryLegacyCap(k)); ++c)
             {
                 TurnSolver::Plan v = p;
                 v.scry_choice = static_cast<int>(c);

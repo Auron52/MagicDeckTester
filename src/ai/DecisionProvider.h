@@ -777,6 +777,17 @@ public:
     // heuristic to prune the search". Default -1 everywhere -> no pruning, byte-identical.
     virtual int ScryVerdict(const GameState& s, const Card& card) const { (void)s; (void)card; return -1; }
 
+    // ScryKeptOrder -- the ORDER prune of a scry / surveil look (USER 2026-11-22: "we should certainly consider
+    // pruning orderings of the top. Those should be something the heuristic can handle."). `kept` holds the look
+    // indices of ONE set of cards kept on top, ascending (look order). A provider that owns the order of that set
+    // rewrites `kept` into it (top -- drawn first -- first) and returns true; TopDispositionCandidates then offers
+    // only that order of the set (the other orders of the same set are dropped from the SEARCH's candidates; human
+    // play enumerates every disposition regardless). A provider prune, so it may be lossy: a deck that adopts one
+    // carries the A/B. Its TopDispositionPick should put a kept set in this same order, or the set is offered twice
+    // (candidate 0 in the pick's order, plus the firm order). false (the default) = every order is searched.
+    virtual bool ScryKeptOrder(const GameState& s, const std::vector<Card>& looked, std::vector<int>& kept) const
+    { (void)s; (void)looked; (void)kept; return false; }
+
     // ScryChainSingleCandidate -- a scry-watcher reveal chain (Galadriel; ScryChainCandidates in
     // core/SpellEffects.h) normally offers the search every distinct skip count, the provider default
     // first. TRUE prunes the chain to that default alone: a provider-owned ONE-OPTION prune, so it

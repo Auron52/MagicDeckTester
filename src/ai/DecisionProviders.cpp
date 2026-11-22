@@ -2495,6 +2495,197 @@ void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::ve
     });
 }
 
+// ---- THE BURN SCRY (Creature Burn + Midrange Burn; Magma Jet's scry 2 is the only scry either deck holds) ----------
+// USER 2026-11-22: "Ideally we would make it a relatively smart heuristic that keeps things based on impact and
+// castability. So, for example, you would often keep bolt because it can fit in to the curve wherever, but you may not
+// keep a 3-drop if you have too many even if you have enough mana. Also, we should certainly consider pruning orderings
+// of the top. Those should be something the heuristic can handle." It replaces GenericProvider's rule for these two
+// decks ("keep every nonland; keep a land only below two lands in play"), which ignores the lands in HAND and the spells
+// the hand already holds (Creature Burn references s6 gi5 / s8 gi7, docs/design/searched-scry-disposition.md).
+// Three parts, three per-job levers:
+//   * MTG_BURN_SCRY_PICK  -- candidate 0 of the searched fan (TopDispositionPick): the default the search ties to,
+//     the playout beyond the horizon and the d0 runner. Not a prune: every disposition stays searched.
+//   * MTG_BURN_SCRY_FIRM  -- two FIRM verdicts (ScryVerdict), a lossy prune of the fan: a one-mana 3-damage burn spell
+//     (Lightning Bolt, Chain Lightning) always stays on top, and a land beyond two over the land goal (with no Figure of
+//     Destiny to sink mana into) always goes to the bottom.
+//   * MTG_BURN_SCRY_ORDER -- the ORDER prune (ScryKeptOrder): a set of kept cards is offered in the rule's order only.
+// The rule, on the state the scry resolves in (the Jet is already off the hand):
+//   lands  A = own lands on the battlefield + lands in hand;  goal G = the hand's largest effective cost, +1 when a
+//          cheap spell rides along (Ball Lightning + Bolt wants 4 lands), clamped to [3, 4]; +1 with a Figure of
+//          Destiny out or in hand (its 4/4 and 8/8 sink mana). A looked land stays on top while A + kept lands < G.
+//   spells effective cost e (Rift Bolt's suspend, the spectacle costs, Fireblast free on two Mountains, Flame
+//          Javelin's {2/R} pips as R, Chandra's Incinerator as 4 -- its discount follows the burn turn's damage).
+//          e <= 1 keeps (fits the curve anywhere). Otherwise, with supply S = A + kept lands: bottom when e > S + 1
+//          (two land draws away), and bottom when the hand already holds about two turns of spells -- the summed e of
+//          its e >= 2 spells plus this one exceeds 2 * S (the crowded slot: a third 3-drop on three lands, Browbeat
+//          beside Keldon Champion on three). Price of Progress against an opponent with no nonbasic land is dead.
+//   order  kept lands first while A < G (the land is the next card needed), last otherwise; then spells castable on
+//          S lands, a creature that deals damage every turn (not sacrificed at end step) before the rest, cheaper first.
+namespace burnscry
+{
+static bool PickOn()  { static const bool v = EnvOn("MTG_BURN_SCRY_PICK", true);  return heurarm::Flag(heurarm::BURN_SCRY_PICK, v); }
+static bool FirmOn()  { static const bool v = EnvOn("MTG_BURN_SCRY_FIRM", true);  return heurarm::Flag(heurarm::BURN_SCRY_FIRM, v); }
+static bool OrderOn() { static const bool v = EnvOn("MTG_BURN_SCRY_ORDER", true); return heurarm::Flag(heurarm::BURN_SCRY_ORDER, v); }
+
+struct Ctx
+{
+    int  lands = 0;          // A: own lands on the battlefield + lands in hand
+    int  goal = 3;           // G
+    int  demand = 0;         // summed effective cost of the hand's e >= 2 spells
+    int  mountains = 0;      // Mountains on the battlefield + in hand (Fireblast's alternative cost)
+    int  opp_nonbasic = 0;   // nonbasic lands the opponents control (Price of Progress)
+    bool figure = false;     // Figure of Destiny out or in hand
+};
+
+static int EffCost(const CardDefinition& d, int mountains)
+{
+    const CardParams& p = d.params;
+    const int mv = d.card.m_mana_cost.ManaValue();
+    if (p.sacrifice_mountains_alternative && mountains >= 2) { return 0; }
+    int e = mv - static_cast<int>(d.card.m_mana_cost.twobrid_count);   // {2/R} paid with R
+    if (p.suspend_cost.has_value())   { e = std::min(e, p.suspend_cost->ManaValue()); }
+    if (p.spectacle_cost.has_value()) { e = std::min(e, p.spectacle_cost->ManaValue()); }
+    if (p.cost_less_per_opponent_noncombat_damage) { e = std::min(e, 4); }
+    return std::max(e, 0);
+}
+
+static bool IsMountain(const Card& c) { return c.IsLand() && CardHasSubtype(c, "Mountain"); }
+static bool IsFigure(const CardDefinition& d) { return d.params.figure_two_cost.has_value(); }
+
+static Ctx Context(const GameState& s, const std::vector<Card>& looked)
+{
+    Ctx x;
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me)
+        {
+            if (p.card.IsLand()) { ++x.lands; if (IsMountain(p.card)) { ++x.mountains; } }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && IsFigure(*d)) { x.figure = true; }
+        }
+        else if (p.card.IsLand() && !p.card.HasSupertype(Supertype::Basic)) { ++x.opp_nonbasic; }
+    }
+    int max_e = 0;
+    bool cheap = false;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        if (c.IsLand()) { ++x.lands; if (IsMountain(c)) { ++x.mountains; } }
+    }
+    auto note_spell = [&](const Card& c, bool in_hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { return; }
+        if (IsFigure(*d)) { x.figure = true; }
+        const int e = EffCost(*d, x.mountains);
+        if (e <= 1) { cheap = true; }
+        else if (in_hand) { x.demand += e; }
+        if (e <= x.lands + 1) { max_e = std::max(max_e, e); }   // a spell two land draws away does not set the goal
+    };
+    for (const Card& c : s.ActivePlayer().hand) { note_spell(c, true); }
+    for (const Card& c : looked) { note_spell(c, false); }
+    x.goal = std::clamp(max_e + (cheap ? 1 : 0), 3, 4) + (x.figure ? 1 : 0);
+    return x;
+}
+
+// The rule's keep set, as one flag per looked card.
+static std::vector<char> KeepSet(const GameState& s, const std::vector<Card>& looked, const Ctx& x)
+{
+    const int m = static_cast<int>(looked.size());
+    std::vector<char> keep(static_cast<std::size_t>(m), 0);
+    int kept_lands = 0;
+    for (int i = 0; i < m; ++i)
+    {
+        if (!looked[static_cast<std::size_t>(i)].IsLand()) { continue; }
+        if (x.lands + kept_lands < x.goal) { keep[static_cast<std::size_t>(i)] = 1; ++kept_lands; }
+    }
+    const int supply = x.lands + kept_lands;
+    int demand = x.demand;
+    for (int i = 0; i < m; ++i)
+    {
+        const Card& c = looked[static_cast<std::size_t>(i)];
+        if (c.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { keep[static_cast<std::size_t>(i)] = 1; continue; }
+        if (d->params.damage_per_nonbasic_land > 0 && x.opp_nonbasic == 0) { continue; }   // dead Price of Progress
+        const int e = EffCost(*d, x.mountains);
+        if (e <= 1) { keep[static_cast<std::size_t>(i)] = 1; continue; }
+        if (e > supply + 1) { continue; }
+        if (demand + e > 2 * supply) { continue; }
+        keep[static_cast<std::size_t>(i)] = 1;
+        demand += e;
+    }
+    (void)s;
+    return keep;
+}
+
+// Sort `kept` (look indices) into the rule's draw order, top first. Stable on look order.
+static void Order(const std::vector<Card>& looked, const Ctx& x, std::vector<int>& kept)
+{
+    int land_in_set = 0;
+    for (int i : kept) { if (looked[static_cast<std::size_t>(i)].IsLand()) { ++land_in_set; } }
+    const int supply = x.lands + land_in_set;
+    auto key = [&](int i) -> std::tuple<int, int, int>
+    {
+        const Card& c = looked[static_cast<std::size_t>(i)];
+        if (c.IsLand()) { return { x.lands < x.goal ? 0 : 3, 0, 0 }; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { return { 2, 1, 99 }; }
+        const int e = EffCost(*d, x.mountains);
+        const bool recurring = (d->card.IsCreature() && !d->params.endstep_sacrifice_self)
+                            || d->card.HasType(CardType::Planeswalker);
+        return { e <= supply ? 1 : 2, recurring ? 0 : 1, e };
+    };
+    std::stable_sort(kept.begin(), kept.end(), [&](int a, int b) { return key(a) < key(b); });
+}
+
+static TopDisposition Pick(const GameState& s, const std::vector<Card>& looked)
+{
+    const Ctx x = Context(s, looked);
+    const std::vector<char> keep = KeepSet(s, looked, x);
+    TopDisposition disp;
+    for (int i = 0; i < static_cast<int>(looked.size()); ++i) { if (keep[static_cast<std::size_t>(i)]) { disp.top_order.push_back(i); } }
+    if (OrderOn()) { Order(looked, x, disp.top_order); }
+    return disp;
+}
+
+// The FIRM verdict for one card (+1 keep, 0 away, -1 none). The context reads only the hand and the board.
+static int Verdict(const GameState& s, const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr) { return -1; }
+    if (!d->card.IsLand())
+    {
+        return (d->tmpl == CardTemplate::DirectDamage && d->card.m_mana_cost.ManaValue() == 1 && d->params.damage >= 3
+                && !d->params.suspend_cost.has_value() && !d->params.spectacle_cost.has_value()) ? 1 : -1;
+    }
+    const Ctx x = Context(s, std::vector<Card>());
+    return (!x.figure && x.lands >= x.goal + 2) ? 0 : -1;
+}
+}   // namespace burnscry
+
+#define BURN_SCRY_HOOKS(Cls, Base)                                                                                    \
+TopDisposition Cls::TopDispositionPick(const GameState& s, const std::vector<Card>& looked, LookKind kind,           \
+                                       int keep_decision) const                                                        \
+{                                                                                                                      \
+    if (kind != LookKind::Scry || !burnscry::PickOn()) { return Base::TopDispositionPick(s, looked, kind, keep_decision); } \
+    return burnscry::Pick(s, looked);                                                                                  \
+}                                                                                                                      \
+int Cls::ScryVerdict(const GameState& s, const Card& card) const                                                       \
+{                                                                                                                      \
+    if (!burnscry::FirmOn()) { return Base::ScryVerdict(s, card); }                                                    \
+    return burnscry::Verdict(s, card);                                                                                 \
+}                                                                                                                      \
+bool Cls::ScryKeptOrder(const GameState& s, const std::vector<Card>& looked, std::vector<int>& kept) const             \
+{                                                                                                                      \
+    if (!burnscry::OrderOn()) { return Base::ScryKeptOrder(s, looked, kept); }                                         \
+    burnscry::Order(looked, burnscry::Context(s, looked), kept);                                                       \
+    return true;                                                                                                       \
+}
+BURN_SCRY_HOOKS(CreatureBurnProvider, RedElementalsProvider)
+BURN_SCRY_HOOKS(MidrangeBurnProvider, DeckProvider)
+#undef BURN_SCRY_HOOKS
+
 // ---- CreatureBurnProvider (Stage 4a, 2026-11-20; the class note in DecisionProviders.h) ---------------------------
 // Teetering Peaks' target ORDER and PRUNE. The arriving reps are the engine's sound classes (LandEtbPumpReps): when an
 // attack-capable candidate exists they are all attack-capable (the inert class was dropped), else there is one rep and

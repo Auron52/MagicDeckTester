@@ -1871,6 +1871,12 @@ public:
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
     bool OrderOpaqueCastsByRank() const override;
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+    // THE BURN SCRY (Magma Jet's scry 2; burnscry in DecisionProviders.cpp, USER 2026-11-22): candidate 0 by impact and
+    // castability, two firm verdicts, and the order prune. Shared with CreatureBurnProvider.
+    TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                      LookKind kind, int keep_decision) const override;
+    int  ScryVerdict(const GameState& s, const Card& card) const override;
+    bool ScryKeptOrder(const GameState& s, const std::vector<Card>& looked, std::vector<int>& kept) const override;
 };
 
 // 1 Drop Burn (onboarding 2026-11-17, Stage 4a): its OWN provider, an empty DeckProvider derivation of
@@ -4286,6 +4292,12 @@ class CreatureBurnProvider : public RedElementalsProvider
 public:
     void LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const override;
     bool RestrictedSecondMainLive(const GameState& s) const override;
+    // THE BURN SCRY (Magma Jet's scry 2; burnscry in DecisionProviders.cpp, USER 2026-11-22): candidate 0 by impact and
+    // castability, two firm verdicts, and the order prune. Shared with MidrangeBurnProvider.
+    TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                      LookKind kind, int keep_decision) const override;
+    int  ScryVerdict(const GameState& s, const Card& card) const override;
+    bool ScryKeptOrder(const GameState& s, const std::vector<Card>& looked, std::vector<int>& kept) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     // SOUND DOMINANCE FOLD shared with Midrange Burn / 1 Drop Burn (MTG_CB_FIREBLAST_PAIR, DEFAULT ON): Fireblast's
     // Mountain pairs fold to the one keeping the most untapped Mountains (definition note).
