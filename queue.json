@@ -1,12 +1,3 @@
 {
- "entries": [
-  {
-   "branch": "wip/refland",
-   "head_since": "2026-11-22T00:07:33Z",
-   "host": "550a08fdc1f3",
-   "id": "550a08fdc1f3:wip/refland",
-   "joined": "2026-11-22T00:07:33Z",
-   "note": "urgent: reference replay fix (Creature_Burn claude_s9_gi8 drift from 42d819bc0)"
-  }
- ]
+ "entries": []
 }
