@@ -511,8 +511,9 @@ the fan has five dispositions at scry two and sixteen at scry three before provi
 folds. Creature Burn and Midrange Burn now have a provider rule based on lands in play and hand, hand spell demand,
 impact, castability, and the order of cards kept on top. The paired A/B and deeper slower-seed checks are recorded
 below. The separate width inventory in `logs/creature-burn/width-inventory.md` found nine other default-on caps
-that make decisions unfindable even at budget zero; the widest is `TutorSearchWidth` (base six). Those caps are
-outside this deck batch.
+that made decisions unfindable even at budget zero at the time of the audit; the widest was
+`TutorSearchWidth` (base six). Tutor width was removed independently on the shared branch before this batch's
+rebase. The other caps are outside this deck batch.
 
 **Cost and limits.** Browbeat's full second main is expensive: in the 300-game probe it used 1.63x the search
 units at d5 b20 and 1.59x at d3 b10, with zero net turn change. It remains because the restricted-main proposal
@@ -553,22 +554,24 @@ at d8 b0 (`ab-deep/`), a line lost by the prune rather than budget churn. Search
 (+10.0%; CPU 1.50 to 1.95 seconds/game). Timing compares separate pooled runs on the same box and is more
 load-sensitive than units. The candidate pick and order prune stay enabled; the full fan stays open.
 
-The clean Release build passed 3,917 unit tests and 610 scenarios. The integrated pre-cleanup build also passed
-coverage with zero missing or partial cards, the suite gate, and a 30-reference replay with zero shortfalls (Creature Burn, Midrange Burn, Modern RW
-Burn; 1 Drop Burn has no saved reference set). The temporary opponent and legacy-scry A/B levers have been
-removed; the final default-off rebuild, regression landing, generated verification block, and profile outcome
-are pending.
+The final rebased Release build passed 4,044 unit tests (3,653,879 assertions) and 610 scenarios. The 30 saved
+references replayed with zero shortfalls (Creature Burn, Midrange Burn, Modern RW Burn; 1 Drop Burn has no saved
+reference set). The deck verifier passed every blocking gate: all 19 cards have full coverage, Scryfall costs
+matched, viewer wiring and surface sweep were clean, both mismatch batches finished without nonconvergence or
+forced-draw divergence, and play invariants held for eight games and 174 decisions. Its generated Stage 6a block
+follows. The temporary opponent and legacy-scry A/B levers have been removed. Regression landing and the fast
+mulligan profile remain pending.
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-22)
 
-`verify_deck.py decks/Creature Burn/Creature Burn.cod --write-ledger` -> **FAIL**
+`verify_deck.py decks/Creature Burn/Creature Burn.cod --write-ledger` -> **PASS**
 
 | Gate | Status | Blocking | Summary |
 |---|---|---|---|
 | coverage | PASS | yes | all 19 cards full (missing=0, partial=0) |
-| card_costs | FAIL | yes | cost audit INCOMPLETE -- 3 cost(s) UNVERIFIED (Scryfall rate-limited/unreachable) |
-| card_fields | PASS | yes | 893 cards match snapshot (cost/PT/types/keywords); 18 allowlisted divergence(s) |
+| card_costs | PASS | yes | all mana costs match Scryfall (cost/cmc only) |
+| card_fields | PASS | yes | 906 cards match snapshot (cost/PT/types/keywords); 20 allowlisted divergence(s) |
 | clause_ledger | SKIP | no | covered by coverage+bracket-notes+oracle-diff |
 | regression_tiers | PASS | yes | in all 3 suite tiers with GT (creatureburn) |
 | viewer | PASS | yes | self-guard + surface sweep clean |
@@ -580,11 +583,7 @@ are pending.
 | provider_policy | PASS | yes | every expected provider policy is implemented (or none applies) |
 
 ### Pending user sign-off (block the gate until fixed OR approved below)
-Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, understood deferral -- not a bug):
-- `card_costs:*` -- 3 card(s) could not be fetched, so their costs were never compared -- a did-not-run, not a mismatch. Re-run when the rate limit clears.
-- `card_costs:Courser of Kruphix` -- Courser of Kruphix: The read operation timed out
-- `card_costs:Bloodghast` -- Bloodghast: The read operation timed out
-- `card_costs:Expropriate` -- Expropriate: The read operation timed out
+_none_ -- every blocking gate is green or already signed off.
 
 ### Stage 6a disclosure (deferrals + not-yet-built checks)
 - coverage deferral -- Browbeat: USER-ruled passive-opponent model of the opponent's choice (2026-11-20, amended 2026-11-22; ONE place: BrowbeatOpponentTakesDamage in SpellEffects.h, the analog of the USER's Vexing Devil ruling -- 'I would probably do the same thing as devil, which is take the damage unless it puts you within 3 life.' and 'No, your idea is good. (hand empty = take the damage unless lethal)'): the opponent takes the 5 damage iff its life (the shared team life in 2HG) LESS THE VISIBLE COMBAT DAMAGE still to come this turn is > 5 with our hand empty (unless lethal), or > 8 while we hold any card (it guesses from our hand SIZE, never its contents; Browbeat itself is not counted, our STAGED exiled-playable cards ARE -- USER 2026-11-22: 'staged cards should be counted because the idea is the opponent thinks you may have burn in hand to finish them off. (it being staged instead does not change this reasoning)' -- HeldCardCount, shared with Vexing Devil). VISIBLE DAMAGE (USER 2026-11-22: 'Maybe we should actually make the opponent take the visible combat damage into account when deciding on browbeat. It doesn't really make sense to exclude it.' and 'If the pinger pings are visible they probably should.'; OpponentAnticipatedLife, shared with Vexing Devil): per permanent we control, max(c, p) -- c = its combat damage still to come (our pre-combat main only: a creature that can still attack this turn -- untapped, not summoning-sick unless hasted -- at its current power with this turn's pumps, doubled for double strike, 0 while combat damage is prevented; exact against the never-blocking goldfish under attack-all), p = its READY tap ping (untapped, able to {T} now); max because a pinger either attacks or pings, never both (USER-confirmed 2026-11-22, as is the opponent assuming we attack with everything: a searched attack hold is not anticipated). 0 on another player's turn; after combat only the ready pings remain. A ping that needs a future cast (Cinder Pyromancer's untap-on-red response ping) is not visible. Taken: 5 noncombat damage from Browbeat to the opponent (marks it dealt damage / lost life this turn) and NO cards drawn. Declined: we draw three (draw_spell draw 3; an over-draw loses, CR 104.3c). The choice is the OPPONENT's, so it is neither a search branch nor a viewer decision; executor and rollout resolve it through the same ResolveDamageInsteadOfDraw. Our OWN 'take 5' option is never used: it is dominated (no draw and no damage to the opponent). FLIP (Creature Burn batch 2, re-derived 2026-11-22): a cast of Browbeat with a Cinder Pyromancer live carries a searched sub-decision (Action::browbeat_flip, BrowbeatFlipPrePings): withhold the fewest Cinder Pyromancer response pings so the opponent takes -- the outcome is binary in the anticipated life, so the base cast plus that one variant cover every reachable outcome at maximum damage. The old 'fire ready pings first so it declines' half is gone: a ready ping is already anticipated, so firing it never lowers the anticipated life. 'Target player draws' targets US: the passive opponent's library is never worth handing three cards. SECOND-MAIN RELEVANT (PROVISIONAL, surfaced to the USER): with the anticipating opponent a post-combat Browbeat usually has a main-1 twin (cast the same things first: the visible damage equals the combat damage), but NOT always -- a haste creature cast (or Teetering Peaks played) AFTER combat empties the hand (threshold 8 -> 5) without adding visible combat damage, which no main-1 order reproduces (cast first, it is anticipated; held, the threshold stays 8) -- so the param stays in GoldFishRunner::DeckUsesSecondMain and the cast classifies to either main. A per-turn variant for Creature Burn (MTG_CB_BROWBEAT_M2_RESTRICT, default OFF; CreatureBurnProvider::RestrictedSecondMainLive opens the post-combat main, with the full menu, only while a castable Browbeat is in hand after combat) was measured NOT an identity on 2026-11-21 (it also changes the phase filter and the greedy playout's main 2), so the every-turn main 2 stays. Human play keeps a main 2 every turn either way.
@@ -616,6 +615,8 @@ Add a key to `## Approved deferrals` to sign one off (only if it is a genuine, u
 - allowlisted divergence -- Bloodline Keeper [keywords]: Transforming DFC (Bloodline Keeper // Lord of Lineage): Scryfall reports CARD-LEVEL keywords for both faces (Flying, Transform). Transform is the layo
 - allowlisted divergence -- Lord of Lineage [keywords]: Transforming DFC back face: Scryfall's card-level keywords include the layout's Transform; the back face carries no transform of its own (transform_fr
 - allowlisted divergence -- Emrakul, the Aeons Torn [keywords]: 'Protection from spells that are one or more colors' is a real keyword but INERT here (PROVISIONAL, ledger Q12): nothing in a goldfish game targets, d
+- allowlisted divergence -- Garruk's Harbinger [keywords]: 'Hexproof from black' is a real keyword but INERT here (PROVISIONAL, user sign-off pending; disclosed in the card's bracket): the passive goldfish opp
+- allowlisted divergence -- Bloated Contaminator [keywords]: Toxic and Proliferate are not engine keywords (the loader has no tag for either): toxic 1 is the toxic param (ApplyToxicPoison, both combat damage-ste
 - oracle_text advisory -- Deeproot Pilgrimage: oracle_text diverges (similarity 0.55); scryfall='Whenever one or more nontoken Merfolk you control become tapped, create a 1/1 blue Merfolk creature token with
 - oracle_text advisory -- Svyelun of Sea and Sky: oracle_text diverges (similarity 0.73); scryfall='Svyelun has indestructible as long as you control at least two other Merfolk.
 Whenever Svyelun attacks, draw
@@ -1689,7 +1690,7 @@ Whenever Ulamog attacks, defending pla
 - oracle_text advisory -- Ulamog, the Infinite Gyre: oracle_text diverges (similarity 0.31); scryfall='When you cast this spell, destroy target permanent.
 Indestructible
 Annihilator 4 (Whenever this creature att
-- oracle_text advisory -- Long-Term Plans: oracle_text diverges (similarity 0.10); scryfall='Search your library for a card, then shuffle and put that card third from the top.'
+- oracle_text advisory -- Long-Term Plans: oracle_text diverges (similarity 0.09); scryfall='Search your library for a card, then shuffle and put that card third from the top.'
 - oracle_text advisory -- Toxic Deluge: oracle_text diverges (similarity 0.13); scryfall='As an additional cost to cast this spell, pay X life.
 All creatures get -X/-X until end of turn.'
 - oracle_text advisory -- Lord of Atlantis: oracle_text diverges (similarity 0.47); scryfall="Other Merfolk get +1/+1 and have islandwalk. (They can't be blocked as long as defending player controls an Is
@@ -1959,17 +1960,45 @@ Whenever you cast a red spell, you may un
 - oracle_text advisory -- Teetering Peaks: oracle_text diverges (similarity 0.11); scryfall='This land enters tapped.
 When this land enters, target creature gets +2/+0 until end of turn.
 {T}: Add {R}.'
-- oracle_text advisory -- Worldfire: oracle_text diverges (similarity 0.13); scryfall="Exile all permanents. Exile all cards from all hands and graveyards. Each player's life total becomes 1."
-- oracle_text advisory -- Keldon Halberdier: oracle_text diverges (similarity 0.39); scryfall='First strike
+- oracle_text advisory -- Worldfire: oracle_text diverges (similarity 0.09); scryfall="Exile all permanents. Exile all cards from all hands and graveyards. Each player's life total becomes 1."
+- oracle_text advisory -- Keldon Halberdier: oracle_text diverges (similarity 0.38); scryfall='First strike
 Suspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four
 - oracle_text advisory -- Mystical Tutor: oracle_text diverges (similarity 0.31); scryfall='Search your library for an instant or sorcery card, reveal it, then shuffle and put that card on top.'
 - oracle_text advisory -- Personal Tutor: oracle_text diverges (similarity 0.40); scryfall='Search your library for a sorcery card, reveal it, then shuffle and put that card on top.'
-- oracle_text advisory -- Overmaster: oracle_text diverges (similarity 0.38); scryfall="The next instant or sorcery spell you cast this turn can't be countered.
+- oracle_text advisory -- Overmaster: oracle_text diverges (similarity 0.36); scryfall="The next instant or sorcery spell you cast this turn can't be countered.
 Draw a card."
-- oracle_text advisory -- Mistrise Village: oracle_text diverges (similarity 0.41); scryfall="This land enters tapped unless you control a Mountain or a Forest.
+- oracle_text advisory -- Mistrise Village: oracle_text diverges (similarity 0.40); scryfall="This land enters tapped unless you control a Mountain or a Forest.
 {T}: Add {U}.
 {U}, {T}: The next spell yo
+- oracle_text advisory -- Garruk's Packleader: oracle_text diverges (similarity 0.12); scryfall='Whenever another creature you control with power 3 or greater enters, you may draw a card.'
+- oracle_text advisory -- Krosan Warchief: oracle_text diverges (similarity 0.12); scryfall='Beast spells you cast cost {1} less to cast.
+{1}{G}: Regenerate target Beast.'
+- oracle_text advisory -- Questing Beast: oracle_text diverges (similarity 0.34); scryfall="Vigilance, deathtouch, haste
+Questing Beast can't be blocked by creatures with power 2 or less.
+Combat damag
+- oracle_text advisory -- Thragtusk: oracle_text diverges (similarity 0.18); scryfall='When this creature enters, you gain 5 life.
+When this creature leaves the battlefield, create a 3/3 green Bea
+- oracle_text advisory -- Cragplate Baloth: oracle_text diverges (similarity 0.15); scryfall="Kicker {2}{G}
+This spell can't be countered.
+Hexproof, haste
+If this creature was kicked, it enters with fo
+- oracle_text advisory -- Kaheera, the Orphanguard: oracle_text diverges (similarity 0.34); scryfall="Companion — Each creature card in your starting deck is a Cat, Elemental, Nightmare, Dinosaur, or Beast card.
+- oracle_text advisory -- Contested Cliffs: oracle_text diverges (similarity 0.11); scryfall='{T}: Add {C}.
+{R}{G}, {T}: Target Beast creature you control fights target creature an opponent controls. (Ea
+- oracle_text advisory -- Elder Gargaroth: oracle_text diverges (similarity 0.14); scryfall='Reach, vigilance, trample
+Whenever this creature attacks or blocks, choose one —
+• Create a 3/3 green Beast
+- oracle_text advisory -- Garruk's Harbinger: oracle_text diverges (similarity 0.20); scryfall='Hexproof from black
+Whenever this creature deals combat damage to a player or planeswalker, look at that many
+- oracle_text advisory -- Migloz, Maze Crusher: oracle_text diverges (similarity 0.18); scryfall='Migloz enters with five oil counters on it.
+{1}, Remove an oil counter from Migloz: It gains vigilance and me
+- oracle_text advisory -- Nykthos, Shrine to Nyx: oracle_text diverges (similarity 0.28); scryfall='{T}: Add {C}.
+{2}, {T}: Choose a color. Add an amount of mana of that color equal to your devotion to that co
+- oracle_text advisory -- Bloated Contaminator: oracle_text diverges (similarity 0.18); scryfall='Trample
+Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+Whenever this crea
+- oracle_text advisory -- Woodland Bellower: oracle_text diverges (similarity 0.21); scryfall='When this creature enters, you may search your library for a nonlegendary green creature card with mana value
 - clause_ledger: no dedicated per-clause artifact. Its function -- every oracle clause modeled/inert/deferred -- is covered by coverage(partial hard-stop) + bracket-note deferrals + viewer oracle cross-check + audit_card_fields oracle-diff. A dedicated ledger is deferred (high per-card cost, marginal added rigor).
-- claude_sweep recorded at commit a478b813c (HEAD e001eca40ae1); re-run if play changed since (play_invariants + smoke digests track play live).
+- claude_sweep recorded at commit a478b813c (HEAD 4517c8a3711e); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->

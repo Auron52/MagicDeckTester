@@ -1,5 +1,46 @@
 # Creature Burn analyze-deck: handoff to Codex (2026-11-22 ~10:50 UTC)
 
+## Codex continuation (2026-11-22 ~17:30 UTC)
+
+No user decision is pending. The PO scry arm (pick plus kept order, firm default OFF) was adopted after the
+500-paired-game follow-up and both slower Creature Burn seeds recovered at d8 b0. The final pre-rebase build
+passed 3,917 unit tests and 610 scenarios; its 30-reference replay had zero shortfalls. The full deck gate
+passed every local check but marked `card_costs` incomplete because three Scryfall reads timed out; all three
+costs matched on direct retry, and `scripts/audit_card_costs.py` now retries transient timeouts.
+
+The shared branch advanced substantially, so the 14 local Creature Burn commits were rebased onto
+`c841cd59c` as HEAD `d083b566b`. The rebased source combined Worldfire's simultaneous-leave handler with
+the unearth replacement and kept the independently removed tutor-width cap removed. A four-job Release build
+is running under `build/.heavy.lock` (`rebased-build2.log`, marker `REBASED_BUILD2_DONE`); the engine has
+linked, and unit test objects are compiling. The first rebase build exposed one missing closing brace in the
+combined leave handlers; it was fixed and the second build has compiled that file. The queue turn was yielded
+at 17:04 and rejoined behind Blood Sun; `queue-wait-rebased.log` / `QUEUE_REBASED_READY` track it.
+
+Next: finish the build, run unit tests, scenarios and `verify_deck.py --write-ledger`; commit the current
+SpellEffects brace, audit retry, and report updates (excluding `.vscode/settings.json` and `test/ref_bench.json`).
+At the next queue head, fetch/rebase if needed, then smoke/scoped regression with changed-game audit, strict viewer
+check, GT accept and `land`. After the Stage 6 report, generate the fast Creature Burn mulligan profile on the
+frozen landed commit.
+
+**17:49 UTC update:** The rebased engine linked and its 30 saved references replayed with 0/30 shortfalls
+(`rebased-ref.log`). The full unit target is still compiling under the four-job build. The queue became ours
+at 17:46 before validation was ready; it was promptly requeued at 17:48 behind Blood Sun. The new waiter is
+`queue-wait-rebased2.log` / `QUEUE_REBASED2_READY`.
+
+**18:44 UTC update:** The full rebased Release build completed (`REBASED_BUILD2_DONE=0`), then 4,044/4,044 unit
+tests and 3,653,879 assertions passed (`REBASED_UNIT_DONE=0`), followed by 610/610 scenarios
+(`REBASED_SCENARIOS_DONE=0`). The 30 saved references remain 0/30 short. The brace and transient Scryfall
+timeout retry are committed as `4517c8a37`. `verify_deck.py --write-ledger` is running under the heavy lock
+(`rebased-verify.log`, `REBASED_VERIFY_DONE`). The push queue has Blood Sun, then an urgent Beasts CI fix, then
+this session.
+
+**18:59 UTC update:** The rebased deck gate passed (`REBASED_VERIFY_DONE=0`). All 19 cards have full coverage;
+Scryfall costs, viewer surface/wiring, mismatch, play invariants, suite, and provider policy are green. Its
+Stage 6a block is regenerated in `analysis-Creature Burn.md`. The report now records the 4,044-unit/610-scenario
+and 0/30-reference results. Commit the report and this handoff, then take the queue turn for smoke/scoped
+regression, changed-game audit, strict viewer check, GT accept and land. The fast mulligan generation follows
+on the frozen landed commit. No user question is pending.
+
 ## Codex continuation (2026-11-22 ~13:30 UTC)
 
 The integrated source is committed through `e001eca40`. Release build, 3917 unit tests, 610 scenarios,
