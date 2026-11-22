@@ -18694,52 +18694,6 @@ std::vector<int> HinataProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, pref);
 }
 
-std::vector<std::string>
-HinataProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
-{
-    // Unpruned A/B: do not narrow -- let the search branch over every legal tutor target.
-    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
-
-    // Already have Hinata in play or hand? The payoffs are live -> search the full set for the
-    // missing piece. Otherwise the deck is dead without her, so fetch Hinata if she's findable.
-    bool have_hinata = HinataInPlay(s);
-    if (!have_hinata)
-    {
-        for (const Card& c : s.players[controller].hand)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
-        }
-    }
-    if (!have_hinata)
-    {
-        for (const Card& lc : s.players[controller].library)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
-            if (d && d->params.hinata_cost_reducer) { return { lc.m_name }; }   // decided: fetch her
-        }
-        // Hinata not in library (all copies drawn/played but none counted above is rare) -> fall through.
-    }
-
-    // Hinata is online: return the full legal set (search-primary -- still branches over everything), but
-    // ORDER it by situational need (SituationalCardRank). The plan tie-break is win-turn then plan.value, and
-    // every tutor candidate shares the tutor spell's eval, so win-turn-equal fetches tie on value and the
-    // FIRST listed wins. Ordering by SituationalCardRank therefore makes an indifferent (clairvoyant-tie)
-    // search fetch the most-wanted MISSING piece -- e.g. Reality Spasm (rank 750) over a third Crackle when
-    // two are already in hand (rank 150, duplicate) -- instead of an arbitrary library-order card. Pure
-    // tie-break: a fetch that wins strictly sooner still wins.
-    std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
-    auto rank_of = [&](const std::string& name) -> int
-    {
-        for (const Card& lc : s.players[controller].library)
-        { if (lc.m_name == name) { return SituationalCardRank(s, lc); } }
-        return 0;
-    };
-    std::stable_sort(cands.begin(), cands.end(),
-                     [&](const std::string& a, const std::string& b) { return rank_of(a) > rank_of(b); });
-    return cands;
-}
-
 // CastOrderRank: no override. Hinata's ritual (Reality Spasm, 15) and restrictor (Irencrag Feat, 18)
 // tiers are now the GENERIC card-parameter tiers -- byte-identical ranks, one implementation.
 
@@ -19023,6 +18977,83 @@ bool HinataProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) con
     // she lands, keep the live pieces after -- while the rank ALSO orders the kept cards for the
     // dig spells, which the old binary keep could not.)
     return SituationalCardRank(s, top_card) >= kHinataKeepThreshold;
+}
+
+std::vector<std::string>
+HinataProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    // Unpruned A/B: do not narrow -- let the search branch over every legal tutor target.
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
+
+    // Already have Hinata in play or hand? The payoffs are live -> search the wanted pieces (below).
+    // Otherwise the deck is dead without her, so fetch Hinata if she's findable.
+    bool have_hinata = HinataInPlay(s);
+    if (!have_hinata)
+    {
+        for (const Card& c : s.players[controller].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.hinata_cost_reducer) { have_hinata = true; break; }
+        }
+    }
+    if (!have_hinata)
+    {
+        for (const Card& lc : s.players[controller].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (d && d->params.hinata_cost_reducer) { return { lc.m_name }; }   // decided: fetch her
+        }
+        // Hinata not in library (all copies drawn/played but none counted above is rare) -> fall through.
+    }
+
+    // Hinata is online. THE MERIT RULE (2026-11-22, replacing the deleted tutor width -- USER: "It should
+    // just search all options unless the heuristic says otherwise and the heuristic should have full
+    // control of how many it returns"). The search branches over what the hand and board NEED, by rank
+    // class, never by count:
+    //   1. NEED -- every name that outranks the digging cantrips (SituationalCardRank > kRankCantrip): a
+    //      missing Crackle or Soulfire, every Reality Spasm (stackable), Irencrag Feat, Sol Ring, early
+    //      ramp, and a land while mana-screwed (can't yet cast Hinata). A tutor is a better dig than a
+    //      dig spell: while a needed card is still in the library, fetching a cantrip / Magma Opus / a
+    //      surplus land only to look for what the tutor could name directly spends Gamble's {R} and its
+    //      random discard on the slower route. The rank tiers say the same thing ("missing combo pieces
+    //      outrank the digging cantrips").
+    //   2. Nothing NEEDED left in the library -> every name the deck would KEEP on top of its library
+    //      (>= kHinataKeepThreshold, the ScryKeepOnTop line: cantrips, Magma, late ramp, an extra land
+    //      for an open drop) -- "worth drawing" and "worth tutoring" share one source of truth.
+    //   3. Nothing clears even that (a library down to duplicates / inert interaction) -> the full ranked
+    //      list, so the tutor keeps its axis.
+    // How many survive is the board's business: a hand missing three pieces offers three, a screwed hand
+    // adds the lands that cast her. Gamble's discard is random and can hit the fetched card or a held
+    // piece; there is nothing in it for a rule to steer, so a fetch is judged only on what the card is for
+    // this hand and board (a 2nd copy as "insurance" stays out with the duplicates).
+    // Measured against the deleted base width 6 (top 6 of this same order) and the full list: the
+    // keep-line rule alone (step 2 as the only cut) still offered 9-16 names per Gamble and cost the d5
+    // b0 backstop game 3.09M units (w6: 1.35M, full: 5.53M); see docs/design/searched-action-subdecisions.md.
+    //
+    // ORDER (unchanged): SituationalCardRank descending. Every tutor candidate shares the tutor spell's
+    // eval, so win-turn-equal fetches tie on value and the FIRST listed wins; ordering by need makes an
+    // indifferent (clairvoyant-tie) search fetch the most-wanted MISSING piece -- e.g. Reality Spasm (rank
+    // 750) over a third Crackle -- instead of an arbitrary library-order card. A fetch that wins strictly
+    // sooner still wins.
+    std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
+    std::vector<std::pair<int, std::string>> ranked;
+    ranked.reserve(cands.size());
+    for (const std::string& name : cands)
+    {
+        int rank = 0;
+        for (const Card& lc : s.players[controller].library)
+        { if (lc.m_name == name) { rank = SituationalCardRank(s, lc); break; } }
+        ranked.emplace_back(rank, name);
+    }
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::vector<std::string> out;
+    out.reserve(ranked.size());
+    for (const auto& r : ranked) { if (r.first > kRankCantrip) { out.push_back(r.second); } }
+    if (out.empty())
+    { for (const auto& r : ranked) { if (r.first >= kHinataKeepThreshold) { out.push_back(r.second); } } }
+    if (out.empty()) { for (const auto& r : ranked) { out.push_back(r.second); } }
+    return out;
 }
 
 bool HinataProvider::KeepReorderTop(const GameState& s, const std::vector<Card>& top) const
@@ -63206,9 +63237,28 @@ MeliraPodProvider::TutorCandidates(const GameState& s, int controller, const Car
                          if (a.mv    != b.mv)    { return a.mv    < b.mv;    }
                          return a.name < b.name;
                      });
+    // THE MERIT RULE (2026-11-22, replacing the deleted tutor width -- USER: "It should just search all
+    // options unless the heuristic says otherwise and the heuristic should have full control of how many
+    // it returns"). The axis searches the names that serve the combo and drops the rest, never by count:
+    // a missing piece / Pod fuel (score > 0 above), or a card on the USER's own Pod/Chord whitelist
+    // (PutTargetOk: free outlets, persist bodies, Celes, an enabler while none is held, a piece-tutor or
+    // digger while a piece is missing, Voice-class fuel while a Pod is active). That is the USER's
+    // 2026-09-05 spec for these tutors ("You only want missing combo pieces, tutors for combo pieces and
+    // more rarely something that can be podded for more combo pieces ... Recruiter should get a combo
+    // piece that you are missing") and the same "narrow them down to just the useful options" line the
+    // Pod/Chord fan already draws: the goldfish-dead toolbox bodies (Chupacabra, Rec Sage, Severance
+    // Priest, Scooze), the dorks, Reveillark, a second enabler and a tutor with nothing left to find
+    // are not fetched. Nothing qualifies -> the full ranked list (the tutor keeps its axis).
+    // MTG_POD_PUT_NARROW=0 (the whitelist's A/B arm) also leaves this list whole.
+    const PutPolicy pol = PutTargetPolicy(s, controller);
     std::vector<std::string> out;
     out.reserve(ranked.size());
-    for (const Ranked& rk : ranked) { out.push_back(rk.name); }
+    for (const Ranked& rk : ranked)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(rk.name);
+        if (!pol.narrow || rk.score > 0 || (d != nullptr && PutTargetOk(pol, *d))) { out.push_back(rk.name); }
+    }
+    if (out.empty()) { for (const Ranked& rk : ranked) { out.push_back(rk.name); } }
     return out;
 }
 

@@ -1974,8 +1974,10 @@ public:
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
     // Gamble (and any unrestricted tutor) is narrowed combo-aware: while no Hinata is in play
-    // or hand, fetch Hinata (a no-Hinata hand is a dead hand); once she is online, let the
-    // search pick among the missing payoffs/rituals (the generic full set). Honours MTG_UNPRUNED.
+    // or hand, fetch Hinata (a no-Hinata hand is a dead hand); once she is online, the search
+    // picks among the NEEDED names (SituationalCardRank above the cantrips: missing pieces, rituals,
+    // Sol Ring, a land while screwed), else the ScryKeepOnTop line, else everything -- a merit rule,
+    // no count. Honours MTG_UNPRUNED.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // Combo-aware scry/dig: a no-Hinata hand is a dead hand (the payoffs are uncastable at full
     // price), so while no Hinata is in play or hand the dig HUNTS her -- keep Hinata, keep only
@@ -2054,8 +2056,8 @@ public:
     // and with it the base 6 this deck rode, was deleted 2026-11-22 -- USER: "It should just search
     // all options unless the heuristic says otherwise and the heuristic should have full control of
     // how many it returns."). History: w2 vs w6 was a held-out wash (+0.0009), and both seed sets
-    // measured w12 as this deck's worst arm, so any narrowing it needs belongs in TutorCandidates'
-    // own rule, on the targets' merits, never in a count.
+    // measured w12 as this deck's worst arm; the full list measured +44 turns / 1900 games against
+    // w6, so the narrowing lives in TutorCandidates' need-line merit rule, never in a count.
 
     // THE USER'S HINATA KAROO RULE (MTG_HINATA_BOUNCE_RULE; USER 2026-10-08): "In the Hinata case, I
     // would say you are probably pretty happy to remove any come-into-play-untapped land, but starting
@@ -4753,8 +4755,9 @@ public:
     // combo pieces and more rarely something that can be podded for more combo pieces ...
     // Recruiter should get a combo piece that you are missing"). Ranks the to-hand tutor list
     // (Recruiter of the Guard) missing-role-first: counter-prevention enabler > free sac outlet >
-    // persist body, each only while absent from battlefield+hand, then cheaper-first. Pod and
-    // Chord do NOT route through this -- their enumerations stay full/search-primary.
+    // persist body, each only while absent from battlefield+hand, then cheaper-first, and offers
+    // only those plus the USER's Pod/Chord whitelist (PutTargetOk) -- a merit rule, no count.
+    // Pod and Chord do NOT route through this (their fan is PutTargetPolicy/PutTargetOk).
     // MTG_POD_TUTOR_RANK=0 reverts both this and TutorHandPutList to the generic base (A/B hatch).
     std::vector<std::string> TutorCandidates(const GameState& s, int controller,
                                              const CardParams& pp) const override;
