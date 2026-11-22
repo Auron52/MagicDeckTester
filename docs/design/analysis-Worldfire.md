@@ -427,9 +427,20 @@ Flag ON, regression tier:
 
 Direct 64 games d5 b20 seed 9100001: off 5.547, on 4.422. Every Worldfire d5 game takes at least one free turn.
 Raw rounds get SLOWER (nothing tie-breaks toward fewer taken turns at an equal credited turn; one game took 10).
-Follow-ups in progress before the USER can adopt: a Creature Burn reference drifts under the flag, the
-`steal_tap_count` lock trait (Vampires pays 3x units for a lock it cannot make), and the passive opponent's
-oldest-first cleanup handing non-lock burn decks a free turn.
+These earlier free-turn measurements were superseded by the scoped trait, corrected opponent cleanup, and fairness
+checks in `docs/design/opponent-lockdown-free-turns.md`. The integrated tier and per-game audit are recorded in
+`docs/design/worldfire-integration-audit.md`; the accepted solo Worldfire d5 means are 4.500 (smoke s1001), 4.417
+(regression s2002), and 4.167 (regression s3003), with 0 reference drift. The larger keep-order A/B and the new
+budget/backstop measurements are in `docs/design/worldfire-followup.md`.
+
+## Integrated verification (2026-11-22)
+
+`verify_deck.py decks/Worldfire/Worldfire.cod --write-ledger` completed with **GATE PASS** on the integrated source:
+22/22 cards full; Scryfall cost and field checks pass; all three regression tiers have GT; viewer self-guard and
+surface sweep clean (six decision types wired); 120 games per nonconv/fd-diverge arm clean; eight play-invariant games,
+332 decisions clean; provider policy and the recorded 16-game external-play sweep pass. The generated disclosure
+below remains the previous snapshot because this verifier run emitted raw multiline Scryfall advisories with trailing
+spaces; the full current gate output is in `logs/worldfire-integration/verify-deck.log`. No blocking finding remains.
 
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-11-21)
