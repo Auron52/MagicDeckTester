@@ -109,3 +109,22 @@ recommendation.
 - Old-name deck folders (FiveColour, KittyEquipment, StompySurprise, slivers_vial: gitignored August artifacts) were
   moved to `logs/archive/old-deck-folders-2026-11-22/` in the primary checkout at the USER's request; delete only if
   the USER confirms.
+
+## Codex continuation (2026-11-22, 15:55 UTC)
+- Integration correctness: failed ETB untap tap-ahead now rolls back (`02986649f`); Revelation packages emit a
+  single reveal for replay (`50233ecae`). The latter still needs the 15 `logs/bloodsun-grim-lost/` files regenerated.
+- Go-off bridge order and Grim's remaining-drop Time Warp payment test are in `d6289881a` and `845676e02`.
+  B12-bis Grim list and variants are default off (`8c53f0fd3`, `e735ba06e`).
+- Full pooled smoke + regression was accepted at `f95d28509`: 632 jobs, 180001 games; all 27 known moved keys
+  match the prior Blood Sun integration and the 13 additional changes are Creature Burn / Midrange Burn from origin.
+  `check_gt_logs.py` found 1409 consistent, 0 stale/missing. Full unit and scenarios passed afterward.
+- Step 7b scoped arms are default off. `MTG_BP_DEV_SEQ_DROP` (`b3e06acd4`) recovers gi518 seed 910518 at d8 b0,
+  T5 -> T4. `MTG_BP_DEV_SEQ_DEFERRED` (`5ae0deb64`) tracks every later site-3 occurrence and recovers the
+  Machinations -> Grim -> Revelation -> two Bolts fixture at d3 b0 and b100, T5 -> T4; its fixture uses the same
+  208 first-pass + 51 second-pass units as `MTG_BP_DEV_SEQ_ALL`. Full unit passed, scenarios 675/675.
+  gi518 with the all-occurrences mask uses 288541 units (arm off 218437), so held-out cost measurement matters.
+- B14 USER cleanup keep buckets are implemented default off (`cffd8a1eb`), with 3 focused tests and full unit pass.
+  The cast-order draft was sent for USER review before measurement; no cast-order code has been adopted.
+- Held-out B12-bis pool is running with frozen binary at `build/scratch/bloodsun/b12bis/` (7326 games, d5/d3,
+  11 arms). After it finishes, run `table.py` and d8 b0 recovery for every slower game. Separate frozen binary and
+  2664-game manifest for B14 and both scoped arms are at `build/scratch/bloodsun/b14/`; run it afterward.
