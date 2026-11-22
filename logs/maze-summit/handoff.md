@@ -77,7 +77,13 @@ Gates" does not hold once the reserve applies. Candidate fixes, to measure in th
 First CONFIRM the hypothesis from the logs (below): find the T-1 Summit decision in each slower game, and check whether
 an untapped Maze's End was present and whether "off" took the "all" pin.
 
-## Running job at handoff time
+## Repro result (landed after the handoff was first written)
+The 4 single-game CLI repros FINISHED (`sg.DONE` present) and reproduce the batch: g65 5->6, g68 5->6, g80 5->6,
+g127 4->5 (off -> on). Each dir `build/scratch/claude_maze_summit/sg/g<gi>_<0|1>/` holds `out.txt` and a JSON game
+log (`<date>_<seed>_game_0.json`). Diff the two arms' JSON logs for each gi to find the first diverging turn (step 1
+below). Nothing is running now.
+
+## Running job at handoff time (now finished, see above)
 - A lane job running 4 single-game logged repros (d5 g65 g68 g80 g127, both arms, budget 20, profile depth):
   `bash scripts/box_lane.sh --slots 2 -- build/scratch/claude_maze_summit/sg.sh 65 68 80 127`, lane PIDs 897375 /
   897376 (it was still waiting for lane admission). Outputs: `build/scratch/claude_maze_summit/sg/g<gi>_<arm>/`
