@@ -153,8 +153,48 @@ d8 b0, so this is budget dilution (Gamble now fans every library name at a budge
 not an unreachable line. The fix the ruling points at is a merit rule inside
 `HinataProvider::TutorCandidates` for Gamble, not a count. **Two unbudgeted backstop games now hit
 the 2M-unit abandonment ceiling** (Hinata d5 s30001 gi1: 1.35M -> 5.53M units, still wins T5;
-Melira d5 s30001 gi1: 1.46M -> 3.10M, still wins T6), which fails those backstop rows. Both are
-USER calls.
+Melira d5 s30001 gi1: 1.46M -> 3.10M, still wins T6), which fails those backstop rows. Per USER
+Q16 (*"If these are bad enough the first step is always to optimize"*) the ceiling stays; the fix is
+the two merit rules below.
+
+### The merit rules that replaced it (2026-11-22, `wip/tutorwidth` 455b2a209)
+
+**Hinata, Gamble** (`HinataProvider::TutorCandidates`). Hinata absent: Hinata alone (unchanged).
+Hinata online, by rank class of `SituationalCardRank`, never by count:
+1. **NEED** -- every name ranked above the cantrips (`> kRankCantrip`): a missing Crackle or
+   Soulfire, every Reality Spasm (stackable), Irencrag Feat, Sol Ring, early ramp, a land while
+   mana-screwed. A tutor is a better dig than a dig spell, so while a needed card is still in the
+   library a cantrip / Magma Opus / surplus land is the slower route to the same card.
+2. Nothing needed left -> the `ScryKeepOnTop` line (`>= kHinataKeepThreshold`).
+3. Nothing clears that -> the full ranked list.
+Gamble's discard is random and can hit the fetched card; there is nothing in it to steer, so the rule
+judges a fetch only by what it is for this hand and board.
+
+A first cut used step 2 alone (the keep line). It still offered 9-16 names per Gamble (trace of the
+backstop game: Ornithopter, all three cantrips, Magma Opus and up to seven land names beside the
+pieces) and cost that game 3.09M units, so it was replaced before its A/B.
+
+**Melira Pod, Recruiter of the Guard** (`MeliraPodProvider::TutorCandidates`): the missing role /
+Pod-fuel names (score > 0) plus the USER's Pod/Chord whitelist (`PutTargetOk`: free outlets, persist
+bodies, Celes, an enabler while none is held, a piece-tutor or digger while a piece is missing,
+Voice-class fuel while a Pod is active) -- the USER's 2026-09-05 spec for these tutors. Dorks,
+the goldfish-dead toolbox, a second enabler and a tutor with nothing left to find are not fetched.
+Nothing qualifies -> the full ranked list.
+
+Held-out A/B, same apparatus and seeds as above (rule arm vs the stored OLD-width arm, which
+reproduced GT; the rules touch only these two providers):
+
+| deck | games | better | worse | net vs OLD w6 | net vs FULL list | units vs OLD |
+|---|---|---|---|---|---|---|
+| hinata | 1900 | 23 | 12 | **-16** | -60 | x0.96 |
+| hinata2hg | 500 | 7 | 3 | **-3** | -25 | x0.94 |
+| melira | 1300 | 2 | 0 | **-2** | -1 | x1.03 |
+| melira2hg | 300 | 0 | 0 | **0** | 0 | x1.07 |
+
+Backstops (b0, abandon 2M): Hinata d5 s30001 gi1 **1.46M** (w6 1.35M, full 5.53M), Melira d5 s30001
+gi1 **1.85M** (w6 1.46M, full 3.10M); both win on the same turn with the same digest as w6. Every
+other backstop game is within 2M (the two pre-existing abandons, Hinata d3 gi1 and Melira d5 gi11,
+abandon on both arms).
 
 The per-deck history below is kept as the record of what the width measured; it no longer
 describes the engine.
