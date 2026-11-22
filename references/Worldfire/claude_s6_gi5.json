@@ -1,0 +1,510 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "opponent_land_entry": 1, "free_turns": 1, "opponent_spawn_land": 1, "opponent_bounce_opening": 1, "opponent_shuffle_ordinal": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 14, "name": "Lotus Bloom" }, { "num": 38, "name": "Sandstone Needle" }, { "num": 50, "name": "Seething Song" }, { "num": 27, "name": "Personal Tutor" }, { "num": 29, "name": "Ponder" }, { "num": 42, "name": "Saprazzan Skerry" }, { "num": 15, "name": "Lotus Bloom" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "land=Saprazzan Skerry", "suspend=Lotus Bloom", "suspend=Lotus Bloom"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 14, "name": "Lotus Bloom", "cost": "", "mv": 0, "kind": "permanent", "suspend_only": true }, { "num": 15, "name": "Lotus Bloom", "cost": "", "mv": 0, "kind": "permanent", "suspend_only": true }, { "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 29, "name": "Ponder", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 42, "name": "Saprazzan Skerry", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Sandstone Needle; cast: Lotus Bloom", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 2, "summary": "land=Sandstone Needle; cast: Lotus Bloom, Lotus Bloom", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Lotus Bloom", "Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 3, "summary": "land=Saprazzan Skerry; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Saprazzan Skerry", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Saprazzan Skerry; cast: Lotus Bloom", "declared_order_payability": "not_verified", "land": "Saprazzan Skerry", "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 5, "summary": "land=Saprazzan Skerry; cast: Lotus Bloom, Lotus Bloom", "declared_order_payability": "not_verified", "land": "Saprazzan Skerry", "casts": ["Lotus Bloom", "Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }, { "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Lotus Bloom", "declared_order_payability": "not_verified", "land": null, "casts": ["Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }] },
+    { "index": 8, "summary": "land=none; cast: Lotus Bloom, Lotus Bloom", "declared_order_payability": "not_verified", "land": null, "casts": ["Lotus Bloom", "Lotus Bloom"], "actions": [{ "card": "Lotus Bloom", "verb": "suspend" }, { "card": "Lotus Bloom", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "suspend", "text": "⌛ Lotus Bloom -- suspended (arrives T4)" }, { "turn": 1, "kind": "suspend", "text": "⌛ Lotus Bloom -- suspended (arrives T4)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 29, "name": "Ponder", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 29, "name": "Ponder", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 3, "arrive_turn": 4 }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [], "library_size": 53, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 73, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Seething Song" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 1, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 29, "name": "Ponder", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Sandstone Needle; cast: Personal Tutor → Irencrag Feat, Ponder", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Personal Tutor", "Ponder"], "cast_order_canonical": ["Personal Tutor", "Ponder"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }, { "card": "Ponder", "ponder_keep": 1 }] },
+    { "index": 1, "summary": "land=Sandstone Needle; cast: Ponder, Personal Tutor → Irencrag Feat", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Ponder", "Personal Tutor"], "cast_order_canonical": ["Ponder", "Personal Tutor"], "actions": [{ "card": "Ponder", "ponder_keep": 1 }, { "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }] },
+    { "index": 28, "summary": "land=none; cast: Personal Tutor → Irencrag Feat, Ponder", "declared_order_payability": "not_verified", "land": null, "casts": ["Personal Tutor", "Ponder"], "cast_order_canonical": ["Personal Tutor", "Ponder"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }, { "card": "Ponder", "ponder_keep": 1 }] },
+    { "index": 29, "summary": "land=none; cast: Ponder, Personal Tutor → Irencrag Feat", "declared_order_payability": "not_verified", "land": null, "casts": ["Ponder", "Personal Tutor"], "cast_order_canonical": ["Ponder", "Personal Tutor"], "actions": [{ "card": "Ponder", "ponder_keep": 1 }, { "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }] },
+    { "index": 56, "summary": "land=Sandstone Needle; cast: Personal Tutor → Irencrag Feat", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Personal Tutor"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }] },
+    { "index": 63, "summary": "land=Sandstone Needle; cast: Ponder", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Ponder"], "actions": [{ "card": "Ponder", "ponder_keep": 1 }] },
+    { "index": 64, "summary": "land=Sandstone Needle; cast: Ponder", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Ponder"], "actions": [{ "card": "Ponder", "ponder_keep": 0 }] },
+    { "index": 65, "summary": "land=none; cast: Personal Tutor → Irencrag Feat", "declared_order_payability": "not_verified", "land": null, "casts": ["Personal Tutor"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Irencrag Feat" }] },
+    { "index": 72, "summary": "land=none; cast: Ponder", "declared_order_payability": "not_verified", "land": null, "casts": ["Ponder"], "actions": [{ "card": "Ponder", "ponder_keep": 1 }] },
+    { "index": 73, "summary": "land=none; cast: Ponder", "declared_order_payability": "not_verified", "land": null, "casts": ["Ponder"], "actions": [{ "card": "Ponder", "ponder_keep": 0 }] },
+    { "index": 74, "summary": "land=Sandstone Needle; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 75, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 64,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 5,
+  "type": "reorder",
+  "source": "Ponder",
+  "turn": 2,
+  "away_zone": "none",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 1, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": [], "library_size": 52, "land_drops_left": 1, "floating_mana": {"U": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "looked": [{ "name": "Irencrag Feat", "is_land": false }, { "name": "Saprazzan Skerry", "is_land": true }, { "name": "Ponder", "is_land": false }],
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "label": "Top: Irencrag Feat, Saprazzan Skerry, Ponder", "shuffle": false, "top": ["Irencrag Feat", "Saprazzan Skerry", "Ponder"], "away": [] }, { "index": 1, "label": "Top: Irencrag Feat, Ponder, Saprazzan Skerry", "shuffle": false, "top": ["Irencrag Feat", "Ponder", "Saprazzan Skerry"], "away": [] }, { "index": 2, "label": "Top: Saprazzan Skerry, Irencrag Feat, Ponder", "shuffle": false, "top": ["Saprazzan Skerry", "Irencrag Feat", "Ponder"], "away": [] }, { "index": 3, "label": "Top: Saprazzan Skerry, Ponder, Irencrag Feat", "shuffle": false, "top": ["Saprazzan Skerry", "Ponder", "Irencrag Feat"], "away": [] }, { "index": 4, "label": "Top: Ponder, Irencrag Feat, Saprazzan Skerry", "shuffle": false, "top": ["Ponder", "Irencrag Feat", "Saprazzan Skerry"], "away": [] }, { "index": 5, "label": "Top: Ponder, Saprazzan Skerry, Irencrag Feat", "shuffle": false, "top": ["Ponder", "Saprazzan Skerry", "Irencrag Feat"], "away": [] }, { "index": 6, "label": "Shuffle them away", "shuffle": true, "top": [], "away": [] }],
+  "note": "reply an option index. Order all cards on top, or shuffle them away."
+}
+},
+    { "chosen": 52, "cast_order": ["**", "cast=Personal Tutor", "land=Sandstone Needle"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Flooded Strand" }],
+  "reveals": [{ "turn": 2, "source": "Ponder (shuffle)", "cards": [{ "name": "Irencrag Feat", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Ponder", "disposition": "to the bottom" }] }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 1, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Personal Tutor", "cost": "{U}", "mv": 1, "kind": "nonpermanent" }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": ["Ponder"], "library_size": 51, "land_drops_left": 1, "floating_mana": {"U": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Personal Tutor → Worldfire, Seething Song, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song", "Seething Song"], "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Personal Tutor", "Seething Song", "Seething Song"], "cast_order_canonical": ["Personal Tutor", "Seething Song", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Personal Tutor", "tutor_target": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=Flooded Strand; cast: Personal Tutor → Worldfire, Seething Song, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song", "Seething Song"], "fetch_target": "Steam Vents", "casts": ["Personal Tutor", "Seething Song", "Seething Song"], "cast_order_canonical": ["Personal Tutor", "Seething Song", "Seething Song"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 14, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Personal Tutor → Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song"], "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Personal Tutor", "Seething Song"], "cast_order_canonical": ["Personal Tutor", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Personal Tutor", "tutor_target": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 21, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song", "Seething Song"], "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 22, "summary": "land=Flooded Strand; cast: Personal Tutor → Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song"], "fetch_target": "Steam Vents", "casts": ["Personal Tutor", "Seething Song"], "cast_order_canonical": ["Personal Tutor", "Seething Song"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 29, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song", "Seething Song"], "fetch_target": "Steam Vents", "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 30, "summary": "land=Flooded Strand; cast: Personal Tutor → Rift Bolt, Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Personal Tutor", "Flooded Strand"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Rift Bolt" }, { "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 37, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song"], "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }] },
+    { "index": 38, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Personal Tutor → Worldfire", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Personal Tutor"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Personal Tutor", "tutor_target": "Worldfire" }] },
+    { "index": 52, "summary": "land=Sandstone Needle; cast: Personal Tutor → Rift Bolt", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": ["Personal Tutor"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Rift Bolt" }] },
+    { "index": 59, "summary": "land=Flooded Strand; cast: Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Seething Song"], "fetch_target": "Steam Vents", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 60, "summary": "land=Flooded Strand; cast: Personal Tutor → Worldfire", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": ["Personal Tutor"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Worldfire" }] },
+    { "index": 81, "summary": "land=none; cast: Personal Tutor → Rift Bolt", "declared_order_payability": "not_verified", "land": null, "casts": ["Personal Tutor"], "actions": [{ "card": "Personal Tutor", "tutor_target": "Rift Bolt" }] },
+    { "index": 88, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 89, "summary": "land=Sandstone Needle; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Sandstone Needle", "casts": [], "actions": [] },
+    { "index": 90, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 91, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 92, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 93, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 75,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "tutor_etb",
+  "source": "Personal Tutor",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 1, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": ["Ponder"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }, { "index": 1, "name": "Worldfire" }, { "index": 2, "name": "Ponder" }, { "index": 3, "name": "Preordain" }, { "index": 4, "name": "Overmaster" }, { "index": 5, "name": "Personal Tutor" }, { "index": 6, "name": "Irencrag Feat" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 2, "source": "Personal Tutor (searched)", "cards": [{ "name": "Worldfire", "disposition": "to top" }] }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 2, "num": 38, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": ["Personal Tutor", "Ponder"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 2, "num": 38, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 42, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 2, "arrive_turn": 4 }], "graveyard": ["Personal Tutor", "Ponder"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 24, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Worldfire" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Plains" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Sandstone Needle", "idx": 3, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 2, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 5, "name": "Flooded Strand", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Personal Tutor", "Ponder"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Worldfire"], "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 4, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 5, "summary": "land=Flooded Strand; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Worldfire"], "fetch_target": "Island", "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 6, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 7, "summary": "land=Flooded Strand; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": "Flooded Strand", "drops": ["Worldfire"], "fetch_target": "Steam Vents", "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 8, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song, Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Seething Song", "Seething Song", "Flooded Strand"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 11, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 12, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 13, "summary": "land=Flooded Strand; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 14, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 15, "summary": "land=Flooded Strand; cast: Seething Song, Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Seething Song", "Flooded Strand"], "actions": [{ "card": "Seething Song" }, { "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 16, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield, Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand", "Seething Song"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Seething Song" }] },
+    { "index": 18, "summary": "land=Flooded Strand; cast: Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 19, "summary": "land=Flooded Strand; cast: Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 20, "summary": "land=Flooded Strand; cast: Seething Song", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 21, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 22, "summary": "land=Flooded Strand; cast: Flooded Strand: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": ["Flooded Strand"], "actions": [{ "card": "Flooded Strand", "src_num": 5, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 23, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Island", "casts": [], "actions": [] },
+    { "index": 24, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "Steam Vents", "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=Flooded Strand; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Flooded Strand", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 4,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "land_entry",
+  "source": "Steam Vents",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Sandstone Needle", "idx": 3, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 2, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Sandstone Needle", "idx": 3, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 2, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Steam Vents", "idx": 4, "num": 56, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": null, "drops": ["Worldfire"], "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Sandstone Needle", "idx": 3, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 2, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Steam Vents", "idx": 4, "num": 56, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "exile": [{ "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }, { "name": "Lotus Bloom", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 4 }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }], "library_size": 51, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": null, "drops": ["Worldfire"], "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Worldfire" }],
+  "events": [{ "turn": 3, "kind": "land", "text": "opponent plays Plains" }, { "turn": 4, "kind": "suspend", "text": "⌛ Lotus Bloom -- cast off suspend (enters play)" }, { "turn": 4, "kind": "suspend", "text": "⌛ Lotus Bloom -- cast off suspend (enters play)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Lotus Bloom", "idx": 6, "num": 14, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Lotus Bloom", "idx": 7, "num": 15, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Sandstone Needle", "idx": 4, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 3, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Steam Vents", "idx": 5, "num": 56, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 58, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100048, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Worldfire, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 4, "summary": "land=none; cast: Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 5, "summary": "land=none; cast: Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 6, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=none; cast: Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire"], "actions": [{ "card": "Worldfire" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Lotus Bloom", "idx": 6, "num": 14, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Lotus Bloom", "idx": 7, "num": 15, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Sandstone Needle", "idx": 4, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 3, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Steam Vents", "idx": 5, "num": 56, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 58, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100048, "is_land": true }], "library_size": 50, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Worldfire, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 4, "summary": "land=none; cast: Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 5, "summary": "land=none; cast: Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 6, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=none; cast: Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire"], "actions": [{ "card": "Worldfire" }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 29, "cast_order": ["**", "suspend=Rift Bolt", "cast=Worldfire"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Rift Bolt" }],
+  "events": [{ "turn": 4, "kind": "land", "text": "opponent plays Furycalm Snarl" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Lotus Bloom", "idx": 7, "num": 14, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Lotus Bloom", "idx": 8, "num": 15, "is_land": false, "taps": "WUBRG", "tap_sac": true, "tap_note": "{T}, sacrifice it: adds 3 mana of one colour you pick" }, { "name": "Sandstone Needle", "idx": 5, "num": 38, "is_land": true, "taps": "R", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Saprazzan Skerry", "idx": 4, "num": 42, "is_land": true, "taps": "U", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Steam Vents", "idx": 6, "num": 56, "is_land": true, "taps": "UR" }], "vial_counters": [], "hand": [{ "num": 37, "name": "Rift Bolt", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 50, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 51, "name": "Seething Song", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent" }, { "num": 57, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 58, "name": "Worldfire", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "graveyard": ["Flooded Strand", "Personal Tutor", "Ponder"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Furycalm Snarl", "idx": 3, "num": 100039, "is_land": true }, { "name": "Plains", "idx": 0, "num": 100052, "is_land": true }, { "name": "Plains", "idx": 1, "num": 100054, "is_land": true }, { "name": "Plains", "idx": 2, "num": 100048, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Rift Bolt → opponent, Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Rift Bolt", "Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 1, "summary": "land=none; cast: Rift Bolt → opponent, Seething Song, Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Rift Bolt", "Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 2, "summary": "land=none; cast: Rift Bolt → opponent, Worldfire, Seething Song, Seething Song", "declared_order_payability": "known_drops", "land": null, "drops": ["Worldfire"], "casts": ["Rift Bolt", "Worldfire", "Seething Song", "Seething Song"], "cast_order_canonical": ["Rift Bolt", "Worldfire", "Seething Song", "Seething Song"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 3, "summary": "land=none; cast: Seething Song, Worldfire, Rift Bolt → opponent, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Rift Bolt", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Rift Bolt", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }] },
+    { "index": 4, "summary": "land=none; cast: Worldfire, Rift Bolt → opponent, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Rift Bolt", "Seething Song", "Seething Song"], "cast_order_canonical": ["Worldfire", "Rift Bolt", "Seething Song", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 5, "summary": "land=none; cast: Rift Bolt → opponent, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Seething Song", "Seething Song"], "cast_order_canonical": ["Rift Bolt", "Seething Song", "Seething Song"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 6, "summary": "land=none; cast: Seething Song, Rift Bolt → opponent, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Rift Bolt", "Seething Song"], "cast_order_canonical": ["Seething Song", "Rift Bolt", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }] },
+    { "index": 7, "summary": "land=none; cast: Rift Bolt → opponent, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Seething Song", "Worldfire"], "cast_order_canonical": ["Rift Bolt", "Seething Song", "Worldfire"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 8, "summary": "land=none; cast: Rift Bolt → opponent, Worldfire, Seething Song", "declared_order_payability": "known_drops", "land": null, "drops": ["Worldfire"], "casts": ["Rift Bolt", "Worldfire", "Seething Song"], "cast_order_canonical": ["Rift Bolt", "Worldfire", "Seething Song"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 9, "summary": "land=none; cast: Seething Song, Worldfire, Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Worldfire", "Rift Bolt"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 10, "summary": "land=none; cast: Worldfire, Rift Bolt → opponent, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Rift Bolt", "Seething Song"], "cast_order_canonical": ["Worldfire", "Rift Bolt", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }] },
+    { "index": 11, "summary": "land=none; cast: Rift Bolt → opponent, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt", "Seething Song"], "cast_order_canonical": ["Rift Bolt", "Seething Song"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }, { "card": "Seething Song" }] },
+    { "index": 12, "summary": "land=none; cast: Seething Song, Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Rift Bolt"], "actions": [{ "card": "Seething Song" }, { "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 13, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 14, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Seething Song"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 15, "summary": "land=none; cast: Worldfire, Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 16, "summary": "land=none; cast: Rift Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "burn_target": "opponent" }] },
+    { "index": 17, "summary": "land=none; cast: Seething Song, Seething Song, Worldfire, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Worldfire", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 18, "summary": "land=none; cast: Seething Song, Worldfire, Seething Song, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Seething Song", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Worldfire", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 19, "summary": "land=none; cast: Worldfire, Seething Song, Seething Song, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song", "Seething Song", "Rift Bolt"], "cast_order_canonical": ["Worldfire", "Seething Song", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 20, "summary": "land=none; cast: Seething Song, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }] },
+    { "index": 21, "summary": "land=none; cast: Seething Song, Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire"], "cast_order_canonical": ["Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }] },
+    { "index": 22, "summary": "land=none; cast: Worldfire, Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song"], "cast_order_canonical": ["Worldfire", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }] },
+    { "index": 23, "summary": "land=none; cast: Seething Song, Seething Song, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Seething Song", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Seething Song"], "actions": [{ "card": "Seething Song" }, { "card": "Seething Song" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 24, "summary": "land=none; cast: Seething Song, Worldfire, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Worldfire", "Rift Bolt"], "cast_order_canonical": ["Seething Song", "Worldfire"], "actions": [{ "card": "Seething Song" }, { "card": "Worldfire" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 25, "summary": "land=none; cast: Worldfire, Seething Song, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Seething Song", "Rift Bolt"], "cast_order_canonical": ["Worldfire", "Seething Song"], "actions": [{ "card": "Worldfire" }, { "card": "Seething Song" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 26, "summary": "land=none; cast: Seething Song", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song"], "actions": [{ "card": "Seething Song" }] },
+    { "index": 27, "summary": "land=none; cast: Worldfire", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire"], "actions": [{ "card": "Worldfire" }] },
+    { "index": 28, "summary": "land=none; cast: Seething Song, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Seething Song", "Rift Bolt"], "actions": [{ "card": "Seething Song" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 29, "summary": "land=none; cast: Worldfire, Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Worldfire", "Rift Bolt"], "actions": [{ "card": "Worldfire" }, { "card": "Rift Bolt", "verb": "suspend" }] },
+    { "index": 30, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=none; cast: Rift Bolt (suspend)", "declared_order_payability": "not_verified", "land": null, "casts": ["Rift Bolt"], "actions": [{ "card": "Rift Bolt", "verb": "suspend" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "suspend", "text": "⌛ Rift Bolt -- suspended (arrives T6)" }, { "turn": 5, "kind": "mana", "text": "🪷 Lotus Bloom -- sacrifice: add 3 R" }, { "turn": 5, "kind": "mana", "text": "🪷 Lotus Bloom -- sacrifice: add 3 R" }, { "turn": 5, "kind": "trigger", "text": "Exile all permanents, and all cards from all hands and graveyards" }, { "turn": 5, "kind": "trigger", "text": "Each player's life total becomes 1" }],
+  "mdfc_backs": [],
+  "me": { "life": 1, "battlefield": [], "vial_counters": [], "hand": [], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 6 }], "graveyard": ["Worldfire"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [], "library_size": 49, "hand_size": 0, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 1, "battlefield": [], "vial_counters": [], "hand": [], "exile": [{ "name": "Rift Bolt", "kind": "suspend", "reason": "suspend", "time_counters": 1, "arrive_turn": 6 }], "graveyard": ["Worldfire"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [], "library_size": 49, "hand_size": 0, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "free_cast",
+  "source": "Rift Bolt (suspend)",
+  "turn": 5,
+  "free_turn": 1,
+  "turn_seq": 6,
+  "mdfc_backs": [],
+  "me": { "life": 1, "battlefield": [], "vial_counters": [], "hand": [], "graveyard": ["Worldfire"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100055, "is_land": true }], "library_size": 48, "hand_size": 0, "graveyard": [] },
+  "heuristic_default": 0,
+  "operation": "suspend_cast",
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Rift Bolt" }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "target",
+  "source": "Rift Bolt",
+  "turn": 5,
+  "free_turn": 1,
+  "turn_seq": 6,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 1, "battlefield": [], "vial_counters": [], "hand": [], "graveyard": ["Worldfire"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100055, "is_land": true }], "library_size": 48, "hand_size": 0, "graveyard": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index (options[].index, NOT legal_targets[].index -- that is the game-object index). Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "free_turn": 1,
+  "turn_seq": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Keldon Halberdier" }],
+  "events": [{ "turn": 5, "kind": "land", "text": "opponent plays Plains" }, { "turn": 5, "kind": "free_turn", "turn_seq": 6, "text": "Free turn: the opponent ended its turn locked (turn 5 again, free 1)" }, { "turn": 5, "kind": "suspend", "turn_seq": 6, "text": "⌛ Rift Bolt -- cast off suspend" }],
+  "mdfc_backs": [],
+  "me": { "life": 1, "battlefield": [], "vial_counters": [], "hand": [{ "num": 11, "name": "Keldon Halberdier", "cost": "{4}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Rift Bolt", "Worldfire"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": -2, "battlefield": [{ "name": "Plains", "idx": 0, "num": 100055, "is_land": true }], "library_size": 48, "hand_size": 0, "graveyard": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ]
+}
