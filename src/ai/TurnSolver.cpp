@@ -89809,6 +89809,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // credits and the pool prices at the current count. Upper bound: +1 per matching creature cand per such land, so it
     // can only prune less. Merfolk Turns s30000762 T4: {Seahunter, Dockhand} = 5 against bound 4. 0 without a City.
     int land_growth_bound = 0;
+    // ...and the same credit PER SELECTION (lg_w[j] = the untapped scaled lands cand j grows): the scalar walk prices a
+    // position against the whole-list addend, so a selection with no grower in it would reach eval_and_push on growth
+    // only another selection's creatures make. land_growth_refuses (below) re-prices each emitted selection with its
+    // own growers -- the same scalar test the walk applies, with the credit this selection can actually earn -- so the
+    // per-subset evaluation is paid only for what the bound was loosened FOR. Exact: a selection with no grower is
+    // tested exactly as with the flag off.
+    std::vector<int> lg_w;
     if (ScaledGrowthBoundOn())
     {
         for (const Permanent& p : state.battlefield)
@@ -89819,10 +89826,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 || LandTypeChangedToIsland(state, p)) { continue; }
             const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
                 ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
-            for (const Action& a : cands)
+            for (std::size_t j = 0; j < cands.size(); ++j)
             {
+                const Action& a = cands[j];
                 if (a.kind == Action::Kind::CastFromHand && a.def && a.def->card.IsCreature()
-                    && a.def->card.m_subtypes.HasId(chosen)) { ++land_growth_bound; }
+                    && a.def->card.m_subtypes.HasId(chosen))
+                {
+                    ++land_growth_bound;
+                    if (lg_w.empty()) { lg_w.assign(cands.size(), 0); }
+                    ++lg_w[j];
+                }
             }
         }
     }
@@ -89864,6 +89877,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         std::fprintf(stderr, "[chain-bound] t%d any_hinata_credit=%d mana_bound=%d\n",
                      state.turn_number, any_hinata_credit ? 1 : 0, mana_bound);
     }
+    // MTG_SCALED_GROWTH_BOUND, per selection (see lg_w above): `cost` is the selection's scalar mana value (the walk's
+    // own sum). Refuses where the walk's whole-list credit admitted a selection its own growers cannot pay for.
+    const bool lg_refine = land_growth_bound > 0 && mana_bound != std::numeric_limits<int>::max();
+    auto land_growth_refuses = [&](const std::vector<int>& sel_, int cost) -> bool
+    {
+        int grow = 0;
+        for (int j : sel_) { grow += lg_w[static_cast<std::size_t>(j)]; }
+        return cost > mana_bound - land_growth_bound + grow;
+    };
     {
         static const int s_dbg_multi_b = EnvInt("MTG_DBG_MULTI", 0);
         if (s_dbg_multi_b > 0 && state.turn_number == s_dbg_multi_b)
@@ -90569,6 +90591,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                  if (vamp_prefilter && pre.vamp.built
                                      && SubsetVampOutletInvalidPre(state, cands, s, /*fold_from_odometer=*/true, pre.vamp))
                                  { return false; }
+                                 if (lg_refine)
+                                 {
+                                     int cost = 0;
+                                     for (int j : s) { cost += cand_mv[static_cast<std::size_t>(j)]; }
+                                     if (land_growth_refuses(s, cost)) { return enum_priced_stop || enum_void_poll(); }
+                                 }
                                  if (fso) { foldsel::g_from_odometer = true; }
                                  if (daf_twin) { dupactfold::t_twin = true; }
                                  eval_and_push(s);
@@ -90716,6 +90744,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                            + ManaGateTriangular(mgy + pgy))
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
+                if (lg_refine && !gate_on && !mcw.on && land_growth_refuses(sel, mcost + pcost)) { continue; }
                 // MTG_MC_WALK_BOUND: the metalcraft addend priced for THIS selection (McWalkBound).
                 if (mcw.on && mcost + pcost - McWalkCredit(mcw, sel) > mcw.bound_nomc)
                 {
