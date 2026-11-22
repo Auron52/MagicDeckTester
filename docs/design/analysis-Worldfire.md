@@ -355,10 +355,54 @@ Root cause:
 
   The keep value breaks ties. A unit test pins the gi31 state.
 
+### Deadline-order arm on the same build (ab2, 320 jobs)
+`on` re-run reproduces the first run exactly (5.453 / 5.417, same units): play is deterministic.
+
+| block | `on` + `MTG_WORLDFIRE_ORDER_DEADLINE` vs `on` |
+|---|---|
+| 9100001 | identical, 0 / 0 |
+| 9200001 | 2 better (gi31, gi64) / 1 worse (gi56), net -1 |
+
+### FINAL ARM: the USER's answers folded in (ab3, 800 jobs, one pooled batch)
+The answers folded in:
+- **Halberdier:** each finisher option has a LATEST go-off turn. The earliest go-off wins, ties go to the earlier
+  kill. "9 before 10" makes the Halberdier the finisher.
+- **Dig fill:** Brainstorm > Ponder only with junk in hand and a shuffle at hand.
+- **Mana:** no extra land or extra ritual in BACKUP ("never more than 10").
+- **Tapped lands:** a tapped land is overflow only when its drop would be T\* itself.
+- **Mystical Tutor:** its {U} is free with a non-depletion blue source in play; otherwise it costs +1 on T\* (an upkeep
+  cast).
+- **New experiment arms (OFF):** `MTG_WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE` keeps a dig on top with 2+ spare blue, no other
+  blue spell and no go-off this turn. `MTG_WORLDFIRE_BAZAAR_T1` makes "early" turn 1 only.
+
+| block | arm | avg | better / worse vs off | net | units | wall | slow (>30 s) |
+|---|---|---|---|---|---|---|---|
+| 9100001 x64 | off | 5.547 | -- | -- | 32.2M | 753 s | 5 (337 s) |
+| | **on** | **5.469** | 7 / 2 | **-5** | **8.9M (0.28x)** | 226 s | 0 |
+| | on + deadline | 5.453 | 8 / 2 | -6 | 8.8M | 210 s | 0 |
+| | on + dig-blue | 5.469 | 7 / 2 | -5 | 8.9M | 213 s | 0 |
+| | on + Bazaar T1 | 5.469 | 7 / 2 | -5 | 8.9M | 208 s | 0 |
+| 9200001 x96 | off | 5.479 | -- | -- | 37.6M | 812 s | 4 (235 s) |
+| | **on** | **5.365** | 17 / 7 | **-11** | **10.6M (0.28x)** | 281 s | 0 |
+| | on + deadline | 5.354 | 16 / 5 | -12 | 10.5M | 270 s | 0 |
+| | on + dig-blue | 5.354 | 17 / 6 | -12 | 10.6M | 267 s | 0 |
+| | on + Bazaar T1 | 5.365 | 17 / 7 | -11 | 10.6M | 249 s | 0 |
+
+`off` reproduces the first batch exactly. The final rule set is better than the first cut on the held-out block (-11
+vs -6) and as cheap. Bazaar turn-1 never binds on these seeds. Deadline order and dig-blue each add one turn on the
+held-out block.
+
+Attribution of the final arm's 9 worse games, each lever flipped, at b20 and b200:
+- **8 recover at b200** (ON = OFF): a gi2, gi37; h gi11, gi35, gi63, gi64, gi82, gi85.
+- **h gi31 persists** (b200: ON 6, OFF 5). It is the Ponder ORDER again: flipping only the Ponder rule recovers it,
+  and so does the proposed deadline order, at b20 and at b200.
+- No worse game is the discard, the Brainstorm rule or the Preordain rule.
+
 ### Validation (flags OFF)
-- **Units:** every shard passes. `unit_par.sh` exits 3 for its known shard-count bug.
+- **Units:** every shard passes. `unit_par.sh` exits 3 for its known shard-count bug. The Worldfire cases now number
+  22.
 - **Scenarios:** 605/605.
-- **Smoke: 243/243 byte-identical.** No key moved, worldfire included. The refactor of the tutor census is
+- **Smoke (first cut): 243/243 byte-identical.** No key moved, worldfire included. The refactor of the tutor census is
   byte-identical. GT not accepted.
 
 ## Free-turn rule (MTG_FREE_TURNS, default OFF -- adoption is the USER's) -- measured 2026-11-21
