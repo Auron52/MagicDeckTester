@@ -28,6 +28,22 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
   - Both are also read in the greedy Solve playout past the horizon. But Sea, Spirits and almost every lord deck
     have a value sidecar (the learned leaf), which explains the small searched movement.
 
+## Milestone 14:20 UTC
+- build_lp done: $B/a7/lp/mtg built, F3 units pass (4648/4648).
+- lock7 results (a6/lock7.status):
+  - build rc=0, Bruna units rc=0.
+  - perf instructions:u, fixes on/off: EDF d0 1.0575, Jumbo d0 1.0294, Sea d0 1.0127, Bruna d0 1.0012. EDF and
+    Jumbo are above 1.01, so profiling is owed.
+  - gi21770: swap=1 and swap=0 are BOTH unwon (9). But fix7 has NO APPLY-DROP in that game (mana oracle, T6-T8).
+    The fixes-off arm wins on T8 only because it APPLY-DROPs a Sage on T5 (lucky). In fix7 it is a different d0
+    line, not a payment defect. The d8 b0 recovery check is queued (below).
+  - The swap A/B is running under the lock (a6/swap).
+- Queued in the lane:
+  - `$B/a7/g21770/d8.sh` (lane PID 940337): gi21770 d8 b0, exact=1 and exact=0 -> `$B/a7/g21770/d8.status`, `d8.DONE`.
+  - `$B/a7/perf/run.sh` (lane PID 940580): per-fix split of the Ir cost (EXACT/KEEP 10 vs 01) on EDF d0 200 and
+    Jumbo d0 3000 -> `$B/a7/perf/summary.txt`, `DONE`. Compare with lock7's 11 (on) and 00 (off).
+    Then callgrind the costly fix: the cg5/run.sh shape, 40 EDF d0 games, on vs off.
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
