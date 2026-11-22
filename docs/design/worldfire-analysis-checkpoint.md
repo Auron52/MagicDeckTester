@@ -119,10 +119,26 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   WITHOUT the --legacy-no-free-turns override (diagnostic only) and LIST every reference whose replay changes (gains
   a free turn / drifts). Change NO reference file; bring the list to the USER for approval first. Keep the legacy
   replay path so every reference stays replayable.
+- USER 2026-11-22 (bouncelands): *"That's okay, except that we shouldn't be playing a bounceland first if we don't
+  have an existing land unless forced by what the player does. The basic replacing bounceland rule should apply."*
+  -- generalise the opening-hand "every land needs another land in play -> replace the rightmost with a basic" rule
+  from the free-turn hurdles to EVERY game (own lever; a flag-off play change for games vs Karoo/Lake lists:
+  smoke + regression, list the moved keys, GT accept via the normal flow after the USER sees the list). Post-Worldfire
+  (forced) a drawn bounceland still returns itself.
 - USER 2026-11-22: *"What might be nice is to include the average of the extra turns as a separate number, even if
   we don't optimize for it. This is just informative for agents and users."* -- report the average free turns
   (and extra turns) taken per game as a separate, informational number beside the credited avg (batch per-job
   line, --games summary, tier report); never used by the search or the GT digest.
+
+## Other USER answers 2026-11-22 (Q12-Q16)
+- Q13 life-gain lands: the moved games are vs Angels (Seraph Sanctuary) and Landfall (Radiant Fountain); also
+  Blossoming Sands / Kazandu Refuge carry etb_lifegain but are in no list. Shockland life for the opponent: USER
+  *"I guess we can leave that part for now. Unless we want to come up with a standard rule like shockland damage
+  should be taken when it is in the first three lands."* -- DEFERRED (proposal below in the report).
+- Q15 White Knights default scenario opponent: *"I guess that is fine."*
+- Q16 degenerate b0 backstop rows: *"If these are bad enough the first step is always to optimize."* -- after the
+  cantrip buckets land, re-screen the Worldfire b0 rows; if still degenerate, census the b0 games (where the 2M
+  units go) and optimize before touching the rows.
 
 ## Open USER questions (defaults taken)
 - Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
