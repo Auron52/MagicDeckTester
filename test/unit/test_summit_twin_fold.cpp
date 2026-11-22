@@ -184,6 +184,9 @@ TEST_CASE("Summit-twin fold: the resolution's witness, and one count taps one se
 TEST_CASE("Summit-twin fold: a twin whose count lands on its base's IS its base; a different count is not")
 {
     LoadStfCards();
+    // These exercise the fold over the {rest-of-line, 0, all} menu (MTG_MAZE_SUMMIT_PAY_FIRST=0): the pay-first
+    // menu has no "all" pin without an untapped Maze's End, so this board would have no twin to fold.
+    const Arm pf_off(heurarm::MAZE_SUMMIT_PAY_FIRST, 0);
     const MazesEndProvider prov;
     for (bool maze : { false, true })
     {
@@ -234,6 +237,9 @@ TEST_CASE("Summit-twin fold: a twin whose count lands on its base's IS its base;
 TEST_CASE("Summit-twin fold: the search commits the same line with the fold on and off, and the fold fires")
 {
     LoadStfCards();
+    // These exercise the fold over the {rest-of-line, 0, all} menu (MTG_MAZE_SUMMIT_PAY_FIRST=0): the pay-first
+    // menu has no "all" pin without an untapped Maze's End, so this board would have no twin to fold.
+    const Arm pf_off(heurarm::MAZE_SUMMIT_PAY_FIRST, 0);
     const MazesEndProvider prov;
     for (bool maze : { false, true })
     {
