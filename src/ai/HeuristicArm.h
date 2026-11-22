@@ -1134,6 +1134,7 @@ enum Slot : int
     UO_BUDGET_PRICE,          // MTG_UO_BUDGET_PRICE  the unlock-order search's walks (MTG_PO_UNLOCK_ORDER: the enumeration site's tree beyond the given order's own path, the apply site's given walk and search) are CHARGED to the decision budget (unitsite unlock_order): one unit per MTG_UO_BUDGET_PRICE_W cast steps, the equip route's shape (inert at an unlimited budget: DecisionBudget() is nullptr). The USER's option (a), 2026-11-20 -- PROPOSED, DEFAULT OFF until the USER rules. docs/design/jumbo-apply-drop-order-2026-11-18.md
     UO_BUDGET_CUT,            // MTG_UO_BUDGET_CUT  with UO_BUDGET_PRICE on, the ENUMERATION site's search also STOPS (no other order admitted) once the decision budget is Exhausted() or Overrun() -- the equip route's per-link cut test, read at each charge. The apply site is charged, never cut. DEFAULT ON (inert while the price is off); =0 -> charge only (the reflection fans' shape)
     LKR_PLAYOUT_OFF,          // MTG_LKR_PLAYOUT_OFF  CPU CUT of the rock rung (docs/design/rock-in-plan-2026-11-19.md, "THE MENU"): in a horizon playout (TurnSolver::InRolloutPlayout, beyond the search window, the doctrine's permitted greedy policy) the line-keep rung of a line with no reducer credit (the rock rung, MTG_LINE_KEEP_ROCK) does not run, so the playout pays that line with the greedy (as MTG_LINE_KEEP_ROCK=0 does). The search window, the executor and the d0 runner keep the full rung. ADOPTED DEFAULT ON (USER 2026-11-24, "Okay, let's adopt it."; Niv searched CPU -5.1% net -8, Hinata play net 0 at 4,000 pairs, d0 byte-identical); =0 runs the rung in playouts too
+    MAZE_SUMMIT_PAY_FIRST,    // MTG_MAZE_SUMMIT_PAY_FIRST  Maze's End (USER 2026-11-22: "We can just pay our mana costs and then tap the rest."): Guild Summit's tap set is a mana-payment consequence of the line -- at resolution a real colour-aware payment of the rest of the applying line (g_line_unpaid_cost, plus Maze's End's {3} reserve) is found with every non-Gate source spent first (LinePayKeepSet), and EVERY Gate it does not use is tapped (MazesEndProvider::EtbTapSubtypePayFirst); the searched menu is {all unneeded, none}. The fixed Gate order is only the tie-break. Default OFF until measured; =0 -> the {rest-of-line, 0, all} mana-value menu
     COUNT
 };
 
@@ -2212,6 +2213,7 @@ inline const char* Name(int slot)
         "MTG_UO_BUDGET_PRICE",
         "MTG_UO_BUDGET_CUT",
         "MTG_LKR_PLAYOUT_OFF",
+        "MTG_MAZE_SUMMIT_PAY_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

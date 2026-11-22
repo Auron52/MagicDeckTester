@@ -71868,13 +71868,77 @@ static bool MazeSummitCountOn()
     return heurarm::Flag(heurarm::MAZE_SUMMIT_COUNT, s_on);
 }
 
+// THE PAY-FIRST TAP SET (USER 2026-11-22, MTG_MAZE_SUMMIT_PAY_FIRST, DEFAULT OFF until measured): "Why do we need to
+// search tapping all gates? Isn't that just a special case of fitting it into the turn's plan? Heap Gate is quite
+// unimportant compared to any other effect, so I'm not particularly worried about holding that back. In this deck
+// Black Gate and Basilisk Gate don't do anything special. Baldur's Gate makes some sense. An order is probably workable
+// here, but generally speaking we shouldn't need to make much in terms of decisions of this sort if we are only
+// considering all unneeded and none. We can just pay our mana costs and then tap the rst." So the menu is {all
+// unneeded (the unpinned cast), none (pin 1)} -- "all" is gone (a plan ending at the Summit already gets all Gates as
+// its unneeded set) -- and the tap set is a MANA-PAYMENT CONSEQUENCE of the plan, the standing mana-payment
+// exemption: EtbTapSubtypePayFirst below pays the rest of the line for real and taps every Gate that payment does not
+// use. "none" stays searched.
+static bool MazeSummitPayFirstOn()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PAY_FIRST");   // DEFAULT OFF until measured
+    return heurarm::Flag(heurarm::MAZE_SUMMIT_PAY_FIRST, s_on);
+}
+
 std::vector<int> MazesEndProvider::EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const
 {
     std::vector<int> base = DeckProvider::EtbChoiceCandidates(s, controller, def);
-    if (def.params.etb_tap_subtype_draw.empty() || base.size() <= 2 || !MazeSummitCountOn()
-        || HumanPlayActive() || DecisionUnpruned())
+    if (def.params.etb_tap_subtype_draw.empty() || !MazeSummitCountOn() || HumanPlayActive() || DecisionUnpruned())
     { return base; }
+    if (MazeSummitPayFirstOn()) { return base.size() >= 2 ? std::vector<int>{ 0, 1 } : base; }
+    if (base.size() <= 2) { return base; }
     return { 0, 1, base.back() };
+}
+
+// The pay-first tap set. The bill is what the rest of the applying line still owes -- g_line_unpaid_cost (Summit's own
+// cost is paid by now; net of the line's same-turn reducer credit) -- plus, when the hold carries no activations, the
+// {3} of an untapped Maze's End of ours, whose {T} is then not a mana source. LinePayKeepSet finds a real colour-aware
+// payment of it with every non-Gate source (floating mana, non-Gate lands, Treasures, rocks) spent before any Gate,
+// and keeps an inclusion-minimal set of Gates, leaving them out in EtbTapSubtypeOrder's order (pure-mana Gates first,
+// so Baldur's Gate -- one tap of it covers several mana -- is kept ahead of a single-mana Gate). Black Gate and
+// Basilisk Gate read as plain mana Gates in this list (no creature for their pumps). `elig` is reordered: the unneeded
+// Gates first (each part in its order), and their count is returned. A bill that even every Gate cannot pay retries
+// without the Maze's End reserve (the activation is out of reach this turn then); still unpayable -> -1 (the
+// mana-value default). Outside a plan apply the hold is empty, so the bill is the Maze's End reserve alone -- the same
+// meaning as the default's beyond-horizon count.
+int MazesEndProvider::EtbTapSubtypePayFirst(const GameState& s, int controller, const CardDefinition& def,
+                                            std::vector<int>& elig) const
+{
+    if (!MazeSummitPayFirstOn() || !MazeSummitCountOn() || HumanPlayActive() || controller != s.active_player_index
+        || def.params.etb_tap_subtype_draw.empty())
+    { return -1; }
+    if (elig.empty()) { return 0; }
+    ManaCost line = g_line_unpaid_cost;
+    if (g_line_reducer_credit > 0) { line.generic = std::max(0, line.generic - g_line_reducer_credit); }
+    ManaCost bill = line;
+    std::vector<int> unavailable;
+    if (!g_line_hold_has_acts)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value())
+            { AddManaCost(bill, *d->params.tap_tutor_put_cost); unavailable.push_back(p.card.m_number); break; }
+        }
+    }
+    std::vector<int> nums;
+    nums.reserve(elig.size());
+    for (int i : elig) { nums.push_back(s.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    std::vector<char> keep;
+    int kept = LinePayKeepSet(s, bill, nums, unavailable, keep);
+    if (kept < 0 && !unavailable.empty()) { kept = LinePayKeepSet(s, line, nums, {}, keep); }
+    if (kept < 0) { return -1; }
+    std::vector<int> out;
+    out.reserve(elig.size());
+    for (std::size_t k = 0; k < elig.size(); ++k) { if (keep[k] == 0) { out.push_back(elig[k]); } }
+    for (std::size_t k = 0; k < elig.size(); ++k) { if (keep[k] != 0) { out.push_back(elig[k]); } }
+    elig.swap(out);
+    return static_cast<int>(elig.size()) - kept;
 }
 
 // The rest-of-line count: the untapped Gates (`avail`) minus what the REST of the applying line still has to pay

@@ -14946,8 +14946,21 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         };
         std::vector<int> elig = eligible();
         const int avail = static_cast<int>(elig.size());
-        int n = etb_kx >= 1 ? etb_kx - 1
-              : ResolveProvider(state).EtbTapSubtypeDrawDefault(state, controller, *def, avail);
+        // The provider's PAY-FIRST tap set (EtbTapSubtypePayFirst; Maze's End, MTG_MAZE_SUMMIT_PAY_FIRST): the rest of
+        // the line paid first, the Gates that payment leaves unused ordered first and counted. It decides the unpinned
+        // count, and orders a pin that taps some but not all (so a pin equal to the unpinned count taps the same
+        // Gates -- the Summit-twin fold's premise). -1 = not implemented (the default count, the order untouched).
+        int n = 0;
+        if (etb_kx >= 1)
+        {
+            n = std::clamp(etb_kx - 1, 0, avail);
+            if (n > 0 && n < avail) { (void)ResolveProvider(state).EtbTapSubtypePayFirst(state, controller, *def, elig); }
+        }
+        else
+        {
+            const int pf = ResolveProvider(state).EtbTapSubtypePayFirst(state, controller, *def, elig);
+            n = pf >= 0 ? pf : ResolveProvider(state).EtbTapSubtypeDrawDefault(state, controller, *def, avail);
+        }
         n = std::clamp(n, 0, avail);
         const bool human = g_play_x_value_chooser != nullptr && !g_tap_speculating && avail > 0;
         if (!human && g_oracle_tap_choice != nullptr) { (*g_oracle_tap_choice)(state, elig, n, /*kind=*/0); }

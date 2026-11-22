@@ -5431,6 +5431,14 @@ public:
     // never worse than a tapped land. OPT-IN, default false: every other provider's drop is unchanged (Blood Sun step 7:
     // Overgrown Tomb in a deck whose Fastbond / City of Brass / Grim Tutor life matters, B1).
     virtual bool SearchesShockLandPay() const { return false; }
+    // EtbTapSubtypePayFirst -- Guild Summit's tap set as a MANA-PAYMENT CONSEQUENCE of the line (Maze's End,
+    // MTG_MAZE_SUMMIT_PAY_FIRST): `elig` = the eligible untapped Gates (battlefield indices, EtbTapSubtypeOrder's
+    // order). A provider that implements it pays the REST of the applying line first (a real colour-aware payment)
+    // and REORDERS `elig` so the Gates that payment does not use come first (each part keeping its order), returning
+    // how many those are: the resolution taps them (unpinned) or the first N (a pin). -1 = not implemented here (the
+    // count is EtbTapSubtypeDrawDefault's, the order untouched). Default -1 -> byte-identical.
+    virtual int EtbTapSubtypePayFirst(const GameState&, int /*controller*/, const CardDefinition&,
+                                      std::vector<int>& /*elig*/) const { return -1; }
 };
 
 // ---------------------------------------------------------------------------------------------------
