@@ -253,6 +253,13 @@ life already folded). Lethal-awareness is the first pruning key for the other ov
 (e.g. Harbinger: keep the dig ranks that enable an earlier lethal). Interpretation surfaced to the
 USER 2026-11-22; check the draft provider against it.
 
+Refinement (USER 2026-11-22): *"I guess there are likely also cases where it makes sense to consider the
+draw only. If we can see the beast won't end the game faster we might be able to, but generally this is
+diffcult to fully predict, so the typical default can be search both."* -> Gargaroth per-ordinal rule:
+token ONLY when the token provably brings lethal sooner; draw ONLY when we can see the token cannot make
+the game end faster (a sound, conservative test -- e.g. lethal is already on board next turn without it,
+or the game cannot last until the token can attack); otherwise (the typical case) search BOTH.
+
 ## Open USER questions (surfaced, not blocking)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
