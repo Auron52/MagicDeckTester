@@ -1770,6 +1770,10 @@ struct GameState
     std::uint8_t                     opt_pings = 0;
     std::int16_t                     opt_pings_turn = -1;
     int  OptPingsLive() const { return opt_pings_turn == static_cast<std::int16_t>(TurnSeq()) ? opt_pings : 0; }
+    // Beasts' restricted main 2 opens after combat created a usable resource: a dig/draw
+    // into hand or a selected proliferate that advanced Garruk/Herald. Shared combat
+    // resolution stamps this in both executor and rollout; the turn guard needs no reset.
+    std::int16_t                     combat_resource_turn = -1;
     // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
     // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER
     // (lifegain_to_loss) must be considerable in the phase of its opponent-lifegain payloads, and a

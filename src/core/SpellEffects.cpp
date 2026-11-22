@@ -3069,6 +3069,23 @@ void FireCombatDamageProliferate(GameState& state, int controller, const std::ve
             for (int ci : chosen)
             { narration += (narration.empty() ? "" : "; ") + ProliferateCandLabel(state, cands[static_cast<std::size_t>(ci)], controller); }
         }
+        // A selected Garruk loyalty or Herald counter is a combat-created main-2
+        // resource for Beasts. Decide from the pre-resolution candidate, then stamp
+        // in this shared executor/rollout trigger rather than in either combat caller.
+        if (controller == state.active_player_index)
+        {
+            for (int ci : chosen)
+            {
+                if (ci < 0 || ci >= static_cast<int>(cands.size())) { continue; }
+                const ProliferateCand& c = cands[static_cast<std::size_t>(ci)];
+                if (c.bf < 0 || c.bf >= static_cast<int>(state.battlefield.size())) { continue; }
+                const Permanent& q = state.battlefield[static_cast<std::size_t>(c.bf)];
+                if (q.controller_index != controller) { continue; }
+                if ((q.card.m_name == "Garruk, Primal Hunter" && q.loyalty > 0)
+                    || (q.card.m_name == "Herald of Ilharg" && PlusCountersOn(q) > 0))
+                { state.combat_resource_turn = static_cast<std::int16_t>(state.TurnSeq()); break; }
+            }
+        }
         ApplyProliferate(state, controller, cands, chosen);
         if (g_play_event_sink && !g_tap_speculating)
         {
@@ -3087,9 +3104,8 @@ void FireCombatDamageProliferate(GameState& state, int controller, const std::ve
 // The pin is read per trigger and shifted (ordinal k = the k-th dig of the combat); the explicit ScriptedEtbDig scope
 // both supplies this trigger's rank and keeps an INHERITED main-phase etb-dig pin from being consumed here.
 //
-// NOT recorded in GameState::combat_hand (the Omnitool's restricted-second-main record): no second main is open
-// for this deck (USER 2026-11-21, unsettled), and the record is folded only behind deck_has_attack_dig_hand. The
-// per-turn second-main gate planned for the Beasts provider (batch J) must add the record and its fold together.
+// A card taken by this combat dig is recorded in combat_hand and opens Beasts' per-turn second main.
+// Both writes happen here, shared by the executor and the rollout; the sim key folds them together.
 void FireCombatDamageDig(GameState& state, int controller, const std::vector<int>& damaging_idx,
                          const std::vector<int>& damaging_pw)
 {
@@ -3117,8 +3133,20 @@ void FireCombatDamageDig(GameState& state, int controller, const std::vector<int
         const int rank = CombatDigRankAt(state.scripted_combat_dig, 0);
         state.scripted_combat_dig = CombatDigPinShift(state.scripted_combat_dig);
         ScriptedEtbDig this_trigger_pin(rank);   // -1 = the provider's front (no searching apply pinned it)
+        int took = -1;
         PerformLookTakeDig(state, controller, t.count, t.def->params.combat_damage_dig_types, /*max_mv=*/-1,
-                           t.name + " (combat damage dig)", /*took_number=*/nullptr, /*bottom_random=*/true);
+                           t.name + " (combat damage dig)", &took, /*bottom_random=*/true);
+        if (took > 0 && took <= 0xFF && controller == state.active_player_index)
+        {
+            state.combat_resource_turn = static_cast<std::int16_t>(state.TurnSeq());
+            if (state.combat_hand_turn != static_cast<std::int16_t>(state.TurnSeq()))
+            {
+                state.combat_hand_turn = static_cast<std::int16_t>(state.TurnSeq());
+                state.combat_hand.fill(0);
+            }
+            for (std::uint8_t& slot : state.combat_hand)
+            { if (slot == 0) { slot = static_cast<std::uint8_t>(took); break; } }
+        }
     }
 }
 

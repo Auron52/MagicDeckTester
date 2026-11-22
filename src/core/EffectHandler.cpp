@@ -1461,7 +1461,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     // storm-count divergence, where ResolveCascade pushed a bare StackEntry that no counter or
     // cast trigger ever saw.)
     ++state.spells_cast_this_turn;
-    state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    state.mv_cast_this_turn += PrintedSpellManaValue(*def);   // CFT damage accumulator (lockstep pair)
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
     if (def->params.max_casts_after >= 0)
     {

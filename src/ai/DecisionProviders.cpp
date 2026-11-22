@@ -9472,14 +9472,52 @@ std::vector<int> RestrictCounterDestroyTargetsFor(const GameState& s, int contro
 std::vector<int> DecisionProvider::CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
                                                                 const std::vector<int>& legal) const
 {
-    return RestrictCounterDestroyTargetsFor(s, controller, src, legal, DecisionUnpruned(UnprunedGate::CounterDestroy));
+    (void)s; (void)controller; (void)src;
+    return legal;
 }
 
 bool DecisionProvider::OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const
 {
     (void)s; (void)src;
+    return true;
+}
+
+bool BeastsProvider::RestrictedSecondMainLive(const GameState& s) const
+{ return s.combat_resource_turn == static_cast<std::int16_t>(s.TurnSeq()); }
+
+std::vector<int> BeastsProvider::EtbDigCandidates(const GameState& s, int controller,
+                                                   const std::vector<Card>& examined,
+                                                   const std::vector<int>& legal) const
+{
+    (void)s; (void)controller;
+    // A rank is a name choice; two copies with the same printed name have the
+    // same hand result and leave the same multiset on the library bottom.
+    std::vector<int> out;
+    for (int i : legal)
+    {
+        if (i < 0 || i >= static_cast<int>(examined.size())) { continue; }
+        bool seen = false;
+        for (int j : out)
+        { if (examined[static_cast<std::size_t>(j)].m_name == examined[static_cast<std::size_t>(i)].m_name)
+          { seen = true; break; } }
+        if (!seen) { out.push_back(i); }
+    }
+    return out;
+}
+
+bool BeastsProvider::OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const
+{
+    (void)s; (void)src;
     return DecisionUnpruned(UnprunedGate::OilGrant);
 }
+
+std::vector<int> BeastsProvider::CounterDestroyArtEnchTargets(const GameState& s, int controller,
+    const Permanent& src, const std::vector<int>& legal) const
+{ return RestrictCounterDestroyTargetsFor(s, controller, src, legal,
+                                          DecisionUnpruned(UnprunedGate::CounterDestroy)); }
+
+long long BeastsProvider::NoWinLeafProgress(const GameState& s) const
+{ return 2000000LL * std::min(9, s.Opponent().poison_counters); }
 
 // Bloated Contaminator's proliferate (see the declaration). The sound one-option collapse: every candidate holds only
 // kinds ProliferateKindsAllBeneficial proves weakly beneficial to add, so the set of ALL candidates dominates every
@@ -27736,6 +27774,7 @@ namespace
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
     const BoarsProvider          g_boars;
+    const BeastsProvider         g_beasts;
     const SeaCreaturesProvider   g_sea_creatures;
     const RedElementalsProvider  g_red_elementals;
     const CreatureBurnProvider   g_creature_burn;
@@ -30478,6 +30517,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // BOARS (R/G Boar ramp-tribal; BoarsProvider). MUST return ABOVE `anti`: the fetchlands' fetch_land_types set
     // that signature alone. Params carried by no other deck (see the class note; I2-I5 append to the OR).
     bool boars = false;
+    bool beasts = false;
     // SEA CREATURES (G/U land-Aura ramp into sea creatures; SeaCreaturesProvider, Sea Creatures I1 2026-11-16). MUST
     // return ABOVE `anti`: the fetchlands' fetch_land_types set that signature alone. INTERIM signature -- see the
     // class note (staple shapes of the I1 cards + a name-free creature param; later steps OR in Sea-only params
@@ -30692,6 +30732,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        // Each term is unique to a Beasts card in cards.json. The OR survives a
+        // single card swap and outranks Herald's shared Boars signature below.
+        if (p.attack_choose_one || p.combat_damage_dig_per_damage > 0
+            || p.combat_damage_self_proliferate || p.remove_counter_destroy_art_ench_oil > 0
+            || p.tutor_nonlegendary || p.kicked_enters_with_plus_counters > 0)
+        { beasts = true; }
         if (p.alt_win_distinct_named_count > 0 || !p.etb_tap_subtype_draw.empty()
             || !p.damage_all_creatures_x_per_subtype.empty()) { mazes_end = true; }
         if (p.exile_all_permanents_hands_graveyards || p.each_player_life_becomes >= 0
@@ -31332,6 +31378,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
+    if (beasts)      { return g_beasts; }
     if (boars)       { return g_boars; }
     // Sea Creatures: its (interim) signature is carried by no other deck, so the position is free; it must beat `anti`
     // (fetchlands).

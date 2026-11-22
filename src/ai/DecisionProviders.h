@@ -660,6 +660,24 @@ public:
     const char* Name() const override { return "Boars"; }
 };
 
+// Beasts has its own combat-time decisions and post-combat resources. Its signature uses
+// mechanics unique to the list, rather than Herald of Ilharg's Boars-shared cast trigger.
+class BeastsProvider : public DeckProvider
+{
+public:
+    const char* Name() const override { return "Beasts"; }
+    bool MayOpenRestrictedSecondMain() const override { return true; }
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    std::vector<int> EtbDigCandidates(const GameState& s, int controller,
+        const std::vector<Card>& examined, const std::vector<int>& legal) const override;
+    bool OffersOilVigilanceMenace(const GameState& s, const CardDefinition& src) const override;
+    std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller,
+        const Permanent& src, const std::vector<int>& legal) const override;
+    long long NoWinLeafProgress(const GameState& s) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "Beasts' haste, pumps, and toxic/proliferate require a proven turn-win bound." }; }
+};
+
 // =============================================================================================
 // SeaCreaturesProvider -- the Sea Creatures deck (G/U land-Aura ramp into Krakens / Leviathans / Serpents; ledger
 // docs/design/analysis-Sea Creatures.md). Created by Sea Creatures I1 (2026-11-16) for the USER's fetch and

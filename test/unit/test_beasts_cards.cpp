@@ -99,6 +99,72 @@ struct BeSearchedScope
 };
 }   // namespace
 
+TEST_CASE("Beasts provider routing survives removal of any one signature card")
+{
+    BeDef("Elder Gargaroth");
+    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Beasts/Beasts.cod"));
+    CHECK(std::string(DetectDecisionProvider(full).Name()) == "Beasts");
+    for (const char* cut : {"Elder Gargaroth", "Garruk's Harbinger", "Bloated Contaminator",
+                            "Migloz, Maze Crusher", "Woodland Bellower", "Cragplate Baloth"})
+    {
+        Decklist d = full;
+        d.mainboard.erase(std::remove_if(d.mainboard.begin(), d.mainboard.end(),
+            [&](const Card& c) { return c.m_name.str() == cut; }), d.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "Beasts", "cutting ", cut);
+    }
+}
+
+TEST_CASE("Beasts provider second main opens for combat draw and proliferate resources")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    s.m_provider = &provider;
+    CHECK_FALSE(ProviderSecondMainLive(s));
+    const CardParams& garg = BeDef("Elder Gargaroth").params;
+    CHECK(ResolveAttackChooseOneMode(s, 0, garg, "Elder Gargaroth", 2));
+    CHECK(ProviderSecondMainLive(s));
+    ++s.turn_number;
+    CHECK_FALSE(ProviderSecondMainLive(s));
+
+    GameState token = BeState();
+    token.m_provider = &provider;
+    CHECK(ResolveAttackChooseOneMode(token, 0, garg, "Elder Gargaroth", 0));
+    CHECK_FALSE(ProviderSecondMainLive(token));
+    BeAdd(token, "Garruk's Packleader", 50);
+    CHECK(ResolveAttackChooseOneMode(token, 0, garg, "Elder Gargaroth", 0));
+    CHECK(ProviderSecondMainLive(token));
+
+    GameState dig = BeState();
+    dig.m_provider = &provider;
+    dig.players[0].library.clear();
+    dig.players[0].library.push_back(BeZone("Questing Beast", 72));
+    const int harbinger = BeAdd(dig, "Garruk's Harbinger", 71);
+    FireCombatDamageDig(dig, 0, {harbinger}, {3});
+    CHECK(ProviderSecondMainLive(dig));
+    CHECK(dig.combat_hand[0] == 72);
+
+    GameState prolif = BeState();
+    prolif.m_provider = &provider;
+    const int herald = BeAdd(prolif, "Herald of Ilharg", 81);
+    AddPlusCounters(prolif.battlefield[static_cast<std::size_t>(herald)], 1);
+    const int contam = BeAdd(prolif, "Bloated Contaminator", 82);
+    FireCombatDamageProliferate(prolif, 0, {contam});
+    CHECK(ProviderSecondMainLive(prolif));
+}
+
+TEST_CASE("Beasts provider folds same-name dig picks and values poison progress")
+{
+    BeastsProvider provider;
+    GameState s = BeState();
+    const std::vector<Card> seen = {BeZone("Questing Beast", 91), BeZone("Questing Beast", 92),
+                                    BeZone("Craterhoof Behemoth", 93)};
+    const std::vector<int> expected = {0, 2};
+    CHECK(provider.EtbDigCandidates(s, 0, seen, {0, 1, 2}) == expected);
+    CHECK(provider.NoWinLeafProgress(s) == 0);
+    s.Opponent().poison_counters = 1;
+    CHECK(provider.NoWinLeafProgress(s) > 0);
+}
+
 // ---- Garruk's Packleader ------------------------------------------------------------------------
 
 TEST_CASE("Garruk's Packleader: draws for another power-3+ creature of ours, not for a 2/2 Warchief")
@@ -170,7 +236,7 @@ TEST_CASE("Questing Beast: a second copy is offered when Herald's cast trigger o
 {
     const CardDefinition& qb = BeDef("Questing Beast");
     REQUIRE(qb.card.HasSupertype(Supertype::Legendary));
-    BoarsProvider provider;   // what the list routes to before its own provider lands
+    BeastsProvider provider;   // the Beasts route
     {   // Nothing pays: the duplicate is the tie the prune assumes, at every depth.
         GameState s = BeState();
         s.m_provider = &provider;
@@ -306,6 +372,8 @@ TEST_CASE("Cragplate Baloth: the kicked face carries the counters; the printed c
     CHECK(kick.params.kicked_base_name == "Cragplate Baloth");
     CHECK(kick.card.m_mana_cost.generic == 7);
     CHECK(kick.card.m_mana_cost.green == 3);
+    CHECK(PrintedSpellManaValue(base) == 7);
+    CHECK(PrintedSpellManaValue(kick) == 7);   // paid 10, printed MV 7 (CR 202.3)
     CHECK(base.card.HasKeyword(Keyword::Haste));
 }
 
@@ -332,7 +400,7 @@ TEST_CASE("Cragplate Baloth: executor site -- kicked enters with four +1/+1 coun
 
 TEST_CASE("Cragplate Baloth: rollout site -- the kicked plan variant enters as a 10/10, the unkicked as a 6/6")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BalothBoard();
     s.m_provider = &provider;
     BeSearchedScope on(true);
@@ -546,7 +614,7 @@ TEST_CASE("Contested Cliffs: no activation without BOTH targets, a tapped source
 
 TEST_CASE("Contested Cliffs: both targets are searched -- one variant per (own class x opponent class)")
 {
-    BoarsProvider provider;   // the deck's current route; its TapFightTargets is the base (all)
+    BeastsProvider provider;   // the Beasts route; its TapFightTargets is the base (all)
     GameState s = BeCliffsBoard();
     s.m_provider = &provider;
     BeSearchedScope on(true);
@@ -821,7 +889,7 @@ TEST_CASE("Elder Gargaroth: the provider fold drops ONLY the life mode, and only
         CHECK(m == std::vector<int>{ 2, 1 });
     }
     // Through the virtual (the deck's current route inherits the root).
-    BoarsProvider provider;
+    BeastsProvider provider;
     s.m_provider = &provider;
     std::vector<int> modes;
     AttackChooseOneSearchModes(s, 0, BeDef(kGarg), modes);
@@ -830,7 +898,7 @@ TEST_CASE("Elder Gargaroth: the provider fold drops ONLY the life mode, and only
 
 TEST_CASE("Elder Gargaroth: the mode axis -- two attackers make 4 joint variants after the fold, 9 without it")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BeGargBoard();
     s.m_provider = &provider;
     s.deck_life_inert = true;
@@ -1266,7 +1334,7 @@ TEST_CASE("Migloz: the pump removes two oil per activation and stops when the oi
 
 TEST_CASE("Migloz: the pump is SEARCHED -- one variant per K (oil- and mana-capped), legal while sick, main 1 and main 2")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     {
         GameState s = BeMigBoard(4, 5);   // 4 mana, 5 oil -> K = 1, 2
@@ -1309,7 +1377,7 @@ TEST_CASE("Migloz: the pump is SEARCHED -- one variant per K (oil- and mana-capp
 
 TEST_CASE("Migloz: executor and rollout apply the searched pump identically (oil, P/T, mana)")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     GameState s = BeMigBoard(4, 5);
     s.m_provider = &provider;
@@ -1400,7 +1468,7 @@ TEST_CASE("Migloz: vigilance + menace is implemented, live only when it changes 
     // The ENGINE offers it; the root provider keeps it out of the autonomous search (USER: heuristically pruned).
     BeSearchedScope on(true);
     {
-        BoarsProvider provider;
+        BeastsProvider provider;
         GameState s = BeMigBoard(2, 5, false);
         s.m_provider = &provider;
         CHECK_FALSE(provider.OffersOilVigilanceMenace(s, BeDef(kMig)));
@@ -1446,7 +1514,7 @@ TEST_CASE("Migloz: the destroy is paid in OIL, targets any artifact/enchantment,
         CHECK(RestrictCounterDestroyTargetsFor(h, 0, BeMigOf(h, 80), legal, false) == legal);
     }
     // Search enumeration: one destroy action, at their Greaves.
-    BoarsProvider provider;
+    BeastsProvider provider;
     s.m_provider = &provider;
     BeSearchedScope on(true);
     int destroys = 0;
@@ -1737,7 +1805,7 @@ TEST_CASE("Nykthos: the fed-tap recolour is refused when the other colour's devo
 
 TEST_CASE("Nykthos: executor and rollout pay a red spell off the fed RED tap identically")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });   // the only red: Nykthos fed, R 1
@@ -1770,7 +1838,7 @@ TEST_CASE("Nykthos: the payability walk grows devotion -- Harbinger's {G}{G} fun
     // Nykthos + six Forests + Questing Beast (G 2). Harbinger {1}{G}{G} off three Forests, then devotion is 4: two
     // Forests feed Nykthos for four green + the last Forest = Gargaroth's 5. No other order pays, and a probe that never
     // put Harbinger on its scratch board would read Nykthos at 2 and reject the pair.
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeNykBoard(6, { "Questing Beast" });
@@ -1793,7 +1861,7 @@ TEST_CASE("Nykthos: the payer holds it for a later devotion-grown fed tap, and s
     // MTG_DEVOTION_LAND_HOLD (ManaSourceRankBase): a payment PREFERENCE. Hold: Harbinger's {1} off a Forest so the fed
     // tap is left for Gargaroth at devotion 4. No hold: three Forests, a {1}{G} then a {G}{G} -- holding Nykthos would
     // leave one Forest to feed its {2}, so its plain {C} must pay the {1}.
-    BoarsProvider provider;
+    BeastsProvider provider;
     ManaCacheClearPerGame();
     {
         GameState s = BeNykBoard(6, { "Questing Beast" });   // G 2
@@ -1859,7 +1927,7 @@ TEST_CASE("Nykthos: the pip-heavy permanent first can be the ONLY payable order 
     // total 9 (Forests + the {C}) < 10, so the flat pool rejects the pair, the filter rescue's single (rank) walk takes
     // Thragtusk first and fails, and before the payable-order domain covered devotion growth the pair was REFUSED --
     // a payable line no budget could find as one plan.
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeNykBoard(8, { "Questing Beast" });
@@ -1900,7 +1968,7 @@ TEST_CASE("Nykthos: a red devotion made INSIDE the line opens the red pip -- Vex
     // Shusher paid with two Forests gives red devotion 2; the last two Forests feed Nykthos for {R}{R}. The colour gate
     // used to read the BOARD's devotion only (red 0) and refused every subset holding the {R} pip as "no untapped source
     // produces red". It now credits the colours a permanent in hand would add.
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeNykBoard(4, {});
@@ -2191,7 +2259,7 @@ TEST_CASE("Contaminator: the root collapses the menu to the dominant set; MTG_UN
     CHECK(std::string(GateName(UnprunedGate::Proliferate)) == "proliferate");
     CHECK(ProliferateDefaultSubset(s, 0, cands) == std::vector<int>{ 0, 1, 2, 3 });
     {
-        BoarsProvider provider;
+        BeastsProvider provider;
         s.m_provider = &provider;
         const auto menu = ProliferateMenu(s, 0, cands);
         REQUIRE(menu.size() == 1);
@@ -2331,7 +2399,7 @@ TEST_CASE("Woodland Bellower: card data, and the filter is green + creature + MV
     CHECK_FALSE(TutorNumericFilterOk(BeDef("Kaheera, the Orphanguard").card, d.params));
     CHECK(TutorNumericFilterOk(BeDef("Krosan Warchief").card, d.params));
     // The candidate list over the test library: exactly the three legal names.
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BeBellBoard(0);
     s.m_provider = &provider;
     std::vector<std::string> c = BeBellCands(s);
@@ -2341,7 +2409,7 @@ TEST_CASE("Woodland Bellower: card data, and the filter is green + creature + MV
 
 TEST_CASE("Woodland Bellower: the tutor pin picks EACH candidate, the named target is put, and the put shuffles")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState base = BeBellBoard(0);
     base.m_provider = &provider;
     const std::vector<std::string> cands = BeBellCands(base);
@@ -2369,7 +2437,7 @@ TEST_CASE("Woodland Bellower: the tutor pin picks EACH candidate, the named targ
 
 TEST_CASE("Woodland Bellower: 'you may' -- both decline shapes put nothing and do NOT shuffle")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState base = BeBellBoard(0);
     base.m_provider = &provider;
     // (a) the search's decline variant (Plan::tutor_choice = kTutorDeclineChoice).
@@ -2397,7 +2465,7 @@ TEST_CASE("Woodland Bellower: 'you may' -- both decline shapes put nothing and d
 
 TEST_CASE("Woodland Bellower: only legendary / off-filter creatures left -> nothing is put")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BeState();
     s.m_provider = &provider;
     auto& lib = s.players[0].library;
@@ -2412,7 +2480,7 @@ TEST_CASE("Woodland Bellower: only legendary / off-filter creatures left -> noth
 
 TEST_CASE("Woodland Bellower: the put creature's OWN ETB fires (Nest Invader's Spawn), and a put is not a cast")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BeState();
     s.m_provider = &provider;
     BeAdd(s, "Herald of Ilharg", 40);   // "Whenever you cast a creature spell" -- a put is no cast
@@ -2430,7 +2498,7 @@ TEST_CASE("Woodland Bellower: the put creature's OWN ETB fires (Nest Invader's S
 
 TEST_CASE("Woodland Bellower: Packleader draws for Bellower BEFORE the search, and for the put Harbinger AFTER the shuffle")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     GameState s = BeState();
     s.m_provider = &provider;
     BeAdd(s, "Garruk's Packleader", 40);
@@ -2452,7 +2520,7 @@ TEST_CASE("Woodland Bellower: Packleader draws for Bellower BEFORE the search, a
 
 TEST_CASE("Woodland Bellower: every put target is SEARCHED -- one plan per legal name + the decline, no greedy pick")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeBellBoard(6);
@@ -2475,7 +2543,7 @@ TEST_CASE("Woodland Bellower: every put target is SEARCHED -- one plan per legal
 
 TEST_CASE("Woodland Bellower: executor and rollout put the same pinned target")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeBellBoard(6);
@@ -2511,7 +2579,7 @@ TEST_CASE("Woodland Bellower: a Nykthos line paid by the PUT's devotion is enume
     // {1}{G}{G} makes it 4: two Forests feed Nykthos for four green = Questing Beast. Nine sources, ten mana: payable
     // ONLY through the put (Bellower's own pips alone leave Nykthos at 2), so a bound / walk that credited the cast
     // and not the put would refuse the pair before any payment could price it.
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeNykBoard(8, {});
@@ -2546,7 +2614,7 @@ TEST_CASE("Woodland Bellower: a Nykthos line paid by the PUT's devotion is enume
 TEST_CASE("Woodland Bellower: a put Krosan Warchief's {1} off a later Beast is credited -- the exact-mana pair is enumerated")
 {
     // Ten Forests. Bellower (6) + Thragtusk {4}{G} (5) = 11 printed; the put Warchief makes Thragtusk 4 -> 10.
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     GameState s = BeState();
@@ -2596,7 +2664,7 @@ TEST_CASE("Kaheera companion: starting-deck restriction selects one outside-game
 
 TEST_CASE("Kaheera companion: searched hand and same-turn cast choices match executor and rollout")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     Decklist deck;
@@ -2643,7 +2711,7 @@ TEST_CASE("Kaheera companion: searched hand and same-turn cast choices match exe
 
 TEST_CASE("Kaheera companion: hand entry opens a searched site-9 continuation, replayed by executor")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     Decklist deck;
@@ -2706,7 +2774,7 @@ TEST_CASE("Kaheera companion: hand entry opens a searched site-9 continuation, r
 
 TEST_CASE("Kaheera companion: Warchief before fee and another Beast after Kaheera")
 {
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     Decklist deck;
@@ -2772,7 +2840,7 @@ TEST_CASE("Kaheera companion: human menu offers fee then an exact ordinary cast"
     // MTG_HUMAN_PLAY is process static. The normal unit run skips this arm;
     // run this case again with MTG_HUMAN_PLAY=1 to test the viewer menu.
     if (!HumanPlayActive()) { return; }
-    BoarsProvider provider;
+    BeastsProvider provider;
     BeSearchedScope on(true);
     ManaCacheClearPerGame();
     Decklist deck;

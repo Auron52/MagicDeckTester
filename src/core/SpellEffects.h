@@ -5244,6 +5244,19 @@ inline Card UnkickedSpellCard(const CardDefinition& def, const Card& resolved)
     return c;
 }
 
+// Kicker is an additional cost, not part of mana value (CR 202.3). The
+// synthesized kicked face keeps the paid bill, while cast triggers and MV
+// accumulators read the printed card through its existing base-name link.
+inline int PrintedSpellManaValue(const CardDefinition& def)
+{
+    if (!def.params.kicked_base_name.empty())
+    {
+        const CardDefinition* base = CardDatabase::Instance().Lookup(def.params.kicked_base_name);
+        if (base != nullptr) { return base->card.m_mana_cost.ManaValue(); }
+    }
+    return def.card.m_mana_cost.ManaValue();
+}
+
 // MORPH (CR 708.9): a face-down permanent that leaves the battlefield is REVEALED and arrives in its
 // new zone as the real card. A face-down permanent's Card IS the DB-synthesized "<name> (Face-down)"
 // face, and zone cards are name-only (resolved through LookupCached by name), so pushing that Card
@@ -8084,7 +8097,7 @@ inline void TapPingCastUntap(GameState& state, int active, const CardDefinition&
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
     g_cast_trigger_mana_spent_probe = mana_spent;
-    int mv = cast_def.card.m_mana_cost.ManaValue();
+    int mv = PrintedSpellManaValue(cast_def);
     int active = state.active_player_index;
     if (cast_def.card.IsCreature())
     {
@@ -17483,7 +17496,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     // The copy is CAST: it counts toward storm-style counters and fires on-cast triggers
     // (a multicolored conjure would ping Mana Cannons -- none of the six is multicolored).
     ++state.spells_cast_this_turn;
-    state.mv_cast_this_turn += cd->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    state.mv_cast_this_turn += PrintedSpellManaValue(*cd);   // CFT damage accumulator (lockstep pair)
     // "You still pay its costs": both callers pay the copy's cost (its Action::cost, {X} folded in) just before
     // this, so the mana spent is the printed cost plus Braingeyser's X.
     {
@@ -25846,7 +25859,7 @@ inline void CastFromMadness(GameState& state, int controller, const Card& card, 
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     if (d == nullptr) { state.players[controller].graveyard.push_back(card); return; }
     ++state.spells_cast_this_turn;
-    state.mv_cast_this_turn += d->card.m_mana_cost.ManaValue();   // printed MV (CR 202.3), not the paid cost
+    state.mv_cast_this_turn += PrintedSpellManaValue(*d);   // printed MV (CR 202.3), not the paid cost
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
     if (d->params.max_casts_after >= 0)
     {
@@ -27535,10 +27548,14 @@ inline bool ResolveAttackChooseOneMode(GameState& state, int controller, const C
 {
     if (mode == 0)
     {
+        const std::size_t before_hand = state.players[controller].hand.size();
         // The token enters NOT attacking (it was never declared, CR 508.4) and runs the shared enter cascade
         // (Garruk's Packleader's power-3 draw, Kaheera's lord, doublers) through CreateToken.
         CreateToken(state, controller, p.attack_choose_token_power, p.attack_choose_token_toughness,
                     p.attack_choose_token_subtypes, p.attack_choose_token_color, {});
+        if (controller == state.active_player_index
+            && state.players[controller].hand.size() > before_hand)
+        { state.combat_resource_turn = static_cast<std::int16_t>(state.TurnSeq()); }
         if (g_play_event_sink)
         {
             EmitPlayEvent(state.turn_number, "ability",
@@ -27566,7 +27583,12 @@ inline bool ResolveAttackChooseOneMode(GameState& state, int controller, const C
     {
         const DrawAttemptResult draw = AttemptDrawIntoHand(state, controller, HandEntryReason::Draw);
         if (!draw.satisfied) { state.player_lost_on_draw = true; return false; }
-        if (draw.drew) { ++pl.cards_drawn_this_turn; }
+        if (draw.drew)
+        {
+            ++pl.cards_drawn_this_turn;
+            if (controller == state.active_player_index)
+            { state.combat_resource_turn = static_cast<std::int16_t>(state.TurnSeq()); }
+        }
         if (draw.drew && g_play_draw_sink)
         { g_play_draw_sink->push_back({ state.turn_number, draw.card_name.str() }); }
     }
@@ -28740,7 +28762,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
     // turn as a Dragonstorm therefore adds +1 storm. Suspending ({0}) and sacrificing are NOT casts and
     // do not come through here. Byte-identical for every deck that never suspends (this path never runs).
     ++state.spells_cast_this_turn;
-    state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+    state.mv_cast_this_turn += PrintedSpellManaValue(*def);   // CFT damage accumulator (lockstep pair)
     // RIPPLE (Thrumming Stone; Shadowborn INT-3): a cast off suspend IS a cast (CR 702.62e), so it ripples.
     // There is no stack here, so its trigger resolves INLINE, above the spell -- before the spell resolves
     // (a Profane Tutor's search, a Lotus Bloom's entry) and before this turn's draw (the upkeep). Shared by

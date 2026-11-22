@@ -77601,7 +77601,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!rip_precast)
         {
         ++state.spells_cast_this_turn;
-        state.mv_cast_this_turn += def.card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
+        state.mv_cast_this_turn += PrintedSpellManaValue(def);   // CFT damage accumulator (lockstep pair)
         // The main-2 stager stamp (GameState::m2_stage_turn): a no-op unless this is a stages_cards cast
         // in the post-combat main of a deck whose provider restricts main 2. Lockstep twin:
         // AIEngine::CastSpellFromHand, at the same per-cast site.
@@ -80184,7 +80184,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                              victim, /*readiness_route=*/true);
             }
             ++state.spells_cast_this_turn;
-            state.mv_cast_this_turn += md->card.m_mana_cost.ManaValue();
+            state.mv_cast_this_turn += PrintedSpellManaValue(*md);
             if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
             if (md->params.max_casts_after >= 0)
             {
@@ -111699,7 +111699,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     // restriction forbids. Deck-gated AND nonzero-gated AND turn-gated, so every other deck, and
     // every turn no dig fired, keeps its exact prior key. Order-independent (XOR of the members)
     // because the record's order is trigger order, which is not a property of the position.
-    if (state.deck_has_attack_dig_hand && state.combat_hand[0] != 0
+    if (state.combat_resource_turn == static_cast<std::int16_t>(state.TurnSeq()))
+    { Fold(k, 0xBEA577); }
+    if ((state.deck_has_attack_dig_hand || state.deck_has_combat_damage_dig)
+        && state.combat_hand[0] != 0
         && state.combat_hand_turn == static_cast<std::int16_t>(state.TurnSeq()))
     {
         Fold(k, 0xD16A1);
