@@ -1,6 +1,6 @@
 # Opponent-lockdown "free turns" (USER proposal, 2026-11-21)
 
-Status: PROPOSED by the USER, being built for the Worldfire analysis behind a flag. The
+Status: the USER's design (USER 2026-11-22 on adoption: *"Okay, but this is not a question."*), built behind `MTG_FREE_TURNS`, DEFAULT OFF until the parent flips it once the checks in "Third pass" pass; "Third pass" (l) states what the flip changes. The
 open questions below are the USER's to settle; each one lists the default the agent took while
 building, and that default is PROVISIONAL until the USER answers.
 
@@ -100,6 +100,8 @@ Worldfire turn itself -- the USER's "usually a win" in real play.
    (Worldfire leaves both sides near-empty), so the extra turns are cheap; and depth-in-rounds keeps a
    lock-then-win line always inside the window (budget-may-reprice rule). The A/B reports search units
    so a long-lock cost shows up. PROVISIONAL; Q9 for extra turns and this should be settled together.
+   **ANSWERED (USER 2026-11-22): no ply cost** -- *"Let's try it this way for now. If we find this restrictive or
+   troublesome we can re-adjust it."*
 
 ## Measurement plan
 
@@ -212,7 +214,8 @@ credit without the hurdles. One definition of the rule: `src/core/FreeTurns.h`. 
 ### Agent defaults (surfaced to the USER, not settled)
 
 1. The flood hurdle removes the RIGHTMOST lands.
-2. An MDFC spell//land in hand is a NONLAND card for the lock, a LAND for the hurdles.
+2. An MDFC spell//land in hand is a NONLAND card for the lock, a LAND for the hurdles. **SUPERSEDED (third pass):** an MDFC counts as
+   the side the hand holds fewer of, a tie as a NONLAND (USER: *"Sure, that sounds fine."*).
 3. A scheduled spawn due with our next turn blocks the lock.
 4. After an opponent extra turn, the lock is checked once, after its following regular turn.
 5. A legacy-replay board (no dealt opponent list) never locks.
@@ -402,8 +405,197 @@ GT (expected under the flag); scenarios 605/605; VPC 940 refs, 0 play-drift.
 
 ### Agent defaults of the second pass (surfaced to the USER, not settled)
 
-6. The cleanup floor: 2 nonlands, oldest-first otherwise (the agent's version of "discard lands before
+6. **REPLACED by USER ruling 2a (third pass (c)).** The cleanup floor: 2 nonlands, oldest-first otherwise (the agent's version of "discard lands before
    nonlands"). It binds at exactly 2 nonlands even where shedding to 1 could not lock (gi934).
 7. The lock-trait list as audited in (b), including `annihilator` and the wish-reachable sideboard rule.
 8. `--legacy-no-free-turns`: an unstamped reference replays flag-off, so a flag-ON sweep tests no reference
    under the rule until references are recorded with it.
+
+## Third pass (2026-11-22, wip/freeturn; `MTG_FREE_TURNS` still DEFAULT OFF)
+
+Commits 94b9d46ca (gate on the lock trait, MDFC side rule, spawn land requirement, Sire lever + fairness check),
+9d396adc8 (MDFC tie -> nonland, annihilator fairness, informational averages, `MTG_OPP_BOUNCE_OPENING`, per-job arms),
+5267c39d0 (USER 2a cleanup by kind, USER 2b one-land removals in the trait). Units on 5267c39d0: 3896 / 3896 pass.
+Measurements on 5267c39d0, `MTG_PGO=0`, raw output under `build/scratch/freeturn/` (`reg_on5/`, `fair/`, `scope/`,
+`spawnrc/`, `bounce_*`), summaries in `logs/freeturn/`.
+
+### (a) Everything is gated on the lock trait: no other deck moves
+
+`freeturn::RuleArmed` = `MTG_FREE_TURNS` AND `GameState::deck_has_free_turn` (the deck's lock trait, stamped before
+the deal). The credit, the hurdles, the cleanup rule and the spawn requirement (env unset) act only where it holds.
+* **Flag-ON regression tier (reg_on5)**: 389 keys, 356 pass / 33 fail; **NON-TRAIT decks moved: 0**; every trait-0
+  deck's search units ON/OFF are exactly 1.000. Scenarios 605 / 605; reference sweep 940 refs, 0 play-drift.
+* Flag-ON smoke (on 9d396adc8): 227 / 16, non-trait moved 0. Flags-OFF smoke on 5267c39d0: 243 / 243, play-changed 0.
+* Hence the Burn / Modern RW Burn games the earlier passes discussed (Burn d0 s2002 gi934, Modern RW Burn d5 s3003
+  gi51, the five Burn "hole" games) are trait-0 and now byte-identical to the flag-off GT.
+
+### (b) MDFC in hand: the fewer side, a tie as a NONLAND
+
+`opponentdeck::CountHandSides`: cards by front face, then each spell//land MDFC joins the side the hand holds fewer of
+(USER: *"a MDFC that is both should count as whatever you have less of"*); a tie joins the NONLAND side (USER
+2026-11-22: *"Sure, that sounds fine."*): an opponent with a land out and a lone MDFC would cast its spell side, so a
+tie read as a land could lock it spuriously. Used by the lock, the screw / flood hurdles and the cleanup.
+
+### (c) The opponent's cleanup discards the more common kind (USER 2a)
+
+USER: *"The opponent should discard whichever is more common between lands and nonlands including hand and field I
+suppose. (not counting the creature tokens) That should avoid any weirdness as we will try to keep the thing we might
+be missing."* `opponentdeck::CleanupShedIndex`, before every discard: count lands vs nonlands over the head's hand AND
+battlefield (creature tokens excluded, an MDFC in hand by (b)), shed the oldest card of the more common kind; an exact
+tie sheds a land (USER 2026-11-22: *"Defaulting to discarding land sounds fine."*). Replaces the two-nonland floor and
+lands-first. Armed for trait decks only, so Burn gi934 (the floor case) is untouched.
+
+### (d) One-land removals join the trait (USER 2b): Elementals, Prevent Damage, Sea Creatures flip to trait 1
+
+USER: *"Yes, it should. ... Those decks need to lock out all lands and the turns where the opponent can play a land
+would still not be free."* IN now: Acidic Slime, Fulminator Mage, Kiora Bests the Sea God ch. III, Ulamog's cast
+trigger. Flipped 0 -> 1: **Landfall Elementals, Prevent Damage, Sea Creatures (+ their 2HG keys)**. reg_on5, none of
+them takes a single free turn, but their play and cost move:
+* Elementals: 16 games' digests, 1 win turn faster (d0 -0.001), units 1.002.
+* Prevent Damage: 53 digests, 1 faster / 6 slower (d0 +0.002, d5 +0.007 / +0.013, 2HG +0.013), units 1.016 / 2HG 1.002.
+  The spawn requirement accounts for its smoke moves (scope run (e): d0 gi9, gi259 slower only with it armed).
+* Sea Creatures: 10 digests, 0 win turns, **units 1.257 / 2HG 1.202** -- the turn-edge prune stand-down
+  (`NextTurnMayShareRound`), the same cost the first pass measured when Kiora was IN.
+
+### (e) The spawn land requirement: global or free-turn-scoped (for the USER)
+
+`MTG_OPP_SPAWN_NEEDS_LAND` (tri-state): unset follows the free-turn rule (armed for the lock-trait decks only, the
+FREE-TURN-SCOPED option, which is what flipping `MTG_FREE_TURNS` ships); `=1` applies it to every game (the GLOBAL
+option); `=0` is off everywhere. Root cause of the global slowdown, from replaying all 235 single-head smoke games whose
+win turn moved under `=1` (both arms, `build/scratch/freeturn/spawnrc/`, `classify.txt`): **230 of 235 lose exactly the
+turn-1 spawn**, and the other 5 are opponents with no land until T4 or later (gi537 in Burn / Critter / Shadowborn,
+Anti-Lifegain gi407, Stuffy gi488) whose later spawns go too. The T1 spawn is lost in EVERY game, on the draw as well as
+on the play (29 of the 235 are on the draw): the passive opponent plays its first land at the end of OUR turn 1 even when
+it is on the play, so it never controls a land at our first untap. 200 of the 235 are slower, 35 faster. 162 of the 200
+slower games cast one of six cards in the OFF arm that USE an opposing creature: Searing Blaze 69 (Burn 21, Midrange
+Burn 35, Modern RW Burn 9, Creature Burn 4), Searing Blood 24 (Burn), Blasphemous Act 35 (Stuffy: one mana cheaper per
+creature), Hinata, Dawn-Crowned 16 (a spell costs 1 less per target), Defense of the Heart 11 (Creature Giving: needs 3
+opposing creatures), Swords to Plowshares 7 (Anti-Lifegain). The other 38 (36 at d0, plus Stuffy d3/d5 gi23) change line
+with none of the six cast. Named games: Burn d5 gi233 (T4 -> T7: the opponent has no land until T4, all three
+spawns vanish, the OFF arm's two Searing Bloods for 6 have no target), Burn d5 gi55 (T4 -> T5: Searing Blood for 3 has
+no target), Midrange Burn d5 gi25 (T4 -> T5: the T4 Searing Blaze deals no 3 to the face), Stuffy d5 gi25 (T4 -> T5:
+Blasphemous Act costs one more), Hinata d5 gi49 (T5 -> T6), Creature Giving d5 gi3 (T4 -> T5: Defense of the Heart a
+turn later). So handoff 4's suspicion holds and is wider: every deck that spends an opposing creature as a resource
+loses the T1 one. In the smoke tier the GLOBAL option moves 58 of 243 keys (digest), 29 of them in aggregate, summed
++0.635 turns (slower): Stuffy +0.208 (3 keys) + 2HG +0.080, Burn +0.109 + 2HG +0.040, Midrange Burn +0.097, Creature
+Giving +0.071 + 2HG +0.020, Hinata +0.013, eight more decks +0.001 to +0.009, Mirrorwing -0.027, Extra Turns and Merfolk -0.002 (faster); per game, searched slower 44 / faster 2, d0 slower 162 / faster 33. Under the FREE-TURN-SCOPED option only the
+lock-trait decks see it: measured as one pooled batch of the 28 trait-deck smoke jobs, flag ON, armed vs `=0` (`scope/`): 17 keys
+move (digest), 7 in aggregate, summed **-0.066** (FASTER: without the T1 spawn a board can lock earlier), Shadowborn d0 /
+d3 / d5 -0.009 / -0.040 / -0.020, Cyclone d0 -0.008 / d5 +0.010, Extra Turns d0 -0.001, Prevent Damage d0 +0.002; every
+Worldfire key is digest-identical; units armed / off 0.997. The trait-0 decks' slowdown above does not happen at all. A refinement either option could take (not built): on the draw, count the
+opponent's own turn-1 land drop as made before our first untap (a real opponent on the play has played its land), which
+restores the T1 spawn in the 29 on-the-draw games.
+
+### (f) Sire of Insanity: in the trait, and the fairness check
+
+Sire stays IN (USER: *"That is why it is in the list, because some decks literally lose to the card."*; *"Sire of
+Insanity I suppose is a bit messy because that is the closest to locking them when it shouldn't. In the face of that
+card you would drop all permanents you can on the field, but the opponent has no ability to do so."*; *"(and it
+protects your board)"*). `MTG_FREE_TURN_SIRE` (default ON, `=0` takes Sire out of the trait). The fairness check the
+USER asked to try (*"Okay, that sounds worth trying."*), `MTG_FREE_TURN_SIRE_FAIR` (default OFF):
+`freeturn::NoteSireBeforeDiscard`, right before Sire's end-step discard in both worlds, vetoes the next lock when the
+discarded hand held a creature the opponent could have cast (MV <= its lands, each coloured pip <= its lands producing
+that colour). Check only, no state change.
+
+### (g) Annihilator fairness (USER: *"If we do that rule for Sire we should also apply the same rule to Annihilator if even just to check if it would make enough sacrifice targets to keep a permanent."*)
+
+`MTG_FREE_TURN_ANNIHILATOR_FAIR` (default OFF): when an annihilator sacrifice takes EVERY opposing permanent, count the
+nonland permanent cards in the opponent's hand it could cast (each separately against its current lands, a generous
+reading: a real opponent could not have cast all of them); if real + castable permanents exceed the annihilator count
+it would have kept one, and the next lock is vetoed. Check only.
+
+### (h) Fairness batch (one pooled batch, arms innermost in 20-game blocks, held-out seeds 7710001..)
+
+`fair/manifest.json`, 485 jobs; deltas are paired per block vs the `on` arm (se over blocks).
+
+| deck (setting, games) | off | on (credited) | fairness arm | games with a free turn on / fair | units on/off |
+|---|---|---|---|---|---|
+| Shadowborn d5 b20, 1000 | 4.758 | **4.747** (-0.011, se 0.005) | sirefair 4.752 (+0.005 vs on, se 0.002) | 13 / 9 | 1.175 |
+| Shadowborn 2HG d3 b10, 200 | 4.990 | 4.990 | sirefair 4.990 | 0 / 0 | 1.159 |
+| Cyclone d5 b20, 1000 | 4.780 | **4.715** (-0.065, se 0.010) | annfair 4.750 (+0.035 vs on, se 0.008) | 286 / 114 | 0.942 |
+| Cyclone 2HG d3 b10, 200 | 5.075 | 5.060 (-0.015) | annfair 5.075 | 8 / 2 | 1.029 |
+| Extra Turns d5 b20, 500 | 4.734 | 4.736 (+0.002, se 0.004) | annfair 4.736 | 5 / 2 | 1.053 |
+
+`sireout` (Sire out of the trait) is byte-identical to `off` on Shadowborn (units too): Sire is its only lock card. So
+on Shadowborn the rule buys 0.011 turns and costs +17.5% search units (the prune stand-down); the fairness check keeps
+9 of the 13 credited games (+0.005). On Cyclone the annihilator check cuts the credited games from 286 to 114 and gives
+back more than half the credit (+0.035 of -0.065): most of Cyclone's annihilator locks are on opponents holding
+castable permanents.
+
+### (i) Informational averages, per-job arms, diagnostics
+
+* `free_avg` / `extra_avg` (USER: *"include the average of the extra turns as a separate number, even if we don't
+  optimize for it"*): on the batch per-job line (when nonzero), the `--games` summary and the tier report's `(info)`
+  line. Never in the digest or GT. Games reused from a resumed batch's partial count 0.
+* heurarm slots `MTG_FREE_TURNS`, `_SIRE`, `_SIRE_FAIR`, `_ANNIHILATOR_FAIR`, so one pooled batch carries every arm.
+* `VPC_FREE_TURN_DIAG=1|2` (viewer_protocol_check.py): replay unstamped references under the rule (2: also under the
+  spawn requirement). Diagnostic only, never in a tier.
+* `MTG_OPP_BOUNCE_OPENING` (default OFF): the bounceland opening rule in every game (j).
+
+### (j) The bounceland opening rule for every game (`MTG_OPP_BOUNCE_OPENING=1`, flags otherwise off; not accepted)
+
+USER: *"we shouldn't be playing a bounceland first if we don't have an existing land unless forced by what the player
+does. The basic replacing bounceland rule should apply."* An opening hand whose every land needs another land in play
+(Karoos, Lake of the Dead) gets its rightmost such land replaced by a basic; the land-drop policy already plays a land
+that can stay alone ahead of a Karoo (`OpponentLandDropIndex`), so this is the only case left. A drawn bounceland later
+still returns itself. Measured: smoke 42 keys' digests move (1 game each, the gi whose dealt opponent is a Karoo list),
+1 in aggregate (Merfolk d0 gi233 T6 -> T5, -0.001); regression 24 keys' digests, 2 in aggregate: Maze's End d5 s2002
+gi168 T5 -> T6 (+0.005; MAZE_MECH) and Extra Turns d0 gi505 T6 -> T5 (-0.001). Scenarios 605 / 605, references 940, 0
+play-drift (the references were all recorded on legacy boards, so none is dealt a Karoo opening). Adopting it would need
+a recording stamp + `--legacy` flag like the other opponent-model changes, and a smoke/regression GT accept.
+
+### (k) References under the rule: NONE changes
+
+Diagnostic sweeps, flag ON, `VPC_FREE_TURN_DIAG=2` (rule + spawn requirement, the adoption picture) and `=1` (rule
+only), `logs/freeturn/vpc_diag{2,1}.log`: both 940 refs, 364 ok / 575 repaired / 1 beaten / 0 play-drift, every per-ref
+verdict identical to the flag-off sweep. Why: the rule acts only on lock-trait decks, and every reference of those decks
+(Extra Turns 10, Prevent Damage 11, Sea Creatures 10, Shadowborn Apostle 10, Unpredictable Cyclone 10, Landfall
+Elementals 10; Worldfire has none) was recorded on the legacy passive-opponent board (no `opponent_land_model`), where
+no opponent library is dealt, so no hurdle, cleanup, spawn requirement or lock can act. **No reference needs
+correcting; nothing to approve.** The legacy replay path stays (`--legacy-no-free-turns`,
+`--legacy-opponent-spawn-any` for unstamped recordings).
+
+### (l) EXACTLY what flipping `MTG_FREE_TURNS` to default ON changes
+
+Only the lock-trait decks' games (Worldfire, Unpredictable Cyclone, Shadowborn Apostle, Extra Turns, Landfall
+Elementals, Prevent Damage, Sea Creatures, and their 2HG keys). Every other deck is byte-identical (a). With the shipped sub-defaults (hurdles ON, spawn requirement follows the rule, Sire IN, Sire-fair and
+annihilator-fair OFF, bounce opening OFF everywhere except as the hurdles' third step), the regression tier (reg_on5)
+moves exactly these 33 keys, credited avg GT -> ON:
+
+| deck | keys (GT -> ON) | units ON/OFF |
+|---|---|---|
+| Worldfire | d0 8.344 -> 7.977 (-0.367); d3 5.533 -> 4.533 (-1.000); d5 s2002 5.567 -> 4.500 (-1.067); d5 s3003 5.483 -> 4.300 (-1.183); backstop d3 / d5 s30401 6.000 -> 5.000 | 0.661 |
+| Worldfire 2HG | d5 5.733 -> 4.633 (-1.100) | 0.669 |
+| Cyclone | d0 -0.035; d3 -0.053 / -0.093; d5 -0.093 / -0.073 | 0.938 |
+| Shadowborn | d0 -0.040; d3 -0.027 / -0.067; d5 -0.013 / -0.040 | 1.133 |
+| Extra Turns | d0 -0.011; d5 -0.007 / +0.007; d3, 2HG digests only | 0.962 / 2HG 1.030 |
+| Prevent Damage | d0 +0.002; d5 +0.007 / +0.013; 2HG +0.013; d3 digests only | 1.016 / 1.002 |
+| Landfall Elementals | d0 -0.001; d5 x2 digests only | 1.002 |
+| Sea Creatures | d0, d5, 2HG digests only | 1.257 / 1.202 |
+
+Worldfire raw rounds (uncredited) under the rule: d5 6.47 / 6.55, d3 6.80, 2HG 5.93 (Q6, unchanged: no cap, no
+tie-break). Free turns taken (reg_on5): Worldfire 887 games / 1678 free turns (2HG 30 / 39), Cyclone 161 / 161,
+Shadowborn 27 / 71, Extra Turns 5 / 5, the three 2b decks 0. Smoke (on 9d396adc8, before 2a / 2b) moved the same decks'
+16 keys the same way (Worldfire d5 5.725 -> 4.550). The flip therefore needs a GT accept of those keys in smoke,
+regression and overnight (the overnight tier at its next periodic run), and new recordings get the `free_turns: 1` and
+`opponent_spawn_land: 1` stamps; existing references replay unchanged (k).
+
+### Agent defaults of the third pass (taken; listed so a reader can find them)
+
+9. The spawn requirement counts the opponent's lands at OUR untap, so the T1 spawn never appears (on the draw too: the
+   passive opponent's first land enters at the end of our turn 1). Refinement in (e), not built.
+10. Annihilator-fair counts each castable nonland permanent separately against the current lands (generous) and fires
+    only when the real sacrifice took every opposing permanent.
+11. White Orchid Phantom stays OUT of the trait (the opponent fetches a basic for the land it loses).
+
+### USER decisions open after the third pass
+
+* **Spawn requirement scope** (e): global (`=1`; 58 smoke keys move, +0.635 summed, through Searing Blaze / Blood,
+  Blasphemous Act, Hinata, Defense of the Heart, Swords losing the T1 creature) vs free-turn-scoped (what the flip ships;
+  trait decks only, -0.066 summed).
+* **The fairness levers** (h): Sire-fair keeps 9 of Shadowborn's 13 credited games (+0.005 turns); annihilator-fair cuts
+  Cyclone's credited games 286 -> 114 (+0.035 of its -0.065). Both ship OFF unless the USER wants them.
+* **The one-land-removal decks' cost** (d): with 2b, Sea Creatures pays +26% search units (2HG +20%) and Prevent Damage
+  moves a few games slower, with zero free turns in any of their games. The stand-down is sound (a free turn would break
+  the prunes' round + 1 assumption); the cheaper alternative would be to keep those cards out until a deck that can
+  strip every land joins the suite.
