@@ -38,6 +38,18 @@ arm, 25 g per searched shape, seed base 1790000) -> if probe cost ratio <= 1.6 v
 (ab/m.json from mk_ab.py 1810000 1000 400 2000; output ab/ab.out, ab/wins/). Status log chain2.log, last line DONE.
 Units failing does NOT stop the A/B (WARN line). After DONE: run cmp_arms.py (step 4 below), then steps 5-6.
 
+## Results so far (new binary bin1, 2026-11-22 ~15:45 UTC)
+- Build rc=0 (15:27). Units: 49/50 Bruna cases pass; the two NEW subcases fail their OFF half
+  (CHECK_FALSE(satyr_kept(false)), CHECK_FALSE(servant_kept(false))): the simplified unit boards do not reproduce the
+  lever's drop (ON halves pass trivially). Fix the boards (real-game payment context; MTG_TAPDBG printed nothing).
+- Real games (lane, d0, rep/N_*): Jumbo gi1447: 7a = T7, 7a + UNTAPPER_LAST = T4 (= off): **7a-amended fixes it**.
+  Niv gi532: 7b = T7, 7b + HASTE_SAC_LAST = T7: **7b-amended does NOT fix it** -- Signet and Brainstorm are paid by lands,
+  and the Servant is then sacrificed for PONDER, the line's last cast, where no land is critical (no later pips), so the
+  amendment (scoped to "not ahead of a moved-back critical land") never fires. The root cause is the d0 PLAN (Ponder
+  over keeping the Servant for the T4 hasty Niv); the off arm's Ponder APPLY-DROP saved the game by accident. No sound
+  payment-level test exists: refusing the Servant for every noncreature cost would make lines unpayable (lossy). The
+  sound route is the other suggestion: charge a sacrificed haste enabler in the d0 plan score. SURFACE TO THE USER.
+
 ## Repro findings (ro2 binary, DONE)
 - Jumbo gi1447 T3 board: Forest#24 + Utopia Sprawl, Forest#18, Voyaging Satyr, land drop Forest#23; hand GSZ, Overgrowth,
   Nylea. Nine mana exactly only if the Satyr untaps the Overgrowth Forest (3). 7a: Overgrowth's {2}{G} took the Satyr ->
