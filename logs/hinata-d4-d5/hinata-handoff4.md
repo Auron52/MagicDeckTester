@@ -20,8 +20,7 @@ Last commit before this file: c3eb0a931.
   digests byte-identical to the 4a7f65983 gate, and the slower-game listing identical (the 23 from handoff3). Logs:
   `/workspaces/MagicDeckTester/build/scratch/claude_hinata_d4d5/gate2/`.
 - Accepted smoke + regression: **a579747bf** (GT + job_cost + gt_logs + doc section 5). check_gt_logs clean (1409).
-- Left to do: confirm `python3 scripts/check_references_safe.py` exits 0, then
-  `git push --force-with-lease origin wip/hinata-d4-d5`. The coordinator lands phase-1-2-deck-analyzer.
+- check_references_safe exit 0; wip branch pushed. NOTHING LEFT for this agent; the coordinator lands it.
 
 ## Next commands, in order
 1. Wait until origin has the Merfolk fix:
