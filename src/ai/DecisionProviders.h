@@ -5111,8 +5111,8 @@ public:
     bool OffersCastNow(const GameState& s, int controller, const CardDefinition& def) const override;
     bool OffersSuspend(const GameState& s, int controller, const CardDefinition& def) const override;
 
-    // THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; DESIGN for USER review, every consumer
-    // DEFAULT OFF until the USER approves the buckets). ONE ranking (WorldfireKeepRank in DecisionProviders.cpp:
+    // THE BUCKETED KEEP ORDER (docs/design/worldfire-discard-buckets.md; every consumer DEFAULT ON since
+    // 2026-11-22, each =0 to turn it off; MTG_WORLDFIRE_ORDER_DEADLINE, also ON, orders the Ponder/Preordain keeps). ONE ranking (WorldfireKeepRank in DecisionProviders.cpp:
     // quota-first buckets netted against the board, the suspended cards and the go-off projection T*), four
     // consumers, each its own lever:
     //   * MTG_WORLDFIRE_BUCKET_DISCARD    -- cleanup sheds the lowest-ranked card (one index, re-ranked per shed);

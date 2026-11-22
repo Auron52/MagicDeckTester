@@ -39621,12 +39621,12 @@ namespace
 {
 bool WfBucketDiscardOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_BUCKET_DISCARD");     // DEFAULT OFF until the USER approves the buckets
+    static const bool on = EnvOn("MTG_WORLDFIRE_BUCKET_DISCARD", true);     // DEFAULT ON (adopted 2026-11-22); =0 -> generic shed
     return heurarm::Flag(heurarm::WORLDFIRE_BUCKET_DISCARD, on);
 }
 bool WfBrainstormRuleOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_BRAINSTORM_RULE");    // DEFAULT OFF until the USER approves
+    static const bool on = EnvOn("MTG_WORLDFIRE_BRAINSTORM_RULE", true);    // DEFAULT ON (adopted 2026-11-22); =0 -> off
     return heurarm::Flag(heurarm::WORLDFIRE_BRAINSTORM_RULE, on);
 }
 bool WfBrainstormSingleOn()
@@ -39636,7 +39636,7 @@ bool WfBrainstormSingleOn()
 }
 bool WfPonderRuleOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_RULE");        // DEFAULT OFF until the USER approves
+    static const bool on = EnvOn("MTG_WORLDFIRE_PONDER_RULE", true);        // DEFAULT ON (adopted 2026-11-22); =0 -> off
     return heurarm::Flag(heurarm::WORLDFIRE_PONDER_RULE, on);
 }
 bool WfPonderSingleOn()
@@ -39648,7 +39648,7 @@ bool WfPonderSingleOn()
 }
 bool WfPreordainRuleOn()
 {
-    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_RULE");     // DEFAULT OFF until the USER approves
+    static const bool on = EnvOn("MTG_WORLDFIRE_PREORDAIN_RULE", true);     // DEFAULT ON (adopted 2026-11-22); =0 -> off
     return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_RULE, on);
 }
 bool WfPreordainAggressiveOn()
@@ -39678,14 +39678,14 @@ bool WfPreordainAggrFinisherOn()
 // The looked-at cards' disposition: the cards that fill a quota, best first (Ponder also keeps the rest, below).
 bool WfOrderDeadlineOn()
 {
-    // PROPOSED AMENDMENT (agent, 2026-11-21; NOT a USER ruling -- DEFAULT OFF until the USER answers). The looked-at
+    // AMENDMENT (agent proposal 2026-11-21; DEFAULT ON, adopted 2026-11-22 as a better-and-cheaper prune). The looked-at
     // cards are drawn one per turn in the order they go back, so a card's PLACE should follow WHEN the plan needs it
     // ("every wait counts"): the quota cards first, earliest deadline first (a Lotus Bloom that pulls the go-off
     // forward must be suspended NOW; a dig spell / the next land drop now; a Halberdier 3 turns before T*; Worldfire,
     // a Rift Bolt and the rituals only by T*), the keep value breaking ties; the rest after, by keep value. Found in
     // the A/B (seed 9200001 gi 31, persists at b200): the rank put Rift Bolt over a Bloom, the Bloom came a turn later
-    // and so did the go-off. MTG_WORLDFIRE_ORDER_DEADLINE=1 enables it.
-    static const bool on = EnvOn("MTG_WORLDFIRE_ORDER_DEADLINE");
+    // and so did the go-off. MTG_WORLDFIRE_ORDER_DEADLINE=0 -> the keep-value order.
+    static const bool on = EnvOn("MTG_WORLDFIRE_ORDER_DEADLINE", true);
     return heurarm::Flag(heurarm::WORLDFIRE_ORDER_DEADLINE, on);
 }
 std::vector<int> WfLookedKept(const WorldfireKeepRank& r, bool quota_only)
