@@ -35,6 +35,16 @@ if [ "$slots" -lt 1 ] || [ "$slots" -gt "$job_max" ]; then echo "box_lane: --slo
 dir=/workspaces/MagicDeckTester/build/scratch/lane
 mkdir -p "$dir"
 need_gb=$(( slots * cap + 2 ))
+# A request the box can never satisfy would hold queue.lock forever and block every other lane job (2026-11-22:
+# a 4-slot build at the default cap needs 26 GB on a 23 GB box; it waited 81 min). Shrink the per-slot cap so the
+# job needs at most MemTotal - 4 GB, and say so.
+total_gb=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo)
+if [ "$need_gb" -gt $(( total_gb - 4 )) ]; then
+  cap=$(( (total_gb - 6) / slots ))
+  if [ "$cap" -lt 1 ]; then echo "box_lane: ${total_gb} GB box cannot host ${slots} slot(s)" >&2; exit 2; fi
+  need_gb=$(( slots * cap + 2 ))
+  echo "box_lane: ${total_gb} GB box -- per-slot cap lowered to ${cap} GB (needs ${need_gb} GB free)" >&2
+fi
 
 # FIFO-ish admission: only the waiter holding queue.lock tries for slots, so a 4-slot build is not starved by a
 # stream of 1-slot jobs grabbing each slot as it frees (2026-11-20: two agents' 4-slot builds waited 1 h 45 min).
