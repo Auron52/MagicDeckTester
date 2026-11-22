@@ -1,0 +1,106 @@
+{
+  "deck": "decks/Blood Sun/Blood Sun.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "library_filler": "Swamp",
+  "library_size": 30,
+  "active_life": 20,
+  "opponent_life": 6,
+  "battlefield": [
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Swamp",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 6,
+  "expect_win_turn": 4,
+  "env": {
+    "MTG_BLOODSUN_USER_PRUNE": "0",
+    "MTG_BP_DEV_SEQ_ALL": "0",
+    "MTG_BP_DEV_SEQ_DEFERRED": "1"
+  },
+  "hand": [
+    "Dimir Machinations"
+  ],
+  "library": [
+    "Grim Tutor",
+    "Diabolic Revelation",
+    "Lightning Bolt",
+    "Lightning Bolt"
+  ],
+  "comment": "Scoped site-3 compound search must find the Machinations -> Grim -> Revelation -> Bolts two-deviation T4 line at budgeted depth 3."
+}
