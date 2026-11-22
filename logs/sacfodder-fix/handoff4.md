@@ -43,16 +43,21 @@ cmp2.py, run1b.sh; binaries mtg.k2 / mtg.k4 / mtg.k6).
    where lever-off finds T3 at 51,126. Every variant tried gives the same T1 failure: onP/onPK/onPKG/onPKGS, nolat
    (wave drop without latent, MTG_SFM_DIAG_NOLATENT), w0 (wave off). BPENUM (drop them in pass 1) measured +7 earlier.
 
+## ab2 result (DONE 14:35 UTC; mtg.k6, one pooled batch, same seeds as ab1)
+Every arm -- on, p2x2, p2x4 and even p2skip -- is IDENTICAL to on (Goblins dev +1, held -3; Fungus dev 0, held -1; units
+x1.096/x1.107 gob, x1.05/x1.04 fun; CPU x1.15-1.17 gob, x1.07-1.09 fun). The arm never fired: it keys on "pass 1 met
+ONLY wave latents", and every traced pass 1 also has a hard latent (`hardnew=1` in every [sfm-2p] line, lever off as
+well). So the second pass runs in both arms for other reasons, and the lever does not open it -- it ENLARGES it (dirty
+nodes 548 -> 1,880 in the st/ census, carried 2,319 -> 5,461). Pricing or skipping "lever-opened" second passes is
+therefore not available; the extra work sits inside second passes the engine runs anyway, plus pass-1 breakpoint credits.
+
 ## Running at handoff time
-- k6.sh (PID 864937): build mtg.k6 DONE (units 3813/3813), then ab2 under claude_box.lock -> ab2/batch.out, marker
-  AB2.DONE, status ab2.status. Arms (per-job borrowed slots): off; on; p2x2 (MTG_SAC_FODDER_WAVE_EARLY=true = wave-only
-  pass-2 units priced x2); p2x4 (MTG_SAC_FODDER_WAVE_CTX=true = x4); p2skip (MTG_SAC_FODDER_WAVE_INWIN=true = wave-only
-  pass 2 skipped, DIAGNOSTIC, lossy). Read with: `cd build/scratch/claude_sacfodder_fix5 && python3 tools/cmp2.py ab2:off
-  ab2:on ab2:p2x2 ab2:p2x4 ab2:p2skip` (use CPU, not units, for the priced arms: their units include the price).
+Nothing. All scratch under build/scratch/claude_sacfodder_fix5/ (ab1, ab2, st, k2, k4, d8b0).
 
 ## Remaining (in order)
-1. Read ab2. If a priced arm keeps every deck net <= 0 on the HELD-OUT tags (gobH, funH) and cuts CPU, it is the adoptable
-   shape (a re-pricing, inert at unlimited budget). If p2skip keeps quality, pass 2 buys nothing and the price can be high.
+1. (ab2 read: no option moved. Per the stuck-iteration rule this line is PARKED again for the USER.) The remaining
+   untried cost option is a per-unit PRICE on work done inside a fodder-credited subtree (charge every unit below a
+   credited plan k times, pass 1 and pass 2 and bp enumerations alike) -- a re-pricing, inert at unlimited budget.
 2. Whatever ships: delete the inert exact cuts or keep them deliberately (KEY_LIVE / GATE_KEEP / MODE_SHARE measured ~0),
    delete TEMP diags (sfmdiag counters, MTG_SFM_DIAG_TRACE dump, MTG_SFM_DIAG_NOLATENT, MTG_SFM_DIAG_NOAPPLY), give the
    kept arm a real heurarm slot (header edit = ~190-file rebuild; reset borrowed slots), then the brief's step 4 (default
