@@ -77304,14 +77304,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (def.params.etb_untap_lands > 0)
             {
-                if (oracle_owns && !manaoracle::TakeEngineStep(state, def.params.etb_untap_lands)
-                    && manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true)) {}
-                else
+                _tau.Run(state, state.active_player_index, [&]
                 {
-                    manaoracle::EngineStepScope _es(state, oracle_owns);
-                    EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
-                                              ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost);
-                }
+                    if (oracle_owns && !manaoracle::TakeEngineStep(state, def.params.etb_untap_lands)
+                        && manaoracle::ScriptedTapAhead(state, def.params.etb_untap_lands, /*lands_only=*/true)) {}
+                    else
+                    {
+                        manaoracle::EngineStepScope _es(state, oracle_owns);
+                        EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
+                                                  ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost);
+                    }
+                });
             }
             // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
             // CastSpellFromHand) -- the land is leaving, so its mana is free.
