@@ -191,7 +191,10 @@ smoke 22 faster / 0 slower, regression 33 faster / 1 churn; refs 18 ok 2 repaire
 in the background. build/scratch/cb-orch/LANDED created -> the three agents (cb-scry, cb-bbgap, cb-unearth) now build
 one at a time under flock build/.heavy.lock. NEXT: their reports -> integrate as ONE batch -> validate -> land (next
 join >= 14:23 UTC, 4-h slow-box rule); then Stage 6 report; then the mulligan profile (fast) alone on the box.
-(History below.) **08:44 UTC: JOINED, I HOLD THE LEASE; smoke RUNNING (landing6/smoke.sh PID 25933 under flock, keepalive running; status landing6/status, marker landing6/SMOKE_DONE; GT backup gtbak6).** Earlier resume point (08:25): rebuild PASSED (landing5 BUILD2/UNIT2 3895/SCEN2 608, binary build/Release =
+10:40 UTC: the three agent builds were relaunched at MTG_BUILD_JOBS=4 (8 jobs alone hit 10/10 GB -- killed them);
+queued on flock build/.heavy.lock: cb-unearth build (flock 72807) -> cb-bbgap chain1.sh (flock 72838) -> cb-scry build
+(flock 73036). Agents (Opus): cb-unearth ~172K, cb-bbgap ~210K (hands off past 250K -> bbgap-handoff2.md), cb-scry
+~173K (-> scry-handoff.md). USER answered every question; none open. (History below.) **08:44 UTC: JOINED, I HOLD THE LEASE; smoke RUNNING (landing6/smoke.sh PID 25933 under flock, keepalive running; status landing6/status, marker landing6/SMOKE_DONE; GT backup gtbak6).** Earlier resume point (08:25): rebuild PASSED (landing5 BUILD2/UNIT2 3895/SCEN2 608, binary build/Release =
 src of eb56e245e). Rebased onto origin 4a7f65983 (box_lane.sh + CLAUDE.md only; src tree hash UNCHANGED, so the binary
 stands). NEXT: `push_queue.py join` -> wait -> at my turn, under `push_queue.py hold --` and `flock build/.heavy.lock`,
 MTG_PGO=0: fetch (if origin moved with src: rebase + MTG_BUILD_JOBS=4 rebuild), back up GT, `regression.sh --smoke` ->
