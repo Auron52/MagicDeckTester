@@ -5,8 +5,8 @@
 //     above the cantrips), rank-descending; only when none is left, every name at the ScryKeepOnTop line
 //     (kHinataKeepThreshold); only when none clears that, the full ranked list. Hinata absent: Hinata.
 //   * MeliraPodProvider::TutorCandidates (Recruiter of the Guard) -- the missing combo pieces / Pod fuel
-//     plus the USER's Pod/Chord whitelist (PutTargetOk); the dorks and the goldfish-dead toolbox bodies
-//     are not offered.
+//     plus the USER's Pod/Chord whitelist (PutTargetOk); dorks join only when a held persist payoff
+//     is short on known mana. Goldfish-dead toolbox bodies are not offered.
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
@@ -207,4 +207,26 @@ TEST_CASE("Melira Recruiter merit rule: only dorks and toolbox left -> the full 
     CHECK(got.size() == 2);
     CHECK(Has(got, "Ignoble Hierarch"));
     CHECK(Has(got, "Reclamation Sage"));
+}
+
+TEST_CASE("Melira Recruiter merit rule: a held Redcap short on mana keeps the dork line")
+{
+    const GameState short_mana = MakeTm(
+        { "Carrion Feeder", "Melira, Sylvok Outcast", "Murderous Redcap", "Razorverge Thicket" },
+        { "Forest", "Blooming Marsh" },
+        { "Birds of Paradise", "Reclamation Sage", "Kitchen Finks" },
+        /*lands_played=*/1);
+    const CardParams& pp = DefTm("Recruiter of the Guard").params;
+    const std::vector<std::string> got = MeliraPodProvider().TutorCandidates(short_mana, 0, pp);
+    CHECK(Has(got, "Birds of Paradise"));
+    CHECK_FALSE(Has(got, "Reclamation Sage"));
+
+    GameState enough_mana = short_mana;
+    Permanent fourth;
+    fourth.card = DefTm("Forest").card;
+    fourth.controller_index = 0;
+    fourth.owner_index = 0;
+    enough_mana.battlefield.push_back(fourth);
+    const std::vector<std::string> after = MeliraPodProvider().TutorCandidates(enough_mana, 0, pp);
+    CHECK_FALSE(Has(after, "Birds of Paradise"));
 }
