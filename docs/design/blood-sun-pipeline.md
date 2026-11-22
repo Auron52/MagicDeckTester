@@ -2204,3 +2204,34 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
   measures +0.030 (se 0.026) against ship, where the plain Grim prune measures -0.015. At d3 b20 it measures -0.060
   (se 0.042), with units about even against ship. DROP is the arm that costs at d5 (+0.070); BOARD and TWNEXT are
   roughly neutral there.
+
+### Implementation notes (perf part 6b, 2026-11-22): the DROP cost is the budget; order-only LATE arm; larger A/B
+- **DROP's d5 cost is the budget, not a lost line.** In DROP's d5 worse games gi 15, 24 and 28, the first decision that
+  differs from grim's game log is never a Grim -> big land pick. It is a root choice both arms offer (gi 15 T2: grim casts
+  Grim -> Revelation, DROP plays Exploration + two lands and holds Grim; gi 28 T2: grim holds, DROP casts Grim -> Blood
+  Sun; gi 24 T4: a different Revelation X3 package after Machinations -> Grim). The T2 Grim menus are identical (< 7
+  mana), and at d5 b0 DROP and grim both win T4 in all three. So the wider Grim menus at 7+ mana nodes deeper in the tree
+  take the budget: `BloodSunRole` ranks the newly admitted lands ahead of Revelation, which makes them the in-place first
+  combination and the beyond-horizon front.
+- **Built (commit 017692748).** `MTG_BLOODSUN_GRIM_AMEND_LATE` (DEFAULT OFF, ORDER only): a target admitted only by
+  DROP / BOARD / TWNEXT ranks after every base B12 target. Nothing is refused, so the searched set at unlimited budget is
+  unchanged (the budget-staged admission shape). One unit case. The viewer part-3 run on f412afe50 (which carries it)
+  passed mtg-test 3866 / 3866 and scenarios 655 / 655.
+- **Held-out A/B** (`perf6/ab2/table.txt`; one pooled batch, 22 threads; the 333 no-mulligan games of gi 0-599, the
+  earlier A/B's scheme; nowin = 9; 12 reused games per old arm re-run on this binary match exactly). At b20, d3 and d5
+  give the same win turn in 331-332 of 333 games per arm, so only the d5 row is evidence:
+
+  | arm vs ship (d5 b20) | dWT (se) | better / worse | units |
+  |---|---|---|---|
+  | grim | -0.018 (0.031) | 35 / 32 | x0.93 |
+  | amended (DROP+BOARD+TWNEXT) | +0.006 (0.022) | 20 / 23 | x0.95 |
+  | **amended + LATE** | **-0.039 (0.029)** | 36 / 24 | x0.87 |
+  | LATE vs amended (paired) | -0.045 (0.023) | | |
+- **d8 b0 recovery** (`perf6/rec2`, one pooled batch, 81 games). **amended: 23 / 23 recover; amended + LATE: 24 / 24
+  recover.** The plain Grim prune's 4 lost games (gi 7, 141, 277, 431) are recovered by the amendments (part 6).
+- **Smoke** (part 6, and the viewer part-3 smoke on f412afe50): 0 moved vs `impl7/smoke-step7-batch.log`. The 8 GT FAILs
+  against origin are the same 8 keys and digests as part 5's (`mazesend_smoke_d5`, `hinata_smoke_d3`/`_d5`,
+  `shadowborn_smoke_d3`/`_d5`, `shadowborn2hg_smoke_d3`, `hinata2hg_smoke_d5`, `edf_smoke_d5`, all `_s1001`).
+- **For the USER (no default chosen):** amended + LATE (`MTG_BLOODSUN_GRIM_PRUNE=1` + the three amendment levers +
+  `MTG_BLOODSUN_GRIM_AMEND_LATE=1`) is the first B12 version that both recovers every slower game at d8 b0 and measures
+  faster than ship (and than the plain Grim prune) at d5 b20, with 13% fewer units.
