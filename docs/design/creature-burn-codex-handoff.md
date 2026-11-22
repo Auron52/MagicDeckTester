@@ -9,8 +9,8 @@ The USER asked: "Please analyze the creature burn deck." That means the full ana
 (`.claude/skills/analyze-deck.md`), Stages 1-6, ending with the Stage 6 report and its 6a disclosure. After that:
 "After that we can try building the mulligan profile."
 - **Done so far:** Stages 1-5 and the verify_deck gate.
-- **Already landed:** `94cd1e06b` at 10:23 UTC 2026-11-22. CI run 45012242724 was still in progress at 10:45; check
-  it with `gh run view 45012242724`, and if it is red, fix that first.
+- **Already landed:** `94cd1e06b` at 10:23 UTC 2026-11-22. CI run 45012242724 finished GREEN (Windows build and checks: success).
+  Nothing to fix.
 - **Not yet landed:** the work of three agents, sitting in worktrees (below). It must be integrated, validated and
   landed as ONE batch. Then the Stage 6 report, then the mulligan profile.
 
