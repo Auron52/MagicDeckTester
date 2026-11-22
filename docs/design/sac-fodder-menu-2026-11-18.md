@@ -104,3 +104,37 @@ still see credited plans and so move leaf values, and (c) the apply's fodder ord
 costs units (pass 2 spends what pass 1 leaves): x1.092 -> x1.157 on Goblins. The prune is sound but moves nothing
 measurable once the wave is on (credited plans are pass-2 only). Next would be a variant that stages (a)-(c), which
 the brief ruled out; the line is parked for the USER.
+
+## Fix-up 6 (2026-11-22, reopened by the USER) -- where the extra work went
+
+USER (reopening): *"It still makes no sense to me that our results get slower. We should be searching less. We should
+try any and all options to get it working better."* and *"My understanding of what we are doing with the sac-fodder
+change is making it so that some of the work (the sacrifice ability) is not searched. To me that should tend to reduce
+the amount of work, but somehow it keeps going up, which I don't like or agree with."*
+
+**Is the lever a second route to the same mana? No.** The searched sacrifice was already retired by `MTG_SAC_OUTLET_PAY`
+(default ON 2026-10-31): wherever the payer is live, Skirk's / Mycon's `SacForMana` action is not emitted
+(`pay_suppress`, CollectActions) and the payment eats a body on demand. The one carve-out is a board where a death pays
+(`SacOutletEatHasValue`: Pashalik Mons, Rundvelt Hordemaster, Mogg War Marshal -- on the battlefield OR IN HAND); there
+the payer is OFF and the searched action stays. The lever's context (`BuildSacFodderMenuCtx` -> `LiveSacPayOutlet` /
+`PlanSacOutletDef`) uses the same carve-out, so it is dead exactly where the searched action lives. No board has both.
+What the lever adds is the one supply the payer could not reach: an outlet CAST this turn.
+
+**So where did the extra work go? Into keys, not menus.** 7f322b6d3 folded the lever's admission mode (1 beyond the
+horizon, 2 wave first pass, 3 admitting pass) into `BuildBreakpointKey` whenever a sac outlet was merely IN REACH
+(battlefield, hand, graveyard, exile). That key feeds the m1/m2 enumeration memos, the solve memo, the searched-m2
+memo, the breakpoint continuation lists and `MidTurnStateKeyOf`. It folded even where the context was DEAD -- e.g. all
+of Goblins 622286, whose opening hand holds Rundvelt Hordemaster, so the lever can credit nothing from T1 to T3 -- and
+there every list is byte-identical to the lever-off list, yet pass 1, pass 2 and the playouts each recomputed it under
+their own key. The lever-off arm computes it once. On 622286 the lever-off T1 search finds the T3 kill at 51,126 of its
+~54K units; a few percent of recomputation pushes it past the budget, which is the whole loss.
+
+Three exact cuts (no plan list changes; every one is a re-keying or a necessary-condition bound):
+1. `MTG_SFM_KEY_LIVE` -- the mode is folded only where the context CAN be live (`SacFodderCtxCanLive`: payer gates on and
+   some outlet in reach whose eat is death-free). A dead context, beyond the horizon or not, keys as the lever-off list.
+2. `MTG_SFM_GATE_KEEP` -- a live context used to BAIL the selection-exact mana gate to the scalar bound (more odometer
+   visits, billed under the canon-wave charge). The gate is kept with its pool total widened by the context's credit
+   bound (no subset is credited more), still a necessary condition at every reader.
+3. `MTG_SFM_MODE_SHARE` -- a live-context enumeration body that applied NO fodder credit enumerated the same list in the
+   wave's first pass as in the admitting pass (the wave drops only credited plans), so its memo entry
+   (`Entry::sfm_touched` false) serves the other mode too, and the other mode's first-visit marker counts toward promotion.
