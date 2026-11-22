@@ -223,6 +223,8 @@ enum class UnprunedGate
     OilGrant,         // Migloz, Maze Crusher: its "{1}, remove an oil counter: vigilance and menace" offered to the
                       // search (DecisionProvider::OffersOilVigilanceMenace's heuristic prune; USER 2026-11-21).
                       // (Migloz's destroy reuses CounterDestroy: the same route, the same "own targets" restore.)
+    Proliferate,      // Bloated Contaminator: the combat-damage proliferate's full searched SUBSET menu restored instead of
+                      // DecisionProvider::ProliferateCollapse's one-option dominance collapse (Beasts G, 2026-11-22)
     _Count
 };
 // The gate masks are a std::bitset (widened from a uint64_t on 2026-11-21, Beasts E: OilGrant was the 65th gate).
@@ -249,6 +251,12 @@ void RestrictAttackChooseOneModesFor(const GameState& s, std::vector<int>& modes
 // never offered one of our OWN permanents unless `unpruned` (USER 2026-11-21 heuristic prune). See the virtual.
 std::vector<int> RestrictCounterDestroyTargetsFor(const GameState& s, int controller, const Permanent& src,
                                                   const std::vector<int>& legal, bool unpruned);
+
+// DecisionProvider::ProliferateCollapse's default body with MTG_UNPRUNE passed in (unit-testable): true (collapse the
+// proliferate menu to the one dominant subset, ProliferateDefaultSubset) iff !unpruned and EVERY candidate is
+// ProliferateCandBeneficial. See the virtual's comment.
+bool ProliferateCollapseFor(const GameState& s, int controller, const std::vector<ProliferateCand>& cands,
+                            bool unpruned);
 
 // A/B gate for the learned mid-game evaluator (MTG_EVAL_MODEL). Default OFF: even when a deck ships
 // an eval sidecar, the learned plan ranking is used only when this is set, so every existing ground

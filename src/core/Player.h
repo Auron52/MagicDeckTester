@@ -1,6 +1,7 @@
 #pragma once
 #include "Card.h"
 #include "Library.h"
+#include "GameSetup.h"
 #include <vector>
 
 // A card exiled by Light Up the Stage (or similar) that can be played until expiry_turn.
@@ -197,7 +198,16 @@ struct Player
     // for every other deck it is an empty vector: no allocation on copy, and byte-identical.
     std::vector<Card> sideboard;
 
-    bool HasLost() const { return life <= 0 || poison_counters >= 10; }
+    // POISON (CR 704.5c): ten or more poison counters loses -- but in Two-Headed Giant that rule is IGNORED and a TEAM
+    // loses at FIFTEEN (CR 704.6b / 810.8d; the team shares one poison total, CR 810.10, which is exactly what one
+    // Player models here: players[1] is the opposing team, gamesetup::OpponentHeads() == 2). The heads read is reached
+    // only at >= 10 poison, so every other deck (poison 0 forever) pays one compare, as before.
+    static constexpr int kPoisonLoss    = 10;
+    static constexpr int kPoisonLoss2HG = 15;
+    static int PoisonLossThreshold() { return gamesetup::OpponentHeads() >= 2 ? kPoisonLoss2HG : kPoisonLoss; }
+    bool PoisonLost() const
+    { return poison_counters >= kPoisonLoss && (poison_counters >= kPoisonLoss2HG || gamesetup::OpponentHeads() < 2); }
+    bool HasLost() const { return life <= 0 || PoisonLost(); }
 
     // Static land-drop effects (e.g. Exploration) are evaluated by GameEngine
     // against the battlefield; one-time triggered grants increment bonus_land_drops_this_turn.

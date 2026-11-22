@@ -2117,6 +2117,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.combat_damage_self_may_draw = params.value("combat_damage_self_may_draw", 0);
     // Garruk's Harbinger (Beasts D) -- see CardParams::combat_damage_dig_per_damage.
     p.combat_damage_dig_per_damage = params.value("combat_damage_dig_per_damage", 0);
+    // Bloated Contaminator (Beasts G) -- see CardParams::toxic / combat_damage_self_proliferate.
+    p.toxic                          = params.value("toxic", 0);
+    p.combat_damage_self_proliferate = params.value("combat_damage_self_proliferate", false);
     if (params.contains("combat_damage_dig_types"))
         p.combat_damage_dig_types = params["combat_damage_dig_types"].get<std::vector<std::string>>();
     p.turned_face_up_return_gy_to_hand = params.value("turned_face_up_return_gy_to_hand", false);

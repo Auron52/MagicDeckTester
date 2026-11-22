@@ -2084,6 +2084,16 @@ struct GameState
     // (an int here would cost +8).
     std::int16_t             scripted_grace_choice             = -1;
     std::int16_t             scripted_athreos_coin              = -1;
+    // THE SEARCHED COMBAT-TIME DIG PICK (Plan::combat_dig_choice): PACKED 4 bits per combat-time dig-trigger ordinal
+    // (CombatDigPackRanks, SpellEffects.h; ordinal 0 lowest; a field of 0 = that ordinal unpinned, r + 1 = RANK r
+    // into the provider's EtbDigCandidates list at resolution, clamped); -1 = nothing pinned (every trigger takes the
+    // provider's front -- legal only beyond the horizon, at the depth-0 runner, or with no searching apply). Ordinal
+    // k is the k-th combat-time dig of THIS combat in resolution order (CombatDigPinShift after each), so a later
+    // attack-step dig (Adaptive Omnitool, docs/design/omnitool-combat-dig-greedy.md) can share it. Decided in a main
+    // phase, spent at the end of THIS combat's damage (Combat.cpp), cleared at both turn starts. FUTURE-DETERMINING:
+    // folded value-gated in dominance::Build(), BuildDedupKey's combat pins and the plan-cache scalar key.
+    // int32 since Beasts G: bits 16-30 carry the PROLIFERATE half (Bloated Contaminator, ProlifRankAt in SpellEffects.h).
+    std::int32_t             scripted_combat_dig          = -1;
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers
     // use DefaultProvider() (see DecisionProviders.h), so a raw GameState stays valid.
@@ -2193,15 +2203,21 @@ struct GameState
     // a combat_damage_dig_per_damage card, so the shared combat core's FireCombatDamageDig and the main-phase dig
     // axis walk the board for one. DEFAULT TRUE, the safe direction (it only skips a walk that would find nothing).
     bool                     deck_has_combat_damage_dig   = true;
-    // THE SEARCHED COMBAT-TIME DIG PICK (Plan::combat_dig_choice): PACKED 4 bits per combat-time dig-trigger ordinal
-    // (CombatDigPackRanks, SpellEffects.h; ordinal 0 lowest; a field of 0 = that ordinal unpinned, r + 1 = RANK r
-    // into the provider's EtbDigCandidates list at resolution, clamped); -1 = nothing pinned (every trigger takes the
-    // provider's front -- legal only beyond the horizon, at the depth-0 runner, or with no searching apply). Ordinal
-    // k is the k-th combat-time dig of THIS combat in resolution order (CombatDigPinShift after each), so a later
-    // attack-step dig (Adaptive Omnitool, docs/design/omnitool-combat-dig-greedy.md) can share it. Decided in a main
-    // phase, spent at the end of THIS combat's damage (Combat.cpp), cleared at both turn starts. FUTURE-DETERMINING:
-    // folded value-gated in dominance::Build(), BuildDedupKey's combat pins and the plan-cache scalar key.
-    std::int16_t             scripted_combat_dig          = -1;
+    // BLOATED CONTAMINATOR (Beasts G). DECK CONSTANTS (StampDeckTraits, MAINBOARD), never folded. DEFAULT TRUE, the
+    // safe direction (each only skips a walk that would find nothing):
+    //   deck_has_combat_proliferate -- a combat_damage_self_proliferate card: gates FireCombatDamageProliferate's walk
+    //                                  and the proliferate axis in AppendSubdecisionAxes;
+    bool                     deck_has_combat_proliferate  = true;
+    //   deck_poison_hit_bound -- NOT a bool: the sum over the MAINBOARD's copies of (toxic + 1 if it proliferates),
+    //                            i.e. the most poison one combat-damage step of every poison source we own could add
+    //                            (PoisonWinReachableThisTurn, SpellEffects.h). 0 = the deck cannot poison (every other
+    //                            deck: the poison terms cost one byte test). kPoisonBoundUnstamped (the default, an
+    //                            unstamped scenario state) = count the sources on the board / in hand / in the library
+    //                            live -- the safe direction without inventing a poison source a scenario lacks.
+    static constexpr std::uint8_t kPoisonBoundUnstamped = 0xFF;
+    std::uint8_t             deck_poison_hit_bound        = kPoisonBoundUnstamped;
+    // (scripted_combat_dig -- the combat-time trigger pin -- lives after scripted_athreos_coin: an int32 since Beasts G,
+    //  placed in the padding hole before m_provider so sizeof(GameState) is unchanged.)
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),
@@ -2267,6 +2283,19 @@ inline bool LandOrderMatters(const GameState& s)
 {
     return s.deck_has_landfall || s.deck_has_scry_watcher;
 }
+
+// PROLIFERATE CANDIDATE (Bloated Contaminator, Beasts G): a permanent (`bf` = battlefield index) or a player (`player`
+// = 0 / 1) that has at least one counter, CR 701.34a. Exactly one of the two is >= 0. Built by ProliferateCandidates
+// (SpellEffects.h); the provider's dominance collapse reads it (DecisionProvider::ProliferateCollapse).
+struct ProliferateCand
+{
+    int bf     = -1;
+    int player = -1;
+};
+// True iff giving `c` one more of EACH counter kind it has is weakly beneficial to `controller` (the proliferating
+// player) in this goldfish: an OWN permanent whose every kind is +1/+1, loyalty or oil; the controller's own energy
+// (and no other player counter); the OPPONENT's poison (and no other player counter). Body in SpellEffects.cpp.
+bool ProliferateCandBeneficial(const GameState& s, int controller, const ProliferateCand& c);
 
 // THE win predicate. Every "have we won?" test in BOTH worlds goes through here.
 //

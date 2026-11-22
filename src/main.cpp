@@ -1644,7 +1644,10 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     for (const Card& c : me.graveyard) { gy.push_back(c.m_name); }
     std::sort(gy.begin(), gy.end());
 
-    os << "  \"me\": { \"life\": " << me.life << ", \"battlefield\": ";
+    os << "  \"me\": { \"life\": " << me.life;
+    // Poison (Bloated Contaminator, Beasts G): emitted only when nonzero, so every other deck's JSON is unchanged.
+    if (me.poison_counters > 0) { os << ", \"poison_counters\": " << me.poison_counters; }
+    os << ", \"battlefield\": ";
     JsonBattlefield(os, s, s.active_player_index);
     // Aether Vial charge counters (a Vial deploys a creature whose MV EQUALS its
     // counters) — exposed so the player needn't guess the Vial's state.
@@ -1938,7 +1941,15 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         JsonNameArray(os, up);
     }
     os << " },\n";
-    os << "  \"opponent\": { \"life\": " << s.players[opp].life << ", \"battlefield\": ";
+    os << "  \"opponent\": { \"life\": " << s.players[opp].life;
+    // The opponent's POISON (toxic + proliferate, Beasts G) and the loss threshold (10; a 2HG team 15, CR 704.6b), so
+    // the viewer can show how close a poison kill is. Only when nonzero (every other deck's JSON is unchanged).
+    if (s.players[opp].poison_counters > 0)
+    {
+        os << ", \"poison_counters\": " << s.players[opp].poison_counters
+           << ", \"poison_loss_at\": " << Player::PoisonLossThreshold();
+    }
+    os << ", \"battlefield\": ";
     JsonBattlefield(os, s, opp);
     // The opponent's LIBRARY, when one was dealt (a deck that makes the opponent draw / mill:
     // Stroke of Genius's deck-out needs X >= this; claude-play sweep seed 80005). Absent otherwise.
@@ -5596,6 +5607,10 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
     { d.Note("reply one 0/1 flag per candidate (1 = exile this land card from your library). Its base power and "
              "toughness become the number exiled; exiling none makes it 0/0 and it dies. Then the library is "
              "shuffled. Default = the AI's pick (exile all)."); }
+    else if (source.find("(proliferate)") != std::string::npos)
+    { d.Note("reply one 0/1 flag per candidate (1 = give this permanent / player one more counter of EACH kind it "
+             "already has). Any number, including none. A candidate named 'Opponent' / 'You' is that PLAYER (its "
+             "poison / energy / rad counters). Default = the AI's pick."); }
     else if (source.find("Surgical Extraction (exile from ") == 0)
     { d.Note("reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). "
              "You may choose any number. Default = the AI's pick."); }

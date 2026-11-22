@@ -64223,6 +64223,9 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         return fresh_mint_memo == 1;
     };
     const bool alt_win_board_only = has_extra_lethal && provider.AlternateWinProjectionIgnoresCasting();
+    // POISON (Beasts G): the twin of EnumeratePlansCore's poison_reach_call -- the lethal-exempt drops below keep a
+    // subset that could still finish by poison this turn. Board-only, asked once (false for every non-poison deck).
+    const bool poison_reach_solve = PoisonWinReachableThisTurn(state);
     int alt_win_memo = -1;
     auto projects_alt_win = [&](const std::vector<const CardDefinition*>& casting_now) -> bool
     {
@@ -65327,16 +65330,16 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop: drop a subset that casts the cast
         // restrictor with nothing after it to spend its float -- unless the plan WINS, which is the
         // USER's stated exception ("do 3 for lethal if no Crackle is present").
-        if (iren_waste && !wins) { return; }
+        if (iren_waste && !(wins || poison_reach_solve)) { return; }
 
         // Hold a sac-land burn (Shard Volley) unless it wins this turn or enables Spectacle -- see
         // BurnProvider::HoldsSacLandBurn. The integer test keeps every deck without such a card off the scan.
-        if (sacrifice_count > 0 && !wins && ResolveProvider(state).HoldsSacLandBurn(state, cands, sel, nullptr))
+        if (sacrifice_count > 0 && !(wins || poison_reach_solve) && ResolveProvider(state).HoldsSacLandBurn(state, cands, sel, nullptr))
         { return; }
 
         // HoldCastUnlessLethal (see the precompute): a held cast -- Hinata's lone Crackle -- only in a
         // subset that wins this turn by THIS projection (every cast's damage + the attack, payable).
-        if (any_held && !wins) { for (int j : sel) { if (cand_held[j]) { return; } } }
+        if (any_held && !(wins || poison_reach_solve)) { for (int j : sel) { if (cand_held[j]) { return; } } }
 
         // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
         // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
@@ -87797,6 +87800,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     // construction; it removes counted work, so a budgeted search can move (play change: A/B + GT).
     // MTG_XWASTE_EARLY_VERIFY=1 keeps the late drop and counts any selection the early test would have dropped
     // that the body went on to emit or to keep past the projection ([xwaste-early] at exit; must be 0).
+    // POISON (Beasts G): can the opponent still reach the poison loss THIS turn? Board-only and the state is const for
+    // the whole walk, so asked once here (O(1) for a stamped deck; false for every deck without toxic / proliferate).
+    const bool poison_reach_call = PoisonWinReachableThisTurn(state);
     bool xw_nowin = false;
     if (XwasteEarlyOn() && !cannons_ctx.live && !herald_ctx.live && freecast_ctx.casters <= 0 && !state.deck_has_counter_ping
         && !has_extra_lethal && atk_mana_srcs.empty() && atk_tap_ctx.cand_bit.empty()
@@ -87818,7 +87824,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             if (xa.haste_prowess) { ++n_hp; }
         }
         ub += static_cast<long long>(n_nc) * (std::max(0, prowess_attackers) + n_hp);
-        xw_nowin = inert && ub < state.Opponent().life;
+        xw_nowin = inert && ub < state.Opponent().life && !poison_reach_call;   // a poison kill is not a no-win (Beasts G)
     }
 
     // SATURATED HUMAN-PLAY COLLAPSE (see HumanEnumSaturated above the function). Evaluated ONCE
@@ -89822,14 +89828,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
         // its own question; widening it here would change other decks.
         if (!wins && has_extra_lethal && !ResolveProvider(state).AlternateWinNeedsAction()   // Maze's End: I3b
             && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
-        if (xw_early && !(iren_waste && !wins)) { xwearly::g_v_reach.fetch_add(1, std::memory_order_relaxed); }
+        // POISON (Beasts G): the drops below exempt a LETHAL subset, and `wins` above projects LIFE only. A subset that
+        // could still finish by poison this turn (PoisonWinReachableThisTurn, an over-approximation hoisted out of the
+        // walk) is kept too, so a poison kill is never dropped as a non-winning line. Not written into
+        // plan.wins_this_turn: that is a positive projection (sort / move tier), and a poison guess must not claim one.
+        const bool keep_lethal = wins || poison_reach_call;
+        if (xw_early && !(iren_waste && !keep_lethal)) { xwearly::g_v_reach.fetch_add(1, std::memory_order_relaxed); }
         if (iren_waste && gefcensus::On())
         {
             gefcensus::g_xwaste.fetch_add(1, std::memory_order_relaxed);
             if (!wins) { gefcensus::g_xwaste_dropped.fetch_add(1, std::memory_order_relaxed); }
         }
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop (lethal-exempt) -- see the twin.
-        if (iren_waste && !wins)
+        if (iren_waste && !keep_lethal)
         {
             if (s_rollout_stats)
             {
@@ -89844,7 +89855,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             _ct.label = "iren-waste"; return;
         }
         // Sac-land burn hold (mirrors Solve::consider) -- see BurnProvider::HoldsSacLandBurn.
-        if (sacrifice_count > 0 && !wins)
+        if (sacrifice_count > 0 && !keep_lethal)
         {
             bool       rescued = false;
             const bool drop    = ResolveProvider(state).HoldsSacLandBurn(state, cands, sel, &rescued);
@@ -89898,12 +89909,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             if (drop) { _ct.label = "sac-burn-hold"; return; }
         }
         // HoldCastUnlessLethal (mirrors Solve::consider): a held cast only in a subset that wins now.
-        if (any_held && !wins)
+        if (any_held && !keep_lethal)
         { for (int j : sel) { if (cand_held[j]) { _ct.label = "hold-unless-lethal"; return; } } }
         // A sacrifice-for-mana the deck holds unless the line needs it (the provider's
         // SacForManaOnlyIfNeeded -- NivMizzetCombo's Generator Servant rule). The sibling subset with the
         // source kept is offered by this walk. Not asked by Solve::consider -- see the helper.
-        if (sac_mana_held_scope && !wins && SubsetSpendsUnneededSacForMana(state, cands, sel))
+        if (sac_mana_held_scope && !keep_lethal && SubsetSpendsUnneededSacForMana(state, cands, sel))
         { _ct.label = "sac-unneeded"; return; }
         _ct.label = "OFFERED";
         {
@@ -99872,7 +99883,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     for (const int r : StatePinVariantRanks(CombatDigRankAt(inherited, 0), width))
                     {
                         TurnSolver::Plan v = p;
-                        v.combat_dig_choice = CombatDigPackRanks(&r, 1);
+                        v.combat_dig_choice = CombatPinMerge(CombatDigPackRanks(&r, 1), inherited);
                         extra.push_back(std::move(v));
                     }
                     continue;
@@ -99893,7 +99904,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     }
                     if (is_base) { continue; }
                     TurnSolver::Plan v = p;
-                    v.combat_dig_choice = CombatDigPackRanks(r, fit);
+                    v.combat_dig_choice = CombatPinMerge(CombatDigPackRanks(r, fit), inherited);
                     extra.push_back(std::move(v));
                 }
             }
@@ -99901,6 +99912,133 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 TRACE("harbingeraxis", "T%d %zu plan(s) fanned -> %zu variant(s) (bf=%d lib_match=%d)",
                       state.turn_number, n_fanned, extra.size(), n_bf, lib_match);
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
+    // SEARCHED PROLIFERATE SUBSET (Bloated Contaminator, Beasts G, 2026-11-22) -- the Harbinger dig's shape, on the
+    // PROLIFERATE half of the same combat-time pin (bits 16-30 of Plan::combat_dig_choice; ProlifRankAt). WHY IT EXISTS
+    // (NO-GREEDY): "choose any number of permanents and/or players that have a counter" is a real choice, so whenever
+    // the menu at resolution can hold more than one subset the search branches its RANKS. The menu is the provider's:
+    // ROOT collapses it to the one dominant subset when every candidate holds only proven-beneficial kinds
+    // (DecisionProvider::ProliferateCollapse, MTG_UNPRUNE=proliferate) -- then there is nothing to fan and this axis
+    // costs one candidate walk. It FANS when the collapse refuses on the board now (an unproven kind is present, or
+    // the gate is unpruned).
+    //   * ORDINALS: every proliferate source that can attack now, plus every one THIS plan casts while a haste source
+    //     is reachable (the Harbinger rule); over-counts fold after combat (the pin is spent there).
+    //   * WIDTH W = min(kProlifMaxRank + 1, 2^n), n = the candidates now + this plan's casts + 1 (the opponent's first
+    //     toxic poison makes them a candidate before the trigger resolves). An over-count clamps onto the last rank (a
+    //     sibling's state). DISCLOSED REPRESENTATION LIMITS: menu ranks past kProlifMaxRank are not branched; an
+    //     unproven kind that APPEARS inside the plan (none can in Beasts: its only counters are +1/+1, loyalty, oil
+    //     and the opponent's poison) is resolved at the provider's default rank. Product over ordinals capped at 27.
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_combat_proliferate && !dig_list_dead)
+    {
+        constexpr int kProlifProductCap = 27;
+        const int me = state.active_player_index;
+        int n_bf = 0;
+        bool haste_bf = state.floating_haste_c > 0;
+        auto is_src = [](const CardDefinition* d)
+        { return d != nullptr && d->params.combat_damage_self_proliferate && d->card.IsCreature(); };
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (GrantsHasteToOther(d)) { haste_bf = true; }
+            if (!is_src(d) || !q.card.IsCreature()) { continue; }
+            if (!CanAttackFull(q, state.battlefield, me)) { continue; }
+            ++n_bf;
+        }
+        auto plan_brings = [&](const TurnSolver::Plan& p, int& casts) -> int
+        {
+            int c = 0;
+            bool c_haste = false;
+            casts = 0;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (d == nullptr) { continue; }
+                if (GrantsHasteToOther(d)) { c_haste = true; }
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::PutFromHandAbility) { continue; }
+                ++casts;
+                if (!is_src(d)) { continue; }
+                ++c;
+                if (d->card.HasKeyword(Keyword::Haste)) { c_haste = true; }
+            }
+            return (c > 0 && (haste_bf || c_haste)) ? c : 0;
+        };
+        std::vector<int> brings(all.size(), 0), casts_of(all.size(), 0);
+        bool any = n_bf > 0;
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            brings[i] = plan_brings(all[i], casts_of[i]);
+            if (brings[i] > 0) { any = true; }
+        }
+        std::vector<ProliferateCand> cands_now;
+        bool open = false;
+        if (any)
+        {
+            cands_now = ProliferateCandidates(state);
+            open = !ResolveProvider(state).ProliferateCollapse(state, me, cands_now);
+        }
+        if (any && open)
+        {
+            const int inherited = state.scripted_combat_dig;
+            std::vector<TurnSolver::Plan> extra;
+            std::size_t n_fanned = 0;
+            for (std::size_t i = 0, n_base = all.size(); i < n_base; ++i)
+            {
+                const TurnSolver::Plan& p = all[i];
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                    || p.tectonic_keep_choice >= 0
+                    || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                    || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
+                    || p.attack_choose_mode_choice >= 0 || p.combat_dig_choice >= 0)
+                { continue; }
+                const int n_ord = std::min(kProlifMaxOrdinals, n_bf + brings[i]);
+                if (n_ord <= 0) { continue; }
+                const int n_c = std::min(5, static_cast<int>(cands_now.size()) + casts_of[i] + 1);
+                const int width = std::min(kProlifMaxRank + 1, 1 << n_c);
+                if (width < 2) { continue; }
+                ++n_fanned;
+                if (n_ord == 1)
+                {
+                    for (const int r : StatePinVariantRanks(ProlifRankAt(inherited, 0), width))
+                    {
+                        TurnSolver::Plan v = p;
+                        v.combat_dig_choice = CombatPinMerge(inherited, ProlifPackRanks(&r, 1));
+                        extra.push_back(std::move(v));
+                    }
+                    continue;
+                }
+                int combos = 1, fit = 0;
+                while (fit < n_ord && combos * width <= kProlifProductCap) { combos *= width; ++fit; }
+                int base[kProlifMaxOrdinals], r[kProlifMaxOrdinals];
+                for (int k = 0; k < fit; ++k) { base[k] = std::max(0, ProlifRankAt(inherited, k)); }
+                for (int code = 0; code < combos; ++code)
+                {
+                    int c = code;
+                    bool is_base = true;
+                    for (int k = 0; k < fit; ++k)
+                    {
+                        r[k] = c % width;
+                        c /= width;
+                        if (r[k] != base[k]) { is_base = false; }
+                    }
+                    if (is_base) { continue; }
+                    TurnSolver::Plan v = p;
+                    v.combat_dig_choice = CombatPinMerge(inherited, ProlifPackRanks(r, fit));
+                    extra.push_back(std::move(v));
+                }
+            }
+            if (n_fanned > 0)
+            {
+                TRACE("prolifaxis", "T%d %zu plan(s) fanned -> %zu variant(s) (bf=%d cands=%zu)",
+                      state.turn_number, n_fanned, extra.size(), n_bf, cands_now.size());
                 all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                       std::make_move_iterator(extra.end()));
             }
@@ -108881,7 +109019,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         if (state.scripted_attack_choose_mode != -1)   // Elder Gargaroth's mode pin, value-gated
         { mix(0x6A26C000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(state.scripted_attack_choose_mode))); }
         if (state.scripted_combat_dig != -1)   // Garruk's Harbinger's dig-rank pin, value-gated
-        { mix(0xC0D16A00ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(state.scripted_combat_dig))); }
+        { mix(0xC0D16A00ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_combat_dig))); }
         if (!state.scripted_prophets_sac.empty())
         {
             mix(0x50524F50ull);
@@ -110157,7 +110295,7 @@ void TurnSolver::ClearPerGameCaches()
 // ---- Transposition key over the future-determining state ------------------
 //
 // Folds every game-state field the rollout reads into a 128-bit key, plus the
-// rollout depth. Fields the rollout never reads (graveyard, exile, poison, the
+// rollout depth. Fields the rollout never reads (graveyard, exile, the
 // always-empty rollout stack contents) are omitted so genuinely-equivalent
 // states share a key. Order-sensitive sequences (hand, battlefield) are folded
 // in order because plan tie-breaks and mana/sacrifice selection read that order.
@@ -110676,6 +110814,14 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // share a memo entry. Gated on nonzero -> byte-identical for every deck with no energy.
         if (p.energy_counters > 0)
         { Fold(k, 0xE9E7); Fold(k, static_cast<uint64_t>(p.energy_counters)); }
+        // POISON (Bloated Contaminator, Beasts G). A WIN CONDITION (Player::HasLost: 10, a 2HG team 15) and, once
+        // present, a proliferate candidate, so two states differing only here reach different futures: without this a
+        // no-win refutation (FSLineWin's nowin bound, the TT's NoWin entries, the per-game line cache) computed at one
+        // poison count was served to another, and a dedup could drop the poisoned twin of a plan -- a poison kill made
+        // unfindable (e.g. Contaminator T2 + a 3-drop T3 vs the reverse: same board from T4, different poison).
+        // Gated on nonzero, so every deck that never poisons keeps the EXACT prior key.
+        if (p.poison_counters > 0)
+        { Fold(k, 0x9015); Fold(k, static_cast<uint64_t>(p.poison_counters)); }
         // OUTSIDE THE GAME (the wish pool). Which SINGLETONS remain decides what a later Living
         // Wish can fetch, so two states that spent their wishes differently reach different
         // futures and must not share a memo entry. Order-insensitive (nothing reads the pool's
@@ -111792,6 +111938,7 @@ static std::string EtChainStateKey(const GameState& s)
     auto add = [&](long long v) { key += std::to_string(v); key += ','; };
     add(s.turn_number); add(s.TurnSeq()); add(s.pending_extra_turns);
     add(s.in_extra_turn); add(s.ActivePlayer().life); add(s.Opponent().life);
+    if (s.Opponent().poison_counters > 0) { key += 'p'; add(s.Opponent().poison_counters); }   // a win term (Beasts G)
     add(s.ActivePlayer().lands_played_this_turn);
     for (const Player& p : s.players)
     {
@@ -142494,7 +142641,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Elder Gargaroth's packed attack-trigger modes, at declare-attackers.
     if (p.attack_choose_mode_choice >= 0) { s.scripted_attack_choose_mode = static_cast<std::int16_t>(p.attack_choose_mode_choice); }
     // Garruk's Harbinger's packed combat-dig ranks, at combat damage.
-    if (p.combat_dig_choice >= 0) { s.scripted_combat_dig = static_cast<std::int16_t>(p.combat_dig_choice); }
+    if (p.combat_dig_choice >= 0) { s.scripted_combat_dig = static_cast<std::int32_t>(p.combat_dig_choice); }
     // The Saga chapter target, read at the NEXT turn's draw step (AdvanceSagas).
     if (p.saga_target_choice >= 0) { s.scripted_saga_target = p.saga_target_choice; }
     // Abiding Grace's packed end-step mode/target ranks, read at THIS turn's end step

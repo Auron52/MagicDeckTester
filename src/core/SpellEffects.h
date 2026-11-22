@@ -7260,7 +7260,51 @@ inline int CombatDigPackRanks(const int* ranks, int n)
 inline int CombatDigPinShift(int packed)
 {
     if (packed < 0) { return -1; }
-    const int v = packed >> 4;
+    // Only the DIG half (bits 0-15) shifts; the proliferate half (bits 16-30, below) belongs to other triggers.
+    const int v = ((packed & 0xFFFF) >> 4) | (packed & 0x7FFF0000);
+    return v != 0 ? v : -1;
+}
+
+// ---- THE PROLIFERATE HALF OF THE SAME PIN (Bloated Contaminator, Beasts G, 2026-11-22) ---------------------------
+// Bits 16-30 of GameState::scripted_combat_dig / Plan::combat_dig_choice (int32 since Beasts G): 5 bits per
+// combat-damage PROLIFERATE-trigger ordinal (ordinal 0 in bits 16-20), the dig half's conventions exactly -- a field
+// of 0 = that ordinal unpinned (menu rank 0, the provider's default), r + 1 = RANK r into ProliferateMenu as it stands
+// at RESOLUTION (clamped to its last entry); the whole pin -1 = nothing pinned. ONE pin for both triggers is sound
+// because each half is read and shifted only by its own trigger, a field of 0 resolves exactly like -1, and every
+// fold / key / compare site already carries the whole int (so a proliferate rank is keyed wherever a dig rank is).
+// A RANK, not a subset, for the dig's reason: the candidate set is the board at combat damage (this plan's casts, a
+// Herald's cast counters, the opponent's first poison from toxic), which the enumerator does not need to predict.
+// Spent with the dig half at the end of combat damage (Combat.cpp's SpendCombatDigPin).
+constexpr int kProlifPinBase      = 16;
+constexpr int kProlifMaxOrdinals  = 3;    // 15 bits: 16..30, the int32 pin stays non-negative
+constexpr int kProlifMaxRank      = 30;   // a field holds rank + 1 <= 31
+inline int ProlifRankAt(int packed, int k)
+{
+    if (packed < 0 || k < 0 || k >= kProlifMaxOrdinals) { return -1; }
+    return ((packed >> (kProlifPinBase + 5 * k)) & 31) - 1;
+}
+inline int ProlifPackRanks(const int* ranks, int n)
+{
+    int v = 0;
+    for (int k = 0; k < n && k < kProlifMaxOrdinals; ++k)
+    {
+        const int r = ranks[k];
+        if (r >= 0) { v |= (std::min(r, kProlifMaxRank) + 1) << (kProlifPinBase + 5 * k); }
+    }
+    return v != 0 ? v : -1;
+}
+// Join a dig half and a proliferate half (either -1 = nothing) into one pin; an axis that writes one half keeps the
+// INHERITED state pin's other half (a breakpoint continuation re-solving mid-main), so neither trigger's pin is lost.
+inline int CombatPinMerge(int dig_part, int prolif_part)
+{
+    const int v = (dig_part < 0 ? 0 : (dig_part & 0xFFFF)) | (prolif_part < 0 ? 0 : (prolif_part & 0x7FFF0000));
+    return v != 0 ? v : -1;
+}
+inline int ProlifPinShift(int packed)
+{
+    if (packed < 0) { return -1; }
+    const int hi = (packed >> kProlifPinBase) >> 5;
+    const int v  = (packed & 0xFFFF) | (hi << kProlifPinBase);
     return v != 0 ? v : -1;
 }
 
@@ -7273,6 +7317,78 @@ inline int CombatDigPinShift(int packed)
 // BOTH damage-step shapes of Combat.cpp's shared core, so the executor and the rollout stay lockstep.
 void FireCombatDamageDig(GameState& state, int controller, const std::vector<int>& damaging_idx,
                          const std::vector<int>& damaging_pw);
+
+// ---- BLOATED CONTAMINATOR: TOXIC + COMBAT-DAMAGE PROLIFERATE (Beasts G, 2026-11-22) -------------------------------
+// ApplyToxicPoison -- "Toxic N" (CR 702.164c / 120.3g): a creature with toxic that deals combat damage to a PLAYER
+// gives that player N poison counters, IN ADDITION to the damage's other results and as part of the damage event. The
+// ONE body both damage-step shapes of the shared combat core call at their `power > 0` connector point (Combat.cpp), so
+// the executor and the rollout give it identically and the poison is on before any combat-damage trigger resolves.
+// 2HG: the hit is on one head and the counters are the TEAM's (CR 810.10) -- players[1] is the team, so no
+// OpponentHeads() scaling. One cached-pointer test for every other attacker.
+inline void ApplyToxicPoison(GameState& state, int opp_idx, const CardDefinition* adef)
+{
+    if (adef != nullptr && adef->params.toxic > 0)
+    { state.players[static_cast<std::size_t>(opp_idx)].poison_counters += adef->params.toxic; }
+}
+
+// The most poison ONE connecting hit of this card can add: its toxic, plus the one poison counter its proliferate can
+// add to the opponent (CR 701.34a: one of each kind already there; 2HG: one per team, CR 701.34b).
+inline int PoisonPerHitOf(const CardDefinition* d)
+{ return d == nullptr ? 0 : std::max(0, d->params.toxic) + (d->params.combat_damage_self_proliferate ? 1 : 0); }
+
+// POISON-AWARE LETHAL REACH (Beasts G). TRUE when the opponent could reach the poison loss (Player::HasLost: 10, a 2HG
+// team 15) THIS TURN, by an over-approximation: every poison source of the deck connects in two damage steps (a granted
+// double strike), twice more with an extra combat. Read by the lethal-exempt drops and early no-win proofs that judge
+// "can this subset win now?" from LIFE alone (TurnSolver.cpp: EnumeratePlansCore's / Solve's keep-unless-lethal drops,
+// the X-waste early proof), so a poison kill is never dropped as a non-winning line: an over-estimate only keeps a
+// line, i.e. re-prices work. O(1) for a stamped deck; 0 for every deck without toxic / proliferate (one byte test).
+inline bool PoisonWinReachableThisTurn(const GameState& s)
+{
+    int per_step = s.deck_poison_hit_bound;
+    if (per_step == 0) { return false; }
+    if (s.deck_poison_hit_bound == GameState::kPoisonBoundUnstamped)   // an unstamped (scenario) state: count live
+    {
+        per_step = 0;
+        const int me = s.active_player_index;
+        for (const Permanent& q : s.battlefield)
+        { if (q.controller_index == me) { per_step += PoisonPerHitOf(CardDatabase::Instance().LookupCached(q.card)); } }
+        const Player& pl = s.players[static_cast<std::size_t>(me)];
+        for (const Card& c : pl.hand) { per_step += PoisonPerHitOf(CardDatabase::Instance().LookupCached(c)); }
+        for (std::size_t i = 0; i < pl.library.size(); ++i)
+        { per_step += PoisonPerHitOf(CardDatabase::Instance().LookupCached(pl.library.RawAt(i))); }
+        if (per_step == 0) { return false; }
+    }
+    const int gain = per_step * 2 * (s.deck_has_extra_combat ? 4 : 1);
+    return s.Opponent().poison_counters + gain >= Player::PoisonLossThreshold();
+}
+
+// The candidates (CR 701.34a): every permanent with a counter (battlefield order, any controller; p.loyalty is the
+// planeswalker's source of truth, its CounterList entry the mirror), then every player with a counter (poison, rad,
+// energy). Body in SpellEffects.cpp.
+std::vector<ProliferateCand> ProliferateCandidates(const GameState& state);
+// The provider-free default: every candidate ProliferateCandBeneficial admits (the dominant set when all are). The
+// playout beyond the horizon, the depth-0 runner and the human chooser's preselection read it (indices into cands).
+std::vector<int> ProliferateDefaultSubset(const GameState& state, int controller,
+                                          const std::vector<ProliferateCand>& cands);
+// THE MENU the search ranks: either the one dominant subset (DecisionProvider::ProliferateCollapse) or EVERY subset,
+// identity-folded (permanents whose controller + RemovalSelfTargetFoldKey agree are interchangeable, so a class of m
+// offers k = 0..m of them), the default first, then by counters added (most first). Each entry = indices into cands.
+// Generation stops at kProlifMenuCap entries (a representation limit, disclosed: the pin addresses ranks 0..30 anyway).
+constexpr int kProlifMenuCap = 256;
+std::vector<std::vector<int>> ProliferateMenu(const GameState& state, int controller,
+                                              const std::vector<ProliferateCand>& cands);
+// Give each chosen candidate one more counter of each kind it has (CR 701.34a). +1/+1 and oil go through the
+// doubler-aware puts; loyalty keeps p.loyalty and its Counter mirror in step; poison is the TEAM's single counter
+// in 2HG (CR 701.34b: only one head of a team can be given the extra poison counter -- one Player here).
+void ApplyProliferate(GameState& state, int controller, const std::vector<ProliferateCand>& cands,
+                      const std::vector<int>& chosen);
+// FireCombatDamageProliferate -- "Whenever this creature deals combat damage to a player, proliferate": one trigger per
+// connecting source carrying combat_damage_self_proliferate in this damage event, fired LAST among the step's
+// combat-damage triggers (the controller orders simultaneous triggers, CR 603.3b, and proliferating after every other
+// counter put weakly dominates). Each reads the proliferate half of the combat-time pin at ordinal 0 and shifts it.
+// Skipped once the game is over (a lethal hit -- life or toxic poison -- ends combat at the SBA check first). Called
+// from BOTH damage-step shapes of Combat.cpp's shared core (executor + rollout lockstep). Deck-gated inert.
+void FireCombatDamageProliferate(GameState& state, int controller, const std::vector<int>& damaging_idx);
 
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on

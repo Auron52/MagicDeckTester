@@ -686,6 +686,10 @@ static_assert(sizeof(Player) == 216,
 // +0 bytes (2026-11-21, Beasts D): Garruk's Harbinger's `scripted_combat_dig` (int16, FUTURE-DETERMINING within the
 // turn -- the packed per-ordinal dig ranks; FOLDED in Build() value-gated beside the Gargaroth pin) and the DECK
 // CONSTANT `deck_has_combat_damage_dig` both fit the padding Beasts C left, so the size is unchanged.
+// +0 bytes (2026-11-22, Beasts G): `scripted_combat_dig` widened to int32 (its bits 16-30 carry Bloated Contaminator's
+// PROLIFERATE ranks; still FOLDED value-gated, now as a uint32) and MOVED into the 6-byte hole after
+// scripted_athreos_coin; the DECK CONSTANTS `deck_has_combat_proliferate` / `deck_poison_hit_bound` take its old bytes
+// (nothing to fold). Opponent POISON is folded below (Player::poison_counters, exact) -- now a live win term.
 static_assert(sizeof(GameState) == 1728,   // combined upstream free turns and Beasts fields; verify at build
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
@@ -1071,7 +1075,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x6A26C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(s.scripted_attack_choose_mode))); }
     // Garruk's Harbinger's packed combat-dig ranks: the same FUTURE-DETERMINING class, value-gated.
     if (s.scripted_combat_dig >= 0)
-    { fold(0xC0D16A0000000ull + static_cast<std::uint64_t>(static_cast<std::uint16_t>(s.scripted_combat_dig))); }
+    { fold(0xC0D16A0000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_combat_dig))); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

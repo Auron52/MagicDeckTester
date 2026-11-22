@@ -1373,6 +1373,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"oppdraw",    UnprunedGate::OpponentDraw},
     {"attackchooselife", UnprunedGate::AttackChooseLife},
     {"oilgrant",   UnprunedGate::OilGrant},
+    {"proliferate", UnprunedGate::Proliferate},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -9463,6 +9464,23 @@ bool DecisionProvider::OffersOilVigilanceMenace(const GameState& s, const CardDe
 {
     (void)s; (void)src;
     return DecisionUnpruned(UnprunedGate::OilGrant);
+}
+
+// Bloated Contaminator's proliferate (see the declaration). The sound one-option collapse: every candidate holds only
+// kinds ProliferateKindsAllBeneficial proves weakly beneficial to add, so the set of ALL candidates dominates every
+// other subset. Anything else (or MTG_UNPRUNE=proliferate) keeps the engine's full searched menu.
+bool DecisionProvider::ProliferateCollapse(const GameState& s, int controller,
+                                           const std::vector<ProliferateCand>& cands) const
+{
+    return ProliferateCollapseFor(s, controller, cands, DecisionUnpruned(UnprunedGate::Proliferate));
+}
+bool ProliferateCollapseFor(const GameState& s, int controller, const std::vector<ProliferateCand>& cands,
+                            bool unpruned)
+{
+    if (unpruned) { return false; }
+    for (const ProliferateCand& c : cands)
+    { if (!ProliferateCandBeneficial(s, controller, c)) { return false; } }
+    return true;
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
