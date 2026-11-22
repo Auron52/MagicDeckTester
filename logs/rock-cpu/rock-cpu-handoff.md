@@ -56,7 +56,7 @@ Slower games: searched niv gi 79, 1250, 1494, 1527 (seed = 700000 + gi); d0 brun
 |---|---|---|---|
 | dev (cuts) build | DONE 10:25 UTC, rc 0; binary staged as `build/scratch/claude_rock_cpu/mtg.dev` | `build_dev.log` | `build_dev.done` |
 | perf slice base100: base binary, on/off, 100 searched + 300 d0 games/deck, seeds 760000/770000, 1 thread x2 | 816001 (queued) | `perf_base100/*.perf, *.out` | `perf_base100/DONE` |
-| startup instruction baseline (1 d0 game) | 816004 (queued) | `perf_startup/st.perf` | the file itself |
+| startup instruction baseline (1 d0 game) | DONE: 416,153,462 instructions per process (subtract from every perf count) | `perf_startup/st.perf` | the file itself |
 | d8 b0 replays of the 9 step-1 slower games, both arms (`d8_m1.json`) | 850695 (queued) | `d8_m1.out`, `logs_d8_m1/` | `d8_m1.done` |
 Read perf: `python3 perfsum.py perf_base100 off on` (subtract `perf_startup/st.perf` per process for cheap decks).
 Compare d8: `python3 -c` over `logs_d8_m1/*.wins` (on vs off per game: equal turn = recovered).
