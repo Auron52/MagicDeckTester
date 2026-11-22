@@ -4491,6 +4491,7 @@ inline void ForEachDedicatedCounterField(P& p, F&& f)
     f("storage", p.storage_counters); f("ice", p.ice_counters); f("age", p.age_counters);
     f("spore", p.spore_counters); f("fade", p.fade_counters); f("quest", p.quest_counters);
     f("hone", p.hone_counters); f("time", p.time_counters);
+    f("hone", p.hone_counters); f("oil", p.oil_counters);   // oil: Migloz (Beasts E)
 }
 
 // "Each counter on it" counts every type, not merely +1/+1. Capture this
@@ -4897,6 +4898,14 @@ inline void PutQuestCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
     p.quest_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+}
+
+// OIL counters (Migloz, Maze Crusher; Beasts E). Through the same doubling chokepoint as every other counter
+// put: "enters with five oil counters" is a put as it enters (CR 122.6), so Doubling Season doubles it.
+inline void PutOilCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    p.oil_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
 }
 
 // DEPLETION counters on a land entering the battlefield (Peat Bog / Hickory Woodlot / Sandstone
@@ -6907,7 +6916,8 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
 {
     if (creature.card.HasKeyword(Keyword::Vigilance)) { return true; }
     // End-Raze Forerunners' ETB "other creatures you control ... gain vigilance ... until end of
-    // turn" (Permanent::temp_vigilance; cleared at both cleanup sites). Never set elsewhere.
+    // turn" (Permanent::temp_vigilance; cleared at both cleanup sites). Also set by Migloz, Maze Crusher's oil-costed
+    // self grant (ActivatePump mode 8, Beasts E).
     if (creature.temp_vigilance) { return true; }
     auto grants = [&](const Permanent& a)
     {
@@ -10378,7 +10388,8 @@ inline bool LegendCopiesInterchangeable(const GameState& state, const std::vecto
             || p.once_per_turn_used || p.skip_next_untap || p.paired_with != 0)
         { return false; }
         if (p.tapped != a.tapped || p.entered_this_turn != a.entered_this_turn
-            || p.gained_control_this_turn != a.gained_control_this_turn || p.is_token != a.is_token)
+            || p.gained_control_this_turn != a.gained_control_this_turn || p.is_token != a.is_token
+            || p.oil_counters != a.oil_counters)   // Migloz: a fresh copy's 5 oil vs a spent one's (Beasts E)
         { return false; }
         int cp[8];
         counts(p, cp);
@@ -11934,7 +11945,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
         || p.storage_counters != 0 || p.loyalty != 0 || p.ice_counters != 0
         || p.age_counters != 0 || p.spore_counters != 0 || p.fade_counters != 0
-        || p.quest_counters != 0 || p.hone_counters != 0 || p.time_counters != 0) { return false; }
+        || p.quest_counters != 0 || p.hone_counters != 0 || p.time_counters != 0 || p.oil_counters != 0) { return false; }
     if (p.storage_hold_this_turn || p.loyalty_activated_this_turn
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
         || p.lifegain_counters_used_this_turn || p.once_per_turn_used
@@ -12839,6 +12850,19 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 EmitPlayEvent(state.turn_number, "etb",
                               e.card.m_name.str() + " enters with " + std::to_string(e.time_counters)
                               + " time counter" + (e.time_counters == 1 ? "" : "s") + " (vanishing)");
+            }
+        }
+        // Migloz, Maze Crusher: "enters with five oil counters on it" -- the same as-enters replacement (CR 614.1c),
+        // so it lands here, before any watcher can observe the entrant, on every enter route. A put (doubler-aware).
+        // Param-gated: one int test for every other entrant.
+        if (ed != nullptr && ed->params.enters_with_oil_counters > 0)
+        {
+            PutOilCounters(state, e, ed->params.enters_with_oil_counters);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb",
+                              e.card.m_name.str() + " enters with " + std::to_string(e.oil_counters) + " oil counter"
+                              + (e.oil_counters == 1 ? "" : "s"));
             }
         }
         if (ed != nullptr && !ed->params.enters_with_plus_counters_per_other_subtype.empty()
@@ -23208,6 +23232,34 @@ inline bool SelfHasteActivationLive(const GameState& state, int controller, int 
     return false;
 }
 
+// MIGLOZ, MAZE CRUSHER (Beasts E, 2026-11-21): the oil a source holds, and how many of an oil-costed
+// activation's `per_oil` costs it can still pay. 0 for a source that is gone or not ours.
+inline int OilCountersOn(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_number == source_id) { return p.oil_counters; } }
+    return 0;
+}
+// "{1}, Remove an oil counter from Migloz: It gains vigilance and menace until end of turn" (ActivatePump MODE 8,
+// CardParams::vigilance_menace_cost). THE ONE LIVENESS PREDICATE, read by the enumeration, the viewer menu and both
+// pay sites BEFORE anything is paid: our creature with the param, enough oil, and the grant changes something --
+// it can still attack this turn (the enumerator owns "combat is still ahead") and is not already vigilant (Kaheera
+// grants Beasts vigilance). MENACE IS INERT (no blockers vs the goldfish) and not modelled; a vigilant source would
+// gain only menace, so that activation is a provable no-op and never offered (the Wirewood Lodge rule).
+inline bool OilVigilanceActivationLive(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.vigilance_menace_cost.has_value()) { return false; }
+        if (p.oil_counters < std::max(1, d->params.vigilance_menace_remove_oil)) { return false; }
+        if (p.temp_vigilance || CreatureHasVigilance(p, state)) { return false; }
+        return CanAttackFull(p, state.battlefield, controller);
+    }
+    return false;
+}
+
 // ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
 // One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
 // apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
@@ -23234,6 +23286,12 @@ inline bool SelfHasteActivationLive(const GameState& state, int controller, int 
 //   mode 5 -- the LOOP-FUNDED team pump (AccomplishedAlchemist); applied here as mode 2 by both callers.
 //   mode 6 -- SELF HASTE (Flinthoof Boar, CardParams::self_haste_cost): the source gains temp_haste until
 //             end of turn. Both callers check SelfHasteActivationLive before paying. k is always 1.
+//   mode 7 -- OIL-COSTED SELF PUMP (Migloz, Maze Crusher: "{2}, Remove two oil counters: It gets +2/+2 until end
+//             of turn"; firebreathing_* + firebreathing_remove_oil_counters). Per activation: remove the oil (the
+//             COST, CR 602.2b) then +P/+T. Stops when the oil runs out (both callers pay only for the activations
+//             the oil still covers -- PumpPayableActivations). No {T}: legal while summoning-sick.
+//   mode 8 -- OIL-COSTED VIGILANCE + MENACE (Migloz's "{1}, Remove an oil counter"). Both callers check
+//             OilVigilanceActivationLive before paying. temp_vigilance; menace inert. k is always 1.
 inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k,
                              const std::string& discard_pin = std::string())
 {
@@ -23254,6 +23312,21 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
         s.temp_haste = true;
         if (g_play_event_sink && !g_tap_speculating)
         { EmitPlayEvent(state.turn_number, "ability", s.card.m_name.str() + ": gains haste until end of turn"); }
+        return 1;
+    }
+    if (mode == 8)
+    {
+        // Migloz (Beasts E): liveness re-checked here too (a stale activation is a full no-op), then the oil COST,
+        // then the grant. Idempotent, so k is always 1.
+        if (!OilVigilanceActivationLive(state, controller, source_id)) { return 0; }
+        Permanent& s = state.battlefield[src];
+        s.oil_counters -= std::max(1, sd->params.vigilance_menace_remove_oil);
+        s.temp_vigilance = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability", s.card.m_name.str() + ": removed an oil counter ("
+                          + std::to_string(s.oil_counters) + " left) -- gains vigilance and menace until end of turn");
+        }
         return 1;
     }
     if (mode == 4)
@@ -23327,6 +23400,24 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                               state.battlefield[src].card.m_name.str() + ": +"
                               + std::to_string(sd->params.firebreathing_power)
                               + "/+0 (discarded " + shed + ")");
+            }
+        }
+        else if (mode == 7)
+        {
+            // Migloz, Maze Crusher (Beasts E): the oil is the COST -- without it the activation cannot be made.
+            Permanent& s = state.battlefield[src];
+            const int per = std::max(1, sd->params.firebreathing_remove_oil_counters);
+            if (s.oil_counters < per) { break; }
+            s.oil_counters -= per;
+            s.temp_power_bonus += sd->params.firebreathing_power;
+            s.temp_tough_bonus += sd->params.firebreathing_tough;
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              s.card.m_name.str() + ": removed " + std::to_string(per) + " oil counters ("
+                              + std::to_string(s.oil_counters) + " left) -- +"
+                              + std::to_string(sd->params.firebreathing_power) + "/+"
+                              + std::to_string(sd->params.firebreathing_tough) + " until end of turn");
             }
         }
         else if (mode == 3)
@@ -27821,7 +27912,10 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             // Same exclusion, same reason, for a firebreather whose rider is LIFELINK (Resplendent
             // Angel): the ratio below prices damage per mana and cannot price the life, which in
             // its deck is the entire point of the activation.
-            if (d->params.firebreathing_discard || d->params.firebreathing_grants_lifelink)
+            // Same exclusion for an OIL-costed self pump (Migloz, Maze Crusher's "{2}, Remove two oil counters: +2/+2"):
+            // the ratio cannot price the oil it spends, which also pays Migloz's other two abilities.
+            if (d->params.firebreathing_discard || d->params.firebreathing_grants_lifelink
+                || d->params.firebreathing_remove_oil_counters > 0)
             { continue; }
             const ManaCost& c = d->params.firebreathing_cost.value();
             if (!pool.CanPay(c)) { continue; }
@@ -38960,6 +39054,15 @@ inline bool CounterDestroyTargetLegal(const GameState& state, const Permanent& q
         && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
     return true;
 }
+// THE COUNTER HALF OF THE COST, one predicate for every site (enumeration, availability bits, liveness, resolution):
+// Steelbane Hydra removes a +1/+1 counter; Migloz, Maze Crusher (remove_counter_destroy_art_ench_oil, Beasts E)
+// removes that many OIL counters instead -- no +1/+1 counter is involved, and a Migloz short on oil cannot activate.
+inline bool CounterDestroyCostPayable(const Permanent& src, const CardDefinition& d)
+{
+    if (d.params.remove_counter_destroy_art_ench_oil > 0)
+    { return src.oil_counters >= d.params.remove_counter_destroy_art_ench_oil; }
+    return PlusCountersOn(src) > 0;
+}
 inline std::vector<int> CounterDestroyLegalTargets(const GameState& state, int controller)
 {
     std::vector<int> out;
@@ -38982,16 +39085,26 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
         const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
         if (p.card.m_number == source_id && p.controller_index == controller) { si = i; break; }
     }
-    if (si < 0 || PlusCountersOn(state.battlefield[static_cast<std::size_t>(si)]) <= 0) { return; }
+    if (si < 0) { return; }
+    const CardDefinition* sdef = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(si)].card);
+    if (sdef == nullptr || !CounterDestroyCostPayable(state.battlefield[static_cast<std::size_t>(si)], *sdef)) { return; }
     const std::string src_name = state.battlefield[static_cast<std::size_t>(si)].card.m_name.str();
     if (target_num == 0)
     {
         for (int i : CounterDestroyLegalTargets(state, controller))
         { target_num = state.battlefield[static_cast<std::size_t>(i)].card.m_number; break; }
     }
-    RemovePlusCounters(state.battlefield[static_cast<std::size_t>(si)], 1);
-    if (CounterPingSbaDead(state.battlefield[static_cast<std::size_t>(si)], state))
-    { CounterPingKillAt(state, static_cast<std::size_t>(si), "its last +1/+1 counter was removed"); }
+    if (sdef->params.remove_counter_destroy_art_ench_oil > 0)
+    {
+        // Migloz (Beasts E): the cost is OIL counters; P/T is untouched, so there is no toughness SBA to run.
+        state.battlefield[static_cast<std::size_t>(si)].oil_counters -= sdef->params.remove_counter_destroy_art_ench_oil;
+    }
+    else
+    {
+        RemovePlusCounters(state.battlefield[static_cast<std::size_t>(si)], 1);
+        if (CounterPingSbaDead(state.battlefield[static_cast<std::size_t>(si)], state))
+        { CounterPingKillAt(state, static_cast<std::size_t>(si), "its last +1/+1 counter was removed"); }
+    }
     int bi = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -39905,9 +40018,9 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // pinned target that left (or stopped being legal) makes the stale plan a clean no-op.
         if (mode == PermAbilityMode::CounterDestroyArtEnch)
         {
-            if (PlusCountersOn(p) <= 0) { return false; }
             const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
             if (td == nullptr || !td->params.remove_counter_destroy_art_ench_cost.has_value()) { return false; }
+            if (!CounterDestroyCostPayable(p, *td)) { return false; }
             const int want = g_tap_target_pump_pin.target;
             bool target_ok = false;
             for (const Permanent& q : state.battlefield)
@@ -40389,6 +40502,12 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
                                                                      : std::string("0"));
         if (d->params.tap_target_pump_grants_trample) { t += " and gains trample"; }
         return t + " until end of turn";
+    }
+    // Migloz, Maze Crusher (Beasts E): the destroy's counter cost is OIL, not a +1/+1 counter.
+    if (mode == PermAbilityMode::CounterDestroyArtEnch && d != nullptr && d->params.remove_counter_destroy_art_ench_oil > 0)
+    {
+        return "remove " + std::to_string(d->params.remove_counter_destroy_art_ench_oil)
+             + " oil counters: destroy target artifact or enchantment";
     }
     if (mode == PermAbilityMode::SelfPing && d != nullptr && d->params.self_ping_damage != 1)
     { return "it deals " + std::to_string(d->params.self_ping_damage) + " damage to itself"; }
@@ -60085,6 +60204,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);
     add(p.fade_counters); add(p.quest_counters); add(p.hone_counters); add(p.mana_tap_mark);
     if (p.time_counters != 0) { k += "|tm"; add(p.time_counters); }   // vanishing's time counters (gated)
+    if (p.oil_counters != 0) { k += "|oil"; add(p.oil_counters); }   // Migloz (Beasts E; gated)
     add(p.chosen_color); add(p.garth_chosen_mask); add(p.chosen_keyword_mask); add(p.chosen_subtype_id);
     add(p.paired_with); add(p.linked_exile_number); add(p.created_by_number);
     if (!p.lens_imprinted_land.empty()) { k += "|lens:" + p.lens_imprinted_land.str(); }

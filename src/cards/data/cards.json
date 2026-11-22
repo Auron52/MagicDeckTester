@@ -19218,6 +19218,36 @@
      "Garruk"
     ]
    }
+  },
+  {
+   "name": "Migloz, Maze Crusher",
+   "mana_cost": "{1}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Phyrexian",
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Migloz enters with five oil counters on it.\n{1}, Remove an oil counter from Migloz: It gains vigilance and menace until end of turn.\n{2}, Remove two oil counters from Migloz: It gets +2/+2 until end of turn.\n{3}, Remove three oil counters from Migloz: Destroy target artifact or enchantment. [OIL COUNTERS: a dedicated Permanent::oil_counters, put AS IT ENTERS (enters_with_oil_counters 5) at the universal enter cascade (FireEtbWatchers), so every enter route gets them; a put (Doubling Season doubles it). Every ability below removes oil as part of its COST (CR 602.2b): with too few counters it cannot be activated, and none has {T}, so all three are legal while Migloz is summoning-sick and repeatable while the oil lasts. Oil is folded into the sim / board / dominance keys and the legend-rule interchangeability check (a fresh copy's 5 oil vs a spent one's is a real keep decision). THE PUMP ({2}, two oil: +2/+2) IS SEARCHED (USER 2026-11-21: 'For Migloz we should include the power pump mode for sure'): firebreathing_cost {2} / _power 2 / _tough 2 + firebreathing_remove_oil_counters 2, a main-phase ActivatePump (mode 7) with one variant per activation count K = 1..min(oil / 2, mana / 2), never the greedy combat converter (which cannot price the oil); emitted in main 1 and any main 2 the deck opens, and a Migloz cast this main is keyed for the breakpoint re-solve so it can be pumped the same main (a +2/+2 before Garruk, Primal Hunter's -3). Both worlds pay only the activations the oil still covers. THE OTHER TWO MODES ARE IMPLEMENTED AND HEURISTICALLY PRUNED FROM THE SEARCH (USER 2026-11-21: 'The other two can be heuristically pruned.'): '{1}, one oil: vigilance and menace' is ActivatePump mode 8 (until-EOT vigilance; MENACE is inert vs the goldfish, which never blocks), offered pre-combat while Migloz can attack and is not already vigilant (Kaheera grants Beasts vigilance); the root DecisionProvider::OffersOilVigilanceMenace keeps it out of the search, MTG_UNPRUNE=oilgrant restores it. '{3}, three oil: destroy target artifact or enchantment' rides Steelbane Hydra's CounterDestroyArtEnch route with the counter cost in oil (remove_counter_destroy_art_ench_oil 3); every artifact/enchantment is a legal target, ours included, and the root DecisionProvider::CounterDestroyArtEnchTargets never offers the search one of OUR OWN (Utopia Sprawl, Wild Growth, Urza's Incubator here); the goldfish opponent holds none, so the search spends no branch on it. MTG_UNPRUNE=counterdestroy (the same gate as Steelbane Hydra's) restores our own. HUMAN PLAY sees every mode (the pump counts and the vigilance grant as main-phase plan entries, the destroy as a board-click target). Instant-speed timing of all three is collapsed to our main phases (inert vs the passive opponent; the approved Steelbane deferral). Second main: NOT added to DeckUsesSecondMain (USER: unsettled).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "enters_with_oil_counters": 5,
+    "firebreathing_cost": "{2}",
+    "firebreathing_power": 2,
+    "firebreathing_tough": 2,
+    "firebreathing_remove_oil_counters": 2,
+    "vigilance_menace_cost": "{1}",
+    "vigilance_menace_remove_oil": 1,
+    "remove_counter_destroy_art_ench_cost": "{3}",
+    "remove_counter_destroy_art_ench_oil": 3
+   }
   }
  ]
 }

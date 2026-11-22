@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <vector>
 
 struct Decklist;
@@ -177,7 +178,9 @@ enum class UnprunedGate
     EtbFight,        // Hydras: Voracious Hydra's fight-mode targets restored (HydrasProvider::EtbFightTargets
                      // prunes every one: a fight can only damage our Hydra vs the passive opponent)
     CounterDestroy,  // Hydras: Steelbane Hydra's destroy targets restored to every legal artifact/enchantment
-                     // (DecisionProvider::CounterDestroyArtEnchTargets' dominance prune drops our own)
+                     // (HydrasProvider::CounterDestroyArtEnchTargets' dominance prune drops our own); Beasts E:
+                     // also Migloz, Maze Crusher's oil-costed destroy (the root DecisionProvider's heuristic prune
+                     // of our own targets, USER 2026-11-21)
     SurgicalSubset,  // Mill: restore every optional-copy subset for Surgical Extraction
     SurgicalTarget,  // Mill: restore every speculative Surgical target name
     SurgicalCost,    // Mill: restore Surgical's black-mana cast beside the life-paid cast
@@ -217,9 +220,15 @@ enum class UnprunedGate
                      // to the minimal lethal count; USER 2026-11-17)
     AttackChooseLife, // Elder Gargaroth: the "gain N life" mode restored to the searched mode list
                       // (DecisionProvider::AttackChooseOneModes' life-inert fold; USER 2026-11-21)
+    OilGrant,         // Migloz, Maze Crusher: its "{1}, remove an oil counter: vigilance and menace" offered to the
+                      // search (DecisionProvider::OffersOilVigilanceMenace's heuristic prune; USER 2026-11-21).
+                      // (Migloz's destroy reuses CounterDestroy: the same route, the same "own targets" restore.)
     _Count
 };
-static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
+// The gate masks are a std::bitset (widened from a uint64_t on 2026-11-21, Beasts E: OilGrant was the 65th gate).
+constexpr int kUnprunedGateBits = 128;
+using UnprunedGateMask = std::bitset<kUnprunedGateBits>;
+static_assert(static_cast<int>(UnprunedGate::_Count) <= kUnprunedGateBits, "UnprunedGate masks are 128-bit");
 
 // True if `g` should be un-pruned for this run: the global MTG_UNPRUNED opens all gates,
 // else MTG_UNPRUNE=<list> opens the named subset. Same human-play suppression as the no-arg
@@ -234,6 +243,12 @@ std::vector<int> OpponentDrawCandidatesFor(const GameState& s, const CardDefinit
 // DecisionProvider::AttackChooseOneModes' default body with MTG_UNPRUNE passed in (unit-testable): order token,
 // draw, life; drop life when s.deck_life_inert && !s.own_death_live && !unpruned. See the virtual's comment.
 void RestrictAttackChooseOneModesFor(const GameState& s, std::vector<int>& modes, bool unpruned);
+
+// DecisionProvider::CounterDestroyArtEnchTargets' default body with MTG_UNPRUNE passed in (unit-testable): every
+// legal target, except that an OIL-costed source (Migloz, Maze Crusher: remove_counter_destroy_art_ench_oil > 0) is
+// never offered one of our OWN permanents unless `unpruned` (USER 2026-11-21 heuristic prune). See the virtual.
+std::vector<int> RestrictCounterDestroyTargetsFor(const GameState& s, int controller, const Permanent& src,
+                                                  const std::vector<int>& legal, bool unpruned);
 
 // A/B gate for the learned mid-game evaluator (MTG_EVAL_MODEL). Default OFF: even when a deck ships
 // an eval sidecar, the learned plan ranking is used only when this is set, so every existing ground
@@ -251,7 +266,7 @@ bool UseValueModel();
 // matching cards / rituals / dig source), so opening it provably changes nothing -- skip sweeping it.
 // The mask accumulates across all threads/games since SetGateProbe(true). GateName maps enum->name.
 void        SetGateProbe(bool on);
-std::uint64_t QueriedGatesMask();
+UnprunedGateMask QueriedGatesMask();
 const char* GateName(UnprunedGate g);
 // Is the probe armed RIGHT NOW? Read by anything that would otherwise skip a DecisionUnpruned
 // callsite as provably-dead work: the probe measures REACHABILITY, so a skipped query would show

@@ -544,6 +544,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.temp_tough_bonus != b.temp_tough_bonus) { fail(i, "temp_tough_bonus"); }
         if (a.charge_counters != b.charge_counters)   { fail(i, "charge_counters"); }
         if (a.hone_counters != b.hone_counters)       { fail(i, "hone_counters"); }
+        if (a.oil_counters != b.oil_counters)         { fail(i, "oil_counters"); }
         if (a.verse_counters != b.verse_counters)     { fail(i, "verse_counters"); }
         if (a.storage_counters != b.storage_counters) { fail(i, "storage_counters"); }
         if (a.storage_hold_this_turn != b.storage_hold_this_turn) { fail(i, "storage_hold_this_turn"); }

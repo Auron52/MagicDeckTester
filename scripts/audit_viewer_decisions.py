@@ -622,6 +622,14 @@ MANIFEST = {
     # 2026-11-11): the TARGET is a main_phase plan VARIANT (one activation per legal target under human
     # play, `destroy_target` on the action; the Nylea/TargetPump shape).
     "remove_counter_destroy_art_ench_cost": ("main_phase", truthy),
+    # ---- Beasts E (2026-11-21): Migloz, Maze Crusher ----
+    # "{2}, Remove two oil counters: +2/+2" -- routed OUT of the combat converter and INTO a searched main-phase
+    # ActivatePump (mode 7), one plan variant per activation count K (the Resplendent Angel shape). The human picks
+    # among them in the main_phase menu.
+    "firebreathing_remove_oil_counters": ("main_phase", truthy),
+    # "{1}, Remove an oil counter: vigilance and menace" -- ActivatePump mode 8, a main_phase plan entry while it can
+    # attack and is not already vigilant. The SEARCH is not offered it (USER-approved provider prune); human play is.
+    "vigilance_menace_cost": ("main_phase", truthy),
     # Bloodghast "you MAY return this card from your graveyard to the battlefield" (landfall): the
     # existing `revive` decision from the landfall chokepoint, one 0/1 flag per graveyard copy, all
     # preselected (autonomous play resolves YES by a PROVISIONAL dominance).
@@ -1022,6 +1030,9 @@ BOARD_ACTIVATIONS = {
     "tap_tutor_put_cost":                         ("activate",       present,  "tap_tutor_put_cost"),
     "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
     "remove_counter_destroy_art_ench_cost":      ("activate",       truthy,   "remove_counter_destroy_art_ench_cost"),   # Steelbane Hydra
+    # Migloz, Maze Crusher (Beasts E): the oil pump and the oil vigilance grant are ActivatePump board activations.
+    "firebreathing_remove_oil_counters":         ("activate",       truthy,   "firebreathing_cost"),
+    "vigilance_menace_cost":                     ("activate",       truthy,   "vigilance_menace_cost"),
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
     # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
     # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
@@ -1122,6 +1133,9 @@ INERT_PARAMS = {
     "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
     # Maze's End (I4, 2026-11-17).
     "mana_per_other_controlled_subtype": "Baldur's Gate -- the scaled mana ability's X (the other Gates you control); colour and amount are the mana-payment exemption (the Three Tree City shape), no choice",
+    "enters_with_oil_counters": "Migloz, Maze Crusher -- the as-enters oil count (five), automatic; the oil is spent by the three activations, each surfaced on its own",
+    "vigilance_menace_remove_oil": "Migloz, Maze Crusher -- the vigilance grant's oil COST (one counter); the activation rides vigilance_menace_cost -> main_phase",
+    "remove_counter_destroy_art_ench_oil": "Migloz, Maze Crusher -- the destroy's oil COST (three counters); the TARGET rides remove_counter_destroy_art_ench_cost -> target / main_phase",
     "attack_choose_token_power": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_token_toughness": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",
     "attack_choose_token_subtypes": "Elder Gargaroth's token-mode PAYLOAD -- automatic once the MODE is chosen; the mode rides attack_choose_one -> attack_mode",

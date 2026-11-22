@@ -1358,6 +1358,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("remove_counter_destroy_art_ench_cost"))
         p.remove_counter_destroy_art_ench_cost =
             ManaCostFromString(params["remove_counter_destroy_art_ench_cost"].get<std::string>());
+    // Migloz, Maze Crusher (Beasts E) -- see CardParams.
+    p.remove_counter_destroy_art_ench_oil = params.value("remove_counter_destroy_art_ench_oil", 0);
+    p.enters_with_oil_counters            = params.value("enters_with_oil_counters", 0);
+    if (params.contains("vigilance_menace_cost"))
+        p.vigilance_menace_cost = ManaCostFromString(params["vigilance_menace_cost"].get<std::string>());
+    p.vigilance_menace_remove_oil         = params.value("vigilance_menace_remove_oil", 0);
     // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug) -- see CardParams.
     p.attack_count_team_power = params.value("attack_count_team_power", false);
     if (params.contains("tap_token_cost"))
@@ -2446,6 +2452,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.life_threshold_pump_tough = params.value("life_threshold_pump_tough", 0);
     p.combat_damage_each_discards   = params.value("combat_damage_each_discards", 0);
     p.firebreathing_discard         = params.value("firebreathing_discard", false);
+    p.firebreathing_remove_oil_counters = params.value("firebreathing_remove_oil_counters", 0);   // Migloz (Beasts E)
     p.firebreathing_tough           = params.value("firebreathing_tough", 0);
     p.firebreathing_grants_lifelink = params.value("firebreathing_grants_lifelink", false);
     p.etb_token_includes_self       = params.value("etb_token_includes_self", false);

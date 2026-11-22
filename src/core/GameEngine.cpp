@@ -78,6 +78,7 @@ static void CollectBoardState(const GameState& state,
         if (p.spore_counters != 0) { snap.counters.push_back({ "spore", p.spore_counters }); }
         if (p.quest_counters != 0) { snap.counters.push_back({ "quest", p.quest_counters }); }
         if (p.time_counters  != 0) { snap.counters.push_back({ "time",  p.time_counters  }); }   // vanishing
+        if (p.oil_counters != 0)   { snap.counters.push_back({ "oil", p.oil_counters }); }   // Migloz (Beasts E)
 
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns

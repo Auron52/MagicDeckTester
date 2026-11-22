@@ -222,6 +222,12 @@
 // folded below GATED ON NONZERO -- NOT a directional axis: more time counters is a LONGER life (more
 // attacks) but a LATER leave trigger (Marauders' 1 damage), so no direction survives on its own. Also
 // folded into every sim / signature key that carries fade_counters, nonzero-gated.
+// 328 -> 336 (2026-11-21, Beasts E): Permanent gained `oil_counters` (Migloz, Maze Crusher -- "enters with five oil
+// counters", spent as the COST of its pump / vigilance grant / destroy). No padding was left (the int pushed the
+// two InternedNames to the next 8-byte boundary). Classification: a DIRECTIONAL AXIS, DomAxis::OilCounters with
+// MoreDominates -- oil has no sink but those three costs and no upkeep, so more is never worse. It survives
+// cleanup, so it is compared, not refused at the boundary. Also folded NONZERO-gated into BuildSimKey,
+// BoardSignature, FungibilityKey, FoldPhysicalCards, the legend interchangeability check and RouteSig.
 static_assert(sizeof(Permanent) == 336,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1697,6 +1703,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         raw[static_cast<std::size_t>(DomAxis::FadeCounters)]    = p.fade_counters;
         raw[static_cast<std::size_t>(DomAxis::QuestCounters)]   = p.quest_counters;
         raw[static_cast<std::size_t>(DomAxis::HoneCounters)]     = p.hone_counters;
+        raw[static_cast<std::size_t>(DomAxis::OilCounters)]      = p.oil_counters;    // Migloz (0 elsewhere)
         raw[static_cast<std::size_t>(DomAxis::Loyalty)]         = p.loyalty;
         for (const Counter& c : p.counters)
         {

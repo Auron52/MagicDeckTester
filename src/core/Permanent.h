@@ -898,6 +898,17 @@ struct Permanent
                                            // banks the bonus and cashes it on a later equip.
                                            // Same dedicated-int rationale and the same byte-identity
                                            // and sim-key obligations as spore_counters above.
+    int       oil_counters         = 0;    // Oil counters (Migloz, Maze Crusher, Beasts E 2026-11-21;
+                                           // CardParams::enters_with_oil_counters puts them AS IT
+                                           // ENTERS, at the universal enter cascade). Spent ONLY as
+                                           // activation COSTS (CR 602.2b): the searched +2/+2 pump
+                                           // (ActivatePump mode 7), vigilance+menace (mode 8) and the
+                                           // destroy (CounterDestroyArtEnch). FUTURE-DETERMINING (it
+                                           // decides which activations a later turn can pay), so it is
+                                           // folded into every sim / dominance / legend key NONZERO-
+                                           // gated, and listed in ForEachDedicatedCounterField so
+                                           // "each counter" readers and a future PROLIFERATE see it.
+                                           // Inert (never inspected) for every other deck.
     // Brutal Cathar: "exile target creature an opponent controls UNTIL THIS CREATURE LEAVES THE
     // BATTLEFIELD." card.m_number of the exiled card, parked in GameState::exile; 0 = none. It
     // survives transformation (transforming is not leaving -- the Moonrage Brute face keeps it) and

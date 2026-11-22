@@ -213,6 +213,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // creature's hidden power bonus, so without the badge the board's real power is
         // unreadable. The spore/quest precedents are documented the same way.
         if (p.hone_counters)    { cs.push_back({ "hone",      "hone",      p.hone_counters }); }
+        // Oil counters (Migloz, Maze Crusher; Beasts E): the budget all three of its abilities spend.
+        if (p.oil_counters)     { cs.push_back({ "oil",       "oil",       p.oil_counters }); }
         // num = stable per-copy id; is_aura/is_equip + attached_to let the viewer draw an Aura or
         // an attached Equipment overlapping the creature (m_number) it enchants/equips
         // (0 = unattached). Additive display fields (equipment added 2026-08-14 -- attached
@@ -1298,6 +1300,21 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     tag = a.card_name + ": " + who + " +" + std::to_string(pp) + "/+" + std::to_string(pt)
                         + " (discard " + (a.discard_name.empty() ? std::string("a card")
                                                                  : a.discard_name.str()) + ")";
+                }
+                else if (a.gy_exile_mode == 7)
+                {
+                    // Migloz, Maze Crusher (Beasts E): "{2}, Remove two oil counters: It gets +2/+2" x K.
+                    const CardDefinition* pd = CardDatabase::Instance().Lookup(a.card_name);
+                    const int pp = pd ? pd->params.firebreathing_power : 0;
+                    const int pt = pd ? pd->params.firebreathing_tough : 0;
+                    const int po = pd ? pd->params.firebreathing_remove_oil_counters : 0;
+                    tag = a.card_name + ": pump +" + std::to_string(pp * k) + "/+" + std::to_string(pt * k)
+                        + " (remove " + std::to_string(po * k) + " oil counters)";
+                }
+                else if (a.gy_exile_mode == 8)
+                {
+                    // Migloz, Maze Crusher (Beasts E): "{1}, Remove an oil counter: vigilance and menace".
+                    tag = a.card_name + ": gains vigilance and menace until end of turn (remove an oil counter)";
                 }
                 else if (a.gy_exile_mode == 6)
                 {
@@ -6066,7 +6083,8 @@ static void WriteFirebreatheDecisionJson(std::ostream& os, const GameState& s,
                                  pp.team_pump_cost->ToDisplayString() + ": " + who + " you control get +"
                                  + std::to_string(pp.team_pump_power) + "/+" + std::to_string(pp.team_pump_tough));
             }
-            else if (pp.firebreathing_cost.has_value())
+            // Migloz's oil pump is a searched MAIN-PHASE activation (ActivatePump mode 7), never bought here.
+            else if (pp.firebreathing_cost.has_value() && pp.firebreathing_remove_oil_counters <= 0)
             {
                 src.emplace_back(p.card.m_name.str(),
                                  pp.firebreathing_cost->ToDisplayString() + ": this creature gets +"
@@ -10779,6 +10797,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.temp_lifelink     = e.value("temp_lifelink", false);
             p.temp_vigilance    = e.value("temp_vigilance", false);   // End-Raze until-EOT grant (Boars I3a)
             p.hone_counters     = e.value("hone_counters", 0);
+            p.oil_counters      = e.value("oil_counters", 0);   // Migloz (Beasts E)
             // A staged planeswalker's loyalty (Permanent::loyalty is the source of truth; the Loyalty counter
             // mirrors it for the viewer). Only when the fixture names it, so every existing fixture is unchanged.
             if (e.contains("loyalty"))
@@ -12137,12 +12156,12 @@ int main(int argc, char* argv[])
             outhealth::Check(std::cout, "stdout (the per-job result lines)");
             if (gate_probe)
             {
-                const std::uint64_t live = QueriedGatesMask();
+                const UnprunedGateMask live = QueriedGatesMask();
                 std::string live_s, dead_s;
                 for (int i = 0; i < static_cast<int>(UnprunedGate::_Count); ++i)
                 {
                     const char* nm = GateName(static_cast<UnprunedGate>(i));
-                    ((live >> i) & 1u ? live_s : dead_s).append(nm).append(" ");
+                    (live.test(static_cast<std::size_t>(i)) ? live_s : dead_s).append(nm).append(" ");
                 }
                 std::cout << "=== GATE PROBE ===\n  live (sweep these): " << live_s
                           << "\n  dead (skip these):  " << dead_s << "\n" << std::flush;

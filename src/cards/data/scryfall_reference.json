@@ -4971,6 +4971,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Migloz, Maze Crusher": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{G}",
+    "oracle_text": "Migloz enters with five oil counters on it.\n{1}, Remove an oil counter from Migloz: It gains vigilance and menace until end of turn.\n{2}, Remove two oil counters from Migloz: It gets +2/+2 until end of turn.\n{3}, Remove three oil counters from Migloz: Destroy target artifact or enchantment.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Phyrexian Beast"
+  },
   "Militia's Pride": {
     "cmc": 2.0,
     "keywords": [],
