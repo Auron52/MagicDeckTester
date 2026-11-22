@@ -1416,7 +1416,7 @@ TEST_CASE("Sol Ring's {1} keeps Three Tree City for Wanderwine Prophets (MTG_SCA
 // Merfolk (Tidal Warrior, Silvergill Douser, Emperor Mihail II) with Seahunter, Rishadan Dockhand and two Islands in
 // hand. Dockhand first ({U} off the new Island) makes four Merfolk, and the other two Islands feeding City pay
 // Seahunter's {2}{U}{U}. MTG_SCALED_GROWTH_BOUND puts {Island + Seahunter + Dockhand} on the menu; the grower order
-// (option (a) the decider fallback, option (b) the Merfolk Turns rule) makes the apply cast both.
+// (MTG_SCALED_GROWER_DECIDER, the payable-order decider's fallback) makes the apply cast both.
 namespace
 {
 GameState SeahunterDockhandBoard(MerfolkTurnsProvider& provider)
@@ -1445,17 +1445,15 @@ GameState SeahunterDockhandBoard(MerfolkTurnsProvider& provider)
 }
 struct GrowerArms
 {
-    GrowerArms(int bound, int decider, int rule)
+    GrowerArms(int bound, int decider)
     {
         heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = static_cast<std::int8_t>(bound);
         heurarm::t_arm[heurarm::SCALED_GROWER_DECIDER] = static_cast<std::int8_t>(decider);
-        heurarm::t_arm[heurarm::MERFOLK_GROWER_ORDER] = static_cast<std::int8_t>(rule);
     }
     ~GrowerArms()
     {
         heurarm::t_arm[heurarm::SCALED_GROWTH_BOUND] = -1;
         heurarm::t_arm[heurarm::SCALED_GROWER_DECIDER] = -1;
-        heurarm::t_arm[heurarm::MERFOLK_GROWER_ORDER] = -1;
     }
 };
 // {offered, applied}: the menu holds Island + Seahunter + Dockhand, and applying it puts both creatures in play.
@@ -1488,23 +1486,17 @@ std::pair<bool, bool> SeahunterDockhandProbe()
 TEST_CASE("Three Tree City: Dockhand before Seahunter is on the menu and applies (s30000762 T4)")
 {
     {
-        const GrowerArms arms(0, 0, 0);
+        const GrowerArms arms(0, 0);
         CHECK_FALSE(SeahunterDockhandProbe().first);   // the scalar bound prices City at three Merfolk
     }
     {
-        const GrowerArms arms(1, 1, 0);   // option (a): the decider fallback
+        const GrowerArms arms(-1, -1);   // the defaults (both ON)
         const auto [offered, applied] = SeahunterDockhandProbe();
         CHECK(offered);
         CHECK(applied);
     }
     {
-        const GrowerArms arms(1, 0, 1);   // option (b): the Merfolk Turns cast-order rule
-        const auto [offered, applied] = SeahunterDockhandProbe();
-        CHECK(offered);
-        CHECK(applied);
-    }
-    {
-        const GrowerArms arms(1, 0, 0);   // the bound alone moves the hole to the apply
+        const GrowerArms arms(1, 0);   // the bound alone moves the hole to the apply
         const auto [offered, applied] = SeahunterDockhandProbe();
         CHECK(offered);
         MESSAGE("bound alone: applied=" << applied);

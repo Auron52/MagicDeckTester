@@ -1,8 +1,8 @@
 #!/bin/bash
 # ENUM-GAP final held-out A/B (off vs the winner, searched + d0), ONE pooled batch under the box lock, full width.
-# usage: eg_ab3.sh <arm> <binary>
+# usage: eg_ab3.sh <arm> <binary> [outdir=ab_eg3]
 W=/workspaces/MagicDeckTester/.claude/worktrees/agent-a1651726d5b941608
-D=$W/build/scratch/claude_merfolk_gate/ab_eg3
+D=$W/build/scratch/claude_merfolk_gate/${3:-ab_eg3}
 cd $W || exit 1
 mkdir -p $D/logs
 python3 logs/merfolk-gate/eg_manifest3.py $D/manifest.json "$1"
