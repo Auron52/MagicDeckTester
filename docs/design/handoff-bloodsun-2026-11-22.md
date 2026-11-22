@@ -169,3 +169,25 @@ recommendation.
   `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups ./play.sh --no-open` there and verify HTTP 8080.
 - The B12-bis frozen process did not survive a previous turn interruption. Its d5 333-game arm results remain in
   `build/scratch/bloodsun/b12bis/`; d3 is partial. Resume by running missing manifest cells, after viewer setup.
+
+## Codex continuation (2026-11-22, 23:50 UTC)
+- Blood Sun landed on the shared branch at `249db2aa7` via the push queue. The primary checkout was updated to that
+  commit with its dirty user files preserved. The primary viewer is serving `http://localhost:8080/` from PID 673169
+  (`tools/play/server.js`, parent 1), with Blood Sun and its profile available. It writes references into the primary
+  checkout's persistent `references/`; check, commit, and push any new reference promptly. Its log is
+  `logs/play/bloodsun-viewer-2026-11-22.log`. CI Windows run 45081937077 was still building at 23:50 UTC.
+- B12-bis d5 held-out 333-game/arm results are complete. The new Grim list improves loss-penalized win turn by about
+  0.087 (SE 0.033) and uses 68% of ship search units; the row-8 Fastbond variant improves by 0.093 (SE 0.033) at
+  67% units. Go-off OFF has identical win turns in all 333 games and 1% more units than ship. These are frozen pre-rebase
+  binaries and must still pass d3 and unlimited-budget recovery before any adoption decision.
+- B12-bis d3 resumed as a detached pooled batch (supervisor PID 676112, binary PID 676116 at 23:50 UTC), logs and
+  marker in `build/scratch/bloodsun/b12bis/` (`ab.log`, `ab.err`, `glog/`, `d3.done`). Its ship baseline was 333 games,
+  5.5706 average. B14's 8-arm d5/d3 pooled batch is chained after it (watcher PID 676277; marker `b14/b14.done`).
+  A same-run Blood Sun vs Hinata suite cost gate is chained after B14 (watcher PID 677135; `suite-cost.done`). All
+  three use `build/scratch/claude_box.lock`; only one big process runs at a time.
+- `test/regression_cases.sh` is dirty with **provisional** Blood Sun smoke/regression/overnight rows needed for the cost
+  gate. `bash -n` and `suite_gate.py --require 'decks/Blood Sun'` passed. If the 3x-Hinata gate fails, remove these rows;
+  if it passes, size them to the suite budget, run Blood Sun's tier cells, accept ground truth, and commit. The cost
+  watcher uses the worktree's existing Release binary, so avoid replacing it before that measurement.
+- The B12-bis d3 run may take hours. After completion, compare paired turns and recover **every** slower game at d8 b0
+  before recommending a Grim arm to the user. The USER owns the Grim-list adoption except the red-source variant.
