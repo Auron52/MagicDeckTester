@@ -765,25 +765,23 @@ inline bool ScaledLandRouteOn()
     return heurarm::Flag(heurarm::SCALED_LAND_ROUTE, env_on);
 }
 
-// THE MERFOLK TURNS ENUM-GAP (2026-11-21, merfolk-gate doc section 3; TEMPORARY selectors under measurement, all default
-// OFF). s30000762 T4: {Seahunter + Rishadan Dockhand} pays only with Dockhand first (it grows Three Tree City to four
-// Merfolk). MTG_SCALED_GROWTH_BOUND puts the subset on the menu (the scalar bound's land-growth addend); one of the two
-// orders then makes the apply realise it: (a) MTG_SCALED_GROWER_DECIDER, the generic decider fallback (only when the
-// given order does not pay), or (b) MTG_MERFOLK_GROWER_ORDER, the Merfolk Turns cast-order rule (always).
+// THE MERFOLK TURNS ENUM-GAP (2026-11-21, merfolk-gate doc section 5; DEFAULT ON, =0 -> as before). s30000762 T4:
+// {Seahunter + Rishadan Dockhand} pays only with Dockhand first (it grows Three Tree City to four Merfolk).
+// MTG_SCALED_GROWTH_BOUND credits a scaled land's same-turn growth where mana is priced (the enumeration's scalar bound,
+// each emitted selection re-priced with its own growers; the filter rescue's supply pre-gate; the scaled-land route's
+// rest-of-line check, incl. a cast trigger's entrants -- Emperor Mihail II's {1}, s30000034 / s30000075 T5), so the
+// subset reaches the menu; MTG_SCALED_GROWER_DECIDER makes the apply realise it (the payable-order decider's last
+// fallback, only when the given order does not pay). The USER's ruling (2026-11-21) chose between this generic decider
+// and a Merfolk Turns cast-order rule on measurement; the rule was deleted (gate slice: more new APPLY-DROP / ORACLE-GAP).
 inline bool ScaledGrowthBoundOn()
 {
-    static const bool env_on = EnvOn("MTG_SCALED_GROWTH_BOUND", false);
+    static const bool env_on = EnvOn("MTG_SCALED_GROWTH_BOUND", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SCALED_GROWTH_BOUND, env_on);
 }
 inline bool ScaledGrowerDeciderOn()
 {
-    static const bool env_on = EnvOn("MTG_SCALED_GROWER_DECIDER", false);
+    static const bool env_on = EnvOn("MTG_SCALED_GROWER_DECIDER", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SCALED_GROWER_DECIDER, env_on);
-}
-inline bool MerfolkGrowerOrderOn()
-{
-    static const bool env_on = EnvOn("MTG_MERFOLK_GROWER_ORDER", false);
-    return heurarm::Flag(heurarm::MERFOLK_GROWER_ORDER, env_on);
 }
 
 // MTG_PAY_EXCESS_RELEASE (2026-11-11, item 5d of the mana-clean chain; DEFAULT ON, =0 -> as before): release a source

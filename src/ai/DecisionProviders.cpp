@@ -971,12 +971,6 @@ uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int co
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
-void MerfolkTurnsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
-                                            std::vector<int>& order) const
-{
-    if (MerfolkGrowerOrderOn()) { (void)ScaledLandGrowerOrder(s, actions, order); }
-}
-
 uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                        const CardDefinition& entering) const
 {
