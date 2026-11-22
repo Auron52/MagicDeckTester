@@ -16134,14 +16134,8 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
 // From the post-combat main on only the ready pings remain. 0 on any other player's turn. In 2HG every hit lands
 // on the opposing team's shared life (players[opponent]).
 inline bool TapPingerReady(const GameState& state, const Permanent& q, int active, const CardDefinition** out);   // defined below
-inline bool OppAnticipateOn()   // TEMPORARY MEASUREMENT ARM (cb-bbgap; removed before landing)
-{
-    static const bool v = EnvOn("MTG_OPP_ANTICIPATE", true);
-    return heurarm::Flag(heurarm::OPP_ANTICIPATE, v);
-}
 inline int OpponentVisibleDamageThisTurn(const GameState& s, int attacker, int exclude_number = -1)
 {
-    if (!OppAnticipateOn()) { return 0; }
     if (s.active_player_index != attacker) { return 0; }
     const bool combat_ahead = s.phase == Phase::PreCombatMain && !s.combat_damage_prevented_this_turn;
     std::optional<HasteSources> hs;
@@ -40553,31 +40547,6 @@ inline void BrowbeatFlipPrePings(GameState& state, int controller, int amount, b
     const int life        = state.players[opp].life;
     const int anticipated = OpponentAnticipatedLife(state, static_cast<int>(opp));
     const int threshold   = BrowbeatTakeThreshold(amount, holding);
-    if (!OppAnticipateOn() && life > threshold)   // TEMPORARY: the pre-2026-11-22 pre-ping half, verbatim
-    {
-        const int need = life - threshold;
-        std::vector<std::pair<int, int>> ready;
-        for (const Permanent& q : state.battlefield)
-        {
-            const CardDefinition* d = nullptr;
-            if (TapPingerReady(state, q, controller, &d) && d->params.tap_ping_damage == 1)
-            { ready.emplace_back(CombatPowerOf(q, state), q.card.m_number); }
-        }
-        if (static_cast<int>(ready.size()) < need) { return; }
-        std::stable_sort(ready.begin(), ready.end(),
-                         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first < b.first; });
-        for (int k = 0; k < need; ++k)
-        {
-            for (std::size_t i = 0; i < state.battlefield.size(); ++i)
-            {
-                if (state.battlefield[i].card.m_number != ready[static_cast<std::size_t>(k)].second) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-                if (d != nullptr) { ResolveTapPing(state, controller, i, *d, /*ask_human=*/false); }
-                break;
-            }
-        }
-        return;
-    }
     if (anticipated > threshold) { return; }   // base TAKE: no pre-ping can flip it (see above)
     if (state.dmg_events_armed || state.deck_tracks_noncombat_damage) { return; }
     const int need = threshold + 1 - anticipated;
@@ -53331,8 +53300,7 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
     // were separate candidates; with the fan open (no width cap, USER 2026-11-22) each would be its own searched twin.
     // Only the alternatives fold (candidate 0 is untouched; the first index-order representative of a name pattern
     // stays). Not for a reorder (the Ponder axes index that list; it is out of this change's scope).
-    const bool fold_names = (kind == LookKind::Scry || kind == LookKind::Surveil)
-                         && !heurarm::Flag(heurarm::SCRY_LEGACY_WIDTH2, false);   // MEASUREMENT ONLY
+    const bool fold_names = (kind == LookKind::Scry || kind == LookKind::Surveil);
     std::vector<std::vector<const void*>> seen_names;
     auto name_key = [&](const TopDisposition& d) -> std::vector<const void*>
     {

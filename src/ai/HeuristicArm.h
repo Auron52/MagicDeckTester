@@ -1118,10 +1118,8 @@ enum Slot : int
     BLOODSUN_GRIM_V2_LAND_CUT,// MTG_BLOODSUN_GRIM_V2_LAND_CUT  Fastbond alone when the surplus has a big land. Default OFF
     BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
     BLOODSUN_BUCKET_DISCARD,    // MTG_BLOODSUN_BUCKET_DISCARD  B14 USER cleanup buckets. Default OFF pending A/B
-    OPP_ANTICIPATE,           // MTG_OPP_ANTICIPATE  TEMPORARY MEASUREMENT ARM (cb-bbgap, never lands): =0 restores the pre-2026-11-22 punisher policies (bare life, the old pre-ping flip half and its emission gate)
     BURN_SCRY_PICK,           // MTG_BURN_SCRY_PICK   Creature Burn / Midrange Burn: candidate 0 of Magma Jet's searched scry is the burnscry rule (impact + castability: lands vs the hand's land goal counting lands in HAND, cheap burn kept, a crowded slot bottomed; USER 2026-11-22) instead of the generic "keep nonlands, a land below two in play". Not a prune. Default ON; =0 -> the generic pick
-    BURN_SCRY_FIRM,           // MTG_BURN_SCRY_FIRM   ...its FIRM verdicts (ScryVerdict, a lossy prune of the fan): a one-mana 3-damage burn spell always stays on top; a land two beyond the land goal (no Figure of Destiny) always goes to the bottom. Default ON; =0 -> no verdict
-    SCRY_LEGACY_WIDTH2,       // MTG_SCRY_LEGACY_WIDTH2  MEASUREMENT ONLY (the 2026-11-22 width-removal A/B; deleted in the commit after): the deleted MTG_SCRY_WIDTH=2 cap at the three scry fans and no same-name fold, i.e. the pre-change engine
+    BURN_SCRY_FIRM,           // MTG_BURN_SCRY_FIRM   ...its FIRM verdicts (ScryVerdict, a lossy prune of the fan): a one-mana 3-damage burn spell always stays on top; a land two beyond the land goal (no Figure of Destiny) always goes to the bottom. Default OFF after the 2026-11-22 Creature Burn A/B: two slower seeds (251, 436) persisted at d8 b0. =1 enables the experimental verdicts
     BURN_SCRY_ORDER,          // MTG_BURN_SCRY_ORDER  ...its ORDER prune (ScryKeptOrder, lossy): a kept set is offered in the rule's draw order only (needed land first, castable spells, recurring damage, cheaper first). Default ON; =0 -> every order searched and the pick keeps look order
     COUNT
 };
@@ -2185,10 +2183,8 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_V2_LAND_CUT",
         "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
         "MTG_BLOODSUN_BUCKET_DISCARD",
-        "MTG_OPP_ANTICIPATE",
         "MTG_BURN_SCRY_PICK",
         "MTG_BURN_SCRY_FIRM",
-        "MTG_SCRY_LEGACY_WIDTH2",
         "MTG_BURN_SCRY_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

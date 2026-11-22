@@ -2524,7 +2524,7 @@ void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::ve
 namespace burnscry
 {
 static bool PickOn()  { static const bool v = EnvOn("MTG_BURN_SCRY_PICK", true);  return heurarm::Flag(heurarm::BURN_SCRY_PICK, v); }
-static bool FirmOn()  { static const bool v = EnvOn("MTG_BURN_SCRY_FIRM", true);  return heurarm::Flag(heurarm::BURN_SCRY_FIRM, v); }
+static bool FirmOn()  { static const bool v = EnvOn("MTG_BURN_SCRY_FIRM", false); return heurarm::Flag(heurarm::BURN_SCRY_FIRM, v); }
 static bool OrderOn() { static const bool v = EnvOn("MTG_BURN_SCRY_ORDER", true); return heurarm::Flag(heurarm::BURN_SCRY_ORDER, v); }
 
 struct Ctx

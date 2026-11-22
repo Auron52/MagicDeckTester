@@ -30178,8 +30178,6 @@ static int LandDropTriggeredScry(const GameState& state, const CardDefinition& l
 // MTG_CAST_SCRY_SEARCH (default ON; per-job lever heurarm::CAST_SCRY_SEARCH): a DirectDamage spell's own scry
 // (Magma Jet's cast_scry) is a SEARCHED axis -- see the CollectActions post-pass that twins each cast per
 // alternative disposition. =0 -> the provider's single in-window pick, byte-identical to before.
-// MEASUREMENT ONLY (MTG_SCRY_LEGACY_WIDTH2): the deleted width-2 cap, for the 2026-11-22 A/B's baseline arm.
-static std::size_t ScryLegacyCap(std::size_t k) { return heurarm::Flag(heurarm::SCRY_LEGACY_WIDTH2, false) ? std::min<std::size_t>(k, 2) : k; }
 static bool CastScrySearchOn()
 {
     static const bool s_on = EnvOn("MTG_CAST_SCRY_SEARCH", true);
@@ -46493,7 +46491,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     const int look = std::min(def.params.cast_scry, static_cast<int>(ap.library.size()));
                     const std::size_t disp = ScryLookDispositionCount(look);   // ordered subsets kept on top
-                    scry_alts = std::min(126, static_cast<int>(ScryLegacyCap(disp)) - 1);
+                    scry_alts = std::min(126, static_cast<int>(disp) - 1);
                 }
                 for (const auto& t : esc)
                 {
@@ -56176,10 +56174,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         auto pinger_live = [&]() -> bool {
             if (pinger >= 0) { return pinger != 0; }
             pinger = 0;
-            if (!OppAnticipateOn() ? false : state.OptPingsLive() > 0) { pinger = 1; return true; }
-            const bool old_gate = !OppAnticipateOn();   // TEMPORARY measurement arm: the old any-pinger gate
-            auto response_pinger = [old_gate](const CardDefinition* d)
-            { return d != nullptr && d->params.tap_ping_damage > 0 && (old_gate || d->params.cast_color_untap_self >= 0); };
+            if (state.OptPingsLive() > 0) { pinger = 1; return true; }
+            auto response_pinger = [](const CardDefinition* d)
+            { return d != nullptr && d->params.tap_ping_damage > 0 && d->params.cast_color_untap_self >= 0; };
             for (const Permanent& q : state.battlefield)
             {
                 if (q.controller_index != me || q.def_absent) { continue; }
@@ -57151,7 +57148,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (d == nullptr || d->tmpl != CardTemplate::DirectDamage || d->params.cast_scry <= 0 || a.scry_pin >= 0)
             { scry_twins.push_back(std::move(a)); continue; }
             const int look = std::min(d->params.cast_scry, static_cast<int>(ap.library.size()));
-            const int alts = std::min(126, static_cast<int>(ScryLegacyCap(ScryLookDispositionCount(look))) - 1);
+            const int alts = std::min(126, static_cast<int>(ScryLookDispositionCount(look)) - 1);
             const Action base = a;
             scry_twins.push_back(std::move(a));
             for (int k = 1; k <= alts; ++k)
@@ -99218,7 +99215,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 : TopDispositionCandidates(state, looked,
                                            surveil ? LookKind::Surveil : LookKind::Scry).size();
             // NO WIDTH CAP (USER 2026-11-22): every candidate is a variant; the provider prunes the candidate set.
-            for (std::size_t c = 1; c < (chain ? k : ScryLegacyCap(k)); ++c)
+            for (std::size_t c = 1; c < k; ++c)
             {
                 TurnSolver::Plan v = p;
                 v.scry_choice = static_cast<int>(c);

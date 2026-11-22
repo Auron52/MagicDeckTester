@@ -1,5 +1,27 @@
 # Creature Burn analyze-deck: handoff to Codex (2026-11-22 ~10:50 UTC)
 
+## Codex continuation (2026-11-22 ~13:30 UTC)
+
+The integrated source is committed through `e001eca40`. Release build, 3917 unit tests, 610 scenarios,
+coverage, suite gate, and the 30-reference replay passed (0 shortfalls). The first landed batch's Windows CI
+run 45012242724 succeeded. The pooled 28-job A/B completed with rc 0; results and `DONE` are in
+`build/scratch/cb-integrated/ab-combined/`. The temporary `MTG_OPP_ANTICIPATE` and
+`MTG_SCRY_LEGACY_WIDTH2` arms are removed in the current working tree. A full Release rebuild plus unit and
+scenarios is running under the heavy lock as PID 119977 (`cleanup-build.log`, `cleanup-unit.log`,
+`cleanup-scenarios.log`, `CLEANUP_DONE`). The corrected depth-8 scry replay is staged at
+`build/scratch/cb-integrated/ab-deep/manifest.json` and must run after that build. An earlier 4-game replay is
+INVALID because its one-game jobs omitted the game-index offset in `seed`; preserved under `ab-deep-invalid/`.
+The Stage 6 report is drafted in the ledger, with the deep checks, landing and generated 6a block still pending.
+No user decision is pending. The earliest next push-queue join remains 14:23 UTC.
+
+**15:20 UTC update:** The clean build, 3917 unit tests, and 610 scenarios passed. The corrected deep replay found
+PFO's firm verdict genuinely lossy: Creature Burn seeds 251 and 436 stayed T6 at d8 b0. The follow-up 500-game
+per-deck PO arm (pick + kept order, firm OFF; `build/scratch/cb-integrated/ab-po/`) is -11 net turns for Creature
+Burn and -5 for Midrange Burn against the old baseline. Its two slower Creature Burn seeds (8, 115) both recovered
+T5 at d8 b0 (`ab-po-deep/`). `MTG_BURN_SCRY_FIRM` is now default OFF in the working tree; a final full build,
+unit tests, and scenarios are running under the lock as PID 146902 (`final-build.log`, `final-unit.log`, `final-scenarios.log`,
+`FINAL_DONE`). Joined the push queue at 14:23 as number 3, now number 2; `queue-wait.log` and `QUEUE_READY` track it.
+
 ## Codex continuation (2026-11-22 11:41 UTC)
 
 The three WIP branches are now cherry-picked as one linear series on the primary branch. The old worktree build
