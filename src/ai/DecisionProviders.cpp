@@ -73739,7 +73739,7 @@ static std::vector<std::string> BloodSunGrimV2Candidates(const GameState& s, int
         if (d == nullptr) { continue; }
         const bool sun = d->params.lands_lose_nonmana_abilities && sun_missing;
         const bool rev = d->params.tutor_up_to_x && rev_missing;
-        const bool red = (nm == "Rakdos Carnarium" || nm == "City of Brass") && sun_hand
+        const bool red = (nm == "Rakdos Carnarium" || nm == "City of Brass") && sun_hand && !sun_bf
             && !red_bf && !red_hand && !BloodSunGrimV2RedOff()
             && (!BloodSunGrimV2RedCond() || rev_hand);
         if (sun || rev || red) { out.push_back(nm); continue; }

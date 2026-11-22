@@ -224,6 +224,10 @@ TEST_CASE("Blood Sun Grim -> Time Warp counts a land drop still available from h
     }
     s.players[0].lands_played_this_turn = s.players[0].LandDropsAvailable();
     CHECK_FALSE(BloodSunGrimTimeWarpCastable(s, 0, tw));
+    GameState lotus = BasePf(7, 20);
+    lotus.players[0].hand.push_back(CardPf("Grim Tutor", 46));
+    lotus.players[0].hand.push_back(CardPf("Lotus Vale", 47));
+    CHECK(BloodSunGrimTimeWarpCastable(lotus, 0, tw));   // the land supplies both blue pips
 }
 
 TEST_CASE("Blood Sun B12-bis: one productive Lotus, otherwise one Ruins")
@@ -297,6 +301,11 @@ TEST_CASE("Blood Sun B12-bis: red-source arms and only-missing arm")
     CHECK_FALSE(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));
     heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_OFF] = -1;
     heurarm::t_arm[heurarm::BLOODSUN_GRIM_V2_RED_COND] = -1;
+    s = BasePf(3, 20);
+    s.players[0].hand.push_back(CardPf("Blood Sun", 44));
+    s.players[0].hand.push_back(CardPf("Grim Tutor", 45));
+    s.players[0].library.push_back(CardPf("City of Brass", 505));
+    CHECK_FALSE(HasPf(ProvPf().TutorCandidates(s, 0, gp), "City of Brass"));   // Sun already out
     s = BasePf(3, 20);   // Sun out, Revelation missing: without ONLY_MISSING, the one-land row also fires
     s.players[0].hand.push_back(CardPf("Grim Tutor", 43));
     s.players[0].library.push_back(CardPf("Diabolic Revelation", 503));
