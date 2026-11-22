@@ -1,19 +1,19 @@
 {
  "entries": [
   {
-   "branch": "phase-1-2-deck-analyzer",
-   "head_since": "2026-11-22T17:02:19Z",
-   "host": "a7c2d36c718e",
-   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
-   "joined": "2026-11-22T16:18:05Z",
-   "note": "Creature Burn integrated rules/search batch; local cleanup build and validation finishing"
-  },
-  {
    "branch": "bloodsun-analysis",
+   "head_since": "2026-11-22T17:04:23Z",
    "host": "8854e545ddab",
    "id": "8854e545ddab:bloodsun-analysis",
    "joined": "2026-11-22T16:24:50Z",
    "note": "Blood Sun integration, GT accepted; held-out Grim comparison running"
+  },
+  {
+   "branch": "phase-1-2-deck-analyzer",
+   "host": "a7c2d36c718e",
+   "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
+   "joined": "2026-11-22T17:04:23Z",
+   "note": "Creature Burn integrated rules/search batch; local cleanup build and validation finishing"
   }
  ]
 }
