@@ -14,7 +14,7 @@ Prior root-cause notes: /workspaces/MagicDeckTester/logs/hinata-gi548/handoff.md
   build/scratch/claude_prepayc/regr.log. Moved (all digest-only except one): hinata smoke d3/d5, hinata regr d5 s2002/s3003,
   hinata2hg smoke d5, hinata2hg regr d5 s2002 5.4133 -> 5.4000 (faster), edf smoke d0, niv regr d0/d5 s2002/d5 s3003,
   niv2hg regr d5 s2002. Tier audit: searched slower=0 (smoke 0 faster, regr 1 faster), d0 slower=0.
-- Step 2 RUNNING: A/B batch build/scratch/claude_prepayc/ab1/ (run.sh, PID 1005245, waits on box lock; status file
+- Step 2 RUNNING (first launch failed: flag was not a per-job lever; fixed in 26d1a31e8 = heurarm slot PREPAY_FLOAT_C_PHYS; run.sh now rebuilds -> mtg.fix2 first): A/B batch build/scratch/claude_prepayc/ab1/ (run.sh, PID 1078627, waits on box lock; status file
   `status`; DONE marker `DONE` holds rc; out ab.out/ab.err; per-job .wins/.units in ab1/wins). Binary mtg.fix (=628fcc728).
   Shapes (seed 81000, held out): hinata d3b10/d5b30/2hg-d5b30 x2000, hinata d0 x5000; niv d3b10/d5b20/2hg-d5b20 x2000,
   niv d0 x5000; edf d3b10/d5b20 x2000, edf d0 x5000. Jobs `<deck>_<shape>__on|off`.
