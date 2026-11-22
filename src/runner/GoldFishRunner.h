@@ -167,6 +167,9 @@ public:
     static bool DeckTouchesOpponentZones(const Decklist& deck);
     // Tasha's Hideous Laughter reads mana values from a real opposing deck.
     static bool DeckMayLockOpponent(const Decklist& deck);
+    // The reachable-lock certificate's precondition (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH): no card of the
+    // deck can touch the opponent's hand or library, so its only route to a free turn is stripping every land.
+    static bool DeckLockNeedsLandStrip(const Decklist& deck);
     static bool DeckUsesDiverseOpponentPool(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto

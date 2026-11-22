@@ -253,6 +253,8 @@ static void NoteOwnDeath(const GameState& state)
 void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
 {
     const int at = static_cast<int>(from);
+    // MTG_FREE_TURN_REACH_AUDIT: the opponent's hand as OUR turn starts (empty unless the audit is on; no behaviour).
+    std::vector<int> reach_hand_at_start;
     if (from == ResumeAt::NewTurn)
     {
         // On the draw, their first turn precedes ours. They skip that draw,
@@ -262,6 +264,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
             ResolvePassiveOpponentLandTurn(state);
             state.opponent_searched_library_this_turn = false;
         }
+        reach_hand_at_start = freeturn::ReachAuditHandAtTurnStart(state);   // after the opponent's turn-0 drop
         AIEngine::LandDrawCensusBeginTurn();   // MTG_LANDDRAW_CENSUS (diagnostic only; no-op unless set)
         // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
         // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
@@ -387,7 +390,14 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // FREE TURNS (MTG_FREE_TURNS; core/FreeTurns.h): the opponent's regular turn ended -- if it ended LOCKED,
     // our next turn keeps the round (pending_free_turn, consumed by AdvanceTurnCounter). Lockstep twin:
     // SimulateEndAndStartNextTurn. A no-op with the flag off.
-    if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); freeturn::NoteOpponentTurnEnd(state); }
+    freeturn::ReachAuditHandAtTurnEnd(state, reach_hand_at_start);   // MTG_FREE_TURN_REACH_AUDIT (no behaviour)
+    if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
+    {
+        const int reach_audit = freeturn::ReachAuditBefore(state);   // MTG_FREE_TURN_REACH_AUDIT (no behaviour)
+        opponent_turn();
+        freeturn::NoteOpponentTurnEnd(state);
+        freeturn::ReachAuditAfter(state, reach_audit);
+    }
     // Heap Gate's last-chance Treasure (Maze's End P5, MTG_MAZE_HEAP_STRICT; a no-op unless the lever is on): the
     // last point before our untap step, after every off-main activation. Rollout twin, same position.
     PerformLastChanceTreasure(state);

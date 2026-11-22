@@ -728,6 +728,30 @@ bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
     return locks(deck.mainboard) || (DeckWishesFromSideboard(deck) && locks(deck.sideboard));
 }
 
+// THE REACHABLE-LOCK CERTIFICATE'S PRECONDITION (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH; fourth pass). The
+// certificate reads the opponent's HAND at a search node and trusts that the rest of our turn leaves it alone (only
+// its own draws append to it). That holds unless the deck holds a card that reaches the opponent's hand or library:
+//   Worldfire (exile_all_permanents_hands_graveyards: exiles the hand), Sire of Insanity (endstep_each_player_discards_hand,
+//   in the trait or not -- it discards at every end step), annihilator (a mass lock card; never certified), and every
+//   DeckTouchesOpponentZones card (mill, forced draw, the opponent-target loot that discards from its hand). Main deck,
+//   plus the sideboard a main-deck wish can fetch. MTG_FREE_TURN_REACH_AUDIT checks both halves in play.
+bool GoldFishRunner::DeckLockNeedsLandStrip(const Decklist& deck)
+{
+    if (DeckTouchesOpponentZones(deck)) { return false; }
+    auto touches = [](const std::vector<Card>& zone) {
+        for (const Card& c : zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (def == nullptr) { return true; }   // unknown card: no claim
+            const CardParams& p = def->params;
+            if (p.exile_all_permanents_hands_graveyards || p.endstep_each_player_discards_hand || p.annihilator > 0)
+            { return true; }
+        }
+        return false;
+    };
+    return !touches(deck.mainboard) && !(DeckWishesFromSideboard(deck) && touches(deck.sideboard));
+}
+
 bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)
 {
     for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
@@ -1422,9 +1446,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         return false;
     }();
     // FREE TURNS (MTG_FREE_TURNS): a deck that can strip the opponent's lands or hand may earn a free turn, so
-    // its next turn may share this round -- the turn-edge prunes stand down for it (NextTurnMayShareRound),
+    // its next turn may share this round -- the turn-edge prunes stand down for it (freeturn::NextTurnMayShareRound),
     // exactly as for an extra-turn deck. FALSE for every deck while the flag is off (byte-identical).
     state.deck_has_free_turn = FreeTurnsOn() && DeckMayLockOpponent(deck);
+    state.deck_free_turn_hand_intact = state.deck_has_free_turn && DeckLockNeedsLandStrip(deck);
     state.deck_has_prophets = [&deck]{
         for (const Card& c : deck.mainboard)
         {
@@ -2369,7 +2394,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
     // FREE TURNS (MTG_FREE_TURNS only): the screw / flood / bounceland hurdles on the opponent's opening hand(s),
     // so mana screw alone cannot lock the opponent (core/FreeTurns.h). A no-op with the flag off, except that
-    // MTG_OPP_BOUNCE_OPENING (default off) applies the bounceland opening rule in every game.
+    // MTG_OPP_BOUNCE_OPENING (default ON) applies the bounceland opening rule in every game.
     freeturn::ApplyOpeningHurdles(state);
 
     DealWishPool(state, deck);

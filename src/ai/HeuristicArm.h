@@ -1073,10 +1073,12 @@ enum Slot : int
     FIVECOLOUR_RULE6_SEES_STEPS, // MTG_FIVECOLOUR_RULE6_SEES_STEPS  Five Colour RULE 6's "is the untapped land's mana spendable this turn" test also sees, as an added use: Deathrite fuel from the cracked fetch, a colour-exact pool (multicolour lands and domain dorks no longer wild), domain growth from a coloured permanent cast first, a Greaves-hasted mana creature cast this turn, and a bigger spell replacing a cheaper one (best total mana value, not card count). Width 1 (one target). Only ever ADDS untapped preference. Default ON (USER 2026-11-21 "Rule6 looks good to me."); =0 -> the coarse RULE 6 test
     S9_MANA_ABILITY_SKIP,     // MTG_S9_MANA_ABILITY_SKIP  site 9 (post-entry re-plan, and its after-deferred twin) is NOT opened by a creature sac outlet whose activation is a MANA ability (sac_outlet_add_mana_amount > 0: Skirk Prospector "Sacrifice a Goblin: Add {R}"). USER 2026-11-21: "the Skirk Prospector ability shouldn't be messing us up in terms of cost because it is a mana ability and should not be part of the search." A pure mana ability (the enumerator's MTG_SAC_OUTLET_PAY suppression predicate: payer live, !SacOutletEatHasValue) is keyed as its own kind and a NEW one opens site 9 only where its mana can buy something the fodder-free pool cannot (S9SacManaDemand: hand's summed flat cost not payable, an X card, or a mana-priced activation live); where a death pays (Rundvelt's impulse, Pashalik) it keys site 9 as before. Sound fold: ON opens a strict subset of =0's sites. The r1 form (skip every mana outlet) lost Goblins 2HG gi242/79/200 at d8 b0. Default ON; =0 -> the outlet keys site 9 like any activation
     CB_BROWBEAT_M2_RESTRICT,  // MTG_CB_BROWBEAT_M2_RESTRICT  Creature Burn: Browbeat no longer opens a FULL searched post-combat main on EVERY turn (GoldFishRunner::DeckUsesSecondMain, which reads THIS slot too -- one half alone deletes the main-2 Browbeat); CreatureBurnProvider::RestrictedSecondMainLive opens the post-combat main (full menu) only on turns a Browbeat is in hand post-combat and castable there. Designed as an identity fold, MEASURED NOT ONE 2026-11-21 (net +9 / +22 turns at d3 b10 / d5 b20; d5 b0 win turns differ; STATUS at the definition, DecisionProviders.cpp). Default OFF (= the every-turn main 2, byte-identical to before); =1 -> the per-turn gate (A/B hatch)
-    FREE_TURNS,               // MTG_FREE_TURNS            the opponent-lockdown free-turn rule (core/FreeTurns.h). Default OFF; per job so ONE pooled batch carries the OFF arm
+    FREE_TURNS,               // MTG_FREE_TURNS            the opponent-lockdown free-turn rule (core/FreeTurns.h). Default ON (USER design, 2026-11-22); per job so ONE pooled batch carries the OFF arm
     FREE_TURN_SIRE,           // MTG_FREE_TURN_SIRE        Sire of Insanity is in the free-turn lock trait (GoldFishRunner::DeckMayLockOpponent). Default ON; =0 -> Sire out
     FREE_TURN_SIRE_FAIR,      // MTG_FREE_TURN_SIRE_FAIR   Sire's lock is vetoed when the discarded hand held a creature the opponent could have cast. Default OFF
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  an annihilator wipe is vetoed when castable nonland permanents would have kept a permanent. Default OFF
+    FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
+    OPP_SPAWN_DRAW_T1,        // MTG_OPP_SPAWN_DRAW_T1     the spawn land requirement counts a land the opponent holds at our first untap on the draw. Default OFF (fidelity lever, measured only)
     COUNT
 };
 
@@ -2098,6 +2100,8 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_SIRE",
         "MTG_FREE_TURN_SIRE_FAIR",
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
+        "MTG_FREE_TURN_REACH",
+        "MTG_OPP_SPAWN_DRAW_T1",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

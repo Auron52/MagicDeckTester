@@ -1,6 +1,6 @@
 #pragma once
 // OPPONENT-LOCKDOWN FREE TURNS (USER proposal + rulings 2026-11-21; docs/design/opponent-lockdown-free-turns.md).
-// MTG_FREE_TURNS (DEFAULT OFF) arms two things, both defined here so the two worlds and the deal read ONE
+// MTG_FREE_TURNS (DEFAULT ON since 2026-11-22) arms two things, both defined here so the two worlds and the deal read ONE
 // definition:
 //
 //   1. THE LOCK CHECK (LockHolds / NoteOpponentTurnEnd), at the END of each passive-opponent regular turn,
@@ -44,6 +44,8 @@
 #include "../ai/EngineFlags.h"
 #include "../cards/CardDatabase.h"
 #include <array>
+#include <atomic>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -83,9 +85,27 @@ inline bool OpponentControlsLand(const GameState& state)
 // Would a scheduled spawn appear now? Read by both worlds' spawn sites (GameEngine::UntapStep, TurnSolver's
 // SimulateEndAndStartNextTurn; lockstep) and by the lock. Nothing changes the opponent's lands between the end of
 // its turn and our untap, so the lock's reading and the spawn site's agree.
+// MTG_OPP_SPAWN_DRAW_T1 (DEFAULT OFF; a fidelity lever, measured, not adopted): on the draw the opponent has taken a
+// turn before our first untap, so a real opponent would control the land it played. Under the requirement the
+// passive opponent's first land can still be missing then (fourth pass, doc (e)), which loses the turn-1 spawn on
+// the draw too. =1: at our first regular untap on the draw (RawRound 1) a head holding a card playable as a land
+// counts as controlling one.
+inline bool OppSpawnDrawT1On()
+{
+    static const bool on = EnvOn("MTG_OPP_SPAWN_DRAW_T1");   // DEFAULT OFF; =1 counts the on-the-draw T1 land
+    return heurarm::Flag(heurarm::OPP_SPAWN_DRAW_T1, on);
+}
+inline bool HeadHoldsPlayableLand(const std::vector<Card>& hand)
+{
+    for (const Card& c : hand) { if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    return false;
+}
 inline bool SpawnMayAppear(const GameState& state)
 {
-    return !SpawnNeedsLand(state) || OpponentControlsLand(state);
+    if (!SpawnNeedsLand(state) || OpponentControlsLand(state)) { return true; }
+    return OppSpawnDrawT1On() && !state.on_the_play && state.RawRound() == 1
+        && (HeadHoldsPlayableLand(state.players[1].hand)
+            || (opponentdeck::HasSecondHead(state) && HeadHoldsPlayableLand(state.opponent2_hand)));
 }
 
 // ---- the lock --------------------------------------------------------------------------------------------
@@ -190,6 +210,139 @@ inline bool LandStaysAlone(const CardDefinition* def)
     const CardDefinition* face = LandFaceDefOf(def);
     if (face == nullptr) { return false; }
     return !face->params.etb_bounce_land && face->params.etb_replace_sacrifice_land_subtype.empty();
+}
+
+// ---- the round + 1 stand-down, narrowed to a REACHABLE lock (MTG_FREE_TURN_REACH) -------------------------------
+//
+// A lock-trait deck's next turn may share this round (a free turn), so the turn-edge prunes that assume "the next turn
+// is round + 1" stand down for it (NextTurnMayShareRound below; TurnSolver's edge folds, edge tail elision, winless
+// certificate, FSL edge no-reach, go-off dominance). Standing down where NO free turn can follow is wasted search:
+// with the one-land removals in the trait (USER 2b) Sea Creatures paid +26% search units, Prevent Damage and Landfall
+// Elementals more, for zero free turns. MTG_FREE_TURN_REACH (DEFAULT ON; =0 stands down for every node of a trait
+// deck, as before) stands down only where the lock is REACHABLE from the node.
+//
+// THE CERTIFICATE (sound under the engine's opponent model; checked by MTG_FREE_TURN_REACH_AUDIT, below). It applies
+// only to a deck whose cards cannot touch the opponent's hand or library (GameState::deck_free_turn_hand_intact,
+// GoldFishRunner::DeckLockNeedsLandStrip: no Worldfire, no Sire of Insanity, no annihilator, no opponent-target loot,
+// no mill / forced draw), i.e. the decks whose only lock cards are single-target land removals. For those the
+// opponent's hand changes only by its own draws (appended at the RIGHT end), its land drop and its cleanup. A head
+// holding, in hand,
+//   (a) a "sure land": a real land (front face) that stays alone (not a Karoo, not Lake of the Dead) and is not a
+//       fetchland, with no fetchland to its LEFT -- the drop policy (opponentdeck::OpponentLandDropIndex) takes the
+//       leftmost non-wasted real land, and every real non-fetch land it could take instead leaves a land behind
+//       (a Karoo is taken only with another land in play and keeps itself; a Lake only with a Swamp, which it
+//       replaces; a legendary copy is "wasted" only while its twin is in play) -- and
+//   (b) a plain nonland (not an MDFC; the flood hurdle's placeholder counts, as in CountHandSides),
+// ends its coming turn controlling a land AND holding a nonland, whatever the rest of OUR turn does: our removals
+// act on the battlefield, which its land drop refills, and its cleanup never sheds the last nonland while it holds
+// lands (CleanupShedIndex sheds the MORE COMMON kind). Such a head is not locked (HeadLocked), and the lock needs
+// EVERY head, so no free turn can follow this turn. A board with no real opponent never locks (LockHolds).
+// The narrowing removes no line at any budget: it skips exactly the stand-downs a free turn cannot use.
+inline bool FreeTurnReachOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURN_REACH", true);   // DEFAULT ON; =0 -> stand down for every node
+    return heurarm::Flag(heurarm::FREE_TURN_REACH, on);           // per-job arm (one pooled A/B batch)
+}
+inline bool OpponentFetchLand(const CardDefinition* def)
+{
+    return def != nullptr && (!def->params.fetch_land_types.empty() || def->params.land_search_activation_sacrifice_self);
+}
+// Condition (a) AND (b) for one head's hand.
+inline bool HeadHoldsSureLandAndNonland(const std::vector<Card>& hand)
+{
+    bool fetch_left = false, sure_land = false, nonland = false;
+    for (const Card& c : hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (opponentdeck::IsSpellLandMdfc(d)) { continue; }   // either side: no claim from it
+        if (!opponentdeck::HandCardIsLandFront(c)) { nonland = true; continue; }
+        if (d == nullptr) { return false; }   // an unknown land: no claim
+        if (OpponentFetchLand(d)) { fetch_left = true; continue; }
+        if (!fetch_left && LandStaysAlone(d)) { sure_land = true; }
+    }
+    return sure_land && nonland;
+}
+// May a free turn follow the turn being searched at this node? TRUE (stand down) unless the certificate holds.
+inline bool FreeTurnMayFollow(const GameState& state)
+{
+    if (!state.deck_free_turn_hand_intact || !FreeTurnReachOn()) { return true; }
+    if (!state.opponent_plays_lands || state.opponent_decked) { return false; }   // LockHolds is false for good
+    if (HeadHoldsSureLandAndNonland(state.players[1].hand)) { return false; }
+    if (opponentdeck::HasSecondHead(state) && HeadHoldsSureLandAndNonland(state.opponent2_hand)) { return false; }
+    return true;
+}
+// The turn-edge prunes' gate: a following turn may share this turn's ROUND -- an extra turn, or a free turn that is
+// reachable from here. Identical to deck_has_extra_turn for every deck without the lock trait.
+inline bool NextTurnMayShareRound(const GameState& state)
+{
+    return state.deck_has_extra_turn || (state.deck_has_free_turn && FreeTurnMayFollow(state));
+}
+
+// MTG_FREE_TURN_REACH_AUDIT=1 (MEASUREMENT ONLY; no behaviour): both worlds evaluate the certificate on the state
+// that ENDS our turn (right before the opponent's regular turn) and, after its lock check, count every turn the
+// certificate called unlockable that locked anyway (UNSOUND, must be 0). The executor also checks the certificate's
+// other half, that OUR turn left the opponent's hand alone: the hand at the end of our turn must extend the hand at
+// its start (only appends; GameEngine::RunTurnFrom). Printed at exit.
+struct ReachAudit
+{
+    std::atomic<long long> checks{0}, certified{0}, unsound{0}, hand_checks{0}, hand_touched{0};
+    ~ReachAudit()
+    {
+        if (checks.load() == 0 && hand_checks.load() == 0) { return; }
+        std::fprintf(stderr, "[free-turn-reach] checks=%lld certified=%lld UNSOUND=%lld (must be 0) "
+                     "hand_checks=%lld hand_touched=%lld (must be 0)\n", checks.load(), certified.load(),
+                     unsound.load(), hand_checks.load(), hand_touched.load());
+    }
+};
+inline ReachAudit g_reach_audit;
+inline bool ReachAuditOn() { static const bool on = EnvOn("MTG_FREE_TURN_REACH_AUDIT"); return on; }
+// -1 = not audited; 1 = the certificate holds (no free turn may follow); 0 = it does not.
+inline int ReachAuditBefore(const GameState& state)
+{
+    if (!ReachAuditOn() || !state.deck_free_turn_hand_intact || !RuleArmed(state)) { return -1; }
+    g_reach_audit.checks.fetch_add(1, std::memory_order_relaxed);
+    const bool cert = !FreeTurnMayFollow(state);
+    if (cert) { g_reach_audit.certified.fetch_add(1, std::memory_order_relaxed); }
+    return cert ? 1 : 0;
+}
+inline void ReachAuditAfter(const GameState& state, int before)
+{
+    if (before == 1 && state.pending_free_turn)
+    {
+        g_reach_audit.unsound.fetch_add(1, std::memory_order_relaxed);
+        std::fprintf(stderr, "[free-turn-reach] UNSOUND: seed=%llu round=%d locked after a certified turn\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number);
+    }
+}
+inline std::vector<int> ReachAuditHandAtTurnStart(const GameState& state)
+{
+    std::vector<int> v;
+    if (!ReachAuditOn() || !state.deck_free_turn_hand_intact) { return v; }
+    for (const Card& c : state.players[1].hand) { v.push_back(c.m_number); }
+    v.push_back(-1);
+    for (const Card& c : state.opponent2_hand) { v.push_back(c.m_number); }
+    return v;
+}
+inline void ReachAuditHandAtTurnEnd(const GameState& state, const std::vector<int>& start)
+{
+    if (start.empty()) { return; }
+    g_reach_audit.hand_checks.fetch_add(1, std::memory_order_relaxed);
+    auto extends = [](const std::vector<Card>& hand, const int* first, const int* last) {
+        const std::size_t n = static_cast<std::size_t>(last - first);
+        if (hand.size() < n) { return false; }
+        for (std::size_t i = 0; i < n; ++i) { if (hand[i].m_number != first[i]) { return false; } }
+        return true;
+    };
+    const int* b = start.data();
+    const int* mid = b;
+    while (*mid != -1) { ++mid; }
+    const int* e = b + start.size();
+    if (!extends(state.players[1].hand, b, mid) || !extends(state.opponent2_hand, mid + 1, e))
+    {
+        g_reach_audit.hand_touched.fetch_add(1, std::memory_order_relaxed);
+        std::fprintf(stderr, "[free-turn-reach] HAND TOUCHED: seed=%llu round=%d\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number);
+    }
 }
 
 // The hurdle basic for a pool slot (cached per slot; computed once).
@@ -311,7 +464,7 @@ inline HurdleResult ApplyHurdlesToHand(std::vector<Card>& hand, const std::strin
 }
 
 // After opponentdeck::Deal (GoldFishRunner::SetupGame, the scenario loader): both heads' opening hands.
-// Without the armed rule, MTG_OPP_BOUNCE_OPENING (DEFAULT OFF) applies the bounceland opening rule alone, in every game.
+// Without the armed rule, MTG_OPP_BOUNCE_OPENING (DEFAULT ON) applies the bounceland opening rule alone, in every game.
 inline void ApplyOpeningHurdles(GameState& state)
 {
     if (!state.opponent_plays_lands || !state.opponent_library_dealt) { return; }

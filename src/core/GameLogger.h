@@ -1716,6 +1716,13 @@ inline bool g_play_legacy_no_free_turns = false;
 // replayer passes `--legacy-opponent-spawn-any`, which turns the requirement off for that process. REPLAY ONLY.
 inline bool g_play_legacy_opponent_spawn_any = false;
 
+// THE BOUNCELAND OPENING RULE AT RECORDING TIME (MTG_OPP_BOUNCE_OPENING, EngineFlags.h; USER 2026-11-22). A game
+// recorded while the rule applied to every game carries `opponent_bounce_opening: 1`: an opponent opening hand
+// whose every land needs another land in play had its rightmost such land dealt as a basic. A reference without
+// it was dealt the hand unchanged, so its replayer passes `--legacy-opponent-bounce-opening`, which turns the
+// every-game rule off for that process (the free-turn hurdles' own third step follows `free_turns`). REPLAY ONLY.
+inline bool g_play_legacy_opponent_bounce_opening = false;
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

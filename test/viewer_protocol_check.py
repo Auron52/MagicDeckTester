@@ -552,7 +552,11 @@ def recording_rule_args(ref):
 
     `opponent_spawn_land` (MTG_OPP_SPAWN_NEEDS_LAND): a game recorded while a scheduled opponent spawn needed an
     opponent land to appear. A reference without it saw every spawn appear, so it replays with
-    --legacy-opponent-spawn-any."""
+    --legacy-opponent-spawn-any.
+
+    `opponent_bounce_opening` (MTG_OPP_BOUNCE_OPENING, default on since 2026-11-22): a game whose opponent opening hand
+    went through the every-game bounceland rule (all its lands need another land in play -> the rightmost becomes a
+    basic). A reference without it was dealt the hand unchanged and replays with --legacy-opponent-bounce-opening."""
     args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
@@ -575,6 +579,8 @@ def recording_rule_args(ref):
         args.append("--legacy-no-free-turns")
     if not ref.get("opponent_spawn_land") and ft_diag != "2":
         args.append("--legacy-opponent-spawn-any")
+    if not ref.get("opponent_bounce_opening"):
+        args.append("--legacy-opponent-bounce-opening")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
