@@ -588,3 +588,26 @@ TEST_CASE("worldfire keep order: inside MANA the colours come first, then the ne
     CHECK(mountain.key > song.key);
     CHECK(song.key > island.key);
 }
+
+TEST_CASE("worldfire keep order: the proposed deadline order puts a go-off Lotus Bloom first (seed 9200001 gi 31)")
+{
+    // Turn 1 after Scalding Tarn + Ponder: one land in play (tapped), the drop spent; Steam Vents, Lotus Bloom and two
+    // Personal Tutors in hand. Ponder sees Rift Bolt, Lotus Bloom, Seething Song.
+    WorldfireProvider prov;
+    GameState s; s.active_player_index = 0; s.turn_number = 1;
+    WFPut(s, "Mountain", 10, 0, /*tapped=*/true);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand = {WFCard("Steam Vents", 30), WFCard("Lotus Bloom", 31), WFCard("Personal Tutor", 32),
+                         WFCard("Personal Tutor", 33)};
+    for (const char* nm : {"Worldfire", "Irencrag Feat", "Ponder"}) { s.players[0].library.push_back(WFCard(nm, 200)); }
+    const std::vector<Card> look = {WFCard("Rift Bolt", 40), WFCard("Lotus Bloom", 41), WFCard("Seething Song", 42)};
+    WFArm arm{{heurarm::WORLDFIRE_PONDER_RULE, 1}};
+    const TopDisposition rank = prov.TopDispositionPick(s, look, LookKind::Reorder, 1);
+    REQUIRE(rank.top_order.size() == 3);
+    CHECK(rank.top_order.front() == 0);                      // the keep value: the missing finisher first
+    WFArm dl{{heurarm::WORLDFIRE_PONDER_RULE, 1}, {heurarm::WORLDFIRE_ORDER_DEADLINE, 1}};
+    const TopDisposition d = prov.TopDispositionPick(s, look, LookKind::Reorder, 1);
+    REQUIRE(d.top_order.size() == 3);
+    CHECK(d.top_order[0] == 1);                              // the Bloom: suspended now, it arrives in time
+    CHECK(d.top_order[1] == 0);                              // the Rift Bolt is only needed on the go-off turn
+}

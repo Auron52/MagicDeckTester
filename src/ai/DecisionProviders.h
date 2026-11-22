@@ -5152,6 +5152,7 @@ struct WorldfireKeepRank
         // What the card IS (Preordain's aggressive mode reads it): Worldfire, a finisher (Rift Bolt / Halberdier),
         // a library tutor, a dig spell (Brainstorm / Ponder / Preordain / Overmaster).
         bool is_worldfire = false, is_finisher = false, is_tutor = false, is_dig = false;
+        int  need_by = 99;       // a quota card: the turn offset by which the plan needs it in hand (the deadline order)
     };
     std::vector<Entry> entries;   // hand cards (non-staged) in hand order, then looked cards in look order
     int  t_star  = -1;            // the projected go-off turn OFFSET (0 = this turn); -1 = "far" (nothing by now+4)
