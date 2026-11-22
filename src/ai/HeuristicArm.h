@@ -43,9 +43,7 @@ enum Slot : int
     EQUIP_DRAW_BP_DEFER,      // MTG_EQUIP_DRAW_BP_DEFER   ...and keep it out of wave 0 (cost only)
     EQUIP_DRAW_BP_INLINE,     // MTG_EQUIP_DRAW_BP_INLINE  ...inline AT the draw + truncate the plan
     BP_CLASSIFY,              // MTG_BP_CLASSIFY           condemn already-considered casts at a bp
-    KE_TUTOR_ALL,             // MTG_KE_TUTOR_ALL          score EVERY Equipment on the tutor axis
-    KE_TUTOR_RANK,            // MTG_KE_TUTOR_RANK         reasoned fetch ranking + width 2
-    KE_TUTOR_ONE,             // MTG_KE_TUTOR_ONE          ...and width 1 (heuristic only)
+    KE_TUTOR_RANK,            // MTG_KE_TUTOR_RANK         reasoned fetch ORDER (no width since 2026-11-22)
     SHED_WORST,               // MTG_SHED_WORST            rollout cleanup sheds the WORST-ranked card
     EQUIP_COPY_COLLAPSE,      // MTG_EQUIP_COPY_COLLAPSE   one odometer position per fungible-copy class
     EQUIP_UNSICK_HOST,        // MTG_EQUIP_UNSICK_HOST     no-Kemba/no-ds host must be able to swing now
@@ -148,7 +146,6 @@ enum Slot : int
     GREEDY_HOLD_LAND,         // MTG_GREEDY_HOLD_LAND     hold-fuel's LAND-DROP site (d0 greedy): skip the drop, cycle the land
     EDF_C_BUDGET,             // MTG_EDF_C_BUDGET         go-off projection budgets {C} pips, not just mana value
     EDF_WISH_CAST_GATE,       // MTG_EDF_WISH_CAST_GATE   hand coverage in the wish ranking needs a CASTABLE card
-    EDF_TUTOR_NARROW,         // MTG_EDF_TUTOR_NARROW     wish width 8 -> 3: the RANKING decides, not the eval
     EDF_SINK_KMAX,            // MTG_EDF_SINK_KMAX        sink K axis {1..3} -> {kmax}: apply-loop realises what's payable
     EDF_BLINK_KMAX,           // MTG_EDF_BLINK_KMAX       blink K axis {1..3} -> {kmax}: same shape, same apply-loop degrade
     EDF_M2,                   // MTG_EDF_M2               flicker-combo decks (blink outlet + ETB-untap payload) get the searched second main
@@ -386,7 +383,6 @@ enum Slot : int
     SELESNYA_BUCKET_DISCARD,  // MTG_SELESNYA_BUCKET_DISCARD  SelesnyaLifegain: the USER-settled cleanup-discard buckets (2026-10-09, docs/design/). Default ON; =0 -> the generic max-MV ranking
     CG_DOTH_LAST,             // MTG_CG_DOTH_LAST             Creature Giving, under MTG_CG_BUCKET_DISCARD=0 only: the 2026-08-06 patch ranking every Defense of the Heart last. Default ON; =0 with the buckets off -> the generic max-MV ranking (the USER's three-arm A/B: generic / patch / buckets)
     DISCARD_DIST_MODEL,       // MTG_DISCARD_DIST_MODEL       the shared distance-to-castable model for the USER discard buckets (docs/design/discard-distance-model.md; USER 2026-10-10: "it makes sense to have a smarter model"): P(castable by turn t) from the library's land / colour counts, kept land drops and the board, discounted per turn. Default ON; =0 -> each deck's previous proxy
-    GIANTS_TUTOR_WIDTH,       // MTG_GIANTS_TUTOR_WIDTH       Giants: TutorSearchWidth 7 -- the deck holds 7 distinct Giant names for Giant Harbinger against the base width 6, so one name was unreachable per game (coverage, recorded in analysis-Pirates.md). Default ON; =0 -> the base 6
     GOBLIN_TUTOR_VIAL_EXACT,  // MTG_GOBLIN_TUTOR_VIAL_EXACT  Goblins: the searched-tutor ranking credits an Aether Vial put only at mana value == charge (the card's rule; charge never falls), not <= charge. Default ON; =0 -> the old <= estimate
     AURA_RESTRICTED_NEW_CREATURE,// MTG_AURA_RESTRICTED_NEW_CREATURE a restricted Aura (Daybreak Coronet / Lion Umbra) is offered onto a creature cast the SAME turn, enabled by a plain Aura cast on it first (docs/design/auras-same-turn-restricted-aura-gap.md). Default ON; =0 -> never enumerated
     EDF_OUTLET_PIPS,          // MTG_EDF_OUTLET_PIPS       EDF discard: a flicker source in hand / library pays 2 per {W} pip our white sources (board lands and their land Auras, the kept hand lands) cannot cover, so the outlet closer to castable outranks "Displacer if 2+ colourless, else Emiel" (as first built, one {C} source shed both Displacers for an Emiel the deck could not cast). ADOPTED default ON (USER 2026-10-10); =0 -> the rule as first built
@@ -679,7 +675,6 @@ enum Slot : int
     DEPLETION_SBA,            // MTG_DEPLETION_SBA  the apply (TurnSolver::ApplyPlanDirect, rollout + search) sacrifices a depletion land whose last counter was spent at the EXECUTOR's SBA point -- when an outermost committed cast has RESOLVED -- not once at the end of the plan, and never earlier (a land the whole-turn prepay empties before the first cast is still there when that cast resolves). A mid-plan resolution read a dead Saprazzan Skerry as a land in play: NivMizzetCombo seed 6 T3, Preordain's ScryKeepOnTop bottomed Island + Cascade Bluffs in the search while the executor kept them, the recorded continuation (play Saprazzan Skerry) could not replay, no land was played and the committed T5 realised T7. Rollout only (the executor already sweeps). DEFAULT ON; =0 -> the end-of-plan sweep
     NIV_SERVANT_FIREMIND_ONLY,// MTG_NIV_SERVANT_FIREMIND_ONLY  NivMizzetCombo: a Generator Servant sacrifice the line does NOT need for mana is searched only beside a Niv-Mizzet, the Firemind cast (its haste = {T}: draw the turn it lands); any other plan holding an unneeded sacrifice is pruned (NivMizzetComboProvider::SacForManaOnlyIfNeeded; USER 2026-10-22: "we should only use it for Niv-mizzet the firemind in that case"). A Servant the line needs (ramp) is untouched; human play is never pruned. DEFAULT ON (the USER's rule, Niv-only); =0 -> every Servant plan searched
     NIV_SERVANT_UNPAIR,       // MTG_NIV_SERVANT_UNPAIR  NivMizzetCombo: amendment to the Servant rule (DEFAULT OFF, the USER's call): an unneeded Servant sacrifice is ALSO searched when the Servant is a Tandem Lookout's live soulbond partner and the plan casts either Niv-Mizzet -- the sacrifice breaks the pair so the Lookout pairs with the entering Niv, and every ping draws (held-out d3 s67072: sac -> Parun paired -> T4 kill; the rule's prune -> T5, at 4x budget too). Inert unless MTG_NIV_SERVANT_FIREMIND_ONLY is on
-    LFE_TUTOR_WIDTH,          // MTG_LFE_TUTOR_WIDTH  LandfallElementals: TutorSearchWidth admits EVERY distinct legal Elemental name for Flamekin Harbinger (10 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so four names were unreachable per search at ANY budget, which the shuffle chose (sweep s61016: Incandescent Soulstoke never scored -> T5 vs T4). A COVERAGE fix (it widens, never narrows; the axis is additive). =0 -> the base 6
     NIV_BRAINSTORM_RULE,      // MTG_NIV_BRAINSTORM_RULE  NivMizzetCombo: Brainstorm's put-back by the USER's rule (2026-10-22: "put the cards you need the least first using the same rules, followed by the ones you can't use yet so you can draw them later") -- NivMizzetComboProvider::PutBackRanking + the per-card default (PutBackRankingPerCard). Inert unless MTG_NIV_CANTRIP_RULES is on; MTG_NIV_CANTRIP_AMEND's order-tier change applies. An ORDER only (every candidate still searched). ADOPTED DEFAULT ON 2026-10-23 (the Niv package: rules + amend + Ponder keep/shuffle + bucket discard + Brainstorm ranking + BRAINSTORM_SINGLE); =0 disables
     NIV_BRAINSTORM_SINGLE,    // MTG_NIV_BRAINSTORM_SINGLE  NivMizzetCombo: the searched put-back fan is pruned to the rule's pick alone (PutBackSingleCandidate). Inert unless MTG_NIV_CANTRIP_RULES and MTG_NIV_BRAINSTORM_RULE are on. Human play is never pruned. ADOPTED DEFAULT ON 2026-10-23 (the Niv package: rules + amend + Ponder keep/shuffle + bucket discard + Brainstorm ranking + BRAINSTORM_SINGLE); =0 disables
     NIV_PONDER_KEEP_SHUFFLE,  // MTG_NIV_PONDER_KEEP_SHUFFLE  NivMizzetCombo: Ponder's searched fan is keep-in-the-rule's-order vs shuffle (ReorderKeepShuffleOnly), not every order. USER 2026-10-22: "My ponder idea was allowing for search between shuffle and keep, but not the order." / "That way we avoid the worst situations and just need to make the reorder relatively smart." Inert unless MTG_NIV_CANTRIP_RULES is on. ADOPTED DEFAULT ON 2026-10-23 (the Niv package: rules + amend + Ponder keep/shuffle + bucket discard + Brainstorm ranking + BRAINSTORM_SINGLE); =0 disables
@@ -786,7 +781,6 @@ enum Slot : int
     BP_DEV_SEQ,               // MTG_BP_DEV_SEQ  the wave walker's deviation SEQUENCES (Plan::bp_pre; docs/design/bp-empty-arm-deferred-site.md 6.1) through LATENT occurrences: a scored variant -- walker hand-out, wave-0 rank or node child -- whose apply reached a site-9 re-open it could reach only by targeting it (an untargeted re-open applies nothing, so one deviation can reach no continuation there) opens a COMPOUND slot there, its own choice kept, handed out only after every slot of fewer deviations retired. Goblins seed 1330145 gi144 / 1343448 gi3447 (MTG_SUBSET_SAC_OUTLETS, T3 -> T4 at d8 b0): the T3 kill needs non-front continuations at the post-entry occurrence AND its re-opens (Skirk's sacrifice bursts, Siege-Gang); the uniform arm had expressed it by luck until the outlets pushed the three-sacrifice burst from rank 1 to rank 8. Searched applies only, every host (FSLineWin, FSLineTail, SolveWithLookahead). A compound apply's enumerations are billed like MTG_BP_CANON_WAVE's (CanonWaveBillScope; inert at --budget-ms 0). A full-line search runs in TWO PASSES (TurnSolver::FullSearchLine): compound waves suppressed, then -- only if a latent occurrence was met -- the full tree for a strictly earlier win, cut at the first pass's turn and reusing its memo minus every node that met one; without it Goblins seed 1380001 gi2586 took 19-29 min / 207,741 units at d8 b0 (two passes: 1,469). =0 -> one deviation per apply
     BP_DEV_SEQ_ALL,           // MTG_BP_DEV_SEQ_ALL  (DEFAULT OFF) MTG_BP_DEV_SEQ's compound slots at EVERY class-on occurrence a variant reached, not only the latent ones: the full cross product, complete at unlimited budget. Measured 2026-10-29: the unbudgeted backstop explodes without a breakpoint-level transposition (Fluctuator d3 AND d5 abandoned 2 of 20 games at the 2,000,000-unit ceiling, seeds 30009 / 30018) and Goblins at its play setting spent +35-39% units (1.7-3.4x wall) over the lever-off arm for -0.0007 / -0.0012 avg (1,500 / 4,000 games). =1 -> on
     SAC_MANA_ACT_DEMAND,      // MTG_SAC_MANA_ACT_DEMAND  a repeatable sac-for-mana outlet's burst COUNT (Skirk Prospector) is also sized for ACTIVATION demand: the shortfall to a mana-costed value sac outlet's landmark activation (a damage outlet's LETHAL shot count -- Siege-Gang -- or another outlet's one activation -- Pashalik Mons) -- not only for hand spells, which left an empty-hand board one {R} per main (Goblins 2HG gi2905 T3: two Siege-Gang shots off four sacs unfindable at any budget). Widens the count axis. DEFAULT ON; =0 -> hand-spell landmarks only, byte-identical to before
-    CYCLONE_TUTOR_WIDTH,      // MTG_CYCLONE_TUTOR_WIDTH  Cyclone (Unpredictable Cyclone): TutorSearchWidth admits EVERY distinct legal name for Long-Term Plans (any card; ~22 in the list) against the base width 6 -- the generic candidate list is in LIBRARY (shuffle) order, so most names (Emrakul among them) were unreachable per search at ANY budget. A COVERAGE fix (widens, never narrows; the axis is additive). DEFAULT ON; =0 -> the base 6
     CYCLE_SEED_FOLD,          // MTG_CYCLE_SEED_FOLD  the searched cycle's SOUND pin fold (EnumeratePlans): a cycle seed whose Curator disposition j exceeds the watchers that can be on the battlefield when it is cycled (on the battlefield now + the watchers the plan itself casts), or whose free-cast pin (decline / take-and-Remand) can never be read because no Cyclone can be out (none on the battlefield, none cast by the plan), resolves EXACTLY as its sibling with the clamped j / the take pin, which is enumerated beside it -- so the duplicate is not emitted. Applied only to plans whose other actions cannot draw (no draw / look / tutor / Remand cast), where the count is exact. Default ON; =0 -> every pinned seed is emitted
     CYCLONE_FETCH_RULE,       // MTG_CYCLONE_FETCH_RULE  Cyclone: the USER's Scalding Tarn rule (2026-10-27) -- Steam Vents while one is in the library; then by RED NEED (CycloneShortOnRed: fewer than two red sources counting the battlefield, at most one untapped-entering red land in hand, Seething Song as the second red only): short -> Blood Crypt, Mountain; else Watery Grave, Island. The top pick is the one-option fetch, with Xander's Lounge admitted beside it (searched). Default ON; =0 -> library-order candidates, top pick only (the generic default)
     CYCLONE_MYRIAD_RULE,      // MTG_CYCLONE_MYRIAD_RULE  Cyclone: the USER's Myriad Landscape rule (2026-10-27) -- two Islands is the one-option pick; two Mountains is ADMITTED (searched against the Islands) only while short on red (the shared red count). A list with no two-Island pick keeps the full fan. Default ON; =0 -> the base order and full fan
@@ -1116,9 +1110,7 @@ inline const char* Name(int slot)
         "MTG_EQUIP_DRAW_BP_DEFER",
         "MTG_EQUIP_DRAW_BP_INLINE",
         "MTG_BP_CLASSIFY",
-        "MTG_KE_TUTOR_ALL",
         "MTG_KE_TUTOR_RANK",
-        "MTG_KE_TUTOR_ONE",
         "MTG_SHED_WORST",
         "MTG_EQUIP_COPY_COLLAPSE",
         "MTG_EQUIP_UNSICK_HOST",
@@ -1221,7 +1213,6 @@ inline const char* Name(int slot)
         "MTG_GREEDY_HOLD_LAND",
         "MTG_EDF_C_BUDGET",
         "MTG_EDF_WISH_CAST_GATE",
-        "MTG_EDF_TUTOR_NARROW",
         "MTG_EDF_SINK_KMAX",
         "MTG_EDF_BLINK_KMAX",
         "MTG_EDF_M2",
@@ -1443,7 +1434,6 @@ inline const char* Name(int slot)
         "MTG_SELESNYA_BUCKET_DISCARD",
         "MTG_CG_DOTH_LAST",
         "MTG_DISCARD_DIST_MODEL",
-        "MTG_GIANTS_TUTOR_WIDTH",
         "MTG_GOBLIN_TUTOR_VIAL_EXACT",
         "MTG_AURA_RESTRICTED_NEW_CREATURE",
         "MTG_EDF_OUTLET_PIPS",
@@ -1725,7 +1715,6 @@ inline const char* Name(int slot)
         "MTG_DEPLETION_SBA",
         "MTG_NIV_SERVANT_FIREMIND_ONLY",
         "MTG_NIV_SERVANT_UNPAIR",
-        "MTG_LFE_TUTOR_WIDTH",
         "MTG_NIV_BRAINSTORM_RULE",
         "MTG_NIV_BRAINSTORM_SINGLE",
         "MTG_NIV_PONDER_KEEP_SHUFFLE",
@@ -1826,7 +1815,6 @@ inline const char* Name(int slot)
         "MTG_BP_DEV_SEQ",
         "MTG_BP_DEV_SEQ_ALL",
         "MTG_SAC_MANA_ACT_DEMAND",
-        "MTG_CYCLONE_TUTOR_WIDTH",
         "MTG_CYCLE_SEED_FOLD",
         "MTG_CYCLONE_FETCH_RULE",
         "MTG_CYCLONE_MYRIAD_RULE",

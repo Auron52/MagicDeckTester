@@ -29931,38 +29931,13 @@ static bool TutorAxisResolveMode()
 {
     return TutorAxisResolveEnabled();   // shared reader (EngineFlags.h) -- providers branch on it too
 }
-// How many tutor targets the axis scores, INCLUDING the provider's best (so 1 == the old
-// heuristic-only behaviour). The provider orders candidates best-first, so this is a pure cost
-// prune in preference order, exactly like MTG_SCRY_WIDTH.
-//
-// The width is PROVIDER-OWNED (DecisionProvider::TutorSearchWidth) rather than one global constant,
-// because the per-deck optima genuinely diverge rather than scatter around a shared value. Goblins
-// keeps improving to W=12 (Matron's ~16 Goblin names are not close substitutes); antilife's pool
-// IS 2 (its only enchantments are Tainted Remedy and Aria of Flame, and it runs no artifacts), so
-// everything above 2 was enumeration cost for a provably empty gain. Held-out confirmation of the
-// finished config vs this global 6: goblins -0.0620 (8/8 cases), antilife 0.0000 with identical
-// play, d0 unmoved. Hinata was ALSO trained to 2 and did NOT survive the holdout (+0.0009, and no
-// cheaper), so it keeps this base -- see docs/design/searched-action-subdecisions.md.
-//
-// MTG_TUTOR_WIDTH overrides every provider for the A/B; unset (or 0) defers to the provider.
-static std::size_t TutorAxisWidthOverride()
-{
-    static const std::size_t w = []() -> std::size_t
-    {
-        const char* v = std::getenv("MTG_TUTOR_WIDTH");
-        if (v == nullptr || *v == '\0') { return 0; }   // 0 == not set == defer to the provider
-        const int n = std::atoi(v);
-        return n < 1 ? 1 : static_cast<std::size_t>(n);
-    }();
-    return w;
-}
-static std::size_t TutorAxisWidth(const GameState& s)
-{
-    const std::size_t ovr = TutorAxisWidthOverride();
-    if (ovr > 0) { return ovr; }
-    const int w = ResolveProvider(s).TutorSearchWidth();
-    return w < 1 ? 1 : static_cast<std::size_t>(w);
-}
+// NO TUTOR WIDTH (deleted 2026-11-22, USER: "I don't like those tutor widths one bit. It should just
+// search all options unless the heuristic says otherwise and the heuristic should have full control
+// of how many it returns."). The axis scores every distinct name the provider's TutorCandidates
+// returns. The old provider-owned cap (base 6) truncated the GENERIC list, which is LIBRARY (shuffle)
+// order, so it dropped legal targets by shuffle position rather than by merit -- a lossy prune inside
+// the search window. A deck that wants fewer targets restricts its own candidate list on the targets'
+// merits; see docs/design/searched-action-subdecisions.md, "Tutor width DELETED".
 
 // SEARCHED ETB-DIG PICK (Acclaimed Contender). Same additive post-dedup axis as the tutor target:
 // the dug card goes to HAND and cannot be cast this turn, so the pick does not change what the plan
@@ -29985,7 +29960,8 @@ static bool EtbDigAxisEnabled()
 // (MTG_ETBDIG_TRACE: 5.9% one legal match, 60.0% two, 6.9% three, 23.4% four, 3.7% five, mean 2.6)
 // explains the shape: past 3 the extra candidates are ones the provider already ranked last.
 // PROVIDER-OWNED since 2026-09-26 (DecisionProvider::EtbDigSearchWidth; 0 == this default of 3), the
-// TutorSearchWidth pattern: MTG_ETBDIG_WIDTH, when set, still overrides every provider for the A/B.
+// same provider-owned shape the (now deleted) tutor width had: MTG_ETBDIG_WIDTH, when set, still
+// overrides every provider for the A/B.
 static std::size_t EtbDigAxisWidth(const GameState& state)
 {
     static const std::size_t env_w = []() -> std::size_t
@@ -97983,8 +97959,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // last candidate (see PerformTutor), the same duplicate-not-whiff rule as the ETB dig.
     // Base plans stay tutor_choice = -1 == the provider's front AT RESOLUTION, so base and variants
     // are one ranking at one state by construction.
-    if (TutorAxisResolveMode() && TutorAxisEnabled() && TutorAxisWidth(state) > 1
-        && !HumanPlayActive())
+    if (TutorAxisResolveMode() && TutorAxisEnabled() && !HumanPlayActive())
     {
         // EMITTED IN PLACE (P3, 2026-10-19): the first loop only SIZES each plan's variants; the
         // clones are then copy-constructed straight onto the end of `all` after one reserve. Same
@@ -98042,7 +98017,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::vector<std::string> uniq;
                     for (const std::string& c : cands)
                     { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-                    const std::size_t k = std::min(uniq.size(), TutorAxisWidth(state));
+                    const std::size_t k = uniq.size();
                     std::vector<int> codes;
                     for (std::size_t c = 0; c < k; ++c)
                     {
@@ -98096,7 +98071,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
         }
     }
-    else if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
+    else if (TutorAxisEnabled() && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
         // MTG_TUTOR_PREFIX_STATS=1: how many DISTINCT prefixes (land played + the casts that precede
@@ -98226,7 +98201,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                                                        d->params);
                     }
                 }
-                const std::size_t k = std::min(cands.size(), TutorAxisWidth(state));
+                const std::size_t k = cands.size();
                 if (axis_rebase && !cands.empty() && !cands[0].empty())
                 { p.actions[ai].tutor_target = cands[0]; }
                 const std::string& base_tgt = p.actions[ai].tutor_target;
@@ -117440,7 +117415,7 @@ std::vector<std::pair<int, std::string>> TurnSolver::UpkeepLandBoundaryForTest(c
 // "real-upkeep" case, Shadowborn seed 940184 T5). So the executor searches it HERE, at the end of the real turn
 // (after the second main, before the end step), with the same node every in-window crossing uses: one crossing
 // per rank of the resolution-state candidate list (the provider's ranked, USER-table-restricted TutorCandidates,
-// capped by TutorSearchWidth: the provider only RESTRICTS and ORDERS), each crossing's next turns SEARCHED by
+// every rank of it: the provider only RESTRICTS and ORDERS), each crossing's next turns SEARCHED by
 // SimulateToEnd, iteratively deepened under the decision budget (sub-depth 0 .. depth-1, as the main-phase solve
 // at this turn would cross). The deepest COMPLETED pass decides; a strictly earlier win is required to leave the
 // front (rank 0 keeps every tie). The budget only prices the deepening: at an unlimited budget every pass runs, so
@@ -117763,7 +117738,7 @@ std::vector<std::pair<int, int>> TurnSolver::UpkeepLegendBoundaryForTest(const G
 // other resolution-time picks: "it makes the most sense to decide what you need in the context of the situation
 // at the time it is cast." So it is searched HERE, at resolution, from the real state with the reveal known: one
 // copy per rank of the resolution-state candidates (the provider's ranked, USER-table-restricted TutorCandidates,
-// capped by TutorSearchWidth: the provider only RESTRICTS and ORDERS), each copy finishing the upkeep
+// every rank of it: the provider only RESTRICTS and ORDERS), each copy finishing the upkeep
 // (FinishSuspendArrivalsForNode, then the rollout's own upkeep tail and draw) and searched by SimulateToEnd,
 // iteratively deepened as the crossing node is. The deepest completed pass decides; leaving rank 0 needs a
 // strictly earlier win. The budget only prices the deepening (at an unlimited budget every pass runs). `state`

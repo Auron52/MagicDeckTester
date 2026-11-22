@@ -153,8 +153,6 @@ TEST_CASE("Bruna sideboard: Glittering Wish offers all ELEVEN multicolored names
     // The hybrid pips make both the hybrid cards multicolored (CR 202.2b): {W/U} and {R/G}.
     CHECK(DefSb("Steel of the Godhead").card.IsMulticolored());
     CHECK(DefSb("Vexing Shusher").card.IsMulticolored());
-    // ...and the provider searches every one of them (the axis width is a cap, never a prune here).
-    CHECK(BrunaSb().TutorSearchWidth() >= 11);
 }
 
 // ---- Steel of the Godhead ------------------------------------------------------------------------

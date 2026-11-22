@@ -3572,17 +3572,11 @@ public:
                                                const std::string& target) const
     { (void)s; (void)controller; (void)actions; (void)target; return {}; }
 
-    // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
-    // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old
-    // heuristic-only behaviour, byte-identical). Sibling of FetchSearchCap, and provider-owned for a
-    // measured reason rather than a symmetry one: the axis is ADDITIVE (cost P+W, one rollout per
-    // extra target), so unlike a multiplicative width it does not dilute the budget the same way --
-    // and the per-deck optima genuinely DIVERGE. A deck whose tutor fetches a combo piece wants to
-    // look deep; a deck whose tutor is a value grab is best served by its own top pick, because the
-    // targets past rank ~2 are ones the provider already judged worse and the variants only spend
-    // budget the rest of the turn wanted. Default 6 = the prior global constant.
-    // MTG_TUTOR_WIDTH still overrides engine-side for A/B. See docs/design/searched-action-subdecisions.md.
-    virtual int TutorSearchWidth() const { return 6; }
+    // (No tutor WIDTH. The tutor axis scores EVERY name TutorCandidates returns, so the provider's
+    // candidate rule is the whole breadth policy: a deck that wants fewer targets restricts the list
+    // on the targets' merits. USER 2026-11-22: "It should just search all options unless the
+    // heuristic says otherwise and the heuristic should have full control of how many it returns."
+    // See docs/design/searched-action-subdecisions.md, "Tutor width DELETED".)
 
     // CleanupDiscardSearchWidth -- how many of CleanupDiscardCandidates' ranked cards the ROLLOUT's
     // end-of-turn cleanup branches over (1 == the ranked pick only, byte-identical to no branch).
@@ -4187,7 +4181,7 @@ public:
     // EtbDigSearchWidth -- how many of EtbDigCandidates' entries the searched ETB-dig axis scores
     // (INCLUDING index 0). 0 == the engine default (3, the Knights-measured knee; see
     // EtbDigAxisWidth in TurnSolver.cpp). MTG_ETBDIG_WIDTH overrides every provider for the A/B.
-    // Provider-owned for the same reason TutorSearchWidth is: the useful breadth is a per-deck fact.
+    // Provider-owned: the useful breadth is a per-deck fact.
     virtual int EtbDigSearchWidth() const { return 0; }
 
     // ReplicateCounts -- Hatchery Sliver replicate: which token-copy counts the SEARCH may branch

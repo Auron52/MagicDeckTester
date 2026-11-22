@@ -87,14 +87,13 @@ int CountCasts(const std::vector<Action>& acts, const std::string& name)
 }
 }   // namespace
 
-TEST_CASE("Shadowborn routing: the deck lands on ShadowbornProvider, width 32, not AntiLifegain")
+TEST_CASE("Shadowborn routing: the deck lands on ShadowbornProvider, not AntiLifegain")
 {
     EnsureCardsSb();
     const Decklist deck = DeckLoader::LoadFromFile(
         ResolveHeuristicDefaultsPath("decks/Shadowborn Apostle/Shadowborn Apostle.cod"));
     const DecisionProvider& p = DetectDecisionProvider(deck);
     CHECK(std::string(p.Name()) == "ShadowbornApostle");
-    CHECK(p.TutorSearchWidth() == 32);
 }
 
 TEST_CASE("Morbid: a creature death sets the flag, a land sacrifice does not, the rollout turn clears it")

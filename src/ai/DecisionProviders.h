@@ -848,9 +848,8 @@ public:
 //   * CleanupDiscardCandidates -- the USER-settled cleanup-discard buckets (2026-10-09,
 //     docs/design/giants-discard-policy-proposal.md; MTG_GIANTS_BUCKET_DISCARD, default ON, =0
 //     restores the generic max-MV ranking). See the .cpp block.
-// plus one COVERAGE fix (it widens, never narrows):
-//   * TutorSearchWidth 7 -- one per distinct Giant name Giant Harbinger can fetch
-//     (MTG_GIANTS_TUTOR_WIDTH, default ON, =0 restores the base 6).
+// (Its old COVERAGE fix, a tutor width of 7 for Giant Harbinger's seven Giant names, went with the
+// tutor width itself on 2026-11-22: the axis now searches every name.)
 // Every other hook inherits GenericProvider byte-for-byte. (Until 2026-10-09 this was an EMPTY
 // derivation, play-neutral by construction.)
 //
@@ -861,9 +860,9 @@ public:
 //     the `goblin` signature -- the same param that misrouted Dragons via Dragonspeaker Shaman.
 //   * Giant Harbinger's `tutor_to_top` ALONE sets the `anti` signature.
 // So removing either card would not fix it; the deck must be routed ABOVE both branches.
-// The harm was not hypothetical: GoblinsProvider narrows TutorSearchWidth, and this deck has
-// SEVEN distinct Giant names for Giant Harbinger to find, so a Goblin-tuned ranking would have
-// silently decided which Giant was unreachable.
+// The harm was not hypothetical: GoblinsProvider narrowed its tutor axis (a width, deleted
+// 2026-11-22), and this deck has SEVEN distinct Giant names for Giant Harbinger to find, so a
+// Goblin-tuned ranking would have silently decided which Giant was unreachable.
 class GiantsProvider : public DeckProvider
 {
 public:
@@ -884,15 +883,6 @@ public:
     // Not prefix-stable while the buckets are on: the mana reach counts hand lands, so shedding a
     // surplus Mountain can move a Giant's distance-discounted value (review 2026-10-09). Re-rank per shed.
     bool CleanupDiscardShedStable() const override;
-    // A COVERAGE fix, not a heuristic: Giant Harbinger fetches any Giant, and this list holds SEVEN
-    // distinct Giant names (Inferno Titan, Sunrise Sovereign, Giant Harbinger, Borderland Behemoth,
-    // Hamletback Goliath, Surtland Flinger, Tectonic Giant). The generic candidate list is in LIBRARY
-    // (= shuffle) order and the base width is 6, so in any game the search could never reach one of
-    // them -- which one decided by the shuffle, not by a judgement (found by the Pirates analysis,
-    // docs/design/analysis-Pirates.md, the same hole PiratesProvider's width 9 closes). Width 7 makes
-    // every name reachable; the axis is ADDITIVE (one rollout per extra target), so the cost is bounded.
-    // MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
-    int TutorSearchWidth() const override;
 };
 
 // Prevent Damage (Manabarbs / painlands / Tamanoa / Rhox Faithmender / Vito / Dina). Onboarded
@@ -908,10 +898,6 @@ public:
 //     (Tamanoa pays it back, Purity turns it into lifegain). The engine separately bounds it by
 //     RULES safety (dmgev::PaymentPainSafe / the sweep's per-tap check), so this hook never has to
 //     reason about dying. PROVISIONAL until Stage 5 measures the coloured-mode preference.
-//   * TutorSearchWidth 20 -- a COVERAGE fix, not a heuristic: Living Wish reaches a 13-card,
-//     13-name sideboard and Beseech the Queen every distinct library name, and the base width 6
-//     would leave names (which ones decided by zone order) unreachable at every budget. Same
-//     argument as Pirates' 9. (Phase I1 set 16 for the sideboard alone; see the override.)
 //   * CleanupDiscardCandidates -- the authored analyze-deck 5i BUCKET shed policy
 //     (MTG_PD_BUCKET_DISCARD, default ON, PROVISIONAL pending user review).
 class PreventDamageProvider : public DeckProvider
@@ -949,15 +935,10 @@ public:
     // death has upside (the base helper). MTG_PD_DUP_LEGEND (default ON; =0 = generic only).
     bool OfferDuplicateLegendCast(const GameState& s, int controller,
                                   const CardDefinition& def) const override;
-    // 20 (was 16 in phase I1, sized for Living Wish's 13-name sideboard): Beseech the Queen ("a card
-    // with mana value <= lands you control") reaches EVERY distinct name in the library -- 19 in
-    // this list once four lands are out -- so any smaller width would leave names unsearchable. A
-    // COVERAGE bound, not a narrowing; PROVISIONAL on cost (Stage 5f may narrow it with a ranking).
-    int  TutorSearchWidth() const override { return 20; }
     // The generic list, NONLANDS FIRST (library order within each half). The axis's base target is
     // the list's front, and library order is shuffle order -- so without this a Beseech's default
     // pick was whichever card happened to sit highest, frequently a land. A provider ORDERING only:
-    // with the width above every legal name is still a searched variant.
+    // every legal name is still a searched variant (the tutor axis has no width).
     // Living Wish is then re-ranked (MTG_PD_WISH_RANK, DEFAULT ON) by the board-aware ENGINE ROLE of
     // the user's 2026-09-29 doctrine (Tamanoa / Vito first, Dina / Rhox backups, lands, the rest) --
     // see PdRankEngineTutor in the .cpp.
@@ -1096,19 +1077,9 @@ public:
                "Wings' in-combat aura swap add power AFTER attackers are declared, so a bound must "
                "price every Aura that can reach an attacker this combat." }; }
     const char* Name() const override { return "Bruna"; }
-    // Tutor axis width: a COVERAGE fix, not a heuristic. Open the Armory's library pool holds SEVEN
-    // distinct Aura/Equipment names (Eldrazi Conscription, Lightning Greaves, Prodigious Growth,
-    // Mythic Proportions, Colossification, Arcanum Wings, Wild Growth) against the base width 6, and
-    // GenericProvider::TutorCandidates returns LIBRARY (shuffle) order -- so one legal target went
-    // unscored every cast, chosen by shuffle rather than merit (the KittyEquipment width-8
-    // precedent). 8 = every legal name, so the target is fully searched.
-    // 2026-10-06 sideboard change (USER): Glittering Wish's pool is now ELEVEN multicolored names
-    // (Bruna, Almost Perfect, Indrik Umbra, Linvala, Troyan, Detention Sphere, Unflinching Courage,
-    // Steel of the Godhead, Vexing Shusher, Auroral Procession, Reborn Hope), and Auroral Procession /
-    // Reborn Hope search the GRAVEYARD (tutor_from_graveyard), whose list is ZONE order, not a
-    // ranking -- so any cap below the pool would be a shuffle-order prune, not a heuristic. 32 covers
-    // every distinct name this list can put in any of the three zones: still "every legal name".
-    int TutorSearchWidth() const override { return 32; }
+    // (No tutor width -- its old 32 was a COVERAGE bound: Open the Armory's seven names and
+    // Glittering Wish's eleven, plus the zone-order graveyard regrowths. The axis now searches every
+    // name the candidate rules below return, so it needs no bound.)
     // GLITTERING WISH CANDIDATE RULE (USER spec 2026-10-06 + USER refinements 2026-10-07;
     // docs/design/glittering-wish-heuristic.md): the wish's 11-name pool narrows to a few CONDITIONAL roles
     // and the SEARCH chooses among them -- Bruna (none owned; not when lethal is already deliverable on a
@@ -1338,13 +1309,9 @@ public:
     // Mana-hungry combo (dorks + on-curve enabler deploy) with NO land-as-resource mechanic -> the NC
     // search should ALWAYS develop mana, not just while establishing the base. Aggressive (ungated).
     double NcLandDropTempoBonus(const GameState&, int) const override;
-    // Both tutors here fetch from a pool of exactly TWO distinct names: the deck's only enchantments
-    // are Tainted Remedy and Aria of Flame, and it runs no artifacts at all -- so Idyllic Tutor
-    // (enchantment) and Enlightened Tutor (artifact or enchantment) see the same two-card list. 2 is
-    // therefore EXHAUSTIVE, not a prune: the train sweep's play digests are byte-identical from
-    // width 2 all the way to 12, because there was never a third candidate to enumerate. The old
-    // global 6 was pure enumeration cost here for a provably empty gain.
-    int TutorSearchWidth() const override { return 2; }
+    // (No tutor width. Its old 2 was EXHAUSTIVE, not a prune: both tutors here fetch from a pool of
+    // exactly two distinct names -- Tainted Remedy and Aria of Flame -- so play digests were
+    // byte-identical from width 2 to 12.)
 };
 
 // ---- DIG OFFER UTILITIES (DecisionProvider::DigOfferAt; USER 2026-10-14) -----------------------------------
@@ -2086,16 +2053,12 @@ public:
     // total override it replaced). Corollary, also per the USER: "if we are considering main 1
     // for Hinata, there is a bug" -- a game measuring worse under the filter is an ENGINE
     // defect in the post-combat path (see main-phase-classification.md round 2).
-    // TutorSearchWidth: deliberately NOT overridden -- this deck keeps the base 6. Worth recording
-    // because the train seeds said otherwise and the holdout overruled them. Gamble is unrestricted
-    // ("search your library for a card") but TutorCandidates above already narrows it hard (Hinata
-    // alone while she is missing; SituationalCardRank order once she is online), so the hypothesis
-    // was that extra targets are ones the provider already judged worse and only dilute a deck whose
-    // turns are the most budget-starved in the suite. Train agreed -- w2 -0.0568 vs w6 -0.0284.
-    // The direct held-out check did NOT: w2 vs w6 came out +0.0009, a wash, and w2 is not cheaper
-    // either (overnight makespan 68s vs 69s). A train-only delta of that size is what a selection
-    // artifact looks like, so there is nothing to adopt. (Both seed sets DO agree Hinata dislikes a
-    // WIDE width -- w12 is its worst arm on each -- so if the base ever moves, it must not move up.)
+    // TUTOR BREADTH: Gamble's axis searches every name TutorCandidates above returns (the tutor width,
+    // and with it the base 6 this deck rode, was deleted 2026-11-22 -- USER: "It should just search
+    // all options unless the heuristic says otherwise and the heuristic should have full control of
+    // how many it returns."). History: w2 vs w6 was a held-out wash (+0.0009), and both seed sets
+    // measured w12 as this deck's worst arm, so any narrowing it needs belongs in TutorCandidates'
+    // own rule, on the targets' merits, never in a count.
 
     // THE USER'S HINATA KAROO RULE (MTG_HINATA_BOUNCE_RULE; USER 2026-10-08): "In the Hinata case, I
     // would say you are probably pretty happy to remove any come-into-play-untapped land, but starting
@@ -2279,43 +2242,12 @@ public:
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Goblins"; }
     bool DeferSacOutletPreCombat(const GameState&, const Permanent&, bool) const override;
-    // Goblin Matron tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every
-    // other tutor in the suite its targets are not close substitutes (Muxus and Mogg War Marshal are
-    // not the same fetch), so the search keeps finding value well past the provider's top few.
-    //
-    // Measured, MONOTONE with a knee at 8 -- the opposite shape to Hinata's dilution:
-    //   TRAIN (1001/2002/3003)   w2 -0.0294  w4 -0.1627  w6 -0.1846  w8 -0.2100  w12 -0.2108
-    //   HELD-OUT (4004..7007)    w12 -0.2740 (the best arm measured there too)
-    // 8 and 12 are statistically indistinguishable on train (0.0008 apart over 15 cases); 12 is taken
-    // because both seed sets rank it no worse and the axis is ADDITIVE -- the whole 3-deck regression
-    // makespan moves 38s -> 46s across the entire width range, not per-width multiplicatively.
-    // FOLDED IN a value x deploy-discount RANKING (TutorCandidates below): the smooth width-sensitivity
-    // documented above was largely an UNRANKED coverage gap, not pure target diversity. Measured (d5 b20
-    // s2002): ranked w4 4.322 ~= unranked w12 4.316; ranked w2 4.324 beats unranked w4 4.329. So width
-    // drops 12 -> 4 to search only the ranked THREATS (Muxus/Siege-Gang/lords/Krenko float to the top,
-    // chaff sinks) -- near-full quality (train ~+0.006) at a narrower, cheaper axis. See TutorCandidates.
-    //
-    // WIDENED 4 -> 6 (2026-08-04) once the lord-amplification term landed. The two are entangled and
-    // neither is adoptable alone: amplification is a clear ranking IMPROVEMENT (held-out d0, which takes
-    // cands[0] and so reads ordering directly, -114.0 turn-units) that at W=4 nonetheless cost +11.0 on
-    // held-out SEARCHED -- promoting a lord into a four-slot window pushes out a card the search still
-    // wanted. That is a window-MEMBERSHIP effect, not an ordering error, and the measurement separates
-    // them cleanly: the same arm at W=6 is -4.0 searched, while its d0 gain is identical at both widths
-    // (width is irrelevant when you take the top card). Width is cheap here -- the axis is ADDITIVE, not
-    // multiplicative -- so 6 buys back the displaced candidate. Held-out searched for the adopted bundle
-    // (v2 ranking + amplification + W=6) is -5.0 with train agreeing on every tier.
-    // ... and 6 -> 9 under MTG_TUTOR_AXIS_RESOLVE (defined in the .cpp; needs EngineFlags.h). The
-    // resolution-state ranking is HONEST about mana where the legacy pre-land state was doubly
-    // pessimistic -- and that pessimism was an accidental diversity mechanism: it buried the bombs,
-    // which kept cheap ENABLERS (Skirk / Warchief / Lackey) inside the 6-wide window. At the honest
-    // state those enablers rank 7-9 (their credit is ~10% under the mid-value bodies), and in five
-    // of the six resolve-mode held-out regressions the baseline's winning fetch sat at EXACTLY
-    // resolution rank 8-9 (gi768/gi727 Skirk 8, gi714/gi200 Warchief 8, gi352 Lackey 9). Same
-    // window-membership-vs-ordering separation as the 4 -> 6 widening above, diagnosed the same way
-    // (MTG_TUTOR_CHOSEN_RANK against the resolution list). Measured: resolve-mode goblins held-out
-    // searched +13 tu at W=6 (0 better / 13 worse, every one recovering at 4x budget) -> +3 at W=9,
-    // d0 untouched (width is irrelevant when you take the top card).
-    int TutorSearchWidth() const override;
+    // Goblin Matron tutors for "a Goblin card" out of ~16 distinct Goblin names. The axis searches
+    // EVERY name TutorCandidates returns (the tutor width was deleted 2026-11-22; this deck shipped 6,
+    // and before that 4, 12 and 9 -- see docs/design/searched-action-subdecisions.md and
+    // docs/design/goblins-enabler-worse-games.md for the width history). TutorCandidates still RANKS
+    // (value x deploy-discount), which orders the base pick and the variants; a narrowing, if this
+    // deck needs one, belongs in that rule on the targets' merits, never in a count.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // WITHDRAWN, and left here only as the hook's one implementation: "turns 1-2, play a Mountain if
     // one is in hand, without branching over the alternatives". Reachable ONLY under
@@ -2818,20 +2750,7 @@ public:
         static const bool env = EnvOn("MTG_KE_CONDEMN", true);
         return heurarm::Flag(heurarm::KE_CONDEMN, env);
     }
-    // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
-    //
-    // This is a COVERAGE fix, not a heuristic. GenericProvider::TutorCandidates deliberately
-    // encodes no ranking ("no deck-agnostic tutor heuristic worth encoding") and returns targets in
-    // LIBRARY ORDER, and the deck has EIGHT distinct Equipment names against a default width of 6 --
-    // so two legal Stoneforge targets go unscored every time, and WHICH two is decided by shuffle
-    // order rather than by merit. Widening to 8 makes the decision fully searched and deletes the
-    // shuffle dependence; there is nothing left to rank.
-    //
-    // Affordable precisely because the decision is RARE: measured 26 tutor triggers across 96 logged
-    // games (0.27/game), and the tutor axis is ADDITIVE (one rollout per extra target, see the base
-    // hook) rather than multiplicative, so the whole cost is ~2 extra rollouts on a quarter of games.
-    int TutorSearchWidth() const override;
-    // The reasoned fetch ranking the NARROW widths rest on (USER 2026-08-21: "narrow the list to a
+    // The reasoned fetch ranking (MTG_KE_TUTOR_RANK, default off; USER 2026-08-21: "narrow the list to a
     // small number and potentially only choose one most to all of the time in a heuristic").
     std::vector<std::string> TutorCandidates(const GameState& s, int controller,
                                              const CardParams& pp) const override;
@@ -2993,11 +2912,10 @@ public:
     // GoblinsProvider's power-ranked list (5.0550 -> 5.0850, both seeds; d5 unmoved). See the
     // definition for the authored order. Honors MTG_UNPRUNE=tutor as the escape hatch.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
-    // No TutorSearchWidth override: the CANDIDATE LIST is the branching control (user 2026-08-21,
-    // "I hate the width idea in general") -- TutorCandidates emits the decided pick alone when
-    // the lethality calculation is certain and the serious contenders when it is not, so a fixed
-    // width would be either inert or a second, arbitrary cap. MTG_TUTOR_WIDTH still overrides
-    // the axis for A/Bs; MTG_UNPRUNE=tutor restores the full untruncated list.
+    // The CANDIDATE LIST is the branching control (user 2026-08-21, "I hate the width idea in
+    // general") -- TutorCandidates emits the decided pick alone when the lethality calculation is
+    // certain and the serious contenders when it is not. (The tutor width itself was deleted
+    // 2026-11-22.) MTG_UNPRUNE=tutor restores the full untruncated list.
     // Cleanup discard: USER-AUTHORED bucket policy (2026-08-21) -- <mana> <threats> <enablers>,
     // shed in that order. Hand THREATS are spares in this deck ("many threats are not played
     // from hand... you can fetch to top of deck with Worldly Tutor and drop it off the top"),
@@ -3965,8 +3883,8 @@ public:
 // Harbinger's tutor_optional (Giant Harbinger / Forerunner carry it), Arbor Elf's
 // mana_requires_land_subtype, and the sideboard (the scan is mainboard only).
 //
-// TutorSearchWidth: inherited from DeckProvider = 6 >= Elvish Harbinger's five Elf names (Alchemist,
-// Harbinger, Ezuri, Seedcradle Witch, Arbor Elf); pinned by a unit test.
+// Tutor breadth: every name the candidate rule returns (no tutor width since 2026-11-22). Elvish
+// Harbinger has five Elf names (Alchemist, Harbinger, Ezuri, Seedcradle Witch, Arbor Elf).
 class AccomplishedAlchemistProvider : public SelesnyaLifegainProvider
 {
 public:
@@ -4022,9 +3940,6 @@ public:
     bool UntapLoopRouteEnabled() const override;
     // The search's COMBO OFF queries are ON for this deck by default (USER 2026-10-20).
     bool ComboOffSearchDefault() const override { return true; }
-    // 9 while the bucket rule is on: a COVERAGE bound, so every name the rule can admit (7 in the
-    // widest case) and its empty-set fallback (the 9-name sideboard) is searched. =0 -> the base 6.
-    int TutorSearchWidth() const override;
     // THE USER'S CLEANUP-DISCARD BUCKETS (2026-10-20): "You keep the best of each bucket and lands etc. for the
     // rest. Living Wish can fill any gaps and Staff can fill both." -- the wish rule's buckets (Alchemist,
     // Lifegain, Untap, Wincon/Draw), net of board, the best hand card of each owed bucket kept, a Wish per
@@ -4208,17 +4123,6 @@ public:
                "Risen Reef look per Elemental entering (a land on top goes in tapped) -- times every "
                "landfall attacker that can attack, plus the haste sources." }; }
     const char* Name() const override { return "LandfallElementals"; }
-    // TutorSearchWidth -- a COVERAGE fix, not a heuristic (2026-10-19, sweep s61016): Flamekin
-    // Harbinger can find 10 distinct Elemental names (Akoum Hellhound, Brushfire Elemental, Mossborn
-    // Hydra, Risen Reef, Flamekin Harbinger, Smokebraider, Fury, Incandescent Soulstoke, Fulminator Mage,
-    // Foundation Breaker; Metallic Mimic is a Shapeshifter, not one) and the generic candidate
-    // list is in LIBRARY (= shuffle) order, so the base width 6 left four names unreachable per search
-    // at ANY budget -- which four, decided by the shuffle. The Pirates (9) / Giants (7) precedent:
-    // admit every distinct legal name (32 = "all" for any list this archetype can hold; the axis is
-    // bounded by the distinct candidates, so the cap costs nothing beyond them). It widens, never
-    // narrows; the axis is ADDITIVE (one rollout per extra target). MTG_LFE_TUTOR_WIDTH=0 restores
-    // the base 6; MTG_TUTOR_WIDTH still overrides engine-side.
-    int TutorSearchWidth() const override;
     // THE FETCH RULE (USER 2026-10-23, MTG_LFE_FETCH_ORDER, default ON): Terramorphic Expanse / Myriad
     // Landscape fetch the first colour the battlefield still lacks in the order Red -> Green -> Blue ->
     // second Red -> second Green -> Red thereafter; Myriad (two basics sharing a type) skips Blue. An
@@ -4537,13 +4441,6 @@ public:
                "turn untaps and attacks before the opponent's next turn)." }; }
     const char* Name() const override { return "Cyclone"; }
     bool LeafKillOnlyNoM2OptIn() const override { return true; }
-    // TutorSearchWidth -- a COVERAGE fix, not a heuristic (the LandfallElementals / Pirates precedent):
-    // Long-Term Plans can find ANY card (~22 distinct names in the list) and the generic candidate list
-    // is in LIBRARY (= shuffle) order, so the base width 6 left most names -- Emrakul among them, as the
-    // shuffle chose -- unreachable per search at ANY budget. 32 admits every distinct name; it widens,
-    // never narrows, and the axis is additive (one rollout per extra target). MTG_CYCLONE_TUTOR_WIDTH=0
-    // restores the base 6; MTG_TUTOR_WIDTH still overrides engine-side. PROVISIONAL (USER Q8).
-    int TutorSearchWidth() const override;
 
     // ---- Phase 3 (2026-10-27): the searched cycle, Cyclone's free cast, Remand ------------------------
     // THE SEARCHED CYCLE. Every distinct cycler in hand whose life half is payable is a seed the search
@@ -4919,7 +4816,7 @@ public:
 //
 // DERIVES FROM DeckProvider, NOT from the provider the list happened to trip. Forerunner of the
 // Coalition carries `tutor_to_top`, which ALONE sets the `anti` signature, so before this class
-// existed the deck rode AntiLifegainProvider -- whose TutorSearchWidth is 2 and whose discard
+// existed the deck rode AntiLifegainProvider -- whose tutor width was 2 and whose discard
 // buckets are keyed on another deck's cards. That is the archetype-neutral misroute class (the
 // eighth occurrence, after Mirrorwing, StompySurprise, Minotaur, Dragons, Melira Pod, Fungus and
 // Giants), not a routing anybody chose, so the deck is NOT play-neutral against its accidental
@@ -4929,7 +4826,6 @@ public:
 //
 // Hooks held (everything else inherits Generic byte-for-byte):
 //   * Certificate -- NotAssessed (see the body for what a sound one must model).
-//   * TutorSearchWidth 9 -- a COVERAGE fix, not a heuristic (see the override).
 //   * CleanupDiscardCandidates -- the authored bucket policy, MTG_PIRATES_BUCKET_DISCARD (default
 //     ON; =0 restores the generic ranking). docs/design/pirates-discard-policy-proposal.md.
 //   * CastOrderRank -- deliberately NOT overridden: cast order is a USER review per deck, and the
@@ -5177,9 +5073,9 @@ struct WorldfireKeepRank
 //
 // Hooks held (everything else inherits DeckProvider byte-for-byte):
 //   * Certificate -- NotAssessed (see the body).
-//   * TutorCandidates / TutorSearchWidth -- the LAND tutors (Sylvan Scrying, Archdruid's Charm) see EVERY
-//     distinct legal name (width 64 -- a coverage fix: the generic list is shuffle order under width 6, so
-//     the shuffle decided which Gate names no budget could reach), ORDERED: Maze's End first while we hold
+//   * TutorCandidates -- the LAND tutors (Sylvan Scrying, Archdruid's Charm) see EVERY distinct legal name
+//     (the tutor axis has no width; its old 64 was a coverage bound against the base 6's shuffle-order
+//     cut), ORDERED: Maze's End first while we hold
 //     none, then Gate names we do not control yet, then everything else, Gates we already control last.
 //     Ordering only -- nothing is dropped.
 //   * TapTutorPutCandidates -- Maze's End's fetch: when the activation WINS whatever it finds (ten distinct
@@ -5199,7 +5095,6 @@ public:
     static int MazeWinlessBound(const GameState& s);
     const char* Name() const override { return "MazesEnd"; }
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
-    int TutorSearchWidth() const override { return 64; }
     bool TapTutorPutCandidates(const GameState& s, const CardDefinition& source,
                                std::vector<std::string>& names) const override;
     bool HasExtraLethalModel() const override { return true; }
@@ -5284,11 +5179,6 @@ public:
 //
 // Hooks held (everything else inherits DeckProvider byte-for-byte):
 //   * Certificate -- NotAssessed (see the body for what a sound one must model).
-//   * TutorSearchWidth 32 -- a COVERAGE fix, not a heuristic (the Cyclone precedent): Demonic Tutor,
-//     four Diabolic Intent and two Profane Tutor can each fetch ANY card, ~15 distinct names in this
-//     library; the generic candidate list is in LIBRARY (= shuffle) order and the base width is 6, so
-//     the shuffle -- not a judgement -- decided which names no budget could reach. 32 makes every
-//     name reachable. PROVISIONAL (a play change for this deck only): held-out A/B owed, USER call.
 class ShadowbornProvider : public DeckProvider
 {
 public:
@@ -5306,7 +5196,6 @@ public:
                "activation the turn's mana (Dark Ritual, Culling the Weak, Lake of the Dead, Lotus "
                "Bloom) can fund, and re-evaluate Jetmir's 3/6/9 thresholds after each." }; }
     const char* Name() const override { return "ShadowbornApostle"; }
-    int TutorSearchWidth() const override { return 32; }
     // RIPPLE TAKE (Shadowborn INT-3; USER-approved 2026-11-03 as a BUDGET-STAGED admission): a revealed
     // Shadowborn Apostle is cast; DECLINING one is PRUNED at every budget (USER 2026-11-03, INT-5: "We should
     // heuristically prune the decline of Apostles. I can't see an advantage."; the late wave no longer
@@ -5705,16 +5594,6 @@ public:
     bool ImplementsRequiredHeuristic(RequiredHeuristic h) const override
     { return h == RequiredHeuristic::EtbDigPick; }
 
-    // Forerunner of the Coalition searches for "a Pirate card", and this list holds NINE distinct
-    // Pirate names in its library (Daring Buccaneer, Corsair Captain, Kitesail Larcenist, Malcolm,
-    // Staunch Crewmate, Goblin Tomb Raider, Dire Fleet Captain, Forerunner, Siren Stormtamer --
-    // Metallic Mimic / Adaptive Automaton are Pirates on the BATTLEFIELD only). The generic
-    // candidate list is in LIBRARY (= shuffle) order and the base width is 6, so in any game the
-    // search could never reach three of them -- which three decided by the shuffle, not by a
-    // judgement. Width 9 makes every name reachable. A coverage fix (it widens, never narrows);
-    // the axis is ADDITIVE (one rollout per extra target), so the cost is bounded. MTG_TUTOR_WIDTH
-    // still overrides for the A/B.
-    int TutorSearchWidth() const override { return 9; }
 
     // Staunch Crewmate's dig ("look at the top four ... reveal an artifact or Pirate card"). Two
     // fixes to the searched pick's REACH, neither a ranking judgement (index 0 stays the base rule's
@@ -5857,26 +5736,10 @@ public:
     // See the implementation's contract block in DecisionProviders.cpp.
     bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
 
-    // The wish pool is EIGHT cards and the default width is SIX, which would leave ranks 6-7 --
-    // Essence Depleter and Dimensional Infiltrator, i.e. BOTH win conditions -- unreachable by the
-    // search at every depth, in every game, forever. Candidates come back in zone order, and for a
-    // sideboard that is decklist order, so it is deterministic rather than merely likely. This is a
-    // COVERAGE fix, not a heuristic one.
-    //
-    // MTG_EDF_TUTOR_NARROW (2026-09-08, default OFF): width 8 -> 3. The width-8 patch predates the
-    // adopted mode-2 ranking; with every candidate inside the width the ranking never BINDS -- the
-    // search evaluates all eight fetches and its depth-5/20ms horizon picks the sink over the
-    // enabler (seed 1: Depleter over Cloud of Faeries, T3 human win vs T5). Narrowing hands the
-    // choice to the board-aware ranking, and the width is also a straight cost multiplier on the
-    // root plan set (one profiled game: w8 90.9s, w3 38.1s, w1 26.1s). Paired with
-    // MTG_EDF_WISH_CAST_GATE -- without the castability gate the ranking itself tops the sink, so
-    // the two are measured JOINTLY (2x2), not in sequence.
-    int  TutorSearchWidth() const override
-    {
-        static const bool s_narrow_env = EnvOn("MTG_EDF_TUTOR_NARROW", false);
-        return heurarm::Flag(heurarm::EDF_TUTOR_NARROW, s_narrow_env) ? 3 : 8;
-    }
-    // The board-aware ranking a NARROWER width rests on (MTG_EDF_TUTOR_RANK: 0 off = the old
+    // (No tutor width. Its old 8 was a COVERAGE fix -- the wish pool is eight cards and the base 6 left
+    // BOTH win conditions unreachable -- and its default-off MTG_EDF_TUTOR_NARROW (8 -> 3) was deleted
+    // with the width on 2026-11-22: a narrowing belongs in TutorCandidates' rule, never a count.)
+    // The board-aware ranking (MTG_EDF_TUTOR_RANK: 0 off = the old
     // zone-order list, 1 flat tiers, 2 tiers with the kill gated on an assemblable loop). ADOPTED
     // at 2. Ranks by card PARAMS, never by name, so it is correct for any wish pool.
     std::vector<std::string> TutorCandidates(const GameState& s, int controller,

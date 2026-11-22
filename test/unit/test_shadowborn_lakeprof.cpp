@@ -358,7 +358,7 @@ TEST_CASE("Profane fetch: the main-phase menu stages no fetch; the crossing fans
     const std::vector<std::string> cands =
         RankedTutorCandidates(ProvLp(), s, 0, CardDatabase::Instance().Lookup("Profane Tutor")->params);
     std::set<std::string> uniq(cands.begin(), cands.end());
-    const std::size_t width = std::min<std::size_t>(uniq.size(), static_cast<std::size_t>(ProvLp().TutorSearchWidth()));
+    const std::size_t width = uniq.size();   // every candidate (no tutor width)
     REQUIRE(width >= 2);
     REQUIRE(x.size() == width);
     std::set<std::string> fetched;

@@ -4044,7 +4044,7 @@ inline bool ProfaneResolveFanOn()
 // Profane Tutors never resolves more -- two arrivals leave no copy to ripple into, one arrival + one free copy is two).
 constexpr int kSuspendTutorPinOrdinals = 2;
 // The crossing's width probe (BoundaryFan::Cross): each suspended-tutor search at the upkeep records its menu width
-// (the distinct resolution-state candidates, capped by the provider's TutorSearchWidth). nullptr outside a probe.
+// (the distinct resolution-state candidates, every one -- no tutor width). nullptr outside a probe.
 struct SuspendTutorProbe { int n = 0; int size[kSuspendTutorPinOrdinals] = { 1, 1 }; };
 inline thread_local SuspendTutorProbe* t_suspend_tutor_probe = nullptr;
 // Diagnostic hook (MTG_STUT_AXIS_STATS, TurnSolver): an UNPINNED suspended-tutor search, so the search can count
@@ -48208,8 +48208,8 @@ inline std::vector<std::vector<EotPutStep>> EotPutOptions(const GameState& t, bo
     };
     // THE PUT CREATURE'S OWN ENTER CHOICES (agent F2, the no-greedy rule): the same two searched pins a main-phase
     // put carries (TurnSolver.cpp EnumeratePlans' tutor axis and look-top fan) -- a put TUTOR creature's target
-    // (Flamekin Harbinger: the provider's front, every other rank of RankedTutorCandidates up to the provider's
-    // TutorSearchWidth, and the optional decline) and the look-tops its entry raises (Risen Reef: one LAND ordinal
+    // (Flamekin Harbinger: the provider's front, every other rank of RankedTutorCandidates (no width: the provider's
+    // candidate rule is the breadth), and the optional decline) and the look-tops its entry raises (Risen Reef: one LAND ordinal
     // per look, {default, flip}, as the full product while 2^n <= 16 and the additive one-hot fan past it -- the
     // main-phase cap and its disclosed limit; an entrant top-tutor's ORDER ordinal {0..r}). Look counts are UPPER
     // bounds (every own Reef watches; a nonland top consumes no entry), so an over-sized row is an inert duplicate,
@@ -48232,8 +48232,7 @@ inline std::vector<std::vector<EotPutStep>> EotPutOptions(const GameState& t, bo
             std::vector<std::string> uniq;
             for (const std::string& c : cands)
             { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-            const int w = std::max(1, ResolveProvider(t).TutorSearchWidth());
-            const int k = std::min(static_cast<int>(uniq.size()), w);
+            const int k = static_cast<int>(uniq.size());   // every candidate (no tutor width)
             for (int c = 1; c < k; ++c) { tut.push_back(c); }
             if (pp.tutor_optional) { tut.push_back(kTutorDeclineChoice); }
         }

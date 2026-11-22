@@ -452,13 +452,6 @@ TEST_CASE("Vampires routing: the signature survives cutting any ONE of its four 
     }
 }
 
-TEST_CASE("Pirates tutor width covers all nine Pirate names Forerunner can find")
-{
-    CHECK(PiratesProvider().TutorSearchWidth() >= 9);
-    // The pinned base it replaces -- if the base ever widens past 9 this override is moot.
-    CHECK(GenericProvider().TutorSearchWidth() == 6);
-}
-
 TEST_CASE("Pirates discard: a surplus land is shed before any threat")
 {
     // Four lands on board already meet the source target, so the Mountain is pure overflow.

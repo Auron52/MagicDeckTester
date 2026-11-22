@@ -8,7 +8,7 @@
 //     sound prune).
 //   * CycloneProvider's routing signature (Cyclone's replacement param, OR Emrakul's extra turn AND
 //     Curator's cycle-or-discard scry), on synthetic registered cards -- the real entries carrying the
-//     params arrive in phases 2/3 -- and its TutorSearchWidth coverage fix.
+//     params arrive in phases 2/3.
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
@@ -266,14 +266,3 @@ TEST_CASE("Cyclone phase 1: CycloneProvider routing signature")
                                 "Scalding Tarn" })) == "AntiLifegain");
 }
 
-TEST_CASE("Cyclone phase 1: TutorSearchWidth is the coverage width, =0 restores the base")
-{
-    EnsureCardsCy();
-    heurarm::Clear();
-    const CycloneProvider cp;
-    const GenericProvider gp;
-    CHECK(cp.TutorSearchWidth() == 32);
-    heurarm::t_arm[heurarm::CYCLONE_TUTOR_WIDTH] = 0;
-    CHECK(cp.TutorSearchWidth() == gp.TutorSearchWidth());
-    heurarm::Clear();
-}

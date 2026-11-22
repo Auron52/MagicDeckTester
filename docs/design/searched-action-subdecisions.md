@@ -89,11 +89,47 @@ This is the shape the engine already uses for every other inline sub-decision �
 **after** `EnumeratePlans` returns, in `EnumeratePlansWithLand`. Cost becomes `P + W` instead of
 `P × k`, and the alternatives actually get scored.
 
-`MTG_TUTOR_AXIS=0` restores the old collapse; `MTG_TUTOR_WIDTH=<n>` overrides how many targets the
-axis scores including the provider's best (so `n=1` is exactly the old behaviour — verified
-byte-identical). Unset, the width comes from the **provider** (`DecisionProvider::TutorSearchWidth`).
+`MTG_TUTOR_AXIS=0` restores the old collapse. The axis scores **every** name the provider's
+`TutorCandidates` returns.
 
-### The width is per-deck, and the per-deck optima genuinely diverge
+## Tutor width DELETED (2026-11-22)
+
+The USER's ruling, verbatim:
+
+> "I don't like those tutor widths one bit. It should just search all options unless the heuristic
+> says otherwise and the heuristic should have full control of how many it returns."
+>
+> "A width provides either too few or more often too many options."
+>
+> "And is a fixed number for no reason where the real problem is not."
+
+So `DecisionProvider::TutorSearchWidth()` and `MTG_TUTOR_WIDTH` are gone, together with every
+per-deck override and every width-only lever (`MTG_GIANTS_TUTOR_WIDTH`, `MTG_LFE_TUTOR_WIDTH`,
+`MTG_CYCLONE_TUTOR_WIDTH`, `MTG_KE_TUTOR_ALL`, `MTG_KE_TUTOR_ONE`, `MTG_EDF_TUTOR_NARROW`,
+`MTG_GOBLIN_TUTOR_WIDTH`) and the Goblins value reserve (`MTG_GOBLIN_VALUE_RESERVE*`), which only
+existed to move a card back inside the window. Every tutor axis (the main-phase name and resolve
+axes, the put-creature ETB tutor, the upkeep instant tutor, the suspended-tutor crossing) now
+scores every candidate. The suspended tutor keeps its `kLandSearchPinMask + 1` cap: that is the
+packed pin's encoding limit, not a search width.
+
+**Where narrowing lives now.** A deck whose tutor needs fewer targets restricts its own
+`TutorCandidates` rule **on the targets' merits** (the Worldfire piece prune, the Glittering Wish
+roles, the Hinata Gamble rule, the Goblins role keepers) — never with a count. The human-play viewer
+and the unpruned audit still see every legal name (`RankedTutorCandidates`).
+
+**Why this is a correctness change and not only a cost one.** The generic `TutorCandidates`
+returns LIBRARY (= shuffle) order, so the base width 6 dropped legal targets by shuffle position,
+not merit: a lossy prune inside the search window that no budget could undo (the completeness
+invariant). Most overrides were patches for exactly that hole (Giants 7, Pirates 9, Kitty 8,
+EDF 8, AA 9, PreventDamage 20, Bruna / Cyclone / LFE / Shadowborn 32, Maze's End 64): they meant
+"every legal name" and simply disappear. AntiLifegain's 2 was exhaustive (a two-name pool). The
+narrowings that were real — Goblins 6 over a ~16-name ranked list, and every deck that rode the
+base 6 with more than six candidates (Hinata's Gamble among them) — now search everything.
+
+The per-deck history below is kept as the record of what the width measured; it no longer
+describes the engine.
+
+### (History) The width was per-deck, and the per-deck optima diverged
 
 The first sweep produced one global constant, 6. That was the best available *average*, but the
 per-deck curves it averaged over do not have the same shape at all — they have three different
@@ -127,7 +163,7 @@ other direction.
 ### What the holdout was for: one of the three picks did not survive it
 
 The widths were chosen on the TRAIN seeds specifically so the overnight seeds stayed a validation
-set (`test/tutor_width_sweep.sh` sweeps; `test/tutor_width_holdout.sh` confirms **once**). Running
+set (`test/tutor_width_sweep.sh` sweeps; `test/tutor_width_holdout.sh` confirms **once**; both deleted 2026-11-22, in git history). Running
 the finished config against the shipped global 6 on the held-out seeds:
 
 ```

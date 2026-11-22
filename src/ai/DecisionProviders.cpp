@@ -1809,15 +1809,14 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // generic tutor silently fetched nothing.)
     std::vector<std::string> all = GenericTutorList(s, controller, pp, /*nonlands_first=*/false);
     // RANKED DEFAULT for put-onto-battlefield tutors (MTG_TUTOR_RANKED_DEFAULT, default off --
-    // A/B lever, st993): the tutor-axis width prune and the tc=-1 base pick both assume this
-    // list is BEST-FIRST ("the provider orders candidates best-first" -- TutorAxisWidth), but
-    // library order is SHUFFLE order. st993's T4 Natural Order drew a library where Craterhoof
+    // A/B lever, st993): the tc=-1 base pick (and, until the tutor width was deleted on 2026-11-22,
+    // the axis's width prune) assumes this list is BEST-FIRST, but library order is SHUFFLE order. st993's T4 Natural Order drew a library where Craterhoof
     // Behemoth sat 6th of 11 distinct names under width 5: neither the greedy default (which
     // fetched Llanowar Elves) nor any searched variant could reach the deck's win condition, so
     // no projection anywhere priced the T4 kill. For a tutor that CHEATS a card onto the
     // battlefield, mana value is the value being cheated -- rank MV descending (name ascending
     // for a total, shuffle-independent order). The searched variants then simulate the real
-    // outcomes; the ranking only has to put the contenders inside the width, not pick the winner.
+    // outcomes; the ranking only has to put a sound default first, not pick the winner.
     static const bool s_ranked = EnvOn("MTG_TUTOR_RANKED_DEFAULT");
     if (s_ranked && pp.tutor_to_battlefield_single)
     {
@@ -21637,32 +21636,11 @@ std::vector<int> GoblinsProvider::CleanupDiscardCandidates(
 
 
 // Goblin Matron fetch RANKING (value x deploy-discount, STATE-AWARE), FOLDED IN (default-on; disable for
-// A/B via the unpruned Tutor gate = raw unranked list). Orders the full candidate set best-first so the
-// narrow searched axis (TutorSearchWidth=4) searches the genuine THREATS, not shuffle-order chaff. value =
+// A/B via the unpruned Tutor gate = raw unranked list). Orders the full candidate set best-first (the
+// searched axis scores every candidate; the tutor width was deleted 2026-11-22). value =
 // board impact EvalCard misses (lords over board+hand Goblins, haste, cost-cut, Krenko/Muxus/Siege-Gang);
 // discount = 0.55^turns-to-deploy over the best enabler path (mana + Skirk ramp, Vial charge-gated put,
 // Lackey free-drop) + opportunity-cost downweight. cands[0] (the dedup's default pick) is thus the best.
-// 6 shipped; 9 under the resolve axis -- see the width history note in the header. Byte-identical
-// with the flag off.
-int
-GoblinsProvider::TutorSearchWidth() const
-{
-    // DIAGNOSTIC (MTG_GOBLIN_TUTOR_WIDTH=n, unset/0 = off): override THIS provider's width for the
-    // width A/B. Distinct from the axis-level MTG_TUTOR_WIDTH, which trims only the search fan-out:
-    // the value-reserve curation below reads this method too, so overriding here moves the reserve's
-    // rescue slots WITH the window (a provider-W=6 arm rescues into ranks 4-5, not 7-8).
-    static const int ovr = EnvInt("MTG_GOBLIN_TUTOR_WIDTH", 0);
-    if (ovr > 0) { return ovr; }
-    // Back to 6 (2026-08-05): the 9-under-resolve patch existed because the winning fetches of six
-    // games ranked 7-9 -- all of them CLOSER reads the ranking was blind to. With the honest-swing
-    // reads (lord buffs + attack pump) and the burst-closer in, every one of those games takes the
-    // W=12 line at W=6, and the full W=6-vs-W=12 residual is noise classes only: budget churn
-    // (gi553/gi352, recover at 4x), clairvoyance (gi124, edge dies under MTG_SHUFFLE_SALT_SEARCH
-    // decoupling), and indirect width-leakage into NON-tutor decisions (gi714's T2 self-sac,
-    // gi200's mulligan bottoming) -- with same-magnitude games in W=6's favor (gi483/gi624/gi299).
-    // A width of 9 out of Matron's ~14 distinct names made the ranking nearly a no-op (user).
-    return 6;
-}
 
 std::vector<std::string>
 GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
@@ -21921,8 +21899,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // same symptom -- gi101 is the case: at the T4 Matron the ranking is computed twice, once with
     // 3 lands (mana_next=4, Siege-Gang rank 8, OUTSIDE a 6-wide window) and once with 4 (mana_next=5,
     // rank 4, inside). The 3-land copy is the one the enumerator binds on, so a bomb that IS castable
-    // next turn gets vetoed off the axis. Gated diagnostics MTG_GOBLIN_RESERVE_TURN /
-    // MTG_GOBLIN_RESERVE_NEXT pinned it to exactly that state (turn 4, mana_next 4).
+    // next turn got vetoed off the axis (the tutor width, deleted 2026-11-22). Gated diagnostics
+    // pinned it to exactly that state (turn 4, mana_next 4).
     // REJECTED, kept default-off with its number. Correcting the projection is measurably WORSE:
     //
     //                                        gi101   HELD-OUT (8000 searched)
@@ -22359,7 +22337,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // the ordering directly and says the ranking genuinely improved; the searched loss was the ranking
     // pushing a still-wanted card out of a four-slot window. Re-measured at W=6 the searched sign flips
     // to -4.0 with the d0 gain unchanged, which is what identifies it as window membership rather than
-    // a bad order. Hence the paired TutorSearchWidth 4 -> 6 -- see the note there.
+    // a bad order. Hence the paired width 4 -> 6 at the time (the width is deleted since 2026-11-22).
     static const bool lord_amp = EnvOn("MTG_GOBLIN_LORD_AMP", true);
     double stuck_hand_value = 0.0;   // best hand Goblin I cannot cast right now = what to accelerate
     int    stuck_mv         = 0;
@@ -23007,157 +22985,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         }
         if (!kept.empty()) { cands.swap(kept); }
     }
-    // --- RESERVE A SLOT FOR THE BEST RAW CARD -------------------------------------------------
-    // The deploy discount is a PRE-SCORER ESTIMATE, and it can hide a bomb from the search entirely
-    // rather than merely ranking it low. s3003 gi101 is the worked case. When the search asks at T3
-    // "should I hold the Matron and cast it on T4 instead", it evaluates projected T4 states that
-    // look like this:
-    //
-    //    8.  Siege-Gang Commander  score=146.3  value=510.0  x disc=0.287 (t=2)
-    //    9.  Muxus, Goblin Grandee score=109.7  value=850.0  x disc=0.129 (t=3)
-    //
-    // Siege-Gang's RAW value (510) is higher than Goblin Chieftain's (500), the card that tops that
-    // list, and Muxus at 850 is the best card in the deck. Both are outside a 6-wide window purely
-    // because a {3}{R}{R} bomb reads as two turns away at untapped=3 / next=4. So the whole "hold
-    // the Matron" branch is unreachable, the search casts on T3 for the lord, and the game ends T6
-    // instead of T5. The width threshold is exactly W=9 -- the rank Siege-Gang occupies there.
-    //
-    // The discount is not wrong as a RANKING signal; it is wrong as an EXCLUSION. Once the bomb is
-    // on the axis the search re-simulates the line and either verifies it or throws it away, which
-    // is the same "optimism proposes, the re-sim disposes" pattern that measured load-bearing for
-    // Dragonstorm's ritual-afford credit. So reserve the last window slot for the highest RAW-value
-    // candidate when the discount has pushed it out, instead of letting an estimate veto it.
-    // ON CLAIRVOYANCE, and a claim retracted. The recovered line turns on a card drawn AFTER the
-    // decision: T3 hold the Matron, T4 DRAW Goblin Lackey + cast it + Matron fetches Siege-Gang,
-    // T5 the Lackey connects and puts Siege-Gang in free. A MTG_SHUFFLE_SALT_SEARCH decouple was run
-    // and the edge survived at salts 1-5, which was reported here as "not a clairvoyance artifact".
-    // That was WRONG: that instrument re-salts MID-GAME shuffles only (the opening library order
-    // comes from MTG_SHUFFLE_SALT_OPENING), so it strips reshuffle clairvoyance -- worth testing,
-    // since Goblin Matron has tutor_shuffle_after -- but a normal draw off the pre-shuffled library
-    // is identical in search and reality at every search salt. It could not have detected this.
-    //
-    // The justification is different, and does hold. First, the searched metric is clairvoyant BY
-    // CONSTRUCTION -- the search simulates the real library, so every searched decision in this
-    // project sees future draws, including the already-shipped W=4 -> 6 widening. Foreknowledge is a
-    // uniform baseline, not something this line uniquely exploits. Second, and decisively: the line
-    // is not merely unfound, it is UNREACHABLE. At W=6 the game stays T6 at depth 3, 5 AND 6 with
-    // unlimited budget, while W=6 + reserve wins T5 at all three. More search cannot evaluate a line
-    // whose key card was never put on the axis, so the window is hard-vetoing a valid play and this
-    // removes an artificial restriction rather than encoding foreknowledge.
-    //
-    // THE BINDING DECISION IS THE T2 LAND DROP, not the fetch (traced 2026-08-05, replacing an
-    // earlier "the deciding state is unpinned" note here -- and an in-hand-Lackey hypothesis that
-    // measured completely inert, for the reason below). Three Tree City taps for {C} in base mode,
-    // so playing it T2 leaves {R}{R}{C} on T3 and Goblin Chainwhirler ({R}{R}{R}) uncastable:
-    //
-    //   W<=8   T2 Three Tree City -> T3 can only cast Matron -> fetch Chieftain            -> T6
-    //   W>=9   T2 Mountain        -> T3 Chainwhirler -> T4 Three Tree City + Matron->Siege-Gang
-    //                              + Lackey -> T5 Lackey connects, Siege-Gang in FREE, and Three
-    //                                Tree City's {2},{T} "add {R} per Goblin" pays 4 sac activations
-    //                                for exactly 8                                          -> T5
-    //
-    // THE BINDING STATE IS THE PRE-LAND-DROP T4 NODE. The lookahead does re-rank at every projected
-    // turn, so an earlier draft of this note blaming a T3 state was wrong -- the rank-8 match there
-    // was a coincidence. Gating the reserve by turn (MTG_GOBLIN_RESERVE_TURN) recovers gi101 ONLY at
-    // turn 4, and gating additionally by mana_next (MTG_GOBLIN_RESERVE_NEXT) ONLY at mana_next=4.
-    // T4 is ranked TWICE, because the enumerator evaluates the cast before and after the land drop:
-    //
-    //   T4 G=1 opp=16 untapped=3 next=4 (3 lands, land STILL IN HAND)  Siege-Gang rank 8  OUTSIDE
-    //   T4 G=1 opp=16 untapped=4 next=5 (4 lands, land played)         Siege-Gang rank 4  inside
-    //
-    // and it binds on the pre-land copy, where mana_next is one short so a {3}{R}{R} bomb prices t=2
-    // instead of t=1. Rank 8 is also why the width threshold is exactly W=9 (W=7 and W=8 add only
-    // Krenko and Mogg War Marshal and change nothing). Crediting that pending drop is the obvious
-    // sharper fix and it DOES recover gi101 with the reserve off -- but it measures +7 to +9 held-out,
-    // so it is rejected; see the MTG_GOBLIN_PENDING_LAND table at the mana_next definition.
-    //
-    // The Lackey that carries the line is DRAWN ON T4, so at the deciding state it is in neither hand
-    // nor play but still in the library -- which is why teaching turns_to_deploy to count an in-hand
-    // Lackey measured inert. The discount is doing its job on the information it has; the defect is
-    // that a fixed window promotes that estimate to a VETO over a search that simulates the draw.
-    //
-    // THE EVICTION BELOW IS DELIBERATE AND MEASURED -- do not "fix" it. Inserting the k-th rescue at
-    // W-1-k shifts the (k-1)-th rescue out of the window, so reserve=N really rescues raw-value ranks
-    // 2..N and DROPS rank 1. That is not what the knob's name suggests, but it is the better rule:
-    // rank 1 is Muxus (raw 850, MV 6), the one bomb whose "genuinely stuck" discount is usually RIGHT.
-    //
-    //   reserve=1  rescue Muxus only          gi101 T6   held-out  0.0    (inert)
-    //   reserve=2  rescue rank 2 only         gi101 T5   held-out  0.0    <- shipped
-    //   reserve=2 + MTG_GOBLIN_VALUE_RESERVE_FIX=1, i.e. keep BOTH ranks 1 and 2:
-    //                                         gi101 T5   held-out +20.0   0 better / 20 worse
-    //
-    // MTG_GOBLIN_VALUE_RESERVE_FIX=1 restores the naive "keep every rescue" semantics (evict the
-    // weakest SURVIVOR rather than the previous rescue). Kept default-off with its number.
-    //
-    // Held-out is EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed -- so
-    // the -2.0 on regression (gi101 at d3 and d5) is the only movement in 20,000 games. Adopted as a
-    // zero-cost fix to a diagnosed mechanism, NOT as a measured win.
-    // MTG_GOBLIN_VALUE_RESERVE=0 disables.
-    static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
-    // DIAGNOSTIC: apply the reserve only at states whose turn number is N (0 = every turn, default).
-    // Pins WHICH projected turn's window a width/reserve effect actually binds at -- the ranking is a
-    // pure function of state, so a lookahead re-ranks at every projected turn and the deciding state
-    // is not necessarily the one being played.
-    static const int reserve_turn = EnvInt("MTG_GOBLIN_RESERVE_TURN", 0);
-    static const int reserve_next = EnvInt("MTG_GOBLIN_RESERVE_NEXT", 0);
-    if (value_reserve > 0 && (reserve_turn == 0 || s.turn_number == reserve_turn)
-        && (reserve_next == 0 || mana_next == reserve_next)
-        && static_cast<int>(cands.size()) > TutorSearchWidth())
-    {
-        const int W = TutorSearchWidth();
-        std::map<std::string, double> raw_memo;   // pure per name -- same byte-identical memo as the sort
-        auto raw_value = [&](const std::string& n) -> double
-        {
-            auto it = raw_memo.find(n);
-            if (it != raw_memo.end()) { return it->second; }
-            double v = 0.0;
-            for (const Card& lc : s.players[controller].library)
-            {
-                if (lc.m_name != n) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
-                v = value_of(d, d ? d->card : lc);
-                break;
-            }
-            return raw_memo.emplace(n, v).first->second;
-        };
-        // See the eviction note above: the default path's insert at W-1-k pushes the previous rescue
-        // out of the window ON PURPOSE (measured better). MTG_GOBLIN_VALUE_RESERVE_FIX=1 is the
-        // rejected naive form -- drop the weakest SURVIVOR and append at W-1 so rescues accumulate,
-        // with already-rescued slots excluded from the weakest scan. Held-out +20.0, 0/20.
-        static const bool reserve_fix = EnvOn("MTG_GOBLIN_VALUE_RESERVE_FIX", false);
-        std::vector<int> kept;                       // window indices already rescued (fix mode)
-        for (int k = 0; k < value_reserve; ++k)
-        {
-            // Best raw-value candidate currently OUTSIDE the window.
-            int best = -1;
-            for (std::size_t i = W; i < cands.size(); ++i)
-            {
-                if (best < 0 || raw_value(cands[i]) > raw_value(cands[best])) { best = static_cast<int>(i); }
-            }
-            if (best < 0) { break; }
-            // Only if it actually beats the weakest card already inside on raw value -- otherwise the
-            // window is already holding the best cards and there is nothing to rescue.
-            int weakest = -1;
-            for (int i = 0; i < W; ++i)
-            {
-                if (reserve_fix
-                    && std::find(kept.begin(), kept.end(), i) != kept.end()) { continue; }
-                if (weakest < 0 || raw_value(cands[i]) < raw_value(cands[weakest])) { weakest = i; }
-            }
-            if (weakest < 0 || raw_value(cands[best]) <= raw_value(cands[weakest])) { break; }
-            const std::string rescued = cands[best];
-            cands.erase(cands.begin() + best);
-            if (!reserve_fix)
-            {
-                cands.insert(cands.begin() + (W - 1 - k), rescued);
-                continue;
-            }
-            cands.erase(cands.begin() + weakest);        // evict the weakest SURVIVOR, not a rescue
-            cands.insert(cands.begin() + (W - 1), rescued);
-            for (int& idx : kept) { if (idx > weakest) { --idx; } }
-            kept.push_back(W - 1);
-        }
-    }
+    // (The VALUE RESERVE that stood here -- MTG_GOBLIN_VALUE_RESERVE / _FIX / _TURN / _NEXT -- moved the
+    // best raw-value card back INSIDE the tutor width when the deploy discount had pushed it out: "the
+    // discount is not wrong as a RANKING signal; it is wrong as an EXCLUSION." The width was deleted
+    // 2026-11-22, so nothing is excluded any more and the reserve had no window to rescue into. Its
+    // worked case, s3003 gi101 (Siege-Gang at rank 8), is now on the axis by construction. History:
+    // docs/design/goblins-enabler-worse-games.md.)
     if (dump)
     {
         static thread_local std::set<uint64_t> s_seen;
@@ -23177,12 +23010,11 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         std::fprintf(stderr,
                      "[tutor-rank] T%d src=%s | G=%d sick=%d ready_atk=%d swing_atk=%d opp_life=%d | lackey_now=%d "
                      "lackey_persist=%d skirk=%d vial=%d | mana: untapped=%d now=%d next=%d | "
-                     "buff_targets=%d hand_has_play=%d | haste=%d swings_left=%d skirk_ramp=%d | W=%d\n",
+                     "buff_targets=%d hand_has_play=%d | haste=%d swings_left=%d skirk_ramp=%d\n",
                      s.turn_number, pp.tutor_types.empty() ? "?" : pp.tutor_types[0].c_str(),
                      G, goblins_sick, ready_atk, swing_atk, opp_life, (int)lackey_now, (int)lackey_persist,
                      (int)skirk_on, vial_charge, untapped_mana, mana_now, mana_next,
-                     buff_targets, (int)hand_has_play, (int)haste_avail, swings_left, skirk_ramp,
-                     TutorSearchWidth());
+                     buff_targets, (int)hand_has_play, (int)haste_avail, swings_left, skirk_ramp);
         // MTG_TUTOR_RANK_DUMP=2: also the board and hand the inputs above were read from (per permanent:
         // tapped / entered_this_turn / CanAttackFull / power; per hand card: staged), the phase and whether
         // this is the REAL resolution -- the instrument for executor-vs-rollout input mismatches.
@@ -23212,8 +23044,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (!lc) { std::fprintf(stderr, "  %2zu. %-28s (gone)\n", i, cands[i].c_str()); continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(*lc);
             const Card& c = d ? d->card : *lc;
-            std::fprintf(stderr, "  %2zu.%s %-28s score=%10.1f  value=%7.1f +enable=%7.1f x disc=%.3f (t=%d)  burst=%d\n",
-                         i, (int)i < TutorSearchWidth() ? " *" : "  ", cands[i].c_str(),
+            std::fprintf(stderr, "  %2zu. %-28s score=%10.1f  value=%7.1f +enable=%7.1f x disc=%.3f (t=%d)  burst=%d\n",
+                         i, cands[i].c_str(),
                          score_of(cands[i]), value_of(d, c), enabler_of(d), discount_of(c),
                          turns_to_deploy(c, /*arriving=*/true), face_burst(d, c));
         }
@@ -28252,7 +28084,7 @@ int PreventDamageProvider::EtbDestroyTargetPick(const GameState& s, int controll
 // engine cards in hand + the top engine pick need and no land of ours makes first, else zone order.
 // Then everything else, zone order ("in goldfish nothing else is relevant").
 //
-// An ORDERING only: TutorSearchWidth 20 keeps every legal name a searched variant at the root.
+// An ORDERING only: every legal name is a searched variant at the root (the tutor axis has no width).
 namespace
 {
 enum PdRole : int { kPdGain = 0, kPdVito = 1, kPdDina = 2, kPdAmp = 3, kPdNoRole = -1 };
@@ -30505,7 +30337,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // PIRATES (U/R/b Vial Pirate tribal). MUST return ABOVE `anti`: Forerunner of the Coalition's
     // tutor_to_top ALONE sets that signature (the Giant Harbinger / Worldly Tutor path), which is the
     // EIGHTH occurrence of the archetype-neutral misroute class -- until 2026-09-26 this deck rode
-    // AntiLifegainProvider, whose TutorSearchWidth of 2 would have hidden seven of Forerunner's nine
+    // AntiLifegainProvider, whose tutor width of 2 would have hidden seven of Forerunner's nine
     // Pirate names. Signature = Pirates-only gated params OR'd across FIVE different cards (Daring
     // Buccaneer, Kitesail Larcenist, Dire Fleet Captain, Malcolm the Eyes, Forerunner of the
     // Coalition), all new in the 2026-09-26 onboarding and verified carried by NO other card in
@@ -31050,17 +30882,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         //     Tutor / Enlightened Tutor path).
         // So cutting either card does NOT fix the routing; it just changes which wrong provider
         // the deck lands on. The harm is concrete rather than theoretical: GoblinsProvider
-        // overrides TutorSearchWidth, and this deck has SEVEN distinct Giant names for Giant
-        // Harbinger to fetch, so a Goblin-tuned ranking would silently decide which Giant is
-        // unreachable -- a narrowing never measured for this deck.
+        // narrowed its tutor axis (a width, deleted 2026-11-22), and this deck has SEVEN distinct
+        // Giant names for Giant Harbinger to fetch, so a Goblin-tuned ranking would silently have
+        // decided which Giant was unreachable -- a narrowing never measured for this deck.
         //
         // Routes to GiantsProvider, a DeckProvider derivation: per the always-own-a-provider rule
         // the deck gets a name and a certificate answer, and it holds exactly ONE judgement hook --
         // the USER-settled cleanup-discard buckets (2026-10-09, GiantsProvider::
-        // CleanupDiscardCandidates, MTG_GIANTS_BUCKET_DISCARD=0 restores Generic) -- plus one
-        // COVERAGE fix, TutorSearchWidth 7 for Giant Harbinger's seven Giant names
-        // (MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6). Every other hook inherits GenericProvider
-        // byte-for-byte.
+        // CleanupDiscardCandidates, MTG_GIANTS_BUCKET_DISCARD=0 restores Generic). Every other hook
+        // inherits GenericProvider byte-for-byte. (Its old coverage fix, a tutor width of 7 for Giant
+        // Harbinger's seven names, went with the width itself on 2026-11-22: every name is searched.)
         //
         // Signature = Giants-only gated params OR'd across FIVE different cards (Inferno Titan,
         // Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic Giant) so a
@@ -38677,16 +38508,6 @@ bool GiantsProvider::CleanupDiscardShedStable() const
     return !GiantsBucketDiscardEnabled();
 }
 
-// ---- LandfallElementalsProvider::TutorSearchWidth --------------------------
-// Flamekin Harbinger's tutor axis must reach every distinct Elemental NAME (10 in the list); the
-// base width 6 over the library-order candidate list left four unreachable per search, chosen by the
-// shuffle (sweep s61016). A coverage fix (see the header note). MTG_LFE_TUTOR_WIDTH=0 -> the base 6.
-int LandfallElementalsProvider::TutorSearchWidth() const
-{
-    static const bool on = EnvOn("MTG_LFE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
-    return heurarm::Flag(heurarm::LFE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
-}
-
 // ---- WorldfireProvider::TutorCandidates ---------------------------------------
 // USER 2026-11-21: "Mystical tutor should be heavily pruned and should look for missing combo pieces.
 // Worldfire, Suspend card (rift bolt) and acceleration (Seething Song or Irencrag) based on what the
@@ -39865,16 +39686,6 @@ std::vector<int> WorldfireProvider::CleanupDiscardCandidates(
 // The quotas move with every shed (a land shed changes the drops, a finisher's slot frees), so the rule is asked
 // again per shed while it is on.
 bool WorldfireProvider::CleanupDiscardShedStable() const { return !WfBucketDiscardOn(); }
-
-// ---- CycloneProvider::TutorSearchWidth --------------------------------------
-// Long-Term Plans' tutor axis must reach every distinct NAME (any card is legal); the base width 6 over
-// the library-order candidate list left most unreachable per search, chosen by the shuffle. A coverage
-// fix (see the header note). MTG_CYCLONE_TUTOR_WIDTH=0 -> the base 6.
-int CycloneProvider::TutorSearchWidth() const
-{
-    static const bool on = EnvOn("MTG_CYCLONE_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
-    return heurarm::Flag(heurarm::CYCLONE_TUTOR_WIDTH, on) ? 32 : GenericProvider::TutorSearchWidth();
-}
 
 // ---- CycloneProvider: the searched cycle, the playout dig policy, the free cast, Remand (phase 3) -------
 // See the header for the rationale of each. A "replacer" is a permanent carrying
@@ -42755,17 +42566,6 @@ std::vector<std::string> LandfallElementalsProvider::TutorCandidates(const GameS
     return out.empty() ? all : out;
 }
 
-// ---- GiantsProvider::TutorSearchWidth ---------------------------------------
-// Giant Harbinger's tutor axis must be able to reach every Giant NAME in the list -- seven of them --
-// and the base width 6 left one unreachable per game, chosen by the shuffle (the library-order
-// candidate list; see the header note and docs/design/analysis-Pirates.md). A coverage fix: it widens,
-// never narrows, and the axis is additive. MTG_GIANTS_TUTOR_WIDTH=0 restores the base 6.
-int GiantsProvider::TutorSearchWidth() const
-{
-    static const bool on = EnvOn("MTG_GIANTS_TUTOR_WIDTH", true);   // DEFAULT ON; =0 -> the base 6
-    return heurarm::Flag(heurarm::GIANTS_TUTOR_WIDTH, on) ? 7 : GenericProvider::TutorSearchWidth();
-}
-
 std::vector<int> GiantsProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -44220,7 +44020,7 @@ std::vector<int> StompyProvider::CleanupDiscardCandidates(
 //     census, and no starving tier (its slot is a threat decision).
 // Census idiom matches ProjectEtbDestroyK (EffectivePower net of until-EOT bonuses, no lord
 // credit -- under-counting is the safe direction). Ordering-only over the full candidate list;
-// the width the axis searches is TutorSearchWidth() as usual. Honors MTG_UNPRUNE=tutor.
+// the axis searches every name returned. Honors MTG_UNPRUNE=tutor.
 std::vector<std::string>
 StompyProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
@@ -45330,21 +45130,13 @@ bool EquipmentProvider::OrderOpaqueCastsByRank() const
 // fetched card's identity barely changes the turn -- and when no Puresteel is out, the cheap
 // equipment the width-6 window already contains is what gets cast anyway. Do not re-widen this
 // without a NEW argument; the coverage argument alone is measured empty.
-static bool KittyTutorAllEnabled()
-{
-    static const bool on = EnvOn("MTG_KE_TUTOR_ALL");
-    return heurarm::Flag(heurarm::KE_TUTOR_ALL, on);
-}
-
+// MTG_KE_TUTOR_RANK (default OFF): the reasoned fetch ORDER below. It only orders the list; every
+// candidate is still searched (the tutor width it was once paired with, 2, and its width-1 sibling
+// MTG_KE_TUTOR_ONE were deleted with the width itself on 2026-11-22).
 static bool KittyTutorRankEnabled()
 {
     static const bool on = EnvOn("MTG_KE_TUTOR_RANK");
     return heurarm::Flag(heurarm::KE_TUTOR_RANK, on);
-}
-static bool KittyTutorOneEnabled()
-{
-    static const bool on = EnvOn("MTG_KE_TUTOR_ONE");
-    return heurarm::Flag(heurarm::KE_TUTOR_ONE, on);
 }
 
 // ---- Stoneforge Mystic's fetch: the REASONED ranking -------------------------------------------
@@ -45372,12 +45164,12 @@ static bool KittyTutorOneEnabled()
 // and Umezawa's Jitte is +0 now for counters later in a race we are trying to end.
 //
 // Losslessness is MEASURED per game, never argued -- see docs/design/kitty-tutor-and-discard-
-// heuristics.md. Both levers off -> the generic library-order list, byte-identical.
+// heuristics.md. Lever off -> the generic library-order list, byte-identical.
 std::vector<std::string>
 EquipmentProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
     std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
-    if (!KittyTutorRankEnabled() && !KittyTutorOneEnabled()) { return all; }
+    if (!KittyTutorRankEnabled()) { return all; }
 
     bool paladin = false;
     for (const Permanent& p : s.battlefield)
@@ -45397,13 +45189,6 @@ EquipmentProvider::TutorCandidates(const GameState& s, int controller, const Car
     std::stable_sort(all.begin(), all.end(),
                      [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
     return all;
-}
-
-int EquipmentProvider::TutorSearchWidth() const
-{
-    if (KittyTutorOneEnabled())  { return 1; }   // the heuristic alone
-    if (KittyTutorRankEnabled()) { return 2; }   // heuristic + one searched alternative
-    return KittyTutorAllEnabled() ? 8 : GenericProvider::TutorSearchWidth();
 }
 
 int EquipmentProvider::EnumGroupCap() const
@@ -57020,10 +56805,6 @@ static bool AaWishWitchWinOn()
     return heurarm::Flag(heurarm::AA_WISH_WITCH_WIN, s_env);
 }
 
-int AccomplishedAlchemistProvider::TutorSearchWidth() const
-{
-    return AaWishBucketsOn() ? 9 : GenericProvider::TutorSearchWidth();
-}
 
 // The rule's admitted names, in the USER's bucket order ({} = nothing admitted). `why` (optional): the
 // lacking buckets, for the proof trace.
