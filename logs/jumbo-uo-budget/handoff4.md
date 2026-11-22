@@ -80,6 +80,53 @@ PID with `kill -0` or on a DONE file). Rebase, never merge. Never touch `referen
 - The doc section in `docs/design/jumbo-apply-drop-order-2026-11-18.md` is drafted. It still holds an
   `IDENTITY_SLICE_PLACEHOLDER` line, and its numbers predate the work replay (re-measure from `$S/id2/j*`).
 
+## HANDOFF 2026-11-22 23:30 UTC (agent stopped at ~256K context)
+### USER rulings (verbatim, carried from handoff3)
+- 2026-11-20: "I'm okay with trying (a), but we will reserve judgement until we see the results. 20% extra is kind of
+  painful, but the other question is how fast or slow Jumbo Cactuar is compared to Hinata?"
+- 2026-11-21: "How is the quality comparison with this on vs off? I'm looking for averages, not absolute numbers. I'm
+  talking about vs lever off. Maybe we should also test each option on a larger set of games to get more accurate
+  numbers."
+- Adoption bar (CLAUDE.md): every slower game must recover at `--depth 8 --budget-ms 0`, and every DECK must be net <= 0
+  vs the committed tree ("+1 is not neutral. 0 is neutral.").
+- Standing rules: "3x is not a CPU licence": cut a fix's CPU cost, never justify it by headroom. Searched impact matters
+  most. Collapse wasted work unconditionally, but a lossy change needs an A/B. Coordinator: adopt nothing lossy, and
+  the price trade-off is the USER's call.
+
+### Commits (wip/jumbo-uo-budget, all pushed)
+| commit | what |
+|---|---|
+| ed421b62f | every-field census |
+| d7366d723 | tutor_target fold |
+| a27e75565 | MTG_SPS_XMEMO default ON, UOT site removed |
+| a09bc5dac | no-trace fix (muted key build, work and witness replay on hit, StoresAllowed, index-carry bypass) |
+| fbc05a285 / this commit | handoff |
+
+### Measurements
+- **lver** (finished; old binary a27e75565, but the verdict logic is unchanged): VERIFY over `$S/id1/verl.json` (all 60
+  decks, 40 games each, Jumbo 200) found **VERIFY_MISMATCH=0** in 935,194 hits. The raw field diffs are in
+  `$S/id1/lver/batch.err`; soulfire_own_targets, tutor_target, eval and hand_index are the largest. Unfolded fields
+  (soulfire_own_targets 177k, equiv_tag 35k, remand_slot 12k, ripple_*) are further fold candidates, but only with a
+  proof that the walk ignores them. Note that the walk DOES read soulfire_own_targets, in SoulfireOwnTargetDiscount and
+  strive.
+- id1 lane identity, old binary: 59 of 60 decks identical. Extra Turns and Hinata diverged (units, plus one digest).
+  The bisect pinned it to the key build (see the update above). The fix is a09bc5dac and is not yet validated.
+
+### Running
+- `$S/id2/chain.sh`, PID 1165672 (setsid). Step 1 is the lane job (build plus perf), marker `$S/id2/LANEDONE`. Step 2
+  is under the box lock (`$S/id2/big.sh`): the identity slice on/off, VERIFY, regression `--both`, then check_gt.
+  Markers: `$S/id2/{on,off,ver}/DONE`, `REGR_DONE`, `DONE`. A box-lock wait of hours is normal (flock is unfair).
+
+### Remaining, in order
+1. After LANEDONE: `$S/id2/et/logs/*.wins` must show 733038 faaf957a (the OFF digest), and Jumbo `jon` vs `joff` must be
+   identical. Record the instruction counts from `$S/id2/j{on,off}/stat.csv` (the memo's saving after the work replay).
+2. After `on` and `off` DONE: every played= line must match once ms/cpu are stripped, all 60 decks, units included. If
+   not, repro the first differing game as in `$S/et1` and bisect again.
+3. Regression `--both` must show no GT change. check_gt_logs must give rc=0.
+4. Fill the doc section: replace `IDENTITY_SLICE_PLACEHOLDER`, update the instruction numbers, and add the no-trace
+   paragraph plus the lver VERIFY count. Commit and push wip/jumbo-uo-budget. Never push phase-1-2-deck-analyzer.
+5. Report: the price variants all fail the bar (USER decision, unsettled); report the exact cut's saving.
+
 ## Next steps
 1. When `$S/id1/on/DONE` and `off/DONE` exist, diff the arms with
    `sed 's/ ms=[0-9]*//;s/ cpu=[0-9]*//' batch.out | grep played= | sort` on each. The result must be identical
