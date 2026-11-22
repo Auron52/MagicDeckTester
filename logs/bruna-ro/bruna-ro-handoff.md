@@ -32,6 +32,12 @@ branch; never phase-1-2-deck-analyzer). Read /workspaces/MagicDeckTester/CLAUDE.
 - rep1.sh: ro2 (old binary) repros in the lane: rep/j1447_{off,a}.* (Jumbo d0 seed 1311447 gi1447 T3),
   rep/n532_{off,b}.* (Niv d0 seed 1310532 gi532 T3). Output: build/scratch/claude_bruna_ro/rep/, logs in rep/<tag>.logs/.
 
+## Chain (launched 2026-11-22 ~14:20 UTC, PID 936334, setsid)
+build/scratch/claude_bruna_ro/chain2.sh: waits for build1 DONE -> units (units.txt) -> box lock -> cost probe (probe/, off
+arm, 25 g per searched shape, seed base 1790000) -> if probe cost ratio <= 1.6 vs ro2: the FULL A/B
+(ab/m.json from mk_ab.py 1810000 1000 400 2000; output ab/ab.out, ab/wins/). Status log chain2.log, last line DONE.
+Units failing does NOT stop the A/B (WARN line). After DONE: run cmp_arms.py (step 4 below), then steps 5-6.
+
 ## Repro findings (ro2 binary, DONE)
 - Jumbo gi1447 T3 board: Forest#24 + Utopia Sprawl, Forest#18, Voyaging Satyr, land drop Forest#23; hand GSZ, Overgrowth,
   Nylea. Nine mana exactly only if the Satyr untaps the Overgrowth Forest (3). 7a: Overgrowth's {2}{G} took the Satyr ->
