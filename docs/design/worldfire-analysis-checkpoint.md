@@ -1,5 +1,16 @@
 # Worldfire analysis -- checkpoint (2026-11-21 ~22:30 UTC)
 
+## Integration continuation (2026-11-22 ~12:35 UTC)
+
+The four sets were cherry-picked linearly onto current shared `94cd1e06b` in
+`.claude/worktrees/worldfire-integration` (`wip/worldfire-integration`), LTB →
+Worldfire cantrips → tutor width → free turns. The Worldfire-only GT acceptance
+commit was skipped for a single integrated acceptance after audit. The combined
+build passed, and the serial suite passed 3,946/3,946. The one pooled
+smoke/regression/scenario/reference run is in progress in
+`logs/worldfire-integration/both.log`. The LTB follow-ups are now recorded in
+`docs/design/worldfire-sweep-deferred.md`. No push queue lease has been joined.
+
 ## Codex continuation (2026-11-22 ~12:05 UTC)
 
 No USER decision is outstanding. The Sire fairness ruling is implemented on
