@@ -70126,6 +70126,31 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
     // that DECLINES -- a decline is what routes the turn's casts to the per-cast fallback, i.e. what
     // turns one folded question into one question per cast.
+    // MTG_PREPAY_C_TRACE=<turn> (DIAGNOSTIC, print-only, default off): the whole-turn prepay's float before/after
+    // and the sources it tapped, on that turn only -- to diff the rollout's and the executor's pre-load (hinata
+    // s63003 gi548: the rollout booked Sol Ring's {C}{C} as `wild`, the executor as {C}).
+    static const int s_pct_turn = []{ const char* e = std::getenv("MTG_PREPAY_C_TRACE"); return (e && *e) ? std::atoi(e) : 0; }();
+    struct PrepayCTrace
+    {
+        GameState* st = nullptr; ManaPool f0; std::vector<char> t0; std::string acts;
+        ~PrepayCTrace()
+        {
+            if (st == nullptr) { return; }
+            const ManaPool& f = st->floating_mana;
+            std::string taps;
+            for (std::size_t i = 0; i < st->battlefield.size() && i < t0.size(); ++i)
+            { if (st->battlefield[i].tapped && !t0[i]) { taps += " " + st->battlefield[i].card.m_name.str(); } }
+            std::fprintf(stderr, "[prepay-c] T%d acts=[%s] float0{u%d r%d c%d *%d} -> float{w%d u%d b%d r%d g%d c%d *%d wc%d} tapped:%s\n",
+                         st->turn_number, acts.c_str(), f0.blue, f0.red, f0.colorless, f0.wild,
+                         f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild, f.wild_c, taps.c_str());
+        }
+    } _pct;
+    if (s_pct_turn > 0 && state.turn_number == s_pct_turn)
+    {
+        _pct.st = &state; _pct.f0 = state.floating_mana;
+        for (const Permanent& p : state.battlefield) { _pct.t0.push_back(p.tapped ? 1 : 0); }
+        for (const Action& a : acts) { _pct.acts += a.card_name.str() + ","; }
+    }
     if (tapstats::Enabled()) { tapstats::g_prepay_calls.fetch_add(1, std::memory_order_relaxed); }
     struct PrepayDeclineTag {
         bool ok = false;
@@ -70842,9 +70867,20 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // committed at spend (USER: no per-colour branching), so booking it `wild` is legal -- and keeping it
     // `colorless` would refuse a line the board pays (Slivers gi1106 T4: Courtyard x2 + Cavern + Hive,
     // the replicate copy's {G} is a Courtyard tap). A land Aura's bonus is not counted (base yield only).
-    auto pure_c_tapped = [&state, &bf_snap]() -> int
+    // A {C} ALREADY FLOATING AT ENTRY IS PHYSICAL TOO (MTG_PREPAY_FLOAT_C_PHYS, DEFAULT OFF; =1 enables). The
+    // counted float (MTG_PREPAY_FLOAT_POOL) is the joint solve's starting pool (bt_start), and the solve can fund
+    // the batch's generic out of it -- but pure_c_tapped() only counts {C} out of sources THIS prepay tapped, so a
+    // `colorless` unit that was already floating reads as flexible and is relaunched as `wild`, which then pays a
+    // COLOURED pip (CR 106.1b / 107.4c: {C} is not a colour). Floating `colorless` is a {C} by definition (an
+    // any-colour {C}-capable unit floats as wild/wild_c), so it always stays {C}.
+    // Hinata s63003 gi548 (d8 b0): a failed Reality Spasm's tap-ahead (RitualTapAheadIntoFloat) left Island + Sol
+    // Ring floating {U}{C}{C} in the ROLLOUT; the next segment's prepay {Ponder, Ornithopter} relaunched Sol Ring's
+    // {C}{C} as wild2, and the continuation's Reality Spasm paid {U}{U} with it -> a verified T5 kill the executor
+    // (whose prepay tapped Sol Ring fresh and kept {C}{C}) could not cast: committed T5, realised T6.
+    static const bool s_float_c_phys = EnvOn("MTG_PREPAY_FLOAT_C_PHYS");
+    auto pure_c_tapped = [&state, &bf_snap, &fm_snap]() -> int
     {
-        int pure = 0;
+        int pure = s_float_c_phys ? fm_snap.colorless : 0;
         const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
         for (int bi = 0; bi < nb; ++bi)
         {
@@ -72472,6 +72508,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const int free_c = std::max(0, produced.colorless - combined.colorless);
             const int c_keep = std::min(c_must_stay(c_funded, free_c, combined.colorless, pure_c_tapped()),
                                         pool.wild);
+            if (s_pct_turn > 0 && state.turn_number == s_pct_turn)   // MTG_PREPAY_C_TRACE (diagnostic)
+            {
+                std::fprintf(stderr, "[prepay-c]   true-colours: produced{u%d r%d c%d *%d} combined{g%d u%d r%d c%d} c_funded=%d free_c=%d pure_c=%d c_keep=%d wild=%d\n",
+                             produced.blue, produced.red, produced.colorless, produced.wild, combined.generic,
+                             combined.blue, combined.red, combined.colorless, c_funded, free_c, pure_c_tapped(), c_keep, pool.wild);
+            }
             pool.wild      -= c_keep;
             pool.colorless += c_keep;
             c_funded_kept   = c_keep;
