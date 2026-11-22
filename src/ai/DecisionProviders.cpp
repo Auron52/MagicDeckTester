@@ -67639,6 +67639,20 @@ void MidrangeBurnProvider::FireblastMountainPairCandidates(
     if (narrow) { FoldFireblastPairsToMostTapped(s, pairs); }
 }
 
+// Creature Burn (USER 2026-11-22: "Apparently Fireblast still branches on every mountain ... Can you fold that like the
+// other burn decks?"). The same SOUND DOMINANCE fold: every Mountain-subtype land in this list is a basic Mountain
+// (Teetering Peaks is not a Mountain), and nothing in it reads WHICH Mountain is on the battlefield or in the graveyard
+// (no landfall-by-name, no Mountain count beyond Fireblast's own cost) -- so two basic Mountains differ only in
+// tappedness, and sacrificing tapped ones keeps the most red available. The helper refuses the fold if any candidate
+// is not a basic Mountain. Human play and the unpruned audit (fireblastpair) keep every pair (the TurnSolver call
+// site). DEFAULT ON; =0 restores the full fan.
+void CreatureBurnProvider::FireblastMountainPairCandidates(
+    const GameState& s, std::vector<std::pair<int, int>>& pairs) const
+{
+    static const bool narrow = EnvOn("MTG_CB_FIREBLAST_PAIR", true);
+    if (narrow) { FoldFireblastPairsToMostTapped(s, pairs); }
+}
+
 // SHARED: Grim Lavamancer's two-card exile fuel folded to one stable name-based representative -- an
 // IDENTITY FOLD for a deck with no effect that retrieves or counts a specific graveyard card (every pair pays
 // the same two-card cost). Target selection remains searched and the viewer still offers every legal pair.

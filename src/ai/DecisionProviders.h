@@ -4328,6 +4328,10 @@ public:
     void LandEtbPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const override;
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
+    // SOUND DOMINANCE FOLD shared with Midrange Burn / 1 Drop Burn (MTG_CB_FIREBLAST_PAIR, DEFAULT ON): Fireblast's
+    // Mountain pairs fold to the one keeping the most untapped Mountains (definition note).
+    void FireblastMountainPairCandidates(
+        const GameState& s, std::vector<std::pair<int, int>>& pairs) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Damage is combat (hasty bodies: Ball Lightning, Spark / Hellspark Elemental with unearth, "

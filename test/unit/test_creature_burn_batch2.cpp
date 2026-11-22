@@ -442,3 +442,29 @@ TEST_CASE("Manual ping: the human-menu shape helpers (standalone plan, tagged pa
     CHECK_FALSE(TurnSolver::HumanMenuBaseEmpty({ pass, ping }));     // a real (enumerated) pass is a base entry
     CHECK_FALSE(TurnSolver::HumanMenuBaseEmpty({ two }));
 }
+
+// USER 2026-11-22: "Apparently Fireblast still branches on every mountain ... Can you fold that like the other burn
+// decks?" -- CreatureBurnProvider::FireblastMountainPairCandidates (MTG_CB_FIREBLAST_PAIR): six basic Mountains, two
+// tapped -> the alternative cost offers ONE pair, the two tapped ones; the full 15-pair fan with the lever off, in
+// human play or under the unpruned audit.
+TEST_CASE("creature burn: Fireblast Mountain pairs fold to the most-tapped pair")
+{
+    GameState s = Cb2Board(6, {"Fireblast"});
+    static const CreatureBurnProvider provider; s.m_provider = &provider;
+    s.battlefield[0].tapped = true;   // Mountain 70
+    s.battlefield[1].tapped = true;   // Mountain 71
+    s.players[0].hand[0].m_number = 200;
+    const auto actions = TurnSolver::CollectActionsForTest(s, true);
+    std::vector<std::string> pins;
+    for (const Action& a : actions)
+    {
+        if (a.card_name != "Fireblast") { continue; }
+        const std::string t = a.tutor_target.str();
+        if (t.rfind("fireblast:", 0) != 0) { continue; }
+        if (std::find(pins.begin(), pins.end(), t) == pins.end()) { pins.push_back(t); }
+    }
+    const bool full = HumanPlayActive() || DecisionUnpruned(UnprunedGate::FireblastPair)
+                   || !EnvOn("MTG_CB_FIREBLAST_PAIR", true);
+    CHECK(pins.size() == (full ? 15u : 1u));
+    if (!full) { CHECK(pins[0] == "fireblast:70,71"); }
+}
