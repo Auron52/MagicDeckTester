@@ -15278,10 +15278,13 @@ static bool AttackPlanLifegainEnabled()
 // through the same PendingAttackDamage / ComputeLordBonus the board uses (subtype filter, "other", double strike,
 // the spent mana sources tapped). A lord's pump on a HASTE body cast in the same plan is still not credited (the
 // conservative direction). Inert for a plan with no lord cast, and with no attack on the board (pending_atk 0).
-// Lockstep: Solve and EnumeratePlans both read it through AttackTapLoss. Default ON; =0 -> no lord credit.
+// Lockstep: Solve and EnumeratePlans both read it through AttackTapLoss. Default OFF (see the reader); =1 -> on.
 static bool AttackLordCastEnabled()
 {
-    static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", true);   // DEFAULT ON; =0 no lord credit
+    // DEFAULT OFF (2026-11-22 A/B, 1.45M pairs, seed 1810000): searched 0 on 19 lord decks except Stompy +1; d0 -10,397
+    // overall, but Boars d0 +172 (216 slower; the Ilharg put projection reads the kept lord) and Goblins d0 +177.
+    // Fails the every-deck bar, so it stays off until those are root-caused (USER call). =1 -> on.
+    static const bool env_on = EnvOn("MTG_ATTACK_LORD_CAST", false);
     return heurarm::Flag(heurarm::ATTACK_LORD_CAST, env_on);
 }
 static bool AttackAuraHostTapEnabled()

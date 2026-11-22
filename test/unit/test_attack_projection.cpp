@@ -402,7 +402,7 @@ GameState LordBoard(int opp, int salt)
 TEST_CASE("F3b lord cast: a lord cast before combat pumps the board's attackers, not itself")
 {
     EnsureCardsLoaded();
-    heurarm::Clear();
+    ArmScope arm({ { heurarm::ATTACK_LORD_CAST, 1 } });
     CHECK(Threshold([](int l) { return LordBoard(l, 0); },
                     [](const TurnSolver::Plan& p) { return CastsOnly(p, { "Lord of Atlantis" }); }) == 6);
     const TurnSolver::Plan g = GreedySolve(LordBoard(6, 0));
@@ -410,7 +410,7 @@ TEST_CASE("F3b lord cast: a lord cast before combat pumps the board's attackers,
     CHECK_FALSE(GreedySolve(LordBoard(7, 0)).wins_this_turn);
 }
 
-TEST_CASE("F3b lord cast: MTG_ATTACK_LORD_CAST=0 credits nothing for the lord")
+TEST_CASE("F3b lord cast: MTG_ATTACK_LORD_CAST=0 (the default) credits nothing for the lord")
 {
     EnsureCardsLoaded();
     ArmScope arm({ { heurarm::ATTACK_LORD_CAST, 0 } });
