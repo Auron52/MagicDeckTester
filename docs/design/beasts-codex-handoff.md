@@ -69,14 +69,20 @@ instructions below are retained for context.
    original untracked deck copy was preserved under `logs/beasts/primary-deck-backup-20261122-1703/`
    (its only difference was line endings). A local baseline profile from seed 221122 enables the
    primary viewer at `http://localhost:8080`; `/api/step` returned the seed-1 mulligan decision.
-   The USER was told immediately. The analyzer's discard evidence may still be running; Windows
-   CI is being watched in the background. Regenerate the profile after batch J settles.
+   The USER was told immediately. The interim analyzer was stopped after writing the profile;
+   batch J's full baseline is running. Windows CI exposed a `far`/`near` macro collision in a
+   Worldfire test; the isolated fix landed as `138f60c83` after full Linux gates. Its Windows
+   rerun is being watched.
 4. **Batch J, BeastsProvider** (owed list in the ledger Checkpoint, every "Gaps for batch J" bullet):
    route above `boars` + re-pin the routing test; Certificate (must decline when opponent poison or a
    poison source exists); per-turn `ProviderSecondMainLive` gate (combat-time draw/dig/proliferate);
    same-name dig fold; cap-27 ordinal-product heuristic prunes per the USER's lethal-aware rule (below);
    Nykthos W-vs-G prune; Kicked Baloth MV fix; point Adaptive Omnitool at the Harbinger pin; **draft a
    per-deck cast order for USER review** (the USER said they would look it over).
+   **Local integration validated (2026-11-22):** 4029/4029 units, 243/243 smoke, zero play changes;
+   Stage 3 coverage clean. The cap-27 and Nykthos W prunes remain broad after the soundness audit
+   found counterexamples to a global fold. A narrow Kaheera/Packleader cast-order edge and
+   reducer-first payable rescue are tested. The full Stage 4 analyzer is running at seed 221122.
 5. Stage 3 coverage recheck; Stage 4 profile + 4a provider audit + the **second-main measurement for the
    USER** (none / per-turn / deck-wide: units, ms/game, avg win turn; deck-wide reachable via
    `MTG_FORCE_USES_M2`); 4-bis suite rows in all three tiers under `suite_gate.py --cost` (3x Hinata);
@@ -86,7 +92,8 @@ instructions below are retained for context.
 ## Rules specific to this run
 
 * **Never add to `DeckUsesSecondMain`** -- the second main is USER-owned and unsettled (ruling in the ledger).
-* Keep `sizeof(Permanent) == 328`, GameState 1720, Plan 792 (static_asserts).
+* Keep the current static-asserted layout: `sizeof(Permanent) == 336`, GameState 1736,
+  Plan 792 (the combined-counter and batch-J combat-resource fields grew the first two).
 * Only a DecisionProvider may restrict/order options; no host-side default/top pick; gates must
   over-approximate (never make a line unfindable).
 * One heavy job at a time, under `flock /workspaces/MagicDeckTester/build/scratch/BOX.lock`.
