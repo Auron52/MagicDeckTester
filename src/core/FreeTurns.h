@@ -92,8 +92,8 @@ inline bool SpawnMayAppear(const GameState& state)
 
 // One head's half of condition 1: it controls no land (its card-number band; tokens included -- a land is a
 // land) OR its hand holds no nonland card (opponentdeck::CountHandSides: an MDFC counts as the side the hand has
-// fewer of, so it fills an empty side -- {Mountain, Turntimber Symbiosis} holds a nonland; a lone MDFC is a land,
-// the tie).
+// fewer of, so it fills an empty side -- {Mountain, Turntimber Symbiosis} holds a nonland; a lone MDFC is a nonland,
+// the tie, so an opponent with a land out and a lone MDFC is NOT locked: it would cast the spell side).
 inline bool HeadLocked(const GameState& state, int head)
 {
     bool land = false;
@@ -142,29 +142,11 @@ inline bool SireDeployableCreature(const GameState& state)
         if (d != nullptr && d->params.endstep_each_player_discards_hand) { sire = true; break; }
     }
     if (!sire) { return false; }
-    int lands = 0;
-    std::array<int, 5> sources{};
-    for (const Permanent& p : state.battlefield)
-    {
-        if (!opponentdeck::HeadControls(p, 1) || !p.card.IsLand()) { continue; }
-        ++lands;
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        for (Color c : d->params.produces)
-        {
-            const int k = static_cast<int>(c);
-            if (k >= 0 && k < 5) { ++sources[static_cast<std::size_t>(k)]; }
-        }
-    }
+    const opponentdeck::HeadMana m = opponentdeck::HeadManaOf(state, 1);
     for (const Card& c : state.players[1].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d == nullptr || !d->card.IsCreature()) { continue; }
-        const ManaCost& m = d->card.m_mana_cost;
-        if (m.ManaValue() > lands) { continue; }
-        if (m.white <= sources[0] && m.blue <= sources[1] && m.black <= sources[2] && m.red <= sources[3]
-            && m.green <= sources[4])
-        { return true; }
+        if (d != nullptr && d->card.IsCreature() && opponentdeck::CastableWith(d, m)) { return true; }
     }
     return false;
 }
@@ -183,6 +165,7 @@ inline bool LockHolds(const GameState& state)
 {
     if (!state.opponent_plays_lands || state.opponent_decked || OpponentHasLost(state)) { return false; }
     if (state.sire_lock_veto) { return false; }   // MTG_FREE_TURN_SIRE_FAIR: it would have deployed a creature
+    if (state.annihilator_lock_veto) { return false; }   // MTG_FREE_TURN_ANNIHILATOR_FAIR: it would have kept a permanent
     if (!HeadLocked(state, 1)) { return false; }
     if (opponentdeck::HasSecondHead(state) && !HeadLocked(state, 2)) { return false; }
     return NoOpposingCreature(state);
@@ -195,6 +178,7 @@ inline void NoteOpponentTurnEnd(GameState& state)
     if (!RuleArmed(state)) { return; }
     state.pending_free_turn = LockHolds(state);
     state.sire_lock_veto = false;
+    state.annihilator_lock_veto = false;
 }
 
 // ---- the hurdles -----------------------------------------------------------------------------------------
@@ -252,6 +236,31 @@ inline const std::string& HurdleBasicName(std::size_t slot)
     return slot < kNames.size() ? kNames[slot] : kNone;
 }
 
+// THE BOUNCELAND OPENING RULE (the hurdles' third step; also every game under MTG_OPP_BOUNCE_OPENING -- USER
+// 2026-11-22: "we shouldn't be playing a bounceland first if we don't have an existing land unless forced by what the
+// player does. The basic replacing bounceland rule should apply."). If the hand holds a land and NO land in it can
+// stay on an empty battlefield (all Karoos / Lake of the Dead), the RIGHTMOST of them becomes a basic, in its slot,
+// numbered `next_basic` (advanced). Returns the number of basics dealt (0 or 1).
+inline int ApplyBouncelandOpening(std::vector<Card>& hand, const std::string& basic_name, int& next_basic)
+{
+    int rightmost_land = -1;
+    bool any_stays = false;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
+        if (!PlayableAsLand(d)) { continue; }
+        rightmost_land = i;
+        if (LandStaysAlone(d)) { any_stays = true; }
+    }
+    if (rightmost_land < 0 || any_stays) { return 0; }
+    Card c;
+    c.m_name = basic_name;
+    c.RehashName();
+    c.m_number = next_basic++;
+    hand[static_cast<std::size_t>(rightmost_land)] = c;
+    return 1;
+}
+
 // What the hurdles did to one hand (unit tests, the measurement's diagnostics).
 struct HurdleResult { int screw_basics = 0; int flood_placeholders = 0; int bounce_basics = 0; };
 
@@ -297,28 +306,27 @@ inline HurdleResult ApplyHurdlesToHand(std::vector<Card>& hand, const std::strin
         ++r.flood_placeholders;
     }
     // BOUNCELAND EXTENSION: no land that can stay alone -> the rightmost land becomes a basic.
-    int rightmost_land = -1;
-    bool any_stays = false;
-    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(hand[static_cast<std::size_t>(i)]);
-        if (!PlayableAsLand(d)) { continue; }
-        rightmost_land = i;
-        if (LandStaysAlone(d)) { any_stays = true; }
-    }
-    if (rightmost_land >= 0 && !any_stays)
-    {
-        hand[static_cast<std::size_t>(rightmost_land)] = make(basic_name, next_basic++);
-        ++r.bounce_basics;
-    }
+    r.bounce_basics = ApplyBouncelandOpening(hand, basic_name, next_basic);
     return r;
 }
 
 // After opponentdeck::Deal (GoldFishRunner::SetupGame, the scenario loader): both heads' opening hands.
+// Without the armed rule, MTG_OPP_BOUNCE_OPENING (DEFAULT OFF) applies the bounceland opening rule alone, in every game.
 inline void ApplyOpeningHurdles(GameState& state)
 {
-    if (!FreeTurnHurdlesOn() || !RuleArmed(state) || !state.opponent_plays_lands || !state.opponent_library_dealt)
-    { return; }
+    if (!state.opponent_plays_lands || !state.opponent_library_dealt) { return; }
+    if (!FreeTurnHurdlesOn() || !RuleArmed(state))
+    {
+        if (!OppOpeningBounceBasicOn()) { return; }
+        int b1 = opponentdeck::kNumberBase + kHurdleBasicOffset;
+        ApplyBouncelandOpening(state.players[1].hand, HurdleBasicName(state.opponent_slot), b1);
+        if (opponentdeck::HasSecondHead(state))
+        {
+            int b2 = opponentdeck::kNumberBase2 + kHurdleBasicOffset;
+            ApplyBouncelandOpening(state.opponent2_hand, HurdleBasicName(state.opponent2_slot), b2);
+        }
+        return;
+    }
     ApplyHurdlesToHand(state.players[1].hand, HurdleBasicName(state.opponent_slot), opponentdeck::kNumberBase);
     if (opponentdeck::HasSecondHead(state))
     {

@@ -937,6 +937,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // FREE TURNS (MTG_FREE_TURNS): exact-match, value-gated (0 / false for every game with the flag off).
     if (s.free_turns_taken != 0 || s.in_free_turn)
     { fold(0xF8EE000ull + static_cast<std::uint64_t>(s.free_turns_taken) * 2ull + (s.in_free_turn ? 1u : 0u)); }
+    if (s.annihilator_lock_veto) { fold(0xA1F8EE1ull); }   // MTG_FREE_TURN_ANNIHILATOR_FAIR: value-gated
     fold(static_cast<std::uint64_t>(s.active_player_index));
     fold(static_cast<std::uint64_t>(s.priority_player_index));
     fold(static_cast<std::uint64_t>(s.phase));

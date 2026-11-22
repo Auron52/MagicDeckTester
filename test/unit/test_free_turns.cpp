@@ -138,9 +138,9 @@ TEST_CASE("free turns: the lock condition (lands OR hand) AND no creature, incl.
     // Beside a land it is the hand's nonland: not locked.
     s.players[1].hand = { FtCard("Mountain", 100003), FtCard("Turntimber Symbiosis", 100004) };
     CHECK_FALSE(freeturn::LockHolds(s));
-    // Alone, both sides are empty and the tie goes to LAND: no nonland in hand, locked.
+    // Alone, both sides are empty and the tie goes to NONLAND: with a land out it would cast the spell side, not locked.
     s.players[1].hand = { FtCard("Turntimber Symbiosis", 100004) };
-    CHECK(freeturn::LockHolds(s));
+    CHECK_FALSE(freeturn::LockHolds(s));
     // Empty hand, a land, but an opposing creature: not locked.
     s.players[1].hand.clear();
     CHECK(freeturn::LockHolds(s));
@@ -538,7 +538,7 @@ TEST_CASE("free turns: a deck WITHOUT the lock trait is untouched under the flag
     CHECK(freeturn::SpawnMayAppear(s));
 }
 
-TEST_CASE("free turns: an MDFC counts as the side the hand has fewer of (ties to land)")
+TEST_CASE("free turns: an MDFC counts as the side the hand has fewer of (ties to nonland)")
 {
     FtLoadDb();
     auto sides = [](std::initializer_list<const char*> names) {
@@ -548,10 +548,10 @@ TEST_CASE("free turns: an MDFC counts as the side the hand has fewer of (ties to
         const opponentdeck::HandSides r = opponentdeck::CountHandSides(h);
         return std::make_pair(r.lands, r.nonlands);
     };
-    CHECK(sides({ "Turntimber Symbiosis" }) == std::make_pair(1, 0));
+    CHECK(sides({ "Turntimber Symbiosis" }) == std::make_pair(0, 1));
     CHECK(sides({ "Lightning Bolt", "Turntimber Symbiosis" }) == std::make_pair(1, 1));
     CHECK(sides({ "Mountain", "Turntimber Symbiosis" }) == std::make_pair(1, 1));
-    CHECK(sides({ "Turntimber Symbiosis", "Turntimber Symbiosis", "Turntimber Symbiosis" }) == std::make_pair(2, 1));
+    CHECK(sides({ "Turntimber Symbiosis", "Turntimber Symbiosis", "Turntimber Symbiosis" }) == std::make_pair(1, 2));
     CHECK(sides({ "Mountain", "Mountain", "Lightning Bolt", "Turntimber Symbiosis" }) == std::make_pair(2, 2));
     // The flood hurdle: six lands + an MDFC is 6 lands + 1 nonland (the MDFC), so ONE placeholder; the MDFC stays.
     std::vector<Card> h = { FtCard("Turntimber Symbiosis", 1) };
@@ -659,5 +659,111 @@ TEST_CASE("free turns: Sire fairness -- a creature the opponent could have cast 
         CHECK_FALSE(s.pending_free_turn);
         CHECK_FALSE(s.sire_lock_veto);
         CHECK(freeturn::LockHolds(s));   // empty hand, a land, no creature: locked once the veto is gone
+    }
+}
+
+TEST_CASE("free turns: annihilator fairness -- virtual targets from castable nonland permanents veto the lock")
+{
+    FtLoadDb();
+    GameState s = FtFresh();
+    FtOppPerm(s, "Mountain", 100001);
+    // One real permanent, annihilator 1: it is all taken. A castable Goblin Guide would have been a second target.
+    s.players[1].hand = { FtCard("Ponder", 100002), FtCard("Goblin Guide", 100003) };
+    CHECK(opponentdeck::AnnihilatorWouldKeepPermanent(s, 1));
+    CHECK_FALSE(opponentdeck::AnnihilatorWouldKeepPermanent(s, 2));   // 1 real + 1 virtual = 2, all taken
+    // A sorcery is no permanent; a green creature has no Forest to cast it.
+    s.players[1].hand = { FtCard("Ponder", 100002), FtCard("Avenger of Zendikar", 100004) };
+    CHECK_FALSE(opponentdeck::AnnihilatorWouldKeepPermanent(s, 1));
+    // More real permanents than the count: a real one stays, the check does not apply.
+    FtOppPerm(s, "Mountain", 100005);
+    s.players[1].hand = { FtCard("Goblin Guide", 100003) };
+    CHECK_FALSE(opponentdeck::AnnihilatorWouldKeepPermanent(s, 1));
+
+    // Through ApplyAnnihilator: Ulamog (annihilator 4) attacks a Mountain; the hand holds four castable Goblin Guides.
+    GameState g = FtFresh();
+    g.deck_has_annihilator = true;
+    FtOppPerm(g, "Mountain", 100001);
+    g.players[1].hand.clear();
+    for (int i = 0; i < 4; ++i) { g.players[1].hand.push_back(FtCard("Goblin Guide", 100010 + i)); }
+    const CardDefinition* ulamog = CardDatabase::Instance().Lookup("Ulamog, the Infinite Gyre");
+    REQUIRE(ulamog != nullptr);
+    Permanent u;
+    u.card = ulamog->card;
+    u.card.m_number = 7;
+    u.controller_index = 0;
+    u.owner_index = 0;
+    g.battlefield.push_back(u);
+    auto attack = [](GameState st, int fair) {
+        FtScope f(1);
+        const int saved = freeturn::t_force_ann_fair;
+        freeturn::t_force_ann_fair = fair;
+        std::vector<int> atk;
+        for (int i = 0; i < static_cast<int>(st.battlefield.size()); ++i)
+        { if (st.battlefield[static_cast<std::size_t>(i)].controller_index == 0) { atk.push_back(i); } }
+        ApplyAnnihilator(st, 0, atk);
+        freeturn::t_force_ann_fair = saved;
+        return st;
+    };
+    {   // Lever off: the Mountain is sacrificed, no veto, the lock holds (no land, no creature).
+        GameState r = attack(g, 0);
+        CHECK_FALSE(r.annihilator_lock_veto);
+        FtScope f(1);
+        CHECK(freeturn::LockHolds(r));
+    }
+    {   // Lever on: same sacrifice (a check only), but 1 real + 4 virtual > 4 -> the veto; consumed by the turn-end check.
+        GameState r = attack(g, 1);
+        CHECK(r.annihilator_lock_veto);
+        int opp = 0;
+        for (const Permanent& p : r.battlefield) { if (p.controller_index == 1) { ++opp; } }
+        CHECK(opp == 0);
+        FtScope f(1);
+        CHECK_FALSE(freeturn::LockHolds(r));
+        freeturn::NoteOpponentTurnEnd(r);
+        CHECK_FALSE(r.pending_free_turn);
+        CHECK_FALSE(r.annihilator_lock_veto);
+    }
+    {   // Lever on, but a deck without the lock trait: never armed.
+        GameState n = g;
+        n.deck_has_free_turn = false;
+        GameState r = attack(n, 1);
+        CHECK_FALSE(r.annihilator_lock_veto);
+    }
+}
+
+TEST_CASE("free turns: MTG_OPP_BOUNCE_OPENING -- the bounceland opening rule in every game, its own lever")
+{
+    FtLoadDb();
+    GameState s = FtFresh();
+    s.deck_has_free_turn = false;   // a deck without the lock trait: the hurdles never act
+    s.players[1].hand = { FtCard("Gruul Turf", 1), FtCard("Goblin Guide", 2), FtCard("Gruul Turf", 3),
+                          FtCard("Ponder", 4) };
+    const std::vector<std::string> before = FtNames(s.players[1].hand);
+    struct BScope { int saved = freeturn::t_force_bounce_opening;
+                    explicit BScope(int v) { freeturn::t_force_bounce_opening = v; }
+                    ~BScope() { freeturn::t_force_bounce_opening = saved; } };
+    {   // Off (the default), flag on or off: untouched.
+        BScope b(0);
+        FtScope f(1);
+        GameState t = s;
+        freeturn::ApplyOpeningHurdles(t);
+        CHECK(FtNames(t.players[1].hand) == before);
+    }
+    {   // On, flag off: the rightmost Karoo becomes the list's hurdle basic; nothing else moves (no screw / flood swap).
+        BScope b(1);
+        FtScope f(0);
+        GameState t = s;
+        freeturn::ApplyOpeningHurdles(t);
+        const std::vector<std::string> after = FtNames(t.players[1].hand);
+        CHECK(after[0] == "Gruul Turf");
+        CHECK(after[1] == "Goblin Guide");
+        CHECK(after[2] == freeturn::HurdleBasicName(t.opponent_slot));
+        CHECK(after[3] == "Ponder");
+        CHECK(opponentdeck::HeadOfNumber(t.players[1].hand[2].m_number) == 1);
+        // A hand with a land that stays alone: untouched.
+        GameState k = s;
+        k.players[1].hand[2] = FtCard("Forest", 3);
+        const std::vector<std::string> kb = FtNames(k.players[1].hand);
+        freeturn::ApplyOpeningHurdles(k);
+        CHECK(FtNames(k.players[1].hand) == kb);
     }
 }

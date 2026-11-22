@@ -1609,6 +1609,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // written to disk. One long long per game -- 166 KB for a 20,800-game matrix.
     static const bool s_dump_units = EnvOn("MTG_DUMP_UNITS");
     std::vector<std::vector<long long>> units(jobs.size());
+    // Per-game free turns (MTG_FREE_TURNS) and extra turns taken: INFORMATIONAL ONLY (USER 2026-11-22: "include the
+    // average of the extra turns as a separate number, even if we don't optimize for it"). Summed into
+    // BatchJobResult::free_turns_total / extra_turns_total for the per-job line; never part of the digest, the
+    // .wins file or the resume partials (a game reused from a partial file counts 0).
+    std::vector<std::vector<std::uint8_t>> free_n(jobs.size());
+    std::vector<std::vector<std::uint8_t>> extra_n(jobs.size());
     // Per-job escalation tallies (MTG_ESC_JOB_STATS=1; diagnostic, see ai/EscStats.h).
     static const bool s_esc_job_stats = EnvOn("MTG_ESC_JOB_STATS");
     std::vector<std::array<std::atomic<long long>, 9>> esc_job(jobs.size());
@@ -1623,6 +1629,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     {
         win_turns[j].assign(jobs[j].games, -1);
         digests[j].assign(jobs[j].games, 0);
+        free_n[j].assign(static_cast<std::size_t>(std::max(0, jobs[j].games)), 0);
+        extra_n[j].assign(static_cast<std::size_t>(std::max(0, jobs[j].games)), 0);
         abandoned_at[j].assign(jobs[j].games, 0);
         units[j].assign(jobs[j].games, 0);
     }
@@ -2142,6 +2150,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             dg_played.push_back(digests[j][i]);
             gi_played.push_back(gidx);
             r.units_total += units[j][i];
+            r.free_turns_total  += free_n[j][i];
+            r.extra_turns_total += extra_n[j][i];
             if (s_dump_units) { r.units.push_back(units[j][i]); }
         }
         r.games_played = static_cast<int>(wt_played.size());
@@ -2831,6 +2841,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 win_turns[wi.job][wi.game] = wt;
                 units[wi.job][wi.game] = g_units;
+                free_n[wi.job][wi.game]  = state.free_turns_taken;
+                extra_n[wi.job][wi.game] = state.extra_turns_taken;
                 const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - g_t0).count();
                 job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);

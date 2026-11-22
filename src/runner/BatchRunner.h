@@ -36,6 +36,11 @@ struct BatchJobResult
     // `units_total=` line -- which forces one process per arm, the per-arm wave pattern CLAUDE.md
     // forbids. One long long per job is free; see main.cpp's `units=` on the per-job result line.
     long long              units_total = 0;
+    // INFORMATIONAL (USER 2026-11-22): free turns (MTG_FREE_TURNS) and extra turns taken, summed over the same counted
+    // games as units_total. Printed beside avg on the per-job line only when nonzero; never read by the search, the
+    // digest or the GT. A game reused from a resume partial counts 0.
+    long long              free_turns_total  = 0;
+    long long              extra_turns_total = 0;
     // GLOBAL indices of games ABANDONED at the per-game work ceiling. NOT derivable from the gap
     // between `game_indices` and the job's range: a short job has two different kinds of hole, and
     // they mean opposite things. An ABANDONED game is degenerate -- every cell of that (deck, seed)

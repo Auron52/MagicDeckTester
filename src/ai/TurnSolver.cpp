@@ -109760,6 +109760,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     // give-back. Value-gated: 0 / false for every game while the flag is off -> the exact prior key.
     if (state.free_turns_taken != 0 || state.in_free_turn)
     { Fold(k, 0xF8EE000ull + static_cast<uint64_t>(state.free_turns_taken) * 2ull + (state.in_free_turn ? 1u : 0u)); }
+    // MTG_FREE_TURN_ANNIHILATOR_FAIR: the veto decides the next lock check. Value-gated (false unless the lever is on).
+    if (state.annihilator_lock_veto) { Fold(k, 0xA1F8EE1ull); }
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
     // Floating mana: future-determining (a mid-turn re-solve state with {R}{R} floated solves

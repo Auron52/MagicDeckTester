@@ -12047,7 +12047,21 @@ int main(int argc, char* argv[])
                           << " digest=" << dbuf
                           << " ms=" << r.elapsed_ms
                           << " units=" << r.units_total
-                          << " cpu=" << r.cpu_ms << "\n" << std::flush;
+                          << " cpu=" << r.cpu_ms;
+                // INFORMATIONAL (USER 2026-11-22: "include the average of the extra turns as a separate number, even
+                // if we don't optimize for it. This is just informative for agents and users."): free turns
+                // (MTG_FREE_TURNS) and extra turns taken per counted game. Appended after cpu= and only when one is
+                // nonzero, so every other job's line is unchanged; no reader of avg / digest / units moves.
+                if (r.free_turns_total != 0 || r.extra_turns_total != 0)
+                {
+                    char ftbuf[64];
+                    const double n = r.games_played > 0 ? static_cast<double>(r.games_played) : 1.0;
+                    std::snprintf(ftbuf, sizeof(ftbuf), " free_avg=%.4f extra_avg=%.4f",
+                                  static_cast<double>(r.free_turns_total) / n,
+                                  static_cast<double>(r.extra_turns_total) / n);
+                    std::cout << ftbuf;
+                }
+                std::cout << "\n" << std::flush;
             };
             // Per-game partial results go beside the .wins (BatchRunner::PersistOptions). The binary
             // and cards.json are part of every job's identity, so a rebuilt engine or an edited card
@@ -12541,6 +12555,18 @@ int main(int argc, char* argv[])
         std::cout << "Games played  : " << result.games_played << "\n";
         std::cout << "avg (turns)   : " << avgline
                   << "    [mean turn-to-win, unwon = max_turns+1; lower is better]\n";
+        // INFORMATIONAL (USER 2026-11-22: "include the average of the extra turns as a separate number, even if we
+        // don't optimize for it"): free turns (MTG_FREE_TURNS) and extra turns taken per game. Printed only when
+        // nonzero, so every other run's output is unchanged; never read by the search or the GT.
+        if (result.free_turns_total != 0 || result.extra_turns_total != 0)
+        {
+            const double n = result.games_played > 0 ? static_cast<double>(result.games_played) : 1.0;
+            char ftline[96];
+            std::snprintf(ftline, sizeof(ftline), "%.4f free + %.4f extra",
+                          static_cast<double>(result.free_turns_total) / n,
+                          static_cast<double>(result.extra_turns_total) / n);
+            std::cout << "turns taken+  : " << ftline << " per game    [informational; avg above is credited]\n";
+        }
 
         // "Infinite life" split (USER feature 2026-09-04, redesigned on review 2026-09-05): going
         // infinite is NOT a win -- the metric above counts actual kills only, and the game plays

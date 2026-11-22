@@ -566,9 +566,14 @@ def recording_rule_args(ref):
         args.append("--legacy-shared-shuffle-ordinal")
     if ref.get("opponent_land_model") and not ref.get("opponent_land_entry"):
         args.append("--legacy-opponent-land-entry")
-    if not ref.get("free_turns"):
+    # DIAGNOSTIC (USER 2026-11-22: list every reference the free-turn rule would change before any is touched):
+    # VPC_FREE_TURN_DIAG=1 replays unstamped references UNDER the rule (no --legacy-no-free-turns), and =2 also under
+    # the spawn land requirement (no --legacy-opponent-spawn-any) -- what adopting MTG_FREE_TURNS would mean. Never
+    # set in a tier; a drift it reports is a list for the USER, not a defect to fix.
+    ft_diag = os.environ.get("VPC_FREE_TURN_DIAG", "0")
+    if not ref.get("free_turns") and ft_diag not in ("1", "2"):
         args.append("--legacy-no-free-turns")
-    if not ref.get("opponent_spawn_land"):
+    if not ref.get("opponent_spawn_land") and ft_diag != "2":
         args.append("--legacy-opponent-spawn-any")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
