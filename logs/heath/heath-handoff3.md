@@ -21,7 +21,12 @@ Read CLAUDE.md first (box lock, lane, never push phase-1-2-deck-analyzer, refere
    T1 fetchland played earlier (r3/changed.txt; single-game replays with logs in r3/games/, all reproduce).
    d8 b0 on all 33 new slower/lost games (r3/d8b_*): 33/33 recover (final == base turn), so these are budget effects.
    Sea 2:11 sign (p~0.02) -> decoupled-clairvoyance test queued (item 3).
-3. RUNNING: r3/clair_chain.sh (manifest r3/manifest_clair.json: Burn/Morph/Sea play with `shuffle_salt_search: 1`, plus Sea
+3. DONE (13:50 UTC) decoupled A/B, r3/crep: with the search's shuffle decoupled from the real one (shuffle_salt_search 1):
+   Burn 30000 net 0 (12 faster / 12 slower), Morph 30000 net -22 (26/7), Sea 10000 net +5 (13/16, 1 lost / 1 gained);
+   Sea blind search (blind_salt 1) 10000: 172 faster / 144 slower, net -34 on both-won, 30 lost / 22 gained.
+   READING: Sea's 2:11 (r3 lockstep) becomes 13:16 once the search cannot see the real reshuffle, so the round-2 Sea / Burn
+   deficit is fetch-reshuffle timing under the lockstep (clairvoyant) search, not a play mechanism; Morph turns clearly
+   negative. CPU final/base 0.95-0.96 on every key. (was: RUNNING: r3/clair_chain.sh (manifest r3/manifest_clair.json: Burn/Morph/Sea play with `shuffle_salt_search: 1`, plus Sea
    with `blind_salt: 1`). Base arm DONE (r3/wins_cpbase); final arm waiting on the box lock -> r3/wins_cpfinal, marker
    r3/DONE_clair, log r3/progress_c. Report: `mkdir r3/crep; ln -s ../wins_cpbase r3/crep/wins_base; ln -s ../wins_cpfinal
    r3/crep/wins_new; python3 ab_report.py r3/crep`. Reading: if Sea's +9 vanishes when the search's shuffle is decoupled /
