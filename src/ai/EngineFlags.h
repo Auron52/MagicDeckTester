@@ -43,24 +43,25 @@ inline bool FreeTurnHurdlesOn()
     static const bool on = EnvOn("MTG_FREE_TURN_HURDLES", true);   // follows MTG_FREE_TURNS; =0 isolates the credit
     return FreeTurnsOn() && (freeturn::t_force_hurdles >= 0 ? freeturn::t_force_hurdles != 0 : on);
 }
-// MTG_FREE_TURN_SIRE_FAIR (DEFAULT OFF; inert unless the free-turn rule is armed): Sire of Insanity's lock holds only
-// if the opponent could NOT have deployed a creature from the hand Sire discards at its end step (USER 2026-11-22:
-// "it can lock out some decks and cannot for others"). A check only: no game state changes (core/FreeTurns.h).
+// MTG_FREE_TURN_SIRE_FAIR (DEFAULT ON; inert unless the free-turn rule is armed): Sire of Insanity's lock holds only
+// if the opponent could NOT have deployed a nonland permanent from the hand Sire discards at its end step
+// (USER 2026-11-22). A check only: no game state changes (core/FreeTurns.h).
 inline bool FreeTurnSireFairOn()
 {
-    static const bool on = EnvOn("MTG_FREE_TURN_SIRE_FAIR");   // DEFAULT OFF; =1 arms the deployable-creature check
+    static const bool on = EnvOn("MTG_FREE_TURN_SIRE_FAIR", true);   // DEFAULT ON; =0 disables the deployable-permanent check
     return heurarm::Flag(heurarm::FREE_TURN_SIRE_FAIR, on);   // per-job arm (one pooled A/B batch)
 }
-// MTG_FREE_TURN_ANNIHILATOR_FAIR (DEFAULT OFF; inert unless the free-turn rule is armed). USER 2026-11-22: "If we do
+// MTG_FREE_TURN_ANNIHILATOR_FAIR (DEFAULT ON; inert unless the free-turn rule is armed). USER 2026-11-22: "If we do
 // that rule for Sire we should also apply the same rule to Annihilator if even just to check if it would make enough
 // sacrifice targets to keep a permanent." When an annihilator sacrifice takes every opposing permanent, add the
 // nonland permanent cards the opponent could have cast from hand (mana value <= its lands, coloured pips covered) as
 // virtual sacrifice targets: if real + virtual permanents exceed the annihilator count, a real opponent would have
-// kept a permanent, and the next lock check does not hold. A check only: the sacrifice itself is unchanged
+// kept a permanent, and the next lock check does not hold IF the opponent played a land on that turn.
+// With no land play, successive attacks can complete the lock. A check only: the sacrifice itself is unchanged
 // (opponentdeck::AnnihilatorWouldKeepPermanent, core/OpponentDeck.h; ApplyAnnihilator, core/SpellEffects.h).
 inline bool FreeTurnAnnihilatorFairOn()
 {
-    static const bool on = EnvOn("MTG_FREE_TURN_ANNIHILATOR_FAIR");   // DEFAULT OFF; =1 arms the virtual-target check
+    static const bool on = EnvOn("MTG_FREE_TURN_ANNIHILATOR_FAIR", true);   // DEFAULT ON; =0 disables virtual targets
     if (freeturn::t_force_ann_fair >= 0) { return freeturn::t_force_ann_fair != 0; }
     return heurarm::Flag(heurarm::FREE_TURN_ANNIHILATOR_FAIR, on);   // per-job arm (one pooled A/B batch)
 }

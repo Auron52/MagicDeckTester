@@ -344,7 +344,7 @@ inline HandSides CountHandSides(const std::vector<Card>& hand, int skip = -1)
     return h;
 }
 
-// THE FREE-TURN FAIRNESS CHECKS' MANA (core/FreeTurns.h SireDeployableCreature; AnnihilatorWouldKeepPermanent below).
+// THE FREE-TURN FAIRNESS CHECKS' MANA (core/FreeTurns.h SireDeployablePermanent; AnnihilatorWouldKeepPermanent below).
 // One head's lands on the battlefield (its card-number band; a land token counts, a land is a land) and, per colour,
 // how many of them produce it. A card is castable with that when its mana value <= the land count and each coloured
 // pip is covered by that many lands producing the colour (an X is 0; a hybrid pip counts its first colour, as

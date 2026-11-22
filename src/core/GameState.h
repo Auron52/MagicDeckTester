@@ -676,12 +676,17 @@ struct GameState
     bool                     deck_free_turn_hand_intact   = false;
     std::uint8_t             free_turns_taken             = 0;
     // MTG_FREE_TURN_SIRE_FAIR (core/FreeTurns.h NoteSireBeforeDiscard): the opponent's hand held, just before Sire's
-    // discard at its end step, a creature it could have cast -- the lock check of that turn does not hold. Set and
+    // discard at its end step, a nonland permanent it could have cast -- the lock check of that turn does not hold. Set and
     // consumed inside one opponent turn (like pending_free_turn): never live at a search node, never folded.
     bool                     sire_lock_veto               = false;
+    // The passive opponent played a land on its current turn (either head in 2HG). Reassigned by every
+    // ResolvePassiveOpponentLandTurn, including a no-play turn. The annihilator fairness veto only applies
+    // on such a turn; without a land play, repeated attacks can complete the lock (USER 2026-11-22).
+    bool                     opponent_played_land_this_turn = false;
     // MTG_FREE_TURN_ANNIHILATOR_FAIR (core/SpellEffects.h ApplyAnnihilator, opponentdeck::AnnihilatorWouldKeepPermanent):
     // an annihilator sacrifice of OUR turn took every opposing permanent, but the opponent could have cast enough
-    // nonland permanents to keep one -- the next regular opponent turn's lock check does not hold (cleared there,
+    // nonland permanents to keep one -- the next regular opponent turn's lock check does not hold IF that
+    // opponent turn plays a land (cleared there,
     // NoteOpponentTurnEnd). LIVE at search nodes (our combat -> the opponent's turn end), so it IS folded, value-gated
     // (BuildSimKey, dominance::Build, the route signature). Never set unless the lever and the rule are armed.
     bool                     annihilator_lock_veto        = false;
