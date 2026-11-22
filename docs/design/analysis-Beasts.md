@@ -62,7 +62,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   second-main gate must add that record and its state fold together; (2) the root `EtbDigCandidates` does not merge
   same-name copies, so duplicate names give wasted (identical-state) variants -- add a same-name fold in the provider;
   (3) Adaptive Omnitool's combat dig can now reuse this pin (`docs/design/omnitool-combat-dig-greedy.md`).
-* **Running:** integrator E (Migloz). NEXT after it = batch F (Nykthos).
+* **Running:** integrator E2 (Migloz, from `logs/beasts/integrator-E-handoff.md`; WIP 95bb47e3b built, tests+smoke owed). NEXT after it = batch F (Nykthos).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -169,6 +169,13 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
    issue is -- answered (it is the fail-to-find-while-legal-cards-remain option only).
 8. Cast order: *"Okay, I'll try to look over what you draft tomorrow."*
 
+### USER rulings (2026-11-22, verbatim)
+
+On the seven deferral questions (Warchief regenerate; Questing Beast's three clauses; Gargaroth
+"or blocks"; Harbinger hexproof-from-black + planeswalker damage; Packleader "may" -> always draw;
+Bellower deliberate fail-to-find while a match remains; Migloz menace unmodelled, vigilance only):
+*"All questions 1-7 sound good to me."* -> all seven APPROVED; drop PROVISIONAL from their notes.
+
 ## Open USER questions (surfaced, not blocking)
 
 1. **Kaheera companion (sideboard).** The deck MEETS Kaheera's companion condition (every
@@ -208,3 +215,10 @@ Beasts-only params from several new cards.
 * Migloz {3}/-3 oil destroy artifact/enchantment: provider-pruned (USER 2026-11-21).
 * Elder Gargaroth gain-3 mode: provider fold (USER 2026-11-21).
 * Packleader/Bellower trigger order collapse (USER 2026-11-21).
+* Krosan Warchief regenerate: unmodelled (USER 2026-11-22).
+* Questing Beast: no-blocks-by-power<=2, no damage prevention, planeswalker redirect unmodelled (USER 2026-11-22).
+* Elder Gargaroth "or blocks": attack trigger only (USER 2026-11-22).
+* Garruk's Harbinger hexproof from black + planeswalker-damage dig: unmodelled (USER 2026-11-22).
+* Garruk's Packleader "may": always draws (USER 2026-11-22).
+* Woodland Bellower: deliberate fail-to-find while a match remains not offered; decline still offered (USER 2026-11-22).
+* Migloz menace: unmodelled, oil grant gives vigilance only (USER 2026-11-22).
