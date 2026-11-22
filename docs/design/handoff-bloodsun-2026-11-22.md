@@ -136,3 +136,7 @@ recommendation.
   on/open 4, on/blind 4. Thus the unblinded comparison is affected by knowledge of post-shuffle draws; the blind
   comparison does not uniformly erase the prune's penalty, but gi431 reverses it. Report both brackets, do not
   treat the open-draw result alone as a correctness failure.
+- Go-off ordering bug fixed in `bf84c87f0`: with two candidate Revelation packages in a plan, the Fastbond
+  bridge retains the cheaper package's joint payment instead of the last package's bill. Five focused go-off tests
+  pass (161 assertions). The B12-bis and B14 binaries were frozen before this change; their A/B arms remain
+  internally paired, but the final default-on go-off fix needs the shared suite smoke before landing.
