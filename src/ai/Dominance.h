@@ -688,7 +688,9 @@ static_assert(sizeof(Player) == 216,
 // PROLIFERATE ranks; still FOLDED value-gated, now as a uint32) and MOVED into the 6-byte hole after
 // scripted_athreos_coin; the DECK CONSTANTS `deck_has_combat_proliferate` / `deck_poison_hit_bound` take its old bytes
 // (nothing to fold). Opponent POISON is folded below (Player::poison_counters, exact) -- now a live win term.
-static_assert(sizeof(GameState) == 1728,   // combined upstream free turns and Beasts fields; verify at build
+// +8 bytes (2026-11-22, Beasts J): combat_resource_turn opens a restricted post-combat main
+// only in its stamped turn. It is folded into the mid-turn sim key and dead at the clean boundary.
+static_assert(sizeof(GameState) == 1736,   // combined upstream free turns and Beasts fields
 // Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
