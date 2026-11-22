@@ -42,9 +42,16 @@ byte-identical (bounceland opening excepted, which moves Karoo/Lake-opponent gam
 Follow-up cantrip A/B (USER 1b/1c list below); re-measure the Worldfire budget curve and re-screen the b0 backstop rows
 (USER Q16: optimize first); write the LTB owed items into a deferred doc; Stage 6 report.
 
-### The ONE open USER decision
-Sire-fair / annihilator-fair lock checks (free-turn doc "USER decisions open after the third pass"): parent recommended
-both ON (consistent with the USER's "underestimation of the effect on the opponent"); they ship OFF until the USER answers.
+### USER ruling 2026-11-22 ~12:00 UTC on the fairness checks (ANSWERED -- build it; no open USER decision remains)
+VERBATIM: *"I think we should do the fairness rule you mentioned for annihilator and sire, but for annihilator with
+multiple attacks it should always be possible to get a lock on turns when they don't play a land."*
+So: Sire-fair (MTG_FREE_TURN_SIRE_FAIR or its actual name) and annihilator-fair (MTG_FREE_TURN_ANNIHILATOR_FAIR) go
+DEFAULT ON, with an amendment to annihilator-fair: the virtual "could have cast it" sacrifice targets count only on a
+turn where the opponent plays a land (its mana to cast comes from lands); on a turn it plays NO land, the virtual
+targets are zero, so repeated annihilator attacks can complete the lock on those turns. (Parent's reading, told to the
+USER; correct it if the USER says otherwise.) Re-measure Cyclone (+2HG), Shadowborn (+2HG), Extra Turns in one pooled
+batch vs the flip without fairness; ride along in the free-turn set of the landing batch (its GT moves are the trait
+decks' anyway).
 Do NOT surface anything else as a question unless it is genuinely blocked on a USER decision (USER 2026-11-22).
 
 ## Done
