@@ -130,15 +130,16 @@ inline bool NoOpposingCreature(const GameState& state)
     return true;
 }
 
-// SIRE OF INSANITY, the fairness check (MTG_FREE_TURN_SIRE_FAIR, DEFAULT OFF; USER 2026-11-22: "The reality is,
+// SIRE OF INSANITY, the fairness check (MTG_FREE_TURN_SIRE_FAIR, DEFAULT ON; USER 2026-11-22: "The reality is,
 // though, that it can lock out some decks and cannot for others."). Sire empties the opponent's hand at EVERY end
 // step, ours included, so the hand it meets at the opponent's end step is exactly what the opponent drew or kept
-// that turn. If that hand holds a CREATURE card the opponent could have cast with the lands on its battlefield --
+// that turn. If that hand holds a NONLAND PERMANENT card the opponent could have cast with the lands on its battlefield --
 // mana value <= its land count and each coloured pip covered by that many lands producing the colour (an X is 0;
-// hybrid pips count their first colour, as ManaCost stores them) -- a real opponent would have deployed it, and
-// the creature would break the lock: that turn's lock does not hold. A CHECK only; the game state is unchanged.
+// hybrid pips count their first colour, as ManaCost stores them) -- a real opponent could have deployed it:
+// that turn's lock does not hold. This intentionally underestimates Sire's
+// lockdown of the card and the board (USER 2026-11-22). A CHECK only; the game state is unchanged.
 // Head 1 only: Sire's discard reaches the dealt hand of head 1 (PerformEndStepDiscardHands), not head 2's.
-inline bool SireDeployableCreature(const GameState& state)
+inline bool SireDeployablePermanent(const GameState& state)
 {
     bool sire = false;
     for (const Permanent& p : state.battlefield)
@@ -152,7 +153,8 @@ inline bool SireDeployableCreature(const GameState& state)
     for (const Card& c : state.players[1].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d != nullptr && d->card.IsCreature() && opponentdeck::CastableWith(d, m)) { return true; }
+        if (d != nullptr && !d->card.IsLand() && d->card.IsPermanentCard()
+            && opponentdeck::CastableWith(d, m)) { return true; }
     }
     return false;
 }
@@ -162,7 +164,7 @@ inline bool SireDeployableCreature(const GameState& state)
 inline void NoteSireBeforeDiscard(GameState& state)
 {
     if (!RuleArmed(state) || !FreeTurnSireFairOn() || !state.deck_has_demon_triggers) { return; }
-    state.sire_lock_veto = SireDeployableCreature(state);
+    state.sire_lock_veto = SireDeployablePermanent(state);
 }
 
 // The whole rule. Only the real-opponent model qualifies (a dealt list that plays lands); a legacy replay's
@@ -170,8 +172,9 @@ inline void NoteSireBeforeDiscard(GameState& state)
 inline bool LockHolds(const GameState& state)
 {
     if (!state.opponent_plays_lands || state.opponent_decked || OpponentHasLost(state)) { return false; }
-    if (state.sire_lock_veto) { return false; }   // MTG_FREE_TURN_SIRE_FAIR: it would have deployed a creature
-    if (state.annihilator_lock_veto) { return false; }   // MTG_FREE_TURN_ANNIHILATOR_FAIR: it would have kept a permanent
+    if (state.sire_lock_veto) { return false; }   // MTG_FREE_TURN_SIRE_FAIR: it could have deployed a nonland permanent
+    if (state.annihilator_lock_veto && state.opponent_played_land_this_turn)
+    { return false; }   // MTG_FREE_TURN_ANNIHILATOR_FAIR: land-play turns only (USER 2026-11-22)
     if (!HeadLocked(state, 1)) { return false; }
     if (opponentdeck::HasSecondHead(state) && !HeadLocked(state, 2)) { return false; }
     return NoOpposingCreature(state);

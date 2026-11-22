@@ -682,7 +682,7 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 //   IN   endstep_each_player_discards_hand (Sire of Insanity), behind MTG_FREE_TURN_SIRE (default ON; =0 takes it
 //        out): the opponent discards its whole hand at its end step. USER 2026-11-22: "a bit messy", but "some decks
 //        literally lose to the card" "(and it protects your board)". A real opponent would deploy a creature first;
-//        MTG_FREE_TURN_SIRE_FAIR (default OFF) vetoes the lock when the discarded hand held a castable creature.
+//        MTG_FREE_TURN_SIRE_FAIR (default ON) vetoes the lock when the discarded hand held a castable nonland permanent.
 //   IN   annihilator (Emrakul 6, Ulamog the Infinite Gyre 4): the opponent sacrifices N permanents per attack,
 //        oldest first (ApplyAnnihilator), lands included; one or two attacks empty its board.
 //   OUT  combat_damage_each_discards (Neheb): only OUR discard is modelled (Combat.cpp

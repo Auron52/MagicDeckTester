@@ -3424,6 +3424,7 @@ inline std::string LandPlayNotes(const std::vector<std::string>& notes)
 // already in our hand; the autonomous policy casts it for {0} immediately.
 inline void ResolvePassiveOpponentLandTurn(GameState& state)
 {
+    state.opponent_played_land_this_turn = false;
     if (state.opponent_plays_lands)
     {
         // Its simplified turn still has an untap step. A fetched shock land
@@ -3437,6 +3438,7 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
     }
     bool searched = false;
     const opponentdeck::LandPlayResult play = opponentdeck::PlayLeftmostLand(state);
+    state.opponent_played_land_this_turn = play.played;
     if (play.played)
     {
         if (g_play_event_sink && !g_tap_speculating)
@@ -3466,6 +3468,7 @@ inline void ResolvePassiveOpponentLandTurn(GameState& state)
     {
         const opponentdeck::LandPlayResult play2 = opponentdeck::PlayLeftmostLandFrom(
             state, state.opponent2_hand, state.opponent2_library, nullptr, 2);
+        state.opponent_played_land_this_turn = state.opponent_played_land_this_turn || play2.played;
         if (play2.played)
         {
             if (g_play_event_sink && !g_tap_speculating)
@@ -25978,9 +25981,10 @@ inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>&
     }
     if (total <= 0) { return; }
     const int defender = 1 - controller;
-    // MTG_FREE_TURN_ANNIHILATOR_FAIR (DEFAULT OFF; the free-turn rule armed -- FreeTurnsOn and the lock trait): a sacrifice
+    // MTG_FREE_TURN_ANNIHILATOR_FAIR (DEFAULT ON; the free-turn rule armed -- FreeTurnsOn and the lock trait): a sacrifice
     // that takes every opposing permanent while a real opponent would have kept one (virtual targets = the nonland
-    // permanents it could have cast from hand) vetoes the next lock check. A check only: the sacrifice is unchanged.
+    // permanents it could have cast from hand) marks a candidate veto. The next lock check applies it only when
+    // the opponent actually plays a land that turn. A check only: the sacrifice is unchanged.
     if (defender == 1 && state.deck_has_free_turn && FreeTurnsOn() && FreeTurnAnnihilatorFairOn()
         && opponentdeck::AnnihilatorWouldKeepPermanent(state, total))
     { state.annihilator_lock_veto = true; }

@@ -628,7 +628,7 @@ TEST_CASE("free turns: a scheduled spawn needs an opponent land (both worlds); t
     }
 }
 
-TEST_CASE("free turns: Sire fairness -- a creature the opponent could have cast from the discarded hand vetoes the lock")
+TEST_CASE("free turns: Sire fairness -- a castable nonland permanent in the discarded hand vetoes the lock")
 {
     FtLoadDb();
     GameState s = FtFresh();
@@ -642,14 +642,25 @@ TEST_CASE("free turns: Sire fairness -- a creature the opponent could have cast 
     p.owner_index = 0;
     s.battlefield.push_back(p);
     FtOppPerm(s, "Mountain", 100001);
-    // Goblin Guide ({R}) with a Mountain: castable. Ponder: not a creature.
+    // Goblin Guide ({R}) with a Mountain: castable. Ponder: not a permanent.
     s.players[1].hand = { FtCard("Ponder", 100002), FtCard("Goblin Guide", 100003) };
-    CHECK(freeturn::SireDeployableCreature(s));
+    CHECK(freeturn::SireDeployablePermanent(s));
     s.players[1].hand = { FtCard("Ponder", 100002) };
-    CHECK_FALSE(freeturn::SireDeployableCreature(s));
+    CHECK_FALSE(freeturn::SireDeployablePermanent(s));
+    // Artifact is a nonland permanent, while a land is never a virtual deployment.
+    s.players[1].hand = { FtCard("Sol Ring", 100006) };
+    CHECK(freeturn::SireDeployablePermanent(s));
+    {
+        FtScope f(1);
+        freeturn::NoteSireBeforeDiscard(s);
+        CHECK(s.sire_lock_veto);
+    }
+    s.sire_lock_veto = false;
+    s.players[1].hand = { FtCard("Mountain", 100007) };
+    CHECK_FALSE(freeturn::SireDeployablePermanent(s));
     // A green creature with only a Mountain: the colour is missing.
     s.players[1].hand = { FtCard("Avenger of Zendikar", 100004) };
-    CHECK_FALSE(freeturn::SireDeployableCreature(s));
+    CHECK_FALSE(freeturn::SireDeployablePermanent(s));
     // The veto: armed + lever on only; consumed by the lock check.
     s.players[1].hand.clear();
     {
@@ -684,6 +695,7 @@ TEST_CASE("free turns: annihilator fairness -- virtual targets from castable non
     GameState g = FtFresh();
     g.deck_has_annihilator = true;
     FtOppPerm(g, "Mountain", 100001);
+    g.opponent_played_land_this_turn = true;
     g.players[1].hand.clear();
     for (int i = 0; i < 4; ++i) { g.players[1].hand.push_back(FtCard("Goblin Guide", 100010 + i)); }
     const CardDefinition* ulamog = CardDatabase::Instance().Lookup("Ulamog, the Infinite Gyre");
@@ -723,12 +735,31 @@ TEST_CASE("free turns: annihilator fairness -- virtual targets from castable non
         CHECK_FALSE(r.pending_free_turn);
         CHECK_FALSE(r.annihilator_lock_veto);
     }
+    {   // No land played on the following opponent turn: virtual targets do not prevent the lock.
+        GameState r = attack(g, 1);
+        r.opponent_played_land_this_turn = false;
+        CHECK(r.annihilator_lock_veto);
+        FtScope f(1);
+        CHECK(freeturn::LockHolds(r));
+        freeturn::NoteOpponentTurnEnd(r);
+        CHECK(r.pending_free_turn);
+    }
     {   // Lever on, but a deck without the lock trait: never armed.
         GameState n = g;
         n.deck_has_free_turn = false;
         GameState r = attack(n, 1);
         CHECK_FALSE(r.annihilator_lock_veto);
     }
+}
+
+TEST_CASE("free turns: the annihilator fairness veto observes whether the opponent played a land")
+{
+    GameState s = FtFresh();
+    s.players[1].hand = { FtCard("Mountain", 120001) };
+    ResolvePassiveOpponentLandTurn(s);
+    CHECK(s.opponent_played_land_this_turn);
+    ResolvePassiveOpponentLandTurn(s);
+    CHECK_FALSE(s.opponent_played_land_this_turn);
 }
 
 TEST_CASE("free turns: MTG_OPP_BOUNCE_OPENING -- the bounceland opening rule in every game, its own lever")

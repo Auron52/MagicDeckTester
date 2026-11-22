@@ -1075,8 +1075,8 @@ enum Slot : int
     CB_BROWBEAT_M2_RESTRICT,  // MTG_CB_BROWBEAT_M2_RESTRICT  Creature Burn: Browbeat no longer opens a FULL searched post-combat main on EVERY turn (GoldFishRunner::DeckUsesSecondMain, which reads THIS slot too -- one half alone deletes the main-2 Browbeat); CreatureBurnProvider::RestrictedSecondMainLive opens the post-combat main (full menu) only on turns a Browbeat is in hand post-combat and castable there. Designed as an identity fold, MEASURED NOT ONE 2026-11-21 (net +9 / +22 turns at d3 b10 / d5 b20; d5 b0 win turns differ; STATUS at the definition, DecisionProviders.cpp). Default OFF (= the every-turn main 2, byte-identical to before); =1 -> the per-turn gate (A/B hatch)
     FREE_TURNS,               // MTG_FREE_TURNS            the opponent-lockdown free-turn rule (core/FreeTurns.h). Default ON (USER design, 2026-11-22); per job so ONE pooled batch carries the OFF arm
     FREE_TURN_SIRE,           // MTG_FREE_TURN_SIRE        Sire of Insanity is in the free-turn lock trait (GoldFishRunner::DeckMayLockOpponent). Default ON; =0 -> Sire out
-    FREE_TURN_SIRE_FAIR,      // MTG_FREE_TURN_SIRE_FAIR   Sire's lock is vetoed when the discarded hand held a creature the opponent could have cast. Default OFF
-    FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  an annihilator wipe is vetoed when castable nonland permanents would have kept a permanent. Default OFF
+    FREE_TURN_SIRE_FAIR,      // MTG_FREE_TURN_SIRE_FAIR   Sire's lock is vetoed when the discarded hand held a castable nonland permanent. Default ON
+    FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  a land-play turn's annihilator wipe is vetoed when castable nonland permanents would have kept one. Default ON
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
     COUNT
 };
