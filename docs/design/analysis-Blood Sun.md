@@ -422,7 +422,10 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   battlefield and hand, then the 3-4 mana lands (Lotus Vale / Lotus Field / Scorched Ruins); (K5) USER (verbatim):
   *"Actually Time Warp should be kept as well if possible."* / *"1 of them."* / *"In the worst case we might have to discard it, but
   it should be prioritized over everything else non-essential."* -> one Time Warp, kept right AFTER the essentials
-  K1 (Blood Sun) and K2 (Revelation) and ABOVE K3 (drop cards) and K4 (lands); discarded only in the worst case. Parent's readings
+  K1 (Blood Sun) and K2 (Revelation) and ABOVE K3 (drop cards) and K4 (lands); discarded only in the worst case. USER (verbatim): *"Keeping one in 4 is okay. We should keep at least a few
+  lands."* (4 = the drop-card bucket in the parent's numbered table) -> the drop-card bucket keeps ONE (Fastbond >
+  Exploration > Burgeoning, counting the battlefield) ahead of the lands; then at least 3 lands (parent's reading of "a
+  few"; all of them if fewer) by the K4 land priority; a second drop card only after those. Parent's readings
   (surfaced, take as default): cards in no bucket (a second Time Warp, Emrakul, Ulamog, a second Blood Sun / Revelation, drop
   cards past the cap, lands past the colour need and the big lands) go first, then the lowest-priority bucket's
   surplus; within a bucket the USER's stated priority, ties by the engine's existing ranking. Stage 4's derived order
