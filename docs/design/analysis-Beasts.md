@@ -146,8 +146,92 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   one. Gaps for batch J: library-put routes do not credit devotion colours; W-dominated-by-G colour prune not done
   (Kaheera gives W devotion); the hold is a payer PREFERENCE (standing mana-payment exemption), so a line needing the
   opposite choice at the first cast is not realised by the walk.
+* **Batch G integrated (Bloated Contaminator, integrator G 2026-11-22): `e2838e47a`.** NEW CardParams `toxic` (int) and
+  `combat_damage_self_proliferate` (bool). Rules verified against the CR text (2026-06-19 edition; NOTE proliferate is
+  **CR 701.34**, not 701.27): toxic 702.164c / 120.3g (poison is a RESULT of the combat damage, so it is on before any
+  trigger resolves); proliferate 701.34a/b (2HG: only one poison counter per team); loss 704.5c (10) and, in 2HG,
+  704.6b / 810.8d / 810.10 (the TEAM loses at 15, poison shared).
+  - **Toxic:** shared `ApplyToxicPoison` (SpellEffects.h) at the `power > 0` connector point of BOTH damage-step shapes
+    of Combat.cpp (executor + rollout lockstep). Not scaled by OpponentHeads (team poison).
+  - **Proliferate:** `FireCombatDamageProliferate` (SpellEffects.cpp), one trigger per connecting damage event, LAST of
+    each step's combat-damage triggers (after Drana / Lackey / Shroofus / the Harbinger dig; the controller orders
+    simultaneous triggers and proliferating last weakly dominates), skipped once the opponent has lost (a lethal
+    toxic). Kinds: +1/+1 (doubler-aware), loyalty (p.loyalty + Counter mirror in step), oil (doubler-aware), every other
+    dedicated kind and CounterList kind, player poison / energy / rad. First hit = toxic 1 then proliferate 2; every
+    later hit +2.
+  - **The choice is SEARCHED:** the PROLIFERATE HALF of the combat-time trigger pin -- bits 16-30 of
+    `Plan::combat_dig_choice` / `GameState::scripted_combat_dig` (widened int16 -> int32 and MOVED into the hole after
+    `scripted_athreos_coin`, so sizeof(GameState) stays 1720; Plan 792 and Permanent 328 unchanged). DESIGN DEPARTURE
+    from the draft: one pin for both combat-time triggers instead of a new field, because every one of the ~55
+    fold / key / compare sites of the dig pin then covers the proliferate ranks by construction (a field of 0 resolves
+    exactly like -1; each half is read and shifted only by its own trigger; `CombatPinMerge` keeps an inherited pin's
+    other half on both axes). 5 bits per ordinal, 3 ordinals, ranks 0..30 into `ProliferateMenu` at resolution.
+  - **Menu + prune:** `ProliferateMenu` = every subset (identical permanents folded k-of-m by controller +
+    RemovalSelfTargetFoldKey; default first, then by counters added; generation capped at 256 entries), or the one
+    dominant subset when the ROOT `DecisionProvider::ProliferateCollapse` says so: collapse iff EVERY candidate is
+    `ProliferateCandBeneficial` (own permanent with only +1/+1 / loyalty / oil; our energy; the opponent's poison). Any
+    other kind (-1/-1, charge, lore, age, depletion, coin, rad, our poison, any counter on an opponent's permanent)
+    REFUSES the collapse and the subsets are searched (never auto-added). NEW gate `UnprunedGate::Proliferate`
+    (`MTG_UNPRUNE=proliferate`). Axis `prolifaxis` in AppendSubdecisionAxes after Harbinger's: fans only when the
+    collapse refuses on the board now; width min(31, 2^(candidates now + plan casts + 1)); product cap 27; skipped in
+    human play and on a dead post-combat list. DISCLOSED: an unproven kind that APPEARS inside the plan (none can in
+    Beasts) resolves at the default rank; ranks past 30 are not branched.
+  - **2HG:** `Player::HasLost` now `life <= 0 || PoisonLost()`, PoisonLost = `>= 10 && (>= 15 || heads < 2)` (the heads
+    read only at >= 10 poison). Toxic and proliferate each add ONE team counter (players[1] is the team).
+  - **Deck stamps** (StampDeckTraits, mainboard): `deck_has_combat_proliferate` (gates the fire walk + axis);
+    `deck_poison_hit_bound` (uint8: sum of toxic + proliferate per copy; 0 for every other deck; 0xFF unstamped = count
+    live). Both fit the bytes the old int16 pin left.
+  - **Viewer:** main.cpp emits `poison_counters` (+ `poison_loss_at` for the opponent) only when nonzero; the lifebar
+    shows "poison N/10"; the proliferate is the `dragon` multi-pick (source "<name> (proliferate) -- choose any number
+    of (k: name: counters; ...)"), every candidate incl. PLAYER tiles (a Card named Opponent / You, number < 0), the
+    pinned / default subset preselected, an empty reply stands; dragonPanelHtml proliferate branch (counter label per
+    tile, player tile); WriteDragonDecisionJson note; DECISIONS.md row; audit_viewer_decisions.py manifest
+    (`combat_damage_self_proliferate` -> dragon, `toxic` inert, sweep-unreached pin to the human-chooser unit test).
+  - **POISON SOUNDNESS AUDIT (every life-only win / no-win site; a read-only Opus audit of TurnSolver, DecisionProviders,
+    AIEngine, GameEngine, DamageEvents, DamageReflection, Dominance, ManaPayment, Combat, runner):**
+    - CHANGED (1) `BuildSimKeyBase` (TurnSolver.cpp): folds `poison_counters` per player, nonzero-gated. THE live hole:
+      every search memo keys on it (FSLineWin nowin bound + win lines, gamelc / inwin, the TT NoWin entries,
+      BuildDedupKey, SeenKey, BuildBreakpointKey, the winless-develop collapse, twin reuse, the solve memo), and the
+      header comment said poison was deliberately omitted. A refutation at one poison count could be served to another
+      (e.g. Contaminator T2 + 3-drop T3 vs the reverse: same board from T4, different poison).
+    - CHANGED (2) `EtChainStateKey`: folds opponent poison when nonzero (Extra Turns' chain replay guard).
+    - CHANGED (3) EnumeratePlansCore's four lethal-exempt drops (Irencrag / X-waste, sac-land burn hold,
+      HoldCastUnlessLethal, SacForManaOnlyIfNeeded) now exempt `wins || PoisonWinReachableThisTurn` (an O(1)
+      over-approximation: opponent poison + 2 x deck_poison_hit_bound (x4 more with an extra combat) >= threshold),
+      hoisted once per call. `plan.wins_this_turn` stays the LIFE projection (a positive claim feeding sort / move tier;
+      a poison guess must not claim a win).
+    - CHANGED (4) the X-waste early proof `xw_nowin` (EnumeratePlansCore): `&& !poison_reach`.
+    - CHANGED (5) Solve's greedy twin: the same three mirrored drops (Irencrag, sac-burn, held-cast) exempt poison
+      reach (playout quality; kept in step with the enumerator).
+    - SAFE (a) the five provider no-win certificates: Snow / Eldrazi Flicker / Fungus decline on `opp.poison_counters >
+      0` and on any card outside their pool; Maze's End is name-gated; Gods' has no poison check but its pool has no
+      poison source. Beasts routes to BoarsProvider (Certificate NotAssessed) -> no certificate runs. Batch J's
+      BeastsProvider must decline on poison if it adds one.
+    - SAFE (b) `proven_no_win` (AIEngine/GameEngine): reads no life itself; trusts search completeness, which (1)
+      restores.
+    - SAFE (c) every board-lethal / pump / loop / equip-route short-circuit (positive detection only, each verified by
+      LethalCutKillIsReal -> OpponentHasLost before it fires); FSLineWin / FSLineTail decide wins by applying and
+      checking OpponentHasLost. CollectActions damage-sized emission (sac demand, Slimefoot, Hinata) cannot deliver
+      poison (toxic is combat only).
+    - SAFE-LATENT (d) the main-2 stranded-kill scan (ApplySecondMainInSearch, FSLineTail fixpoint) filters on the life
+      projection: a main-2 poison kill needs a NONCOMBAT poison source or an extra combat after main 2 -- none in the
+      pool. Re-check if one is added.
+    - SAFE-LATENT (e) deck-specific narrowings (Anti-Lifegain SubsetHasUnbackedAltPayload, Fungus FadeKLandmarks,
+      Vampires PostCombatCannotKillOptIn, Gods ProvenWinlessThisTurn): deck-gated, no poison source in those lists.
+    - SAFE (f) open-coded life-only game-over guards (Prophets gate, incinerator, SpendSurplusOnDrain,
+      ComboFinishFromHand, ping loops, a few provider early-outs): cost only wasted work after a poison win.
+      DamageReflection's no-progress rule counts life + deaths only (a poison-only trigger loop: latent, none exists).
+    - Dominance.h (exact fold) and RouteSig already folded poison.
+  - **Gaps for batch J (BeastsProvider):** (1) proliferating Garruk's loyalty (3->4 opens -3 a turn earlier; 5->6
+    the -6) or Herald's counters is a MAIN-2 reason -- feed the per-turn second-main gate (NOT added to
+    DeckUsesSecondMain, USER unsettled); (2) the no-win leaf grade (`leafeval::Quantity`) and the value leaf price
+    opponent life only, so poison progress is invisible at the horizon (quality; hook `NoWinLeafProgress` exists);
+    (3) a provider certificate, if added, must decline on poison > 0 / a poison source; (4) the scenario loader cannot
+    set poison (tests set the state directly).
+  - Tests: 8 new Contaminator cases in test_beasts_cards.cpp. Units 3878/3878 (8 new). Audits: audit_card_costs 697/697 match; audit_card_fields --update at 1 s throttle (0 HTTP 429; the card enters scryfall_reference.json; the Toxic / Proliferate keyword divergence allowlisted in scryfall_divergences.json) + offline rc 0; audit_viewer_decisions --no-sweep clean (`dragon` now expected).
+  - **SMOKE (no accept):** **235/235 PASS, per-game audit 0 configs changed, play-changed 0 (searched and d0), scenarios 596/596**, makespan 702 s; log `build/scratch/beastsG/smoke.log`. Units 190,918,240 = batch F exactly; summed job CPU 15.31M ms vs F 16.83M ms (box less loaded; not a controlled A/B). The new hot-path terms for every other deck are one-byte / one-compare tests (deck_poison_hit_bound == 0, poison_counters > 0, the heads read only at >= 10 poison), so no per-deck cost was expected and none showed.
 * **Viewer readiness (USER 2026-11-22 wants to be TOLD when the deck can be played in the viewer, to save references):** needs every mainboard + companion card implemented (batches G Contaminator, H Bellower, I Kaheera companion), then the branch landed on the shared branch and the PRIMARY checkout fast-forwarded (the viewer runs only there). Primary holds an untracked `decks/Beasts/` copy: diff it against the branch's before the pull, move it aside (never delete), and check the primary for uncommitted references + a live viewer game first. Batch J (provider) does not block human play.
-* **Running:** integrator G (Bloated Contaminator: toxic + combat-damage proliferate), launched 2026-11-22 ~09:10 UTC. NEXT after it = batch H (Woodland Bellower).
+* **Running:** none. NEXT = batch H (Woodland Bellower).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -211,7 +295,7 @@ Bracket notes to re-check for THIS deck:
 | Migloz | 3 | integrated 7f1a76269 (batch E, see Checkpoint) | NEW Permanent::oil_counters (sizeof 328 -> 336), folded into every sim/board/dominance/legend key + DomAxis::OilCounters; pump SEARCHED as ActivatePump mode 7 (one variant per K <= oil/2, mana/2; main 1 + any main 2; site-9 key kActOilPump; both pay sites oil-capped); vigilance grant = mode 8, root-pruned (`MTG_UNPRUNE=oilgrant`, menace unmodelled -- USER approved 2026-11-22); destroy = Steelbane route paid in oil, own targets root-pruned (reused `MTG_UNPRUNE=counterdestroy`); NOT in DeckUsesSecondMain |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
 | Nykthos | 2 | integrated 63aa2fe6b (batch F, see Checkpoint) | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, all five devotions in the mana cache key); per-colour fed faces in the viewer; gate soundness (a)/(b)/(c) fixed; payer hold MTG_DEVOTION_LAND_HOLD (default ON, devotion land only) |
-| Bloated Contaminator | 2 (+3) | drafted | NEW toxic + combat_damage_self_proliferate (closed-table dominant set, viewer dragon multi-pick); poison in sim key + no-win bounds; 2HG 15 poison |
+| Bloated Contaminator | 2 (+3) | integrated e2838e47a (batch G, see Checkpoint) | NEW toxic + combat_damage_self_proliferate; subset SEARCHED on the proliferate half of the combat-time pin, root dominance collapse (MTG_UNPRUNE=proliferate); poison folded into BuildSimKeyBase, lethal-exempt drops poison-aware; 2HG team loses at 15; viewer dragon multi-pick with player tiles; NOT in DeckUsesSecondMain; no deferrals |
 | Woodland Bellower | 2 | drafted | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order PROVISIONAL |
 | Garruk's Packleader | 1 | integrated 375a50399; approved | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
 
@@ -222,6 +306,8 @@ Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 * Contested Cliffs (batch B): bucket A. ONE unpinned main-phase entry under human play; both fight targets (our Beast, then theirs) are `target` board clicks at activation via `g_play_loyalty_chooser` (Voracious precedent). `audit_viewer_decisions.py`: `tap_fight_cost` -> target / activate, `tap_fight_requires_subtype` inert. Registry: tools/play/DECISIONS.md "Targeted tap fight".
 
 * Elder Gargaroth (batch C): bucket A (reuse, widened). `attack_mode` with THREE options (0 token, 1 life, 2 draw), asked per declared copy at declare-attackers from `ApplyAttackChooseOneTriggers` over the full legal menu (the search's life fold never narrows the human). `audit_viewer_decisions.py`: `attack_choose_one` -> attack_mode, payload params inert. Registry: tools/play/DECISIONS.md attack_mode Gargaroth row.
+
+* Bloated Contaminator (batch G): bucket A (reuse). The proliferate is the generic `dragon` multi-pick, asked from `FireCombatDamageProliferate` (both damage-step shapes, shared executor+rollout) whenever something has a counter after the hit: EVERY candidate permanent (either side) and PLAYER (a candidate card named `Opponent` / `You`, numbered < 0, rendered as a player tile with its counter label), the pinned subset or the dominant default preselected, an empty reply stands; the search's collapse never narrows the human. Toxic is automatic (no decision). The lifebar shows the opponent's poison (`poison_counters` / `poison_loss_at`, emitted only when nonzero). `audit_viewer_decisions.py`: `combat_damage_self_proliferate` -> dragon, `toxic` inert. Registry: tools/play/DECISIONS.md Bloated Contaminator `dragon` row.
 
 ## Verification verdicts (Stage 5)
 
