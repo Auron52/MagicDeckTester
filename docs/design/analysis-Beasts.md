@@ -123,8 +123,31 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   without a HW PMU. A clean wall A/B also needs a quiet box (the outside load made both designs above +/-2% at
   best). Scratch, all on the build volume: `build/scratch/beastsEperf/` (`ab3_*`, `abc_*`, `cg_*`, `cache_*`,
   `rc_*`, `perf_*.data`).
+* **Batch F integrated (Nykthos, Shrine to Nyx; integrators F, F2, F3 2026-11-22): `63aa2fe6b`** (squash of WIP
+  5ac71f59f + a272ebc63 + F3; the two orchestrator ledger commits replayed on top, tree diff vs the pre-squash tip
+  empty). Units **3870/3870** (16 Nykthos cases). `audit_card_costs.py` 696/696 match; `audit_card_fields.py` offline
+  rc 0; `audit_viewer_decisions.py --no-sweep` clean. **SMOKE (no accept) 235/235 PASS, per-game audit 0 configs
+  changed, play-changed 0 (searched and d0), scenarios 596/596**, makespan 1270 s; log `build/scratch/beastsF/smoke.log`.
+  GATE VERDICTS: **(a) colour gate UNSOUND, FIXED** (ComputeAvailableColors credited only board devotion; it now also
+  credits a hand permanent's colours; residual: a permanent put from the LIBRARY inside the line, e.g. Bellower's put,
+  is not credited -- moot for this list). **(b) payability UNSOUND, FIXED** (four refusals: the enumerator odometer
+  bound and SpwfProvablySupplyShort read Nykthos at board devotion -> DevotionGrowthBound addend; a single walk order
+  -> DevotionOrderDomain joins the payable-order search; and THE PAYER, below). **(c) kicked Cragplate devotion: erred
+  high (sound), FIXED anyway** (DevotionCardOf pushes the printed card). PAYER OUTCOME: FIXED, not deferred. The
+  previous hold sat behind MTG_SCALED_LAND_RANK (default OFF), so it never ran; it is now its own
+  MTG_DEVOTION_LAND_HOLD (default ON, devotion land only): Nykthos ranks 61 while board devotion + the line's owed
+  pips beats {feeder} AND (inside a payment) a later cast exists AND the other sources left after this bill can still
+  feed it (otherwise its {C} pays, e.g. three Forests, a {1}{G} then a {G}{G}). Wild Growth failure was a SEPARATE
+  cause: SourceColorCapLive's scaled-land per-colour cap was N without the land Aura's units, so the colour gate
+  refused {G}{G}{G}{G} off Nykthos (devotion 3) + Wild Growth; it now adds LandAuraBonus (0 without a land Aura).
+  **Three Tree City has the same two holes** and they are NOT changed here (would move Goblins / Maze's End / Merfolk
+  Turns play): its rank hold is MTG_SCALED_LAND_RANK, default OFF pending its adoption A/B, and even ON it reads the
+  CURRENT net yield, not the creatures the line adds; the Aura-cap fix applies to it too but no suite deck enchants
+  one. Gaps for batch J: library-put routes do not credit devotion colours; W-dominated-by-G colour prune not done
+  (Kaheera gives W devotion); the hold is a payer PREFERENCE (standing mana-payment exemption), so a line needing the
+  opposite choice at the first cast is not realised by the walk.
 * **Viewer readiness (USER 2026-11-22 wants to be TOLD when the deck can be played in the viewer, to save references):** needs every mainboard + companion card implemented (batches G Contaminator, H Bellower, I Kaheera companion), then the branch landed on the shared branch and the PRIMARY checkout fast-forwarded (the viewer runs only there). Primary holds an untracked `decks/Beasts/` copy: diff it against the branch's before the pull, move it aside (never delete), and check the primary for uncommitted references + a live viewer game first. Batch J (provider) does not block human play.
-* **Running:** integrator F3 (Nykthos: payer spends Nykthos {C} early -> 3 tests fail; WIP a272ebc63; handoff `logs/beasts/integrator-F-handoff.md`). NEXT after it = batch G (Bloated Contaminator).
+* **Running:** none. NEXT = batch G (Bloated Contaminator).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
@@ -180,17 +203,17 @@ Bracket notes to re-check for THIS deck:
 | Contested Cliffs | 3 | integrated (batch B, see Checkpoint) | NEW PermAbilityMode::TapFight (Kessig shape), shared ResolveFight (deathtouch + immediate SBA death pass); both targets searched (own class x opp class); emitted in main 1 and any main 2; NOT added to DeckUsesSecondMain (USER: second main unsettled) |
 | Cragplate Baloth | 2 | integrated 53e68dcd3 | new kicked_enters_with_plus_counters (pre-entry kicked branch) |
 | Kaheera companion (sideboard) | 3 | planned | companion {3} put-into-hand, once/game, sorcery speed |
-| Krosan Warchief | 1 | integrated 375a50399 | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
-| Questing Beast | 1 | integrated 375a50399 | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
-| Elder Gargaroth | 3 | integrated (batch C, see Checkpoint) | NEW attack_choose_one 3-mode trigger, searched per-ordinal axis (Tectonic-style, cap 27), shared executor+rollout helper; life mode = root provider fold on deck_life_inert (USER approved); viewer attack_mode widened to 3; 'or blocks' PROVISIONAL deferral; NOT in DeckUsesSecondMain (combat draw waits a turn until the per-turn gate) |
-| Garruk's Harbinger | 3 | integrated afa007b00 (batch D, see Checkpoint) | NEW combat_damage_dig_per_damage + FireCombatDamageDig (both damage-step shapes, shared executor+rollout; count = damage dealt), shared PerformLookTakeDig (Creature/Garruk, random bottom); searched RANK pin per ordinal (cap 27, width min(15, library matches, power+2)); no decline variant (dominated, viewer offers it); NOT in DeckUsesSecondMain (dug card waits a turn until the per-turn gate); hexproof-from-black + PW PROVISIONAL |
+| Krosan Warchief | 1 | integrated 375a50399; approved | reduces_spell_subtype Beast; regenerate PROVISIONAL deferral (dominated) |
+| Questing Beast | 1 | integrated 375a50399; approved | deathtouch via fight helper; D2-D4 PROVISIONAL (no blocks / no prevention / no PWs); dup-legend prune risk |
+| Elder Gargaroth | 3 | integrated (batch C, see Checkpoint); approved | NEW attack_choose_one 3-mode trigger, searched per-ordinal axis (Tectonic-style, cap 27), shared executor+rollout helper; life mode = root provider fold on deck_life_inert (USER approved); viewer attack_mode widened to 3; 'or blocks' PROVISIONAL deferral; NOT in DeckUsesSecondMain (combat draw waits a turn until the per-turn gate) |
+| Garruk's Harbinger | 3 | integrated afa007b00 (batch D, see Checkpoint); approved | NEW combat_damage_dig_per_damage + FireCombatDamageDig (both damage-step shapes, shared executor+rollout; count = damage dealt), shared PerformLookTakeDig (Creature/Garruk, random bottom); searched RANK pin per ordinal (cap 27, width min(15, library matches, power+2)); no decline variant (dominated, viewer offers it); NOT in DeckUsesSecondMain (dug card waits a turn until the per-turn gate); hexproof-from-black + PW PROVISIONAL |
 | Kaheera | 2 | lord+vigilance integrated 53e68dcd3; companion pending (batch I) | lord_effect multi-subtype + NEW grants_vigilance; companion: implement (see Q1) |
 | Migloz | 3 | integrated 7f1a76269 (batch E, see Checkpoint) | NEW Permanent::oil_counters (sizeof 328 -> 336), folded into every sim/board/dominance/legend key + DomAxis::OilCounters; pump SEARCHED as ActivatePump mode 7 (one variant per K <= oil/2, mana/2; main 1 + any main 2; site-9 key kActOilPump; both pay sites oil-capped); vigilance grant = mode 8, root-pruned (`MTG_UNPRUNE=oilgrant`, menace unmodelled -- USER approved 2026-11-22); destroy = Steelbane route paid in oil, own targets root-pruned (reused `MTG_UNPRUNE=counterdestroy`); NOT in DeckUsesSecondMain |
 | Cavern of Souls (recheck) | - | no change | exact for this list |
-| Nykthos | 2 | drafted | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, cache key!) |
+| Nykthos | 2 | integrated 63aa2fe6b (batch F, see Checkpoint) | Three Tree City scaled-land shape + NEW mana_per_devotion (per-colour yield, all five devotions in the mana cache key); per-colour fed faces in the viewer; gate soundness (a)/(b)/(c) fixed; payer hold MTG_DEVOTION_LAND_HOLD (default ON, devotion land only) |
 | Bloated Contaminator | 2 (+3) | drafted | NEW toxic + combat_damage_self_proliferate (closed-table dominant set, viewer dragon multi-pick); poison in sim key + no-win bounds; 2HG 15 poison |
 | Woodland Bellower | 2 | drafted | Natural Order put route wired into creature ETB + NEW tutor_nonlegendary + optional decline (no shuffle); fail-to-find + trigger order PROVISIONAL |
-| Garruk's Packleader | 1 | integrated 375a50399 | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
+| Garruk's Packleader | 1 | integrated 375a50399; approved | own_creature_enters_draw + creature_enters_min_power 3; "may" PROVISIONAL |
 
 Drafts: `logs/beasts/drafts/*.md` (gitignored, host drive).
 
