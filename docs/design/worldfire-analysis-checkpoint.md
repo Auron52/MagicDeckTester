@@ -98,11 +98,12 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   (global vs free-turn-scoped). PASS 4 agent (fresh) from handoff4: waits on chain PID 4152934 ->
   build/scratch/freeturn/chain5.DONE, then fairness batch, ref LIST, bounceland measurement, doc, full units.
   Handoff: logs/freeturn/handoff5.md.
-- TUTOR-WIDTH deletion agent in .claude/worktrees/tutorwidth (branch wip/tutorwidth off d0d5f8463): delete
-  TutorSearchWidth + MTG_TUTOR_WIDTH; narrowing lives in TutorCandidates (USER: "I don't like those tutor widths
-  one bit ... the heuristic should have full control of how many it returns" / "A width provides either too few or
-  more often too many options." / "And is a fixed number for no reason where the real problem is not."). Tiers,
-  d8 b0 recovery of slower games, held-out A/B on moved decks; parent lands.
+- TUTOR-WIDTH pass 1 DONE (b8ea0658e code, af4b5fe83 doc, wip/tutorwidth): coverage decks byte-identical; held-out
+  A/B Hinata +44 / 1900 (x1.11 units), hinata2hg +22, Goblins -8, Melira -1, others 0. Two b0 backstop rows now
+  abandon (Hinata 5.5M, Melira 3.1M units). NOT landable. Parent: Hinata Gamble merit rule in
+  HinataProvider::TutorCandidates (no fixed count), Melira tutor prune for its b0 row (USER Q16 optimize first, never
+  raise abandon_units), Goblins reserve deletion kept, stale cards.json notes fixed. Handoff:
+  .claude/worktrees/tutorwidth/logs/tutorwidth/handoff.md -> fresh pass-2 agent.
 
 ## Next, in order
 1. Relay each agent's report as it lands; surface its USER questions.
