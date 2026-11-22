@@ -35765,6 +35765,14 @@ static bool BpDevSeqAllOn()
     static const bool v = EnvOn("MTG_BP_DEV_SEQ_ALL");
     return heurarm::Flag(heurarm::BP_DEV_SEQ_ALL, v);
 }
+// A later site-10 occurrence opened by Exploration/Fastbond may need a second
+// non-front choice (the new land drop). Buy that compound slot without opening
+// the full cross product of every ordinary continuation.
+static bool BpDevSeqDropOn()
+{
+    static const bool v = EnvOn("MTG_BP_DEV_SEQ_DROP");
+    return heurarm::Flag(heurarm::BP_DEV_SEQ_DROP, v);
+}
 // ...and the occurrence an apply could reach only by TARGETING it (MTG_BP_DEV_SEQ): site 9's re-open
 // counts its next occurrence only when the plan's choice targets it (an untargeted re-open would apply
 // nothing, and counting it would renumber -- see the re-open loop), so a variant that does not target
@@ -76031,6 +76039,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // on the pre-ping hand while the executor's replay sees the post-ping one. Executor twin:
         // exec_section_reset. No-op without the loop.
         if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
+        const bool created_drop = site == 10 && BpDevSeqDropOn()
+            && TurnSolver::LandDropNewlyOpen(drops_at_section, state, false);
         // bp_seen counts only breakpoints of an ENABLED class, and only for a plan that carries a
         // choice -- exactly the original short-circuit. Counting disabled-class breakpoints too
         // would shift every later index and silently change play, which is why BpSiteMask is one
@@ -76073,6 +76083,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
         if (seen_before >= 0) { g_bp_seen_last = seen_before + 1; }
+        // A choice at an earlier occurrence can create this land-drop decision.
+        // The ordinary single-deviation walk takes the canon here, so expose a
+        // priced compound slot at this occurrence, like a latent re-open.
+        if (created_drop && seen_before > plan.bp_at && plan.bp_at >= 0 && !plan.bp_all
+            && g_rollout_nest == 0 && g_bp_enum_depth == 0 && BpDevSeqOn())
+        {
+            g_bp_seen_latent = std::max(g_bp_seen_latent, seen_before + 1);
+            if (g_devseq_suppress > 0)
+            {
+                g_devseq_latent_hit = true; ++g_devseq_latent_n; ++g_devseq_hard_n;
+                g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number);
+                DvsNotePassLatent(state.turn_number);
+            }
+        }
         // MTG_BP_DEV_SEQ_ALL under FullSearchLine's TWO PASSES (Blood Sun step 6e): _ALL opens a compound slot at every
         // counted occurrence a variant reaches PAST its deviation (DevSeqOpen's reach = seen), so such an occurrence is,
         // for the pass-2 trigger, exactly what a latent one is for the shipped scope -- the only thing a compound wave
