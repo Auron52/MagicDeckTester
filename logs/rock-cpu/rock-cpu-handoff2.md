@@ -85,7 +85,7 @@ Remaining only: the USER's decision on MTG_LKR_PLAYOUT_OFF (recommended), and th
 ## Follow-up (parent, 16:10 UTC): confirmatory re-measure of MTG_LKR_PLAYOUT_OFF (do not adopt; USER decides)
 Brief: "Re-measure Hinata searched shapes at 4,000 pairs on FRESH seeds ... off vs PLAYOUT_OFF in one pooled batch
 under the box lock. If it's cheap, add Niv 2HG and Extra Turns 2HG at 1,000 pairs. Replay any slower games at d8 b0."
-Running: `build/scratch/claude_rock_cpu/hc/run.sh`, real PID **1021918** (script copy `logs/rock-cpu/hc_run.sh`), binary
+Running: `build/scratch/claude_rock_cpu/hc/run.sh`, real PID **1166545** (relaunched 23:03 UTC: the first launch waited 7 h for the box lock, then aborted in 4 s because explicit-depth jobs need "ignore_play_profile": true; fixed in hc/H.json) (script copy `logs/rock-cpu/hc_run.sh`), binary
 mtg.dev2. Manifest `hc/H.json`: arms def / poff; hinata play settings 4000 pairs (seeds 800000), hinata d3 b10 1000
 (805000), niv2hg d5 b20 1000 (810000), extraturns2hg d5 b20 1000 (812000; 2HG = starting_life 30, opponent_heads 2).
 Out `hc/H.out`, logs `hc/logs/`, perf `hc/perf/` (first chunk, 12-20 games/arm), progress `hc/status`, marker `hc/DONE`.
