@@ -7,6 +7,7 @@
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
+#include "ai/PlanContext.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
@@ -191,4 +192,63 @@ TEST_CASE("Maze's End Summit pay-first: Baldur's Gate pays ahead of single-mana 
         CHECK_FALSE(TappedByNumber(r, 705));
         CHECK_FALSE(TappedByNumber(r, 720));
     }
+}
+
+TEST_CASE("Maze's End Summit pay-first NAMED: the {3} reserve only when the applying plan activates Maze's End")
+{
+    LoadSummitPayCards();
+    const MazesEndProvider prov;
+    const Arm on(heurarm::MAZE_SUMMIT_PAY_FIRST, 1);
+    const Arm named(heurarm::MAZE_SUMMIT_PF_NAMED, 1);
+    GameState s = Base();
+    s.m_provider = &prov;
+    Put(s, "Azorius Guildgate", 700);
+    Put(s, "Boros Guildgate", 701);
+    Put(s, "Dimir Guildgate", 702);
+    Put(s, "Golgari Guildgate", 703);
+    Put(s, "Maze's End", 720);
+    const LineUnpaidCostScope clean(ManaCost{});
+    {
+        // No plan apply in scope: the speculative reserve stays (three Gates pay {3}; one draws).
+        GameState r = s;
+        CHECK(ResolveSummit(r) == 1);
+    }
+    {
+        // A plan that does not activate Maze's End: nothing is owed, every Gate draws.
+        PlanTraits t;
+        const PlanTraitsScope sc(&t);
+        GameState r = s;
+        CHECK(ResolveSummit(r) == 4);
+        CHECK_FALSE(TappedByNumber(r, 720));
+    }
+    {
+        // A plan that activates Maze's End ({3}, {T}): its {3} is owed and its {T} is not a mana source.
+        PlanTraits t;
+        t.act_mana_total = 3;
+        t.act_src_nums[0] = 720;
+        t.act_src_count = 1;
+        const PlanTraitsScope sc(&t);
+        GameState r = s;
+        CHECK(ResolveSummit(r) == 1);
+        CHECK_FALSE(TappedByNumber(r, 720));
+    }
+}
+
+TEST_CASE("Maze's End Summit pay-first ALL3: the all pin stays while an untapped Maze's End is ours")
+{
+    LoadSummitPayCards();
+    const MazesEndProvider prov;
+    const CardDefinition& summit = D("Guild Summit");
+    const Arm on(heurarm::MAZE_SUMMIT_PAY_FIRST, 1);
+    const Arm all3(heurarm::MAZE_SUMMIT_PF_ALL3, 1);
+    GameState s = Base();
+    s.m_provider = &prov;
+    Put(s, "Azorius Guildgate", 700);
+    Put(s, "Boros Guildgate", 701);
+    Put(s, "Dimir Guildgate", 702);
+    CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1 });
+    Put(s, "Maze's End", 720);
+    CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1, 4 });
+    s.battlefield.back().tapped = true;
+    CHECK(prov.EtbChoiceCandidates(s, 0, summit) == std::vector<int>{ 0, 1 });
 }

@@ -71883,13 +71883,42 @@ static bool MazeSummitPayFirstOn()
     static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PAY_FIRST");   // DEFAULT OFF until measured
     return heurarm::Flag(heurarm::MAZE_SUMMIT_PAY_FIRST, s_on);
 }
+// TEMPORARY A/B levers on top of the pay-first tap set (2026-11-22; the first A/B netted +15 at d5 b20: the speculative
+// Maze's End {3} reserve held Gates back for an activation the line never made, where the deleted "all" pin drew them).
+// NAMED: inside a plan apply, the bill carries the plan's OWN pending trailing activations (their mana and their {T}
+// sources) instead of the speculative reserve -- the reserve only where the line really activates Maze's End.
+// ALL3: keep the "all" pin as a third menu entry while an untapped Maze's End of ours exists (the reserve can bind).
+static bool MazeSummitPfNamedOn()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PF_NAMED");   // DEFAULT OFF (A/B lever)
+    return heurarm::Flag(heurarm::MAZE_SUMMIT_PF_NAMED, s_on);
+}
+static bool MazeSummitPfAll3On()
+{
+    static const bool s_on = EnvOn("MTG_MAZE_SUMMIT_PF_ALL3");   // DEFAULT OFF (A/B lever)
+    return heurarm::Flag(heurarm::MAZE_SUMMIT_PF_ALL3, s_on);
+}
+static bool MazeUntappedOwnMaze(const GameState& s, int controller)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (MazeIsMazeDef(d) && d->params.tap_tutor_put_cost.has_value()) { return true; }
+    }
+    return false;
+}
 
 std::vector<int> MazesEndProvider::EtbChoiceCandidates(const GameState& s, int controller, const CardDefinition& def) const
 {
     std::vector<int> base = DeckProvider::EtbChoiceCandidates(s, controller, def);
     if (def.params.etb_tap_subtype_draw.empty() || !MazeSummitCountOn() || HumanPlayActive() || DecisionUnpruned())
     { return base; }
-    if (MazeSummitPayFirstOn()) { return base.size() >= 2 ? std::vector<int>{ 0, 1 } : base; }
+    if (MazeSummitPayFirstOn())
+    {
+        if (base.size() > 2 && MazeSummitPfAll3On() && MazeUntappedOwnMaze(s, controller)) { return { 0, 1, base.back() }; }
+        return base.size() >= 2 ? std::vector<int>{ 0, 1 } : base;
+    }
     if (base.size() <= 2) { return base; }
     return { 0, 1, base.back() };
 }
@@ -71916,7 +71945,22 @@ int MazesEndProvider::EtbTapSubtypePayFirst(const GameState& s, int controller, 
     if (g_line_reducer_credit > 0) { line.generic = std::max(0, line.generic - g_line_reducer_credit); }
     ManaCost bill = line;
     std::vector<int> unavailable;
-    if (!g_line_hold_has_acts)
+    const PlanTraits* pt = MazeSummitPfNamedOn() ? CurrentPlanTraits() : nullptr;
+    if (!g_line_hold_has_acts && pt != nullptr)
+    {
+        // NAMED: the plan's own pending trailing activations (Maze's End's {3}, Heap Gate's {1}), net of those
+        // paid and the one being paid, and their {T} sources set aside.
+        bill.generic += std::max(0, pt->act_mana_total - g_act_line_paid.ManaValue() - g_act_line_current.ManaValue());
+        for (int k = 0; k < pt->act_src_count; ++k)
+        {
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.card.m_number == pt->act_src_nums[k] && p.controller_index == controller && !p.tapped)
+                { unavailable.push_back(p.card.m_number); break; }
+            }
+        }
+    }
+    else if (!g_line_hold_has_acts)
     {
         for (const Permanent& p : s.battlefield)
         {
