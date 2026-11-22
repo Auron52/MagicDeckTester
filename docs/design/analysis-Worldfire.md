@@ -217,14 +217,15 @@ Monotone in aggregate; each worse game is a single +1 turn (gi 23, 29, 76, 93, 9
 attributed. b200 buys 0.11 turns/game at ~3.7x units. A SETTINGS question for the USER; re-measure after the
 cantrip buckets (`docs/design/worldfire-discard-buckets.md`), which change both the cost and what each budget finds.
 
-## Cantrip keep order (bucketed discard + Brainstorm / Ponder / Preordain) -- built 2026-11-21/22, ALL LEVERS DEFAULT OFF
+## Cantrip keep order (bucketed discard + Brainstorm / Ponder / Preordain) -- built 2026-11-21/22, ADOPTED (DEFAULT ON) 2026-11-22
 
 Design: `docs/design/worldfire-discard-buckets.md` (the parent's draft and the USER's amendments 1-12). USER
 request (verbatim): *"It seems pretty clear we are going to need prunes for Brainstorm, Ponder and Preordain.
 Probably similar to those in Cyclone, but a bit simpler because we don't need to worry about our topdeck."* --
 *"But essentially what we'll need to design is the discard heuristic to do this well. ... It should be bucketed
-based on the combo and mana needs."* Discard buckets are USER-owned (analyze-deck 5i), so every lever ships OFF,
-whatever the A/B says. Code: `WorldfireKeepRank::Of` and the consumers in `WorldfireProvider`
+based on the combo and mana needs."* Discard buckets are USER-owned (analyze-deck 5i); the buckets are the USER's
+design (amendments 1-12). The levers were built OFF and turned ON on 2026-11-22 (see "Adoption" below) as a
+better-and-cheaper provider prune under the USER's standing clean-win approval (parent's decision). Code: `WorldfireKeepRank::Of` and the consumers in `WorldfireProvider`
 (`src/ai/DecisionProviders.cpp`); heurarm slots `WORLDFIRE_*`; tests: `test/unit/test_worldfire.cpp` ("worldfire
 keep order: ...", 11 cases).
 
@@ -297,7 +298,7 @@ Rank each card in hand (for Ponder and Preordain, the looked-at cards too). Quot
   Mistrise. A tapped land drops below every untapped one when no drop remains before T\*.
 - **The look:** a looked-at card only takes a slot the hand has not filled.
 
-**Consumers** (each its own lever, all OFF):
+**Consumers** (each its own lever, all DEFAULT ON since 2026-11-22; `=0` turns each off):
 - `MTG_WORLDFIRE_BUCKET_DISCARD`: the cleanup sheds the lowest card. One index, re-ranked per shed.
 - `MTG_WORLDFIRE_BRAINSTORM_RULE`: put back the two lowest, the higher of them on top. The searched put-back fan is
   that one pick (`_BRAINSTORM_SINGLE`, on under the rule; =0 keeps the rule as the fan's order only).
@@ -308,7 +309,8 @@ Rank each card in hand (for Ponder and Preordain, the looked-at cards too). Quot
     piece or one tutor for it.
   - `_AGGR_DIG` (on): dig is bottomed too.
   - `_AGGR_FINISHER` (on): a missing finisher triggers it, not only a missing Worldfire.
-- `MTG_WORLDFIRE_ORDER_DEADLINE` (OFF): an agent proposal, see the attribution below.
+- `MTG_WORLDFIRE_ORDER_DEADLINE` (ON since 2026-11-22): an agent proposal, see the attribution below.
+- Experiment arms that stay OFF: `_PONDER_SINGLE`, `_AGGR_DIG_BLUE`, `MTG_WORLDFIRE_BAZAAR_T1`.
 
 ### A/B -- d5 b20, profile attached, paired per game, ONE pooled batch (1600 jobs, arms innermost), Release
 `on` = the four consumers with their default sub-levers; `off` = none. Units / wall are the arm's summed games;
@@ -322,7 +324,7 @@ Rank each card in hand (for Ponder and Preordain, the looked-at cards too). Quot
 | | **on** | **5.417** | **15 / 10** | **-6** | **10.7M (0.28x)** | **338 s (0.34x)** | 0 |
 
 All 160 games won in every arm. **ON is a clean win on both blocks: better (net -6 and -6) and about 3.5x cheaper.**
-It still ships OFF, because the buckets are the USER's (parent's instruction).
+It shipped OFF at first, because the buckets are the USER's (parent's instruction); adopted 2026-11-22, below.
 
 Per-consumer (each consumer alone; and `on` with one sub-lever flipped), net turns vs off, block a / held out:
 
@@ -397,6 +399,73 @@ Attribution of the final arm's 9 worse games, each lever flipped, at b20 and b20
 - **h gi31 persists** (b200: ON 6, OFF 5). It is the Ponder ORDER again: flipping only the Ponder rule recovers it,
   and so does the proposed deadline order, at b20 and at b200.
 - No worse game is the discard, the Brainstorm rule or the Preordain rule.
+
+### Adoption (2026-11-22): ON + ORDER_DEADLINE, defaults flipped
+USER rulings (2026-11-22, verbatim, relayed by the parent):
+- 1a, the adoption bar: *"Obviously if I designed the rules and they work well (i.e. improvements in average quality
+  and no unrecoverable that cannot be shown to be clairvoyance) then we should turn them on."*
+- 1b, the experiment arms (`_AGGR_DIG_BLUE`, `_BAZAAR_T1`, `_AGGR_DIG=0`, `_AGGR_FINISHER=0`): *"If there is no
+  difference I would keep the rule as designed. These are worth considering only if we see them perform better in
+  testing. If the difference is small we should try a larger test set to separate them."* They stay at the designed
+  defaults (`_AGGR_DIG` and `_AGGR_FINISHER` ON; `_AGGR_DIG_BLUE`, `_BAZAAR_T1`, `_PONDER_SINGLE` OFF). A follow-up
+  agent runs the larger test.
+- 1c1-1c3 (rule refinements): a follow-up agent A/Bs them against this adopted baseline. No rule changed here.
+
+**Attribution, ON + deadline vs OFF, final build** (ab3 at b20; attr2 at b200; the same binary byte-for-byte, so
+the b200 runs already in attr2 are the re-runs). 7 games are slower than OFF at b20; **all 7 recover at b200**, so
+none needed a d8 b0 run and none is a clairvoyance question:
+
+| block | gi | b20 on+DL / off | b200 on+DL / off | verdict |
+|---|---|---|---|---|
+| 9100001 | 2 | 6 / 5 | 5 / 5 | recovers (budget churn) |
+| 9100001 | 37 | 6 / 5 | 5 / 5 | recovers |
+| 9200001 | 11 | 6 / 5 | 5 / 5 | recovers |
+| 9200001 | 35 | 7 / 6 | 6 / 6 | recovers |
+| 9200001 | 63 | 6 / 5 | 5 / 5 | recovers |
+| 9200001 | 82 | 5 / 4 | 4 / 4 | recovers |
+| 9200001 | 85 | 6 / 5 | 5 / 5 | recovers |
+
+h gi31 (the persisting game of the plain ON arm) is faster under deadline: b200 on+DL 5 = OFF 5. h gi56, worse under
+deadline in ab2 (first build), is not worse on the final build.
+
+**Defaults now ON:** `MTG_WORLDFIRE_BUCKET_DISCARD`, `_BRAINSTORM_RULE`, `_PONDER_RULE`, `_PREORDAIN_RULE`,
+`_ORDER_DEADLINE` (each `EnvOn(..., true)`, `=0` turns it off); sub-levers at their under-the-rule defaults.
+Unit tests pin the OFF paths with explicit `=0` arms and check the defaults.
+
+**Tiers with the defaults ON** (`regression.sh --both`, one pooled batch, Release): scenarios 605/605; units as with
+flags OFF (one known pre-existing failure, `test_shadowborn_int9.cpp:184`, plus unit_par's shard-count `rc=3`).
+**Only worldfire keys moved** (smoke 239/243 pass, regression 384/390, every FAIL a worldfire key), accepted
+(`--deck=worldfire,worldfire2hg`), `check_gt_logs.py` consistent:
+
+| key | old | new |
+|---|---|---|
+| worldfire_smoke d0 / d3 / d5 | 8.366 / 5.600 / 5.725 | 8.139 / 5.800 / 5.600 |
+| worldfire2hg_smoke d5 | 5.700 | 5.450 |
+| worldfire_regression d0 / d3 / d5 s2002 / d5 s3003 | 8.344 / 5.533 / 5.567 / 5.483 | 8.150 / 5.533 / 5.483 / 5.367 |
+| worldfire2hg_regression d5 | 5.733 | 5.733 |
+
+The regression tier's other FAIL is the strict reference check: `Creature_Burn/claude_s9_gi8` play-drift. It is
+NOT this change (the pre-change binary drifts identically). It is fixed upstream by d0d5f8463 (the
+`opponent_land_entry` stamp), which is past this branch's merge base, so it clears on rebase.
+
+**The tier's 18 searched-slower games** (each re-run ON vs OFF on the same binary, OFF = the five flags =0; scratch
+`build/scratch/worldfire/adopt/tierattr*`):
+- 13 recover at b200 (ON = OFF or ON faster).
+- 5 persist at b200, which is 3 physical games:
+  - seed 1004: smoke gi3 at std d3, std d5 and 2HG d5;
+  - seed 3046: s3003 gi43;
+  - seed 3057: s3003 gi54.
+- At d8 b0, seeds 1004 (std and 2HG) and 3046 **recover** (ON 5 = OFF 5). At b200 both had ON suspend Lotus Bloom on
+  T2 instead of T1, a budget miss.
+- **Seed 3057 (gi54) persists at d8 b0** (ON 5, OFF 4). Only the Ponder rule's flip recovers it at b200.
+  - Mechanism: OFF opens Skerry, which lets it Ponder twice on T2. The second Ponder SHUFFLES away Preordain /
+    Flooded Strand / Ponder and draws Seething Song, then Worldfire, and goes off T3.
+  - **Evidence of clairvoyance:** a blind ensemble (`blind_salt` 0-7, d5 b200, both arms) TIES: OFF 5.5
+    (5,5,5,6,7,5,6,5) vs ON 5.5 (5,5,7,6,6,5,5,5). The blind OFF search never reaches T4, so OFF's T4 win needs the
+    shuffle outcome it could not know.
+  - Under the USER's bar (1a) gi54 is clairvoyance and does not block.
+  - A blind d8 b0 ensemble was started and killed as degenerate: 1 of 16 games done in 2.3 h, the ON salt 0 game won
+    T5. Blind arms are never d8-gated (USER 2026-11-21).
 
 ### Validation (flags OFF)
 - **Units:** every shard passes. `unit_par.sh` exits 3 for its known shard-count bug. The Worldfire cases now number
