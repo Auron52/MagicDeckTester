@@ -690,11 +690,14 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 //   OUT  steal_tap_count (Captivating Vampire): steals a CREATURE; never a land or a hand card.
 //   OUT  etb_destroy_nonbasic_land_optional (White Orchid Phantom): the opponent searches out a basic for the
 //        land it loses (ResolveEtbDestroyNonbasicLandOptional), so its land count never falls.
-//   OUT  the single-target land removals -- etb_destroy_artifact_enchantment_land (Acidic Slime),
-//        sac_outlet_destroy_nonbasic_land (Fulminator Mage), saga_ch3_gain_control_opp_permanent (Kiora Bests the Sea
-//        God ch. III), cast_trigger_destroy_target_permanents (Ulamog's cast trigger): ONE land per copy (the shipping
-//        lists hold one copy, Kiora two, and a saga's ch. III lands two turns after a seven-mana cast) against a board
-//        of two or more lands. (Ulamog stays IN by its annihilator.)
+//   IN   the single-target land removals (USER 2026-11-22: "Yes, it should. We don't have a deck like that yet in the
+//        list, but I will be adding one later that turns things into artifacts and destroys them. I believe these
+//        rules cover that case well enough as an underestimation of the effect on the opponent. Those decks need to
+//        lock out all lands and the turns where the opponent can play a land would still not be free.") --
+//        etb_destroy_artifact_enchantment_land (Acidic Slime), sac_outlet_destroy_nonbasic_land (Fulminator Mage),
+//        saga_ch3_gain_control_opp_permanent (Kiora Bests the Sea God ch. III), cast_trigger_destroy_target_permanents
+//        (Ulamog's cast trigger). The lock test itself is unchanged: a turn the opponent ends with a land is never free.
+//        (White Orchid Phantom stays OUT for its own reason above: the opponent's land count never falls.)
 // MAIN, plus the SIDEBOARD only when a main-deck wish can fetch from it (DeckWishesFromSideboard): an unreachable
 // sideboard card never resolves (Vampires holds Worldfire in a wishless sideboard). A deck this misses still
 // receives the credit in play (the lock check is general, USER 2026-11-21); only the search's turn-edge prunes stay
@@ -715,7 +718,9 @@ bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
             if (def == nullptr) { continue; }
             const CardParams& p = def->params;
             if (p.exile_all_permanents_hands_graveyards || p.annihilator > 0
-                || (sire_in && p.endstep_each_player_discards_hand))
+                || (sire_in && p.endstep_each_player_discards_hand)
+                || p.etb_destroy_artifact_enchantment_land || p.sac_outlet_destroy_nonbasic_land
+                || p.saga_ch3_gain_control_opp_permanent || p.cast_trigger_destroy_target_permanents > 0)
             { return true; }
         }
         return false;
