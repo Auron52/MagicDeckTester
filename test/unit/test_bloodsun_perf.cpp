@@ -99,7 +99,60 @@ struct GrimArms
 };
 bool HasPf(const std::vector<std::string>& v, const std::string& x)
 { return std::find(v.begin(), v.end(), x) != v.end(); }
+struct BucketArmPf
+{
+    heurarm::Arm saved;
+    BucketArmPf() : saved(heurarm::t_arm) { heurarm::t_arm[heurarm::BLOODSUN_BUCKET_DISCARD] = 1; }
+    ~BucketArmPf() { heurarm::t_arm = saved; }
+};
+std::string FirstShedPf(const GameState& s)
+{
+    const std::vector<int> rank = ProvPf().CleanupDiscardCandidates(s, nullptr);
+    REQUIRE_FALSE(rank.empty());
+    return s.players[0].hand[static_cast<std::size_t>(rank.front())].m_name.str();
+}
 }   // namespace
+
+TEST_CASE("Blood Sun B14: keep three lands ahead of the second drop-maker")
+{
+    GameState s = BasePf(0, 20);
+    s.battlefield.clear();
+    const std::vector<std::string> names = { "Blood Sun", "Diabolic Revelation", "Time Warp",
+        "Exploration", "Burgeoning", "City of Brass", "Blooming Marsh", "Lotus Field" };
+    int num = 300;
+    for (const std::string& name : names) { s.players[0].hand.push_back(CardPf(name, num++)); }
+    const BucketArmPf arm;
+    CHECK(heurarm::Flag(heurarm::BLOODSUN_BUCKET_DISCARD, false));
+    CHECK_FALSE(ProvPf().CleanupDiscardShedStable());
+    CHECK(FirstShedPf(s) == "Burgeoning");
+}
+
+TEST_CASE("Blood Sun B14: Fastbond on the board makes other drop-makers surplus")
+{
+    GameState s = BasePf(0, 20);
+    s.battlefield.clear();
+    PutPf(s, "Fastbond", 200);
+    const std::vector<std::string> names = { "Blood Sun", "Diabolic Revelation", "Time Warp",
+        "Exploration", "Burgeoning", "City of Brass", "Blooming Marsh", "Lotus Field" };
+    int num = 300;
+    for (const std::string& name : names) { s.players[0].hand.push_back(CardPf(name, num++)); }
+    const BucketArmPf arm;
+    const std::string first = FirstShedPf(s);
+    CHECK((first == "Exploration" || first == "Burgeoning"));
+}
+
+TEST_CASE("Blood Sun B14: a Lotus supplies both black pips from the battlefield")
+{
+    GameState s = BasePf(0, 20);
+    PutPf(s, "Lotus Field", 201);
+    const std::vector<std::string> names =
+        { "Blooming Marsh", "City of Brass", "Lotus Vale", "Scorched Ruins" };
+    int num = 300;
+    for (const std::string& name : names) { s.players[0].hand.push_back(CardPf(name, num++)); }
+    const BucketArmPf arm;
+    const std::string first = FirstShedPf(s);
+    CHECK((first == "Blooming Marsh" || first == "City of Brass"));
+}
 
 TEST_CASE("Blood Sun go-off front: Emrakul + Time Warp at 20 life is a projected kill this round")
 {

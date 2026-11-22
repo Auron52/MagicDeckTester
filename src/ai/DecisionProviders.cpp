@@ -73416,6 +73416,161 @@ void BloodSunProvider::RevelationClassOrder(const GameState& s, const std::vecto
                      { return key[static_cast<std::size_t>(a)] < key[static_cast<std::size_t>(b)]; });
 }
 
+// B14 (USER 2026-11-22): cleanup is a set of keep buckets, re-evaluated after each shed.
+// A card filling no slot goes first; then surplus lands that supply no missing colour,
+// a second drop-maker, the remaining lands, the first drop-maker, Time Warp,
+// Revelation access, and Blood Sun access. The three-land floor beats a second
+// drop-maker when the hand is forced to choose between them.
+static bool BloodSunBucketDiscardOn()
+{
+    static const bool on = EnvOn("MTG_BLOODSUN_BUCKET_DISCARD");
+    return heurarm::Flag(heurarm::BLOODSUN_BUCKET_DISCARD, on);
+}
+bool BloodSunProvider::CleanupDiscardShedStable() const { return !BloodSunBucketDiscardOn(); }
+
+std::vector<int> BloodSunProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!BloodSunBucketDiscardOn())
+    { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    const std::vector<int> generic = DeckProvider::CleanupDiscardCandidates(s, required_pieces);
+    std::vector<int> tie(static_cast<std::size_t>(n), n);
+    for (int k = 0; k < static_cast<int>(generic.size()); ++k)
+    { if (generic[static_cast<std::size_t>(k)] >= 0 && generic[static_cast<std::size_t>(k)] < n)
+      { tie[static_cast<std::size_t>(generic[static_cast<std::size_t>(k)])] = k; } }
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    std::vector<int> rank(static_cast<std::size_t>(n), 0);   // 0 = no bucket; higher = harder to shed
+    std::vector<int> lands, drops;
+    int sun = -1, rev = -1, warp = -1, grim1 = -1, grim2 = -1, mach1 = -1, mach2 = -1;
+    bool sun_out = false, fastbond_out = false;
+    int drop_out = 0, red_board = 0, black_board = 0;
+    auto makes = [](const CardParams& p, Color c)
+    { return std::find(p.produces.begin(), p.produces.end(), c) != p.produces.end(); };
+    for (const Permanent& pm : s.battlefield)
+    {
+        if (pm.controller_index != me || pm.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (d == nullptr) { continue; }
+        if (BsIsSun(*d)) { sun_out = true; }
+        if (BsIsFastbond(*d)) { fastbond_out = true; }
+        if (d->params.static_extra_land_drops > 0 && !d->card.IsLand())
+        { drop_out += d->params.static_extra_land_drops; }
+        if (d->params.opponent_land_play_put_land_from_hand) { ++drop_out; }
+        if (d->card.IsLand())
+        {
+            const CardParams& p = EffectiveLandDef(s, *d).params;
+            red_board += makes(p, Color::Red);
+            black_board += makes(p, Color::Black)
+                         ? (p.produces_one_color ? std::max(1, p.produces_amount) : 1) : 0;
+        }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[static_cast<std::size_t>(i)];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        defs[static_cast<std::size_t>(i)] = d;
+        if (c.IsLand()) { lands.push_back(i); continue; }
+        if (d == nullptr) { continue; }
+        if (BsIsSun(*d) && sun < 0) { sun = i; }
+        if (d->params.tutor_up_to_x && rev < 0) { rev = i; }
+        if (d->params.extra_turns_on_resolve > 0 && warp < 0) { warp = i; }
+        if (d->card.m_name == "Grim Tutor")
+        { if (grim1 < 0) { grim1 = i; } else if (grim2 < 0) { grim2 = i; } }
+        if (d->card.m_name == "Dimir Machinations")
+        { if (mach1 < 0) { mach1 = i; } else if (mach2 < 0) { mach2 = i; } }
+        if (BsIsFastbond(*d) || d->params.static_extra_land_drops > 0
+            || d->params.opponent_land_play_put_land_from_hand) { drops.push_back(i); }
+    }
+    if (!sun_out)
+    {
+        if (sun >= 0) { rank[static_cast<std::size_t>(sun)] = 8; }
+        else
+        {
+            const int tutor = grim1 >= 0 ? grim1 : mach1;
+            if (tutor >= 0) { rank[static_cast<std::size_t>(tutor)] = 8; }
+        }
+    }
+    if (rev >= 0) { rank[static_cast<std::size_t>(rev)] = 7; }
+    else
+    {
+        const int tutor = grim1 >= 0 && rank[static_cast<std::size_t>(grim1)] == 0 ? grim1
+                        : grim2 >= 0 ? grim2
+                        : mach1 >= 0 && rank[static_cast<std::size_t>(mach1)] == 0 ? mach1 : mach2;
+        if (tutor >= 0) { rank[static_cast<std::size_t>(tutor)] = 7; }
+    }
+    if (warp >= 0) { rank[static_cast<std::size_t>(warp)] = 6; }
+    std::stable_sort(drops.begin(), drops.end(), [&](int a, int b)
+    {
+        const CardParams& x = defs[static_cast<std::size_t>(a)]->params;
+        const CardParams& y = defs[static_cast<std::size_t>(b)]->params;
+        const int xa = x.unlimited_land_plays ? 0 : x.static_extra_land_drops > 0 ? 1 : 2;
+        const int ya = y.unlimited_land_plays ? 0 : y.static_extra_land_drops > 0 ? 1 : 2;
+        return xa != ya ? xa < ya : tie[static_cast<std::size_t>(a)] > tie[static_cast<std::size_t>(b)];
+    });
+    if (!fastbond_out)
+    {
+        const int slots = std::max(0, 2 - drop_out);
+        for (int k = 0; k < static_cast<int>(drops.size()) && k < slots; ++k)
+        {
+            const int i = drops[static_cast<std::size_t>(k)];
+            rank[static_cast<std::size_t>(i)] = k == 0 ? 5 : 2;
+            if (defs[static_cast<std::size_t>(i)]->params.unlimited_land_plays) { break; }
+        }
+    }
+    // Choose the three best hand lands as the floor. A fourth land also stays in
+    // the colour bucket if it alone supplies a still-missing red or black source.
+    int need_red = sun_out ? 0 : std::max(0, 1 - red_board);
+    int need_black = std::max(0, 2 - black_board);
+    std::vector<int> remaining = lands;
+    for (int k = 0; k < static_cast<int>(lands.size()); ++k)
+    {
+        int best = -1, best_score = -1;
+        for (int i : remaining)
+        {
+            const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+            if (d == nullptr) { continue; }
+            const CardParams& p = EffectiveLandDef(s, *d).params;
+            const int red = need_red > 0 && makes(p, Color::Red);
+            const int black = need_black > 0 && makes(p, Color::Black);
+            const int black_value = black * 60 * (p.produces_one_color
+                ? std::min(need_black, std::max(1, p.produces_amount)) : 1);
+            const int colour = p.produces_one_color ? std::max(red * 100, black_value)
+                                                      : red * 100 + black_value;
+            const int score = colour + (BsIsBigLand(*d) ? 25 : 0)
+                            + std::min(4, std::max(1, p.produces_amount)) * 3
+                            - (p.enters_tapped ? 2 : 0);
+            if (score > best_score || (score == best_score && tie[static_cast<std::size_t>(i)] > tie[static_cast<std::size_t>(best)]))
+            { best = i; best_score = score; }
+        }
+        if (best < 0) { break; }
+        const CardParams& p = EffectiveLandDef(s, *defs[static_cast<std::size_t>(best)]).params;
+        const bool red = need_red > 0 && makes(p, Color::Red);
+        const bool black = need_black > 0 && makes(p, Color::Black);
+        const bool colour_needed = red || black;
+        rank[static_cast<std::size_t>(best)] = k < 3 || colour_needed ? 3 : 1;
+        if (p.produces_one_color)
+        { if (red && (!black || need_red * 100 >= 60 * std::min(need_black, std::max(1, p.produces_amount))))
+          { --need_red; }
+          else if (black) { need_black -= std::min(need_black, std::max(1, p.produces_amount)); } }
+        else { need_red -= red; need_black -= black; }
+        remaining.erase(std::find(remaining.begin(), remaining.end(), best));
+    }
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) { shed.push_back(i); }
+    std::stable_sort(shed.begin(), shed.end(), [&](int a, int b)
+    {
+        const int ra = rank[static_cast<std::size_t>(a)], rb = rank[static_cast<std::size_t>(b)];
+        return ra != rb ? ra < rb : tie[static_cast<std::size_t>(a)] < tie[static_cast<std::size_t>(b)];
+    });
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}
+
 // ---- BLOOD SUN step 6c: the USER's tutor targets (B3), USER 2026-11-20, VERBATIM excerpts (the ledger holds the rest):
 // "a number of cards in the deck are not worth searching at all. Blood Sun should be searched early with Grim Tutor or
 // Dimir Machinations if it is missing, but is not necessary to search once we have one. The only lands we should be

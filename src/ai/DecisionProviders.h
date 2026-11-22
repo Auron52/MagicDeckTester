@@ -4413,6 +4413,10 @@ public:
     // hard-cast this turn) is tried first; nothing is removed, the nested round-win stop then ends the list.
     bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
                             bool projected_lethal) const override;
+    // B14: USER-authored cleanup keep buckets, recalculated after each discard.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     // B13 (MTG_BLOODSUN_LOTUS_SAC_PRUNE, DEFAULT ON, USER-decided): the Lotus sacrifice menu collapses to ONE pair.
     void LotusSacrificeRestrict(const GameState& s, int controller, const CardDefinition& def,
                                 std::vector<std::vector<int>>& picks) const override;
