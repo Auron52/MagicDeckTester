@@ -128,3 +128,11 @@ recommendation.
 - Held-out B12-bis pool is running with frozen binary at `build/scratch/bloodsun/b12bis/` (7326 games, d5/d3,
   11 arms). After it finishes, run `table.py` and d8 b0 recovery for every slower game. Separate frozen binary and
   2664-game manifest for B14 and both scoped arms are at `build/scratch/bloodsun/b14/`; run it afterward.
+- The 15 `logs/bloodsun-grim-lost/` game logs were regenerated at their original d8 b0 seeds with Revelation's
+  `REVEAL` event; 38 package reveals show 209 fetched cards in total. Old logs are backed up at
+  `build/scratch/bloodsun/reveal-refresh/backup/`.
+- Blind-unknown bracket (`build/scratch/bloodsun/blind/`, gi7 and gi431, d8 b0, Grim prune on/off): gi7 win turns
+  are off/open 5, off/blind 6, on/open 6, on/blind 7. gi431 are off/open 3, off/blind unwon at max turn 8,
+  on/open 4, on/blind 4. Thus the unblinded comparison is affected by knowledge of post-shuffle draws; the blind
+  comparison does not uniformly erase the prune's penalty, but gi431 reverses it. Report both brackets, do not
+  treat the open-draw result alone as a correctness failure.
