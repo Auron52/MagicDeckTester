@@ -5443,6 +5443,12 @@ struct CardParams
     // with N = OTHER permanents the controller controls with this subtype (tapped or not) instead of
     // creatures of a chosen type. IsScaledManaLand / ScaledManaCreatureCount read it.
     std::string              mana_per_other_controlled_subtype;
+    // Nykthos, Shrine to Nyx (Beasts F, 2026-11-22): "{2}, {T}: Choose a color. Add an amount of mana of that color
+    // equal to your devotion to that color." The same scaled-mana-land shape (feeder =
+    // mana_per_creature_feeder_generic), with N = DevotionTo(controller, chosen colour) read PER COLOUR at activation:
+    // the colour is a payment choice, so the payer branches over every colour with N >= 1 and each colour adds its
+    // own N (ScaledManaYieldFor). Colour-blind bounds read the max over WUBRG (a sound over-count). false = inert.
+    bool                     mana_per_devotion = false;
     // Basilisk Gate: "Target creature gets +X/+X ..., where X is the number of Gates you control." The
     // TapTargetPump's flat +power/+tough is multiplied by the controller's permanents of this subtype,
     // counted at resolution (the source included).

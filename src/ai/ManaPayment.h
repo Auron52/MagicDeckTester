@@ -1216,6 +1216,9 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
 // A filter whose feed the floating pool cannot pay is one such report ("tap a source for the Izzet
 // Signet's {1} first"). MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
+// Test seam (Beasts F, Nykthos): run the scaled land's fed-tap recolour (MTG_SCALED_FED_FLOAT's ScaledFedRecolourAfter)
+// on `state` after a payment of `cost`, `pre_state` being the board before it.
+void ScaledFedRecolourAfterForTest(GameState& state, const ManaCost& cost, const GameState& pre_state);
 // Does a mana-oracle payment option consume the searched early-crack pin as the payer would (a land crack, no
 // lump)? Read before the option's taps; see ManaPayment.cpp.
 bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector<TurnSolver::PreTap>& taps);

@@ -2690,6 +2690,17 @@ inline bool ScaledFedFloatOn()
     return heurarm::Flag(heurarm::SCALED_FED_FLOAT, env_on);
 }
 
+// MTG_DEVOTION_LAND_HOLD -- DEFAULT ON; =0 gives a devotion land (Nykthos) the ordinary {C}-only rank. A payment
+// PREFERENCE (rank only): ManaSourceRankBase holds Nykthos at the scaled tier (61) while the board devotion plus the
+// line's still-owed pips beats its {feeder}, so a multi-cast line's early generic pip is not paid with the plain {C}
+// the later, devotion-grown fed tap needs (Beasts F: Harbinger then Gargaroth). Separate from MTG_SCALED_LAND_RANK
+// (Three Tree City's tier, default OFF pending its own A/B): only a mana_per_devotion land reads it.
+inline bool DevotionLandHoldOn()
+{
+    static const bool v = EnvOn("MTG_DEVOTION_LAND_HOLD", true);
+    return v;
+}
+
 // MTG_SCALED_LAND_RANK=1 -- DEFAULT OFF pending the adoption A/B.
 //
 // ManaSourceRank reserves every OTHER board-scaled source (scaled dork 61, storage land 62, live

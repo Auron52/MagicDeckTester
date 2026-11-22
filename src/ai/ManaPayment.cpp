@@ -11362,12 +11362,14 @@ void ScaledFedFloatAfter(GameState& state, const ManaCost& cost_in, const PayRef
     const Permanent& sp = state.battlefield[static_cast<std::size_t>(scaled)];
     const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
     const int feeder = sd->params.mana_per_creature_feeder_generic;
-    const int x = ScaledManaCreatureCount(state, &sp);
-    const int gain = x - feeder - 1;
-    if (gain < 1 || cost_in.generic < feeder + 1) { return; }
     int order[5];
     LumpColourOrder(state, ManaCost{}, order);
     const Color k = static_cast<Color>(order[0]);
+    // X in the colour K the float takes: Nykthos makes its devotion to K (Beasts F), every other scaled land the
+    // colour-blind N (ScaledManaYieldFor returns ScaledManaCreatureCount for it -- byte-identical).
+    const int x = ScaledManaYieldFor(state, &sp, k);
+    const int gain = x - feeder - 1;
+    if (gain < 1 || cost_in.generic < feeder + 1) { return; }
     ManaPool& f = state.floating_mana;
     if (f.colorless > pre.fm.colorless) { f.colorless -= 1; f.Add(k, gain + 1); }
     else { f.Add(k, gain); }
@@ -11421,18 +11423,30 @@ void ScaledFedRecolourAfter(GameState& state, const ManaCost& cost_in, const Pay
     const int pips[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
     if (pips[c] != 0) { return; }
     const Permanent& sp = state.battlefield[static_cast<std::size_t>(scaled)];
-    const int x = ScaledManaCreatureCount(state, &sp);
+    const int x = ScaledManaYieldFor(state, &sp, static_cast<Color>(c));
     const int gain = now[c] - was[c];
     if (gain > x) { return; }
     int order[5];
     LumpColourOrder(state, ManaCost{}, order);
     const int k = order[0];
     if (k == c) { return; }
+    // Nykthos (Beasts F): a fed tap in colour k makes its devotion to k, not to c, so the re-read is the SAME tap only
+    // when the two yields agree -- otherwise refused (the payment stands as made). Every other scaled land's yield is
+    // colour-blind, so this never refuses there.
+    if (ScaledManaYieldFor(state, &sp, static_cast<Color>(k)) != x) { return; }
     ManaPool& fm = state.floating_mana;
     fm.Add(static_cast<Color>(c), -gain);
     fm.Add(static_cast<Color>(k), gain);
 }
 } // namespace
+
+// Test seam (Beasts F): ScaledFedRecolourAfter against a snapshot of `pre_state` (the board before the payment).
+void ScaledFedRecolourAfterForTest(GameState& state, const ManaCost& cost, const GameState& pre_state)
+{
+    PayRefineSnap pre;
+    pre.Take(pre_state, nullptr);
+    ScaledFedRecolourAfter(state, cost, pre);
+}
 
 static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco)
@@ -13785,7 +13799,31 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     // "{2},{T}: Add N mana of one colour" (N = creatures you control -- the backtracker's model,
     // ScaledManaCreatureCount) is a fed face per colour, through the same feed-from-float path as a
     // filter. Offered only while N >= 1, as the backtracker requires: N = 0 pays {2} for nothing.
-    if (IsScaledManaLand(*def))
+    if (IsScaledManaLand(*def) && IsDevotionManaLand(*def))
+    {
+        // Nykthos (Beasts F): N is the devotion to the colour picked, so a fed face is offered per colour WITH devotion
+        // (the backtracker skips a zero-devotion colour too), ordered by N descending (WUBRG within a tie) so the mana
+        // oracle's one-representative-per-useless-colour fold keeps the LARGEST such face. The note lists each N.
+        int dev[5];
+        DevotionAllColors(state, p.controller_index, dev);
+        int ord[5] = { 0, 1, 2, 3, 4 };
+        std::stable_sort(ord, ord + 5, [&](int a, int b) { return dev[a] > dev[b]; });
+        std::string counts;
+        for (int ci : ord)
+        {
+            if (dev[ci] < 1) { continue; }
+            add_fed(std::string(1, kPreTapColorLetters[ci]));
+            if (!counts.empty()) { counts += ", "; }
+            counts += std::to_string(dev[ci]) + " {" + std::string(1, kPreTapColorLetters[ci]) + "}";
+        }
+        if (!counts.empty())
+        {
+            o.feed = "{" + std::to_string(q.mana_per_creature_feeder_generic) + "}";
+            o.note = "its fed mode pays " + o.feed + " from your floating mana and adds your devotion to the colour"
+                     " you pick: " + counts;
+        }
+    }
+    else if (IsScaledManaLand(*def))
     {
         const int n = ScaledManaCreatureCount(state, &p);
         if (n >= 1)
@@ -14084,8 +14122,10 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
                           + HumanPreTapFaceText(t) + " -- tap a source for the " + t.name + "'s "
                           + offer.feed + " first");
         }
-        // N for a scaled land, read BEFORE the tap (tapping a land changes no creature count).
-        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state, found) : 0;
+        // N for a scaled land, read BEFORE the tap (tapping a land changes no creature count). Nykthos: the devotion to
+        // the colour the human picked (Beasts F; the face is offered only for a colour with devotion >= 1).
+        const int scaled_n = IsScaledManaLand(*def)
+            ? ScaledManaYieldFor(state, found, static_cast<Color>(t.color)) : 0;
         TapConversionSource(state, *found);
         if (scaled_n > 0) { state.floating_mana.Add(static_cast<Color>(t.color), scaled_n); }
         else if (combo)   { for (int c : t.combo) { state.floating_mana.Add(static_cast<Color>(c), 1); } }

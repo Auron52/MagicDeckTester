@@ -1495,3 +1495,427 @@ TEST_CASE("Migloz: oil is state -- the legend copies differ, and more oil domina
     CHECK(dominance::Covers(more, less));
     CHECK_FALSE(dominance::Covers(less, more));
 }
+
+// ---- Nykthos, Shrine to Nyx (Beasts F) ------------------------------------------------------------------------------
+// "{2}, {T}: Choose a color. Add an amount of mana of that color equal to your devotion to that color." The Three Tree
+// City scaled-land shape with N = DevotionTo(chosen colour), PER COLOUR: the payer branches every colour with N >= 1,
+// the mana cache keys all five counts, the human picks a per-colour fed face, and the recolour refuses a re-read whose
+// yield differs.
+namespace
+{
+constexpr const char* kNyk = "Nykthos, Shrine to Nyx";
+ManaCost BeCost(int generic, int w, int u, int b, int r, int g)
+{
+    ManaCost c;
+    c.generic = generic; c.white = w; c.blue = u; c.black = b; c.red = r; c.green = g;
+    return c;
+}
+// Nykthos #5, `forests` untapped Forests (10..), then `perms` (40..), the land drop spent.
+GameState BeNykBoard(int forests, std::initializer_list<const char*> perms)
+{
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    BeAdd(s, kNyk, 5);
+    for (int i = 0; i < forests; ++i) { BeAdd(s, "Forest", 10 + i); }
+    int n = 40;
+    for (const char* p : perms) { BeAdd(s, p, n++); }
+    return s;
+}
+const Permanent& BeNyk(const GameState& s)
+{
+    const int i = BeIndexOf(s, 5);
+    REQUIRE(i >= 0);
+    return s.battlefield[static_cast<std::size_t>(i)];
+}
+bool BeTapped(const GameState& s, int num)
+{
+    const int i = BeIndexOf(s, num);
+    return i >= 0 && s.battlefield[static_cast<std::size_t>(i)].tapped;
+}
+void BeHand(GameState& s, const char* name, int number)
+{
+    Card c = BeDef(name).card;
+    c.m_number = number;
+    s.players[0].hand.push_back(c);
+}
+}   // namespace
+
+TEST_CASE("Nykthos: card data, and the fed yield is the devotion to the colour picked (G vs R)")
+{
+    const CardDefinition& d = BeDef(kNyk);
+    CHECK(d.card.IsLand());
+    CHECK(d.card.HasSupertype(Supertype::Legendary));
+    CHECK(d.params.mana_per_devotion);
+    CHECK(d.params.mana_per_creature_feeder_generic == 2);
+    CHECK(IsScaledManaLand(d));
+    CHECK(IsDevotionManaLand(d));
+    CHECK_FALSE(IsDevotionManaLand(BeDef("Forest")));
+    CHECK(d.params.mana_per_creature_subtype.empty());
+    CHECK(d.params.mana_per_other_controlled_subtype.empty());
+
+    GameState s = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });   // G 2 + 1, R 1
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 3);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Red) == 1);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::White) == 0);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Colorless) == 0);
+    CHECK(DevotionTo(s, 0, "G") == 3);
+    CHECK(DevotionTo(s, 0, "R") == 1);
+    // The colour-blind bound is the best colour (sound over-count), by source and by the null-source convention.
+    CHECK(ScaledManaCreatureCount(s, &BeNyk(s)) == 3);
+    CHECK(ScaledManaCreatureCount(s) == 3);
+    // An opponent's permanent adds nothing; a Garruk planeswalker's {G}{G}{G} does (devotion counts every permanent).
+    BeAdd(s, "Questing Beast", 50, /*controller=*/1);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 3);
+    BeAdd(s, "Garruk, Primal Hunter", 51);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 6);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Red) == 1);
+}
+
+TEST_CASE("Nykthos: the payer branches every colour with devotion -- {G}{G}{G} and {R} pay, red is never pinned away")
+{
+    ManaCacheClearPerGame();
+    const GameState base = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });   // G 3, R 1
+    {   // fed for three GREEN off the two Forests' feed
+        GameState s = base;
+        CHECK(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 0, 3), false, ManaPool{}));
+        CHECK(BeNyk(s).tapped);
+    }
+    {   // fed for one RED: the only red source on the board
+        GameState s = base;
+        CHECK(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 1, 0), false, ManaPool{}));
+        CHECK(BeNyk(s).tapped);
+        CHECK(BeTapped(s, 10));
+        CHECK(BeTapped(s, 11));
+    }
+    { GameState s = base; CHECK_FALSE(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 2, 0), false, ManaPool{})); }  // R = 1
+    { GameState s = base; CHECK_FALSE(TapForCostBacktrack(s, BeCost(0, 1, 0, 0, 0, 0), false, ManaPool{})); }  // no W
+    { GameState s = base; CHECK_FALSE(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 0, 4), false, ManaPool{})); }  // G = 3
+    // The cheap plain {C} still pays a generic bill (the fed mode is reached only when the plain tap cannot pay).
+    {
+        GameState s = base;
+        CHECK(TapForCostBacktrack(s, BeCost(3, 0, 0, 0, 0, 0), false, ManaPool{}));
+    }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: the mana cache keys every colour's devotion -- the same best colour, a different red, splits the key")
+{
+    // A: Questing Beast + Herald (G 3, R 1). B: Questing Beast + Thragtusk (G 3, R 0). Same source list (Nykthos + two
+    // Forests), same MAX devotion, so a max-only key collides; {R} pays on A only. Both orders: a stale positive and a
+    // stale negative.
+    const GameState a0 = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });
+    const GameState b0 = BeNykBoard(2, { "Questing Beast", "Thragtusk" });
+    REQUIRE(ScaledManaCreatureCount(a0) == ScaledManaCreatureCount(b0));
+    const ManaCost red = BeCost(0, 0, 0, 0, 1, 0);
+    ManaCacheClearPerGame();
+    {
+        GameState a = a0; CHECK(TapForCostBacktrack(a, red, false, ManaPool{}));
+        GameState b = b0; CHECK_FALSE(TapForCostBacktrack(b, red, false, ManaPool{}));
+    }
+    ManaCacheClearPerGame();
+    {
+        GameState b = b0; CHECK_FALSE(TapForCostBacktrack(b, red, false, ManaPool{}));
+        GameState a = a0; CHECK(TapForCostBacktrack(a, red, false, ManaPool{}));
+    }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: a Wild Growth on it adds its {G} to the fed tap (+1), and counts toward green devotion")
+{
+    ManaCacheClearPerGame();
+    auto board = [](bool on_nykthos)
+    {
+        GameState s = BeNykBoard(0, { "Questing Beast" });   // G 2
+        s.deck_has_land_aura = true;   // StampDeckTraits' land-Aura stamp (LandAuraBonusOfLand reads nothing without it)
+        BeAdd(s, "Mountain", 12);
+        s.battlefield[static_cast<std::size_t>(BeIndexOf(s, 12))].tapped = true;
+        const int wg = BeAdd(s, "Wild Growth", 45);
+        s.battlefield[static_cast<std::size_t>(wg)].aura_attached_to = on_nykthos ? 5 : 12;
+        return s;
+    };
+    ManaPool feed;
+    feed.colorless = 2;   // the {2} already floating
+    {
+        GameState s = board(true);
+        CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 3);   // QB 2 + Wild Growth 1
+        CHECK(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 0, 4), false, feed));   // 3 + the Aura's 1
+    }
+    {
+        GameState s = board(true);
+        CHECK_FALSE(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 0, 5), false, feed));
+    }
+    {
+        GameState s = board(false);   // the Aura on the (tapped) Mountain: devotion 3, no bonus on Nykthos
+        CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 3);
+        CHECK_FALSE(TapForCostBacktrack(s, BeCost(0, 0, 0, 0, 0, 4), false, feed));
+    }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: hybrid pips count for both colours -- Kaheera's {G/W}{G/W} is 2 green and 2 white")
+{
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(2, { "Kaheera, the Orphanguard" });
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Green) == 2);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::White) == 2);
+    CHECK(DevotionTo(s, 0, "W") == 2);
+    CHECK(ScaledManaYieldFor(s, &BeNyk(s), Color::Red) == 0);
+    {
+        GameState p = s;
+        CHECK(TapForCostBacktrack(p, BeCost(0, 2, 0, 0, 0, 0), false, ManaPool{}));   // {W}{W}: fed white
+    }
+    const HumanPreTapOffer o = HumanPreTapOfferFor(s, BeNyk(s));
+    CHECK(o.fed_faces == std::vector<std::string>{ "W", "G" });   // a tie: WUBRG order
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: the human's fed face is per colour -- the R face adds the red count, a W face is refused")
+{
+    const GameState base = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });   // G 3, R 1
+    const HumanPreTapOffer o = HumanPreTapOfferFor(base, BeNyk(base));
+    CHECK(o.free_faces == "C");
+    CHECK(o.fed_faces == std::vector<std::string>{ "G", "R" });   // N descending; no W/U/B (no devotion)
+    CHECK(o.feed == "{2}");
+    CHECK(o.note.find("3 {G}") != std::string::npos);
+    CHECK(o.note.find("1 {R}") != std::string::npos);
+
+    auto tap = [](GameState& s, int color)
+    {
+        TurnSolver::PreTap t;
+        t.name = kNyk; t.num = 5; t.color = color;
+        return ApplyHumanPreTap(s, t);
+    };
+    {
+        GameState s = base;
+        s.floating_mana.green = 2;   // the two Forests, tapped first by the human
+        CHECK(tap(s, static_cast<int>(Color::Red)) == "");
+        CHECK(s.floating_mana.red == 1);
+        CHECK(s.floating_mana.green == 0);
+        CHECK(BeNyk(s).tapped);
+    }
+    {
+        GameState s = base;
+        s.floating_mana.green = 2;
+        CHECK(tap(s, static_cast<int>(Color::Green)) == "");
+        CHECK(s.floating_mana.green == 3);
+    }
+    {
+        GameState s = base;
+        s.floating_mana.green = 2;
+        CHECK_FALSE(tap(s, static_cast<int>(Color::White)).empty());   // no white devotion: not a face
+        CHECK_FALSE(BeNyk(s).tapped);
+        CHECK(s.floating_mana.green == 2);
+    }
+}
+
+TEST_CASE("Nykthos: the fed-tap recolour is refused when the other colour's devotion differs (and taken when equal)")
+{
+    // The payment: two Forests fed Nykthos for GREEN (devotion 3) and {2} took two of it -- one {G} floats. The line's
+    // colour is RED (Monastery Swiftspear in hand). Re-reading the surplus as red is the same tap only if Nykthos makes
+    // as much red as green.
+    auto run = [](std::initializer_list<const char*> perms)
+    {
+        GameState pre = BeNykBoard(2, perms);
+        BeHand(pre, "Monastery Swiftspear", 70);
+        GameState post = pre;
+        for (int n : { 5, 10, 11 }) { post.battlefield[static_cast<std::size_t>(BeIndexOf(post, n))].tapped = true; }
+        post.floating_mana.green = 1;
+        ScaledFedRecolourAfterForTest(post, BeCost(2, 0, 0, 0, 0, 0), pre);
+        return post.floating_mana;
+    };
+    const ManaPool unequal = run({ "Questing Beast", "Herald of Ilharg" });   // G 3, R 1: refused
+    CHECK(unequal.green == 1);
+    CHECK(unequal.red == 0);
+    const ManaPool equal = run({ "Herald of Ilharg", "Herald of Ilharg", "Herald of Ilharg" });   // G 3, R 3
+    CHECK(equal.green == 0);
+    CHECK(equal.red == 1);
+}
+
+TEST_CASE("Nykthos: executor and rollout pay a red spell off the fed RED tap identically")
+{
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(2, { "Questing Beast", "Herald of Ilharg" });   // the only red: Nykthos fed, R 1
+    BeHand(s, "Monastery Swiftspear", 70);
+    s.m_provider = &provider;
+    const TurnSolver::Plan* cast = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CastFromHand && p.actions[0].def != nullptr
+            && p.actions[0].def->card.m_name.str() == "Monastery Swiftspear") { cast = &p; break; }
+    }
+    REQUIRE(cast != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *cast, true);
+    CHECK(BeIndexOf(roll, 70) >= 0);
+    CHECK(BeNyk(roll).tapped);
+
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *cast, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 70) >= 0);
+    for (int n : { 5, 10, 11 }) { CHECK(BeTapped(ex, n) == BeTapped(roll, n)); }
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: the payability walk grows devotion -- Harbinger's {G}{G} funds the Gargaroth after it")
+{
+    // Nykthos + six Forests + Questing Beast (G 2). Harbinger {1}{G}{G} off three Forests, then devotion is 4: two
+    // Forests feed Nykthos for four green + the last Forest = Gargaroth's 5. No other order pays, and a probe that never
+    // put Harbinger on its scratch board would read Nykthos at 2 and reject the pair.
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(6, { "Questing Beast" });
+    BeHand(s, "Garruk's Harbinger", 70);
+    BeHand(s, "Elder Gargaroth", 71);
+    s.m_provider = &provider;
+    bool both = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int n = 0;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++n; } }
+        if (n == 2) { both = true; break; }
+    }
+    CHECK(both);
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: the payer holds it for a later devotion-grown fed tap, and spends its {C} when holding would strand it")
+{
+    // MTG_DEVOTION_LAND_HOLD (ManaSourceRankBase): a payment PREFERENCE. Hold: Harbinger's {1} off a Forest so the fed
+    // tap is left for Gargaroth at devotion 4. No hold: three Forests, a {1}{G} then a {G}{G} -- holding Nykthos would
+    // leave one Forest to feed its {2}, so its plain {C} must pay the {1}.
+    BoarsProvider provider;
+    ManaCacheClearPerGame();
+    {
+        GameState s = BeNykBoard(6, { "Questing Beast" });   // G 2
+        s.m_provider = &provider;
+        {
+            LineUnpaidCostScope luc(BeCost(4, 0, 0, 0, 0, 4));   // Harbinger {1}{G}{G} + Gargaroth {3}{G}{G}
+            CHECK(TapForCostDirect(s, BeCost(1, 0, 0, 0, 0, 2), true));
+        }
+        CHECK_FALSE(BeNyk(s).tapped);
+        BeAdd(s, "Garruk's Harbinger", 41);   // resolved: G 4
+        {
+            LineUnpaidCostScope luc(BeCost(3, 0, 0, 0, 0, 2));
+            CHECK(TapForCostDirect(s, BeCost(3, 0, 0, 0, 0, 2), true));
+        }
+        CHECK(BeNyk(s).tapped);
+    }
+    ManaCacheClearPerGame();
+    {
+        GameState s = BeNykBoard(3, {});   // devotion 0
+        s.m_provider = &provider;
+        {
+            LineUnpaidCostScope luc(BeCost(1, 0, 0, 0, 0, 3));   // a {1}{G} creature + Nourish {G}{G}
+            CHECK(TapForCostDirect(s, BeCost(1, 0, 0, 0, 0, 1), true));
+        }
+        CHECK(BeNyk(s).tapped);
+        {
+            LineUnpaidCostScope luc(BeCost(0, 0, 0, 0, 0, 2));
+            CHECK(TapForCostDirect(s, BeCost(0, 0, 0, 0, 0, 2), false));
+        }
+    }
+    ManaCacheClearPerGame();
+}
+
+namespace
+{
+// The plan that casts exactly the hand cards named `names` (any order), or nullptr.
+const TurnSolver::Plan* BeFindCastPlan(const std::vector<TurnSolver::Plan>& plans,
+                                       std::initializer_list<std::string> names)
+{
+    for (const TurnSolver::Plan& p : plans)
+    {
+        std::vector<std::string> got;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            got.push_back(a.card_name.str());
+        }
+        std::vector<std::string> want(names);
+        std::sort(got.begin(), got.end());
+        std::sort(want.begin(), want.end());
+        if (got == want) { return &p; }
+    }
+    return nullptr;
+}
+}   // namespace
+
+TEST_CASE("Nykthos: the pip-heavy permanent first can be the ONLY payable order -- enumerated, and both apply worlds take it")
+{
+    // Nykthos + eight Forests + Questing Beast (G 2). Hand: Thragtusk {4}{G} (one pip) and Elder Gargaroth {3}{G}{G} (two),
+    // the same mana value, Thragtusk first in the hand. Thragtusk first: five Forests, then devotion 3 -- two Forests feed
+    // Nykthos for three green + one Forest = 4 < 5 (or the plain {C}: 3 Forests + 1 = 4). Gargaroth first: five
+    // Forests, then devotion 4 -- two of the last three Forests feed Nykthos for four, + the third = Thragtusk's 5. Board
+    // total 9 (Forests + the {C}) < 10, so the flat pool rejects the pair, the filter rescue's single (rank) walk takes
+    // Thragtusk first and fails, and before the payable-order domain covered devotion growth the pair was REFUSED --
+    // a payable line no budget could find as one plan.
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(8, { "Questing Beast" });
+    BeHand(s, "Thragtusk", 70);
+    BeHand(s, "Elder Gargaroth", 71);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = BeFindCastPlan(plans, { "Thragtusk", "Elder Gargaroth" });
+    REQUIRE(both != nullptr);
+    // The walk itself: only Gargaroth-first pays.
+    std::vector<int> tg, gt;
+    for (int i = 0; i < static_cast<int>(both->actions.size()); ++i)
+    {
+        const Action& a = both->actions[static_cast<std::size_t>(i)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (a.card_name.str() == "Thragtusk") { tg.insert(tg.begin(), i); gt.push_back(i); }
+        else                     { tg.push_back(i); gt.insert(gt.begin(), i); }
+    }
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, both->actions, tg));
+    CHECK(TurnSolver::OrderPaysSequentially(s, both->actions, gt));
+    // Rollout and executor both realise the paying order and cast both.
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *both, true);
+    CHECK(BeIndexOf(roll, 70) >= 0);
+    CHECK(BeIndexOf(roll, 71) >= 0);
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, *both, true);
+    GameState ex = s;
+    eng.TakeTurn(ex, true, BeResolveAll);
+    CHECK(BeIndexOf(ex, 70) >= 0);
+    CHECK(BeIndexOf(ex, 71) >= 0);
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Nykthos: a red devotion made INSIDE the line opens the red pip -- Vexing Shusher {R/G}{R/G} off Forests, then Swiftspear off the fed {R}")
+{
+    // Nykthos + four Forests, no devotion, no red source. Hand: Vexing Shusher {R/G}{R/G} and Monastery Swiftspear {R}.
+    // Shusher paid with two Forests gives red devotion 2; the last two Forests feed Nykthos for {R}{R}. The colour gate
+    // used to read the BOARD's devotion only (red 0) and refused every subset holding the {R} pip as "no untapped source
+    // produces red". It now credits the colours a permanent in hand would add.
+    BoarsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeNykBoard(4, {});
+    BeHand(s, "Vexing Shusher", 70);
+    BeHand(s, "Monastery Swiftspear", 71);
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = BeFindCastPlan(plans, { "Vexing Shusher", "Monastery Swiftspear" });
+    REQUIRE(both != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *both, true);
+    CHECK(BeIndexOf(roll, 70) >= 0);
+    CHECK(BeIndexOf(roll, 71) >= 0);
+    CHECK(BeNyk(roll).tapped);
+    // Without Shusher the red pip stays unreachable (the gate still refuses what nothing can make).
+    GameState lone = BeNykBoard(4, {});
+    BeHand(lone, "Monastery Swiftspear", 71);
+    lone.m_provider = &provider;
+    CHECK(BeFindCastPlan(TurnSolver::EnumerateMainPlans(lone, true), { "Monastery Swiftspear" }) == nullptr);
+    ManaCacheClearPerGame();
+}
+

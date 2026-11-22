@@ -33597,8 +33597,37 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 inline bool IsScaledManaLand(const CardDefinition& def)
 {
     return (!def.params.mana_per_creature_subtype.empty()
-            || !def.params.mana_per_other_controlled_subtype.empty())
+            || !def.params.mana_per_other_controlled_subtype.empty()
+            || def.params.mana_per_devotion)
         && def.params.mana_per_creature_feeder_generic > 0;
+}
+
+// Nykthos, Shrine to Nyx (Beasts F): the scaled-mana-land shape whose N is the controller's DEVOTION to the colour the
+// activation chooses ("Choose a color. Add an amount of mana of that color equal to your devotion to that color").
+// Unlike Three Tree City / Baldur's Gate, N DEPENDS ON THE COLOUR, so every colour-specific reader goes through
+// ScaledManaYieldFor; the colour-blind readers (ScaledManaCreatureCount and its bounds) take the max over WUBRG, a
+// sound over-count. Param-gated: no other card sets mana_per_devotion.
+inline bool IsDevotionManaLand(const CardDefinition& def)
+{ return def.params.mana_per_devotion && def.params.mana_per_creature_feeder_generic > 0; }
+
+// All five single-colour devotions of `controller` in ONE battlefield walk, WUBRG order -- each out[c] equals
+// DevotionTo(state, controller, "<c>") exactly (the flat cost holds a hybrid's FIRST colour; a hybrid adds its SECOND
+// colour only when that differs from the first, CR 202.2b / 700.5).
+inline void DevotionAllColors(const GameState& state, int controller, int out[5])
+{
+    for (int c = 0; c < 5; ++c) { out[c] = 0; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const ManaCost& mc = q.card.m_mana_cost;
+        out[0] += mc.white; out[1] += mc.blue; out[2] += mc.black; out[3] += mc.red; out[4] += mc.green;
+        for (int i = 0; i < mc.hybrid_count; ++i)
+        {
+            const int first  = mc.hybrid_pair[i] >> 4;
+            const int second = mc.hybrid_pair[i] & 0xF;
+            if (second != first && second >= 0 && second < 5) { ++out[second]; }
+        }
+    }
 }
 
 // Baldur's Gate's N: permanents `controller` controls with land subtype `sub` NOW (LandHasSubtypeNow for
@@ -33642,6 +33671,14 @@ inline int ScaledManaCreatureCount(const GameState& state, const Permanent* sour
                                                    cd->params.mana_per_other_controlled_subtype,
                                                    cs->card.m_number);
         }
+        // Nykthos: the colour-blind N is the BEST colour's devotion (the max over WUBRG) -- a sound over-count for
+        // every bound / liveness reader; a colour-specific yield reads ScaledManaYieldFor.
+        if (cs != nullptr && cd != nullptr && IsDevotionManaLand(*cd))
+        {
+            int dev[5];
+            DevotionAllColors(state, cs->controller_index, dev);
+            return std::max({ dev[0], dev[1], dev[2], dev[3], dev[4] });
+        }
     }
     uint16_t chosen = source ? source->chosen_subtype_id : SubtypeRegistry::kNone;
     if (chosen == SubtypeRegistry::kNone && source)
@@ -33671,6 +33708,26 @@ inline int ScaledManaCreatureCount(const GameState& state, const Permanent* sour
             && (p.AnimatedAllTypes() || p.card.m_subtypes.HasId(chosen))) { ++n; }
     }
     return n;
+}
+
+// The yield of ONE fed tap of scaled land `source` in colour `c`: Nykthos's devotion to `c` (Beasts F); every other
+// scaled land's N does not depend on the colour, so it is ScaledManaCreatureCount unchanged. `c` outside WUBRG yields 0
+// for a devotion land (the fed mode adds a COLOUR).
+inline int ScaledManaYieldFor(const GameState& state, const Permanent* source, Color c)
+{
+    if (source != nullptr)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source->card);
+        if (d != nullptr && IsDevotionManaLand(*d))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci < 0 || ci >= 5) { return 0; }
+            int dev[5];
+            DevotionAllColors(state, source->controller_index, dev);
+            return dev[ci];
+        }
+    }
+    return ScaledManaCreatureCount(state, source);
 }
 
 // Generic mana available to FEED a scaled land's activation cost: already floated general mana plus
@@ -57007,7 +57064,10 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
     amt = SourceMaxNetLive(state, pp, dd, nullptr, reserved_mask);
     if (dd.params.is_filter)    { amt = std::max(amt, 2); }
     if (dd.params.ramp_filter || dd.params.any_color_filter) { amt = std::max(amt, 1); }
-    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state, &pp)); }
+    // A land Aura on the scaled land (Wild Growth on Nykthos) adds its bonus to the FED tap too -- the backtracker's
+    // activate() credits it on every tap branch -- so the colour gain is N + the Aura's units (Beasts F; LandAuraBonus is 0
+    // without a land Aura, so byte-identical on every other board).
+    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state, &pp) + LandAuraBonus(state, pp)); }
     if (dd.params.untap_creature_cost.has_value())
     {
         amt = std::max(amt, UntapBurstBestYield(state, pp.controller_index, dd,
