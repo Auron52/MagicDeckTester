@@ -23,6 +23,13 @@
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-22T17:48:43Z",
    "note": "Creature Burn integrated rules/search batch; local cleanup build and validation finishing"
+  },
+  {
+   "branch": "wip/land-1122c",
+   "host": "839667a3a15d",
+   "id": "839667a3a15d:wip/land-1122c",
+   "joined": "2026-11-22T18:30:22Z",
+   "note": ""
   }
  ]
 }
