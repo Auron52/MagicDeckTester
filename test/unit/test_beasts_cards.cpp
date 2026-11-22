@@ -211,7 +211,9 @@ TEST_CASE("Adaptive Omnitool consumes the shared combat dig rank before damage-s
     const int e = BeAdd(head, "Adaptive Omnitool", 61);
     head.battlefield[static_cast<std::size_t>(e)].equipped_to = head.battlefield[static_cast<std::size_t>(h)].card.m_number;
     BeSearchedScope searched(true);
-    const auto plans = TurnSolver::EnumerateMainPlans(head, true);
+    // Exercise the combat pin fan on a real idle base plan. MainPlansBase can
+    // omit idle plans from an empty-hand frame before this axis is reached.
+    const auto plans = TurnSolver::SubdecisionAxesForTest(head, true, {TurnSolver::Plan{}});
     bool saw_second_rank = false;
     for (const auto& p : plans)
     { if (CombatDigRankAt(p.combat_dig_choice, 0) == 1) { saw_second_rank = true; break; } }
