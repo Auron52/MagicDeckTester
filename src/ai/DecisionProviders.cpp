@@ -39138,6 +39138,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
         x.e.key = key; x.e.quota = quota; x.e.bucket = bucket;
         done[static_cast<std::size_t>(i)] = 1;
     };
+    auto need_by = [&](int i, int turn) { it[static_cast<std::size_t>(i)].e.need_by = turn; };
     // The not-yet-assigned items whose role passes `want`, HAND FIRST (a looked card only takes a slot the hand
     // has not filled), then by `better` (a strict weak order), then pool order.
     auto ordered = [&](const std::function<bool(WfRole)>& want, const std::function<bool(int, int)>& better)
@@ -39309,10 +39310,11 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
     }
     const FinOpt fin = opts[static_cast<std::size_t>(chosen)];
     out.t_star = tstar;
+    const int t_need = tstar < 0 ? kWfHorizon + 1 : tstar;   // the turn a go-off piece must be in hand by
 
     // ---- COMBO ----
     for (std::size_t q = 0; q < wf.size(); ++q)
-    { set(wf[q], q == 0 ? kWfKeyCombo : kWfKeyDeadDup, q == 0, q == 0 ? "combo" : "dead"); }
+    { set(wf[q], q == 0 ? kWfKeyCombo : kWfKeyDeadDup, q == 0, q == 0 ? "combo" : "dead"); if (q == 0) { need_by(wf[q], t_need); } }
     if (combo_tutor >= 0) { set(combo_tutor, kWfKeyComboTutor, true, "combo"); }
     out.combo_filled = !wf.empty() || combo_tutor >= 0;
 
@@ -39324,7 +39326,12 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
         const std::vector<int>& other = halb_type ? bolts : halbs;
         for (std::size_t q = 0; q < same.size(); ++q)
         {
-            if (q == 0 && pool_fin) { set(same[q], kWfKeyFinisher, true, "finisher"); }
+            if (q == 0 && pool_fin)
+            {
+                set(same[q], kWfKeyFinisher, true, "finisher");
+                // A Rift Bolt is suspended ON T*; a Halberdier 3 turns before it (suspend 4, landing after T*).
+                need_by(same[q], halb_type ? std::max(kmin, t_need - 3) : t_need);
+            }
             else if (halb_type)     { set(same[q], kWfKeyBackupHalb, false, "backup"); }   // a further Halberdier
             else                    { set(same[q], kWfKeyDeadDup, false, "dead"); }        // a same-type Rift Bolt
         }
@@ -39349,7 +39356,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
         const std::vector<int> bl = ordered(is(kWfBloom), no_pref);
         for (std::size_t q = 0; q < bl.size(); ++q)
         {
-            if (static_cast<int>(q) < blooms_kept) { set(bl[q], kWfKeyAccel, true, "mana"); }
+            if (static_cast<int>(q) < blooms_kept) { set(bl[q], kWfKeyAccel, true, "mana"); need_by(bl[q], kmin); }
             else                                   { set(bl[q], kWfKeyBloomNear, false, "bloom-near"); }
         }
     }
@@ -39466,6 +39473,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
                 else if (q == second_blue) { key = kWfKeySecondBlue + o; }
                 else                       { key = kWfKeyLand + 10 + o; }
                 set(i, key, true, "mana");
+                need_by(i, first_drop + q);   // the drop it is played on
             }
             else if (q == drops) { set(i, kWfKeyBackupLand, false, "backup"); }
             else                 { set(i, kWfKeyLandBeyond + 20 + o, false, "land-beyond"); }
@@ -39486,6 +39494,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
             if (r == kWfSong) { castable = pre >= 3 && red_have >= 1; song_castable = song_castable || castable; }
             else if (r == kWfFeat) { castable = pre >= 4 && (red_have >= 3 || song_castable); }
             set(i, (castable ? kWfKeyAccel : kWfKeyAccelLate) + sub, true, "mana");
+            need_by(i, t_need);
         }
     }
     // ---- DIG (Brainstorm > Ponder > Preordain > Overmaster) ----
@@ -39503,6 +39512,7 @@ WorldfireKeepRank WorldfireKeepRank::Of(const GameState& s, int me, const std::v
                 if (shortp && qi == 0)      { key = kWfKeyDig1Short; }
                 else if (shortp && qi == 1) { key = kWfKeyDig2Short; }
                 set(dg[q], key, true, "dig");
+                need_by(dg[q], kmin);
             }
             else { set(dg[q], kWfKeyDigBeyond + fill, false, "dig-beyond"); }
         }
@@ -39588,13 +39598,33 @@ bool WfPreordainAggrFinisherOn()
     return heurarm::Flag(heurarm::WORLDFIRE_PREORDAIN_AGGR_FINISHER, on);
 }
 // The looked-at cards' disposition: the cards that fill a quota, best first (Ponder also keeps the rest, below).
+bool WfOrderDeadlineOn()
+{
+    // PROPOSED AMENDMENT (agent, 2026-11-21; NOT a USER ruling -- DEFAULT OFF until the USER answers). The looked-at
+    // cards are drawn one per turn in the order they go back, so a card's PLACE should follow WHEN the plan needs it
+    // ("every wait counts"): the quota cards first, earliest deadline first (a Lotus Bloom that pulls the go-off
+    // forward must be suspended NOW; a dig spell / the next land drop now; a Halberdier 3 turns before T*; Worldfire,
+    // a Rift Bolt and the rituals only by T*), the keep value breaking ties; the rest after, by keep value. Found in
+    // the A/B (seed 9200001 gi 31, persists at b200): the rank put Rift Bolt over a Bloom, the Bloom came a turn later
+    // and so did the go-off. MTG_WORLDFIRE_ORDER_DEADLINE=1 enables it.
+    static const bool on = EnvOn("MTG_WORLDFIRE_ORDER_DEADLINE");
+    return heurarm::Flag(heurarm::WORLDFIRE_ORDER_DEADLINE, on);
+}
 std::vector<int> WfLookedKept(const WorldfireKeepRank& r, bool quota_only)
 {
     std::vector<const WorldfireKeepRank::Entry*> v;
     for (const WorldfireKeepRank::Entry& e : r.entries)
     { if (e.look_index >= 0 && (!quota_only || e.quota)) { v.push_back(&e); } }
-    std::stable_sort(v.begin(), v.end(), [](const WorldfireKeepRank::Entry* a, const WorldfireKeepRank::Entry* b)
-    { return a->key > b->key; });
+    const bool deadline = WfOrderDeadlineOn();
+    std::stable_sort(v.begin(), v.end(), [deadline](const WorldfireKeepRank::Entry* a, const WorldfireKeepRank::Entry* b)
+    {
+        if (deadline)
+        {
+            if (a->quota != b->quota) { return a->quota; }
+            if (a->quota && a->need_by != b->need_by) { return a->need_by < b->need_by; }
+        }
+        return a->key > b->key;
+    });
     std::vector<int> out;
     for (const WorldfireKeepRank::Entry* e : v) { out.push_back(e->look_index); }
     return out;

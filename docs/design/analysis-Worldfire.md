@@ -186,7 +186,7 @@ The 4 worse games of block 1, attributed by flipping one lever at a time and re-
   b200 (new 5 = old 5): budget churn from the wider plan set. Landed in 42d819bc0 with the GT.
 - OPEN (search misplay candidate, gi 4 / seed 9300005): from the same mulligan bottom the search wins T6 at d5
   b200 / b2000 and d8 b200; Claude suspends Halberdier T1 and wins T5 (handed the post-suspend board the search
-  finds T5). d8 b0 pending.
+  finds T5). RECOVERS at d8 b0 (2026-11-22, ~8 h one core): the search itself suspends Halberdier T1, casts Worldfire T4 and wins T5 -- Claude's line; a reach/budget miss, not a search hole.
 - Deferred, no win-turn effect: `docs/design/worldfire-sweep-deferred.md` (identical-copy reorder fold, the
   upkeep win check, the Ponder shuffle label, suspend reporting/labels/log, the target-reply index trap).
 
@@ -224,6 +224,150 @@ One pooled `--batch` (800 jobs, 32/32 workers). Raw: `build/scratch/worldfire/bu
 Monotone in aggregate; each worse game is a single +1 turn (gi 23, 29, 76, 93, 97, 193 across the arms), not
 attributed. b200 buys 0.11 turns/game at ~3.7x units. A SETTINGS question for the USER; re-measure after the
 cantrip buckets (`docs/design/worldfire-discard-buckets.md`), which change both the cost and what each budget finds.
+
+## Cantrip keep order (bucketed discard + Brainstorm / Ponder / Preordain) -- built 2026-11-21/22, ALL LEVERS DEFAULT OFF
+
+Design: `docs/design/worldfire-discard-buckets.md` (the parent's draft and the USER's amendments 1-12). USER
+request (verbatim): *"It seems pretty clear we are going to need prunes for Brainstorm, Ponder and Preordain.
+Probably similar to those in Cyclone, but a bit simpler because we don't need to worry about our topdeck."* --
+*"But essentially what we'll need to design is the discard heuristic to do this well. ... It should be bucketed
+based on the combo and mana needs."* Discard buckets are USER-owned (analyze-deck 5i), so every lever ships OFF,
+whatever the A/B says. Code: `WorldfireKeepRank::Of` and the consumers in `WorldfireProvider`
+(`src/ai/DecisionProviders.cpp`); heurarm slots `WORLDFIRE_*`; tests: `test/unit/test_worldfire.cpp` ("worldfire
+keep order: ...", 11 cases).
+
+**Census first** (MTG_CANTRIP_ATTRIB, 12 games, seed 9100001, d5 b20, profile, levers off): of 13.9M search
+units, **65% were spent under Brainstorm put-back variants** (mean menu width 30, p90 43, max 90) and **30% under
+Ponder variants** (width 7: six orders + the shuffle). Preordain's scry is NOT searched (width 5, 152,886
+resolutions, all by the provider default). So the put-back fan is the cost, Ponder second, and a Preordain rule is
+a pure play change that removes no search.
+
+### The rule in plain words: one ranking, four consumers
+Rank each card in hand (for Ponder and Preordain, the looked-at cards too). Quotas are filled first:
+1. **Go-off turn T\*.** This is the first turn from now (offsets 0..4) on which Worldfire, a finisher and the mana are
+   all ready. Every wait is counted:
+   - Mystical Tutor brings its card on the next draw. Personal Tutor brings it next turn, or this turn if a cantrip in
+     hand can draw it, paying both {U}.
+   - A Rift Bolt is suspended ON T\* and needs one more {R}.
+   - A Halberdier must land the turn after T\*. A pending one pins T\* to its arrival minus 1. One in hand allows
+     T\* at its suspend turn + 3 or later.
+   - Mana is 9, plus 1 for a Rift Bolt suspended that turn. It comes from:
+     - the board (depletion lands 2, Bazaar its counters + its charging turns);
+     - one land drop per turn (a tapped land counts from the next turn);
+     - Blooms on the battlefield or arriving off suspend;
+     - rituals at their net (Song +2 each, one Feat +3).
+
+   Nothing by now+4 is "far". At cleanup this turn is over.
+2. **COMBO** (1): the first Worldfire. With none, the best live tutor in hand (Mystical > Personal) fills it, ranked
+   just below a real Worldfire. A 2nd Worldfire is DEAD.
+3. **FINISHER** (1): the option giving the earliest T\*. Ties go pending Bolt > pending Halberdier > Halberdier in
+   hand > Bolt in hand > a second tutor.
+   - The first finisher of the OTHER type is BACKUP, the last overflow card shed.
+   - A same-type 2nd Rift Bolt is DEAD.
+   - A further Halberdier is BACKUP.
+4. **MANA**:
+   - **Lotus Bloom:** only if the go-off WITHOUT the pool's Blooms (T0) is later than the Bloom's arrival, or far. A
+     2nd only if T\* is still far. Any other Bloom is the first card shed after DEAD.
+   - **Lands:** the drops through T\*. One extra land is BACKUP.
+   - **Rituals:** the fewest (Song, then Feat, then a spare tutor) that reach T\*'s need. One extra is BACKUP. A 2nd
+     Feat is DEAD. A spare tutor with the mana covered is DEAD.
+   - **Far:** all mana is quota.
+   - **Inside MANA**, best first:
+     1. colour sources: red to 1 (Song / a Rift Bolt suspend), or 3 (Feat, or Worldfire's RRR with no ritual kept);
+        blue to 1 always. Needle counts RR, Skerry UU, Bazaar R. Steam Vents and the fetches count as either colour,
+        not both.
+     2. the next land drop.
+     3. castable acceleration: Song with 3 incl. R before it; Feat with 4 incl. RRR or after a Song; a kept Bloom.
+     4. a 2nd blue source while 2+ blue spells are held.
+     5. further drops.
+     6. acceleration castable only with those further drops.
+   - **Mercadian Bazaar** keeps its place only on our turns 1-2 (`kWorldfireBazaarEarlyTurns`). Later it is the last
+     land, unless T\* is far.
+5. **DIG** (Brainstorm > Ponder > Preordain > Overmaster; tutors are not dig):
+   - while a piece is missing, 1 + the missing pieces, at least 2. A piece filled only by a tutor counts as missing;
+   - 1 once both pieces are in hand;
+   - 0 once the mana is also covered;
+   - dig beyond the quota is overflow, kept above surplus mana.
+6. **DEAD**: Memory Lapse, the duplicates, and every tutor when nothing is missing.
+
+**Keep order, best first.**
+- **A piece GENUINELY missing** (no card, no tutor): COMBO > FINISHER > dig slot 1 > the next land drop > dig slot 2 >
+  the rest of MANA > further dig.
+- **Otherwise:** COMBO > FINISHER > MANA > dig. A dig kept only to draw a tutored card ranks below the go-off mana.
+- **Then the overflow:**
+  1. BACKUP (other-type finisher > extra land > extra ritual > 2nd Halberdier);
+  2. dig beyond quota;
+  3. rituals beyond;
+  4. lands beyond;
+  5. a Bloom near the combo turn;
+  6. DEAD (tutor > duplicate > Memory Lapse).
+- **Land keep order:** Needle > Steam Vents > Scalding Tarn > Flooded Strand > Mountain > Bazaar > Skerry > Island >
+  Mistrise. A tapped land drops below every untapped one when no drop remains before T\*.
+- **The look:** a looked-at card only takes a slot the hand has not filled.
+
+**Consumers** (each its own lever, all OFF):
+- `MTG_WORLDFIRE_BUCKET_DISCARD`: the cleanup sheds the lowest card. One index, re-ranked per shed.
+- `MTG_WORLDFIRE_BRAINSTORM_RULE`: put back the two lowest, the higher of them on top. The searched put-back fan is
+  that one pick (`_BRAINSTORM_SINGLE`, on under the rule; =0 keeps the rule as the fan's order only).
+- `MTG_WORLDFIRE_PONDER_RULE`: the three go back in rank order. Keep-in-that-order vs shuffle stays SEARCHED (USER
+  amendment 9), so the fan goes from 7 to 2. `_PONDER_SINGLE` (OFF) lets the rank decide the shuffle too.
+- `MTG_WORLDFIRE_PREORDAIN_RULE`: keep a card iff it fills a still-unfilled quota, best on top; bottom the rest.
+  - `_AGGRESSIVE` (on under the rule): with a piece genuinely missing, judged on the hand and board, keep only that
+    piece or one tutor for it.
+  - `_AGGR_DIG` (on): dig is bottomed too.
+  - `_AGGR_FINISHER` (on): a missing finisher triggers it, not only a missing Worldfire.
+- `MTG_WORLDFIRE_ORDER_DEADLINE` (OFF): an agent proposal, see the attribution below.
+
+### A/B -- d5 b20, profile attached, paired per game, ONE pooled batch (1600 jobs, arms innermost), Release
+`on` = the four consumers with their default sub-levers; `off` = none. Units / wall are the arm's summed games;
+"slow" = games over 30 s.
+
+| block | arm | avg | better / worse vs off | net turns | units | wall | slow games |
+|---|---|---|---|---|---|---|---|
+| 9100001 x64 | off | 5.547 | -- | -- | 32.2M | 811 s | 5 (392 s) |
+| | **on** | **5.453** | **7 / 1** | **-6** | **9.4M (0.29x)** | **324 s (0.40x)** | 3 (155 s) |
+| 9200001 x96 (held out) | off | 5.479 | -- | -- | 37.6M | 1007 s | 8 (466 s) |
+| | **on** | **5.417** | **15 / 10** | **-6** | **10.7M (0.28x)** | **338 s (0.34x)** | 0 |
+
+All 160 games won in every arm. **ON is a clean win on both blocks: better (net -6 and -6) and about 3.5x cheaper.**
+It still ships OFF, because the buckets are the USER's (parent's instruction).
+
+Per-consumer (each consumer alone; and `on` with one sub-lever flipped), net turns vs off, block a / held out:
+
+| arm | net | units (a / h) | reading |
+|---|---|---|---|
+| Brainstorm rule alone | -3 / -6 | 9.6M / 10.4M | carries nearly all the cost cut and most of the gain |
+| Ponder rule alone | -2 / -2 | 27.2M / 32.8M | small cut (fan 7 -> 2) |
+| Preordain rule alone | +2 / -5 | 32.7M / 36.4M | unsearched: a play change only, noisy |
+| discard alone | -1 / 0 | 32.6M / 36.9M | inert in effect |
+| on, `_BRAINSTORM_SINGLE=0` (order only) | -3 / +1 | 28.5M / 35.1M | the one-option prune is what buys both |
+| on, `_PONDER_SINGLE=1` | +1 / -4 | 8.0M / 9.4M | worse than keep/shuffle searched: keep the USER's shape |
+| on, `_AGGR_DIG=0` | -6 / -8 | 9.4M / 10.5M | slightly better than the default (a dig on top kept) |
+| on, `_AGGR_FINISHER=0` | -7 / -7 | 9.3M / 10.7M | slightly better than the default (Worldfire-only trigger) |
+
+### Attribution of the 11 worse games (ON slower than OFF), each lever flipped, at b20 and b200
+10 of 11 **recover at b200** (ON = OFF): a gi37; h gi2, gi11, gi25, gi29, gi35, gi62, gi63, gi64, gi82. That is
+budget churn. **h gi31 persists** (b200: ON 6, OFF 5). Flipping only the Ponder rule recovers it at both budgets; at
+b20 that arm is byte-identical to OFF (same digest).
+
+Root cause:
+- The unpruned arm cracks Scalding Tarn before its T1 Ponder, sees Rift Bolt / Lotus Bloom / Seething Song, and puts
+  **the Bloom on top**. It suspends the Bloom on T1, the Bloom arrives on T4, and Worldfire goes off on T4.
+- The rank puts Rift Bolt (the missing finisher) above the Bloom. But Rift Bolt is only needed on the go-off turn,
+  while the Bloom's three-turn suspend wait means a Bloom drawn a turn late delays the go-off a turn.
+- **PROPOSED AMENDMENT (agent, `MTG_WORLDFIRE_ORDER_DEADLINE`, default OFF):** the cards Ponder and Preordain put back
+  are ordered by WHEN the plan needs each in hand, quota cards first:
+  - a go-off Bloom, the dig and the next land drop: now;
+  - a Halberdier: T\*-3;
+  - Worldfire, a Rift Bolt and the rituals: by T\*.
+
+  The keep value breaks ties. A unit test pins the gi31 state.
+
+### Validation (flags OFF)
+- **Units:** every shard passes. `unit_par.sh` exits 3 for its known shard-count bug.
+- **Scenarios:** 605/605.
+- **Smoke: 243/243 byte-identical.** No key moved, worldfire included. The refactor of the tutor census is
+  byte-identical. GT not accepted.
 
 ## Free-turn rule (MTG_FREE_TURNS, default OFF -- adoption is the USER's) -- measured 2026-11-21
 Branch `wip/freeturn` (2d373428c implementation, d35211372 doc; spec + measurement in
