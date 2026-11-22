@@ -1094,6 +1094,8 @@ enum Slot : int
     WORLDFIRE_PREORDAIN_AGGR_DIG, // MTG_WORLDFIRE_PREORDAIN_AGGR_DIG  sub-lever of the aggressive mode (an open default): a dig spell on top is bottomed too. DEFAULT ON; =0 keeps a dig spell that fills a quota. Inert unless the aggressive mode is on
     WORLDFIRE_PREORDAIN_AGGR_FINISHER, // MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER  sub-lever of the aggressive mode (an open default): a genuinely missing FINISHER triggers it as well as a missing Worldfire. DEFAULT ON; =0 -> only a missing Worldfire. Inert unless the aggressive mode is on
     WORLDFIRE_ORDER_DEADLINE, // MTG_WORLDFIRE_ORDER_DEADLINE  Worldfire PROPOSED AMENDMENT (agent; DEFAULT OFF until the USER answers): the Ponder / Preordain kept cards go back quota-first in DEADLINE order (when the plan needs each in hand: a go-off-pulling Lotus Bloom and the dig now, a Halberdier T*-3, Worldfire / Rift Bolt / rituals by T*), keep value breaking ties. Found at seed 9200001 gi 31 (the rank's Rift Bolt over a Bloom cost the go-off a turn, persists at b200). =1 enables
+    WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE, // MTG_WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE  Worldfire EXPERIMENT ARM (USER 2026-11-21 "either one is correct"): in Preordain's aggressive mode a dig spell stays on top when 2+ blue mana is left this turn, no other blue spell in hand, and no go-off this turn. DEFAULT OFF
+    WORLDFIRE_BAZAAR_T1,      // MTG_WORLDFIRE_BAZAAR_T1  Worldfire optional arm (USER 2026-11-21): Mercadian Bazaar keeps its land-keep place on turn 1 only (default: turns 1-2). DEFAULT OFF
     COUNT
 };
 
@@ -2132,6 +2134,8 @@ inline const char* Name(int slot)
         "MTG_WORLDFIRE_PREORDAIN_AGGR_DIG",
         "MTG_WORLDFIRE_PREORDAIN_AGGR_FINISHER",
         "MTG_WORLDFIRE_ORDER_DEADLINE",
+        "MTG_WORLDFIRE_PREORDAIN_AGGR_DIG_BLUE",
+        "MTG_WORLDFIRE_BAZAAR_T1",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
