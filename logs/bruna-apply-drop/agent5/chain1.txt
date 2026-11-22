@@ -1,0 +1,7 @@
+python3: can't open file '/workspaces/MagicDeckTester/.claude/worktrees/bruna-apply-drop/../../../../build/scratch/bad/cmp_arms.py': [Errno 2] No such file or directory
+on vs off
+| deck | pairs | faster | slower | net | digest-only | units A/B | cpu A/B |
+|---|---|---|---|---|---|---|---|
+| sead0 | 114 | 0 | 0 | +0 | 0 | nan | nan |
+| spiritsd0 | 1 | 0 | 0 | +0 | 0 | nan | nan |
+| ALL | 115 | 0 | 0 | +0 | | | |
