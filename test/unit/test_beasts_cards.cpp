@@ -136,7 +136,7 @@ TEST_CASE("Beasts provider second main opens for combat draw and proliferate res
 
     GameState dig = BeState();
     dig.m_provider = &provider;
-    dig.players[0].library.clear();
+    dig.players[0].library = Library{};
     dig.players[0].library.push_back(BeZone("Questing Beast", 72));
     const int harbinger = BeAdd(dig, "Garruk's Harbinger", 71);
     FireCombatDamageDig(dig, 0, {harbinger}, {3});
@@ -186,7 +186,7 @@ TEST_CASE("Adaptive Omnitool consumes the shared combat dig rank before damage-s
     BeastsProvider provider;
     GameState s = BeState();
     s.m_provider = &provider;
-    s.players[0].library.clear();
+    s.players[0].library = Library{};
     s.players[0].library.push_back(BeZone("Urza's Incubator", 101));
     s.players[0].library.push_back(BeZone("Adaptive Omnitool", 102));
     s.players[0].library.push_back(BeZone("Questing Beast", 103));
@@ -204,7 +204,7 @@ TEST_CASE("Adaptive Omnitool consumes the shared combat dig rank before damage-s
     head.m_provider = &provider;
     head.deck_has_attack_dig_hand = true;
     head.players[0].lands_played_this_turn = 1;
-    head.players[0].library.clear();
+    head.players[0].library = Library{};
     head.players[0].library.push_back(BeZone("Urza's Incubator", 101));
     head.players[0].library.push_back(BeZone("Adaptive Omnitool", 102));
     const int h = BeAdd(head, "Questing Beast", 60);
