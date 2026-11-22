@@ -1710,6 +1710,12 @@ inline bool OpponentLandEntryRulesOn() { return !g_play_legacy_opponent_land_ent
 // the opponent is dealt the hand the game was played against. REPLAY ONLY; process-global.
 inline bool g_play_legacy_no_free_turns = false;
 
+// THE OPPONENT-SPAWN LAND REQUIREMENT AT RECORDING TIME (MTG_OPP_SPAWN_NEEDS_LAND, EngineFlags.h). A game recorded
+// while the requirement could act (MTG_OPP_SPAWN_NEEDS_LAND=1, or MTG_FREE_TURNS with the env unset) carries
+// `opponent_spawn_land: 1`. A reference without it was played with every scheduled spawn appearing, so its
+// replayer passes `--legacy-opponent-spawn-any`, which turns the requirement off for that process. REPLAY ONLY.
+inline bool g_play_legacy_opponent_spawn_any = false;
+
 // ---- Affordability audit (MEASUREMENT ONLY; MTG_AFFORD_AUDIT) --------------------------------
 // Counts plan-cast payment FAILURES: a cast in an enumeration-approved plan that the payment routine
 // cannot pay in its plan.actions order, so it is silently dropped (a mis-order / aggregate over-credit

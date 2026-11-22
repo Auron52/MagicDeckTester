@@ -83681,6 +83681,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         TryOffMainAltWinActivation(state);   // ...after a Burgeoning put (F1 defect 4; executor twin)
+        freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR (executor twin: RunTurnFrom)
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
         if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }   // Soulstoke (twin)
@@ -83866,7 +83867,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Not in an EXTRA turn: spawns are keyed on the round and arrive at its regular turn only
     // (lockstep with GameEngine::UntapStep's gate). in_extra_turn is false for every other deck.
     // Keyed on the RAW round (a free turn is a new raw round; lockstep with GameEngine::UntapStep).
-    if (s_fd_opp_spawns && state.opponent_spawns && !state.in_extra_turn)
+    // The spawn land requirement (freeturn::SpawnMayAppear): lockstep with GameEngine::UntapStep.
+    if (s_fd_opp_spawns && state.opponent_spawns && !state.in_extra_turn && freeturn::SpawnMayAppear(state))
     {
         int opp_index = 1 - state.active_player_index;
         for (const OpponentSpawn& spawn : *state.opponent_spawns)

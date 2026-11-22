@@ -548,7 +548,11 @@ def recording_rule_args(ref):
 
     `free_turns` (MTG_FREE_TURNS, docs/design/opponent-lockdown-free-turns.md): a game recorded with the
     free-turn rule on (opening-hand hurdles dealt, rounds credited). A reference without it was played with
-    the rule off, so it replays with --legacy-no-free-turns whatever MTG_FREE_TURNS says in the environment."""
+    the rule off, so it replays with --legacy-no-free-turns whatever MTG_FREE_TURNS says in the environment.
+
+    `opponent_spawn_land` (MTG_OPP_SPAWN_NEEDS_LAND): a game recorded while a scheduled opponent spawn needed an
+    opponent land to appear. A reference without it saw every spawn appear, so it replays with
+    --legacy-opponent-spawn-any."""
     args = ["--legacy-combat-swap-defer"] if ref.get("combat_swap_timing") else []
     if not ref.get("karoo_float"):
         args.append("--legacy-karoo-float")
@@ -564,6 +568,8 @@ def recording_rule_args(ref):
         args.append("--legacy-opponent-land-entry")
     if not ref.get("free_turns"):
         args.append("--legacy-no-free-turns")
+    if not ref.get("opponent_spawn_land"):
+        args.append("--legacy-opponent-spawn-any")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):

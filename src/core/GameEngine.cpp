@@ -365,6 +365,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
+        freeturn::NoteSireBeforeDiscard(state);   // MTG_FREE_TURN_SIRE_FAIR: the hand Sire meets (rollout twin)
         PerformEndStepDiscardHands(state, state.active_player_index);
         // MORPH at the opponent's end step: its self-sacrifice sweep (inert -- a face-up Firecat died at ours),
         // then the searched flip window (the plan's pin, the human's `face_up` prompt, or beyond the horizon the
@@ -543,7 +544,10 @@ void GameEngine::UntapStep(GameState& state)
     int opp_index = 1 - state.active_player_index;
     // The schedule keys on the RAW round (GameState::RawRound; == turn_number unless a FREE turn was taken):
     // the opponent took its turns, locked or not, so a free turn is a new raw round and its spawns arrive.
-    if (state.opponent_spawns && !state.in_extra_turn)
+    // The spawn land requirement (freeturn::SpawnMayAppear; MTG_OPP_SPAWN_NEEDS_LAND, USER 2026-11-22): with no land
+    // on the opponent's side no token appears. Inert unless the free-turn rule is armed for this deck or the flag is
+    // =1. Lockstep twin: the rollout's spawn site.
+    if (state.opponent_spawns && !state.in_extra_turn && freeturn::SpawnMayAppear(state))
     for (const OpponentSpawn& spawn : *state.opponent_spawns)
     {
         if (spawn.turn != state.RawRound()) { continue; }
