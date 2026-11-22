@@ -613,9 +613,12 @@ struct Permanent
                                            // mana -> stays untapped -> charges +1 at end of turn. Set only
                                            // via the human StorageHoldChooser; reset each UntapStep. Never
                                            // set autonomously -> byte-identical for the search/rollout.
-    bool      loyalty_activated_this_turn = false; // one loyalty ability per walker per turn
+    bool      loyalty_activated_this_turn : 1 = false; // one loyalty ability per walker per turn
                                            // (CR 606.3); reset at BOTH untap sites (lockstep).
-    bool      colored_cast_lifegain_used_this_turn = false; // Ancient Cornucopia's once-each-turn
+    // BIT-FIELDS since Beasts E perf (2026-11-22): this flag and loyalty_activated_this_turn above were
+    // plain bools; as 1-bit fields they join the storied_draw_used_this_turn run below (it had 2 bits
+    // free), which frees the 2 bytes oil_counters now uses -- see the note there.
+    bool      colored_cast_lifegain_used_this_turn : 1 = false; // Ancient Cornucopia's once-each-turn
                                            // colored-cast lifegain fired already this turn. Set in
                                            // FireOnCastTriggers (both cast paths), reset at BOTH untap
                                            // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
@@ -771,6 +774,17 @@ struct Permanent
     // identically in the executor and the rollout. 0 = kNone = this permanent chooses nothing,
     // which is every card but the Incubator -> byte-identical everywhere else.
     uint16_t  chosen_subtype_id     = 0;
+    // Oil counters (Migloz, Maze Crusher, Beasts E 2026-11-21; CardParams::enters_with_oil_counters puts them
+    // AS IT ENTERS, at the universal enter cascade). Spent ONLY as activation COSTS (CR 602.2b): the searched
+    // +2/+2 pump (ActivatePump mode 7), vigilance+menace (mode 8) and the destroy (CounterDestroyArtEnch).
+    // FUTURE-DETERMINING (it decides which activations a later turn can pay), so it is folded into every sim /
+    // dominance / legend key NONZERO-gated, and listed in ForEachDedicatedCounterField so "each counter"
+    // readers and a future PROLIFERATE see it. Inert (never inspected) for every other deck.
+    // INT16, IN THE PAD BEFORE paired_with (Beasts E perf, 2026-11-22): as a plain int after hone_counters it
+    // grew sizeof(Permanent) 328 -> 336 (+8 bytes on every permanent of every GameState deep copy and board
+    // scan, for every deck). Here, with the two bools above folded into bit-fields, sizeof is 328 again.
+    // Every put goes through PutOilCounters, which clamps to the int16 range (a goldfish game holds a handful).
+    int16_t   oil_counters          = 0;
     // SOULBOND pair (CR 702.46b, Silverblade Paladin): the PARTNER's card.m_number, 0 = unpaired.
     // Set only on the permanent that HAS soulbond (the equipped_to pattern -- one side holds the
     // link). READ-TIME VERIFIED by SoulbondPartnerIndex: every read re-checks the partner is still
@@ -888,17 +902,6 @@ struct Permanent
                                            // banks the bonus and cashes it on a later equip.
                                            // Same dedicated-int rationale and the same byte-identity
                                            // and sim-key obligations as spore_counters above.
-    int       oil_counters         = 0;    // Oil counters (Migloz, Maze Crusher, Beasts E 2026-11-21;
-                                           // CardParams::enters_with_oil_counters puts them AS IT
-                                           // ENTERS, at the universal enter cascade). Spent ONLY as
-                                           // activation COSTS (CR 602.2b): the searched +2/+2 pump
-                                           // (ActivatePump mode 7), vigilance+menace (mode 8) and the
-                                           // destroy (CounterDestroyArtEnch). FUTURE-DETERMINING (it
-                                           // decides which activations a later turn can pay), so it is
-                                           // folded into every sim / dominance / legend key NONZERO-
-                                           // gated, and listed in ForEachDedicatedCounterField so
-                                           // "each counter" readers and a future PROLIFERATE see it.
-                                           // Inert (never inspected) for every other deck.
     // Brutal Cathar: "exile target creature an opponent controls UNTIL THIS CREATURE LEAVES THE
     // BATTLEFIELD." card.m_number of the exiled card, parked in GameState::exile; 0 = none. It
     // survives transformation (transforming is not leaving -- the Moonrage Brute face keeps it) and

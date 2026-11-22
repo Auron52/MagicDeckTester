@@ -153,7 +153,7 @@ TEST_CASE("Sea I5: RemoveAllCounters is the exact twin of TotalCountersOn")
     p.loyalty = 4;
     int expected = 3 + 1 + 4;
     int k = 1;
-    ForEachDedicatedCounterField(p, [&](const char*, int& v) { v = k; expected += k; ++k; });
+    ForEachDedicatedCounterField(p, [&](const char*, auto& v) { v = k; expected += k; ++k; });
     CHECK(TotalCountersOn(p) == expected);
     RemoveAllCounters(p);
     CHECK(TotalCountersOn(p) == 0);

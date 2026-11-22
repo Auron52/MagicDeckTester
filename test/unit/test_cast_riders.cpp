@@ -244,7 +244,7 @@ TEST_CASE("Cast riders: an UNPAID walker cast does not fire its loyalty activati
     REQUIRE(FindNum(exec, old_ajani) != nullptr);
 
     // The rollout casts nothing and activates nothing; the executor used to activate the OLD Ajani.
-    CHECK_FALSE(FindNum(roll, old_ajani)->loyalty_activated_this_turn);
+    CHECK_FALSE(static_cast<bool>(FindNum(roll, old_ajani)->loyalty_activated_this_turn));
     CHECK(FindNum(exec, old_ajani)->loyalty_activated_this_turn
           == FindNum(roll, old_ajani)->loyalty_activated_this_turn);
     CHECK(FindNum(exec, old_ajani)->loyalty == FindNum(roll, old_ajani)->loyalty);
