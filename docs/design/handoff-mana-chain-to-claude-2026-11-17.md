@@ -23,13 +23,12 @@ date first) is the full picture; this section is the short version of how to pic
    1409 consistent, references safe; origin had not moved from 94cd1e06b). Lease passed to another session
    (550a08fdc1f3:wip/worldfire-integration). Claude is no longer in the queue. CI not watched (gh unauthed). Primary
    fast-forwarded.
-   **NEXT LAND (in progress 18:30):** Hinata d5E0 GT a579747bf (wip/hinata-d4-d5 head 0ed4ec24b, rebased on cd330ec5a,
-   8 Hinata keys only, all 23 slower games recover at escalated budget). Landing tree `.claude/worktrees/land-1122c`
-   (branch wip/land-1122c), queue id `839667a3a15d:wip/land-1122c`, number 3 in queue at 18:30; bg `wait` loop armed.
-   At head: fetch; if origin moved with gated changes, rebase onto it, ./build.sh, units, `MTG_PGO=0 MTG_RSS_CAP_GB=40
-   bash test/regression.sh --smoke` under flock box.lock + `push_queue.py keepalive --pid`, check_gt_logs (a play change
-   on origin touching Hinata keys means re-accept); then `land`; then pull --rebase the primary. Ride-alongs if ready:
-   Bruna APPLY-DROP GT (wip/bruna-lordproj), Prepay-C GT (wip/hinata-gi548).
+   **NEXT LAND: Hinata d5E0.** At our queue turn (21:14) origin was 138f60c83 (Worldfire + Beasts integrations, 216
+   files); Worldfire's GT 9575556d5 moved six Hinata gt_logs, so a579747bf conflicts on GT. Rebase aborted, LEFT the
+   queue. The Hinata agent re-gates on the new origin (rebase dropping/redoing its GT commit, build, units,
+   `regression.sh --both` under the box lock, re-accept Hinata keys, push wip/hinata-d4-d5). Then: tree
+   `.claude/worktrees/land-1122c` (branch wip/land-1122c) reset to the new wip/hinata-d4-d5, `push_queue.py join`
+   (id `839667a3a15d:wip/land-1122c`), bg wait, smoke under the lease, land.
 5. **Workstreams (each owns a worktree under `.claude/worktrees/`, has its own `logs/<work>/*handoff*.md`, and lands
    through the parent via the queue; none pushes the shared branch itself):**
    | work | worktree / branch | state | next |
