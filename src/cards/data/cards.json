@@ -18927,7 +18927,7 @@
    ],
    "power": 4,
    "toughness": 1,
-   "oracle_text": "First strike\nSuspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.) [Hard cast {4}{R}: a 4/1 first-striker. SUSPEND (suspend_time_counters 4, suspend_cost {R}): a main-phase Action::Kind::Suspend paying {R} through the shared ApplySuspend (NOT a cast, so it stays legal after Irencrag Feat's 'only one more spell'); suspended on turn T it is cast off suspend at the T+4 upkeep through the shared CastOffSuspend (a CAST: storm +1, and Irencrag's restriction can strand it), entering with HASTE (CR 702.62a -- the first creature with suspend; the keyword is set on the permanent at the single arrival path, so it attacks the turn it arrives in both worlds). Suspended cards survive Worldfire. 'You MAY cast it' is collapsed to CAST [PROVISIONAL]: declining leaves it exiled with no counters for nothing, while a hasty 4/1 attacks at once. First strike is inert in a goldfish (the passive opponent never blocks).]",
+   "oracle_text": "First strike\nSuspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.) [Hard cast {4}{R}: a 4/1 first-striker. SUSPEND (suspend_time_counters 4, suspend_cost {R}): a main-phase Action::Kind::Suspend paying {R} through the shared ApplySuspend (NOT a cast, so it stays legal after Irencrag Feat's 'only one more spell'); suspended on turn T it is cast off suspend at the T+4 upkeep through the shared CastOffSuspend (a CAST: storm +1, and Irencrag's restriction can strand it), entering with HASTE (CR 702.62a -- the first creature with suspend; the keyword is set on the permanent at the single arrival path, so it attacks the turn it arrives in both worlds). Suspended cards survive Worldfire. 'You MAY cast it' is collapsed to CAST [APPROVED by USER 2026-11-21]: declining leaves it exiled with no counters for nothing, while a hasty 4/1 attacks at once. First strike is inert in a goldfish (the passive opponent never blocks).]",
    "template": "vanilla_creature",
    "parameters": {
     "suspend_time_counters": 4,
@@ -18977,7 +18977,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "The next instant or sorcery spell you cast this turn can't be countered.\nDraw a card. [draw_spell draw 1. The can't-be-countered rider is goldfish-INERT [PROVISIONAL deferral]: the passive opponent casts no spells, so nothing ever counters ours (our own Memory Lapse is goldfish_inert -- never cast), and no card in the pool reads 'can't be countered' as a condition.]",
+   "oracle_text": "The next instant or sorcery spell you cast this turn can't be countered.\nDraw a card. [draw_spell draw 1. The can't-be-countered rider is goldfish-INERT [APPROVED deferral, USER 2026-11-21]: the passive opponent casts no spells, so nothing ever counters ours (our own Memory Lapse is goldfish_inert -- never cast), and no card in the pool reads 'can't be countered' as a condition.]",
    "template": "draw_spell",
    "parameters": {
     "draw": 1
@@ -18991,7 +18991,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {U}.\n{U}, {T}: The next spell you cast this turn can't be countered. [Check land: enters untapped iff a controlled land has subtype Mountain or Forest (checkland_subtypes, the shared LandWouldEnterTapped predicate -- Steam Vents is a Mountain). Taps for {U}. The {U},{T} can't-be-countered activation is goldfish-INERT [PROVISIONAL deferral]: the passive opponent casts no spells, so nothing ever counters ours, and activating it only spends mana and the land's tap.]",
+   "oracle_text": "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {U}.\n{U}, {T}: The next spell you cast this turn can't be countered. [Check land: enters untapped iff a controlled land has subtype Mountain or Forest (checkland_subtypes, the shared LandWouldEnterTapped predicate -- Steam Vents is a Mountain). Taps for {U}. The {U},{T} can't-be-countered activation is goldfish-INERT [APPROVED deferral, USER 2026-11-21]: the passive opponent casts no spells, so nothing ever counters ours, and activating it only spends mana and the land's tap.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
