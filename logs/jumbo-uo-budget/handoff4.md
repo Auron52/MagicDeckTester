@@ -60,6 +60,26 @@ PID with `kill -0` or on a DONE file). Rebase, never merge. Never touch `referen
   members cleared), binary `$S/mtg.exp`, outputs `$S/et1/e{0,1,2,3}/g/*.wins`, marker `$S/et1/EXPDONE`. Remove the
   flag after the bisect.
 
+## UPDATE 2026-11-22 23:20 UTC -- cause found and fixed (a09bc5dac)
+- Bisect (`$S/et1/e*`): building the key ALONE (no store, no hit) reproduces the ON play. The cause is that
+  BuildSimKeyBase bills `workctr::kSimKey` to the PRICED meter, which the decision ceiling reads, and bumps
+  `combatpin::t_reads`. Same hazard as the sfxprobe key near TurnSolver.cpp "MUTED: BuildSimKeyBase bills".
+- a09bc5dac: the key build is muted (`++workctr::t_mute` and t_reads restored). A miss records the walk's workctr
+  deltas and t_reads delta. A hit replays them (`workctr::IncReplayed`, t_reads +=). There is no store under a mute
+  (`workctr::StoresAllowed`) or when the walk moved DecisionBudget units, and no memo while an index-carry sink is
+  live. The TEMP flag MTG_SPSX_EXP is gone.
+- The superseded id1 regression (old binary) was stopped; it was my own run. `lver` (old binary, VERIFY verdicts) may
+  still be finishing in the lane. The verdict logic is unchanged, so its mismatch count still holds.
+- Running chain `$S/id2/chain.sh` (setsid; log `$S/id2/chain.log`):
+  1. Lane job (`$S/id2/lanejob.sh`): build to `$S/mtg.id2` (marker `$S/id2/BUILT`), then perf instruction counts for
+     Jumbo on/off (`$S/id2/j{on,off}/stat.csv`) and the Extra Turns repro (`$S/id2/et`; must give faaf957a, the OFF
+     digest). Marker `$S/id2/LANEDONE`.
+  2. Under the box lock (`$S/id2/big.sh`): identity slice `on` / `off` over `$S/id2/idl.json` at nproc threads, then
+     `ver` (VERIFY) over `verl.json`, then `regression.sh --both`, then check_gt_logs. Markers `$S/id2/<arm>/DONE`,
+     `REGR_DONE`, `DONE`.
+- The doc section in `docs/design/jumbo-apply-drop-order-2026-11-18.md` is drafted. It still holds an
+  `IDENTITY_SLICE_PLACEHOLDER` line, and its numbers predate the work replay (re-measure from `$S/id2/j*`).
+
 ## Next steps
 1. When `$S/id1/on/DONE` and `off/DONE` exist, diff the arms with
    `sed 's/ ms=[0-9]*//;s/ cpu=[0-9]*//' batch.out | grep played= | sort` on each. The result must be identical
