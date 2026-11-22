@@ -15,6 +15,13 @@
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-22T23:33:22Z",
    "note": "Creature Burn final validation and fast mulligan profile"
+  },
+  {
+   "branch": "beasts-analysis",
+   "host": "67d5329561c0",
+   "id": "67d5329561c0:beasts-analysis",
+   "joined": "2026-11-22T23:42:38Z",
+   "note": "Beasts batch J, profile and three-tier suite admission; Stage 5 final checks running"
   }
  ]
 }
