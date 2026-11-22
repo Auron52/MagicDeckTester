@@ -42,7 +42,7 @@ that tapped its plain {C}`.
 ## 3. ENUM-GAP: {Seahunter + Rishadan Dockhand} kept off the menu
 
 s30000762 T4: Islands x2, City, three Merfolk; hand Seahunter, Dockhand, Island x2. Dockhand first makes four Merfolk
-and two Islands into City pay Seahunter. NOT FIXED (a cast-order question for the USER; see section 5).
+and two Islands into City pay Seahunter. FIXED by option (a), section 5.
 
 Mechanism (traced with `MTG_DBG_MULTI=4` on a unit-test board, the Island already played). The plan never reaches a
 per-subset gate: EnumeratePlans' odometer prunes on a scalar mana bound, `[dbgmulti-bound] t4 bound=4 pool=4
@@ -149,18 +149,57 @@ gi781 loss -> T6; regression d0 4 faster, 0 slower. gi592 (seed 1593) reproduces
 `--depth 8 --budget-ms 0` (T4 on both arms). Every deck is net <= 0. Units 3,805/3,805; `check_gt_logs.py` 1,358
 consistent.
 
-## 5. Open items
+## 5. ENUM-GAP: resolved by option (a), the generic decider (shipped default ON, 2026-11-22)
 
 **USER ruling 2026-11-21 (verbatim), on the section 3 ENUM-GAP cast order:** *"I'm fine with trying either option as
-needed. Whatever does better can win out. We are looking for the cheapest that corrects the issue."* Both options
-(reorder-on-failure growing an untapped Three Tree City first; a Merfolk Turns cast-order rule, cheaper City-growing
-Merfolk first) are to be built behind a temporary selector, measured (gate-slice ENUM-GAP count, held-out A/B, d8 b0 on
-slower games, CPU), and the cheapest that corrects the issue and meets the bar ships; the other is deleted.
+needed. Whatever does better can win out. We are looking for the cheapest that corrects the issue."* Both options were
+built behind a temporary selector and measured; option (a) won and ships, option (b) is deleted. No USER cast-order
+decision is owed (option (b), the deck cast-order rule, lost).
 
-**Status 2026-11-21 (1d34d618c, all flags default OFF).** Two menu cuts, not one: the scalar bound AND
-`SpwfProvablySupplyShort` (the filter rescue's supply pre-gate) both read City at its current count; both now credit +1
-per City-matching creature cast (MTG_SCALED_GROWTH_BOUND). Seahunter is a Human Mercenary, so the grower order moves every
-tied creature cast cheapest-first once one cast grows the City. Gate slice (gi 0-399, distinct game-turns, off / (a)
-decider fallback / (b) Merfolk rule): ENUM-GAP 27 / 17 / 17, APPLY-DROP 1 / 3 / 6, ORACLE-GAP 9 / 8 / 20. (a) adds two
-APPLY-DROPs on newly admitted lines (s30000034 T5, s30000075 T5: the engine's second payment strands the City feed);
-under investigation, A/B pending. Handoff: `logs/merfolk-gate/handoff2.md` in the worktree.
+**What ships (both default ON, `=0` restores the old behaviour):**
+- `MTG_SCALED_GROWTH_BOUND`: a scaled LAND's same-turn growth is credited where the mana is priced. EnumeratePlans'
+  scalar bound adds +1 per City-matching creature cand per untapped scaled land with a creature subtype (an upper bound,
+  so it can only prune less), and so does `SpwfProvablySupplyShort` (the filter rescue's supply pre-gate). Under the same
+  flag the scaled-land route (`MTG_SCALED_LAND_ROUTE`) credits a cast trigger's entrants (Emperor Mihail II's "may pay
+  {1}" is paid in FireOnCastTriggers while the cast Merfolk is on the stack and before its token exists; the route
+  priced City at the board's count, saw no hold-out, and the greedy paid {1} with City's plain {C}) and a creature
+  spell's own body to its rest-of-line solves only (`PendingScaledEntrants`, `ScaledEntrantCreditArmed`); the payment
+  itself is made at the real count. Fixes option (a)'s two new APPLY-DROPs (s30000034 T5 Wanderwine Prophets, s30000075
+  T5 Seahunter). Each emitted selection is priced with its own growers (3218cc593; exact, measured to save nothing).
+- `MTG_SCALED_GROWER_DECIDER`: the apply's payable-order decider, when the given order pays in neither the whole-turn
+  prepay nor the sequential walk (after the unlock and damage-order domains), tries the order with City-growing
+  creature casts cheapest-first and takes it only when the sequential walk pays it. Generic: not Merfolk-specific.
+- Deleted: option (b) (`MerfolkTurnsProvider::ArrangeCastOrder` override, `MTG_MERFOLK_GROWER_ORDER` and its heurarm
+  slot).
+
+**Gate slice** (Merfolk Turns gi 0-399, gate deck files, `MTG_MANA_ORACLE=2`; distinct game-turns):
+
+| class | off | (a) first cut | (b) first cut | (a) shipped | (b) + entrant credit |
+|---|---|---|---|---|---|
+| ENUM-GAP | 27 | 17 | 17 | **15** | 16 |
+| APPLY-DROP | 1 | 3 | 6 | **1** (s30000006 T4, same as off) | 4 |
+| ORACLE-GAP | 9 | 8 | 20 | 8 | 20 |
+
+**Held-out A/B** (fresh seeds 35000000+, 2,000 games per deck, off vs (a); net = loss-penalized turns, negative = better):
+
+| deck | searched net | searched slower | d0 net | d0 slower | units (a)/off |
+|---|---|---|---|---|---|
+| Merfolk Turns | 0 | 0 | -5 (5 faster) | 0 | 1.0071 |
+| Goblins | 0 | 0 | 0 | 0 | 1.0089 |
+
+No slower game anywhere, so no d8 b0 recovery was owed. A bound-only arm measured units 1.0072 / 1.0097, so the decider
+costs ~0 and the whole +0.7-0.9% units is the bound: the selections it admits and the supply-credit rescue, i.e. the
+cost of the correction itself. The per-selection pricing cut (3218cc593) was byte-identical over all 8,000 games and
+removed nothing measurable.
+
+**Smoke + regression on the rebased ship tree** (2026-11-22; d8e910d97 on 4a7f65983, Release, `MTG_PGO=0`, box lock;
+605 scenarios pass, units 3890/3890). Only Three Tree City decks move, and nothing between the prior GT's base and
+4a7f65983 touches src or decks, so every move is this change:
+- Merfolk Turns: searched 3 faster (smoke d3/d5 gi6 6->5, 2HG d3 gi6 6->5), d0 5 faster (smoke gi353 7->6, gi626 / gi771
+  / gi859 6->5; regression gi609 6->5), **0 slower**. Same-score line changes are the admitted growth casts (an extra
+  Rishadan Dockhand or Silvergill Douser in the turn City pays for): smoke d3/d5 gi12 gi32, regression d5 gi80 gi114,
+  d0 smoke 11 and regression 7.
+- Goblins (plays Three Tree City): digest-only at the same score (regression d5 s2002 gi174 gi184, s3003 gi151 gi220,
+  d0 gi371).
+- Net: Merfolk Turns searched -3, d0 -5; Goblins 0 / 0; every other deck byte-identical. No slower game, so no d8 b0
+  recovery owed. Accepted (GT commit below); overnight GT left for the periodic overnight run.
