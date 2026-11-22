@@ -210,10 +210,15 @@ take the visible combat damage into account when deciding on browbeat. It doesn'
 AGENTS (Opus, background): scry -> brief logs/creature-burn/scry-brief.md, worktree cb-scry (wip/cb-scry), handoff
 scry-handoff.md; Browbeat policy + gap -> brief logs/creature-burn/browbeat-gap-brief.md, worktree cb-bbgap
 (wip/cb-bbgap), handoff bbgap-handoff.md. MULLIGAN GENERATION WAITS for both (USER: not in a rush).
-STILL OPEN for the USER: (4) per-turn fold ship-OFF vs amended (explained 2026-11-22; likely moot if the Browbeat
-policy makes main 2 dominated); Hellspark unearth PROVISIONAL; Midrange Burn keep-table regen; overnight FULL-set
-expansion vs the slow-box once-only rule; recipe fast; pingers counted in "visible" damage?; same anticipation for
-Vexing Devil?
+USER 2026-11-22 (verbatim): (6) Hellspark unearth: "It's arguable, but I think its best to just fully implement this."
+-> agent cb-unearth (brief logs/creature-burn/unearth-brief.md, handoff unearth-handoff.md). (7) "We don't re-open
+these questions for any one change. Instead the regeneration queue handles these automatically based on drift." (8)
+"Fast is fine. Generating overnight once on the machine is fine. The point is that we don't want to be constantly
+regenerating it when developing or doing so when holding up the queue." + "(although if you do generate the overnight
+at some point, I recommend pulling from origin first)". So: mullgen `fast`; overnight FULL-set expansion once at
+adoption, after a fresh pull, never under the lease.
+STILL OPEN for the USER: (4) per-turn fold (likely moot under the anticipating Browbeat policy); pingers counted in
+"visible" damage? (default no); same anticipation for Vexing Devil?
 NEXT after landing: s9 check (USER expects T5 with the opponent Karoo fix); Stage 6 report + 6a disclosure (items: fold
 OFF verdict; main-1 attack-then-Browbeat gap; PEAKS_PLAIN_FOLD; Browbeat out of signature; extra Peaks positions; echo
 census NO GAP; Pyromancer response ping / un-ping; 1-power pinger exemption; Peaks inert-class premise; PoP vs Peaks;
