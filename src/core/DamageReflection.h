@@ -271,16 +271,18 @@ inline int SbaPass(GameState& s)
     for (;;)
     {
         std::vector<Dead> died;
+        std::vector<Permanent> unearth_left;   // unearthed: exiled instead (CR 702.84a)
         for (std::size_t i = 0; i < s.battlefield.size(); )
         {
             const Permanent& q = s.battlefield[i];
             if (!CounterPingSbaDead(q, s)) { ++i; continue; }
+            if (UnearthExileDeferred(s, i, "would die (lethal damage)", unearth_left)) { continue; }
             died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q), TotalCountersOn(q),
                              q.owner_index });
             s.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         }
-        if (died.empty()) { break; }
+        if (died.empty() && unearth_left.empty()) { break; }
         for (const Dead& d : died)
         {
             for (Permanent& e : s.battlefield)
@@ -290,6 +292,8 @@ inline int SbaPass(GameState& s)
             }
         }
         SweepOrphanedAuras(s);   // CR 704.5m, inline: simultaneous with the deaths that orphaned them
+        FireUnearthedLeaves(s, unearth_left);   // left (to exile), did not die
+        total += static_cast<int>(unearth_left.size());
         for (const Dead& d : died)
         {
             Log(s, "death", "\xE2\x98\xA0 " + d.card.m_name.str() + " dies (lethal damage)");
