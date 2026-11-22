@@ -120,6 +120,28 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **Agents still working:** Bruna 5, Sac-fodder 6 and gi548.
 - **Push queue:** empty. No GT is ready to land yet.
 
+**08:37 UTC 11-22:** OWNER check. The box is fully used (load 32-36), so no action was needed.
+- **Big process:** Bruna's ro_ab A/B (PID 748316, 32 threads). 33 GB is available.
+- **Lock waiters, in no fixed order since flock is not FIFO:**
+  - ab1.sh (726572);
+  - the Hinata slower-game classify (738681), before its GT accept;
+  - the Heath r3 final play arm (743106);
+  - a regression --both (748280);
+  - Bruna chain1 (766264);
+  - the Maze gate filler.
+- **Lane, 9 jobs:** the head is the Rock CPU base build (-j2, about 2.5 h so far). Queued behind it:
+  - the Maze Summit build;
+  - Heath's two d8 b0 replays;
+  - Bruna's diag and build_fix6;
+  - the sac-fodder run1b;
+  - the gi548 r2;
+  - the rock-cpu-dev build.
+  Builds at -j2 take about 2 h each. It is the same CPU work either way, so I left the order alone.
+- **Hinata gate passed:** the build is clean, units pass, and regression --both changed only Hinata cases, each equal or better. 23 slower games are being classified at 4x/16x budget.
+- **Merfolk ship:** build OK, units running.
+- **Heath 3** (af9aa5293dc35c5aa) took over from logs/heath/heath-handoff.md.
+- **Old Merfolk ENUM-GAP agent:** it woke, killed its never-admitted duplicate chain4 and stopped. eg_chain5 is the live chain.
+- **Push queue:** empty. No GT is ready to land yet.
 **21:45 UTC 11-21:** Maze gate resume (lock 21:21): the on arm at 24 threads tripped its 28 GB cap after 333 s (rss 28.9 GB: ~1.2 GB/worker, so fewer threads barely saves memory), 0 new on games; mana_clean then ran the OFF arm to completion (5000/5000, 13 min). State: on arm 1631/5000, off arm DONE; report says 'incomplete'. NOT requeued yet: the gate is a record (the batch-1121 changes are oracle-only + smoke passed), so it does not block landing. PLAN: when rock's d8 b0 verdicts are in, build ONE integration batch (batch-1121 + PD f98cfb65f + rock wip/rock-in-plan-rb + Merfolk wip/merfolk-gate as ready) on current origin, validate under the lock, join the push queue; THEN resume the Maze on arm at 32 threads / MTG_RSS_CAP_GB=40 (`mana_clean.py run --resume claude-queue-20261121a` in .claude/worktrees/batch-1121, src must stay unchanged there).
 
 **20:45 UTC 11-21:** status check + SCHEDULING CHANGE. The Maze gate (32 threads, ~32 GB) left MemAvailable ~10 GB, so every 4-slot lane job (need 14 GB: Bruna build_ro, burn chain1, Merfolk eg_chain1) sat at the lane head and blocked ~15 agent jobs (Hinata probes/traces, sac-fodder diag4, overnight bisect, Bruna fix3) for hours; gate ETA was ~06:00. STOPPED it at 20:40 (1631/5000 on-arm games streamed; chunk-granular resume), batch-1121 status 'gate rc=143' + DONE. REQUEUED: build/scratch/claude_batch1121/resume.sh (setsid) = flock box.lock + `mana_clean.py run --resume claude-queue-20261121a --threads 24` at MTG_RSS_CAP_GB=28 (~24 GB, leaves the lane room); status lines 'resume lock', 'gate-resume rc=', 'DONE2' in claude_batch1121/status, log gate_resume.log. Rock chain10 took the lock at 20:41. Also resubmitted Bruna's build_fix3 at --slots 2 (was 4; same script/log).
