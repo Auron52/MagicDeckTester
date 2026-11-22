@@ -176,6 +176,16 @@ landing5/rebuild.sh (PID 5322, incremental build + unit + scen of HEAD fc57da098
 agents' uncommitted edits were committed as WIP (cb-scry d9982edbf UNBUILT, cb-unearth a313b8e48 UNBUILT) and three new
 Opus agents resumed from those + bbgap-handoff.md. Next unchanged: BUILT2 -> join -> under hold: smoke, scoped
 regression, accepts -> land.
+**08:00 UTC: a SECOND restart. Both were the container's MEMORY cap** (USER: "Unfortunately I think we are hitting a
+memory cap. I don't need the viewer restarted, but run things carefully" / "That is why both restarts happened"):
+~24 cc1plus (my 12-job build + three 4-slot lane builds). NEW RULE: one build/batch at a time under
+`flock build/.heavy.lock`, setsid nohup; viewer NOT restarted. Rebuild relaunched under the lock (PID 4334, marker
+landing5/BUILT2). Agents resumed, told to touch nothing heavy until build/scratch/cb-orch/LANDED exists (I create it
+after my last heavy landing run). USER rulings: (a) yes (b) yes (c) "This needs to stop reappearing. I say every time
+that it must always be able to do nothing to end the phase." -> CLAUDE.md hard rule 295128c44, idle pass
+unconditional at every root (cb-bbgap) (d) "staged cards should be counted because the idea is the opponent thinks you
+may have burn in hand to finish them off. (it being staged instead does not change this reasoning)" -> both policies
+count staged cards (cb-bbgap).
 DONE: Stages 1-5 + verify_deck GATE PASS; Browbeat fold DEFAULT OFF (measured); USER's 10 references committed;
 LANDED 5a07c3df3 16:01 UTC (CI green). Since then, local (rebased onto origin 42d819bc0, unpushed):
 * 2352c2241 manual tap-ping in human play (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot
