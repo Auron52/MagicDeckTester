@@ -22,8 +22,14 @@ date first) is the full picture; this section is the short version of how to pic
 4. **Merfolk LANDED 14:59 UTC 11-22** as cd330ec5a on phase-1-2-deck-analyzer (smoke 243/243 byte-identical, gt_logs
    1409 consistent, references safe; origin had not moved from 94cd1e06b). Lease passed to another session
    (550a08fdc1f3:wip/worldfire-integration). Claude is no longer in the queue. CI not watched (gh unauthed). Primary
-   fast-forwarded. Next land: Hinata d5E0 (agent rebasing + gate2 + GT on wip/hinata-d4-d5), batched with whatever
-   else is GT-accepted by then.
+   fast-forwarded.
+   **NEXT LAND (in progress 18:30):** Hinata d5E0 GT a579747bf (wip/hinata-d4-d5 head 0ed4ec24b, rebased on cd330ec5a,
+   8 Hinata keys only, all 23 slower games recover at escalated budget). Landing tree `.claude/worktrees/land-1122c`
+   (branch wip/land-1122c), queue id `839667a3a15d:wip/land-1122c`, number 3 in queue at 18:30; bg `wait` loop armed.
+   At head: fetch; if origin moved with gated changes, rebase onto it, ./build.sh, units, `MTG_PGO=0 MTG_RSS_CAP_GB=40
+   bash test/regression.sh --smoke` under flock box.lock + `push_queue.py keepalive --pid`, check_gt_logs (a play change
+   on origin touching Hinata keys means re-accept); then `land`; then pull --rebase the primary. Ride-alongs if ready:
+   Bruna APPLY-DROP GT (wip/bruna-lordproj), Prepay-C GT (wip/hinata-gi548).
 5. **Workstreams (each owns a worktree under `.claude/worktrees/`, has its own `logs/<work>/*handoff*.md`, and lands
    through the parent via the queue; none pushes the shared branch itself):**
    | work | worktree / branch | state | next |
