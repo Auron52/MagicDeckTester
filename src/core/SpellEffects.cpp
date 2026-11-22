@@ -180,6 +180,23 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
         }
     }
 
+    // Worldfire's tutor plans in the human menu can carry a legal target that the
+    // combo-piece rule would not choose (for example, a second Rift Bolt while one
+    // is already in hand). The chooser calls this default the AI's pick, so use the
+    // shipped provider ranking at the live resolution state. Keep the full menu and
+    // its indices intact; the player can still choose the plan's baked target.
+    if (std::strcmp(ResolveProvider(state).Name(), "Worldfire") == 0)
+    {
+        HumanPlaySuppress pruned;
+        const std::vector<std::string> ranked =
+            LiveTutorCandidates(state, controller_index, pp);
+        if (!ranked.empty())
+        {
+            auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
+            if (it != uniq.end()) { def = static_cast<int>(it - uniq.begin()); }
+        }
+    }
+
     // SUGGESTED MARKS (USER 2026-10-06, Glittering Wish): when the provider narrows this tutor
     // (TutorMarksSuggested), mark the names its pruned set holds -- a badge only, the offered list
     // and its order are untouched (reference replays index into it). Marked only when the pruned set
