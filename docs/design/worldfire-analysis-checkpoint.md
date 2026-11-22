@@ -51,7 +51,10 @@ So: Sire-fair (MTG_FREE_TURN_SIRE_FAIR or its actual name) and annihilator-fair 
 DEFAULT ON, with an amendment to annihilator-fair: the virtual "could have cast it" sacrifice targets count only on a
 turn where the opponent plays a land (its mana to cast comes from lands); on a turn it plays NO land, the virtual
 targets are zero, so repeated annihilator attacks can complete the lock on those turns. (Parent's reading, CONFIRMED by the
-USER: *"Yes, that's the ruling."*) Re-measure Cyclone (+2HG), Shadowborn (+2HG), Extra Turns in one pooled
+USER: *"Yes, that's the ruling."*) SIRE follow-up, VERBATIM: *"Whereas with Sire, it can't really lock
+them out if they can play something."* *"(a permanent)"* -- Sire-fair has NO no-land-turn exception: whenever the
+opponent could cast ANY nonland permanent (not only a creature), the Sire lock does not hold; widen the check if it
+only looks at creatures. Re-measure Cyclone (+2HG), Shadowborn (+2HG), Extra Turns in one pooled
 batch vs the flip without fairness; ride along in the free-turn set of the landing batch (its GT moves are the trait
 decks' anyway).
 Do NOT surface anything else as a question unless it is genuinely blocked on a USER decision (USER 2026-11-22).
