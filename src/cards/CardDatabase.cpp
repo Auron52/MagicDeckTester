@@ -2700,6 +2700,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_treasure_cost = ManaCostFromString(params["tap_treasure_cost"].get<std::string>());
     p.tap_treasure_tap_other_subtype    = params.value("tap_treasure_tap_other_subtype", std::string{});
     p.mana_per_other_controlled_subtype = params.value("mana_per_other_controlled_subtype", std::string{});
+    p.mana_per_devotion                 = params.value("mana_per_devotion", false);
     p.tap_target_pump_per_subtype_both  = params.value("tap_target_pump_per_subtype_both", std::string{});
     if (params.contains("hand_put_self_cost"))
         p.hand_put_self_cost = ManaCostFromString(params["hand_put_self_cost"].get<std::string>());

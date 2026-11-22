@@ -3458,6 +3458,18 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                                         ManaProducedPerTap(*def));
             if (scaled <= 0) { continue; }
             srcs.push_back({ nbits, scaled, scaled, i });
+            // ...and a LAND AURA on it is its own edge, exactly as for every other land below (the `continue` here
+            // skipped it, so a Wild Growth on Nykthos was priced as absent and the oracle vetoed a fed {G}{G}{G}{G}
+            // the DFS pays: devotion 3 + the Aura's {G}; Beasts F). An extra edge only ever adds supply.
+            if (const int aura_units = LandAuraBonus(state, state.battlefield[i]); aura_units > 0)
+            {
+                if (const int am = LandAuraColorMask(state, state.battlefield[i]); am != 0)
+                {
+                    std::uint8_t abits = 0;
+                    for (int ci = 0; ci < 5; ++ci) { if (am & (1 << ci)) { abits |= (1u << ci); } }
+                    srcs.push_back({ abits, aura_units, aura_units, i });
+                }
+            }
             continue;
         }
 
@@ -5527,12 +5539,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     // Maze's End s6 gi5 T5: the second Maze's End {3} fed Baldur's Gate for five WHITE, and Sylvan
                     // Scrying's {G} had nothing (ScaledFedFloatAfter's comment).
                     if (ScaledFedFloatOn()) { ScaledFedColourOrder(state, cost, cols); }
+                    // Nykthos (Beasts F): N is the devotion to the colour being tried, so each colour adds its OWN
+                    // count and a colour with no devotion is skipped (it would pay {feeder} for nothing). `give` above
+                    // is the max over WUBRG, so the outer gate is unchanged. Every other scaled land: dev_land false,
+                    // every colour adds `give` (byte-identical).
+                    const bool dev_land = IsDevotionManaLand(*def);
+                    int dev[5] = { give, give, give, give, give };
+                    if (dev_land) { DevotionAllColors(state, state.battlefield[i].controller_index, dev); }
                     for (Color c : cols)
                     {
+                        const int gc = dev[static_cast<int>(c)];
+                        if (gc < 1) { continue; }
                         ManaPool f = floating; bool ok = true;
                         for (int k = 0; k < feeder; ++k) { Color took; if (!ConsumeFloatingAny(f, took)) { ok = false; break; } }
                         if (!ok) { break; }
-                        f.Add(c, give);
+                        f.Add(c, gc);
                         if (activate(f)) { return true; }
                     }
                 }
@@ -6045,6 +6066,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     int drip_useful = -1;   // lazy, hashed once on the first drip source
     bool domain_done = false;   // lazy, hashed once on the first domain source (Elder / Bloom Tender)
     bool scaled_done = false;   // lazy, hashed once on the first scaled source (Three Tree City)
+    bool devotion_done = false; // lazy, hashed once on the first devotion land (Nykthos; Beasts F)
     if (out_ord) { out_ord->assign(state.battlefield.size(), -1); }
     int nsrc = 0;
     // Resolved once for the whole walk, the same shape the payer uses (and free for every deck
@@ -6103,7 +6125,23 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         }
         // Scaled source: N = creatures you control, again mostly permanents this loop skips. The
         // feeder side (which sources can pay the {2}) is already keyed -- it reads only mana sources.
-        if (McScaled(d) && !scaled_done)
+        // Nykthos (Beasts F): its yield is PER COLOUR (devotion to the chosen colour), so the max alone would let two
+        // boards with the same best devotion but a different red (or white, ...) devotion share a key while the DFS
+        // pays them differently -- every one of the five counts is hashed, once, on its own term. Param-gated: no
+        // other scaled land is a devotion land, so its key below is unchanged.
+        if (McScaled(d) && IsDevotionManaLand(*d) && !devotion_done)
+        {
+            devotion_done = true;
+            int dev[5];
+            DevotionAllColors(state, p.controller_index, dev);
+            mix(h1, 0xDE'70'01ull); mix(h2, 0xDE'70'02ull);
+            for (int c = 0; c < 5; ++c)
+            {
+                const std::uint64_t v = static_cast<std::uint64_t>(dev[c]) * 8 + static_cast<std::uint64_t>(c);
+                mix(h1, 0xDE'70'10ull + v); mix(h2, (v + 1) * 0xC2B2AE3D27D4EB4Full);
+            }
+        }
+        else if (McScaled(d) && !IsDevotionManaLand(*d) && !scaled_done)
         {
             scaled_done = true;
             const std::uint64_t nc = static_cast<std::uint64_t>(ScaledManaCreatureCount(state, &p));

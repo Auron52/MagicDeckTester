@@ -9739,6 +9739,31 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // scaled mode that is dead, unaffordable, or no better than the basic {C} tap yields 0 and the
     // land keeps its ordinary rank, so no deck without a LIVE scaled land can move.
     if (ScaledLandRankEnabled() && ScaledManaNetYield(s, def) > 0) { return 61; }
+    // Nykthos (Beasts F): the fed yield is the devotion when it TAPS, and the line's own permanents raise it. Read at
+    // the board's devotion its net is often <= 0 now, so the land paid an early cast's generic pip with its plain {C}
+    // and the fed tap a later cast needed was gone in EVERY cast order (Harbinger's {1} off Nykthos, then Gargaroth one
+    // short). Held like a gainful scaled land while the board devotion plus every pip the line still owes (the cast
+    // being paid resolves before the next) beats the {feeder}: a payment PREFERENCE (rank only, the land still pays
+    // when nothing else can), and only for a devotion land, so every other deck's order is unchanged.
+    // Inside a payment (g_pay_need_live) the hold also asks that the line has a LATER cast to spend the fed tap on
+    // (g_line_unpaid_cost still includes the cast being paid, so g_pay_full_mv comes back out -- the
+    // UntapBurstNeededByLine shape) and that the OTHER sources still left after this bill can feed {feeder} (feeder
+    // mana minus g_pay_remaining_mv): a hold that leaves Nykthos unfeedable only strands its {C} (three Forests, a
+    // {1}{G} then a {G}{G}: the {C} must pay the {1}).
+    const int dl_feeder = def.params.mana_per_creature_feeder_generic;
+    const bool dl_in_pay = g_pay_need_live;
+    const bool dl_later = !dl_in_pay || g_line_unpaid_cost.ManaValue() - g_pay_full_mv > 0;
+    const int dl_others = ScaledManaFeederMana(s) - (dl_in_pay ? g_pay_remaining_mv : 0);
+    if (DevotionLandHoldOn() && IsDevotionManaLand(def) && dl_later && dl_others >= dl_feeder)
+    {
+        int dev[5];
+        DevotionAllColors(s, active, dev);
+        const ManaCost& lu = g_line_unpaid_cost;
+        const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+        int best = 0;
+        for (int c = 0; c < 5; ++c) { best = std::max(best, dev[c] + owed[c]); }
+        if (best - def.params.mana_per_creature_feeder_generic >= 1) { return 61; }
+    }
     // An untap-land with a LIVE burst (Wirewood Lodge + a 2+ scaled Elf, see UntapBurstBestYield)
     // is reserved past even the scaled dorks: its burst yield reads the best Elf's count AT FIRE
     // TIME, so firing it absolutely last maximises the net. With no live burst it falls through to

@@ -8376,6 +8376,92 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     return p;
 }
 
+// Nykthos, Shrine to Nyx (Beasts F): a permanent spell with a coloured pip raises our devotion as it resolves, so a
+// cast earlier in the walk grows the land's fed yield for a later one (creature or not: Garruk's {G}{G}{G} counts).
+// A hybrid pip counts (it adds to both its colours). Lands are never cast; an instant / sorcery never stays.
+static bool CastGrowsDevotion(const CardDefinition& def)
+{
+    if (!def.card.IsPermanentCard() || def.card.IsLand()) { return false; }
+    const ManaCost& mc = def.card.m_mana_cost;
+    return mc.white + mc.blue + mc.black + mc.red + mc.green + mc.hybrid_count > 0;
+}
+
+// The single-colour devotion a permanent with cost `mc` adds, per WUBRG colour -- the DevotionAllColors rule (the flat
+// cost holds a hybrid's FIRST colour; its SECOND colour adds only when it differs).
+static void AddCostDevotion(const ManaCost& mc, int out[5])
+{
+    out[0] += mc.white; out[1] += mc.blue; out[2] += mc.black; out[3] += mc.red; out[4] += mc.green;
+    for (int i = 0; i < mc.hybrid_count; ++i)
+    {
+        const int first  = mc.hybrid_pair[i] >> 4;
+        const int second = mc.hybrid_pair[i] & 0xF;
+        if (second != first && second >= 0 && second < 5) { ++out[second]; }
+    }
+}
+
+// The card a devotion-growing cast puts on the battlefield, for a scratch board: the PRINTED card. A kicked face
+// (Cragplate Baloth (Kicked)) carries the kicker in its cost, but the permanent that enters is the printed card
+// (kicked_base_name), whose cost is what devotion counts (CR 700.5: the mana cost, never what was paid).
+static const Card& DevotionCardOf(const CardDefinition& def)
+{
+    if (!def.params.kicked_base_name.empty())
+    {
+        if (const CardDefinition* base = CardDatabase::Instance().Lookup(def.params.kicked_base_name)) { return base->card; }
+    }
+    return def.card;
+}
+
+// Untapped devotion lands (Nykthos) the active player controls that can fire their fed mode (not Islandized).
+static int LiveDevotionLands(const GameState& state)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && IsDevotionManaLand(*d) && !LandTypeChangedToIsland(state, p)) { ++n; }
+    }
+    return n;
+}
+
+// UPPER BOUND on the mana the devotion-growing casts among `cands` (only those in `sel` when given) can add to the
+// untapped devotion lands' fed yield this turn: per land, the largest single-colour devotion they could add (every
+// such cast resolved before the land taps). The flat pool and the supply bounds read the land at the BOARD's devotion,
+// so without this addend they refuse the lines whose own casts raise it (Harbinger, then Gargaroth off a Nykthos at
+// four) before any payment walk can price them. Over-counts are safe here (a ceiling only ever prunes less); 0 with no
+// untapped devotion land, so every other deck is byte-identical.
+static int DevotionGrowthBound(const GameState& state, const std::vector<Action>& cands,
+                               const std::vector<int>* sel = nullptr)
+{
+    const int lands = LiveDevotionLands(state);
+    if (lands == 0) { return 0; }
+    int add[5] = { 0, 0, 0, 0, 0 };
+    auto take = [&](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || !CastGrowsDevotion(*a.def)) { return; }
+        AddCostDevotion(a.def->card.m_mana_cost, add);
+    };
+    if (sel != nullptr) { for (int j : *sel) { take(cands[static_cast<std::size_t>(j)]); } }
+    else { for (const Action& a : cands) { take(a); } }
+    return lands * std::max({ add[0], add[1], add[2], add[3], add[4] });
+}
+
+// Does an ordered cast list hold a devotion-growing cast beside another cast, with a devotion land untapped? Then
+// WHICH cast resolves first decides the land's yield, so the payable-order search (UnlockOrderSearch, both sites)
+// must price the other orders: a pip-heavy permanent first can be the only order that pays (Gargaroth before
+// Thragtusk off a Nykthos at two), and the rank order tries just one.
+static bool DevotionOrderDomain(const GameState& state, const std::vector<Action>& acts, const std::vector<int>& order)
+{
+    if (order.size() < 2 || LiveDevotionLands(state) == 0) { return false; }
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (a.kind == Action::Kind::CastFromHand && d != nullptr && CastGrowsDevotion(*d)) { return true; }
+    }
+    return false;
+}
+
 static void ComputeAvailableColors(const GameState& state, bool have[5], bool pending_auras = true)
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -8453,7 +8539,28 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
         // Three Tree City scaled ability yields a SEARCH-CHOSEN colour (any of W/U/B/R/G), so when it
         // can fire (a feeder pays the {2}, even when its net yield is zero) every colour is producible.
         // Empty subtype on every board without the land -> byte-identical.
-        if (IsScaledManaLand(*def)
+        // Nykthos (Beasts F): N is PER COLOUR (devotion), so only a colour with devotion is producible -- each colour
+        // the backtracker's fed branch can make (it takes any colour with N >= 1), once a feeder pays the {2}.
+        if (IsDevotionManaLand(*def))
+        {
+            if (ScaledManaFeederMana(state) >= def->params.mana_per_creature_feeder_generic)
+            {
+                int dev[5];
+                DevotionAllColors(state, p.controller_index, dev);
+                // ...and every colour a permanent still in HAND would add once the line casts it (the domain-widen
+                // lesson below: this gate is state-only, but a permanent cast EARLIER IN THE SAME LINE raises the
+                // devotion the fed tap reads). A {R/G} permanent paid with green makes red devotion out of a board
+                // with none, and then the fed tap is the line's only {R}. Over-approximating only keeps lines; the
+                // real payer prices them. Hand cards are name-only placeholders, so the cost is read off the def.
+                for (const Card& hc : state.players[p.controller_index].hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd != nullptr && CastGrowsDevotion(*hd)) { AddCostDevotion(hd->card.m_mana_cost, dev); }
+                }
+                for (int ci = 0; ci < 5; ++ci) { if (dev[ci] >= 1) { have[ci] = true; } }
+            }
+        }
+        else if (IsScaledManaLand(*def)
             && ScaledManaCreatureCount(state, &p) >= def->params.mana_per_creature_feeder_generic
             && ScaledManaFeederMana(state) >= def->params.mana_per_creature_feeder_generic)
         { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
@@ -10813,7 +10920,10 @@ static bool SpwfProvablySupplyShort(const GameState& state, const std::vector<Ac
     if (demand <= floating + aura_extra) { return false; }
     SpellSubtypePayScope _ssps(nullptr);
     BigSpellBatchScope   _bbs(-1);
-    int supply = floating + aura_extra + UntappedManaUpperBound(state, /*for_creature=*/true, 0);
+    // + the devotion the subset's own permanents add to an untapped Nykthos before it taps (DevotionGrowthBound: an
+    // upper bound; 0 with no devotion land, so byte-identical elsewhere).
+    int supply = floating + aura_extra + UntappedManaUpperBound(state, /*for_creature=*/true, 0)
+               + DevotionGrowthBound(state, cands, &sel);
     if (demand <= supply) { return false; }
     // MTG_SCALED_GROWTH_BOUND: an untapped Three Tree City yields one more per creature of its type the walk pays
     // before it taps (the walk's grower order), which the bound reads at the board's current count. +1 per matching
@@ -11320,11 +11430,25 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
     // order and put each creature on its scratch battlefield after paying for it. Merfolk Turns s2 T3:
     // Dockhand grows City from one to two Merfolk, then City funds Silvergill Douser.
     bool scaled_land_growth = false;
+    // Nykthos (Beasts F): ANY persisting permanent spell with a coloured pip grows a devotion land's yield, so the walk
+    // runs in the growth order and every such permanent joins the scratch board after it pays (below).
+    bool devotion_growth = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
         if (!land || !IsScaledManaLand(*land) || LandTypeChangedToIsland(state, p)) { continue; }
+        if (IsDevotionManaLand(*land))
+        {
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && CastGrowsDevotion(*a.def))
+                { devotion_growth = scaled_land_growth = true; break; }
+            }
+            if (scaled_land_growth) { break; }
+            continue;
+        }
         const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
             ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
         for (int j : sel)
@@ -11355,6 +11479,12 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             // before the two-mana Douser raises City's yield in time to fund the latter.
             if (scaled_land_growth && cands[x].def && cands[y].def
                 && cands[x].def->card.IsCreature() && cands[y].def->card.IsCreature())
+            { return cands[x].cost.ManaValue() < cands[y].cost.ManaValue(); }
+            // Nykthos (Beasts F): the same cheaper-first rule over every devotion-growing PERMANENT (a planeswalker's
+            // pips count too), so a cheap pip-heavy permanent raises the fed yield before the dearer cast it funds.
+            // ORDER ONLY: the walk is a payability probe; every subset is still searched by the enumerator.
+            if (devotion_growth && cands[x].def && cands[y].def
+                && CastGrowsDevotion(*cands[x].def) && CastGrowsDevotion(*cands[y].def))
             { return cands[x].cost.ManaValue() < cands[y].cost.ManaValue(); }
             return false;
         });
@@ -11494,10 +11624,22 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 && ScaledLandCreaturePersists(cp, *def))
             {
                 Permanent creature;
-                creature.card = def->card;
+                // Nykthos: a kicked face's cost holds its kicker; devotion counts the printed card (DevotionCardOf).
+                creature.card = devotion_growth ? DevotionCardOf(*def) : def->card;
                 creature.controller_index = cp.active_player_index;
                 creature.owner_index = cp.active_player_index;
                 cp.battlefield.push_back(creature);
+            }
+            // Nykthos (Beasts F): a NONcreature devotion-growing permanent (Garruk) joins too. A rock or a land Aura
+            // already joins through its own producer branch below, so it is not pushed twice.
+            else if (devotion_growth && a.kind == Action::Kind::CastFromHand && !def->card.IsCreature()
+                     && !is_rock && !is_aura && CastGrowsDevotion(*def) && ScaledLandCreaturePersists(cp, *def))
+            {
+                Permanent perm;
+                perm.card = DevotionCardOf(*def);
+                perm.controller_index = cp.active_player_index;
+                perm.owner_index = cp.active_player_index;
+                cp.battlefield.push_back(perm);
             }
             // ...and its resolution: the ETB untap, after the creature's own payment.
             if (untapper)
@@ -12877,7 +13019,12 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             }
         }
         bool grows_scaled_land = false;
-        if (def.card.IsCreature() && ScaledLandCreaturePersists(cp, def))
+        bool grows_devotion = false;   // ...through a devotion land: the scratch permanent is the PRINTED card
+        // Nykthos (Beasts F): a persisting permanent with a coloured pip grows a devotion land's yield (creature or not).
+        // A land Aura with a bonus already joins through its own attach branch above, so it is not pushed twice.
+        const bool devotion_cand = CastGrowsDevotion(def)
+            && !(def.params.is_land_aura && def.params.land_aura_extra_mana > 0) && !def.params.lens_imprint_land;
+        if ((def.card.IsCreature() || devotion_cand) && ScaledLandCreaturePersists(cp, def))
         {
             for (const Permanent& p : cp.battlefield)
             {
@@ -12885,6 +13032,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
                 if (land == nullptr || !IsScaledManaLand(*land) || LandTypeChangedToIsland(cp, p))
                 { continue; }
+                if (IsDevotionManaLand(*land))
+                { if (devotion_cand) { grows_scaled_land = grows_devotion = true; break; } continue; }
+                if (!def.card.IsCreature()) { continue; }
                 const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
                     ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
                 if (def.card.m_subtypes.HasId(chosen)) { grows_scaled_land = true; break; }
@@ -12908,7 +13058,8 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         if (joins_for_mana)
         {
             Permanent perm;
-            perm.card             = def.card;
+            // A kicked face's cost holds its kicker; devotion counts the printed card that enters (DevotionCardOf).
+            perm.card             = grows_devotion ? DevotionCardOf(def) : def.card;
             perm.controller_index = cp.active_player_index;
             perm.owner_index      = cp.active_player_index;
             if (enter_haste_for_mana)
@@ -13742,11 +13893,14 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
     // MTG_PO_UNLOCK_ORDER: the unlock-order domain's search (see UnlockOrderSearch), the twin of the apply's
     // fallback (TurnSolver::UnlockPayableOrder). Only casts are in `order`; a Vial put or a reveal surcharge in the
     // subset leaves the domain (the walk's set-level inputs those two read are order-sensitive).
+    // Nykthos (Beasts F): a devotion-growing cast beside another one joins the domain (DevotionOrderDomain) -- the
+    // order decides the fed yield, so the walk must price the other orders; the apply site takes the same test.
     const bool uo_dom = PoUnlockOrderOn() && order.size() >= 2 && seq_rv_charged.empty()
         && std::none_of(sel.begin(), sel.end(), [&](int j)
                         { return cands[static_cast<std::size_t>(j)].kind == Action::Kind::ActivateVial; })
-        && UnlockOrderHasHaste(cands, order, std::any_of(sel.begin(), sel.end(), [&](int j)
-                               { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); }));
+        && (UnlockOrderHasHaste(cands, order, std::any_of(sel.begin(), sel.end(), [&](int j)
+                                { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); }))
+            || DevotionOrderDomain(state, cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -13987,7 +14141,7 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         if (SeqWalkUnlockEquip(state, a)) { sel.push_back(i); any_unlock = true; }
         else if (SeqWalkTrailingEquip(state, a)) { sel.push_back(i); }   // priced at the walk's end, as the apply pays it
     }
-    if (!UnlockOrderHasHaste(*use, order, any_unlock)) { return false; }
+    if (!UnlockOrderHasHaste(*use, order, any_unlock) && !DevotionOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
@@ -66307,7 +66461,9 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     // legacy scalar bound (MTG_LEGACY_MANA_BOUND), loosened by the spectacle plan credit's most-forgiven
     // mana (0 unless that credit is live -> byte-identical).
     // ...plus the first-equip waiver's addend (0 unless leaf_waiver; see its declaration).
-    const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit + leaf_waiver_bound);
+    // ...plus the Nykthos devotion growth (DevotionGrowthBound; 0 without an untapped devotion land).
+    const int mana_bound = ManaPruneBound(pool, cands, spec_ctx.bound_credit + leaf_waiver_bound
+                                                       + DevotionGrowthBound(state, cands));
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
@@ -89066,6 +89222,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             const bool seq_on_aura = SeqLandAuraEnabled();
             const bool pending_noncombat_discount =
                 SubsetHasPendingNoncombatDiscount(state, cands, sel);
+            // Nykthos (Beasts F): a devotion-growing cast beside another with a devotion land untapped. The filter
+            // rescue above walks ONE order; which cast resolves first decides the fed yield, so the sequenced walk
+            // and its payable-order search (DevotionOrderDomain) must get to price the others. Rescue-only.
+            const bool pending_devotion_growth = DevotionOrderDomain(state, cands, sel);
             bool pending_enter_haste = false;
             if (pending_enter_haste_bound > 0)
             {
@@ -89080,10 +89240,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 pending_enter_haste = watcher && dork;
             }
             if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
-                && !pending_enter_haste)
+                && !pending_enter_haste && !pending_devotion_growth)
             { return false; }
             bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
-                          || pending_enter_haste;
+                          || pending_enter_haste || pending_devotion_growth;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
@@ -90039,6 +90199,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                          // + the spectacle plan credit's most-forgiven mana (0 unless it is live).
                          haste_unlock_bound + metalcraft_bound + waiver_bound + growth_bound + land_growth_bound
                              + widen_bound + spec_ctx.bound_credit
+                             + DevotionGrowthBound(state, cands)   // Nykthos (Beasts F); 0 without one
                              + sacfod.bound,   // MTG_SAC_FODDER_MENU: plan-made fodder (0 when inert)
                          // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
                          // terms above already have (Solve passes none). Its consumer is the
@@ -106527,6 +106688,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         { s += "sc" + pp.mana_per_creature_subtype
              + std::to_string(pp.mana_per_creature_feeder_generic)
              + (pp.mana_per_creature_count_all ? "a" : ""); }
+        // Nykthos (Beasts F): the devotion-scaled fed mode is its own behaviour (N per chosen colour).
+        if (pp.mana_per_devotion)
+        { s += "dv" + std::to_string(pp.mana_per_creature_feeder_generic); }
         // Tap-for-damage (Shivan Gorge / Keldon Megaliths class).
         if (pp.tap_damage_cost)               { s += "td" + pp.tap_damage_cost->ToString(); }
         if (pp.tap_damage_each_opponent > 0)  { s += "te" + std::to_string(pp.tap_damage_each_opponent); }

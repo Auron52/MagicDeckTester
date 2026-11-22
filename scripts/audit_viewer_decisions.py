@@ -1133,6 +1133,8 @@ INERT_PARAMS = {
     "draw_on_other_subtype_enter": "Guild Summit / Kili -- 'whenever a(nother) <subtype> you control enters, draw a card': a mandatory trigger (no 'may', no target), resolved at OnLandEntered / FireEtbWatchers",
     # Maze's End (I4, 2026-11-17).
     "mana_per_other_controlled_subtype": "Baldur's Gate -- the scaled mana ability's X (the other Gates you control); colour and amount are the mana-payment exemption (the Three Tree City shape), no choice",
+    # Beasts F (2026-11-22).
+    "mana_per_devotion": "Nykthos, Shrine to Nyx -- the scaled mana ability's X is the devotion to the CHOSEN colour (the Three Tree City shape, per colour); the colour is the mana-payment exemption in autonomous play (the payer branches every colour with devotion) and the human picks it as a per-colour pre-tap fed face (tap_fed, each face's N in tap_note), no separate decision",
     "enters_with_oil_counters": "Migloz, Maze Crusher -- the as-enters oil count (five), automatic; the oil is spent by the three activations, each surfaced on its own",
     "vigilance_menace_remove_oil": "Migloz, Maze Crusher -- the vigilance grant's oil COST (one counter); the activation rides vigilance_menace_cost -> main_phase",
     "remove_counter_destroy_art_ench_oil": "Migloz, Maze Crusher -- the destroy's oil COST (three counters); the TARGET rides remove_counter_destroy_art_ench_cost -> target / main_phase",
