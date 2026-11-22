@@ -237,3 +237,28 @@ longer a guard (nothing the rung pays with can crack it), so the Generator Serva
 Niv's no-fire strands (the stats sample) had only that guard. Pay-sac (Treasure) and on-demand (Lotus Bloom, Lake of
 the Dead) sources are cracked by the payer itself and stay guards. Only Niv-Mizzet Combo holds a direct-action
 sacrifice source among the suite's rock decks.
+
+### Measurements of the fix (agent 7, 2026-11-21)
+
+* **Guard cut exact.** `mtg.b9x` (= e02588b84, the structural direct-action-sac predicate) vs `mtg.b8` on Niv 200
+  (seeds 680000, lever on): 8 of 8 `.wins` byte-identical, units identical (7,111,995); `MTG_LKR_TIGHT_CHECK=1`: 0
+  `[lkr-tight-bad]`. Rung time 13,141 -> 11,774 ms (strand-nofire 101,096 -> 57,175 trials, 4,729 -> 3,252 ms);
+  process CPU 207.6 -> 205.2 s (-1.1%).
+* **CPU on/off (b9x, same Niv 200, paired 1-thread arms, contended lane):** raw 1.0824, but the on arm does 3.1% more
+  search units (7,111,995 vs 6,896,298) because its play differs; per unit **1.0496**. The rung is 5.7% of the on arm's
+  CPU. Remaining phases: filtered 3.2 s, strand-nofire 3.3 s, fired-table 1.6 s. No further exact cut identified.
+* **d0, 30,000 held-out Niv pairs (seed base 710000, depth 0, three arms):** fixed vs off **net -343** (365 faster, 120
+  slower); avg win 5.7188 -> 5.7117, unwon 3,062 -> 3,016. Old lever (`MTG_LKR_NO_SAC_ACTION=0`) vs off net **+225**
+  (479 faster / 562 slower), fixed vs old lever -568. The fix turns the d0 loss into a gain.
+* **gi367 (seed 670367, searched held-out T4 -> T5):** recovers at d8 b0, T4 on both arms.
+* **Tiers on the rebased tree (wip/rock-in-plan-rb 0d0a3c97f) vs origin GT:** units 3822/3822; smoke 224 pass / 11
+  fail, regression 356 / 19. Per deck (smoke + regression, loss-penalized turns): searched dragons -1, hinata -1,
+  merfolkturns -1, niv -2 (3 faster, 1 slower: regression d3 gi17 T4 -> T5); d0 bruna -3, fivecolour -2, galadriel -5,
+  hinata -4 (1 slower: smoke gi430 7 -> unwon), merfolkturns -1, niv -15 (20 faster, 9 slower), sea -1; every other
+  deck 0 (digest-only changes). Every deck nets <= 0, searched and d0.
+* **d8 b0 on every tier slower game** (rebased binary, both arms, `build/scratch/claude_rock_plan/d8rb/`): niv
+  regression d3 gi17 T4 (was T4 -> T5); niv smoke d0 gi119 T4, gi296 T4, gi442 T5, gi500 T4, gi874 T4, gi938 T4, gi974
+  T4; niv regression d0 gi224 T5, gi550 T4; hinata smoke d0 gi430 T5. Every one recovers, and the on arm wins on the same
+  turn as the off arm (identical digests in 10 of 11; gi500 differs in play only).
+* **GT accepted** (smoke + regression) on the rebased tree; `test/check_gt_logs.py` 1358 consistent, 0 stale. The
+  overnight GT is left for the periodic overnight run.
