@@ -91,7 +91,9 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
 1. Land wip/refland urgently once validated (join --urgent; land; CI watch).
 2. Then a fresh free-turn agent from handoff2.md (floor version: build, units, smoke, one flag-ON tier, doc, push).
 3. Relay the bucket agent's A/B; surface the bucket doc's open questions.
-4. gi4 d8 b0 result -> ledger.
+4. gi4 d8 b0 DONE (2026-11-22): RECOVERS -- the search itself suspends Halberdier T1, Worldfire T4, wins T5
+   (Claude's line). Add to the ledger's sweep OPEN line once the bucket agent's ledger edit is committed (do not
+   `commit -a` while it has a dirty tree).
 5. Stage 6 report; CronDelete cf1c0324 when everything is reported.
 
 ## Open USER questions (defaults taken)
