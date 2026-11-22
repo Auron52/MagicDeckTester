@@ -14246,7 +14246,26 @@ inline void CensusAll(const Action& a, const Action& b, int site)
 // Equal for the walk: the whole Action, with the copy ordinal (equiv_ord, the subset fold's), the valuation scalar
 // (eval, read by plan scoring only) and the continuation pins (cont_pins, read by the executor and the fold) taken
 // from `a`. Counts which fields differed when `site` >= 0.
-inline bool WalkSame(const Action& a, const Action& b, int site)
+// tutor_target as the walk reads it. In the payment walk's cluster (SubsetPayableSequential*, SeqWalkFixedOrder, the
+// unlock-order tree and its helpers) the field is read in exactly four places: the Fireblast / Archive Trap / Walk
+// the Aeons buyback alternative-cost pins (SeqWalkFixedOrder), and TutoredUntapperHostId (a tutor that puts an
+// untapper unlock host onto the battlefield; the host is the FIRST library copy of the named card, so its number
+// identifies the name). So two hand casts of the same card whose targets differ walk identically when neither target
+// is one of those pins and both tutor the same untapper host (or none). Anything else keeps the field strict.
+inline bool TutorWalkSame(const GameState& state, const Action& a, const Action& b)
+{
+    if (a.kind != Action::Kind::CastFromHand || b.kind != Action::Kind::CastFromHand || a.def == nullptr
+        || a.def != b.def || a.kicked != b.kicked) { return false; }
+    const CardDefinition& def = *KickedFaceOr(a.def, a.kicked);
+    for (const Action* x : { &a, &b })
+    {
+        const std::string& pin = x->tutor_target.str();
+        if (IsFireblastAlternative(def, pin) || IsWalkBuyback(def, pin)) { return false; }
+        if (def.params.archive_trap_free_if_opponent_searched && pin == "archive_trap_zero") { return false; }
+    }
+    return TutoredUntapperHostId(state, a) == TutoredUntapperHostId(state, b);
+}
+inline bool WalkSame(const GameState& state, const Action& a, const Action& b, int site)
 {
     if (a == b) { return true; }
     if (site >= 0)
@@ -14260,6 +14279,7 @@ inline bool WalkSame(const Action& a, const Action& b, int site)
     if (!NormOn()) { return false; }
     Action c = b;
     c.equiv_ord = a.equiv_ord; c.eval = a.eval; c.cont_pins = a.cont_pins;
+    if (c.tutor_target != a.tutor_target && TutorWalkSame(state, a, b)) { c.tutor_target = a.tutor_target; }
     const bool same = a == c;
     if (!same && site >= 0) { g_diff_field[site][4].fetch_add(1, std::memory_order_relaxed); }
     return same;
@@ -14326,7 +14346,7 @@ static bool UoTreeXMemo(int site, const GameState& state, const std::vector<Acti
     {
         bool same = it->second.acts.size() == sel.size();
         for (std::size_t i = 0; same && i < sel.size(); ++i)
-        { same = uotx::WalkSame(it->second.acts[i], cands[static_cast<std::size_t>(sel[i])], site); }
+        { same = uotx::WalkSame(state, it->second.acts[i], cands[static_cast<std::size_t>(sel[i])], site); }
         if (!same)
         {
             uotx::g_act_diff[site].fetch_add(1, std::memory_order_relaxed);
