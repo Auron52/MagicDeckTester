@@ -1,0 +1,86 @@
+{
+  "card_scores": {
+    "Blood Sun": [
+      0.7477848628508239,
+      -1.0134269778971285
+    ],
+    "Blooming Marsh": [
+      0.2676606730468629,
+      -0.04437205935577282
+    ],
+    "Burgeoning": [
+      -0.21721696992731232
+    ],
+    "City of Brass": [
+      0.26779720127294127,
+      0.25021690091965976
+    ],
+    "Copperline Gorge": [
+      0.2580990547278894,
+      0.391752577319588
+    ],
+    "Diabolic Revelation": [
+      0.005251595040326684,
+      -0.802884615384615
+    ],
+    "Dimir Machinations": [
+      0.04127388702398349
+    ],
+    "Emrakul, the Aeons Torn": [
+      -0.05201492692893073
+    ],
+    "Exploration": [
+      0.07052913824118434,
+      -0.9995907361933654
+    ],
+    "Fastbond": [
+      0.2294372294372291
+    ],
+    "Golgari Rot Farm": [
+      0.24074560657815347,
+      -0.3014835302992198
+    ],
+    "Graven Cairns": [
+      0.32098800685322715
+    ],
+    "Grim Tutor": [
+      0.3405128205128207,
+      -0.33342062193126054
+    ],
+    "Lotus Field": [
+      -0.08009411615077688
+    ],
+    "Lotus Vale": [
+      -0.17858310682389433,
+      -0.33788395904436896
+    ],
+    "Overgrown Tomb": [
+      0.2399043196848174
+    ],
+    "Rakdos Carnarium": [
+      0.21058174159343412
+    ],
+    "Scorched Ruins": [
+      -0.09107734932097866,
+      -0.9592397275324105
+    ],
+    "Time Warp": [
+      -0.17131773740252587
+    ],
+    "Ulamog, the Ceaseless Hunger": [
+      -0.3120516499282644
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
