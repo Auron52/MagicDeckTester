@@ -540,7 +540,7 @@ does. The basic replacing bounceland rule should apply."* An opening hand whose 
 that can stay alone ahead of a Karoo (`OpponentLandDropIndex`), so this is the only case left. A drawn bounceland later
 still returns itself. Measured: smoke 42 keys' digests move (1 game each, the gi whose dealt opponent is a Karoo list),
 1 in aggregate (Merfolk d0 gi233 T6 -> T5, -0.001); regression 24 keys' digests, 2 in aggregate: Maze's End d5 s2002
-gi168 T5 -> T6 (+0.005; MAZE_MECH) and Extra Turns d0 gi505 T6 -> T5 (-0.001). Scenarios 605 / 605, references 940, 0
+gi168 T5 -> T6 (+0.005; single-game repro `build/scratch/freeturn/bouncerc6/`: the dealt opponent's opening hand holds only lands that need another land in play, so with the rule off it plays no land until it draws an Island on its turn 4; with the rule on a basic Island replaces one and enters on its turn 1. That is a different opponent from turn 1, and Maze's End reads it through Burgeoning ("whenever an opponent plays a land"): the d5 b20 search now opens T2 Burgeoning + Manabond instead of T2 Sylvan Scrying, the gate count arrives a turn later, and the win moves T5 -> T6. An opponent-model consequence, not a search defect) and Extra Turns d0 gi505 T6 -> T5 (-0.001). Scenarios 605 / 605, references 940, 0
 play-drift (the references were all recorded on legacy boards, so none is dealt a Karoo opening). Adopting it would need
 a recording stamp + `--legacy` flag like the other opponent-model changes, and a smoke/regression GT accept.
 
