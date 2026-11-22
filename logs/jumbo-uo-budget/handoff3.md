@@ -68,6 +68,18 @@ instructions:u`, deterministic, the CPU metric to use -- ms/cpu fields swing 2-3
   `$S/xm3/<tag>/batch.err`), then instruction counts for j/b {on,uot,sps,both}1 and joff/joffsps
   (`$S/xm3/<tag>/stat.csv`). DONE marker `$S/xm3/DONE` ("done" or "fail"). Build log `$S/xm3/build.log`.
 
+## xm3 RESULT (finished 14:33 UTC, rc=0) -- the normalisation does NOT help
+VERIFY 0 mismatches on both sites and decks; play byte-identical (on vs uot / both / verify, Jumbo and Bruna; off vs
+off+sps). Instructions unchanged from xm2: Jumbo on 348.97G, uot 345.89, sps 346.04, both 347.62, off 303.45, off+sps
+304.34; Bruna on 837.75, uot 836.98, sps 837.56, both 837.68. Field census on Jumbo UOT: act_diff 36,968, of which
+eval 19,674, hand_index 82, equiv_ord 66, cont_pins 0, and **other_after_norm 36,968 (ALL of them)**: some field other
+than those four differs between enumerations on every mismatching hit. The hash-only key (ActSig fields) had 73,780
+hits with 0 mismatches, so whatever it is does not affect the verdict on this sample. NEXT: find that field (extend
+`uotx::WalkSame`'s census to more Action fields, e.g. the valuation scalars direct_damage / card_mv /
+haste_attack_power / vial_attack_power / rec_* / breakpoint_casts / remand_* / pitch_*), show the walk never reads
+it, normalise it, and confirm the hit count returns to ~73,780 and Jumbo instructions to ~338G. Then continue with
+step 3 below.
+
 ## Next steps, in order
 1. When `$S/xm3/DONE` exists: check VERIFY_MISMATCH=0 on both sites, the field-diff counts (which fields differed:
    if `other_after_norm` is 0 the normalisation explains all differences), and instruction counts
