@@ -85,27 +85,13 @@ inline bool OpponentControlsLand(const GameState& state)
 // Would a scheduled spawn appear now? Read by both worlds' spawn sites (GameEngine::UntapStep, TurnSolver's
 // SimulateEndAndStartNextTurn; lockstep) and by the lock. Nothing changes the opponent's lands between the end of
 // its turn and our untap, so the lock's reading and the spawn site's agree.
-// MTG_OPP_SPAWN_DRAW_T1 (DEFAULT OFF; a fidelity lever, measured, not adopted): on the draw the opponent has taken a
-// turn before our first untap, so a real opponent would control the land it played. Under the requirement the
-// passive opponent's first land can still be missing then (fourth pass, doc (e)), which loses the turn-1 spawn on
-// the draw too. =1: at our first regular untap on the draw (RawRound 1) a head holding a card playable as a land
-// counts as controlling one.
-inline bool OppSpawnDrawT1On()
-{
-    static const bool on = EnvOn("MTG_OPP_SPAWN_DRAW_T1");   // DEFAULT OFF; =1 counts the on-the-draw T1 land
-    return heurarm::Flag(heurarm::OPP_SPAWN_DRAW_T1, on);
-}
-inline bool HeadHoldsPlayableLand(const std::vector<Card>& hand)
-{
-    for (const Card& c : hand) { if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { return true; } }
-    return false;
-}
+// The on-the-draw turn-1 spawn needs no special case: on the draw the opponent's turn 0 precedes ours and plays the
+// leftmost land of its hand (GameEngine::RunTurnFrom), so at our first untap it controls a land whenever its
+// hand held one it could play. A turn-1 spawn is refused only when the opening hand held none (Burn gi434: a 0-land 7) (fourth pass: the deleted
+// MTG_OPP_SPAWN_DRAW_T1 lever measured byte-identical in every block of 6,300 trait-deck games).
 inline bool SpawnMayAppear(const GameState& state)
 {
-    if (!SpawnNeedsLand(state) || OpponentControlsLand(state)) { return true; }
-    return OppSpawnDrawT1On() && !state.on_the_play && state.RawRound() == 1
-        && (HeadHoldsPlayableLand(state.players[1].hand)
-            || (opponentdeck::HasSecondHead(state) && HeadHoldsPlayableLand(state.opponent2_hand)));
+    return !SpawnNeedsLand(state) || OpponentControlsLand(state);
 }
 
 // ---- the lock --------------------------------------------------------------------------------------------

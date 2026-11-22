@@ -1095,7 +1095,6 @@ enum Slot : int
     FREE_TURN_SIRE_FAIR,      // MTG_FREE_TURN_SIRE_FAIR   Sire's lock is vetoed when the discarded hand held a creature the opponent could have cast. Default OFF
     FREE_TURN_ANNIHILATOR_FAIR, // MTG_FREE_TURN_ANNIHILATOR_FAIR  an annihilator wipe is vetoed when castable nonland permanents would have kept a permanent. Default OFF
     FREE_TURN_REACH,          // MTG_FREE_TURN_REACH       the turn-edge prunes stand down for a lock-trait deck only where a free turn is REACHABLE (freeturn::FreeTurnMayFollow, a sound certificate). Default ON; =0 -> stand down at every node of a trait deck
-    OPP_SPAWN_DRAW_T1,        // MTG_OPP_SPAWN_DRAW_T1     the spawn land requirement counts a land the opponent holds at our first untap on the draw. Default OFF (fidelity lever, measured only)
     COUNT
 };
 
@@ -2135,7 +2134,6 @@ inline const char* Name(int slot)
         "MTG_FREE_TURN_SIRE_FAIR",
         "MTG_FREE_TURN_ANNIHILATOR_FAIR",
         "MTG_FREE_TURN_REACH",
-        "MTG_OPP_SPAWN_DRAW_T1",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
