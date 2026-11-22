@@ -7512,9 +7512,9 @@ void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<
 // Packleader draw, Gargaroth's draw mode) -- a card-number pin would need the enumerator to predict that window, a
 // rank pin needs only a bound on N, and ranks 0 .. N-1 then reach every legal pick whatever the window turns out to
 // hold. Each dig trigger reads ordinal 0 and SHIFTS the rest down (CombatDigPinShift), so the k-th combat-time dig
-// of a combat reads ordinal k with no shared counter -- which is what lets Adaptive Omnitool's attack-step dig
-// (FireAttackEquipDigHand, today an in-window front pick: docs/design/omnitool-combat-dig-greedy.md) be pointed at
-// the same pin later: its trigger resolves first, so it would simply take ordinal 0. NOT wired to it in batch D.
+// of a combat reads ordinal k with no shared counter. Adaptive Omnitool's attack-step dig
+// (FireAttackEquipDigHand) consumes the same pin before Harbinger's damage-step dig,
+// so it takes the earlier ordinal when both trigger in a combat.
 constexpr int kCombatDigMaxOrdinals = 3;    // 12 bits: fits the int16 state pin
 constexpr int kCombatDigMaxRank     = 14;   // a field holds rank + 1 <= 15
 inline int CombatDigRankAt(int packed, int k)

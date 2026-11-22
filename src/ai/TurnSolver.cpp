@@ -15747,6 +15747,27 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
                 }
             }
         }
+        if (pump && CastHasEtbLibraryPut(*d) && a.tutor_target.str() != kTutorDeclineTarget)
+        {
+            // Bellower's put resolves after its own entry and before the next
+            // cast. A later Craterhoof counts that creature in X. The target
+            // is a sick body in this projection, so it adds no attack here.
+            std::vector<const CardDefinition*> targets;
+            EtbPutTargetDefs(state, *d, targets);
+            if (!targets.empty())
+            {
+                const CardDefinition* target = targets.front();
+                for (const CardDefinition* candidate : targets)
+                { if (candidate->card.m_name == a.tutor_target.str()) { target = candidate; break; } }
+                Permanent put;
+                put.card = target->card;
+                put.card.m_number = kWalkNumberBase + static_cast<int>(cands.size()) + j;
+                put.controller_index = active;
+                put.owner_index = active;
+                put.entered_this_turn = true;
+                t.battlefield.push_back(put);
+            }
+        }
     }
     if (life)
     {
