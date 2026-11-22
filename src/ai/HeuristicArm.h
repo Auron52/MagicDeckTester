@@ -1081,6 +1081,9 @@ enum Slot : int
     PO_DAMAGE_ORDER,          // MTG_PO_DAMAGE_ORDER  the DAMAGE-ORDER domain of the payable-order search (mana-clean gate claude-queue-20261120b, 1 Drop Burn / Midrange Burn APPLY-DROP-ORDER): a line holding a cast whose legality or cost needs same-turn damage (Needle Drop, a not-yet-live spectacle cast, Chandra's Incinerator) beside a face-burn cast is priced by the sequential walk with the damage modelled; the given order is kept when it pays, else the nearest order that pays. Default lives at the reader (TurnSolver.cpp PoDamageOrderOn)
     LAVAMANCER_TARGET_PRUNE,  // MTG_LAVAMANCER_TARGET_PRUNE  Grim Lavamancer's ping (gy-exile mode 3) targets only the OPPONENT and opponent-controlled creatures / planeswalkers in autonomous play (Midrange Burn / 1 Drop Burn GraveyardDamageTargetCandidates; USER 2026-11-21: "This indeed should be pruned. In fact everything but the opponent should be pruned."). Human play and MTG_UNPRUNE=fixedburntarget keep every target. DEFAULT ON; =0 -> every legal target
     FIREBLAST_COPY_PINS,      // MTG_FIREBLAST_COPY_PINS  two Fireblast alternative casts whose pinned Mountains overlap are one physically impossible selection (SubsetHasDuplicateSacSource kDupFireblast; the apply silently dropped the second), and under a provider's one-pair fold each further Fireblast copy is pinned to the best pair DISJOINT from the earlier copies' pins, so two Fireblasts on four Mountains stay findable. Sound (rejects only selections no order can pay). DEFAULT ON; =0 -> the pre-2026-11-21 shared pins
+    LKR_PLAYOUT_NO_TABLE,     // MTG_LKR_PLAYOUT_NO_TABLE  LOSSY CPU CUT (default OFF, docs/design/rock-in-plan-2026-11-19.md): in a horizon playout (TurnSolver::InRolloutPlayout, beyond the search window) the line-keep rung of a line with no reducer credit (the rock rung) tries only the greedy's own hold-out sets, never the oracle payment table
+    LKR_PLAYOUT_OFF,          // MTG_LKR_PLAYOUT_OFF  LOSSY CPU CUT (default OFF): in a horizon playout the line-keep rung of a line with no reducer credit (the rock rung) does not run at all (the greedy payment, as with MTG_LINE_KEEP_ROCK=0, beyond the window only)
+    LKR_PRICE,                // MTG_LKR_PRICE  BUDGET PRICE (default OFF): the line-keep rung's work on a line with no reducer credit is charged to the decision's budget (MTG_LKR_PRICE_MILLI milli-units per payment trial / backtracker judge / table option, x MTG_LKR_PRICE_TABLE per table ask); inert at an unlimited budget (TurnSolver::DecisionBudget() is nullptr there)
     COUNT
 };
 
@@ -2106,6 +2109,9 @@ inline const char* Name(int slot)
         "MTG_PO_DAMAGE_ORDER",
         "MTG_LAVAMANCER_TARGET_PRUNE",
         "MTG_FIREBLAST_COPY_PINS",
+        "MTG_LKR_PLAYOUT_NO_TABLE",
+        "MTG_LKR_PLAYOUT_OFF",
+        "MTG_LKR_PRICE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

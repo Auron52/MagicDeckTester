@@ -237,3 +237,56 @@ longer a guard (nothing the rung pays with can crack it), so the Generator Serva
 Niv's no-fire strands (the stats sample) had only that guard. Pay-sac (Treasure) and on-demand (Lotus Bloom, Lake of
 the Dead) sources are cracked by the payer itself and stay guards. Only Niv-Mizzet Combo holds a direct-action
 sacrifice source among the suite's rock decks.
+
+## Current per-deck CPU of the rung, 2026-11-22 (agent rock-cpu, step 1 of the USER-approved "Rock Niv" plan)
+
+USER ruling (verbatim, relayed): "Sure, we can do your recommendation on Rock Niv." -- a fresh per-deck CPU measurement
+first, then a search for a cut that gives up some quality. And: "I'm mostly concerned with searched."
+
+Binary: origin/phase-1-2-deck-analyzer 4a7f65983 (HEAD:src 104f1245), Release, `MTG_PGO=0`. One pooled batch on the box
+lock, both arms interleaved (`MTG_LINE_KEEP_ROCK=1` vs `=0`), 32 threads, 32/32 busy. Seeds: searched base 700000 (play
+settings), d0 base 710000. Scratch: `build/scratch/claude_rock_cpu/` (`m1.json`, `m1.out`, `logs_m1/`, `m1.cmp.txt`).
+Units are budget units (d0 charges none). CPU = per-job thread CPU on a shared box (load ~30), so ratios under ~1% are
+noise, and the d0 CPU column is mostly noise (d0 games cost ~10 M instructions each). Instruction counts (perf stat,
+user space, 1 thread, 12 searched / 50 d0 games per deck, seeds 740000 / 750000, process start-up included, so cheap
+decks' ratios are diluted) are the deterministic check.
+
+| deck | searched pairs | faster | slower | net turns | units on/off | CPU on/off | instr on/off (12 g) | d0 pairs | d0 faster / slower | d0 net | d0 CPU on/off | d0 instr on/off (50 g) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| angels | 1000 | 0 | 0 | 0 | 1.0000 | 1.0025 | 1.0082 | 1000 | 0/0 | 0 | 1.0537 | 1.0002 |
+| bruna | 1000 | 1 | 0 | -1 | 0.9981 | 1.0034 | 1.0065 | 1000 | 1/1 | +1 | 1.0878 | 1.0002 |
+| dragons | 1000 | 0 | 0 | 0 | 0.9996 | 1.0089 | 1.0185 | 1000 | 3/0 | -3 | 1.0641 | 0.9995 |
+| extraturns | 1000 | 0 | 0 | 0 | 1.0000 | **1.0329** | **1.0667** | 1000 | 0/0 | 0 | 1.0130 | 1.0081 |
+| fivecolour | 1000 | 0 | 0 | 0 | 1.0001 | 1.0073 | 1.0149 | 1000 | 2/1 | -1 | 1.3764 | 1.0006 |
+| fungusv3 | 1000 | 0 | 0 | 0 | 1.0000 | 1.0015 | 1.0117 | 1000 | 0/0 | 0 | 1.0155 | 1.0003 |
+| galadriel | 1000 | 1 | 0 | -1 | 0.9998 | 0.9991 | 1.0237 | 1000 | 3/0 | -4 | 1.0244 | 1.0031 |
+| giants | 1000 | 0 | 0 | 0 | 1.0000 | 1.0053 | 1.0057 | 1000 | 0/0 | 0 | 1.0281 | 1.0001 |
+| hinata | 1000 | 1 | 0 | -1 | 1.0002 | **1.0285** | **1.0287** | 1000 | 1/0 | -1 | 1.0348 | 1.0012 |
+| kittyv3 | 1000 | 0 | 0 | 0 | 1.0000 | 1.0008 | 1.0016 | 1000 | 0/0 | 0 | 1.0053 | 1.0000 |
+| merfolkturns | 1000 | 0 | 0 | 0 | 1.0000 | 1.0105 | 1.0015 | 1000 | 0/0 | 0 | 1.0959 | 1.0001 |
+| niv | 2000 | 10 | 4 | -6 | 0.9998 | **1.0641** | **1.0652** | 1000 | 10/3 | -12 | 1.0267 | 1.0013 |
+| sea | 1000 | 1 | 0 | -1 | 0.9992 | 1.0004 | 1.0025 | 1000 | 0/0 | 0 | 1.0240 | 1.0004 |
+| stompy | 1000 | 0 | 0 | 0 | 1.0000 | 1.0182 | 1.0074 | 1000 | 0/0 | 0 | 1.0722 | 1.0005 |
+| stuffy | 1000 | 0 | 0 | 0 | 1.0001 | 1.0129 | 1.0226 | 1000 | 0/0 | 0 | 0.9695 | 1.0009 |
+| whiteknights | 1000 | 0 | 0 | 0 | 1.0000 | 1.0062 | 1.0086 | 1000 | 0/0 | 0 | 1.0114 | 1.0002 |
+| ALL | 17000 | 14 | 4 | **-10** | 0.9999 | 1.0256 | 1.0372 | 16000 | 20/5 | **-20** | (noise) | 1.0015 |
+
+Reading: the rung costs real CPU only in searched play, and there in three decks: Niv-Mizzet Combo (+6.4% CPU / +6.5%
+instructions), Extra Turns (+3.3% / +6.7%) and Hinata (+2.9% / +2.9%); Dragons, Galadriel, Stuffy, Stompy, Five Colour
+are +1-2%, the rest under 1%. Units are unchanged everywhere (the rung is not charged to the budget), so the whole cost
+is per-unit. At d0 it is ~0.1% of instructions on every deck. Quality on these fresh seeds: searched net -10 (14 faster,
+4 slower, all slower games Niv: gi 79, 1250, 1494, 1527), d0 net -20 (slower: bruna 772, fivecolour 686, niv 74 / 201 /
+401). Those 9 slower games are queued for `--depth 8 --budget-ms 0` replay (`d8_m1.json`, both arms).
+
+### Lossy / priced cuts built (wip/rock-cpu, all DEFAULT OFF, not yet measured)
+
+In `LineReducerKeepHold` (ManaPayment.cpp), applying only to a line with no reducer credit (the rock rung):
+* `MTG_LKR_PLAYOUT_OFF` -- no rung in a horizon playout (`TurnSolver::InRolloutPlayout`, beyond the search window, where
+  the doctrine permits a greedy policy). Window, executor and d0 keep the full rung.
+* `MTG_LKR_PLAYOUT_NO_TABLE` -- in a horizon playout, hold-out sets only, no oracle table.
+* `MTG_LKR_PRICE` (+ `MTG_LKR_PRICE_MILLI`, default 1000 milli-units per work event; `MTG_LKR_PRICE_TABLE`, default 4
+  events per table ask) -- the rung's work is charged to `TurnSolver::DecisionBudget()` (new unit site `lkr_rung`,
+  `TurnSolver::ChargeLineKeepUnits`). nullptr at an unlimited root and with no decision frame, so it is inert at
+  `--budget-ms 0`, in the executor and at d0: the preferred budget-priced shape.
+* `MTG_LINE_REDUCER_KEEP_STATS=1` now also prints `[line-keep-ctx]` (trials / ms / work / tables / fired split by
+  executor / window / playout / d0) and `[line-keep-cut]` (units charged, cuts taken) -- needed to calibrate the price.

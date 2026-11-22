@@ -10818,6 +10818,11 @@ std::atomic<unsigned long long> g_lk_ph_n[12]{}, g_lk_ph_ns[12]{};
 std::atomic<unsigned long long> g_lk_held_try{0}, g_lk_held_paid{0}, g_lk_opt_try{0}, g_lk_opt_n{0}, g_lk_tables{0};
 // ...the time in MinimalPayments, and the table index of the option that fired (0, 1, 2, 3+).
 std::atomic<unsigned long long> g_lk_mp_ns{0}, g_lk_fire_idx[4]{};
+// ...by CONTEXT (no-credit calls only, i.e. the rock rung with MTG_LINE_KEEP_ALL off): 0 no decision frame (the executor's
+// committed apply), 1 the search window of a decision, 2 a horizon playout (TurnSolver::InRolloutPlayout), 3 the d0
+// runner. Calls that got past the pre-tests (trials), their ns, work events (MTG_LKR_PRICE's count), tables, fired.
+std::atomic<unsigned long long> g_lkc_trial[4]{}, g_lkc_ns[4]{}, g_lkc_work[4]{}, g_lkc_tables[4]{}, g_lkc_fired[4]{};
+std::atomic<unsigned long long> g_lkc_charged{0}, g_lkc_cut_off{0}, g_lkc_cut_table{0};
 struct LineReducerKeepStats
 {
     ~LineReducerKeepStats()
@@ -10846,6 +10851,15 @@ struct LineReducerKeepStats
                      g_lk_held_try.load(), g_lk_held_paid.load(), g_lk_tables.load(), g_lk_opt_n.load(),
                      g_lk_opt_try.load(), static_cast<double>(g_lk_mp_ns.load()) / 1e6, g_lk_fire_idx[0].load(),
                      g_lk_fire_idx[1].load(), g_lk_fire_idx[2].load(), g_lk_fire_idx[3].load());
+        static const char* const cx[4] = {"executor", "window", "playout", "d0"};
+        for (int k = 0; k < 4; ++k)
+        {
+            std::fprintf(stderr, "[line-keep-ctx] %-8s trials=%llu ms=%.1f work=%llu tables=%llu fired=%llu\n", cx[k],
+                         g_lkc_trial[k].load(), static_cast<double>(g_lkc_ns[k].load()) / 1e6, g_lkc_work[k].load(),
+                         g_lkc_tables[k].load(), g_lkc_fired[k].load());
+        }
+        std::fprintf(stderr, "[line-keep-cut] charged_units=%llu playout_off=%llu playout_no_table=%llu\n",
+                     g_lkc_charged.load(), g_lkc_cut_off.load(), g_lkc_cut_table.load());
     }
 };
 LineReducerKeepStats g_lrk_stats;
@@ -10991,6 +11005,60 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
                 std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
         }
     } _ph{s_stats, 0, false, s_stats ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{}};
+    // ---- LOSSY / PRICED CPU CUTS of the rock rung (all DEFAULT OFF; docs/design/rock-in-plan-2026-11-19.md, "CPU cuts").
+    // They touch only a line with no reducer credit (keep_all: with MTG_LINE_KEEP_ALL off, the lines MTG_LINE_KEEP_ROCK
+    // binds); MTG_LINE_REDUCER_KEEP's own reducer lines are untouched.
+    //  * MTG_LKR_PLAYOUT_OFF: no rung in a horizon playout (beyond the search window: the doctrine's permitted greedy
+    //    policy). The window, the executor and the d0 runner keep the full rung.
+    //  * MTG_LKR_PLAYOUT_NO_TABLE: in a horizon playout the rung tries the greedy's hold-out sets only, never the oracle
+    //    payment table (41-55% of the rung's time on Niv-Mizzet Combo).
+    //  * MTG_LKR_PRICE: the rung's work is CHARGED to the decision's budget (TurnSolver::DecisionBudget), at
+    //    MTG_LKR_PRICE_MILLI milli-units per work event (a payment trial, a backtracker judge, a table option made) and
+    //    MTG_LKR_PRICE_TABLE events per table ask, rounded up per call. A price, not a gate: DecisionBudget() is nullptr
+    //    at an unlimited root and with no decision frame, so unbudgeted play, the executor and the d0 runner are
+    //    untouched by construction, and a finite budget only spends itself sooner -- nothing becomes unfindable.
+    //    Per call, never carried between calls (a residual carried on the thread would make play depend on which
+    //    games the batch worker ran before).
+    const bool in_playout = keep_all && TurnSolver::InRolloutPlayout();
+    {
+        static const bool s_off_env = EnvOn("MTG_LKR_PLAYOUT_OFF", false);
+        if (in_playout && heurarm::Flag(heurarm::LKR_PLAYOUT_OFF, s_off_env))
+        {
+            if (s_stats) { g_lkc_cut_off.fetch_add(1, std::memory_order_relaxed); }
+            return none;
+        }
+    }
+    static const bool s_price_env = EnvOn("MTG_LKR_PRICE", false);
+    static const long long s_price_milli = std::max(0, EnvInt("MTG_LKR_PRICE_MILLI", 1000));
+    static const long long s_price_table = std::max(0, EnvInt("MTG_LKR_PRICE_TABLE", 4));
+    struct WorkMeter
+    {
+        bool stats; bool price; int ctx; bool counted = false; bool fired = false; long long work = 0;
+        std::chrono::steady_clock::time_point t0{};
+        ~WorkMeter()
+        {
+            if (price && work > 0)
+            {
+                const long long u = (work * s_price_milli + 999) / 1000;
+                if (u > 0)
+                {
+                    SearchBudget* const b = TurnSolver::DecisionBudget();
+                    if (b != nullptr)
+                    {
+                        TurnSolver::ChargeLineKeepUnits(b, static_cast<int>(std::min<long long>(u, 1 << 30)));
+                        if (stats) { g_lkc_charged.fetch_add(static_cast<unsigned long long>(u), std::memory_order_relaxed); }
+                    }
+                }
+            }
+            if (!stats || !counted) { return; }
+            g_lkc_trial[ctx].fetch_add(1, std::memory_order_relaxed);
+            g_lkc_work[ctx].fetch_add(static_cast<unsigned long long>(work), std::memory_order_relaxed);
+            if (fired) { g_lkc_fired[ctx].fetch_add(1, std::memory_order_relaxed); }
+            g_lkc_ns[ctx].fetch_add(static_cast<unsigned long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+        }
+    } _wm{s_stats && keep_all, keep_all && heurarm::Flag(heurarm::LKR_PRICE, s_price_env),
+          in_playout ? 2 : TurnSolver::InD0Runner() ? 3 : TurnSolver::DecisionRootOpen() ? 1 : 0};
     // The hold must evidently carry this payment (LineRestAfter's test): an activation's payment is not in it.
     const ManaCost& lu = g_line_unpaid_cost;
     if (lu.ManaValue() < cost_in.ManaValue() || lu.white < cost_in.white || lu.blue < cost_in.blue
@@ -11191,6 +11259,9 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     };
     (keep_all ? g_lka_trial : g_lrk_trial).fetch_add(1, std::memory_order_relaxed);
     if (rock.def != nullptr) { g_lkr_trial.fetch_add(1, std::memory_order_relaxed); }
+    _wm.counted = true;
+    if (_wm.stats) { _wm.t0 = std::chrono::steady_clock::now(); }
+    ++_wm.work;   // the trial payment
     TapPrefChooser* const tap_pref = g_play_tap_pref_chooser;
     RevealLogPause _quiet;
     g_play_tap_pref_chooser = tap_pref;
@@ -11211,6 +11282,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         PaymentTapped(state, a.Board(), tapped, nullptr);
         PutLineKeepRock(a.Board(), rock);   // after the taps are read: the rock is not one of this payment's sources
         static const bool s_check = EnvOn("MTG_LINE_KEEP_ALL_CHECK");
+        ++_wm.work;   // the witness
         if (TapForCostSharedDiag(a.Board(), rest, rest_creature, nullptr, honor_legacy_cco))
         {
             g_lka_filtered.fetch_add(1, std::memory_order_relaxed);
@@ -11225,6 +11297,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             return none;
         }
         _ph.phase = 1;
+        _wm.work += 2;   // the re-made trial and the complete judge
         RampScratch a2(state);
         ManaPool av_a2 = available ? *available : ManaPool{};
         if (!TapForCostSharedDiag(a2.Board(), cost_in, for_creature, available ? &av_a2 : nullptr, honor_legacy_cco))
@@ -11237,6 +11310,7 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
         if (LineBillPayable(a.Board(), rest, rest_creature, rock)) { return none; }
     }
     _ph.phase = 2;
+    ++_wm.work;   // the joint judge
     bool joint_ok = tight ? LineBillPayable(state, joint_t, joint_creature) : LineBillPayable(state, joint, joint_creature, rock);
     if (!joint_ok && tight && s_tcheck)
     {
@@ -11287,10 +11361,13 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             RampScratch b(state);
             ManaPool av_b = available ? *available : ManaPool{};
             if (s_stats) { g_lk_held_try.fetch_add(1, std::memory_order_relaxed); }
+            ++_wm.work;
             if (!PayHoldingSet(b.Board(), held, cost_in, for_creature, available ? &av_b : nullptr, honor_legacy_cco))
             { continue; }
             if (s_stats) { g_lk_held_paid.fetch_add(1, std::memory_order_relaxed); }
+            ++_wm.work;
             if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
+            _wm.fired = true;
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             _ph.phase = 4;
@@ -11316,7 +11393,10 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
     static const std::size_t s_prefix = static_cast<std::size_t>(
         std::clamp(EnvInt("MTG_LKR_TABLE_PREFIX", 2), 0, static_cast<int>(kLineKeepTableOpts)));
     std::size_t made = 0;   // options of the table already made (they failed)
-    for (int ask = 0; ask < 2; ++ask)
+    static const bool s_no_table_env = EnvOn("MTG_LKR_PLAYOUT_NO_TABLE", false);
+    const bool no_table = in_playout && heurarm::Flag(heurarm::LKR_PLAYOUT_NO_TABLE, s_no_table_env);   // see above
+    if (no_table && s_stats) { g_lkc_cut_table.fetch_add(1, std::memory_order_relaxed); }
+    for (int ask = 0; ask < (no_table ? 0 : 2); ++ask)
     {
         const std::size_t want = ask == 0 && s_prefix > 0 ? s_prefix : kLineKeepTableOpts;
         std::chrono::steady_clock::time_point t_mp{};
@@ -11328,6 +11408,8 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             return manaoracle::MinimalPayments(state, cost_in, for_creature, nullptr, PayingCreatureAbility(),
                                                /*whole_float=*/false, nullptr, nullptr, 0, want, 0);
         }();
+        _wm.work += s_price_table;
+        if (_wm.stats) { g_lkc_tables[_wm.ctx].fetch_add(1, std::memory_order_relaxed); }
         if (s_stats)
         {
             g_lk_tables.fetch_add(1, std::memory_order_relaxed);
@@ -11340,12 +11422,14 @@ static LineKeepPlan LineReducerKeepHold(const GameState& state, const ManaCost& 
             const manaoracle::PayOption& opt = opts[i];
             if (opt.fail) { continue; }
             if (s_stats) { g_lk_opt_try.fetch_add(1, std::memory_order_relaxed); }
+            ++_wm.work;
             RampScratch b(state);
             ManaPool av_b = available ? *available : ManaPool{};
             if (!MakeLineKeepOption(b.Board(), opt, cost_in, for_creature, available ? &av_b : nullptr,
                                     honor_legacy_cco))
             { continue; }
             if (!LineBillPayableOn(b.Board(), rest, rest_creature, rock)) { continue; }
+            _wm.fired = true;
             (keep_all ? g_lka_fired : g_lrk_fired).fetch_add(1, std::memory_order_relaxed);
             if (rock.def != nullptr) { g_lkr_fired.fetch_add(1, std::memory_order_relaxed); }
             if (s_stats) { g_lk_fire_idx[std::min<std::size_t>(i, 3)].fetch_add(1, std::memory_order_relaxed); }

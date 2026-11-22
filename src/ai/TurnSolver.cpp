@@ -1553,6 +1553,7 @@ enum Site
     kMeterGreedyWalk,      // EnumeratePlans' subset walk with no budget, billed to the meter
     kCacheHit,             // a plan-cache HIT replaying the units its computation charged (MTG_CACHE_HIT_CHARGE)
     kRfxFan,               // the damage-reflection fans (AppendSubdecisionAxes): one unit per probe (MTG_RFX_FAN_CHARGE)
+    kLkrRung,              // the line-keep rung's work on a no-credit line (MTG_LKR_PRICE, default OFF; ChargeLineKeepUnits)
     kSiteCount
 };
 static constexpr int kFirstMeterOnly = kMeterRolloutStep;
@@ -1560,7 +1561,7 @@ static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
     "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
     "fs_m2_wave", "greedy_walk", "equip_route", "putback_price", "enum_charge", "aa_route",
-    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan"
+    "meter_rollout_step", "meter_greedy_walk", "cache_hit", "rfx_fan", "lkr_rung"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -4603,6 +4604,15 @@ void TurnSolver::ChargeDecisionUnits(SearchBudget* budget, int n)
 {
     if (budget == nullptr) { if (n > 0 && cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }
     for (int i = 0; i < n; ++i) { ConsumeAt(budget, unitsite::kEquipRoute); }
+}
+// MTG_LKR_PRICE (ManaPayment.cpp, LineReducerKeepHold): the line-keep rung's work charged to the decision budget. A
+// no-op on nullptr (an unlimited root, or no decision frame: the executor, the d0 runner), so unbudgeted play is
+// untouched by construction; at a finite budget it only re-prices work, it refuses nothing.
+void TurnSolver::ChargeLineKeepUnits(SearchBudget* budget, int n)
+{
+    if (budget == nullptr || n <= 0)
+    { if (budget == nullptr && n > 0 && cachecharge::t_rec != nullptr) { CacheChargeNoteNull(); } return; }
+    ConsumeAtN(budget, unitsite::kLkrRung, n);
 }
 void TurnSolver::ChargeAaRouteUnits(SearchBudget* budget, int n)
 {
@@ -140976,6 +140986,7 @@ static long long MtgTurnCensusShapeSum(std::atomic<std::uint64_t> shapestats::Sl
     X(u_meter_greedy_walk,  MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kMeterGreedyWalk]))    \
     X(u_cache_hit,        MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kCacheHit]))             \
     X(u_rfx_fan,          MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kRfxFan]))               \
+    X(u_lkr_rung,         MTG_TURN_CENSUS_CV(unitsite::g_units[unitsite::kLkrRung]))              \
     /* ---- BRANCHING: how many lines were built, scored and paid for. ---- */                    \
     X(cand_scored,        MTG_TURN_CENSUS_CV(g_cand_scored))                                      \
     /* ---- THE ENUMERATION WALK: the space, and the FUNNEL that trims it. ----                   \
