@@ -54,7 +54,7 @@ Slower games: searched niv gi 79, 1250, 1494, 1527 (seed = 700000 + gi); d0 brun
 ## Running jobs at handoff (do NOT kill; markers in build/scratch/claude_rock_cpu/)
 | job | PID (lane wrapper) | output | DONE marker |
 |---|---|---|---|
-| dev (cuts) build, worktree rock-cpu-dev, lane 2 slots | 732572 | `build_dev.log` | `build_dev.done` (holds rc) |
+| dev (cuts) build | DONE 10:25 UTC, rc 0; binary staged as `build/scratch/claude_rock_cpu/mtg.dev` | `build_dev.log` | `build_dev.done` |
 | perf slice base100: base binary, on/off, 100 searched + 300 d0 games/deck, seeds 760000/770000, 1 thread x2 | 816001 (queued) | `perf_base100/*.perf, *.out` | `perf_base100/DONE` |
 | startup instruction baseline (1 d0 game) | 816004 (queued) | `perf_startup/st.perf` | the file itself |
 | d8 b0 replays of the 9 step-1 slower games, both arms (`d8_m1.json`) | 850695 (queued) | `d8_m1.out`, `logs_d8_m1/` | `d8_m1.done` |
@@ -62,7 +62,7 @@ Read perf: `python3 perfsum.py perf_base100 off on` (subtract `perf_startup/st.p
 Compare d8: `python3 -c` over `logs_d8_m1/*.wins` (on vs off per game: equal turn = recovered).
 
 ## Remaining, in order
-1. When `build_dev.done` = 0: copy `rock-cpu-dev/build/Release/mtg` to `build/scratch/claude_rock_cpu/mtg.dev`. Check that
+1. (`mtg.dev` is staged.) Check that
    with every new flag off it is byte-identical to `mtg.base` (e.g. `perf_lane.sh` with the dev binary, arm `{"on":{}}`, same
    seeds as perf_base100, compare `.wins`; perfsum's "same games" column does it).
 2. Calibrate the price: run the on arm with `MTG_LINE_REDUCER_KEEP_STATS=1` on Niv / Extra Turns / Hinata (lane, 1 thread),
