@@ -169,8 +169,7 @@ bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 // untapped scaled land (Three Tree City naming its type), put the creature casts cheapest-first among CastOrderLess
 // TIES, every other position kept.
 // The enumeration's rescue (SubsetPayableWithFilters) already walks growers this way. Returns true when `order` moved.
-// Read by option (a), the apply decider's fallback (MTG_SCALED_GROWER_DECIDER), and option (b), the Merfolk Turns
-// cast-order rule (MTG_MERFOLK_GROWER_ORDER).
+// Read by the apply decider's fallback (MTG_SCALED_GROWER_DECIDER).
 bool ScaledLandGrowerOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
 // The per-action key CastOrderLess ranks by: CastOrderLess(s, a, b) ==
 // CastOrderLessRanked(s, a, CastOrderKeyOf(s, a), b, CastOrderKeyOf(s, b)), so a caller sorting many
