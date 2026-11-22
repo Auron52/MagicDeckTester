@@ -419,8 +419,10 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   Dimir Machinations; (K3) extra-land-drop cards (the USER's "extra turn playing" = extra LAND plays), priority
   Fastbond > Exploration > Burgeoning, up to 2 counting those on the battlefield, and none beyond a Fastbond; (K4)
   lands: first the ones supplying the colours Blood Sun ({R}) and / or Grim Tutor ({B}{B}) still need given the
-  battlefield and hand, then the 3-4 mana lands (Lotus Vale / Lotus Field / Scorched Ruins). Parent's readings
-  (surfaced, take as default): cards in no bucket (Time Warp, Emrakul, Ulamog, a second Blood Sun / Revelation, drop
+  battlefield and hand, then the 3-4 mana lands (Lotus Vale / Lotus Field / Scorched Ruins); (K5) USER (verbatim):
+  *"Actually Time Warp should be kept as well if possible."* / *"1 of them."* -> one Time Warp, the lowest keep
+  bucket ("if possible": kept when a slot is left after K1-K4; parent's reading). Parent's readings
+  (surfaced, take as default): cards in no bucket (a second Time Warp, Emrakul, Ulamog, a second Blood Sun / Revelation, drop
   cards past the cap, lands past the colour need and the big lands) go first, then the lowest-priority bucket's
   surplus; within a bucket the USER's stated priority, ties by the engine's existing ranking. Stage 4's derived order
   (City of Brass, Blooming Marsh, Burgeoning, Scorched Ruins, Revelation, Lotus Field, Ulamog, Lotus Vale) is
