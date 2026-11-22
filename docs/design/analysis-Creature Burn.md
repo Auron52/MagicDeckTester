@@ -187,8 +187,13 @@ ROUND 3 DONE 00:54 UTC 2026-11-22 (HEAD 532aab341): build/unit/scen PASS; smoke 
 creatureburn2hg d5, midrangeburn d3/d5 (22 faster / 0 slower / 20 same-turn) -> ACCEPTED f95d5e065; gt_logs consistent;
 ref_bench 0/20 short (creature_burn human 4.600 / search 4.500; midrange_burn 4.700 / 4.500). s9 under origin's Karoo
 fix: opp T1 Haven, T2 Gruul Turf bouncing Haven, PoP hits 2 -- search STILL wins T4 (Bolt, PoP, Ball Lightning, then
-Ball Lightning + Fireblast), = the reference's T4. RUNNING: scoped regression creatureburn,creatureburn2hg,midrangeburn,
-midrangeburn2hg (landing3/reg.log, marker landing3/reg.done) -> accept, check_gt_logs, commit; then join + land.
+Ball Lightning + Fireblast), = the reference's T4. Scoped regression ACCEPTED (33 faster; midrangeburn d5 s2002 gi65 4->5 = churn, recovers 4 at 4x/16x).
+s9 reference PLAY-DRIFT under origin's Karoo fix (recorded T2: opp Gruul Turf + Haven unbounced, PoP 4) -- FIXED by
+origin d0d5f8463 (opponent_land_entry stamp + --legacy-opponent-land-entry), another session. Rebased onto it
+(2026-11-22 ~01:45 UTC). RUNNING: validation round 4 build/scratch/cb-orch/landing4/chain.sh (PID 268953; build, unit,
+scenarios, smoke, check_gt_logs, viewer_protocol_check --strict on Creature_Burn+Midrange_Burn; status landing4/status,
+marker landing4/DONE), BEFORE joining (build+smoke > the 2 h lease). Expect smoke byte-identical to the accepted GT.
+Then join; if origin has not moved, land at once.
 USER QUESTIONS (surface): MTG_SCRY_WIDTH=2 (engine-wide, pre-existing) leaves 3 of 5 two-card-scry dispositions
 unfindable at any budget -- width 5 + a Burn ScryVerdict prune would satisfy completeness; Burn scry heuristic ignores
 lands in hand (provider change, USER's call); Midrange Burn keep table regen after the play change (USER's call).
