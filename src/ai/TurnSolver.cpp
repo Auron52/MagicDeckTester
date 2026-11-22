@@ -70879,9 +70879,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // {C}{C} as wild2, and the continuation's Reality Spasm paid {U}{U} with it -> a verified T5 kill the executor
     // (whose prepay tapped Sol Ring fresh and kept {C}{C}) could not cast: committed T5, realised T6.
     static const bool s_float_c_phys = EnvOn("MTG_PREPAY_FLOAT_C_PHYS", true);   // DEFAULT ON; =0 disables
-    auto pure_c_tapped = [&state, &bf_snap, &fm_snap]() -> int
+    const bool float_c_phys = heurarm::Flag(heurarm::PREPAY_FLOAT_C_PHYS, s_float_c_phys);   // per-job A/B override
+    auto pure_c_tapped = [&state, &bf_snap, &fm_snap, float_c_phys]() -> int
     {
-        int pure = s_float_c_phys ? fm_snap.colorless : 0;
+        int pure = float_c_phys ? fm_snap.colorless : 0;
         const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
         for (int bi = 0; bi < nb; ++bi)
         {
