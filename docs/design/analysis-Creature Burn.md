@@ -186,6 +186,15 @@ that it must always be able to do nothing to end the phase." -> CLAUDE.md hard r
 unconditional at every root (cb-bbgap) (d) "staged cards should be counted because the idea is the opponent thinks you
 may have burn in hand to finish them off. (it being staged instead does not change this reasoning)" -> both policies
 count staged cards (cb-bbgap).
+**RESUME HERE (08:25 UTC 2026-11-22):** rebuild PASSED (landing5 BUILD2/UNIT2 3895/SCEN2 608, binary build/Release =
+src of eb56e245e). Rebased onto origin 4a7f65983 (box_lane.sh + CLAUDE.md only; src tree hash UNCHANGED, so the binary
+stands). NEXT: `push_queue.py join` -> wait -> at my turn, under `push_queue.py hold --` and `flock build/.heavy.lock`,
+MTG_PGO=0: fetch (if origin moved with src: rebase + MTG_BUILD_JOBS=4 rebuild), back up GT, `regression.sh --smoke` ->
+expect ONLY creatureburn d3/d5 + creatureburn2hg (Magma Jet + Fireblast pair fold) and midrangeburn d3/d5(+2hg) (Magma
+Jet) to move -> attribute, accept; scoped regression creatureburn,creatureburn2hg,midrangeburn,midrangeburn2hg -> classify
+slower (classify_turn_later.sh) -> accept; check_gt_logs; viewer_protocol_check --strict --only Creature_Burn,Midrange_Burn
+--threads 4; commit GT; `land`; CI watch (--interval 60, background); then `touch build/scratch/cb-orch/LANDED`
+(the three agents wait on it before building). Viewer NOT running (USER: not needed).
 DONE: Stages 1-5 + verify_deck GATE PASS; Browbeat fold DEFAULT OFF (measured); USER's 10 references committed;
 LANDED 5a07c3df3 16:01 UTC (CI green). Since then, local (rebased onto origin 42d819bc0, unpushed):
 * 2352c2241 manual tap-ping in human play (USER: "It seems like Cinder Pyromancer auto-taps in the viewer, but cannot
