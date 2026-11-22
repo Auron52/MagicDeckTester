@@ -213,7 +213,11 @@ TEST_CASE("CG discard C5: lone Reflecting Pool, Birds already in play, Crop Rota
 // War-Riders 5, tail 2 4 3 1.
 TEST_CASE("CG discard C6: a land covering a missing colour beats a better-tier land")
 {
-    const GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
+    GameState s = MakeCg({ kHeath, kBP, kHP, kSP, kDotH, kWR, kEW, kCrop }, { kFor, kTG, kSG, kOT });
+    // The Heath's hand hint is its deck-derived reach (HandFixingProduces, USER 2026-11-22): a library holding only a
+    // Forest and a Plains gives it W/G and no U, which is this case's premise.
+    { Card f = CardDatabase::Instance().Lookup("Forest")->card; f.m_number = 950; s.players[0].library.push_back(f); }
+    { Card w = CardDatabase::Instance().Lookup("Plains")->card; w.m_number = 951; s.players[0].library.push_back(w); }
     CHECK(Cg(s) == std::vector<int>{ 6, 0, 7, 5, 2, 4, 3, 1 });
     CHECK(Gen(s).front() == 4);       // generic sheds Defense of the Heart (MV 4)
     CHECK(DothLast(s).front() == 2);  // the patch moves it back and sheds Phantasm
