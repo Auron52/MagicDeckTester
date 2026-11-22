@@ -188,7 +188,6 @@ enum Slot : int
     EDF_DEPLOY_NO_COUNTER,    // MTG_COMBO_OFF_DEPLOY_NO_COUNTER a mid-loop deploy never pays Emiel's {G/W} counter trigger (default ON since 2026-09-16)
     EDF_DIG_BANK_FIRST,       // MTG_COMBO_OFF_DIG_BANK_FIRST   ONE cheapest draw land is promoted, and only once the float already pays it (default ON since 2026-09-16)
     EDF_CYCLE_SET,            // MTG_TAPAHEAD_CYCLE_SET         the autonomous loop's tap-ahead budget is over the top-`untaps` yield lands, not every tapped land (built 2026-09-16, default OFF: deck average +0.03 / 0 better 3 worse)
-    FS_IDLE_NODE,             // MTG_FS_IDLE_NODE               a full-search node with NOTHING to do searches the idle continuation instead of answering "no win" (default ON since 2026-09-16)
     EDF_COMBO_ROUTE,          // MTG_EDF_COMBO_ROUTE            the mechanical COMBO OFF route as one searched plan action (built 2026-09-16)
     BP_CANDS_ORDER,           // MTG_BP_CANDS_ORDER        value-order the breakpoint continuation list (MoveOrderPlans)
     BP_W4,                    // MTG_BP_W4                 wave-0 width 4 (per-job twin of MTG_BP_SEARCH=4)
@@ -1120,7 +1119,6 @@ enum Slot : int
     BLOODSUN_GRIM_V2_ONLY_MISSING,// MTG_BLOODSUN_GRIM_V2_ONLY_MISSING  Sun/Revelation targets first. Default OFF
     BLOODSUN_BUCKET_DISCARD,    // MTG_BLOODSUN_BUCKET_DISCARD  B14 USER cleanup buckets. Default OFF pending A/B
     OPP_ANTICIPATE,           // MTG_OPP_ANTICIPATE  TEMPORARY MEASUREMENT ARM (cb-bbgap, never lands): =0 restores the pre-2026-11-22 punisher policies (bare life, the old pre-ping flip half and its emission gate)
-    FS_ROOT_IDLE_PASS,        // MTG_FS_ROOT_IDLE_PASS  TEMPORARY MEASUREMENT ARM (cb-bbgap, never lands): FSLineWin offers the idle pass at a node whose enumeration has no empty plan (a mid-turn root with the drop spent)
     COUNT
 };
 
@@ -1279,7 +1277,6 @@ inline const char* Name(int slot)
         "MTG_COMBO_OFF_DEPLOY_NO_COUNTER",
         "MTG_COMBO_OFF_DIG_BANK_FIRST",
         "MTG_TAPAHEAD_CYCLE_SET",
-        "MTG_FS_IDLE_NODE",
         "MTG_EDF_COMBO_ROUTE",
         "MTG_BP_CANDS_ORDER",
         "MTG_BP_W4",
@@ -2185,7 +2182,6 @@ inline const char* Name(int slot)
         "MTG_BLOODSUN_GRIM_V2_ONLY_MISSING",
         "MTG_BLOODSUN_BUCKET_DISCARD",
         "MTG_OPP_ANTICIPATE",
-        "MTG_FS_ROOT_IDLE_PASS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

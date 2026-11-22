@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "THE PASS AT A MID-TURN ROOT (CLAUDE.md hard rule, USER 2026-11-22: \"it must always be able to do nothing to end the phase\").",
+    "MAIN-1 frame of turn 5, the land drop already used: opponent at 4, a settled Keldon Marauders (3/3, can attack), three untapped Mountains, hand Browbeat + a Mountain we cannot play (so we HOLD a card), a TWO-card library.",
+    "The only main-1 cast is Browbeat, and the opponent DECLINES it (4 - 3 visible = 1 <= 8): we draw three from a two-card library and LOSE (CR 104.3c). Passing attacks the opponent to 1 and wins next turn.",
+    "Before 2026-11-22 the no-drop enumeration held no pass (non-empty subsets only) and the hosts appended one only to an EMPTY list, so the root's only line was the losing Browbeat."
+  ],
+  "deck": "decks/Creature Burn/Creature Burn.cod",
+  "profile": "decks/Creature Burn/Creature Burn.profile.json",
+  "turn": 5,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 4,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Keldon Marauders",
+      "controller": 0,
+      "sick": false,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Browbeat",
+    "Mountain"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 2,
+  "depth": 2,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "expect_win_turn": 6
+}

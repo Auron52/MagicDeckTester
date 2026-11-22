@@ -434,18 +434,55 @@ TEST_CASE("Browbeat policy: what is visible -- sick, tapped, hasted, pumped, pre
     CHECK_FALSE(BrowbeatOpponentTakesDamage(s, 1, 5, true));
 }
 
-TEST_CASE("Browbeat policy: staged (exiled-playable) cards are not held; 2HG reads the team's life and deals x1")
+TEST_CASE("Browbeat / Vexing Devil policy: staged (exiled-playable) cards ARE held (USER 2026-11-22); 2HG reads the team's life and deals x1")
 {
+    // USER 2026-11-22: "staged cards should be counted because the idea is the opponent thinks you may have burn in
+    // hand to finish them off. (it being staged instead does not change this reasoning)". Both storages count: the
+    // rollout's flagged hand card and the executor's Player::staged_cards.
     GameState s = CbBoard(0, {});
+    CHECK(HeldCardCount(s, 0) == 0);
     Card staged = CbCard("Lightning Bolt", 5);
     staged.m_is_staged = true;
     s.players[0].hand.push_back(staged);
-    CHECK(HeldCardCount(s, 0) == 0);
-    s.players[1].life = 6;
-    CHECK(BrowbeatOpponentTakesDamage(s, 1, 5, HeldCardCount(s, 0) > 0));
+    CHECK(HeldCardCount(s, 0) == 1);
+    s.players[1].life = 6;                           // 6 <= 5 + 3: declines while a (staged) card is held
+    CHECK_FALSE(BrowbeatOpponentTakesDamage(s, 1, 5, HeldCardCount(s, 0) > 0));
+    CHECK_FALSE(VexingDevilOpponentTakesDamage(s, 0, 1, 4));   // the Devil reads the same count (6 <= 4 + 3)
+    GameState e = CbBoard(0, {});
+    e.players[1].life = 6;
+    e.players[0].staged_cards.push_back(StagedCard{});
+    CHECK(HeldCardCount(e, 0) == 1);
+    CHECK_FALSE(BrowbeatOpponentTakesDamage(e, 1, 5, HeldCardCount(e, 0) > 0));
+    CHECK_FALSE(VexingDevilOpponentTakesDamage(e, 0, 1, 4));
+    e.players[0].staged_cards.clear();
+    CHECK(BrowbeatOpponentTakesDamage(e, 1, 5, HeldCardCount(e, 0) > 0));   // 6 > 5: takes with nothing held
+    CHECK(VexingDevilOpponentTakesDamage(e, 0, 1, 4));
 
     CbHeads heads(2);
     GameState t = CbBoard(3, {"Browbeat"}, /*opp_life=*/30);
     TurnSolver::ApplyPlan(t, CbPlan({ CbCast("Browbeat") }), /*is_pre_combat=*/true);
     CHECK(t.players[1].life == 25);                 // ONE 5-damage hit to the shared team life
+}
+
+// ---- "DO NOTHING MORE" AT A MID-TURN ROOT (CLAUDE.md hard rule, USER 2026-11-22) ----------------------------------
+// "This needs to stop reappearing. I say every time that it must always be able to do nothing to end the phase."
+// A main-1 root with the drop spent enumerates only NON-EMPTY plans (EnumeratePlansWithLand's no-drop path); the
+// hosts must append the pass. Witness: the only cast is a Browbeat the opponent DECLINES (we hold a Mountain we
+// cannot play: threshold 8; anticipated life 4 - 3 visible = 1), whose three draws from a two-card library LOSE the
+// game (CR 104.3c), while passing wins next turn on Keldon Champion's two attacks (4 -> 1 -> dead).
+TEST_CASE("mid-turn root: the search can always do nothing (the pass beats the only, losing, cast)")
+{
+    GameState s = CbBoard(3, {"Browbeat", "Mountain"}, /*opp_life=*/4);
+    s.players[0].library.resize(2);
+    Permanent& champ = CbPut(s, "Keldon Champion", 90);
+    champ.echo_resolved = true;                            // a settled Champion: no echo left to pay
+    const auto plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    REQUIRE_FALSE(plans.empty());
+    CHECK(TurnSolver::HoldPassAppendedForTest(s, plans));  // the enumeration itself holds no pass...
+    for (const int depth : {1, 2, 3})
+    {
+        const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, /*is_pre_combat=*/true, depth, 8,
+                                                                     nullptr, false, false, nullptr);
+        CHECK(pick.actions.empty());                       // ...and the host appends and picks it
+    }
 }
