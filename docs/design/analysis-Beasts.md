@@ -92,7 +92,7 @@ primary checkout's untracked `decks/Beasts/`, original left in place). Nothing p
   (`OffersOilVigilanceMenace`, the oil branch of `RestrictCounterDestroyTargetsFor`); move them if wanted, and consider
   a provider prune of the pump when Migloz cannot attack and nothing reads its power (no Garruk -3 live) -- today every
   K is searched each main.
-* **Running:** none. NEXT = batch F (Nykthos).
+* **Running:** perf agent E-perf (root-cause + recover the batch E +3.9% CPU at identical units, byte-identical). NEXT after it = batch F (Nykthos).
 * **Orchestrator decisions taken (PROVISIONAL, surfaced to USER):** implement Kaheera companion
   (Tier 3) + make the coverage scan treat a met companion as a reachable sideboard; deathtouch is
   honoured in the shared Cliffs fight helper (not deferred); deck-wide searched second main;
