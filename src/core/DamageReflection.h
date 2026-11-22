@@ -263,7 +263,7 @@ inline int ApplyDamageToPlayer(GameState& s, const SourceRef& src, int player, i
 // SweepOrphanedAuras run inline (an Aura whose host died is in the graveyard before any trigger
 // resolves), FireOppCreatureDies for an opponent's creature (the legacy sweep's clause), and the life
 // SBA (dmgev::SbaCheckpoint, own_death_live decks only -- it parks our life at kLostLife).
-// Returns the number of creatures that died.
+// Returns the number of creatures that left (died, or -- unearthed -- were exiled instead, CR 702.84a).
 inline int SbaPass(GameState& s)
 {
     struct Dead { Card card; int controller; bool was_token; int minus_counters; int total_counters; int owner; };
