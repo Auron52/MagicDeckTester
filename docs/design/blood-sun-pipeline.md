@@ -2161,3 +2161,46 @@ replayed as real games with `--force-mulligan 3:35,16,13` (219 s) and `3:9,16,49
   false when the crossing is into our own extra turn and only Burgeoning asks. That is a sharper predicate, but it
   also gates the in-search BoundaryFan, so it is a play-path change; not done. (c) The running A/B's Grim arms on
   `mtg.v1` (the unfixed binary) cannot finish game 319. Any other game with this shape would also stall.
+
+### Implementation notes (perf part 6, 2026-11-22): three amendment arms for the B12 Grim prune
+- **Why.** `MTG_BLOODSUN_GRIM_PRUNE=1` lost 4 games at d8 b0 (gi 7, 141, 277, 431). In each one the shipped arm's
+  winning Grim line was outside the B12 list. gi 7 and gi 277: a big land played the same turn at 7+ mana. gi 141: the
+  7-mana test counted a hand land. gi 431: Time Warp fetched for NEXT turn. The USER expected the first two (*"We might
+  find some other lines with Grim Tutor that have to do with dropping things this turn."*).
+- **Built (commit 9ff957cad).** Three sub-levers of the Grim prune, all DEFAULT OFF and inert while it is off. Each is
+  read in `BloodSunGrimTargetAdmitted` and has a heurarm slot. `MTG_BLOODSUN_GRIM_LAND_DROP`: a big land at any mana
+  while `lands_played_this_turn < LandDropsAvailable()` (the engine's drop test, which carries Exploration and Fastbond).
+  `MTG_BLOODSUN_GRIM_LAND_BOARD`: the 7-mana test counts battlefield lands only. `MTG_BLOODSUN_GRIM_TW_ANY`: Time Warp
+  whenever none is in hand. Four unit cases on the lost games' boards. Unit 3,865 / 3,865, scenarios 655 / 655.
+- **d8 b0 reproduction** (`build/scratch/bloodsun/perf6/repro`, `lost/`). DROP gi 7 T5 and gi 277 T3; BOARD gi 141 T3;
+  TWNEXT gi 431 T3. Each matches ship. The drop-7, drop-277 and board-141 game logs give the same per-phase trace as
+  ship's. twnext-431 matches ship through the win setup (Grim -> Time Warp on T2), then differs in a later extra turn
+  (Grim -> Revelation, because without DROP a big land is closed). The combined arm wins every one of the four at ship's turn.
+- **Held-out A/B** (`perf6/ab/table.txt`; one pooled batch, 14 threads; the 199 d5 / 100 d3 games both earlier arms
+  finished; nowin = 9; this binary for every arm):
+
+  | arm | d5 b20 dWT (se), better/worse, units | d3 b20 dWT (se), better/worse, units |
+  |---|---|---|
+  | grim | -0.015 (0.033), 18/16, x0.83 | -0.100 (0.067), 15/10, x1.08 |
+  | grim+DROP | +0.070 (0.034), 7/16, x0.99 | -0.070 (0.067), 10/9, x0.90 |
+  | grim+BOARD | -0.015 (0.032), 17/15, x0.87 | -0.100 (0.069), 16/11, x1.09 |
+  | grim+TWNEXT | -0.025 (0.031), 17/14, x0.90 | -0.100 (0.050), 16/7, x1.11 |
+  | amended (all 3) | +0.030 (0.026), 7/13, x1.00 | -0.060 (0.042), 10/5, x0.92 |
+
+  One game dominates d3 units: gi 505 (wt 8 on every arm) costs 4.59M units under grim, BOARD and TWNEXT, against
+  141k on ship. Under DROP and amended it costs 188k. Without gi 505 the d3 ratios are grim x0.74, DROP x0.89, BOARD
+  x0.75, TWNEXT x0.77, amended x0.92. Wall times are on a shared box and are not a measurement.
+- **d8 b0 recovery** (`perf6/rec/rec_table.txt`, one pooled batch). Slower games tested: amended at both depths, plus
+  each single arm at any depth where dWT <= 0 (DROP at d3 only). **Amended: 18 / 18 recover.** DROP: 8 of 9; gi 431
+  does not (3 vs 4, the Time Warp case). BOARD: 23 of 26; gi 277 and 431 do not (the DROP and TWNEXT cases), and
+  neither does gi 518 (4 vs 5). On gi 518 ship's T4 plays Revelation X3, then Grim -> Lotus Vale at 7+ battlefield mana
+  with an Exploration drop open, plays the Vale and casts Time Warp. Only DROP admits that land, so it is a DROP case.
+  TWNEXT: 19 of 21; gi 7 and 277 do not (DROP cases). Each single arm loses exactly the games another arm covers.
+- **Smoke** (THREADS=14, with the Stage 4 analyzer and `rec8` running): 235 / 235 jobs, **0 moved** by digest vs
+  `impl7/smoke-step7-batch.log` (saved as `perf6/smoke-perf6-batch.log`). The 8 GT FAILs against origin GT are the
+  step-7 tree's, as in part 5. Every batch ran outside `heavy.lock`, because the Stage 4 analyzer (pid 8105) has held it
+  for hours.
+- **For the USER (no default chosen):** only the amended arm passes the "every slower game recovers" bar. At d5 b20 it
+  measures +0.030 (se 0.026) against ship, where the plain Grim prune measures -0.015. At d3 b20 it measures -0.060
+  (se 0.042), with units about even against ship. DROP is the arm that costs at d5 (+0.070); BOARD and TWNEXT are
+  roughly neutral there.
