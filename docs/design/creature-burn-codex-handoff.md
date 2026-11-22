@@ -1,5 +1,27 @@
 # Creature Burn analyze-deck: handoff to Codex (2026-11-22 ~10:50 UTC)
 
+## Codex continuation (2026-11-22 ~21:50 UTC)
+
+The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
+Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
+tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
+`build/.heavy.lock` (`prequeue-smoke.log`, `PREQUEUE_SMOKE_DONE`). Its binary is the committed Release source at
+`0a522c2ae`; if origin changes before landing, compare `HEAD:src` and deck trees after rebase before trusting it.
+
+The focused Burn `--smoke --regression` batch completed (42 cases, 10,526 games; `burn-gates.log`,
+`BURN_GATES_DONE=1` because GT has not yet been accepted). All 610 scenarios, 940 strict reference replays, and
+both suboptimal-reference games passed. `burn-classify.log` / `BURN_CLASSIFY_DONE=0` classify all searched slower
+games. Both Creature Burn 2HG smoke slowdowns recover at 4x budget. Creature Burn's persistent smoke gi98 changes
+the kept hand; it remains T5 at d8 b0. The persistent 1 Drop Burn slower games are the requested Vexing Devil
+opponent-policy change (opponent declines four damage before a lethal attack), confirmed for representative
+smoke gi87 and regression gi80 at d8 b0 (`deep-persist.log`, `DEEP_PERSIST_DONE=0`). The baseline+changed per-game
+audit is in `burn-gates.log`. No GT is accepted or committed yet. Preserve the user modifications to
+`.vscode/settings.json` and `test/ref_bench.json`.
+
+Next: finish full smoke, audit every moved deck and classify searched slowdowns, then accept. Run the scoped
+regression for any additional moved deck, accept, check GT logs, commit GT, land through `push_queue.py`, and launch
+`bash scripts/mullgen.sh run "decks/Creature Burn" fast` alone under the heavy lock on the frozen landed commit.
+
 ## Codex continuation (2026-11-22 ~17:30 UTC)
 
 No user decision is pending. The PO scry arm (pick plus kept order, firm default OFF) was adopted after the
