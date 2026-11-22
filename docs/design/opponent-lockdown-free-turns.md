@@ -599,3 +599,55 @@ regression and overnight (the overnight tier at its next periodic run), and new 
   moves a few games slower, with zero free turns in any of their games. The stand-down is sound (a free turn would break
   the prunes' round + 1 assumption); the cheaper alternative would be to keep those cards out until a deck that can
   strip every land joins the suite.
+
+## Fourth pass (2026-11-22, wip/freeturn; fairness integration in progress)
+
+The third pass above records the experiment as it ran. The USER subsequently ruled both fairness checks DEFAULT ON:
+*"I think we should do the fairness rule you mentioned for annihilator and sire, but for annihilator with multiple
+attacks it should always be possible to get a lock on turns when they don't play a land."* The confirmed reading:
+annihilator's virtual targets veto a free turn only if the opponent actually plays a land on that turn. A no-land
+turn can complete a lock after repeated attacks. The passive land-turn routine records whether either opposing head
+played a land; the lock check uses that fact. The sacrifice and the opponent's hand are unchanged.
+
+For Sire, the USER clarified: *"the fairness rule for sire should only count nonland permanents. It's an
+underestimation of the lockdown capabilities of the card and the board, but that's okay for this mode."* Its
+pre-discard check therefore counts any castable nonland permanent in the opponent's hand, including artifacts,
+enchantments and planeswalkers, as well as creatures. Lands and nonpermanent spells do not count. Sire has no
+no-land-turn exception: it can leave the opponent able to develop a permanent off existing mana even without a
+new land drop. This is deliberately a conservative estimate of Sire's lockdown.
+
+Before the fairness edits, the seventh `MTG_FREE_TURN_REACH` site was built and measured. The certificate audit
+reported UNSOUND=0; the b0 pairs and identity decks remained digest-identical. In the regression tier Sea Creatures'
+search units fell to 0.921 of the previous pass (2HG 0.934), with no digest changes; Prevent Damage and Elementals
+were unchanged. All 940 saved references replayed with 0 play-drift, board-diverged or enum-gap. Among non-trait
+decks, every moved game matched the separate bounceland-opening arm exactly: 42 smoke games across 215 keys and 22
+regression games across 343 keys, with 0 unexplained and 0 missing bounceland movers.
+
+The third pass's default 9 was wrong: on the draw, `GameEngine::RunTurnFrom` gives the opponent its first land play
+before our first turn. The T1 spawn is refused only when that opponent hand has no playable land (or on the play,
+before it has taken a turn). The separate T1 spawn lever was deleted after proving inert in the paired reach batch.
+
+The build passed at eight compile jobs (32 jobs exhausted available RAM); focused free-turn units
+27/27 and the full serial suite 3,903/3,903. One pooled fairness batch, 435 jobs / 8,700 games,
+paired arms innermost in 20-game blocks on held-out seeds 7710001..7750001:
+
+| deck, setting | games | rule off | fairness off | fairness ON | free-turn games, fairness off → ON |
+|---|---:|---:|---:|---:|---:|
+| Shadowborn d5 b20 | 1,000 | 4.758 | 4.747 | 4.754 | 13 → 6 |
+| Shadowborn 2HG d3 b10 | 200 | 4.990 | 4.990 | 4.990 | 0 → 0 |
+| Cyclone d5 b20 | 1,000 | 4.780 | 4.715 | 4.715 | 286 → 282 |
+| Cyclone 2HG d3 b10 | 200 | 5.075 | 5.060 | 5.060 | 8 → 8 |
+| Extra Turns d5 b20 | 500 | 4.734 | 4.736 | 4.736 | 5 → 5 |
+
+The Sire check removes seven credited Shadowborn games (paired mean +0.007 turns vs fairness off,
+se 0.0025); it leaves a small benefit vs the rule-off arm (-0.004). Its test now includes a castable
+Sol Ring and excludes a land and a sorcery. The annihilator check removes four Cyclone free-turn
+games but changes no win-turn average in this sample. The no-land-turn exception preserves nearly all
+of Cyclone's credit; the previous experiment without it cut 286 → 114 credited games. The check is
+about credit only and does not make the passive opponent cast anything.
+
+The focused test suite passed 27/27 and the full serial suite passed 3,903/3,903.
+The full pooled smoke/regression/reference tier remains an integration gate. The
+branch-local run was stopped after the initial rows so the four-set integration
+tree can run this expensive tier once, with all changes present. No result from
+the partial run is treated as a pass.
