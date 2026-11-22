@@ -913,8 +913,10 @@ TEST_CASE("free turns: the certificate's deck precondition (GoldFishRunner::Deck
     CHECK_FALSE(GoldFishRunner::DeckLockNeedsLandStrip(si));
 }
 
-TEST_CASE("free turns: MTG_OPP_SPAWN_DRAW_T1 -- a held land counts at our first untap on the draw (lever, default OFF)")
+TEST_CASE("free turns: the spawn land requirement reads the battlefield only (the T1 lever is deleted)")
 {
+    // On the draw the opponent's turn 0 has already played the leftmost land it held (GameEngine::RunTurnFrom), so a
+    // land still only in hand at our first untap is a land it could not play; it never counts.
     FtScope f(1);
     GameState s = FtFresh();
     struct SScope { int saved = freeturn::t_force_spawn_land; SScope() { freeturn::t_force_spawn_land = 1; }
@@ -923,18 +925,5 @@ TEST_CASE("free turns: MTG_OPP_SPAWN_DRAW_T1 -- a held land counts at our first 
     s.free_turns_taken = 0;
     s.on_the_play = false;
     s.players[1].hand = { FtCard("Forest", 100001), FtCard("Ponder", 100002) };
-    CHECK_FALSE(freeturn::SpawnMayAppear(s));   // default OFF: no land in play, no spawn
-    const std::int8_t saved = heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1];
-    heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1] = 1;
-    CHECK(freeturn::SpawnMayAppear(s));
-    GameState p = s;
-    p.on_the_play = true;
-    CHECK_FALSE(freeturn::SpawnMayAppear(p));   // on the play the opponent has had no turn
-    GameState t2 = s;
-    t2.turn_number = 2;
-    CHECK_FALSE(freeturn::SpawnMayAppear(t2));   // only our first untap
-    GameState nl = s;
-    nl.players[1].hand = { FtCard("Ponder", 100002) };
-    CHECK_FALSE(freeturn::SpawnMayAppear(nl));
-    heurarm::t_arm[heurarm::OPP_SPAWN_DRAW_T1] = saved;
+    CHECK_FALSE(freeturn::SpawnMayAppear(s));
 }

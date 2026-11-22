@@ -111120,7 +111120,10 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // where a kill still scores cutoff_turn -- "only a this-turn kill matters" is false there.
         const bool ko_turn = LeafKillOnlyOn() && !t_ko_suppress && depth > 0
                           && (!state.deck_has_extra_turn || LeafKillOnlyExtraOn())
-                          && !state.deck_has_free_turn   // a FREE turn of this round may follow (MTG_FREE_TURNS)
+                          // a FREE turn of this round may follow (MTG_FREE_TURNS) -- unless the reachable-lock
+                          // certificate says none can follow this turn (freeturn::FreeTurnMayFollow, MTG_FREE_TURN_REACH;
+                          // the seventh stand-down site, the one the fourth pass's six-site conversion missed)
+                          && !(state.deck_has_free_turn && freeturn::FreeTurnMayFollow(state))
                           && state.turn_number == cutoff_turn && cutoff_turn < max_turns
                           && (second_main || KillOnlyNoM2Parity(state, second_main)) && !g_honest_teacher
                           && M2FixModeFor(state) == 0 && !HumanPlayActive();
