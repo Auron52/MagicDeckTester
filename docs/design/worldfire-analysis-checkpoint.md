@@ -107,6 +107,13 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
    LTB (if tiers byte-identical), free turns default ON (USER: adoption is not a question, once checks pass). CI watch
    --interval 60.
    USER-pending (bring with numbers when measured): spawn-land rule global vs free-turn-scoped; the reference LIST.
+2b. VIEWER READY for USER references (USER 2026-11-22: *"Let me know when you are at a point where the play viewer
+   can be run for this deck. I would like to create references for it at some point."*). The deck + every card are
+   already on origin (1d1aa4b3f era); the free-turn rule (default ON) and the LTB triggers must land first, since free
+   turns change what the opponent does after Worldfire resolves. After the landing batch: fast-forward the PRIMARY
+   checkout (`git -C /workspaces/MagicDeckTester pull --rebase`; it was 100 behind on 11-22 06:45, with untracked
+   decks/Worldfire/Worldfire.cod + docs/design/{analysis-Worldfire,opponent-lockdown-free-turns}.md that collide with
+   tracked origin files -- compare content first, never delete user work), `./build.sh` there, then TELL THE USER.
 3. After the cantrip adoption: FOLLOW-UP A/B agent (USER 1b/1c list in "USER rulings on the cantrip keep order").
 4. Then re-measure the Worldfire budget curve and re-screen the b0 backstop rows (USER Q16: optimize first).
 5. Only surface GENUINE USER decisions (USER 2026-11-22: nothing waiting on our side or on measurement).
