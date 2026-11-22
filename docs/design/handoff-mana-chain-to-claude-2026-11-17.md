@@ -296,6 +296,30 @@ FOLLOW-UPS: the Pirates routing unit test resolves decks/ next to the binary (pr
 - **OWED (mine):** queue the Hinata-style d5 beam-off (W3 beam 0) A/B for Anti-Lifegain / Creature Giving / Dragonstorm (adopt if every deck net <= 0, searched weighted). Maze gate filler waiter bbhw5mk1l (DONE3) -> commit record. Follow-ups list in the 10:45 entry stands.
 - **USER DECISIONS OPEN:** Bruna 7a/7b (after BRUNA-RO reports); sac-fodder CPU trade (only if no priced arm passes). Heath Q1/Q2 and TOKEN_SELF direction are ANSWERED (above).
 
+**21:25 UTC 11-22:** STATE FOR RESUME (pre-compaction 9). The CODEX TAKEOVER section at the top is the live table (kept current). Summary:
+- **LANDED:** Merfolk cd330ec5a (14:59). Origin is now 138f60c83 (other sessions' Worldfire + Beasts integrations).
+- **HINATA (next land):** origin's Worldfire GT 9575556d5 moved six Hinata gt_logs, so I left the queue. Agent ab27a0a483d947243 (~95K) has rebased wip/hinata-d4-d5 onto 138f60c83, taking origin's test/ files. Its gate3 (PID 1126869) waits on the box lock; then the agent re-accepts and pushes. Then I reset .claude/worktrees/land-1122c to it, `push_queue.py join` (id 839667a3a15d:wip/land-1122c), bg wait loop (re-arm on rc 75), smoke under the lease, land, pull --rebase the primary. If the box lock is held by my own A/B at my turn: SIGSTOP that mtg for the ~30 min build+smoke and SIGCONT after (budgets are unit-based, so results are unaffected), rather than holding the lease for hours.
+- **BOX LOCK:** the Bruna-RO A/B holds it (mtg PID 1094666; 36,296 jobs, ~907k games, started 18:56). Waiters: Jumbo id1, Rock confirm (run.sh 1021920), Bruna lordproj gt.sh (1040009), Heath r4 chain (892503), Prepay-C ab1 (1081260), Maze Summit d8/reg chain.
+- **MY WAITERS:**
+  - bymq4i4lf: Bruna-RO chain3 PID 1018227. When it fires, start a fresh agent from logs/bruna-ro/bruna-ro-handoff.md to compare arms, run d8 b0 and fix the unit boards, then report to the USER.
+  - b6mj8le43: Heath r4 DONE_ab. When it fires, start a fresh agent from heath-derived/logs/heath/heath-handoff3.md to compare, run d8 b0 and accept GT.
+  - bbhw5mk1l: Maze gate filler DONE3. When it fires, commit the record.
+- **AGENTS ALIVE:**
+  - Hinata ab27a0a483d947243.
+  - Maze Summit 2 a105032093724e6de (~183K): ALL3 adopted default ON (d5 -1, 2HG -1; NAMED failed d5 +8); units 4026 pass at 7a5417a42; d8 b0 and then the reg --both chain are queued on the lock; then GT.
+  - Jumbo next a6f2e67bd4783f88c (~163K): MTG_UOT_XMEMO identity arms are in the lane.
+  - Prepay-C a9a8c38e075b9ee42 (~115K): ab1 relaunched with a per-job lever (26d1a31e8), then GT.
+  - Rock CPU a87656165cca29a40 (~182K): Hinata 4k-pair fresh-seed re-measure of MTG_LKR_PLAYOUT_OFF.
+  - Bruna 7 a94440518d98b40a1 (~248K): APPLY-DROP GT chain; it stops after that. Then a fresh agent root-causes the lord-projection Boars d0 +172 / Goblins d0 +177 and the Stompy +1.
+- **STOPPED (handoffs pushed):** Bruna-RO, Heath 3, Jumbo, Maze Summit 1, Sac-fodder 6.
+- **USER DECISIONS OPEN** (surfaced in chat):
+  - Sac-fodder: held-out Goblins -3 / Fungus -1 at CPU x1.17 / x1.07 (plus the untried per-unit price and the Skirk redesign proposal).
+  - Jumbo unlock price: every price variant is +4..+8.
+  - Rock MTG_LKR_PLAYOUT_OFF, after the Hinata re-measure.
+  - Bruna 7a/7b plus the MTG_D0_HASTE_SAC_CHARGE lever, after the A/B.
+  - Hinata follow-ups: beam-off for Anti-Lifegain/CG/Dragonstorm; delete the depth==5 beam gate vs a per-deck beam_width 0; gi33 unpriced enumeration.
+- **OWNER CRON** f58af08e (session-only, 2-hourly at :37).
+
 **21:45 UTC 11-21:** Maze gate resume (lock 21:21): the on arm at 24 threads tripped its 28 GB cap after 333 s (rss 28.9 GB: ~1.2 GB/worker, so fewer threads barely saves memory), 0 new on games; mana_clean then ran the OFF arm to completion (5000/5000, 13 min). State: on arm 1631/5000, off arm DONE; report says 'incomplete'. NOT requeued yet: the gate is a record (the batch-1121 changes are oracle-only + smoke passed), so it does not block landing. PLAN: when rock's d8 b0 verdicts are in, build ONE integration batch (batch-1121 + PD f98cfb65f + rock wip/rock-in-plan-rb + Merfolk wip/merfolk-gate as ready) on current origin, validate under the lock, join the push queue; THEN resume the Maze on arm at 32 threads / MTG_RSS_CAP_GB=40 (`mana_clean.py run --resume claude-queue-20261121a` in .claude/worktrees/batch-1121, src must stay unchanged there).
 
 **20:45 UTC 11-21:** status check + SCHEDULING CHANGE. The Maze gate (32 threads, ~32 GB) left MemAvailable ~10 GB, so every 4-slot lane job (need 14 GB: Bruna build_ro, burn chain1, Merfolk eg_chain1) sat at the lane head and blocked ~15 agent jobs (Hinata probes/traces, sac-fodder diag4, overnight bisect, Bruna fix3) for hours; gate ETA was ~06:00. STOPPED it at 20:40 (1631/5000 on-arm games streamed; chunk-granular resume), batch-1121 status 'gate rc=143' + DONE. REQUEUED: build/scratch/claude_batch1121/resume.sh (setsid) = flock box.lock + `mana_clean.py run --resume claude-queue-20261121a --threads 24` at MTG_RSS_CAP_GB=28 (~24 GB, leaves the lane room); status lines 'resume lock', 'gate-resume rc=', 'DONE2' in claude_batch1121/status, log gate_resume.log. Rock chain10 took the lock at 20:41. Also resubmitted Bruna's build_fix3 at --slots 2 (was 4; same script/log).
