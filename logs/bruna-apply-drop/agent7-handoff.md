@@ -44,6 +44,19 @@ Compare arms: `python3 $B/cmp_arms.py <wins_dir> <batch.out> <armA> <armB>` (net
     Jumbo d0 3000 -> `$B/a7/perf/summary.txt`, `DONE`. Compare with lock7's 11 (on) and 00 (off).
     Then callgrind the costly fix: the cg5/run.sh shape, 40 EDF d0 games, on vs off.
 
+## Milestone 15:00 UTC
+- Swap A/B (a6/swap/cmp.txt) PASSES: brunad0 -2 (2 faster, 0 slower), every other deck 0, cpu ~1.00.
+  MTG_CREATURE_FLOAT_SWAP stays ON.
+- Perf split (a7/perf/summary.txt): ALL of the EDF d0 (+5.75%) and Jumbo d0 (+2.9%) Ir cost is
+  MTG_AURA_HOST_LINE_KEEP (KEEP-only = the on numbers; EXACT-only = the off numbers).
+- Queued in the lane:
+  - callgrind EDF d0 40 games, KEEP 1 vs 0: `$B/a7/cg/run.sh` (lane PID 986493) -> `$B/a7/cg/edf_keep{1,0}.cg`, `DONE`.
+    Next: `callgrind_annotate --inclusive=yes` on both and cut the cost inside AuraHostHoldKeepsLine
+    (ManaPayment.cpp ~10928) or at its call sites (AIEngine.cpp 11240, TurnSolver.cpp 11542 / 12748, memo 11159).
+    Any cut must be sound (identical play; MTG_AURA_HOLD_MEMO_VERIFY-style 0 mismatches).
+  - gi21770 d8 b0 relaunched with --ignore-play-profile (lane PID 986214) -> `$B/a7/g21770/d8.status`.
+- lpab is waiting on the box lock (other sessions hold it).
+
 ## Running jobs (all agent-owned, none USER-requested; waiters use DONE files / kill -0, never pgrep -f)
 | job | PID | what | marker / output |
 |---|---|---|---|
