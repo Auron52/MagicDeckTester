@@ -69,9 +69,9 @@ commit "GT: accept smoke + regression for Blood Sun integration ...". If git log
    `discard_analysis`, RULE_FOUND) derived [City of Brass, Blooming Marsh, Burgeoning, Scorched Ruins, Revelation,
    Lotus Field, Ulamog, Lotus Vale]; A/B d0 -0.133 (t -13.6, n 4000), d3 -0.0075 (t -0.3, n 800). **The USER reviews
    drafts of USER-owned heuristics BEFORE measurement** (USER 2026-11-22: "some of those should be reviewed prior to
-   measurement such as the cast order and discard heuristics"). The discard draft was shown to the USER on 2026-11-22
-   (the derived order + refinements: Revelation only with a duplicate in hand; a redundant Blood Sun early); take the
-   USER's review, THEN build it as a provider lever (default OFF), A/B at play depth, present the numbers.
+   measurement such as the cast order and discard heuristics"). The USER REJECTED an order and gave BUCKETS (ledger
+   B14, verbatim + the parent's readings): build B14 as the provider's `CleanupDiscardCandidates` override (default
+   OFF), A/B at play depth, present the numbers. A discard heuristic is ALWAYS buckets, never an order.
 6b. **Cast order (USER-owned, NO draft exists yet):** draft Blood Sun's cast order (and main-1 / main-2 split if the
    provider has one; read how `HinataProvider` / other providers express theirs) from the design's go-off sequence and
    present it to the USER for review BEFORE measuring. Same for the mulligan policy draft (ledger B11).
