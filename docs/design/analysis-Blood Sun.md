@@ -407,6 +407,25 @@ fresh implementer agent per step, serial. USER asked (~12:33 UTC) to continue au
   USER (verbatim): *"Right, which is another reason why Scorched Ruins is pruned from play prior to Blood Sun."*
   -> consistent with B4 (Ruins never played / put without Blood Sun), so in practice the B13 order only
   applies to a Lotus Vale / Lotus Field played under B4's Blood-Sun-enabling exception.
+- B14 Discard = BUCKETS, never an order (USER 2026-11-22, verbatim, after the parent showed the Stage 4 derived ORDER
+  as a draft): *"Discard heuristic shouldn't be an order as I have said before. Instead, you should divide them up into
+  buckets. In this case it would be 1 Blood Sun (if none is out and a tutor in its place if we don't have one) 1
+  Diabolic Revelation (or a Grim Tutor to get it, even a Dimir Machinations is better than nothing) extra turn playing
+  cards prioritized as fastbond, exploration, burgeoning. (up to 2 counting the field, but no others are needed with
+  fastbond) Lands prioritizing the mana for blood sun and/or grim tutor depending on what is on the field and in hand,
+  followed by 3-4 mana lands."* -> KEEP buckets (filled in this priority; a card that fills no bucket slot is
+  discard fodder first): (K1) one Blood Sun while none is on the battlefield -- else, if we hold none, one tutor in
+  its place (Grim Tutor, then Dimir Machinations); (K2) one Diabolic Revelation -- else a Grim Tutor to get it, else a
+  Dimir Machinations; (K3) extra-land-drop cards (the USER's "extra turn playing" = extra LAND plays), priority
+  Fastbond > Exploration > Burgeoning, up to 2 counting those on the battlefield, and none beyond a Fastbond; (K4)
+  lands: first the ones supplying the colours Blood Sun ({R}) and / or Grim Tutor ({B}{B}) still need given the
+  battlefield and hand, then the 3-4 mana lands (Lotus Vale / Lotus Field / Scorched Ruins). Parent's readings
+  (surfaced, take as default): cards in no bucket (Time Warp, Emrakul, Ulamog, a second Blood Sun / Revelation, drop
+  cards past the cap, lands past the colour need and the big lands) go first, then the lowest-priority bucket's
+  surplus; within a bucket the USER's stated priority, ties by the engine's existing ranking. Stage 4's derived order
+  (City of Brass, Blooming Marsh, Burgeoning, Scorched Ruins, Revelation, Lotus Field, Ulamog, Lotus Vale) is
+  SUPERSEDED. Build as the provider's `CleanupDiscardCandidates` override (default OFF), then A/B at play depth and
+  present.
 
 ## Open USER decisions
 - Go-off (2) "always bridges to (1)": design to report any residual gap.
