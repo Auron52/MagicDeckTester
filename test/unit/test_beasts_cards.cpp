@@ -1972,20 +1972,6 @@ const TurnSolver::Plan* BeFindCastPlan(const std::vector<TurnSolver::Plan>& plan
     return nullptr;
 }
 
-const TurnSolver::Plan* BeFindOrderedCastPlan(const std::vector<TurnSolver::Plan>& plans,
-                                              std::initializer_list<std::string> names)
-{
-    for (const TurnSolver::Plan& p : plans)
-    {
-        std::vector<std::string> got;
-        for (const Action& a : p.actions)
-        {
-            if (a.kind == Action::Kind::CastFromHand) { got.push_back(a.card_name.str()); }
-        }
-        if (got == std::vector<std::string>(names)) { return &p; }
-    }
-    return nullptr;
-}
 }   // namespace
 
 TEST_CASE("Nykthos: the pip-heavy permanent first can be the ONLY payable order -- enumerated, and both apply worlds take it")
@@ -2841,7 +2827,7 @@ TEST_CASE("Kaheera companion: hand entry opens a searched site-9 continuation, r
     REQUIRE(reached.players[0].hand.size() == 2);
     CHECK(TurnSolver::PostEntryActivationPending(reached, pre));
     const std::vector<TurnSolver::Plan> continuations = TurnSolver::EnumerateBreakpointPlans(reached, true);
-    const TurnSolver::Plan* both = BeFindOrderedCastPlan(continuations,
+    const TurnSolver::Plan* both = BeFindCastPlan(continuations,
         { "Kaheera, the Orphanguard", "Krosan Warchief" });
     REQUIRE(both != nullptr);
     TurnSolver::Plan selected = *hand_only;
@@ -2912,7 +2898,7 @@ TEST_CASE("Kaheera companion: Warchief before fee and another Beast after Kaheer
     CHECK_FALSE(BeOnBf(reached, "Kaheera, the Orphanguard"));
     REQUIRE(reached.players[0].hand.size() == 2);
     const std::vector<TurnSolver::Plan> continuations = TurnSolver::EnumerateBreakpointPlans(reached, true);
-    const TurnSolver::Plan* last = BeFindOrderedCastPlan(continuations,
+    const TurnSolver::Plan* last = BeFindCastPlan(continuations,
         { "Kaheera, the Orphanguard", "Krosan Warchief" });
     REQUIRE(last != nullptr);
     TurnSolver::Plan selected = *first;
@@ -2933,6 +2919,30 @@ TEST_CASE("Kaheera companion: Warchief before fee and another Beast after Kaheer
     CHECK(BeOnBf(ex, "Kaheera, the Orphanguard"));
     CHECK(ex.players[0].hand.size() == roll.players[0].hand.size());
     CHECK(BeTappedLands(ex) == BeTappedLands(roll));
+    ManaCacheClearPerGame();
+}
+
+TEST_CASE("Kaheera and Warchief: mana-tight pair keeps the reducer-first order")
+{
+    BeastsProvider provider;
+    BeSearchedScope on(true);
+    ManaCacheClearPerGame();
+    GameState s = BeState();
+    s.players[0].lands_played_this_turn = 1;
+    for (int i = 0; i < 5; ++i) { BeAdd(s, "Forest", 10 + i); }
+    BeAdd(s, "Garruk's Packleader", 30);
+    s.players[0].hand.push_back(BeZone("Kaheera, the Orphanguard", 40));
+    s.players[0].hand.push_back(BeZone("Krosan Warchief", 41));
+    s.m_provider = &provider;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* pair = BeFindCastPlan(plans,
+        { "Kaheera, the Orphanguard", "Krosan Warchief" });
+    REQUIRE(pair != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *pair, true);
+    CHECK(BeOnBf(roll, "Kaheera, the Orphanguard"));
+    CHECK(BeOnBf(roll, "Krosan Warchief"));
+    CHECK(roll.players[0].hand.size() == 1); // reducer first pays 5 and Kaheera draws once
     ManaCacheClearPerGame();
 }
 

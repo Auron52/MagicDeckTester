@@ -8604,6 +8604,25 @@ static bool EtbPutReducerOrderDomain(const GameState& state, const std::vector<A
     return false;
 }
 
+// Packleader makes Kaheera-before-Warchief an extra draw, but Warchief's
+// discount can make the reverse order the only payable one. The Beasts rank
+// chooses the draw when both orders pay; the payable-order search must retain
+// the reverse as a rescue instead of losing a mana-tight line.
+static bool BeastsLordReducerOrderDomain(const GameState& state, const std::vector<Action>& acts,
+                                        const std::vector<int>& order)
+{
+    if (order.size() < 2 || std::strcmp(ResolveProvider(state).Name(), "Beasts") != 0) { return false; }
+    bool lord = false, reducer = false;
+    for (int j : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        lord |= a.card_name == "Kaheera, the Orphanguard";
+        reducer |= a.card_name == "Krosan Warchief";
+    }
+    return lord && reducer;
+}
+
 static void ComputeAvailableColors(const GameState& state, bool have[5], bool pending_auras = true)
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -14076,7 +14095,8 @@ static bool SubsetPayableSequentialTail(const GameState& state, const std::vecto
         && (UnlockOrderHasHaste(cands, order, std::any_of(sel.begin(), sel.end(), [&](int j)
                                 { return SeqWalkUnlockEquip(state, cands[static_cast<std::size_t>(j)]); }))
             || DevotionOrderDomain(state, cands, order)
-            || EtbPutReducerOrderDomain(state, cands, order));
+            || EtbPutReducerOrderDomain(state, cands, order)
+            || BeastsLordReducerOrderDomain(state, cands, order));
     // MTG_UO_FOLD (DEFAULT ON; =0 -> the given walk, the ETB retry and the unlock-order search run one after the
     // other, as before). In the unlock-order domain this site's verdict is "the given order pays, or the ETB order
     // does, or some other class order does" -- an OR over walks, so the order they are tried in is free. The given
@@ -14318,7 +14338,8 @@ bool TurnSolver::UnlockPayableOrder(const GameState& state, const std::vector<Ac
         else if (SeqWalkTrailingEquip(state, a)) { sel.push_back(i); }   // priced at the walk's end, as the apply pays it
     }
     if (!UnlockOrderHasHaste(*use, order, any_unlock) && !DevotionOrderDomain(state, *use, order)
-        && !EtbPutReducerOrderDomain(state, *use, order)) { return false; }
+        && !EtbPutReducerOrderDomain(state, *use, order)
+        && !BeastsLordReducerOrderDomain(state, *use, order)) { return false; }
     const std::vector<int> none;
     if (SeqWalkFixedOrder(state, *use, sel, order, none)) { return false; }   // the given order pays: kept
     return UnlockOrderSearch(state, *use, sel, order, none, /*nearest=*/true);
@@ -90101,6 +90122,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             // and its payable-order search (DevotionOrderDomain) must get to price the others. Rescue-only.
             const bool pending_devotion_growth = DevotionOrderDomain(state, cands, sel);
             const bool pending_put_reducer = EtbPutReducerOrderDomain(state, cands, sel);
+            const bool pending_lord_reducer = BeastsLordReducerOrderDomain(state, cands, sel);
             bool pending_enter_haste = false;
             if (pending_enter_haste_bound > 0)
             {
@@ -90115,10 +90137,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                 pending_enter_haste = watcher && dork;
             }
             if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
-                && !pending_enter_haste && !pending_devotion_growth && !pending_put_reducer)
+                && !pending_enter_haste && !pending_devotion_growth && !pending_put_reducer
+                && !pending_lord_reducer)
             { return false; }
             bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
-                          || pending_enter_haste || pending_devotion_growth || pending_put_reducer;
+                          || pending_enter_haste || pending_devotion_growth || pending_put_reducer
+                          || pending_lord_reducer;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding

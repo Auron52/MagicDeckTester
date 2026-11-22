@@ -9485,6 +9485,23 @@ bool DecisionProvider::OffersOilVigilanceMenace(const GameState& s, const CardDe
 bool BeastsProvider::RestrictedSecondMainLive(const GameState& s) const
 { return s.combat_resource_turn == static_cast<std::int16_t>(s.TurnSeq()); }
 
+int BeastsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    // With Packleader already watching, Kaheera first makes a later Warchief
+    // enter as a 3/3 and draw. The ordinary reducer rank puts Warchief first.
+    // The payable-order rescue still tries Warchief first when its discount is
+    // needed to cast the pair.
+    if (def.card.m_name == "Kaheera, the Orphanguard")
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index == s.active_player_index
+                && p.card.m_name == "Garruk's Packleader") { return 7; }
+        }
+    }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
 std::vector<int> BeastsProvider::EtbDigCandidates(const GameState& s, int controller,
                                                    const std::vector<Card>& examined,
                                                    const std::vector<int>& legal) const

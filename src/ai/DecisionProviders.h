@@ -666,6 +666,7 @@ class BeastsProvider : public DeckProvider
 {
 public:
     const char* Name() const override { return "Beasts"; }
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
     bool RestrictedSecondMainLive(const GameState& s) const override;
     std::vector<int> EtbDigCandidates(const GameState& s, int controller,
