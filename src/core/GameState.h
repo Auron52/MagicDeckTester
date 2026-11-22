@@ -671,6 +671,10 @@ struct GameState
     bool                     in_free_turn                 = false;
     bool                     deck_has_free_turn           = false;
     std::uint8_t             free_turns_taken             = 0;
+    // MTG_FREE_TURN_SIRE_FAIR (core/FreeTurns.h NoteSireBeforeDiscard): the opponent's hand held, just before Sire's
+    // discard at its end step, a creature it could have cast -- the lock check of that turn does not hold. Set and
+    // consumed inside one opponent turn (like pending_free_turn): never live at a search node, never folded.
+    bool                     sire_lock_veto               = false;
     // Extra turns are taken in reverse creation order (CR 500.7). Zero names our player;
     // one names the passive opponent. Keep the old own-turn count for the existing search
     // gates and for scenario states that install pending_extra_turns directly.

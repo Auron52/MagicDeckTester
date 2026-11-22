@@ -20,7 +20,9 @@
 #include "core/SpellEffects.h"
 #include "runner/GoldFishRunner.h"
 
+#include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -90,6 +92,7 @@ GameState FtFresh(int heads = 1)
     s.battlefield.clear();
     s.opponent_spawns = nullptr;
     s.turn_number = 3;
+    s.deck_has_free_turn = true;   // the rule acts only for a lock-trait deck; these boards stand for one
     return s;
 }
 
@@ -131,9 +134,13 @@ TEST_CASE("free turns: the lock condition (lands OR hand) AND no creature, incl.
     // A land and only lands in hand: locked.
     s.players[1].hand = { FtCard("Mountain", 100003) };
     CHECK(freeturn::LockHolds(s));
-    // An MDFC spell//land in hand is a NONLAND card there (front face): not locked.
-    s.players[1].hand = { FtCard("Turntimber Symbiosis", 100004) };
+    // An MDFC spell//land counts as the side the hand has FEWER of (USER 2026-11-22), so it fills an empty side.
+    // Beside a land it is the hand's nonland: not locked.
+    s.players[1].hand = { FtCard("Mountain", 100003), FtCard("Turntimber Symbiosis", 100004) };
     CHECK_FALSE(freeturn::LockHolds(s));
+    // Alone, both sides are empty and the tie goes to LAND: no nonland in hand, locked.
+    s.players[1].hand = { FtCard("Turntimber Symbiosis", 100004) };
+    CHECK(freeturn::LockHolds(s));
     // Empty hand, a land, but an opposing creature: not locked.
     s.players[1].hand.clear();
     CHECK(freeturn::LockHolds(s));
@@ -237,6 +244,7 @@ TEST_CASE("free turns: Worldfire's post-cast board is credited (the opponent dra
     REQUIRE(s.opponent_plays_lands);
     s.opponent_spawns = nullptr;
     s.turn_number = 5;
+    s.deck_has_free_turn = true;   // a Worldfire list carries the lock trait
     FtOppPerm(s, "Mountain", 100090);
     FtOppPerm(s, "Goblin Guide", 100091);
     const CardDefinition* wf = CardDatabase::Instance().Lookup("Worldfire");
@@ -302,7 +310,7 @@ TEST_CASE("free turns: the flood hurdle -- the rightmost lands leave, placeholde
     REQUIRE(ph != nullptr);
     CHECK_FALSE(ph->card.IsLand());
     CHECK_FALSE(PlayableAsLand(ph));
-    CHECK(freeturn::IsNonlandHandCard(h.back()));
+    CHECK_FALSE(opponentdeck::HandCardIsLandFront(h.back()));
     // Seven lands: two placeholders.
     std::vector<Card> all(7, FtCard("Forest", 9));
     CHECK(freeturn::ApplyHurdlesToHand(all, "Forest", opponentdeck::kNumberBase).flood_placeholders == 2);
@@ -361,39 +369,6 @@ TEST_CASE("free turns: the hurdle basic -- the list's most common basic; the fou
     }
 }
 
-TEST_CASE("free turns: the deal applies the hurdles under the flag (every head), never without it")
-{
-    FtLoadDb();
-    auto lands_nonlands = [](const std::vector<Card>& hand) {
-        int lands = 0;
-        for (const Card& c : hand) { if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { ++lands; } }
-        return std::make_pair(lands, static_cast<int>(hand.size()) - lands);
-    };
-    int screwed_off = 0;
-    for (std::uint64_t seed = 1; seed <= 400; ++seed)
-    {
-        FtHeads h(seed % 2 == 0 ? 2 : 1);
-        GameState off, on;
-        { FtScope f(0); off = GoldFishRunner::SetupGame(FtForests(), seed, 0); }
-        { FtScope f(1); on = GoldFishRunner::SetupGame(FtForests(), seed, 0); }
-        REQUIRE(on.players[1].hand.size() == off.players[1].hand.size());
-        CHECK(on.players[1].library.size() == off.players[1].library.size());   // library untouched
-        if (lands_nonlands(off.players[1].hand).first < 2) { ++screwed_off; }
-        const auto ln = lands_nonlands(on.players[1].hand);
-        CHECK(ln.first >= 2);
-        CHECK(ln.second >= 2);
-        if (opponentdeck::HasSecondHead(on))
-        {
-            const auto l2 = lands_nonlands(on.opponent2_hand);
-            CHECK(l2.first >= 2);
-            CHECK(l2.second >= 2);
-        }
-        // The player's own game is untouched.
-        CHECK(FtLibNames(on.players[0].library) == FtLibNames(off.players[0].library));
-    }
-    CHECK(screwed_off > 0);   // the sample does exercise the screw hurdle
-}
-
 namespace {
 Decklist FtDeckWith(const std::vector<std::string>& main, const std::vector<std::string>& side = {})
 {
@@ -414,10 +389,46 @@ Decklist FtDeckWith(const std::vector<std::string>& main, const std::vector<std:
 }
 } // namespace
 
+TEST_CASE("free turns: the deal applies the hurdles under the flag (every head), never without it")
+{
+    FtLoadDb();
+    auto lands_nonlands = [](const std::vector<Card>& hand) {
+        int lands = 0;
+        for (const Card& c : hand) { if (PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { ++lands; } }
+        return std::make_pair(lands, static_cast<int>(hand.size()) - lands);
+    };
+    int screwed_off = 0;
+    for (std::uint64_t seed = 1; seed <= 400; ++seed)
+    {
+        FtHeads h(seed % 2 == 0 ? 2 : 1);
+        GameState off, on;
+        const Decklist lock = FtDeckWith({ "Worldfire" });   // a lock-trait deck: the hurdles act
+        { FtScope f(0); off = GoldFishRunner::SetupGame(lock, seed, 0); }
+        { FtScope f(1); on = GoldFishRunner::SetupGame(lock, seed, 0); }
+        REQUIRE(on.deck_has_free_turn);
+        REQUIRE(on.players[1].hand.size() == off.players[1].hand.size());
+        CHECK(on.players[1].library.size() == off.players[1].library.size());   // library untouched
+        if (lands_nonlands(off.players[1].hand).first < 2) { ++screwed_off; }
+        const auto ln = lands_nonlands(on.players[1].hand);
+        CHECK(ln.first >= 2);
+        CHECK(ln.second >= 2);
+        if (opponentdeck::HasSecondHead(on))
+        {
+            const auto l2 = lands_nonlands(on.opponent2_hand);
+            CHECK(l2.first >= 2);
+            CHECK(l2.second >= 2);
+        }
+        // The player's own game is untouched.
+        CHECK(FtLibNames(on.players[0].library) == FtLibNames(off.players[0].library));
+    }
+    CHECK(screwed_off > 0);   // the sample does exercise the screw hurdle
+}
+
+
 TEST_CASE("free turns: the lock trait arms only on a card that can strip ALL lands or ALL nonland hand cards")
 {
     FtLoadDb();
-    // IN: mass exile, the end-step hand discard, annihilator.
+    // IN: mass exile, the end-step hand discard (MTG_FREE_TURN_SIRE, default ON), annihilator.
     CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Worldfire" })));
     CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Sire of Insanity" })));
     CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Emrakul, the Aeons Torn" })));
@@ -433,7 +444,7 @@ TEST_CASE("free turns: the lock trait arms only on a card that can strip ALL lan
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({})));
     // The SIDEBOARD counts only when a main-deck wish can reach it: Vampires' wishless sideboard Worldfire is out.
     CHECK_FALSE(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Captivating Vampire" }, { "Worldfire" })));
-    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Living Wish" }, { "Sire of Insanity" })));
+    CHECK(GoldFishRunner::DeckMayLockOpponent(FtDeckWith({ "Living Wish" }, { "Emrakul, the Aeons Torn" })));
 }
 
 TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands (the flood hurdle's floor)")
@@ -459,7 +470,7 @@ TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands 
         opponentdeck::EndOfTurnCleanup(s);
         CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Rift Bolt", "Mountain", "Mountain" });
     }
-    {   // ON: at the floor, the two oldest LANDS go; the spells (an MDFC is a nonland card in hand) stay, so no lock.
+    {   // ON: at the floor, the two oldest LANDS go; the spells stay (the MDFC joins the smaller, nonland side), so no lock.
         FtScope f(1);
         GameState s = overfull();
         opponentdeck::EndOfTurnCleanup(s);
@@ -483,7 +494,7 @@ TEST_CASE("free turns: under the rule the opponent's cleanup keeps two nonlands 
     }
 }
 
-TEST_CASE("free turns: 2HG -- the second head's cleanup sheds lands first too")
+TEST_CASE("free turns: 2HG -- the second head's cleanup keeps the floor too")
 {
     FtScope f(1);
     GameState s = FtFresh(2);
@@ -493,4 +504,160 @@ TEST_CASE("free turns: 2HG -- the second head's cleanup sheds lands first too")
     opponentdeck::EndOfTurnCleanup(s);
     REQUIRE(s.opponent2_hand.size() == 7);
     CHECK(s.opponent2_hand.front().m_name == "Lightning Bolt");
+}
+
+TEST_CASE("free turns: a deck WITHOUT the lock trait is untouched under the flag (hurdles, lock, floor, spawns)")
+{
+    // USER 2026-11-22: "if we do it right, there won't be any change to any of our existing decks".
+    FtLoadDb();
+    for (std::uint64_t seed = 1; seed <= 200; ++seed)
+    {
+        FtHeads h(seed % 2 == 0 ? 2 : 1);
+        GameState off, on;
+        { FtScope f(0); off = GoldFishRunner::SetupGame(FtForests(), seed, 0); }
+        { FtScope f(1); on = GoldFishRunner::SetupGame(FtForests(), seed, 0); }
+        REQUIRE_FALSE(on.deck_has_free_turn);
+        CHECK(FtNames(on.players[1].hand) == FtNames(off.players[1].hand));
+        CHECK(FtNames(on.opponent2_hand) == FtNames(off.opponent2_hand));
+    }
+    FtScope f(1);
+    GameState s = FtFresh();
+    s.deck_has_free_turn = false;
+    // A locked board raises no free turn...
+    s.players[1].hand = { FtCard("Lightning Bolt", 100001) };
+    REQUIRE(freeturn::LockHolds(s));
+    freeturn::NoteOpponentTurnEnd(s);
+    CHECK_FALSE(s.pending_free_turn);
+    // ...the cleanup sheds oldest first...
+    s.players[1].hand = { FtCard("Lightning Bolt", 100001), FtCard("Lightning Bolt", 100002) };
+    for (int i = 0; i < 7; ++i) { s.players[1].hand.push_back(FtCard("Mountain", 100010 + i)); }
+    opponentdeck::EndOfTurnCleanup(s);
+    CHECK(FtNames(s.players[1].graveyard) == std::vector<std::string>{ "Lightning Bolt", "Lightning Bolt" });
+    // ...and a spawn appears with no opponent land.
+    CHECK_FALSE(freeturn::SpawnNeedsLand(s));
+    CHECK(freeturn::SpawnMayAppear(s));
+}
+
+TEST_CASE("free turns: an MDFC counts as the side the hand has fewer of (ties to land)")
+{
+    FtLoadDb();
+    auto sides = [](std::initializer_list<const char*> names) {
+        std::vector<Card> h;
+        int n = 1;
+        for (const char* x : names) { h.push_back(FtCard(x, n++)); }
+        const opponentdeck::HandSides r = opponentdeck::CountHandSides(h);
+        return std::make_pair(r.lands, r.nonlands);
+    };
+    CHECK(sides({ "Turntimber Symbiosis" }) == std::make_pair(1, 0));
+    CHECK(sides({ "Lightning Bolt", "Turntimber Symbiosis" }) == std::make_pair(1, 1));
+    CHECK(sides({ "Mountain", "Turntimber Symbiosis" }) == std::make_pair(1, 1));
+    CHECK(sides({ "Turntimber Symbiosis", "Turntimber Symbiosis", "Turntimber Symbiosis" }) == std::make_pair(2, 1));
+    CHECK(sides({ "Mountain", "Mountain", "Lightning Bolt", "Turntimber Symbiosis" }) == std::make_pair(2, 2));
+    // The flood hurdle: six lands + an MDFC is 6 lands + 1 nonland (the MDFC), so ONE placeholder; the MDFC stays.
+    std::vector<Card> h = { FtCard("Turntimber Symbiosis", 1) };
+    for (int i = 0; i < 6; ++i) { h.push_back(FtCard("Forest", 2 + i)); }
+    const freeturn::HurdleResult r = freeturn::ApplyHurdlesToHand(h, "Forest", opponentdeck::kNumberBase);
+    CHECK(r.flood_placeholders == 1);
+    CHECK(h.front().m_name.str() == "Turntimber Symbiosis");
+    CHECK(h.back().m_name.str() == freeturn::kPlaceholderName);
+}
+
+TEST_CASE("free turns: a scheduled spawn needs an opponent land (both worlds); the lock counts only one that appears")
+{
+    static const std::vector<OpponentSpawn> due = { { 4, 1, 1 } };
+    auto board = [](bool land) {
+        GameState s = FtFresh();
+        s.players[1].hand.clear();
+        FtEmpty(s.players[1].library);
+        s.players[1].library.push_back(FtCard("Lightning Bolt", 100050));   // its draw: no land to play
+        s.players[1].library.push_back(FtCard("Lightning Bolt", 100051));
+        if (land) { FtOppPerm(s, "Mountain", 100002); }
+        s.opponent_spawns = &due;
+        return s;
+    };
+    auto opp_creatures = [](const GameState& s) {
+        int n = 0;
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == 1 && p.card.IsCreature()) { ++n; } }
+        return n;
+    };
+    {   // Armed, no opponent land: no token in either world, and the due spawn does not block the lock.
+        FtScope f(1, 0);
+        GameState s = board(false);
+        REQUIRE(freeturn::SpawnNeedsLand(s));
+        CHECK(freeturn::LockHolds(s));
+        GameState roll = s;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        CHECK(opp_creatures(roll) == 0);
+        CHECK(roll.in_free_turn);
+        GameState exec = s;
+        AIEngine ai(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine engine(ai);
+        REQUIRE(engine.AdvanceToFirstMainForTest(exec));
+        CHECK(opp_creatures(exec) == 0);
+        CHECK(exec.in_free_turn == roll.in_free_turn);
+    }
+    {   // Armed, an opponent land and an empty hand: the token appears, so it blocks the lock.
+        FtScope f(1, 0);
+        GameState s = board(true);
+        CHECK_FALSE(freeturn::LockHolds(s));
+        GameState roll = s;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        CHECK(opp_creatures(roll) == 1);
+        CHECK_FALSE(roll.in_free_turn);
+    }
+    {   // MTG_OPP_SPAWN_NEEDS_LAND=1 with the free-turn flag OFF: the requirement alone, for every deck.
+        FtScope f(0);
+        const int saved = freeturn::t_force_spawn_land;
+        freeturn::t_force_spawn_land = 1;
+        GameState s = board(false);
+        s.deck_has_free_turn = false;
+        GameState roll = s;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        CHECK(opp_creatures(roll) == 0);
+        freeturn::t_force_spawn_land = 0;   // =0: off even under the rule
+        CHECK_FALSE(freeturn::SpawnNeedsLand(s));
+        freeturn::t_force_spawn_land = saved;
+    }
+    {   // Flag off, env unset: every spawn appears, as ever.
+        FtScope f(0);
+        GameState s = board(false);
+        GameState roll = s;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        CHECK(opp_creatures(roll) == 1);
+    }
+}
+
+TEST_CASE("free turns: Sire fairness -- a creature the opponent could have cast from the discarded hand vetoes the lock")
+{
+    FtLoadDb();
+    GameState s = FtFresh();
+    s.deck_has_demon_triggers = true;
+    const CardDefinition* sire = CardDatabase::Instance().Lookup("Sire of Insanity");
+    REQUIRE(sire != nullptr);
+    Permanent p;
+    p.card = sire->card;
+    p.card.m_number = 5;
+    p.controller_index = 0;
+    p.owner_index = 0;
+    s.battlefield.push_back(p);
+    FtOppPerm(s, "Mountain", 100001);
+    // Goblin Guide ({R}) with a Mountain: castable. Ponder: not a creature.
+    s.players[1].hand = { FtCard("Ponder", 100002), FtCard("Goblin Guide", 100003) };
+    CHECK(freeturn::SireDeployableCreature(s));
+    s.players[1].hand = { FtCard("Ponder", 100002) };
+    CHECK_FALSE(freeturn::SireDeployableCreature(s));
+    // A green creature with only a Mountain: the colour is missing.
+    s.players[1].hand = { FtCard("Avenger of Zendikar", 100004) };
+    CHECK_FALSE(freeturn::SireDeployableCreature(s));
+    // The veto: armed + lever on only; consumed by the lock check.
+    s.players[1].hand.clear();
+    {
+        FtScope f(1);
+        s.sire_lock_veto = true;
+        CHECK_FALSE(freeturn::LockHolds(s));
+        freeturn::NoteOpponentTurnEnd(s);
+        CHECK_FALSE(s.pending_free_turn);
+        CHECK_FALSE(s.sire_lock_veto);
+        CHECK(freeturn::LockHolds(s));   // empty hand, a land, no creature: locked once the veto is gone
+    }
 }

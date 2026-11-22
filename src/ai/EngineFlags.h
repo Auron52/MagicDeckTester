@@ -22,7 +22,11 @@
 // round. Read by BOTH worlds' lock check (GameEngine::RunTurnFrom, TurnSolver's
 // SimulateEndAndStartNextTurn), by the deal's opening-hand hurdles and by the deck trait, so one reader.
 // Unit-test override (-1 = the environment; 0 / 1 force). Never set outside test/unit.
-namespace freeturn { inline thread_local int t_force = -1; inline thread_local int t_force_hurdles = -1; }
+namespace freeturn {
+inline thread_local int t_force = -1;
+inline thread_local int t_force_hurdles = -1;
+inline thread_local int t_force_spawn_land = -2;   // -2 = the environment; -1 / 0 / 1 force OppSpawnNeedsLandEnv
+}
 inline bool FreeTurnsOn()
 {
     static const bool on = EnvOn("MTG_FREE_TURNS");   // DEFAULT OFF; =1 enables credit + hurdles
@@ -36,6 +40,29 @@ inline bool FreeTurnHurdlesOn()
 {
     static const bool on = EnvOn("MTG_FREE_TURN_HURDLES", true);   // follows MTG_FREE_TURNS; =0 isolates the credit
     return FreeTurnsOn() && (freeturn::t_force_hurdles >= 0 ? freeturn::t_force_hurdles != 0 : on);
+}
+// MTG_FREE_TURN_SIRE_FAIR (DEFAULT OFF; inert unless the free-turn rule is armed): Sire of Insanity's lock holds only
+// if the opponent could NOT have deployed a creature from the hand Sire discards at its end step (USER 2026-11-22:
+// "it can lock out some decks and cannot for others"). A check only: no game state changes (core/FreeTurns.h).
+inline bool FreeTurnSireFairOn()
+{
+    static const bool on = EnvOn("MTG_FREE_TURN_SIRE_FAIR");   // DEFAULT OFF; =1 arms the deployable-creature check
+    return on;
+}
+// MTG_OPP_SPAWN_NEEDS_LAND (USER 2026-11-22: "Perhaps we should have a land requirement for token creation? If
+// there are no lands played or on board no token should appear."): a scheduled passive-opponent creature spawn
+// appears only while the opponent controls a land (freeturn::SpawnNeedsLand, core/FreeTurns.h). Tri-state:
+//   unset  -> follows the free-turn rule: ON exactly where the rule is armed (MTG_FREE_TURNS and a lock-trait
+//             deck), so every other deck is byte-identical;
+//   =1     -> ON for EVERY deck, flag or no flag (the separate measurement arm; a play change everywhere);
+//   =0     -> OFF everywhere, also under MTG_FREE_TURNS.
+// Returns -1 / 0 / 1. A reference recorded without the rule replays with it off (--legacy-opponent-spawn-any).
+inline int OppSpawnNeedsLandEnv()
+{
+    static const int env = !EnvOn("MTG_OPP_SPAWN_NEEDS_LAND", true) ? 0
+                         : EnvOn("MTG_OPP_SPAWN_NEEDS_LAND", false) ? 1 : -1;
+    if (freeturn::t_force_spawn_land != -2) { return freeturn::t_force_spawn_land; }
+    return env;
 }
 
 // Merfolk Turns' autonomous Prophets victim policy is shared by the real

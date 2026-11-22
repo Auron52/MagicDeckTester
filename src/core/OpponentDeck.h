@@ -305,38 +305,69 @@ inline void EndOfTurnDrawHead1(GameState& state)
 // It makes no discard decisions: repeatedly move the first card in hand to its graveyard.
 // Keeping this separate from EndOfTurnDraw also covers extra draws such as Howling Mine.
 //
-// UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn: MTG_FREE_TURNS, hurdles on) the cleanup keeps the flood hurdle's
-// floor: it still sheds the oldest card, except that it never sheds a NONLAND card that would leave the hand with
-// fewer than kCleanupNonlandFloor (2) nonlands -- it sheds the oldest land instead (CleanupShedIndex). Plain
-// oldest-first shed the opening hand's nonlands -- the two the hurdle guarantees -- once one of OUR cards grew the
-// opponent's hand past seven (Goblin Guide's reveal, Howling Mine, Horn of Greed), so a land-heavy list kept a hand
-// of lands only and "locked" with no lock card in play (Burn s3664 gi661 vs Galadriel). The opponent never casts and
-// a land drop takes only lands, so with the floor its nonlands fall below two only to one of OUR effects (the USER's
-// "the opponent needing to show that they can remove things"). The floor binds only in that case, so the
-// opponent's land development is otherwise untouched (an unconditional lands-first shed measured as moving long
-// games of nearly every deck: it discards the lands the opponent would have played). An MDFC spell//land is a
-// nonland card in hand (front face), as the lock reads it. Off the rule: oldest first, as ever.
-inline constexpr int kCleanupNonlandFloor = 2;
-inline bool CleanupIsLand(const Card& c)
+// THE HAND'S TWO SIDES under the free-turn rule (USER 2026-11-22: "I guess a MDFC that is both should count as
+// whatever you have less of."). Shared by the lock (core/FreeTurns.h HeadLocked), the opening-hand hurdles and the
+// cleanup floor below, so the three can never disagree. Every card that is not a spell//land MDFC counts by its
+// front face; then each MDFC joins whichever side is SMALLER at that point, a TIE going to LAND (agent default,
+// reported). So an MDFC fills an empty side: {Bolt, MDFC} is 1 land + 1 nonland; {Mountain, MDFC} likewise;
+// a hand holding only {MDFC} is 1 land + 0 nonlands (the tie).
+struct HandSides { int lands = 0; int nonlands = 0; };
+// A spell//land modal double-faced card: a nonland front whose back face is a land (Turntimber Symbiosis).
+inline bool IsSpellLandMdfc(const CardDefinition* def)
+{
+    if (def == nullptr || def->card.IsLand() || def->params.mdfc_back_name.empty()) { return false; }
+    const CardDefinition* back = CardDatabase::Instance().Lookup(def->params.mdfc_back_name);
+    return back != nullptr && back->card.IsLand();
+}
+inline bool HandCardIsLandFront(const Card& c)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
     return d != nullptr ? d->card.IsLand() : c.IsLand();
 }
+// skip: an index to leave out (the cleanup's "what if this card were shed"), or -1.
+inline HandSides CountHandSides(const std::vector<Card>& hand, int skip = -1)
+{
+    HandSides h;
+    int mdfcs = 0;
+    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
+    {
+        if (i == skip) { continue; }
+        const Card& c = hand[static_cast<std::size_t>(i)];
+        if (IsSpellLandMdfc(CardDatabase::Instance().LookupCached(c))) { ++mdfcs; }
+        else if (HandCardIsLandFront(c)) { ++h.lands; }
+        else { ++h.nonlands; }
+    }
+    for (; mdfcs > 0; --mdfcs) { if (h.lands <= h.nonlands) { ++h.lands; } else { ++h.nonlands; } }
+    return h;
+}
+
+// UNDER THE FREE-TURN RULE (FreeTurnHurdlesOn AND the deck's lock trait, GameState::deck_has_free_turn) the cleanup
+// keeps the flood hurdle's floor: it still sheds the oldest card, except that a shed may not take the hand below
+// kCleanupNonlandFloor (2) nonlands (CountHandSides) -- then it sheds the oldest card whose loss keeps the nonland
+// count, i.e. the oldest land (CleanupShedIndex). Plain oldest-first shed the opening hand's nonlands -- the two the
+// hurdle guarantees -- once one of OUR cards grew the opponent's hand past seven (Goblin Guide's reveal, Howling
+// Mine, Horn of Greed), so a land-heavy list kept a hand of lands only and "locked" with no lock card in play
+// (Burn s3664 gi661 vs Galadriel). The opponent never casts and a land drop takes only lands, so with the floor
+// its nonlands fall below two only to one of OUR effects (the USER's "the opponent needing to show that they can
+// remove things"). The floor binds only in that case, so the opponent's land development is otherwise untouched
+// (an unconditional lands-first shed measured as moving long games of nearly every deck: it discards the lands
+// the opponent would have played). Off the rule, and for every deck without the lock trait: oldest first, as ever.
+inline constexpr int kCleanupNonlandFloor = 2;
 inline int CleanupShedIndex(const std::vector<Card>& hand, bool keep_floor)
 {
-    if (!keep_floor || hand.empty() || CleanupIsLand(hand.front())) { return 0; }
-    int nonlands = 0;
-    for (const Card& c : hand) { if (!CleanupIsLand(c)) { ++nonlands; } }
-    if (nonlands > kCleanupNonlandFloor) { return 0; }
-    for (int i = 0; i < static_cast<int>(hand.size()); ++i)
-    { if (CleanupIsLand(hand[static_cast<std::size_t>(i)])) { return i; } }
-    return 0;   // no land: the hand is over seven nonlands, so the floor cannot bind
+    if (!keep_floor || hand.empty()) { return 0; }
+    const int before = CountHandSides(hand).nonlands;
+    const int need = std::min(kCleanupNonlandFloor, before);
+    if (CountHandSides(hand, 0).nonlands >= need) { return 0; }
+    for (int i = 1; i < static_cast<int>(hand.size()); ++i)
+    { if (CountHandSides(hand, i).nonlands >= need) { return i; } }
+    return 0;   // every shed costs a nonland (a hand of over seven nonlands): the floor cannot bind
 }
 inline void EndOfTurnCleanup(GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return; }
     Player& opp = state.players[1];
-    const bool keep_floor = FreeTurnHurdlesOn();
+    const bool keep_floor = FreeTurnHurdlesOn() && state.deck_has_free_turn;
     while (opp.hand.size() > 7)
     {
         const int at = CleanupShedIndex(opp.hand, keep_floor);

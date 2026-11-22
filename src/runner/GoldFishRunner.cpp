@@ -679,7 +679,10 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 // only loses nonlands to one of OUR effects. Only a card that can strip ALL of the opponent's lands or ALL of its
 // nonland hand cards can earn a free turn. Audit per param (2026-11-21; docs/design/opponent-lockdown-free-turns.md):
 //   IN   exile_all_permanents_hands_graveyards (Worldfire): exiles every land and every hand card.
-//   IN   endstep_each_player_discards_hand (Sire of Insanity): the opponent discards its whole hand at its end step.
+//   IN   endstep_each_player_discards_hand (Sire of Insanity), behind MTG_FREE_TURN_SIRE (default ON; =0 takes it
+//        out): the opponent discards its whole hand at its end step. USER 2026-11-22: "a bit messy", but "some decks
+//        literally lose to the card" "(and it protects your board)". A real opponent would deploy a creature first;
+//        MTG_FREE_TURN_SIRE_FAIR (default OFF) vetoes the lock when the discarded hand held a castable creature.
 //   IN   annihilator (Emrakul 6, Ulamog the Infinite Gyre 4): the opponent sacrifices N permanents per attack,
 //        oldest first (ApplyAnnihilator), lands included; one or two attacks empty its board.
 //   OUT  combat_damage_each_discards (Neheb): only OUR discard is modelled (Combat.cpp
@@ -698,14 +701,20 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 // armed for it, and the batch reports any free turn such a deck receives with trait=0, as a hole in this list.
 bool GoldFishRunner::DeckMayLockOpponent(const Decklist& deck)
 {
+    // MTG_FREE_TURN_SIRE (DEFAULT ON; =0 takes Sire of Insanity out of the trait). USER 2026-11-22: "Sire of
+    // Insanity I suppose is a bit messy because that is the closest to locking them when it shouldn't. In the face
+    // of that card you would drop all permanents you can on the field, but the opponent has no ability to do so."
+    // and then: "That is why it is in the list, because some decks literally lose to the card." / "(and it
+    // protects your board)". So it stays IN; MTG_FREE_TURN_SIRE_FAIR (core/FreeTurns.h) is the fairness check.
+    static const bool sire_in = EnvOn("MTG_FREE_TURN_SIRE", true);
     auto locks = [](const std::vector<Card>& zone) {
         for (const Card& c : zone)
         {
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
             if (def == nullptr) { continue; }
             const CardParams& p = def->params;
-            if (p.exile_all_permanents_hands_graveyards || p.endstep_each_player_discards_hand
-                || p.annihilator > 0)
+            if (p.exile_all_permanents_hands_graveyards || p.annihilator > 0
+                || (sire_in && p.endstep_each_player_discards_hand))
             { return true; }
         }
         return false;
