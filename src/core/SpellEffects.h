@@ -3196,12 +3196,16 @@ inline void PerformTutorPackageToHand(GameState& state, int controller, const Ca
             { names.push_back(cands[static_cast<std::size_t>(i)].m_name.str()); }
         }
     }
+    std::vector<int> searched_nums;
+    std::vector<std::string> searched_names;
     for (const std::string& nm : names)
     {
         for (std::size_t i = 0; i < ap.library.size(); ++i)
         {
             if (ap.library[i].m_name.str() != nm) { continue; }
             Card c = ap.library[i];
+            searched_nums.push_back(c.m_number);
+            searched_names.push_back(nm);
             ap.library.erase(ap.library.begin() + static_cast<std::ptrdiff_t>(i));
             EnterHand(state, controller, std::move(c), HandEntryReason::Tutor);
             if (g_play_event_sink && !g_tap_speculating)
@@ -3211,6 +3215,12 @@ inline void PerformTutorPackageToHand(GameState& state, int controller, const Ca
             }
             break;
         }
+    }
+    if (RevealVisible() && !searched_nums.empty())
+    {
+        EmitReveal(state.turn_number, def.card.m_name.str() + " (searched)",
+                   searched_nums, searched_names, searched_nums, {},
+                   std::vector<std::string>(searched_nums.size(), "to hand"));
     }
     ShuffleAfterSearch(state, controller);
 }
