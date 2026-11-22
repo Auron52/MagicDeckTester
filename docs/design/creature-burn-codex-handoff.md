@@ -2,6 +2,17 @@
 
 ## Codex continuation (2026-11-22 ~21:50 UTC)
 
+**23:15 UTC integration update:** The detached full smoke finished all 243 cases (206 matched the prior GT,
+37 moved; `PREQUEUE_SMOKE_DONE=1` reflects expected GT drift). Blood Sun then landed as `249db2aa7` with
+substantial `src/` and GT changes, invalidating that smoke as a final landing gate. Our 18 local commits were
+rebased onto it as `ca844988c`; `HeuristicArm.h` keeps Blood Sun's slots and the final Burn scry slots, and
+`TurnSolver.cpp` keeps the Revelation wave helpers while the temporary root-pass counter is removed. The user's
+two local file edits were stashed and restored. We are push-queue head, with a detached 90-minute heartbeat in
+`queue-hold-profile.log`. A four-job integrated Release build is running under `build/.heavy.lock`
+(`postblood-build.log`, `POSTBLOOD_BUILD_DONE`). Next: unit/scenarios/reference/deck gates, a fresh full smoke
+and per-game audit against the new Blood Sun GT, scoped regression, GT accept, and `land`. Requeue if the validation
+exceeds the head window, then launch the fast profile after landing.
+
 The previous full smoke was interrupted when its attached tool session stopped, and the queue lease passed to
 Blood Sun. No user decision is pending. Rejoined the queue as number 1 behind Blood Sun; a detached waiter
 tracks `build/scratch/cb-integrated/QUEUE_PROFILE_READY`. A detached prequeue full smoke is now running under
