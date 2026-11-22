@@ -19,6 +19,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "mtg_test_seam.h"
 
 #include <string>
 #include <vector>
@@ -67,7 +68,12 @@ int UnearthHellspark(GameState& s, bool legendary = false)
     s.players[0].graveyard.push_back(c);
     REQUIRE(ApplyUnearth(s, 0, "Hellspark Elemental", c.m_number));
     for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
-    { if (s.battlefield[i].card.m_number == c.m_number) { REQUIRE(s.battlefield[i].unearthed); return i; } }
+    {
+        if (s.battlefield[i].card.m_number != c.m_number) { continue; }
+        REQUIRE(bool(s.battlefield[i].unearthed));
+        if (legendary) { s.battlefield[i].card.AddSupertype(Supertype::Legendary); }
+        return i;
+    }
     FAIL("unearthed Hellspark not on the battlefield");
     return -1;
 }
@@ -140,6 +146,26 @@ TEST_CASE("Unearth replacement: a DESTROY effect exiles the unearthed creature (
     }
 }
 
+TEST_CASE("Unearth replacement: an ETB destroy that bypasses the removal resolver also exiles it")
+{
+    GameState s = BoardUe();
+    UnearthHellspark(s);
+    DestroyLargestOppCreature(s, 1);  // Ravenous Chupacabra's separate destroy path
+    CheckExiledNotDied(s);
+}
+
+TEST_CASE("Unearth replacement: a morbid end-step destroy exiles without another death")
+{
+    GameState s = BoardUe();
+    PutUe(s, "Reaper from the Abyss");
+    UnearthHellspark(s);
+    s.creature_died_this_turn = true;  // the Reaper trigger was already put on the stack
+    PerformEndStepMorbidDestroy(s, 1);
+    CHECK(BfCount(s, "Hellspark Elemental") == 0);
+    CHECK(CountUe(s.exile, "Hellspark Elemental") == 1);
+    CHECK(CountUe(s.players[0].graveyard, "Hellspark Elemental") == 0);
+}
+
 TEST_CASE("Unearth replacement: LETHAL DAMAGE (executor SBA, rollout SBA, pinger kill) exiles it")
 {
     AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
@@ -148,7 +174,7 @@ TEST_CASE("Unearth replacement: LETHAL DAMAGE (executor SBA, rollout SBA, pinger
         GameState s = BoardUe();
         const int i = UnearthHellspark(s);
         s.battlefield[static_cast<std::size_t>(i)].damage = 1;   // a 3/1
-        ge.CheckStateBasedActions(s);
+        MtgTestSeam::GeCheckSba(ge, s);
         CheckExiledNotDied(s);
     }
     {   // rollout twin: SbaKillDeadCreatures
@@ -178,7 +204,7 @@ TEST_CASE("Unearth replacement: TOUGHNESS 0 (both SBA worlds, an until-end-of-tu
         GameState s = BoardUe();
         const int i = UnearthHellspark(s);
         s.battlefield[static_cast<std::size_t>(i)].temp_tough_bonus = -1;
-        ge.CheckStateBasedActions(s);
+        MtgTestSeam::GeCheckSba(ge, s);
         CheckExiledNotDied(s);
     }
     {
@@ -239,7 +265,7 @@ TEST_CASE("Unearth replacement: it LEFT -- leave triggers fire (Keldon Marauders
     const int i = PutUe(s, "Keldon Marauders", /*unearthed=*/true);
     const int life0 = s.players[1].life;
     s.battlefield[static_cast<std::size_t>(i)].damage = 3;   // a 3/3
-    ge.CheckStateBasedActions(s);
+    MtgTestSeam::GeCheckSba(ge, s);
     CHECK(BfCount(s, "Keldon Marauders") == 0);
     CHECK(CountUe(s.exile, "Keldon Marauders") == 1);
     CHECK(CountUe(s.players[0].graveyard, "Keldon Marauders") == 0);

@@ -473,7 +473,8 @@ TEST_CASE("Browbeat / Vexing Devil policy: staged (exiled-playable) cards ARE he
 TEST_CASE("mid-turn root: the search can always do nothing (the pass beats the only, losing, cast)")
 {
     GameState s = CbBoard(3, {"Browbeat", "Mountain"}, /*opp_life=*/4);
-    s.players[0].library.resize(2);
+    while (s.players[0].library.size() > 2)
+    { s.players[0].library.erase(s.players[0].library.end() - 1); }
     Permanent& champ = CbPut(s, "Keldon Champion", 90);
     champ.echo_resolved = true;                            // a settled Champion: no echo left to pay
     const auto plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);

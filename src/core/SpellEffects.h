@@ -14089,7 +14089,7 @@ inline void AskHumanEtbDestroyVictims(GameState& state, int controller, const Ca
         }
         targets.push_back(state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])].card.m_number);
     }
-    std::vector<int> elephant_for;   // the controller of each permanent put into a graveyard this way
+    std::vector<int> elephant_for;   // the controller of each permanent destroyed this way
     for (int num : targets)
     {
         for (std::size_t i = state.battlefield.size(); i-- > 0; )
@@ -14105,8 +14105,11 @@ inline void AskHumanEtbDestroyVictims(GameState& state, int controller, const Ca
                               + (ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                               + q.card.m_name.str() + (q.tapped ? " (tapped)" : ""));
             }
-            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
-            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            if (!UnearthExileInstead(state, i, "destroyed"))
+            {
+                state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            }
             elephant_for.push_back(ctrl);
             break;
         }
@@ -14407,10 +14410,13 @@ inline void PerformMvCastDamageOppCreatures(GameState& state, int controller,
         {
             ++killed;
             const int dead_controller = q.controller_index;
-            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
-            state.battlefield.erase(state.battlefield.begin()
-                                    + static_cast<std::ptrdiff_t>(i));
-            FireOppCreatureDies(state, dead_controller);
+            if (!UnearthExileInstead(state, i, "would die (lethal damage)"))
+            {
+                state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+                state.battlefield.erase(state.battlefield.begin()
+                                        + static_cast<std::ptrdiff_t>(i));
+                FireOppCreatureDies(state, dead_controller);
+            }
         }
     }
     if (hit > 0 && g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
@@ -15369,6 +15375,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         // attacker whose 1+7 made the swing lethal. The victim set and order are the rule's own (a dry run of
         // the loop below on a copy); the hook (g_tera_drain_hook, installed by the AI layer: ApplyEnginePreTap)
         // is null in core-only builds, which keeps the old behaviour.
+        std::vector<Permanent> unearth_left;
         if (g_tera_drain_hook != nullptr && TeraDrainDoomedOn())
         {
             std::vector<int> victims;  // card m_numbers, the rule loop's own order (a dry run of it, below)
@@ -15404,8 +15411,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 for (std::size_t i = 0; i < state.battlefield.size(); ++i)
                 {
                     if (state.battlefield[i].card.m_number != num) { continue; }
-                    state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
-                    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    if (!UnearthExileDeferred(state, i, "destroyed", unearth_left))
+                    {
+                        state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+                        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    }
                     ++made;
                     break;
                 }
@@ -15422,12 +15432,16 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                     Permanent& q = state.battlefield[i];
                     if (q.tapped != want_tapped) { continue; }
                     if (EtbDestroyVictimClass(state, controller, q) != cls) { continue; }
-                    state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
-                    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    if (!UnearthExileDeferred(state, i, "destroyed", unearth_left))
+                    {
+                        state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+                        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    }
                     --k; ++made;
                 }
             }
         }
+        FireUnearthedLeaves(state, unearth_left);
         for (int t = 0; t < made; ++t)
         {
             CreateToken(state, controller, p.etb_created_token_power,
@@ -15559,6 +15573,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     if (p.etb_opp_creatures_debuff > 0)
     {
         const int opp_ix = 1 - controller;
+        std::vector<Permanent> unearth_left;
         for (std::size_t i = state.battlefield.size(); i-- > 0; )
         {
             Permanent& q = state.battlefield[i];
@@ -15566,10 +15581,14 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             q.temp_tough_bonus -= p.etb_opp_creatures_debuff;
             if (q.EffectiveToughness() - q.damage > 0) { continue; }
             const int dead_controller = q.controller_index;
-            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
-            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-            FireOppCreatureDies(state, dead_controller);
+            if (!UnearthExileDeferred(state, i, "would die (state-based action)", unearth_left))
+            {
+                state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                FireOppCreatureDies(state, dead_controller);
+            }
         }
+        FireUnearthedLeaves(state, unearth_left);
     }
 
     // (1h) Dwalin, Weaponmaster's ENTERS half: "whenever Dwalin enters or attacks, put a hone
@@ -15662,6 +15681,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         // Ping each opponent creature; remove any that die (opponent has creatures only from spawn
         // effects, so this is a no-op in the usual passive goldfish). No SBA re-entrancy: we prune
         // inline. entered_index belongs to `controller`, never the opponent, so it is untouched.
+        std::vector<Permanent> unearth_left;
         for (std::size_t i = state.battlefield.size(); i-- > 0; )
         {
             Permanent& q = state.battlefield[i];
@@ -15671,13 +15691,16 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 && !q.HasKeyword(Keyword::Indestructible))
             {
                 const int dead_controller = q.controller_index;
-                state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
-                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-                // Opponent-death watchers (Massacre Wurm clause 2). Param-gated scan ->
-                // byte-identical for every deck without a watcher (incl. all Goblins GT).
-                FireOppCreatureDies(state, dead_controller);
+                if (!UnearthExileDeferred(state, i, "would die (lethal damage)", unearth_left))
+                {
+                    state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
+                    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    // Opponent-death watchers (Massacre Wurm clause 2) require a death.
+                    FireOppCreatureDies(state, dead_controller);
+                }
             }
         }
+        FireUnearthedLeaves(state, unearth_left);
     }
 
     // (3b) Fury: "it deals N damage divided as you choose among any number of target creatures and/or
@@ -17671,9 +17694,12 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         if (pick >= 0)
         {
             const Permanent dead = state.battlefield[pick];
-            if (!dead.is_token)
-            { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
-            state.battlefield.erase(state.battlefield.begin() + pick);
+            if (!UnearthExileInstead(state, static_cast<std::size_t>(pick), "destroyed"))
+            {
+                if (!dead.is_token)
+                { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
+                state.battlefield.erase(state.battlefield.begin() + pick);
+            }
         }
     }
     // Disenchant: never enumerated (user-approved choose-but-never-cast stub).
@@ -18291,11 +18317,14 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         if (pick >= 0)
         {
             Permanent dead = state.battlefield[pick];
-            for (Permanent& q : state.battlefield)
-            { if (q.equipped_to == dead.card.m_number) { q.equipped_to = 0; } }
-            if (!dead.is_token)
-            { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
-            state.battlefield.erase(state.battlefield.begin() + pick);
+            if (!UnearthExileInstead(state, static_cast<std::size_t>(pick), "destroyed"))
+            {
+                for (Permanent& q : state.battlefield)
+                { if (q.equipped_to == dead.card.m_number) { q.equipped_to = 0; } }
+                if (!dead.is_token)
+                { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
+                state.battlefield.erase(state.battlefield.begin() + pick);
+            }
         }
     }
     else if (ab.effect == "steal_creature")
@@ -21342,6 +21371,7 @@ inline void PerformEndStepDelayedReturns(GameState& state)
                               "\xE2\x8F\xB3 " + q.card.m_name.str()
                               + " -- returned to hand at the beginning of the end step (put attacking by Ilharg)");
             }
+            if (UnearthExileInstead(state, static_cast<std::size_t>(i), "returned to hand")) { break; }
             const int num = q.card.m_number;
             const int owner = q.owner_index;
             Card returned = RevealedCard(q.card);
@@ -21407,9 +21437,12 @@ inline void DestroyAttackedAtEndStep(GameState& state)
                 if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
             }
             const int  owner     = q.owner_index;
-            state.players[owner].graveyard.push_back(RevealedCard(dead));
-            state.battlefield.erase(state.battlefield.begin() + i);
-            OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total, owner);
+            if (!UnearthExileInstead(state, static_cast<std::size_t>(i), "destroyed at end step"))
+            {
+                state.players[owner].graveyard.push_back(RevealedCard(dead));
+                state.battlefield.erase(state.battlefield.begin() + i);
+                OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total, owner);
+            }
             break;
         }
     }
@@ -22254,6 +22287,7 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
+    if (UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed")) { return; }
     if (!was_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
@@ -22488,7 +22522,8 @@ inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controll
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    if (destroyed)
+    const bool unearth_exiled = destroyed && UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed");
+    if (destroyed && !unearth_exiled)
     {
         if (!was_token) { state.players[static_cast<std::size_t>(dead_owner)].graveyard.push_back(dead); }
         state.battlefield.erase(state.battlefield.begin() + bi);
@@ -31196,9 +31231,12 @@ inline void DestroyLargestOppCreature(GameState& state, int controller)
     if (pick >= 0)
     {
         const Permanent dead = state.battlefield[pick];
-        if (!dead.is_token)
-        { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
-        state.battlefield.erase(state.battlefield.begin() + pick);
+        if (!UnearthExileInstead(state, static_cast<std::size_t>(pick), "destroyed"))
+        {
+            if (!dead.is_token)
+            { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
+            state.battlefield.erase(state.battlefield.begin() + pick);
+        }
     }
 }
 
@@ -39895,6 +39933,7 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
+    if (UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed")) { return; }
     if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
@@ -58704,6 +58743,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
                           + (dead_ctrl == me ? std::string("your ") : std::string("the opponent's "))
                           + dead.m_name.str());
         }
+        if (UnearthExileInstead(state, static_cast<std::size_t>(bi), "destroyed")) { continue; }
         state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + bi);
         for (Permanent& o : state.battlefield)

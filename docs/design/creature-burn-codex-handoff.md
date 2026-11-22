@@ -1,5 +1,16 @@
 # Creature Burn analyze-deck: handoff to Codex (2026-11-22 ~10:50 UTC)
 
+## Codex continuation (2026-11-22 11:41 UTC)
+
+The three WIP branches are now cherry-picked as one linear series on the primary branch. The old worktree build
+queue below was stopped to avoid duplicate heavy builds. A direct-removal review found additional paths that
+bypassed the unearth replacement; fixes and two tests are in the primary working tree, pending the unit run.
+The first two integrated build attempts stopped on test fixture compile errors (`Library::resize`, a bit-field
+assertion, and private SBA access); those fixtures are fixed. The incremental build is running as PID 89254,
+with `build/scratch/cb-integrated/build4.log` and `BUILD4_DONE`. The linked engine passed the two new scenarios and a 30-reference replay (0 shortfalls); the
+pooled A/B manifests are combined at `build/scratch/cb-integrated/ab-combined/manifest.json` (19,400 games).
+All other remaining steps below still apply. The original process IDs in the next section are historical.
+
 This replaces the CHECKPOINT section of `docs/design/analysis-Creature Burn.md` (the history is kept there).
 Start here. Read `CLAUDE.md` (it is authoritative for Codex too, via `AGENTS.md`). Before acting, check every
 process and file named below, because some may have finished or moved on by the time you read this.
