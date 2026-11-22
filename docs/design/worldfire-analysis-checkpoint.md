@@ -149,8 +149,28 @@ Worldfire deck"). Worktree `/workspaces/MagicDeckTester/.claude/worktrees/worldf
   cantrip buckets land, re-screen the Worldfire b0 rows; if still degenerate, census the b0 games (where the 2M
   units go) and optimize before touching the rows.
 
+## USER rulings on the cantrip keep order 2026-11-22 (~03:30 UTC), VERBATIM
+- 1a: *"Obviously if I designed the rules and they work well (i.e. improvements in average quality and no
+  unrecoverable that cannot be shown to be clairvoyance) then we should turn them on."* (relayed to the adoption agent)
+- 1b: *"If there is no difference I would keep the rule as designed. These are worth considering only if we see them
+  perform better in testing. If the difference is small we should try a larger test set to separate them. I have no
+  issues with any of these options IF they perform better."* -- arms: _AGGR_DIG_BLUE, _BAZAAR_T1, _AGGR_DIG=0,
+  _AGGR_FINISHER=0. FOLLOW-UP agent: larger held-out set for the small-difference arms.
+- 1c1 (next land drop vs dig slot 2 when a piece is missing): *"We'll have to play with this a bit. My initial take
+  is that the land drop is nice, but I would take more dig over it if our mana is good already."*
+- 1c2 (third dig below the quota lands): *"That is potentially okay, though I would keep the third dig if we are
+  missing both combo pieces. I'm not against doing some A/B with rules like this, though. Some of them may be close
+  enough that they are just my preference. For example, my finding is that you can skimp a bit on mana if you have
+  to dig a lot. You tend to draw land as part of the process."*
+- 1c3 (spare tutor = acceleration while mana short): *"That makes sense. The tutors are goodif we can fill all of the
+  slots and not quite so good otherwise because it gives up a draw. We don't want more than 2 at any time."*
+- FOLLOW-UP agent (after adoption lands in wip/worldfire): A/B against the adopted ON baseline, each its own lever:
+  (i) dig slot 2 > next land drop when mana is already good; (ii) keep a 3rd dig when both pieces are missing;
+  (iii) "skimp on mana when digging a lot"; (iv) cap kept tutors at 2; plus the 1b arms on a larger set.
+- Still open: 1c4 (next-drop tier after this turn's land), 1c5 (Mystical Tutor free {U}).
+
 ## Open USER questions (defaults taken)
-- Search depth for free turns: default = no ply cost (match Extra Turns; its Q9 was never USER-answered).
+- Search depth for free turns: default = no ply cost. USER Q9 said it is primarily a performance question.
 - Integrator #1's: four PROVISIONAL deferrals (Overmaster / Mistrise uncounterable riders inert,
   Halberdier "may cast" -> cast, Worldfire LTB triggers not fired); INERT_PARAMS for the two Worldfire
   params; the TutorSearchWidth 32 hook (lossless, default ON).
