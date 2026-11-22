@@ -152,3 +152,20 @@ recommendation.
   when Beasts landed 47 new commits at origin `c841cd59c4`; Blood Sun is queue HEAD again at 17:04 and must rebase
   onto that tip before a final gate. The B12-bis frozen batch PID 459036 is PAUSED; `kill -CONT 459036` when gates
   permit. Queue waiter exec session 96044 is active (it may have exited on becoming HEAD).
+
+## Codex continuation (2026-11-22, 23:05 UTC)
+- Rebased 107 Blood Sun commits onto origin `138f60c83` (the Beasts tip plus a Worldfire Windows test fix). The
+  rebased tree built successfully; full unit passed 4124/4124 cases and 3,666,730 assertions, scenarios 675/675.
+  `check_gt_logs.py` passed 1409 consistent, 0 stale/missing; reference safety passed across 107 checkouts.
+- One pooled `regression.sh --both` completed 632 cases / 180005 games. Exactly the previously identified 27
+  integration configurations moved: smoke 9, regression 18. Smoke has 1 slower searched game, 2 faster, and 21
+  same-turn play changes; regression has 0 slower, 5 faster, and 66 same-turn play changes. Hinata smoke d3 s1001
+  gi22 (T5 -> T7 at 10 ms) recovers T5 at 4x and 16x budget and at depth 8 unlimited budget. The strict viewer
+  replay reports 363 ok, 576 repaired, 1 beaten, and zero drift/gaps across 940 references; both suboptimal
+  references are beaten. Smoke and regression GT were accepted; `check_gt_logs.py` again passed 1409/0/0.
+- Blood Sun remains HEAD of the push queue. Commit the accepted GT, check reference safety, then `push_queue.py land`.
+  Update the PRIMARY checkout `/workspaces/MagicDeckTester2` preserving its eight local reference/viewer commits and
+  dirty files; its untracked Blood Sun deck is content-identical to the committed deck after CR removal. Start
+  `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups ./play.sh --no-open` there and verify HTTP 8080.
+- The B12-bis frozen process did not survive a previous turn interruption. Its d5 333-game arm results remain in
+  `build/scratch/bloodsun/b12bis/`; d3 is partial. Resume by running missing manifest cells, after viewer setup.
