@@ -13425,7 +13425,10 @@ static std::uint64_t UoTreeCtxSig()
 //   (plan scoring), cont_pins (executor / fold), and tutor_target where TutorWalkSame shows the walk reads it the same.
 //   hand_index stays strict (a cast's permanent takes the hand card at that index).
 //   BYPASSED under a live plan context / traits (identified by ADDRESS in paymemo::Ctx, which another context can reuse
-//   later in the decision), the unlock-order price (its charges read the budget) and human play.
+//   later in the decision), the unlock-order price (its charges read the budget), human play and a live index-carry
+//   sink.
+//   NO TRACE: the key is built muted (workctr, combat-pin witness), and a hit replays the walk's recorded work counters
+//   and witness reads, so the priced decision ceiling and every witness read what the walk would have left.
 // Inert at every budget by construction (it returns the verdict the walk would return). The memory is bounded per
 // thread (cleared past kMaxBytes; a clear only loses hits). Measured 2026-11-22 (400 Jumbo games, gi 719000+): 179k hits,
 // VERIFY 0 mismatches, play byte-identical; instructions lever-on 349.0G -> 329.6G, lever-off 303.5G -> 293.9G.
@@ -13438,7 +13441,8 @@ inline bool Verify() { static const bool v = EnvOn("MTG_SPS_XMEMO_VERIFY"); retu
 inline std::atomic<long long> g_hits{}, g_misses{}, g_mismatch{}, g_bypass_ctx{}, g_act_diff{};
 struct K { std::uint64_t a, b; bool operator==(const K& o) const { return a == o.a && b == o.b; } };
 struct KH { std::size_t operator()(const K& k) const { return static_cast<std::size_t>(k.a ^ (k.b * 0x9E3779B97F4A7C15ull)); } };
-struct Entry { bool verdict = false; std::vector<Action> acts; };
+// `work` / `cp_reads`: the walk's own work-counter and combat-pin-witness increments, replayed on a hit (see below).
+struct Entry { bool verdict = false; std::vector<Action> acts; long long work[workctr::kKinds] = {}; unsigned long long cp_reads = 0; };
 constexpr std::size_t kMaxBytes = std::size_t{32} << 20;   // per thread: stored Actions, approximated by sizeof
 // VERIFY diagnostic: per-field census of EVERY Action member on an action difference (declaration order).
 #define SPSX_FIELDS(X) X(kind) X(steal_spec) X(card_name) X(hand_index) X(equiv_tag) X(equiv_ord) X(cost) X(sacrifice_land) X(discard_lands) X(vial_bf_index) X(dig_sacrifice) X(land_face) X(land_fetch_target) X(land_rad_mode) X(land_from_top) X(cast_from_top) X(alt_cost) X(awaken) X(alt_lifegain) X(tutor_target) X(ability_mode) X(ritual_float) X(rock_mana) X(chosen_x) X(splice_count) X(chosen_float_color) X(sac_source_id) X(sac_victim_id) X(needs_cast_mask) X(victim_name) X(discard_name) X(sac_count) X(pooled_sac) X(vamp_casts_needed) X(madness_choice) X(madness_arm) X(madness_mv) X(convoke_plan_pip) X(convoke_plan_other) X(player_target) X(dies_tuck) X(legend_keep) X(scry_pin) X(gy_cast_source_id) X(gy_exile_mode) X(loyalty_ability) X(free_cast) X(phyrexian_life) X(twobrid_colored) X(convoke_green) X(convoke_other) X(soulfire_own_targets) X(mint_gain) X(mint_hand_magnet) X(mint_magnet) X(crackle_targets) X(max_casts_after) X(enchant_target) X(trick_hand_target) X(trick_put_target) X(attach_equip_id) X(draw_target) X(attach_equip_hand) X(attach_equip_hand_ord) X(evoke) X(emerge) X(adventure) X(bestow) X(kicked) X(face_down) X(trick_redirect) X(cont_pins) X(ponder_keep) X(devour_count) X(seed_pay_split) X(replicate_count) X(remand_by) X(remand_slot) X(remand_chain_by) X(pitch_name) X(pitch_slot) X(eval) X(direct_damage) X(is_noncreature) X(card_mv) X(vial_attack_power) X(haste_attack_power) X(haste_rider_hand) X(cond_artifact_haste_power) X(adds_durable_artifact) X(haste_prowess) X(is_draw) X(has_spectacle) X(is_draw_until_nonland) X(discard_land_damage) X(ripple_pinned) X(ripple_reveals) X(ripple_take_cap) X(ripple_mask) X(ripple_decline) X(ripple_free_tutor) X(ripple_free_victim) X(ripple_granter_req) X(ripple_chain_float) X(def) X(breakpoint_casts) X(rec_mana_casts) X(rec_pump_target) X(rec_payment_traits) X(rec_line_hold) X(rec_bp_ord)
@@ -13509,7 +13513,9 @@ template <class F>
 static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
                              F&& run)
 {
-    if (!spsx::On() || HumanPlayActive() || uoprice::PriceOn()) { return run(); }
+    // Index carry (MTG_INDEX_CARRY, screening only): a hit would skip the walk's library reads, i.e. under-report
+    // accessibility -- the carry's one unsafe direction -- so no memo while a carry sink is live.
+    if (!spsx::On() || HumanPlayActive() || uoprice::PriceOn() || indexcarry::t_sink != nullptr) { return run(); }
     if (CurrentPlanContext() != nullptr || CurrentPlanTraits() != nullptr)
     { if (spsx::Verify()) { spsx::g_bypass_ctx.fetch_add(1, std::memory_order_relaxed); } return run(); }
     static thread_local std::uint64_t epoch = ~0ull;
@@ -13517,6 +13523,12 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
     static thread_local std::unordered_map<spsx::K, spsx::Entry, spsx::KH> table;
     if (epoch != TurnSolver::DecisionEpoch() || bytes > spsx::kMaxBytes)
     { table.clear(); bytes = 0; epoch = TurnSolver::DecisionEpoch(); }
+    // THE KEY LEAVES NO TRACE. BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
+    // (decisionwork::PricedExceeded) and bumps the combat-pin read witness (combatpin::t_reads) that the put-bounce
+    // fold's clean test compares; either moved by this key alone moved play (Extra Turns gi 733038, 2026-11-22). Same
+    // muting as the rollout's probe key (sfxprobe).
+    const unsigned long long cp_reads0 = combatpin::t_reads;
+    ++workctr::t_mute;
     const TranspositionTable::Key bk = BuildSimKey(state, 0, 0, false);
     std::uint64_t h = 0x7C3Bull + 1;
     paycensus::MixA(h, FsOrderSig(state));
@@ -13532,14 +13544,31 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
     paycensus::MixA(h, UoTreeCtxSig());
     for (int j : sel) { paycensus::MixA(h, paycensus::ActSig(cands[static_cast<std::size_t>(j)])); }
     paycensus::MixA(h, sel.size());
+    --workctr::t_mute;
+    combatpin::t_reads = cp_reads0;
     const spsx::K key{ bk.h1 ^ (h * 0x2545F4914F6CDD1Dull), bk.h2 + h };
-    auto store = [&](bool r)
+    // A MISS walks and records what the walk counted: its work-counter increments (the priced meter), its combat-pin
+    // witness reads, and its budget units. A HIT replays the first two (workctr::IncReplayed, as the plan cache's
+    // replay does), so every meter and witness reads exactly what the walk it stands in for would have left. A walk
+    // that moved budget units is not stored (none does with the unlock-order price off, and the memo is bypassed
+    // under the price), and a muted recompute stores nothing (workctr::StoresAllowed, MTG_MUTE_NO_STORE).
+    auto walk_and_store = [&]() -> bool
     {
-        spsx::Entry& slot = table[key];   // re-looked-up: run() may have nested another probe and rehashed
+        long long n0[workctr::kKinds];
+        for (int k = 0; k < workctr::kKinds; ++k) { n0[k] = workctr::t_n[k]; }
+        const unsigned long long r0 = combatpin::t_reads;
+        SearchBudget* const db = TurnSolver::DecisionBudget();
+        const long long u0 = db != nullptr ? db->Used() : 0;
+        const bool r = run();
+        if (!workctr::StoresAllowed() || (db != nullptr && db->Used() != u0)) { return r; }
+        spsx::Entry& slot = table[key];   // looked up after run(): a nested probe may have rehashed the table
         bytes += sel.size() * sizeof(Action);
         slot.verdict = r;
         slot.acts.clear();
         for (int j : sel) { slot.acts.push_back(cands[static_cast<std::size_t>(j)]); }
+        for (int k = 0; k < workctr::kKinds; ++k) { slot.work[k] = workctr::t_n[k] - n0[k]; }
+        slot.cp_reads = combatpin::t_reads - r0;
+        return r;
     };
     auto it = table.find(key);
     if (it != table.end())
@@ -13550,7 +13579,13 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
         if (same)
         {
             const bool memo = it->second.verdict;   // `it` is not used past this point (run() may rehash)
-            if (!spsx::Verify()) { return memo; }
+            if (!spsx::Verify())
+            {
+                for (int k = 0; k < workctr::kKinds; ++k)
+                { if (it->second.work[k] != 0) { workctr::IncReplayed(k, it->second.work[k]); } }
+                combatpin::t_reads += it->second.cp_reads;
+                return memo;
+            }
             spsx::g_hits.fetch_add(1, std::memory_order_relaxed);
             const bool r = run();
             if (r != memo)
@@ -13564,9 +13599,7 @@ static bool SpsCrossEnumMemo(const GameState& state, const std::vector<Action>& 
         if (spsx::Verify()) { spsx::g_act_diff.fetch_add(1, std::memory_order_relaxed); }
     }
     else if (spsx::Verify()) { spsx::g_misses.fetch_add(1, std::memory_order_relaxed); }
-    const bool r = run();
-    store(r);
-    return r;
+    return walk_and_store();
 }
 
 static bool SubsetPayableSequentialBody(const GameState& state, const std::vector<Action>& cands,

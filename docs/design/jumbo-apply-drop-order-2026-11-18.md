@@ -446,3 +446,62 @@ every arm, W-invariant) the clearest result. Against the lever OFF, every price 
 
 Raw outputs: `logs/jumbo-uo-budget/ab2/compare2.txt`, `recov2.txt` (worktree), and
 `build/scratch/claude_jumbo_uo_budget/{ab2,rec2}/`.
+
+## Exact cuts, 2026-11-21/22 (`MTG_SPS_XMEMO`, default ON)
+
+The price arms trade quality for CPU, which is a USER decision. This section covers the other route: cutting the lever's
+CPU with **exact** cuts only (play byte-identical, no A/B needed). CPU here is `perf stat -e instructions:u` over a
+deterministic 400-game batch (Jumbo gi 719000-719399, Bruna the same gi, 2 threads). The ms/cpu fields swing 2-3x with
+box load, so they are not used.
+
+**Where the cost is.** perf: lever on vs off is +13.7% cycles. `UnlockOrderSearchTree` is 7.5% of on's cycles and the
+apply's `UnlockOrderSearch` another 1.4%. Inside the tree about half is mana payment (`TapForCostDirect`) and about 1%
+is GameState copies. The rest is diffuse: more payable plans enumerated.
+
+**What did not work.**
+- `MTG_SPS_EQUIP_MEMO`, a memo scoped to one SubsetPayableSequential call, got 0 hits in 132,011 lookups. The repeats
+  are ACROSS enumerations, so it was reverted.
+- Re-spending the price's budget (`MTG_UO_BUDGET_REPLAY`) is refuted. The replay arms lose the same 6 Bruna games as
+  pc16, and they diverge at the first T1/T2 decisions.
+- A naive mana-supply bound is unsound: true verdicts reach a crude gap of +7, so any bound would have to credit unlocks.
+
+**The repeat census (`MTG_PAY_CENSUS`, fn `UOT`).** The enumeration site's unlock-order tree runs 126,312 times in 400
+Jumbo games. 73,780 of those (58%) are exact repeats inside one decision, always EnumeratePlans -> EnumeratePlans on the
+same board content, and they account for 35% of the tree's cycles. SubsetPayableSequential as a whole repeats on 180k of
+its 360k calls.
+
+**The cut.** `SpsCrossEnumMemo` (TurnSolver.cpp, namespace `spsx`) memoises SubsetPayableSequential's verdict across
+enumerations within a decision.
+- Key: board content (BuildSimKey depth 0), FsOrderSig, the floating pools, `g_line_unpaid_cost`, the payment-context
+  globals by content, and the asked actions.
+- On a hit, every stored Action must equal the asked one whole, except the fields the walk does not read: `equiv_ord`,
+  `eval`, `cont_pins`, and `tutor_target` where `TutorWalkSame` holds. `hand_index` stays strict.
+- Bypassed under a live plan context or traits (identified by address only), under the price, and in human play.
+
+**Why tutor_target folds.** With whole-Action comparison, half the hits disappeared. A census of every Action field
+found the cause: 36,886 of 36,968 mismatched hits differed only in `tutor_target`, i.e. the GSZ / Finale / Tooth and
+Nail variants of the same subset. Within the walk cluster that field is read only in two places:
+- the Fireblast, Archive Trap and Walk-the-Aeons buyback pins (SeqWalkFixedOrder);
+- `TutoredUntapperHostId`, a tutor that puts an untapper unlock host onto the battlefield.
+
+So two casts of the same card walk identically when neither target is one of those pins and both name the same host or
+none. Every other `tutor_target` reader is plan-level (signatures, the enumerator, the executor) and is not reached from
+the walk. Folding the field brought the hits back to the hash-only level.
+
+| Jumbo 400 games, instructions | lever on | lever off |
+|---|---|---|
+| no memo | 348.97G | 303.45G |
+| memo at the tree site only (prototype) | 338.41G | -- |
+| **memo at SubsetPayableSequential (shipped)** | **329.63G** | **293.86G** |
+| both sites | 330.53G | -- |
+
+With the memo on, VERIFY (`MTG_SPS_XMEMO_VERIFY=1`, which re-walks every hit) found 0 mismatches over 179k Jumbo hits and
+160k Bruna hits. Play is byte-identical on both decks. The lever's overhead on Jumbo falls from +15.0% to +12.2% (both
+arms with the memo), and the lever-off engine itself gets 3.2% cheaper. Bruna moves little (837.75G -> about 837.5G):
+its repeats mostly differ in `hand_index`, which the walk reads.
+
+IDENTITY_SLICE_PLACEHOLDER
+
+**Further exact-cut leads (not done).** (a) A general cross-enumeration memo of EnumeratePlans results. The enumeration
+itself re-runs on the same board, and the plan cache's m1-enum barely hits. It is lever-independent and probably the
+larger win. (b) A sound supply bound that credits unlocks.
