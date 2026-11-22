@@ -1,17 +1,8 @@
 {
  "entries": [
   {
-   "branch": "wip/beasts-ci-fix",
-   "head_since": "2026-11-22T18:58:13Z",
-   "heartbeat": "2026-11-22T19:23:13Z",
-   "host": "67d5329561c0",
-   "id": "67d5329561c0:wip/beasts-ci-fix",
-   "joined": "2026-11-22T18:23:48Z",
-   "note": "",
-   "urgent": true
-  },
-  {
    "branch": "phase-1-2-deck-analyzer",
+   "head_since": "2026-11-22T19:23:43Z",
    "host": "a7c2d36c718e",
    "id": "a7c2d36c718e:phase-1-2-deck-analyzer",
    "joined": "2026-11-22T17:48:43Z",
