@@ -185,7 +185,7 @@ TEST_CASE("Chandra minus three can kill our own creature and requires a target b
     s = LavamancerState(); PutChandra(s);
     ApplyLoyaltyAbility(s, 0, 102, 2, 999999);
     CHECK(s.battlefield.back().loyalty == 4);
-    CHECK_FALSE(s.battlefield.back().loyalty_activated_this_turn);
+    CHECK_FALSE(static_cast<bool>(s.battlefield.back().loyalty_activated_this_turn));   // a bit-field
 }
 TEST_CASE("Chandra emblem survives loyalty death and stacks on every spell cast")
 {

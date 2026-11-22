@@ -1472,9 +1472,19 @@ static UnprunedGateMask ParseUnpruneMask()
     return mask;
 }
 
-static const UnprunedGateMask& UnpruneMask()
+// The parsed mask as plain 64-bit words, so the per-query test is one load, shift and AND (Beasts E perf,
+// 2026-11-22): std::bitset::test carries a range check and a throw path on a function every gated callsite hits.
+struct UnpruneWords { std::uint64_t w[kUnprunedGateBits / 64]; };
+static const UnpruneWords& UnpruneMask()
 {
-    static const UnprunedGateMask m = ParseUnpruneMask();
+    static const UnpruneWords m = []
+    {
+        const UnprunedGateMask b = ParseUnpruneMask();
+        UnpruneWords u{};
+        for (int i = 0; i < kUnprunedGateBits; ++i)
+        { if (b.test(static_cast<std::size_t>(i))) { u.w[i / 64] |= std::uint64_t{1} << (i % 64); } }
+        return u;
+    }();
     return m;
 }
 
@@ -1519,7 +1529,8 @@ bool DecisionUnpruned(UnprunedGate g)
     if (g_unpruned_suppressed) { return false; }     // hand-back: shipped gates, mask included
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
-    return UnpruneMask().test(static_cast<std::size_t>(g));
+    const int gi = static_cast<int>(g);
+    return ((UnpruneMask().w[gi / 64] >> (gi % 64)) & 1u) != 0;
 }
 
 // Stuffy Doll step-9b prunes (RedirectWindow / GcHost / EscapeTarget): the MTG_UNPRUNE mask, plus the per-job

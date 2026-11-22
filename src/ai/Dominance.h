@@ -228,7 +228,11 @@
 // MoreDominates -- oil has no sink but those three costs and no upkeep, so more is never worse. It survives
 // cleanup, so it is compared, not refused at the boundary. Also folded NONZERO-gated into BuildSimKey,
 // BoardSignature, FungibilityKey, FoldPhysicalCards, the legend interchangeability check and RouteSig.
-static_assert(sizeof(Permanent) == 336,
+// 336 -> 328 (2026-11-22, Beasts E perf): the +8 bytes land on every permanent of every deck's GameState copy,
+// so oil_counters became an int16 in the 2-byte pad before paired_with, and loyalty_activated_this_turn /
+// colored_cast_lifegain_used_this_turn became 1-bit fields in the storied_draw_used_this_turn run (which had 2
+// bits free) to open that pad. No field added or removed; the classification above is unchanged.
+static_assert(sizeof(Permanent) == 328,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks

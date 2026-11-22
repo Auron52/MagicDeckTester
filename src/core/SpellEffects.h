@@ -4513,7 +4513,7 @@ inline int TotalCountersOn(const Permanent& p)
 inline void RemoveAllCounters(Permanent& p)
 {
     p.counters.clear();
-    ForEachDedicatedCounterField(p, [](const char*, int& v) { v = 0; });
+    ForEachDedicatedCounterField(p, [](const char*, auto& v) { v = 0; });
     p.loyalty = 0;
     RefreshCounterThresholdKeywords(p);
 }
@@ -4905,7 +4905,10 @@ inline void PutQuestCounters(GameState& state, Permanent& p, int n)
 inline void PutOilCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
-    p.oil_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+    // Permanent::oil_counters is an int16 (it sits in a padding hole); clamp rather than wrap.
+    const long long v = static_cast<long long>(p.oil_counters)
+                      + (static_cast<long long>(n) << DoublerShift(state, p.controller_index, /*for_tokens=*/false));
+    p.oil_counters = static_cast<int16_t>(std::min<long long>(v, INT16_MAX));
 }
 
 // DEPLETION counters on a land entering the battlefield (Peat Bog / Hickory Woodlot / Sandstone
@@ -16724,7 +16727,7 @@ inline void ResolveDiesCountersToOwnCreature(GameState& state, int dead_controll
         int nv = 0;
         ForEachDedicatedCounterField(lki, [&](const char*, const int& v) { if (nv < 32) { vals[nv++] = v; } });
         nv = 0;
-        ForEachDedicatedCounterField(tgt, [&](const char*, int& v)
+        ForEachDedicatedCounterField(tgt, [&](const char*, auto& v)   // auto&: oil_counters is an int16
         {
             const int n = nv < 32 ? vals[nv++] : 0;
             if (n > 0) { v += n << shift; put_total += n << shift; }
