@@ -31,10 +31,16 @@ _spec.loader.exec_module(sg)
 def gen_settings(deck_path):
     d = os.path.dirname(deck_path)
     stem = os.path.splitext(os.path.basename(deck_path))[0]
-    try:
-        vp = json.load(open(os.path.join(d, stem + ".value.json"))).get("value_play", {})
-    except Exception:
-        vp = {}
+    # Generation-only keys live in .profile.json for decks without a value sidecar.
+    # A sidecar may override them, but an older sidecar with no gen keys must not
+    # erase the profile's setting (the analyzer follows the same precedence).
+    vp = {}
+    for suffix in (".profile.json", ".value.json"):
+        try:
+            with open(os.path.join(d, stem + suffix)) as fh:
+                vp.update(json.load(fh).get("value_play", {}))
+        except FileNotFoundError:
+            continue
     return (vp.get("mull_gen_depth") or vp.get("target_depth") or 5,
             vp.get("mull_gen_budget_ms") or vp.get("budget_ms") or 20)
 

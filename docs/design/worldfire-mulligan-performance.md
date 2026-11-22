@@ -3,7 +3,8 @@
 Measured 2026-11-22 before the first exhaustive profile. The deck has 21
 equivalence buckets: Scalding Tarn and Flooded Strand merge; the other card
 names remain distinct. `value_play.expected_buckets` records that discovery
-result.
+result. With the deck's copy limits, the size-seven table has 562,383 bucket
+compositions per play/draw side.
 
 The default 48-hand, R24 setting screen chose depth 1 / 1 ms, but its reference
 noise ceiling was 0.9202. All candidates saturated the normalized fidelity
